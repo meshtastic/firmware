@@ -523,7 +523,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-
+    if (mp.pki_encrypted && myReply) {
+        myReply->pki_encrypted = true;
+    }
     return handled;
 }
 
@@ -735,6 +737,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             config.lora.sx126x_rx_boosted_gain == c.payload_variant.lora.sx126x_rx_boosted_gain) {
             requiresReboot = false;
         }
+
+#if defined(ARCH_PORTDUINO)
+        // If running on portduino and using SimRadio, do not require reboot
+        if (SimRadio::instance) {
+            requiresReboot = false;
+        }
+#endif
 
 #ifdef RF95_FAN_EN
         // Turn PA off if disabled by config
@@ -952,6 +961,9 @@ void AdminModule::handleGetOwner(const meshtastic_MeshPacket &req)
         res.which_payload_variant = meshtastic_AdminMessage_get_owner_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
+        if (req.pki_encrypted) {
+            myReply->pki_encrypted = true;
+        }
     }
 }
 
@@ -1023,6 +1035,9 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         res.which_payload_variant = meshtastic_AdminMessage_get_config_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
+        if (req.pki_encrypted) {
+            myReply->pki_encrypted = true;
+        }
     }
 }
 
@@ -1043,19 +1058,32 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.serial = moduleConfig.serial;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
+#if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
             LOG_INFO("Get module config: External Notification");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_external_notification_tag;
             res.get_module_config_response.payload_variant.external_notification = moduleConfig.external_notification;
+#else
+            LOG_DEBUG("External Notification module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
             LOG_INFO("Get module config: Store & Forward");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_store_forward_tag;
             res.get_module_config_response.payload_variant.store_forward = moduleConfig.store_forward;
+#else
+            LOG_DEBUG("Store & Forward module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
+#if !MESHTASTIC_EXCLUDE_RANGETEST
             LOG_INFO("Get module config: Range Test");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_range_test_tag;
             res.get_module_config_response.payload_variant.range_test = moduleConfig.range_test;
+#else
+            LOG_DEBUG("Range Test module excluded from build, skipping config");
+            // Don't set payload variant - will result in empty response
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
             LOG_INFO("Get module config: Telemetry");
@@ -1068,9 +1096,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG:
+#if !MESHTASTIC_EXCLUDE_AUDIO
             LOG_INFO("Get module config: Audio");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
+#else
+            LOG_DEBUG("Audio module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG:
             LOG_INFO("Get module config: Remote Hardware");
@@ -1083,19 +1115,31 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG:
+#if !(NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR)
             LOG_INFO("Get module config: Detection Sensor");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
             res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
+#else
+            LOG_DEBUG("Detection Sensor module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
             LOG_INFO("Get module config: Ambient Lighting");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
+#else
+            LOG_DEBUG("Ambient Lighting module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
             LOG_INFO("Get module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+#else
+            LOG_DEBUG("Paxcounter module excluded from build, skipping config");
+#endif
             break;
         }
 
@@ -1110,6 +1154,9 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
         res.which_payload_variant = meshtastic_AdminMessage_get_module_config_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
+        if (req.pki_encrypted) {
+            myReply->pki_encrypted = true;
+        }
     }
 }
 
@@ -1134,6 +1181,9 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
     }
     setPassKey(&r);
     myReply = allocDataProtobuf(r);
+    if (req.pki_encrypted) {
+        myReply->pki_encrypted = true;
+    }
 }
 
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
@@ -1143,6 +1193,9 @@ void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
     setPassKey(&r);
     myReply = allocDataProtobuf(r);
+    if (req.pki_encrypted) {
+        myReply->pki_encrypted = true;
+    }
 }
 
 void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req)
@@ -1211,6 +1264,9 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
     setPassKey(&r);
     myReply = allocDataProtobuf(r);
+    if (req.pki_encrypted) {
+        myReply->pki_encrypted = true;
+    }
 }
 
 void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex)
@@ -1222,6 +1278,9 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
         r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
         setPassKey(&r);
         myReply = allocDataProtobuf(r);
+        if (req.pki_encrypted) {
+            myReply->pki_encrypted = true;
+        }
     }
 }
 
@@ -1231,6 +1290,9 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
     r.which_payload_variant = meshtastic_AdminMessage_get_ui_config_response_tag;
     r.get_ui_config_response = uiconfig;
     myReply = allocDataProtobuf(r);
+    if (req.pki_encrypted) {
+        myReply->pki_encrypted = true;
+    }
 }
 
 void AdminModule::reboot(int32_t seconds)

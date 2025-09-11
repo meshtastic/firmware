@@ -34,6 +34,21 @@
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
 
+// Helper function to skip excluded module configs and advance state
+size_t PhoneAPI::skipExcludedModuleConfig(uint8_t *buf)
+{
+    config_state++;
+    if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
+        if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
+            state = STATE_SEND_FILEMANIFEST;
+        } else {
+            state = STATE_SEND_OTHER_NODEINFOS;
+        }
+        config_state = 0;
+    }
+    return getFromRadio(buf);
+}
+
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -354,20 +369,35 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.payload_variant.serial = moduleConfig.serial;
             break;
         case meshtastic_ModuleConfig_external_notification_tag:
+#if !(NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION)
             LOG_DEBUG("Send module config: ext notification");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_external_notification_tag;
             fromRadioScratch.moduleConfig.payload_variant.external_notification = moduleConfig.external_notification;
             break;
+#else
+            LOG_DEBUG("External Notification module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         case meshtastic_ModuleConfig_store_forward_tag:
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
             LOG_DEBUG("Send module config: store forward");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_store_forward_tag;
             fromRadioScratch.moduleConfig.payload_variant.store_forward = moduleConfig.store_forward;
             break;
+#else
+            LOG_DEBUG("Store & Forward module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         case meshtastic_ModuleConfig_range_test_tag:
+#if !MESHTASTIC_EXCLUDE_RANGETEST
             LOG_DEBUG("Send module config: range test");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_range_test_tag;
             fromRadioScratch.moduleConfig.payload_variant.range_test = moduleConfig.range_test;
             break;
+#else
+            LOG_DEBUG("Range Test module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         case meshtastic_ModuleConfig_telemetry_tag:
             LOG_DEBUG("Send module config: telemetry");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
@@ -379,10 +409,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case meshtastic_ModuleConfig_audio_tag:
+#if !MESHTASTIC_EXCLUDE_AUDIO
             LOG_DEBUG("Send module config: audio");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_audio_tag;
             fromRadioScratch.moduleConfig.payload_variant.audio = moduleConfig.audio;
             break;
+#else
+            LOG_DEBUG("Audio module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         case meshtastic_ModuleConfig_remote_hardware_tag:
             LOG_DEBUG("Send module config: remote hardware");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
@@ -399,15 +434,25 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.payload_variant.detection_sensor = moduleConfig.detection_sensor;
             break;
         case meshtastic_ModuleConfig_ambient_lighting_tag:
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
             LOG_DEBUG("Send module config: ambient lighting");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             fromRadioScratch.moduleConfig.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
+#else
+            LOG_DEBUG("Ambient Lighting module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         case meshtastic_ModuleConfig_paxcounter_tag:
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
             LOG_DEBUG("Send module config: paxcounter");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
+#else
+            LOG_DEBUG("Paxcounter module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         default:
             LOG_ERROR("Unknown module config type %d", config_state);
         }

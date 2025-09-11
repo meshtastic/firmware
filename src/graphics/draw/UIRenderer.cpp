@@ -194,7 +194,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
     }
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS)) &&                                  \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS)) &&            \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (isHighResolution) {
@@ -879,7 +879,26 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     config.display.heading_bold = false;
 
     const char *displayLine = ""; // Initialize to empty string by default
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+
+    bool usePhoneGPS = (ourNode && nodeDB->hasValidPosition(ourNode) &&
+                        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED);
+
+    if (usePhoneGPS) {
+        // Phone-provided GPS is active
+        displayLine = "Phone GPS";
+        int yOffset = (isHighResolution) ? 3 : 1;
+        if (isHighResolution) {
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
+        } else {
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
+        }
+        int xOffset = (isHighResolution) ? 6 : 0;
+        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
+    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        // GPS disabled / not present
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
         } else {
@@ -896,6 +915,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
     } else {
+        // Onboard GPS
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
     }
 
@@ -922,32 +942,61 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
+        // === Second Row: Last GPS Fix ===
+        if (gpsStatus->getLastFixMillis() > 0) {
+            uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
+            uint32_t days = delta / 86400;
+            uint32_t hours = (delta % 86400) / 3600;
+            uint32_t mins = (delta % 3600) / 60;
+            uint32_t secs = delta % 60;
 
-        // === Second Row: Date ===
-        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-        char datetimeStr[25];
-        bool showTime = false; // set to true for full datetime
-        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
-        char fullLine[40];
-        snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
-        display->drawString(0, getTextPositions(display)[line++], fullLine);
+            char buf[32];
+#if defined(USE_EINK)
+            // E-Ink: skip seconds, show only days/hours/mins
+            if (days > 0) {
+                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
+            } else if (hours > 0) {
+                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
+            } else {
+                snprintf(buf, sizeof(buf), " Last: %um", mins);
+            }
+#else
+            // Non E-Ink: include seconds where useful
+            if (days > 0) {
+                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
+            } else if (hours > 0) {
+                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
+            } else if (mins > 0) {
+                snprintf(buf, sizeof(buf), "Last: %um %us", mins, secs);
+            } else {
+                snprintf(buf, sizeof(buf), "Last: %us", secs);
+            }
+#endif
+
+            display->drawString(0, getTextPositions(display)[line++], buf);
+        } else {
+            display->drawString(0, getTextPositions(display)[line++], "Last: ?");
+        }
 
         // === Third Row: Latitude ===
         char latStr[32];
-        snprintf(latStr, sizeof(latStr), " Lat: %.5f", geoCoord.getLatitude() * 1e-7);
+        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], latStr);
 
         // === Fourth Row: Longitude ===
         char lonStr[32];
-        snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
+        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
         // === Fifth Row: Altitude ===
         char DisplayLineTwo[32] = {0};
+        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
+                          ? ourNode->position.altitude
+                          : geoCoord.getAltitude();
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
         }
         display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
     }

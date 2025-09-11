@@ -562,6 +562,91 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
+#elif defined(ST7796_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for ST7796 driver chip
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_ST7796 _panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+    lgfx::Light_PWM _light_instance;
+
+  public:
+    LGFX(void)
+    {
+        {
+            auto cfg = _bus_instance.config();
+
+            // SPI
+            cfg.spi_host = ST7796_SPI_HOST;
+            cfg.spi_mode = 0;
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
+            cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
+            cfg.spi_3wire = false;
+            cfg.use_lock = true;               // Set to true to use transaction locking
+            cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+                                               // SPI_DMA_CH_AUTO=auto setting)
+            cfg.pin_sclk = ST7796_SCK;         // Set SPI SCLK pin number
+            cfg.pin_mosi = ST7796_SDA;         // Set SPI MOSI pin number
+            cfg.pin_miso = ST7796_MISO;        // Set SPI MISO pin number (-1 = disable)
+            cfg.pin_dc = ST7796_RS;            // Set SPI DC pin number (-1 = disable)
+
+            _bus_instance.config(cfg);              // applies the set value to the bus.
+            _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
+        }
+
+        {                                        // Set the display panel control.
+            auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
+
+            cfg.pin_cs = ST7796_CS;     // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = ST7796_RESET; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = ST7796_BUSY; // Pin number where BUSY is connected (-1 = disable)
+
+            // cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
+            // cfg.memory_height = TFT_HEIGHT;            // Maximum height supported by the driver IC
+            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+#ifdef TFT_DUMMY_READ_PIXELS
+            cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
+#else
+            cfg.dummy_read_pixel = 8; // Number of bits for dummy read before pixel readout
+#endif
+            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;                          // Set to true if data can be read
+            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+            cfg.dlen_16bit =
+                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+            cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+
+            _panel_instance.config(cfg);
+        }
+
+#ifdef ST7796_BL
+        // Set the backlight control. (delete if not necessary)
+        {
+            auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
+
+            cfg.pin_bl = ST7796_BL; // Pin number to which the backlight is connected
+            cfg.invert = false;     // true to invert the brightness of the backlight
+            cfg.freq = 44100;
+            cfg.pwm_channel = 7;
+
+            _light_instance.config(cfg);
+            _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
+        }
+#endif
+
+        setPanel(&_panel_instance); // Sets the panel to use.
+    }
+};
+
+static LGFX *tft = nullptr;
+
 #elif defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER)
 
 #include <LovyanGFX.hpp> // Graphics and font library for ILI9341/ILI9342 driver chip
@@ -682,24 +767,24 @@ class LGFX : public lgfx::LGFX_Device
 
     LGFX(void)
     {
-        if (settingsMap[displayPanel] == st7789)
+        if (portduino_config.displayPanel == st7789)
             _panel_instance = new lgfx::Panel_ST7789;
-        else if (settingsMap[displayPanel] == st7735)
+        else if (portduino_config.displayPanel == st7735)
             _panel_instance = new lgfx::Panel_ST7735;
-        else if (settingsMap[displayPanel] == st7735s)
+        else if (portduino_config.displayPanel == st7735s)
             _panel_instance = new lgfx::Panel_ST7735S;
-        else if (settingsMap[displayPanel] == st7796)
+        else if (portduino_config.displayPanel == st7796)
             _panel_instance = new lgfx::Panel_ST7796;
-        else if (settingsMap[displayPanel] == ili9341)
+        else if (portduino_config.displayPanel == ili9341)
             _panel_instance = new lgfx::Panel_ILI9341;
-        else if (settingsMap[displayPanel] == ili9342)
+        else if (portduino_config.displayPanel == ili9342)
             _panel_instance = new lgfx::Panel_ILI9342;
-        else if (settingsMap[displayPanel] == ili9488)
+        else if (portduino_config.displayPanel == ili9488)
             _panel_instance = new lgfx::Panel_ILI9488;
-        else if (settingsMap[displayPanel] == hx8357d)
+        else if (portduino_config.displayPanel == hx8357d)
             _panel_instance = new lgfx::Panel_HX8357D;
 #if defined(LGFX_SDL)
-        else if (settingsMap[displayPanel] == x11) {
+        else if (portduino_config.displayPanel == x11) {
             _panel_instance = new lgfx::Panel_sdl;
         }
 #endif
@@ -710,61 +795,61 @@ class LGFX : public lgfx::LGFX_Device
 
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        buscfg.spi_host = settingsMap[displayspidev];
+        buscfg.spi_host = portduino_config.display_spi_dev_int;
 
-        buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
+        buscfg.pin_dc = portduino_config.displayDC.pin; // Set SPI DC pin number (-1 = disable)
 
         _bus_instance.config(buscfg);            // applies the set value to the bus.
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Width: %d, Height: %d", settingsMap[displayWidth], settingsMap[displayHeight]);
-        cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
-        cfg.pin_rst = settingsMap[displayReset];
-        if (settingsMap[displayRotate]) {
-            cfg.panel_width = settingsMap[displayHeight]; // actual displayable width
-            cfg.panel_height = settingsMap[displayWidth]; // actual displayable height
+        LOG_DEBUG("Width: %d, Height: %d", portduino_config.displayWidth, portduino_config.displayHeight);
+        cfg.pin_cs = portduino_config.displayCS.pin; // Pin number where CS is connected (-1 = disable)
+        cfg.pin_rst = portduino_config.displayReset.pin;
+        if (portduino_config.displayRotate) {
+            cfg.panel_width = portduino_config.displayHeight; // actual displayable width
+            cfg.panel_height = portduino_config.displayWidth; // actual displayable height
         } else {
-            cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
-            cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
+            cfg.panel_width = portduino_config.displayWidth;   // actual displayable width
+            cfg.panel_height = portduino_config.displayHeight; // actual displayable height
         }
-        cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
-        cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
-        cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
-        cfg.invert = settingsMap[displayInvert];                // Set to true if the light/darkness of the panel is reversed
+        cfg.offset_x = portduino_config.displayOffsetX;             // Panel offset amount in X direction
+        cfg.offset_y = portduino_config.displayOffsetY;             // Panel offset amount in Y direction
+        cfg.offset_rotation = portduino_config.displayOffsetRotate; // Rotation direction value offset 0~7 (4~7 is mirrored)
+        cfg.invert = portduino_config.displayInvert;                // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
 
         // Configure settings for touch  control.
-        if (settingsMap[touchscreenModule]) {
-            if (settingsMap[touchscreenModule] == xpt2046) {
+        if (portduino_config.touchscreenModule) {
+            if (portduino_config.touchscreenModule == xpt2046) {
                 _touch_instance = new lgfx::Touch_XPT2046;
-            } else if (settingsMap[touchscreenModule] == stmpe610) {
+            } else if (portduino_config.touchscreenModule == stmpe610) {
                 _touch_instance = new lgfx::Touch_STMPE610;
-            } else if (settingsMap[touchscreenModule] == ft5x06) {
+            } else if (portduino_config.touchscreenModule == ft5x06) {
                 _touch_instance = new lgfx::Touch_FT5x06;
             }
             auto touch_cfg = _touch_instance->config();
 
-            touch_cfg.pin_cs = settingsMap[touchscreenCS];
+            touch_cfg.pin_cs = portduino_config.touchscreenCS.pin;
             touch_cfg.x_min = 0;
-            touch_cfg.x_max = settingsMap[displayHeight] - 1;
+            touch_cfg.x_max = portduino_config.displayHeight - 1;
             touch_cfg.y_min = 0;
-            touch_cfg.y_max = settingsMap[displayWidth] - 1;
-            touch_cfg.pin_int = settingsMap[touchscreenIRQ];
+            touch_cfg.y_max = portduino_config.displayWidth - 1;
+            touch_cfg.pin_int = portduino_config.touchscreenIRQ.pin;
             touch_cfg.bus_shared = true;
-            touch_cfg.offset_rotation = settingsMap[touchscreenRotate];
-            if (settingsMap[touchscreenI2CAddr] != -1) {
-                touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
+            touch_cfg.offset_rotation = portduino_config.touchscreenRotate;
+            if (portduino_config.touchscreenI2CAddr != -1) {
+                touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
             } else {
-                touch_cfg.spi_host = settingsMap[touchscreenspidev];
+                touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
             }
 
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
         }
 #if defined(LGFX_SDL)
-        if (settingsMap[displayPanel] == x11) {
+        if (portduino_config.displayPanel == x11) {
             lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)_panel_instance;
             sdl_panel_->setup();
             sdl_panel_->addKeyCodeMapping(SDLK_RETURN, SDL_SCANCODE_KP_ENTER);
@@ -997,8 +1082,9 @@ static LGFX *tft = nullptr;
 
 #endif
 
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ST7796_CS) || defined(ILI9341_DRIVER) ||           \
+    defined(ILI9342_DRIVER) || defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) ||           \
+    (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -1029,10 +1115,10 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
     backlightEnable = p;
 
 #if ARCH_PORTDUINO
-    if (settingsMap[displayRotate]) {
-        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    if (portduino_config.displayRotate) {
+        setGeometry(GEOMETRY_RAWMODE, portduino_config.displayWidth, portduino_config.displayWidth);
     } else {
-        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
+        setGeometry(GEOMETRY_RAWMODE, portduino_config.displayHeight, portduino_config.displayHeight);
     }
 
 #elif defined(SCREEN_ROTATE)
@@ -1042,37 +1128,111 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 #endif
 }
 
+TFTDisplay::~TFTDisplay()
+{
+    // Clean up allocated line pixel buffer to prevent memory leak
+    if (linePixelBuffer != nullptr) {
+        free(linePixelBuffer);
+        linePixelBuffer = nullptr;
+    }
+}
+
 // Write the buffer to the display memory
 void TFTDisplay::display(bool fromBlank)
 {
     if (fromBlank)
         tft->fillScreen(TFT_BLACK);
-    // tft->clear();
+
     concurrency::LockGuard g(spiLock);
 
-    uint16_t x, y;
+    uint32_t x, y;
+    uint32_t y_byteIndex;
+    uint8_t y_byteMask;
+    uint32_t x_FirstPixelUpdate;
+    uint32_t x_LastPixelUpdate;
+    bool isset, dblbuf_isset;
+    uint16_t colorTftMesh, colorTftBlack;
+    bool somethingChanged = false;
 
-    for (y = 0; y < displayHeight; y++) {
-        for (x = 0; x < displayWidth; x++) {
-            auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
+    // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
+    colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
+    colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
+
+    y = 0;
+    while (y < displayHeight) {
+        y_byteIndex = (y / 8) * displayWidth;
+        y_byteMask = (1 << (y & 7));
+
+        // Step 1: Do a quick scan of 8 rows together. This allows fast-forwarding over unchanged screen areas.
+        if (y_byteMask == 1) {
             if (!fromBlank) {
-                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
-                auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
-                if (isset != dblbuf_isset) {
-                    tft->drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
+                for (x = 0; x < displayWidth; x++) {
+                    if (buffer[x + y_byteIndex] != buffer_back[x + y_byteIndex])
+                        break;
                 }
-            } else if (isset) {
-                tft->drawPixel(x, y, TFT_MESH);
+            } else {
+                for (x = 0; x < displayWidth; x++) {
+                    if (buffer[x + y_byteIndex] != 0)
+                        break;
+                }
+            }
+            if (x >= displayWidth) {
+                // No changed pixels found in these 8 rows, fast-forward to the next 8
+                y = y + 8;
+                continue;
             }
         }
+
+        // Step 2: Scan each of the 8 rows individually. Find the first pixel in each row that needs updating
+        for (x_FirstPixelUpdate = 0; x_FirstPixelUpdate < displayWidth; x_FirstPixelUpdate++) {
+            isset = buffer[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+
+            if (!fromBlank) {
+                // get src pixel in the page based ordering the OLED lib uses
+                dblbuf_isset = buffer_back[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+                if (isset != dblbuf_isset) {
+                    break;
+                }
+            } else if (isset) {
+                break;
+            }
+        }
+
+        // Did we find a pixel that needs updating on this row?
+        if (x_FirstPixelUpdate < displayWidth) {
+
+            // Quickly write out the first changed pixel (saves another array lookup)
+            linePixelBuffer[x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+            x_LastPixelUpdate = x_FirstPixelUpdate;
+
+            // Step 3: copy all remaining pixels in this row into the pixel line buffer,
+            // while also recording the last pixel in the row that needs updating
+            for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
+                isset = buffer[x + y_byteIndex] & y_byteMask;
+                linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
+
+                if (!fromBlank) {
+                    dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
+                    if (isset != dblbuf_isset) {
+                        x_LastPixelUpdate = x;
+                    }
+                } else if (isset) {
+                    x_LastPixelUpdate = x;
+                }
+            }
+
+            // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
+            // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
+            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+                          &linePixelBuffer[x_FirstPixelUpdate]);
+
+            somethingChanged = true;
+        }
+        y++;
     }
     // Copy the Buffer to the Back Buffer
-    for (y = 0; y < (displayHeight / 8); y++) {
-        for (x = 0; x < displayWidth; x++) {
-            uint16_t pos = x + y * displayWidth;
-            buffer_back[pos] = buffer[pos];
-        }
-    }
+    if (somethingChanged)
+        memcpy(buffer_back, buffer, displayBufferSize);
 }
 
 void TFTDisplay::sdlLoop()
@@ -1080,7 +1240,7 @@ void TFTDisplay::sdlLoop()
 #if defined(LGFX_SDL)
     static int lastPressed = 0;
     static int shuttingDown = false;
-    if (settingsMap[displayPanel] == x11) {
+    if (portduino_config.displayPanel == x11) {
         lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)tft->_panel_instance;
         if (sdl_panel_->loop() && !shuttingDown) {
             LOG_WARN("Window Closed!");
@@ -1128,8 +1288,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
-        if (settingsMap[displayBacklight] > 0)
-            digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
+        if (portduino_config.displayBacklight.pin > 0)
+            digitalWrite(portduino_config.displayBacklight.pin, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
@@ -1152,8 +1312,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
-        if (settingsMap[displayBacklight] > 0)
-            digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
+        if (portduino_config.displayBacklight.pin > 0)
+            digitalWrite(portduino_config.displayBacklight.pin, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();
@@ -1264,13 +1424,21 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR)
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
     tft->fillScreen(TFT_BLACK);
 
+    if (this->linePixelBuffer == NULL) {
+        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);
+
+        if (!this->linePixelBuffer) {
+            LOG_ERROR("Not enough memory to create TFT line buffer\n");
+            return false;
+        }
+    }
     return true;
 }
 

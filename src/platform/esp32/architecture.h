@@ -45,6 +45,9 @@
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
+#ifndef HAS_32768HZ
+#define HAS_32768HZ 0
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU
@@ -192,6 +195,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
+#elif defined(T_LORA_PAGER)
+#define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
 #endif
 
 // -----------------------------------------------------------------------------
@@ -215,3 +220,13 @@
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.
+
+// Setup flag, which indicates if our device supports power management
+#ifdef CONFIG_PM_ENABLE
+#define HAS_ESP32_PM_SUPPORT 1
+#endif
+
+// Setup flag, which indicates if our device supports dynamic light sleep
+#if defined(HAS_ESP32_PM_SUPPORT) && defined(CONFIG_FREERTOS_USE_TICKLESS_IDLE)
+#define HAS_ESP32_DYNAMIC_LIGHT_SLEEP 1
+#endif

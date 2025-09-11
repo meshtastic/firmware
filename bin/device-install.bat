@@ -7,6 +7,7 @@ SET "DEBUG=0"
 SET "PYTHON="
 SET "TFT_BUILD=0"
 SET "BIGDB8=0"
+SET "MUIDB8=0"
 SET "BIGDB16=0"
 SET "ESPTOOL_BAUD=115200"
 SET "ESPTOOL_CMD="
@@ -14,11 +15,12 @@ SET "LOGCOUNTER=0"
 SET "BPS_RESET=0"
 
 @REM FIXME: Determine mcu from PlatformIO variant, this is unmaintainable.
-SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
+SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone t-eth-elite tlora-pager mesh-tab dreamcatcher ESP32-S3-Pico seeed-sensecap-indicator heltec_capsule_sensor_v3 vision-master icarus tracksenger elecrow-adv"
 SET "C3=esp32c3"
 @REM FIXME: Determine flash size from PlatformIO variant, this is unmaintainable.
-SET "BIGDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
-SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite t-watch-s3"
+SET "BIGDB_8MB=crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
+SET "MUIDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator"
+SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite tlora-pager t-watch-s3 elecrow-adv"
 
 GOTO getopts
 :help
@@ -100,7 +102,6 @@ IF NOT "!FILENAME:update=!"=="!FILENAME!" (
 )
 
 :skip-filename
-SET "ESPTOOL_BAUD=1200"
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
@@ -120,11 +121,10 @@ IF NOT "__%PYTHON%__"=="____" (
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 !ESPTOOL_CMD! >nul 2>&1
-IF %ERRORLEVEL% GEQ 2 (
-    @REM esptool exits with code 1 if help is displayed.
+IF %ERRORLEVEL% EQU 9009 (
+    @REM 9009 = command not found on Windows
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
-    GOTO eof
 )
 IF %DEBUG% EQU 1 (
     CALL :LOG_MESSAGE DEBUG "Skipping ESPTOOL_CMD steps."
@@ -142,7 +142,7 @@ CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
 IF %BPS_RESET% EQU 1 (
     @REM Attempt to change mode via 1200bps Reset.
-    CALL :RUN_ESPTOOL !ESPTOOL_BAUD! --after no_reset read_flash_status
+    CALL :RUN_ESPTOOL 1200 --after no_reset read_flash_status
     GOTO eof
 )
 
@@ -164,6 +164,15 @@ FOR %%a IN (%BIGDB_8MB%) DO (
 )
 :end_loop_bigdb_8mb
 
+FOR %%a IN (%MUIDB_8MB%) DO (
+    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
+        @REM We are working with any of %MUIDB_8MB%.
+        SET "MUIDB8=1"
+        GOTO end_loop_muidb_8mb
+    )
+)
+:end_loop_muidb_8mb
+
 FOR %%a IN (%BIGDB_16MB%) DO (
     IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
         @REM We are working with any of %BIGDB_16MB%.
@@ -174,6 +183,7 @@ FOR %%a IN (%BIGDB_16MB%) DO (
 :end_loop_bigdb_16mb
 
 IF %BIGDB8% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 8mb partition selected."
+IF %MUIDB8% EQU 1 CALL :LOG_MESSAGE INFO "MUIDB 8mb partition selected."
 IF %BIGDB16% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 16mb partition selected."
 
 @REM Extract BASENAME from %FILENAME% for later use.
@@ -215,6 +225,12 @@ SET "SPIFFS_OFFSET=0x300000"
 @REM Offsets for BigDB 8mb.
 IF %BIGDB8% EQU 1 (
     SET "OTA_OFFSET=0x340000"
+    SET "SPIFFS_OFFSET=0x670000"
+)
+
+@REM Offsets for MUIDB 8mb.
+IF %MUIDB8% EQU 1 (
+    SET "OTA_OFFSET=0x5D0000"
     SET "SPIFFS_OFFSET=0x670000"
 )
 
