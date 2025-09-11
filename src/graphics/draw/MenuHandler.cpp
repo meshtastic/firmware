@@ -660,7 +660,7 @@ void menuHandler::nodeNameLengthMenu()
         } else if (selected == Short) {
             // Set names to short
             LOG_INFO("Setting names to short");
-            config.display.use_long_node_name = false; 
+            config.display.use_long_node_name = false;
         } else if (selected == Back) {
             menuQueue = screen_options_menu;
             screen->runNow();
