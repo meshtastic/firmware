@@ -46,7 +46,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     shorterTimeout = _shorterTimeout;
     DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocReply();
-    DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo");
+    DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;

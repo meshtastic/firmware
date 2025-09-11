@@ -278,7 +278,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
         DEBUG_HEAP_BEFORE;
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
-        DEBUG_HEAP_AFTER("Router::send");
+        DEBUG_HEAP_AFTER("Router::send", p_decoded);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -614,7 +614,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // Store a copy of encrypted packet for MQTT
     DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
-    DEBUG_HEAP_AFTER("Router::handleReceived");
+    DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);

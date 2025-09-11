@@ -24,7 +24,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
-        DEBUG_HEAP_AFTER("ReliableRouter::send");
+        DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
         startRetransmission(copy, NUM_RELIABLE_RETX);
     }

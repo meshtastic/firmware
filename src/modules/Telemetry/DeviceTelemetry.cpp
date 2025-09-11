@@ -174,7 +174,7 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
-    DEBUG_HEAP_AFTER("DeviceTelemetryModule::sendTelemetry");
+    DEBUG_HEAP_AFTER("DeviceTelemetryModule::sendTelemetry", p);
 
     p->to = dest;
     p->decoded.want_response = false;

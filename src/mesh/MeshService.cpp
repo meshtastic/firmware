@@ -195,7 +195,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     // Send the packet into the mesh
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
-    DEBUG_HEAP_AFTER("MeshService::handleToRadio");
+    DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
     sendToMesh(a, RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
@@ -254,7 +254,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
         DEBUG_HEAP_BEFORE;
         auto a = packetPool.allocCopy(*p);
-        DEBUG_HEAP_AFTER("MeshService::sendToMesh");
+        DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
 
         sendToPhone(a);
     }
