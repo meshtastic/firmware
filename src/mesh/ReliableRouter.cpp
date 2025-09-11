@@ -22,14 +22,9 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         if (p->hop_limit == 0) {
             p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
-#if defined(DEBUG_HEAP)
-        auto heapBefore = memGet.getFreeHeap();
-#endif
+        DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
-#if defined(DEBUG_HEAP)
-        auto heapAfter = memGet.getFreeHeap();
-        LOG_HEAP("Alloc in ReliableRouter::send() pointer 0x%x, size: %u, free: %u", copy, heapBefore - heapAfter, heapAfter);
-#endif
+        DEBUG_HEAP_AFTER("ReliableRouter::send");
 
         startRetransmission(copy, NUM_RELIABLE_RETX);
     }
