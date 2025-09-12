@@ -25,10 +25,15 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
   protected:
     /** Called to handle a particular incoming message
-
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *p) override;
+
+    /** Called to handle a particular incoming message and continue or stop processing
+     * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered
+     * for it
+     */
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  */
