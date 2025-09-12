@@ -79,23 +79,21 @@ bool copyFile(const char *from, const char *to)
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef FSCom
-
-#ifdef ARCH_ESP32
-    // take SPI Lock
-    spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
-    bool result = FSCom.rename(pathFrom, pathTo);
-    spiLock->unlock();
-    return result;
-#else
-    // copyFile does its own locking.
-    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
-        return true;
-    } else {
-        return false;
-    }
+    bool result = false;
+    {
+        concurrency::LockGuard g(spiLock);
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
+        result = FSCom.rename(pathFrom, pathTo);
 #endif
-
+    }
+    if (!result) {
+        if (copyFile(pathFrom, pathTo)) {
+            concurrency::LockGuard g(spiLock);
+            FSCom.remove(pathFrom);
+            result = true;
+        }
+    }
+    return result;
 #endif
 }
 
