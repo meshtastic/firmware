@@ -44,7 +44,10 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
+    DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocReply();
+    DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
+
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
         p->decoded.want_response = (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&

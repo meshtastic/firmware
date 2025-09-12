@@ -193,8 +193,10 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                                                  // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
-
-    sendToMesh(packetPool.allocCopy(p), RX_SRC_USER);
+    DEBUG_HEAP_BEFORE;
+    auto a = packetPool.allocCopy(p);
+    DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
+    sendToMesh(a, RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
     if (loopback) {
@@ -250,7 +252,11 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
-        sendToPhone(packetPool.allocCopy(*p));
+        DEBUG_HEAP_BEFORE;
+        auto a = packetPool.allocCopy(*p);
+        DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
+
+        sendToPhone(a);
     }
 
     // Router may ask us to release the packet if it wasn't sent

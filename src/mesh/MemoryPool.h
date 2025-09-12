@@ -84,6 +84,8 @@ template <class T> class MemoryDynamic : public Allocator<T>
     virtual void release(T *p) override
     {
         assert(p);
+        LOG_HEAP("Freeing 0x%x", p);
+
         free(p);
     }
 
