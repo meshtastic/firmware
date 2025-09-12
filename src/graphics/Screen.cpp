@@ -1419,6 +1419,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             }
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+            const meshtastic_Channel channel = channels.getByIndex(node->channel ? node->channel : channels.getPrimaryIndex());
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
@@ -1440,15 +1441,14 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 } else {
                     strcpy(banner, "Alert Received");
                 }
-            } else {
+            } else if (!node->is_muted && !channel.settings.mute) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
                 } else {
                     strcpy(banner, "New Message");
                 }
+                screen->showSimpleBanner(banner, 3000);
             }
-
-            screen->showSimpleBanner(banner, 3000);
         }
     }
 
