@@ -130,11 +130,15 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
+#ifdef GPS_DEBUG
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+#endif
         return RTCSetResultInvalidTime;
     } else if (tv->tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+#ifdef GPS_DEBUG
         LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
                  BUILD_EPOCH + FORTY_YEARS);
+#endif
         return RTCSetResultInvalidTime;
     }
 #endif
@@ -252,11 +256,15 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
+#ifdef GPS_DEBUG
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+#endif
         return RTCSetResultInvalidTime;
     } else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+#ifdef GPS_DEBUG
         LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
                  BUILD_EPOCH + FORTY_YEARS);
+#endif
         return RTCSetResultInvalidTime;
     }
 #endif

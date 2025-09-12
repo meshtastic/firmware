@@ -12,7 +12,7 @@
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
 #if ARCH_PORTDUINO
-#define SX126X_MAX_POWER settingsMap[sx126x_max_power]
+#define SX126X_MAX_POWER portduino_config.sx126x_max_power
 #endif
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
@@ -53,10 +53,10 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
-    if (settingsMap[sx126x_ant_sw_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[sx126x_ant_sw_pin], HIGH);
-        pinMode(settingsMap[sx126x_ant_sw_pin], OUTPUT);
+    tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
+        pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
     }
 #endif
     if (tcxoVoltage == 0.0)
@@ -98,7 +98,7 @@ template <typename T> bool SX126xInterface<T>::init()
         bool dio2AsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
         bool dio2AsRfSwitch = false;
-        if (settingsMap[dio2_as_rf_switch]) {
+        if (portduino_config.dio2_as_rf_switch) {
             dio2AsRfSwitch = true;
         }
 #else
@@ -112,9 +112,9 @@ template <typename T> bool SX126xInterface<T>::init()
     // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen_pin],
-                  settingsMap[txen_pin]);
-        lora.setRfSwitchPins(settingsMap[rxen_pin], settingsMap[txen_pin]);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", portduino_config.lora_rxen_pin.pin,
+                  portduino_config.lora_txen_pin.pin);
+        lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN

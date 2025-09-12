@@ -1040,19 +1040,32 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.serial = moduleConfig.serial;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
+#if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
             LOG_INFO("Get module config: External Notification");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_external_notification_tag;
             res.get_module_config_response.payload_variant.external_notification = moduleConfig.external_notification;
+#else
+            LOG_DEBUG("External Notification module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
             LOG_INFO("Get module config: Store & Forward");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_store_forward_tag;
             res.get_module_config_response.payload_variant.store_forward = moduleConfig.store_forward;
+#else
+            LOG_DEBUG("Store & Forward module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
+#if !MESHTASTIC_EXCLUDE_RANGETEST
             LOG_INFO("Get module config: Range Test");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_range_test_tag;
             res.get_module_config_response.payload_variant.range_test = moduleConfig.range_test;
+#else
+            LOG_DEBUG("Range Test module excluded from build, skipping config");
+            // Don't set payload variant - will result in empty response
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
             LOG_INFO("Get module config: Telemetry");
@@ -1065,9 +1078,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG:
+#if !MESHTASTIC_EXCLUDE_AUDIO
             LOG_INFO("Get module config: Audio");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
+#else
+            LOG_DEBUG("Audio module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG:
             LOG_INFO("Get module config: Remote Hardware");
@@ -1080,19 +1097,31 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG:
+#if !(NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR)
             LOG_INFO("Get module config: Detection Sensor");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
             res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
+#else
+            LOG_DEBUG("Detection Sensor module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
             LOG_INFO("Get module config: Ambient Lighting");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
+#else
+            LOG_DEBUG("Ambient Lighting module excluded from build, skipping config");
+#endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
             LOG_INFO("Get module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+#else
+            LOG_DEBUG("Paxcounter module excluded from build, skipping config");
+#endif
             break;
         }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NodeDB.h"
 #include "graphics/Screen.h"
 #include "graphics/emotes.h"
 #include <OLEDDisplay.h>
