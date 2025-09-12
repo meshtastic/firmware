@@ -275,7 +275,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
+
+        DEBUG_HEAP_BEFORE;
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
+        DEBUG_HEAP_AFTER("Router::send", p_decoded);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -607,8 +610,11 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     bool skipHandle = false;
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+
     // Store a copy of encrypted packet for MQTT
+    DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
+    DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);
@@ -656,7 +662,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
-    if (!skipHandle && p->from != nodeDB->getNodeNum()) {
+    if (!skipHandle) {
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -670,8 +676,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
-    } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
-        MeshModule::callModules(*p, src);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
