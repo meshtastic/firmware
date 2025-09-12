@@ -6,6 +6,8 @@
 
 #define ORIGIN_NAME "RotaryEncoder"
 
+#define ROTARY_INTERRUPT_FLAG _BV(0)
+
 RotaryEncoderImpl *rotaryEncoderImpl;
 
 RotaryEncoderImpl::RotaryEncoderImpl() : concurrency::OSThread(ORIGIN_NAME), originName(ORIGIN_NAME)
@@ -30,6 +32,17 @@ bool RotaryEncoderImpl::init()
                                moduleConfig.canned_message.inputbroker_pin_press);
     rotary->resetButton();
 
+    inputQueue = xQueueCreate(5, sizeof(input_broker_event));
+    interruptFlag = xEventGroupCreate();
+    interruptInstance = this;
+    auto interruptHandler = []() {
+        xEventGroupSetBits(interruptInstance->interruptFlag, ROTARY_INTERRUPT_FLAG);
+    };
+    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
+    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
+    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
+    xTaskCreate(inputWorker, "rotary", 2 * 1024, this, 10, &inputWorkerTask);
+
     inputBroker->registerSource(this);
 
     LOG_INFO("RotaryEncoder initialized pins(%d, %d, %d), events(%d, %d, %d)", moduleConfig.canned_message.inputbroker_pin_a,
@@ -38,35 +51,49 @@ bool RotaryEncoderImpl::init()
     return true;
 }
 
-int32_t RotaryEncoderImpl::runOnce()
+void RotaryEncoderImpl::dispatchInputs()
 {
-    InputEvent e{originName, INPUT_BROKER_NONE, 0, 0, 0};
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
         if (lastPressed + 200 < millis()) {
-            LOG_DEBUG("Rotary event Press");
+            // LOG_DEBUG("Rotary event Press");
             lastPressed = millis();
-            e.inputEvent = this->eventPressed;
-        }
-    } else {
-        switch (rotary->process()) {
-        case RotaryEncoder::DIRECTION_CW:
-            LOG_DEBUG("Rotary event CW");
-            e.inputEvent = this->eventCw;
-            break;
-        case RotaryEncoder::DIRECTION_CCW:
-            LOG_DEBUG("Rotary event CCW");
-            e.inputEvent = this->eventCcw;
-            break;
-        default:
-            break;
+            xQueueSend(inputQueue, &this->eventPressed, portMAX_DELAY);
         }
     }
 
-    if (e.inputEvent != INPUT_BROKER_NONE) {
+    switch (rotary->process()) {
+    case RotaryEncoder::DIRECTION_CW:
+        // LOG_DEBUG("Rotary event CW");
+        xQueueSend(inputQueue, &this->eventCw, portMAX_DELAY);
+        break;
+    case RotaryEncoder::DIRECTION_CCW:
+        // LOG_DEBUG("Rotary event CCW");
+        xQueueSend(inputQueue, &this->eventCcw, portMAX_DELAY);
+        break;
+    default:
+        break;
+    }
+}
+
+void RotaryEncoderImpl::inputWorker(void *p)
+{
+    RotaryEncoderImpl* instance = (RotaryEncoderImpl*)p;
+    while (true) {
+        xEventGroupWaitBits(instance->interruptFlag, ROTARY_INTERRUPT_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        instance->dispatchInputs();
+    }
+    vTaskDelete(NULL);
+}
+
+RotaryEncoderImpl* RotaryEncoderImpl::interruptInstance;
+
+int32_t RotaryEncoderImpl::runOnce()
+{
+    InputEvent e{originName, INPUT_BROKER_NONE, 0, 0, 0};
+    while(xQueueReceive(inputQueue, &e.inputEvent, 0) == pdPASS) {
         this->notifyObservers(&e);
     }
-
     return 10;
 }
 
