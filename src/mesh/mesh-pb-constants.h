@@ -30,7 +30,7 @@
 
 /// max number of ClientNotification packets which can be waiting for delivery to phone
 #ifndef MAX_RX_NOTIFICATION_TOPHONE
-#define MAX_RX_NOTIFICATION_TOPHONE 4
+#define MAX_RX_NOTIFICATION_TOPHONE 2
 #endif
 
 /// Verify baseline assumption of node size. If it increases, we need to reevaluate
