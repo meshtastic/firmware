@@ -1770,6 +1770,65 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
     }
 }
 
+bool NodeDB::isFavorite(uint32_t nodeId)
+{
+    // returns true if nodeId is_favorite; false if not or not found
+
+    // NODENUM_BROADCAST will never be in the DB
+    if (nodeId == NODENUM_BROADCAST)
+        return false;
+
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+
+    if (lite) {
+        return lite->is_favorite;
+    }
+    return false;
+}
+
+bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
+{
+    // This method is logically equivalent to:
+    //   return isFavorite(p.from) || isFavorite(p.to);
+    // but is more efficient by:
+    //   1. doing only one pass through the database, instead of two
+    //   2. exiting early when a favorite is found, or if both from and to have been seen
+
+    if (p.to == NODENUM_BROADCAST)
+        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
+
+    meshtastic_NodeInfoLite *lite = NULL;
+
+    bool seenFrom = false;
+    bool seenTo = false;
+
+    for (int i = 0; i < numMeshNodes; i++) {
+        lite = &meshNodes->at(i);
+
+        if (lite->num == p.from) {
+            if (lite->is_favorite)
+                return true;
+
+            seenFrom = true;
+        }
+
+        if (lite->num == p.to) {
+            if (lite->is_favorite)
+                return true;
+
+            seenTo = true;
+        }
+
+        if (seenFrom && seenTo)
+            return false; // we've seen both, and neither is a favorite, so we can stop searching early
+
+        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
+        // all favorited nodes first.
+    }
+
+    return false;
+}
+
 void NodeDB::pause_sort(bool paused)
 {
     sortingIsPaused = paused;
