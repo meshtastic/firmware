@@ -46,8 +46,6 @@ class TCA8418KeyboardBase
     virtual char dequeueEvent(void);
 
   protected:
-    enum KeyState { Init, Idle, Held, Busy };
-
     enum TCA8418Register : uint8_t {
         TCA8418_REG_RESERVED = 0x00,
         TCA8418_REG_CFG = 0x01,
@@ -121,7 +119,7 @@ class TCA8418KeyboardBase
     };
 
     virtual void pressed(uint8_t key);
-    virtual void released(void);
+    virtual void released(uint8_t key);
 
     virtual void queueEvent(char);
 
@@ -159,7 +157,6 @@ class TCA8418KeyboardBase
   protected:
     uint8_t rows;
     uint8_t columns;
-    KeyState state;
     String queue;
 
   private:

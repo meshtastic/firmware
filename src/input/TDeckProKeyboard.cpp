@@ -6,8 +6,6 @@
 #define _TCA8418_ROWS 4
 #define _TCA8418_NUM_KEYS 35
 
-#define _TCA8418_MULTI_TAP_THRESHOLD 1500
-
 using Key = TCA8418KeyboardBase::TCA8418Key;
 
 constexpr uint8_t modifierRightShiftKey = 31 - 1; // keynum -1
@@ -20,10 +18,10 @@ constexpr uint8_t modifierAltKey = 30 - 1;
 constexpr uint8_t modifierAlt = 0b0100;
 
 // Num chars per key, Modulus for rotating through characters
-static uint8_t TDeckProTapMod[_TCA8418_NUM_KEYS] = {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-                                                    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5};
+static const uint8_t TDeckProTapMod[_TCA8418_NUM_KEYS] = {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                                                          5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5};
 
-static unsigned char TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
+static const uint8_t TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
     {'p', 'P', '@', 0x00, Key::SEND_PING},
     {'o', 'O', '+'},
     {'i', 'I', '-'},
@@ -61,9 +59,10 @@ static unsigned char TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
     {0x00, 0x00, 0x00} // R_Shift, sym, space, mic, L_Shift
 };
 
+static bool TDeckProHeldMap[_TCA8418_NUM_KEYS] = {};
+
 TDeckProKeyboard::TDeckProKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(-1), next_key(-1),
-      last_tap(0L), char_idx(0), tap_interval(0)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0)
 {
 }
 
@@ -74,91 +73,53 @@ void TDeckProKeyboard::reset()
     setBacklight(false);
 }
 
-// handle multi-key presses (shift and alt)
-void TDeckProKeyboard::trigger()
+int8_t TDeckProKeyboard::keyToIndex(uint8_t key)
 {
-    uint8_t count = keyCount();
-    if (count == 0)
-        return;
-    for (uint8_t i = 0; i < count; ++i) {
-        uint8_t k = readRegister(TCA8418_REG_KEY_EVENT_A + i);
-        uint8_t key = k & 0x7F;
-        if (k & 0x80) {
-            pressed(key);
-        } else {
-            released();
-            state = Idle;
-        }
-    }
-}
-
-void TDeckProKeyboard::pressed(uint8_t key)
-{
-    if (state == Init || state == Busy) {
-        return;
-    }
-    if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
-        modifierFlag = 0;
-    }
-
-    uint8_t next_key = 0;
+    uint8_t key_index = 0;
     int row = (key - 1) / 10;
     int col = (key - 1) % 10;
 
     if (row >= _TCA8418_ROWS || col >= _TCA8418_COLS) {
-        return; // Invalid key
+        return -1; // Invalid key
     }
 
-    next_key = row * _TCA8418_COLS + col;
-    state = Held;
-
-    uint32_t now = millis();
-    tap_interval = now - last_tap;
-
-    updateModifierFlag(next_key);
-    if (isModifierKey(next_key)) {
-        last_modifier_time = now;
-    }
-
-    if (tap_interval < 0) {
-        last_tap = 0;
-        state = Busy;
-        return;
-    }
-
-    if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
-        char_idx = 0;
-    } else {
-        char_idx += 1;
-    }
-
-    last_key = next_key;
-    last_tap = now;
+    key_index = row * _TCA8418_COLS + col;
+    return key_index;
 }
 
-void TDeckProKeyboard::released()
+void TDeckProKeyboard::pressed(uint8_t key)
 {
-    if (state != Held) {
+    int8_t key_index = keyToIndex(key);
+    if (key_index < 0)
+        return;
+
+    if (TDeckProHeldMap[key_index]) {
         return;
     }
 
-    if (last_key < 0 || last_key >= _TCA8418_NUM_KEYS) {
-        last_key = -1;
-        state = Idle;
+    TDeckProHeldMap[key_index] = true;
+    modifierFlag |= keyToModifierFlag(key_index);
+}
+
+void TDeckProKeyboard::released(uint8_t key)
+{
+    int8_t key_index = keyToIndex(key);
+    if (key_index < 0)
+        return;
+
+    if (!TDeckProHeldMap[key_index]) {
         return;
     }
 
-    uint32_t now = millis();
-    last_tap = now;
+    TDeckProHeldMap[key_index] = false;
+    modifierFlag &= ~keyToModifierFlag(key_index);
 
-    if (TDeckProTapMap[last_key][modifierFlag % TDeckProTapMod[last_key]] == Key::BL_TOGGLE) {
+    if (TDeckProTapMap[key_index][modifierFlag % TDeckProTapMod[key_index]] == Key::BL_TOGGLE) {
         toggleBacklight();
         return;
     }
 
-    queueEvent(TDeckProTapMap[last_key][modifierFlag % TDeckProTapMod[last_key]]);
-    if (isModifierKey(last_key) == false)
-        modifierFlag = 0;
+    queueEvent(TDeckProTapMap[key_index][modifierFlag % TDeckProTapMod[key_index]]);
 }
 
 void TDeckProKeyboard::setBacklight(bool on)
@@ -175,22 +136,23 @@ void TDeckProKeyboard::toggleBacklight(void)
     digitalWrite(KB_BL_PIN, !digitalRead(KB_BL_PIN));
 }
 
-void TDeckProKeyboard::updateModifierFlag(uint8_t key)
+uint8_t TDeckProKeyboard::keyToModifierFlag(uint8_t key)
 {
     if (key == modifierRightShiftKey) {
-        modifierFlag ^= modifierRightShift;
+        return modifierRightShift;
     } else if (key == modifierLeftShiftKey) {
-        modifierFlag ^= modifierLeftShift;
+        return modifierLeftShift;
     } else if (key == modifierSymKey) {
-        modifierFlag ^= modifierSym;
+        return modifierSym;
     } else if (key == modifierAltKey) {
-        modifierFlag ^= modifierAlt;
+        return modifierAlt;
     }
+    return 0;
 }
 
 bool TDeckProKeyboard::isModifierKey(uint8_t key)
 {
-    return (key == modifierRightShiftKey || key == modifierLeftShiftKey || key == modifierAltKey || key == modifierSymKey);
+    return keyToModifierFlag(key) != 0;
 }
 
 #endif // T_DECK_PRO
