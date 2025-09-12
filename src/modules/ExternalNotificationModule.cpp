@@ -451,7 +451,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
-            for (int i = 0; i < p.payload.size; i++) {
+            for (size_t i = 0; i < p.payload.size; i++) {
                 if (p.payload.bytes[i] == ASCII_BELL) {
                     containsBell = true;
                 }
@@ -460,7 +460,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             meshtastic_Channel ch = channels.getByIndex(sender->channel ? sender->channel : channels.getPrimaryIndex());
 
-            if (moduleConfig.external_notification.alert_bell && !sender->is_muted && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
                     isNagging = true;
@@ -473,7 +473,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_vibra && !sender->is_muted && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_bell_vibra) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Vibra)");
                     isNagging = true;
@@ -486,7 +486,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz() && !sender->is_muted && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
                     isNagging = true;

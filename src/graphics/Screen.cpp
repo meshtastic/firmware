@@ -95,7 +95,7 @@ namespace graphics
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
-
+#define ASCII_BELL '\x07'
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
@@ -1426,21 +1426,27 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             char banner[256];
 
-            // Check for bell character in message to determine alert type
             bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
 
+            if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
+                moduleConfig.external_notification.alert_bell_buzzer)
+                // Check for bell character to determine if this message is an alert
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == ASCII_BELL) {
+                        isAlert = true;
+                        break;
+                    }
+                }
+
+            // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
+            // 'mute' preferences set to any specific node or channel.
             if (isAlert) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
                 } else {
                     strcpy(banner, "Alert Received");
                 }
+                screen->showSimpleBanner(banner, 3000);
             } else if (!node->is_muted && !channel.settings.mute) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
