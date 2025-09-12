@@ -457,7 +457,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell) {
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+            meshtastic_Channel ch = channels.getByIndex(sender->channel ? sender->channel : channels.getPrimaryIndex());
+
+            if (moduleConfig.external_notification.alert_bell && !sender->is_muted && !ch.settings.mute) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
                     isNagging = true;
@@ -470,7 +473,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_vibra) {
+            if (moduleConfig.external_notification.alert_bell_vibra && !sender->is_muted && !ch.settings.mute) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Vibra)");
                     isNagging = true;
@@ -483,7 +486,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
+            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz() && !sender->is_muted && !ch.settings.mute) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
                     isNagging = true;
@@ -506,9 +509,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     }
                 }
             }
-
-            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
-            meshtastic_Channel ch = channels.getByIndex(sender->channel ? sender->channel : channels.getPrimaryIndex());
 
             if (moduleConfig.external_notification.alert_message && !sender->is_muted && !ch.settings.mute) {
                 LOG_INFO("externalNotificationModule - Notification Module");
