@@ -182,12 +182,18 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
             if (isFromUs(p) || roleAllowsCancelingFromTxQueue(p)) {
                 // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
                 cancelSending(getFrom(p), p->id);
-                // now free the pooled copy for retransmission too
-                packetPool.release(p);
             }
         }
+
+        // Regardless of whether or not we canceled this packet from the txQueue, remove it from our pending list so it doesn't
+        // get scheduled again. (This is the core of stopRetransmission.)
         auto numErased = pending.erase(key);
         assert(numErased == 1);
+
+        // When we remove an entry from pending, always be sure to release the copy of the packet that was allocated in the call
+        // to startRetransmission.
+        packetPool.release(p);
+
         return true;
     } else
         return false;
