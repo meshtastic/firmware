@@ -343,6 +343,16 @@ void Channels::setChannel(const meshtastic_Channel &c)
     old = c; // slam in the new settings/role
 }
 
+void Channels::setMute(ChannelIndex chIndex)
+{
+    if (chIndex < channelFile.channels_count) {
+        meshtastic_Channel *ch = channelFile.channels + chIndex;
+        ch->settings.mute = !ch->settings.mute;
+    } else {
+        LOG_ERROR("Failed to mute. Invalid channel index %d > %d", chIndex, channelFile.channels_count);
+    };
+};
+
 bool Channels::anyMqttEnabled()
 {
 #if USERPREFS_EVENT_MODE && !MESHTASTIC_EXCLUDE_MQTT
