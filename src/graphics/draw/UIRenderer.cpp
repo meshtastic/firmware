@@ -155,9 +155,10 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
                     snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%s", "Out of Boundary");
                     coordinateLine_2[0] = '\0';
                 } else {
-                    snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%1c%1c %05u", geoCoord.getOSGRE100k(),
-                             geoCoord.getOSGRN100k(), geoCoord.getOSGREasting());
-                    snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u", geoCoord.getOSGRNorthing());
+                    snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%1c%1c", geoCoord.getOSGRE100k(),
+                             geoCoord.getOSGRN100k());
+                    snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getOSGREasting(),
+                             geoCoord.getOSGRNorthing());
                 }
             }
 
