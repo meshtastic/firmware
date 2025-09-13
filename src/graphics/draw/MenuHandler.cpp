@@ -633,11 +633,11 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
+    enum optionsNumbers { Back, GPSToggle, GPSFormat, CompassMenu, CompassCalibrate, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
-    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
-    int options = 3;
+    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "GPS Format", "Compass"};
+    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, GPSFormat, CompassMenu};
+    int options = 4;
 
     if (accelerometerThread) {
         optionsArray[options] = "Compass Calibrate";
@@ -652,6 +652,9 @@ void menuHandler::positionBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == GPSToggle) {
             menuQueue = gps_toggle_menu;
+            screen->runNow();
+        } else if (selected == GPSFormat) {
+            menuQueue = gps_format_menu;
             screen->runNow();
         } else if (selected == CompassMenu) {
             menuQueue = compass_point_north_menu;
@@ -777,6 +780,47 @@ void menuHandler::GPSToggleMenu()
         }
     };
     bannerOptions.InitialSelected = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2;
+    screen->showOverlayBanner(bannerOptions);
+}
+void menuHandler::GPSFormatMenu()
+{
+
+    static const char *optionsArray[] = {"Back",
+                                         isHighResolution ? "Decimal Degrees" : "DEC",
+                                         isHighResolution ? "Degrees Minutes Seconds" : "DMS",
+                                         isHighResolution ? "Universal Transverse Mercator" : "UTM",
+                                         isHighResolution ? "Military Grid Reference System" : "MGRS",
+                                         isHighResolution ? "Open Location Code" : "OLC",
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "GPS Format";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 7;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 2) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 3) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 4) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 5) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 6) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else {
+            menuQueue = position_base_menu;
+            screen->runNow();
+        }
+    };
+    bannerOptions.InitialSelected = config.display.gps_format + 1;
     screen->showOverlayBanner(bannerOptions);
 }
 #endif
@@ -1451,6 +1495,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
         GPSToggleMenu();
+        break;
+    case gps_format_menu:
+        GPSFormatMenu();
         break;
 #endif
     case compass_point_north_menu:
