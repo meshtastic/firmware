@@ -160,6 +160,48 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
                     snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getOSGREasting(),
                              geoCoord.getOSGRNorthing());
                 }
+            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAIDENHEAD) { // Maidenhead Locator
+                double lat = geoCoord.getLatitude() * 1e-7;
+                double lon = geoCoord.getLongitude() * 1e-7;
+
+                // Normalize
+                if (lat > 90.0)
+                    lat = 90.0;
+                if (lat < -90.0)
+                    lat = -90.0;
+                while (lon < -180.0)
+                    lon += 360.0;
+                while (lon >= 180.0)
+                    lon -= 360.0;
+
+                double adjLon = lon + 180.0;
+                double adjLat = lat + 90.0;
+
+                char maiden[10]; // enough for 8-char + null
+
+                // Field (2 letters)
+                int lonField = int(adjLon / 20.0);
+                int latField = int(adjLat / 10.0);
+                adjLon -= lonField * 20.0;
+                adjLat -= latField * 10.0;
+
+                // Square (2 digits)
+                int lonSquare = int(adjLon / 2.0);
+                int latSquare = int(adjLat / 1.0);
+                adjLon -= lonSquare * 2.0;
+                adjLat -= latSquare * 1.0;
+
+                // Subsquare (2 letters)
+                double lonUnit = 2.0 / 24.0;
+                double latUnit = 1.0 / 24.0;
+                int lonSub = int(adjLon / lonUnit);
+                int latSub = int(adjLat / latUnit);
+
+                snprintf(maiden, sizeof(maiden), "%c%c%c%c%c%c", 'A' + lonField, 'A' + latField, '0' + lonSquare, '0' + latSquare,
+                         'A' + lonSub, 'A' + latSub);
+
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "MH: %s", maiden);
+                coordinateLine_2[0] = '\0'; // only need one line
             }
 
             if (strcmp(mode, "line1") == 0) {

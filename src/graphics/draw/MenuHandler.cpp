@@ -738,11 +738,12 @@ void menuHandler::GPSFormatMenu()
                                          isHighResolution ? "Universal Transverse Mercator" : "UTM",
                                          isHighResolution ? "Military Grid Reference System" : "MGRS",
                                          isHighResolution ? "Open Location Code" : "OLC",
-                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR"};
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         isHighResolution ? "Maidenhead Locator" : "Maidenhead"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 7;
+    bannerOptions.optionsCount = 8;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC;
@@ -761,6 +762,9 @@ void menuHandler::GPSFormatMenu()
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 6) {
             config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 7) {
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAIDENHEAD;
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
