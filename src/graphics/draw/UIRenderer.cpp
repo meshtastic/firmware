@@ -116,64 +116,78 @@ void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, con
 }
 
 // Draw GPS status coordinates
-void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps,
+                                    const char *mode)
 {
     auto gpsFormat = config.display.gps_format;
     char displayLine[32];
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
         strcpy(displayLine, "No GPS present");
-        display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        display->drawString(x, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         strcpy(displayLine, "No GPS Lock");
-        display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        display->drawString(x, y, displayLine);
     } else {
 
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
 
         if (gpsFormat != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) {
-            char coordinateLine[22];
+            char coordinateLine_1[22];
+            char coordinateLine_2[22];
             if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
-                snprintf(coordinateLine, sizeof(coordinateLine), "%f %f", geoCoord.getLatitude() * 1e-7,
-                         geoCoord.getLongitude() * 1e-7);
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "Lat: %f", geoCoord.getLatitude() * 1e-7);
+                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "Lon: %f", geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
-                snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
-                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %06u E", geoCoord.getUTMZone(),
+                         geoCoord.getUTMBand(), geoCoord.getUTMEasting());
+                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%07u N", geoCoord.getUTMNorthing());
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
-                snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(),
-                         geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(),
-                         geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %1c%1c", geoCoord.getMGRSZone(),
+                         geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k());
+                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getMGRSEasting(),
+                         geoCoord.getMGRSNorthing());
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
-                geoCoord.getOLCCode(coordinateLine);
+                geoCoord.getOLCCode(coordinateLine_1);
+                coordinateLine_2[0] = '\0';
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
-                if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
-                    snprintf(coordinateLine, sizeof(coordinateLine), "%s", "Out of Boundary");
-                else
-                    snprintf(coordinateLine, sizeof(coordinateLine), "%1c%1c %05u %05u", geoCoord.getOSGRE100k(),
-                             geoCoord.getOSGRN100k(), geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
+                if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') { // OSGR is only valid around the UK region
+                    snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%s", "Out of Boundary");
+                    coordinateLine_2[0] = '\0';
+                } else {
+                    snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%1c%1c", geoCoord.getOSGRE100k(),
+                             geoCoord.getOSGRN100k());
+                    snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getOSGREasting(),
+                             geoCoord.getOSGRNorthing());
+                }
             }
 
-            // If fixed position, display text "Fixed GPS" alternating with the coordinates.
-            if (config.position.fixed_position) {
-                if ((millis() / 10000) % 2) {
-                    display->drawString(x + (display->getWidth() - (display->getStringWidth(coordinateLine))) / 2, y,
-                                        coordinateLine);
-                } else {
-                    display->drawString(x + (display->getWidth() - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
+            if (strcmp(mode, "line1") == 0) {
+                display->drawString(x, y, coordinateLine_1);
+            } else if (strcmp(mode, "line2") == 0) {
+                display->drawString(x, y, coordinateLine_2);
+            } else if (strcmp(mode, "combined") == 0) {
+                display->drawString(x, y, coordinateLine_1);
+                if (coordinateLine_2[0] != '\0') {
+                    display->drawString(x + display->getStringWidth(coordinateLine_1), y, coordinateLine_2);
                 }
-            } else {
-                display->drawString(x + (display->getWidth() - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
             }
+
         } else {
-            char latLine[22];
-            char lonLine[22];
-            snprintf(latLine, sizeof(latLine), "%2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(),
-                     geoCoord.getDMSLatSec(), geoCoord.getDMSLatCP());
-            snprintf(lonLine, sizeof(lonLine), "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(),
-                     geoCoord.getDMSLonSec(), geoCoord.getDMSLonCP());
-            display->drawString(x + (display->getWidth() - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1,
-                                latLine);
-            display->drawString(x + (display->getWidth() - (display->getStringWidth(lonLine))) / 2, y, lonLine);
+            char coordinateLine_1[22];
+            char coordinateLine_2[22];
+            snprintf(coordinateLine_1, sizeof(coordinateLine_1), "Lat: %2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(),
+                     geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(), geoCoord.getDMSLatCP());
+            snprintf(coordinateLine_2, sizeof(coordinateLine_2), "Lon: %3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(),
+                     geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(), geoCoord.getDMSLonCP());
+            if (strcmp(mode, "line1") == 0) {
+                display->drawString(x, y, coordinateLine_1);
+            } else if (strcmp(mode, "line2") == 0) {
+                display->drawString(x, y, coordinateLine_2);
+            } else { // both
+                display->drawString(x, y, coordinateLine_1);
+                display->drawString(x, y + 10, coordinateLine_2);
+            }
         }
     }
 }
@@ -1092,6 +1106,13 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             display->drawString(0, getTextPositions(display)[line++], "Last: ?");
         }
 
+        // === Third Row: Line 1 GPS Info ===
+        UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line1");
+
+        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) {
+            // === Fourth Row: Line 2 GPS Info ===
+            UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
+        }
         // === Third Row: Latitude ===
         char latStr[32];
         snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
@@ -1108,7 +1129,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
-        // === Fifth Row: Altitude ===
+        // === Fourth/Fifth Row: Altitude ===
         char DisplayLineTwo[32] = {0};
         int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
                           ? ourNode->position.altitude
