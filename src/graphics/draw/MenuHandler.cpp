@@ -737,8 +737,8 @@ void menuHandler::GPSFormatMenu()
                                          isHighResolution ? "Degrees Minutes Seconds" : "DMS",
                                          isHighResolution ? "Universal Transverse Mercator" : "UTM",
                                          isHighResolution ? "Military Grid Reference System" : "MGRS",
-                                         isHighResolution ? "Open Location Code (Plus Codes)" : "OLC",
-                                         isHighResolution ? "Ordnance Survey Grid Reference" : "OSGR"};
+                                         isHighResolution ? "Open Location Code" : "OLC",
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;
