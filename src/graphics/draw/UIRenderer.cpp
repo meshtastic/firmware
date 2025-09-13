@@ -116,26 +116,28 @@ void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, con
 }
 
 // Draw GPS status coordinates
-void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps,
+                                    const char *mode)
 {
     auto gpsFormat = config.display.gps_format;
     char displayLine[32];
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
         strcpy(displayLine, "No GPS present");
-        display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        display->drawString(x, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         strcpy(displayLine, "No GPS Lock");
-        display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+        display->drawString(x, y, displayLine);
     } else {
 
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
 
         if (gpsFormat != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine[22];
+            char lonLine[22];
             if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
-                snprintf(coordinateLine, sizeof(coordinateLine), "%f %f", geoCoord.getLatitude() * 1e-7,
-                         geoCoord.getLongitude() * 1e-7);
+                snprintf(coordinateLine, sizeof(coordinateLine), "Lat: %f", geoCoord.getLatitude() * 1e-7);
+                snprintf(lonLine, sizeof(lonLine), "Lon: %f", geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
                 snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                          geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
@@ -153,27 +155,27 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
                              geoCoord.getOSGRN100k(), geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
             }
 
-            // If fixed position, display text "Fixed GPS" alternating with the coordinates.
-            if (config.position.fixed_position) {
-                if ((millis() / 10000) % 2) {
-                    display->drawString(x + (display->getWidth() - (display->getStringWidth(coordinateLine))) / 2, y,
-                                        coordinateLine);
-                } else {
-                    display->drawString(x + (display->getWidth() - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
-                }
-            } else {
-                display->drawString(x + (display->getWidth() - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
+            if (strcmp(mode, "lat") == 0) {
+                display->drawString(x, y, coordinateLine);
+            } else if (strcmp(mode, "lon") == 0) {
+                display->drawString(x, y, lonLine);
             }
+
         } else {
             char latLine[22];
             char lonLine[22];
-            snprintf(latLine, sizeof(latLine), "%2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(),
+            snprintf(latLine, sizeof(latLine), "Lat: %2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(),
                      geoCoord.getDMSLatSec(), geoCoord.getDMSLatCP());
-            snprintf(lonLine, sizeof(lonLine), "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(),
+            snprintf(lonLine, sizeof(lonLine), "Lon: %3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(),
                      geoCoord.getDMSLonSec(), geoCoord.getDMSLonCP());
-            display->drawString(x + (display->getWidth() - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1,
-                                latLine);
-            display->drawString(x + (display->getWidth() - (display->getStringWidth(lonLine))) / 2, y, lonLine);
+            if (strcmp(mode, "lat") == 0) {
+                display->drawString(x, y, latLine);
+            } else if (strcmp(mode, "lon") == 0) {
+                display->drawString(x, y, lonLine);
+            } else { // both
+                display->drawString(x, y, latLine);
+                display->drawString(x, y + 10, lonLine); // shift down for longitude
+            }
         }
     }
 }
@@ -979,26 +981,27 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
 
         // === Third Row: Latitude ===
-        char latStr[32];
-        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-        display->drawString(x, getTextPositions(display)[line++], latStr);
+        UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "lat");
 
-        // === Fourth Row: Longitude ===
-        char lonStr[32];
-        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-        display->drawString(x, getTextPositions(display)[line++], lonStr);
-
-        // === Fifth Row: Altitude ===
-        char DisplayLineTwo[32] = {0};
-        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
-                          ? ourNode->position.altitude
-                          : geoCoord.getAltitude();
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
-        } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
+        if (config.display.gps_format == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC ||
+            config.display.gps_format == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) {
+            // === Fourth Row: Longitude ===
+            UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "lon");
         }
-        display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
+
+        // === Fourth/Fifth Row: Altitude ===
+        char DisplayLineTwo[32] = {0};
+        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) {
+            int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
+                              ? ourNode->position.altitude
+                              : geoCoord.getAltitude();
+            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+                snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+            } else {
+                snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
+            }
+            display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
+        }
     }
 
     // === Draw Compass if heading is valid ===
