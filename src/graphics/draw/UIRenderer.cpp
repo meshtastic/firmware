@@ -1037,7 +1037,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         // === Third Row: Line 1 GPS Info ===
         UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line1");
 
-        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) {
+        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC &&
+            config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAIDENHEAD) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
         }
