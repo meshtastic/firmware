@@ -767,7 +767,7 @@ void menuHandler::GPSFormatMenu()
             screen->runNow();
         }
     };
-    bannerOptions.InitialSelected = config.display.gps_format;
+    bannerOptions.InitialSelected = config.display.gps_format + 1;
     screen->showOverlayBanner(bannerOptions);
 }
 #endif
