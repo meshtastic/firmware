@@ -35,7 +35,7 @@
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryDynamic<meshtastic_MeshPacket> dynamicPool(MAX_PACKETS);
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
