@@ -105,14 +105,16 @@
 // LoRa
 #define USE_SX1262
 #define USE_SX1268
+#define USE_SX1280
+#define USE_LR1121
 
 #define LORA_SCK 35
 #define LORA_MISO 33
 #define LORA_MOSI 34
 #define LORA_CS 36
+#define LORA_RESET 47
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
-#define LORA_RESET 47
 #define LORA_DIO1 14 // SX1262 IRQ
 #define LORA_DIO2 48 // SX1262 BUSY
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
@@ -123,3 +125,18 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 3.0
+
+#define SX128X_CS LORA_CS
+#define SX128X_DIO1 LORA_DIO1
+#define SX128X_BUSY LORA_DIO2
+#define SX128X_RESET LORA_RESET
+
+#define LR1121_IRQ_PIN LORA_DIO1
+#define LR1121_NRESET_PIN LORA_RESET
+#define LR1121_BUSY_PIN LORA_DIO2
+#define LR1121_SPI_NSS_PIN LORA_CS
+#define LR1121_SPI_SCK_PIN LORA_SCK
+#define LR1121_SPI_MOSI_PIN LORA_MOSI
+#define LR1121_SPI_MISO_PIN LORA_MISO
+#define LR11X0_DIO3_TCXO_VOLTAGE 3.0
+#define LR11X0_DIO_AS_RF_SWITCH
