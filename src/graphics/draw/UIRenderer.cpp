@@ -139,14 +139,14 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
                 snprintf(coordinateLine_1, sizeof(coordinateLine_1), "Lat: %f", geoCoord.getLatitude() * 1e-7);
                 snprintf(coordinateLine_2, sizeof(coordinateLine_2), "Lon: %f", geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
-                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %06u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
-                         geoCoord.getUTMEasting());
-                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%07u", geoCoord.getUTMNorthing());
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %06u E", geoCoord.getUTMZone(),
+                         geoCoord.getUTMBand(), geoCoord.getUTMEasting());
+                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%07u N", geoCoord.getUTMNorthing());
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
-                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %1c%1c %05u", geoCoord.getMGRSZone(),
-                         geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(),
-                         geoCoord.getMGRSEasting());
-                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u", geoCoord.getMGRSNorthing());
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %1c%1c", geoCoord.getMGRSZone(),
+                         geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k());
+                snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getMGRSEasting(),
+                         geoCoord.getMGRSNorthing());
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine_1);
                 coordinateLine_2[0] = '\0';
