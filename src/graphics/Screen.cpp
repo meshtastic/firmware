@@ -1447,7 +1447,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     strcpy(banner, "Alert Received");
                 }
                 screen->showSimpleBanner(banner, 3000);
-            } else if (!node->is_muted && !channel.settings.module_settings.is_client_muted) {
+            } else if (!node->is_muted && !channel.settings.mute) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
                 } else {

@@ -347,7 +347,7 @@ void Channels::setMute(ChannelIndex chIndex)
 {
     if (chIndex < channelFile.channels_count) {
         meshtastic_Channel *ch = channelFile.channels + chIndex;
-        ch->settings.module_settings.is_client_muted = !ch->settings.module_settings.is_client_muted;
+        ch->settings.mute = !ch->settings.mute;
     } else {
         LOG_ERROR("Failed to mute. Invalid channel index %d > %d", chIndex, channelFile.channels_count);
     };
