@@ -160,7 +160,7 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
                     snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getOSGREasting(),
                              geoCoord.getOSGRNorthing());
                 }
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAIDENHEAD) { // Maidenhead Locator
+            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MLS) { // Maidenhead Locator System
                 double lat = geoCoord.getLatitude() * 1e-7;
                 double lon = geoCoord.getLongitude() * 1e-7;
 
@@ -1038,7 +1038,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line1");
 
         if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC &&
-            config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAIDENHEAD) {
+            config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
         }

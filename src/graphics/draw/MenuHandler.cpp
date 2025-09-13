@@ -739,7 +739,7 @@ void menuHandler::GPSFormatMenu()
                                          isHighResolution ? "Military Grid Reference System" : "MGRS",
                                          isHighResolution ? "Open Location Code" : "OLC",
                                          isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
-                                         isHighResolution ? "Maidenhead Locator" : "Maidenhead"};
+                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -764,7 +764,7 @@ void menuHandler::GPSFormatMenu()
             config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 7) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAIDENHEAD;
+            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MLS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
