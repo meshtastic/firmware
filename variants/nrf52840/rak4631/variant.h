@@ -267,6 +267,20 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
 
+// RAK4630 AIN0 = nrf52840 AIN3 = Pin 5
+#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3
+
+// We have AIN3 with a VBAT divider so AIN3 = VBAT * (1.5/2.5)
+// We have the device going deep sleep under 3.1V, which is AIN3 = 1.86V
+// So we can wake up when VBAT>=VDD is restored to 3.3V, where AIN3 = 1.98V
+// 1.98/3.3 = 6/10, but that's close to the VBAT divider, so we
+// pick 6/8VDD, which means VBAT=4.1V.
+// Reference:
+// VDD=3.3V AIN3=5/8*VDD=2.06V VBAT=1.66*AIN3=3.41V
+// VDD=3.3V AIN3=11/16*VDD=2.26V VBAT=1.66*AIN3=3.76V
+// VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
+
 #define HAS_RTC 1
 
 #define HAS_ETHERNET 1
