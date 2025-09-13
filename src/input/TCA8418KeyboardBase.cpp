@@ -43,6 +43,18 @@ void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire)
     m_wire = wire;
     m_wire->begin();
     reset();
+
+#ifdef KB_INT
+    interruptInstance = this;
+    auto interruptHandler = []() {
+        interruptInstance->notifyObservers(interruptInstance);
+    };
+
+    ::pinMode(KB_INT, INPUT_PULLUP);
+    attachInterrupt(KB_INT, interruptHandler, FALLING);
+
+    enableInterrupts();
+#endif
 }
 
 void TCA8418KeyboardBase::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
@@ -157,6 +169,11 @@ void TCA8418KeyboardBase::trigger()
             released(key);
         }
     }
+
+#ifdef KB_INT
+    // Reset interrupt mask so we can receive future interrupts
+    writeRegister(TCA8418_REG_INT_STAT, 3);
+#endif
 }
 
 void TCA8418KeyboardBase::pressed(uint8_t key)
@@ -291,6 +308,8 @@ void TCA8418KeyboardBase::disableInterrupts()
     value &= ~(_TCA8418_REG_CFG_GPI_IEN | _TCA8418_REG_CFG_KE_IEN);
     writeRegister(TCA8418_REG_CFG, value);
 };
+
+TCA8418KeyboardBase* TCA8418KeyboardBase::interruptInstance;
 
 void TCA8418KeyboardBase::enableMatrixOverflow()
 {

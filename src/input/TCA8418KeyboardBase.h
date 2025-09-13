@@ -1,6 +1,7 @@
 // Based on the MPR121 Keyboard and Adafruit TCA8418 library
 #include "configuration.h"
 #include <Wire.h>
+#include "kbInterrupt.h"
 
 /**
  * @brief TCA8418KeyboardBase is the base class for TCA8418 keyboard handling.
@@ -8,7 +9,7 @@
  * and handling key states. It is designed to be extended for specific keyboard implementations.
  * It supports both I2C communication and function pointers for custom I2C operations.
  */
-class TCA8418KeyboardBase
+class TCA8418KeyboardBase : public KbInterruptObservable
 {
   public:
     enum TCA8418Key : uint8_t {
@@ -142,6 +143,7 @@ class TCA8418KeyboardBase
     // enable / disable interrupts for matrix and GPI pins
     void enableInterrupts();
     void disableInterrupts();
+    static TCA8418KeyboardBase* interruptInstance;
 
     // ignore key events when FIFO buffer is full or not.
     void enableMatrixOverflow();

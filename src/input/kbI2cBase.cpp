@@ -46,6 +46,7 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
+    int32_t interval = 300;
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
@@ -61,6 +62,7 @@ int32_t KbI2cBase::runOnce()
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
                 TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire1);
+                observe(&TCAKeyboard);
             }
             break;
 #endif
@@ -76,6 +78,7 @@ int32_t KbI2cBase::runOnce()
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
                 TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire);
+                observe(&TCAKeyboard);
             }
             break;
         case ScanI2C::NO_I2C:
@@ -249,6 +252,7 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x84: { // Adafruit TCA8418
+        interval = 3000;  // Less polling, we have interrupts with onNotify()
         TCAKeyboard.trigger();
         InputEvent e;
         while (TCAKeyboard.hasEvent()) {
@@ -331,7 +335,6 @@ int32_t KbI2cBase::runOnce()
                 LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
-            TCAKeyboard.trigger();
         }
         break;
     }
@@ -518,5 +521,17 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
-    return 300;
+
+    // If new interrupt triggered while we were processing the previous, reinvoke with 0 interval right away
+    if (pendingInterruptCount) pendingInterruptCount--;
+    if (pendingInterruptCount) return 0;
+
+    return interval;
+}
+
+int KbI2cBase::onNotify(KbInterruptObservable* src)
+{
+    pendingInterruptCount++;
+    setInterval(0);
+    return 0;
 }
