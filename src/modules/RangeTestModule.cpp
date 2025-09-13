@@ -13,12 +13,12 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "SPILock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "gps/RTC.h"
 #include <Arduino.h>
 #include <Throttle.h>
 

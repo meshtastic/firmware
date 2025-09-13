@@ -2,9 +2,9 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 
