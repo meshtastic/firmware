@@ -49,6 +49,7 @@ const int *NotificationRenderer::optionsEnumPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
+
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
 VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
@@ -85,8 +86,12 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
 void NotificationRenderer::resetBanner()
 {
+    notificationTypeEnum previousType = current_notification_type;
+
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
+
+    OnScreenKeyboardModule::instance().clearPopup();
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
@@ -100,6 +105,13 @@ void NotificationRenderer::resetBanner()
     currentNumber = 0;
 
     nodeDB->pause_sort(false);
+
+    // If we're exiting from text_input (virtual keyboard), stop module and trigger frame update
+    // to ensure any messages received during keyboard use are now displayed
+    if (previousType == notificationTypeEnum::text_input && screen) {
+        OnScreenKeyboardModule::instance().stop(false);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
 }
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -609,100 +621,179 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
 
 void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    if (virtualKeyboard) {
-        // Check for timeout and auto-exit if needed
-        if (virtualKeyboard->isTimedOut()) {
-            LOG_INFO("Virtual keyboard timeout - auto-exiting");
-            // Cancel virtual keyboard - call callback with empty string to indicate timeout
-            auto callback = textInputCallback; // Store callback before clearing
+    // Delegate session to OnScreenKeyboardModule
+    auto &osk = OnScreenKeyboardModule::instance();
 
-            // Clean up first to prevent re-entry
-            delete virtualKeyboard;
-            virtualKeyboard = nullptr;
-            textInputCallback = nullptr;
-            resetBanner();
-
-            // Call callback after cleanup
-            if (callback) {
-                callback("");
-            }
-
-            // Restore normal overlays
-            if (screen) {
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-            }
-            return;
-        }
-
-        if (inEvent.inputEvent != INPUT_BROKER_NONE) {
-            if (inEvent.inputEvent == INPUT_BROKER_UP) {
-                // high frequency for move cursor left/right than up/down with encoders
-                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
-                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
-                    virtualKeyboard->moveCursorLeft();
-                } else {
-                    virtualKeyboard->moveCursorUp();
-                }
-            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN) {
-                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
-                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
-                    virtualKeyboard->moveCursorRight();
-                } else {
-                    virtualKeyboard->moveCursorDown();
-                }
-            } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
-                virtualKeyboard->moveCursorLeft();
-            } else if (inEvent.inputEvent == INPUT_BROKER_RIGHT) {
-                virtualKeyboard->moveCursorRight();
-            } else if (inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-                virtualKeyboard->moveCursorUp();
-            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-                virtualKeyboard->moveCursorDown();
-            } else if (inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
-                virtualKeyboard->moveCursorLeft();
-            } else if (inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
-                virtualKeyboard->moveCursorRight();
-            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
-                virtualKeyboard->handlePress();
-            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT_LONG) {
-                virtualKeyboard->handleLongPress();
-            } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL) {
-                auto callback = textInputCallback;
-                delete virtualKeyboard;
-                virtualKeyboard = nullptr;
-                textInputCallback = nullptr;
-                resetBanner();
-                if (callback) {
-                    callback("");
-                }
-                if (screen) {
-                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-                }
-                return;
-            }
-
-            // Consume the event after processing for virtual keyboard
-            inEvent.inputEvent = INPUT_BROKER_NONE;
-        }
-
-        // Clear the screen to avoid overlapping with underlying frames or overlays
-        display->setColor(BLACK);
-        display->fillRect(0, 0, display->getWidth(), display->getHeight());
-        display->setColor(WHITE);
-        // Draw the virtual keyboard
-        virtualKeyboard->draw(display, 0, 0);
-    } else {
-        // If virtualKeyboard is null, reset the banner to avoid getting stuck
-        LOG_INFO("Virtual keyboard is null - resetting banner");
+    if (!osk.isActive()) {
+        LOG_INFO("Virtual keyboard is not active - resetting banner");
         resetBanner();
+        return;
+    }
+
+    if (inEvent.inputEvent != INPUT_BROKER_NONE) {
+        osk.handleInput(inEvent);
+        inEvent.inputEvent = INPUT_BROKER_NONE; // consume
+    }
+
+    // Draw. If draw returns false, session ended (timeout or cancel)
+    if (!osk.draw(display)) {
+        // Session ended, ensure banner reset and restore frames
+        resetBanner();
+        if (screen)
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     }
 }
 
 bool NotificationRenderer::isOverlayBannerShowing()
 {
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+}
+
+void NotificationRenderer::showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs)
+{
+    if (!title || !content || current_notification_type != notificationTypeEnum::text_input)
+        return;
+    OnScreenKeyboardModule::instance().showPopup(title, content, durationMs);
+}
+
+// drawKeyboardMessagePopup removed; OnScreenKeyboardModule handles popup drawing within draw()
+
+// Custom inverted color version for keyboard popup - black background with white text
+void NotificationRenderer::drawInvertedNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
+                                                       uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth)
+{
+    bool is_picker = false;
+    uint16_t lineCount = 0;
+    // === Layout Configuration ===
+    constexpr uint16_t hPadding = 5;
+    constexpr uint16_t vPadding = 2;
+    bool needs_bell = false;
+    uint16_t lineWidths[totalLines] = {0};
+    uint16_t lineLengths[totalLines] = {0};
+
+    if (maxWidth != 0)
+        is_picker = true;
+
+    // Setup font and alignment
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    while (lines[lineCount] != nullptr) {
+        auto newlinePointer = strchr(lines[lineCount], '\n');
+        if (newlinePointer)
+            lineLengths[lineCount] = (newlinePointer - lines[lineCount]);
+        else
+            lineLengths[lineCount] = strlen(lines[lineCount]);
+        lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+        if (!is_picker) {
+            if (lineWidths[lineCount] > maxWidth)
+                maxWidth = lineWidths[lineCount];
+        }
+        lineCount++;
+    }
+
+    uint16_t boxWidth = hPadding * 2 + maxWidth;
+    if (needs_bell) {
+        if (isHighResolution && boxWidth <= 150)
+            boxWidth += 26;
+        if (!isHighResolution && boxWidth <= 100)
+            boxWidth += 20;
+    }
+
+    uint16_t screenHeight = display->height();
+    uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
+    uint8_t visibleTotalLines = std::min<uint8_t>(lineCount, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
+    uint16_t boxHeight = contentHeight + vPadding * 2;
+    if (visibleTotalLines == 1) {
+        boxHeight += (isHighResolution) ? 4 : 3;
+    }
+
+    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
+    if (totalLines > visibleTotalLines) {
+        boxWidth += (isHighResolution) ? 4 : 2;
+    }
+    int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
+
+    // === Draw Box with INVERTED COLORS ===
+    // Add outer separation pixels (1-pixel white background around the box)
+    display->setColor(WHITE);
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+
+    // Make outer corners round by filling back with背景色 (BLACK for separation)
+    display->setColor(BLACK);
+    // Top-left outer corner
+    display->fillRect(boxLeft - 1, boxTop - 1, 1, 1);
+    // Top-right outer corner
+    display->fillRect(boxLeft + boxWidth, boxTop - 1, 1, 1);
+    // Bottom-left outer corner
+    display->fillRect(boxLeft - 1, boxTop + boxHeight, 1, 1);
+    // Bottom-right outer corner
+    display->fillRect(boxLeft + boxWidth, boxTop + boxHeight, 1, 1);
+
+    // Draw single pixel black border
+    display->setColor(BLACK);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+
+    // Make inner corners round by filling white pixels at corners
+    display->setColor(WHITE);
+    display->fillRect(boxLeft, boxTop, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
+    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
+
+    // Fill interior with BLACK (inverted)
+    display->setColor(BLACK);
+    display->fillRect(boxLeft + 1, boxTop + 1, boxWidth - 2, boxHeight - 2);
+
+    // === Draw Content with WHITE text on BLACK background ===
+    display->setColor(WHITE);
+    int16_t lineY = boxTop + vPadding;
+    for (int i = 0; i < lineCount; i++) {
+        int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
+
+        char lineBuffer[lineLengths[i] + 1];
+        strncpy(lineBuffer, lines[i], lineLengths[i]);
+        lineBuffer[lineLengths[i]] = '\0';
+
+        // For keyboard popup, treat first line as title if it's different from others
+        if (i == 0 && lineCount > 1) {
+            // Title line - use inverted colors (white background, black text)
+            display->setColor(WHITE);
+            int background_yOffset = 1;
+            // Check for low hanging characters
+            if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
+                background_yOffset = -1;
+            }
+            display->fillRect(boxLeft + 1, boxTop + 1, boxWidth - 2, effectiveLineHeight - background_yOffset);
+            display->setColor(BLACK);
+            int yOffset = 3;
+            display->drawString(textX, lineY - yOffset, lineBuffer);
+            display->setColor(WHITE); // Reset to white for next lines
+            lineY += (effectiveLineHeight - 2 - background_yOffset);
+        } else {
+            // Content lines - white text on black background
+            display->drawString(textX, lineY, lineBuffer);
+            lineY += effectiveLineHeight;
+        }
+    }
+
+    // === Scroll Bar (if needed) ===
+    if (totalLines > visibleTotalLines) {
+        const uint8_t scrollBarWidth = 5;
+        int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
+        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight;
+        uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
+
+        float ratio = (float)visibleTotalLines / totalLines;
+        uint16_t indicatorHeight = std::max((int)(scrollBarHeight * ratio), 4);
+        float scrollRatio = (float)(firstOptionToShow + lineCount - visibleTotalLines) / (totalLines - visibleTotalLines);
+        uint16_t indicatorY = scrollBarY + scrollRatio * (scrollBarHeight - indicatorHeight);
+
+        display->setColor(WHITE);
+        display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
+        display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
+    }
 }
 
 } // namespace graphics
