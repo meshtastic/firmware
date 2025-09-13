@@ -18,6 +18,21 @@
 #define MAX_RX_TOPHONE 32
 #endif
 
+/// max number of QueueStatus packets which can be waiting for delivery to phone
+#ifndef MAX_RX_QUEUESTATUS_TOPHONE
+#define MAX_RX_QUEUESTATUS_TOPHONE 4
+#endif
+
+/// max number of MqttClientProxyMessage packets which can be waiting for delivery to phone
+#ifndef MAX_RX_MQTTPROXY_TOPHONE
+#define MAX_RX_MQTTPROXY_TOPHONE 32
+#endif
+
+/// max number of ClientNotification packets which can be waiting for delivery to phone
+#ifndef MAX_RX_NOTIFICATION_TOPHONE
+#define MAX_RX_NOTIFICATION_TOPHONE 2
+#endif
+
 /// Verify baseline assumption of node size. If it increases, we need to reevaluate
 /// the impact of its memory footprint, notably on MAX_NUM_NODES.
 static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
