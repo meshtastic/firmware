@@ -20,7 +20,7 @@ RTCQuality getRTCQuality()
 
 // stuff that really should be in in the instance instead...
 static uint32_t
-    timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
+    timeStartMsec;              // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
 /**
@@ -31,7 +31,8 @@ RTCSetResult readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
-    if (rtc_found.address == RV3028_RTC) {
+    if (rtc_found.address == RV3028_RTC)
+    {
         uint32_t now = millis();
         Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
@@ -51,7 +52,8 @@ RTCSetResult readFromRTC()
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
 #ifdef BUILD_EPOCH
-        if (tv.tv_sec < BUILD_EPOCH) {
+        if (tv.tv_sec < BUILD_EPOCH)
+        {
             LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
             return RTCSetResultInvalidTime;
         }
@@ -59,7 +61,8 @@ RTCSetResult readFromRTC()
 
         LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        if (currentQuality == RTCQualityNone) {
+        if (currentQuality == RTCQualityNone)
+        {
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
@@ -67,7 +70,8 @@ RTCSetResult readFromRTC()
         return RTCSetResultSuccess;
     }
 #elif defined(PCF8563_RTC)
-    if (rtc_found.address == PCF8563_RTC) {
+    if (rtc_found.address == PCF8563_RTC)
+    {
         uint32_t now = millis();
         PCF8563_Class rtc;
 
@@ -90,7 +94,8 @@ RTCSetResult readFromRTC()
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
 #ifdef BUILD_EPOCH
-        if (tv.tv_sec < BUILD_EPOCH) {
+        if (tv.tv_sec < BUILD_EPOCH)
+        {
             LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
             return RTCSetResultInvalidTime;
         }
@@ -98,7 +103,8 @@ RTCSetResult readFromRTC()
 
         LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        if (currentQuality == RTCQualityNone) {
+        if (currentQuality == RTCQualityNone)
+        {
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
@@ -106,7 +112,8 @@ RTCSetResult readFromRTC()
         return RTCSetResultSuccess;
     }
 #else
-    if (!gettimeofday(&tv, NULL)) {
+    if (!gettimeofday(&tv, NULL))
+    {
         uint32_t now = millis();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
         LOG_DEBUG("Read RTC time as %ld", printableEpoch);
@@ -133,14 +140,19 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     uint32_t now = millis();
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
-    if (tv->tv_sec < BUILD_EPOCH) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+    if (tv->tv_sec < BUILD_EPOCH)
+    {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false)
+        {
             LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
             lastTimeValidationWarning = millis();
         }
         return RTCSetResultInvalidTime;
-    } else if (tv->tv_sec > (time_t)(BUILD_EPOCH + FORTY_YEARS)) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+    }
+    else if (tv->tv_sec > (time_t)(BUILD_EPOCH + FORTY_YEARS))
+    {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false)
+        {
             // Calculate max allowed time safely to avoid overflow in logging
             uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
@@ -153,29 +165,40 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #endif
 
     bool shouldSet;
-    if (forceUpdate) {
+    if (forceUpdate)
+    {
         shouldSet = true;
         LOG_DEBUG("Override current RTC quality (%s) with incoming time of RTC quality of %s", RtcName(currentQuality),
                   RtcName(q));
-    } else if (q > currentQuality) {
+    }
+    else if (q > currentQuality)
+    {
         shouldSet = true;
         LOG_DEBUG("Upgrade time to quality %s", RtcName(q));
-    } else if (q == RTCQualityGPS) {
+    }
+    else if (q == RTCQualityGPS)
+    {
         shouldSet = true;
         LOG_DEBUG("Reapply GPS time: %ld secs", printableEpoch);
-    } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL))) {
+    }
+    else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL)))
+    {
         // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
         LOG_DEBUG("Reapply external time to correct clock drift %ld secs", printableEpoch);
-    } else {
+    }
+    else
+    {
         shouldSet = false;
         LOG_DEBUG("Current RTC quality: %s. Ignore time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
     }
 
-    if (shouldSet) {
+    if (shouldSet)
+    {
         currentQuality = q;
         lastSetMsec = now;
-        if (currentQuality >= RTCQualityNTP) {
+        if (currentQuality >= RTCQualityNTP)
+        {
             lastSetFromPhoneNtpOrGps = now;
         }
 
@@ -184,7 +207,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         zeroOffsetSecs = tv->tv_sec;
         // If this platform has a setable RTC, set it
 #ifdef RV3028_RTC
-        if (rtc_found.address == RV3028_RTC) {
+        if (rtc_found.address == RV3028_RTC)
+        {
             Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
             rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -197,7 +221,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         }
 #elif defined(PCF8563_RTC)
-        if (rtc_found.address == PCF8563_RTC) {
+        if (rtc_found.address == PCF8563_RTC)
+        {
             PCF8563_Class rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
@@ -220,14 +245,17 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #endif
 
         return RTCSetResultSuccess;
-    } else {
+    }
+    else
+    {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time
     }
 }
 
 const char *RtcName(RTCQuality quality)
 {
-    switch (quality) {
+    switch (quality)
+    {
     case RTCQualityNone:
         return "None";
     case RTCQualityDevice:
@@ -264,30 +292,27 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
-    if (tv.tv_sec < BUILD_EPOCH) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-            lastTimeValidationWarning = millis();
-        }
+    if (tv.tv_sec < BUILD_EPOCH)
+    {
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
         return RTCSetResultInvalidTime;
-    } else if (tv.tv_sec > (time_t)(BUILD_EPOCH + FORTY_YEARS)) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            // Calculate max allowed time safely to avoid overflow in logging
-            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
-            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
-                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
-            lastTimeValidationWarning = millis();
-        }
+    }
+    else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS))
+    {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
+                 BUILD_EPOCH + FORTY_YEARS);
         return RTCSetResultInvalidTime;
     }
 #endif
 
     // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
-    if (t.tm_year < 0 || t.tm_year >= 300) {
+    if (t.tm_year < 0 || t.tm_year >= 300)
+    {
         // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
         return RTCSetResultInvalidTime;
-    } else {
+    }
+    else
+    {
         return perhapsSetRTC(q, &tv);
     }
 }
@@ -317,9 +342,12 @@ int32_t getTZOffset()
  */
 uint32_t getTime(bool local)
 {
-    if (local) {
+    if (local)
+    {
         return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
-    } else {
+    }
+    else
+    {
         return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
     }
 }
@@ -340,9 +368,12 @@ time_t gm_mktime(struct tm *tm)
 #if !MESHTASTIC_EXCLUDE_TZ
     setenv("TZ", "GMT0", 1);
     time_t res = mktime(tm);
-    if (*config.device.tzdef) {
+    if (*config.device.tzdef)
+    {
         setenv("TZ", config.device.tzdef, 1);
-    } else {
+    }
+    else
+    {
         setenv("TZ", "UTC0", 1);
     }
     return res;
