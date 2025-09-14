@@ -25,9 +25,13 @@ Time after which the sensor can go to sleep, as the warmup period has passed
 and the VOCs sensor will is allowed to stop (although needs to recover the state
 each time)
 */
-#ifndef SEN55_VOC_STATE_WARMUP_S
-// TODO for Testing 5' - Sensirion recommends 1h. We can try to test a smaller value
-#define SEN55_VOC_STATE_WARMUP_S 3600
+#ifndef SEN5X_VOC_STATE_WARMUP_S
+/* Note for Testing 5' is enough
+Sensirion recommends 1h
+This can be bypassed completely if switching to low-power RHT/Gas mode and setting
+SEN5X_VOC_STATE_WARMUP_S 0
+*/
+#define SEN5X_VOC_STATE_WARMUP_S 3600
 #endif
 
 #define ONE_WEEK_IN_SECONDS 604800
@@ -82,7 +86,7 @@ class SEN5XSensor : public TelemetrySensor
     enum SEN5Xmodel { SEN5X_UNKNOWN = 0, SEN50 = 0b001, SEN54 = 0b010, SEN55 = 0b100 };
     SEN5Xmodel model = SEN5X_UNKNOWN;
 
-    enum SEN5XState { SEN5X_OFF, SEN5X_IDLE, SEN5X_MEASUREMENT, SEN5X_MEASUREMENT_2, SEN5X_CLEANING, SEN5X_NOT_DETECTED };
+    enum SEN5XState { SEN5X_OFF, SEN5X_IDLE, SEN5X_RHTGAS_ONLY, SEN5X_MEASUREMENT, SEN5X_MEASUREMENT_2, SEN5X_CLEANING, SEN5X_NOT_DETECTED };
     SEN5XState state = SEN5X_OFF;
     // Flag to work on one-shot (read and sleep), or continuous mode
     bool oneShotMode = true;
@@ -98,11 +102,11 @@ class SEN5XSensor : public TelemetrySensor
     bool startCleaning();
     uint8_t getMeasurements();
     // bool readRawValues();
-    bool readPnValues(bool cumulative);
+    bool readPNValues(bool cumulative);
     bool readValues();
 
-    uint32_t measureStarted = 0;
-    uint32_t firstMeasureStarted = 0;
+    uint32_t pmMeasureStarted = 0;
+    uint32_t rhtGasMeasureStarted = 0;
     _SEN5XMeasurements sen5xmeasurement;
 
   protected:
@@ -135,13 +139,17 @@ class SEN5XSensor : public TelemetrySensor
     SEN5XSensor();
     bool isActive();
     uint32_t wakeUp();
-    bool idle();
+    bool idle(bool checkState=true);
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 
-    // Sensirion recommends taking a reading after 15 seconds, if the Particle number reading is over 100#/cm3 the reading is OK, but if it is lower wait until 30 seconds and take it again.
-    // https://sensirion.com/resource/application_note/low_power_mode/sen5x
+    /* Sensirion recommends taking a reading after 15 seconds,
+    if the Particle number reading is over 100#/cm3 the reading is OK,
+    but if it is lower wait until 30 seconds and take it again.
+    See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
+    */
     #define SEN5X_PN4P0_CONC_THD 100
+    // TODO - Add a way to take averages of samples
     // This value represents the time needed for pending data
     int32_t pendingForReady();
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request, meshtastic_AdminMessage *response) override;

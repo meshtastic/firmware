@@ -216,7 +216,7 @@ bool SEN5XSensor::I2Cdetect(TwoWire *_Wire, uint8_t address)
     else return false;
 }
 
-bool SEN5XSensor::idle()
+bool SEN5XSensor::idle(bool checkState)
 {
     // From the datasheet:
     // By default, the VOC algorithm resets its state to initial
@@ -227,26 +227,28 @@ bool SEN5XSensor::idle()
     // restoring the previously memorized algorithm state before
     // starting the measure mode
 
-    // If the stabilisation period is not passed for SEN55, don't go to idle
-    if (model == SEN55) {
-        // Get VOC state before going to idle mode
-        vocValid = false;
-        if (vocStateFromSensor()) {
-            vocValid = vocStateValid();
-            // Check if we have time, and store it
-            uint32_t now;  // If time is RTCQualityNone, it will return zero
-            now = getValidTime(RTCQuality::RTCQualityDevice);
-            if (now) {
-                // Check if state is valid (non-zero)
-                vocTime = now;
+    if (checkState) {
+        // If the stabilisation period is not passed for SEN54 or SEN55, don't go to idle
+        if (model != SEN50) {
+            // Get VOC state before going to idle mode
+            vocValid = false;
+            if (vocStateFromSensor()) {
+                vocValid = vocStateValid();
+                // Check if we have time, and store it
+                uint32_t now;  // If time is RTCQualityNone, it will return zero
+                now = getValidTime(RTCQuality::RTCQualityDevice);
+                if (now) {
+                    // Check if state is valid (non-zero)
+                    vocTime = now;
+                }
             }
-        }
 
-        if (vocStateStable() && vocValid) {
-            saveState();
-        } else {
-            LOG_INFO("SEN5X: Not stopping measurement, vocState is not stable yet!");
-            return true;
+            if (vocStateStable() && vocValid) {
+                saveState();
+            } else {
+                LOG_INFO("SEN5X: Not stopping measurement, vocState is not stable yet!");
+                return true;
+            }
         }
     }
 
@@ -255,16 +257,25 @@ bool SEN5XSensor::idle()
         return true;
     }
 
-    if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
-        LOG_ERROR("SEN5X: Error stoping measurement");
-        return false;
+    // Switch to low-power based on the model
+    if (model == SEN50) {
+        if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
+            LOG_ERROR("SEN5X: Error stopping measurement");
+            return false;
+        }
+        state = SEN5X_IDLE;
+        LOG_INFO("SEN5X: Stop measurement mode");
+    } else {
+        if (!sendCommand(SEN5X_START_MEASUREMENT_RHT_GAS)) {
+            LOG_ERROR("SEN5X: Error switching to RHT/Gas measurement");
+            return false;
+        }
+        state = SEN5X_RHTGAS_ONLY;
+        LOG_INFO("SEN5X: Switch to RHT/Gas only measurement mode");
     }
 
     delay(200); // From Sensirion Datasheet
-    LOG_INFO("SEN5X: Stop measurement mode");
-
-    state = SEN5X_IDLE;
-    measureStarted = 0;
+    pmMeasureStarted = 0;
     return true;
 }
 
@@ -293,7 +304,7 @@ bool SEN5XSensor::vocStateValid() {
 
 bool SEN5XSensor::vocStateToSensor()
 {
-    if (model != SEN55){
+    if (model == SEN50){
         return true;
     }
 
@@ -325,7 +336,7 @@ bool SEN5XSensor::vocStateToSensor()
 
 bool SEN5XSensor::vocStateFromSensor()
 {
-    if (model != SEN55){
+    if (model == SEN50){
         return true;
     }
 
@@ -340,8 +351,8 @@ bool SEN5XSensor::vocStateFromSensor()
 
     // Retrieve the data
     // Allocate buffer to account for CRC
-    uint8_t vocBuffer[SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2)];
-    size_t receivedNumber = readBuffer(&vocBuffer[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
+    // uint8_t vocBuffer[SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2)];
+    size_t receivedNumber = readBuffer(&vocState[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
     delay(20); // From Sensirion Datasheet
 
     if (receivedNumber == 0) {
@@ -349,14 +360,14 @@ bool SEN5XSensor::vocStateFromSensor()
         return false;
     }
 
-    vocState[0] = vocBuffer[0];
-    vocState[1] = vocBuffer[1];
-    vocState[2] = vocBuffer[3];
-    vocState[3] = vocBuffer[4];
-    vocState[4] = vocBuffer[6];
-    vocState[5] = vocBuffer[7];
-    vocState[6] = vocBuffer[9];
-    vocState[7] = vocBuffer[10];
+    // vocState[0] = vocBuffer[0];
+    // vocState[1] = vocBuffer[1];
+    // vocState[2] = vocBuffer[3];
+    // vocState[3] = vocBuffer[4];
+    // vocState[4] = vocBuffer[6];
+    // vocState[5] = vocBuffer[7];
+    // vocState[6] = vocBuffer[9];
+    // vocState[7] = vocBuffer[10];
 
     // Print the state (if debug is on)
     LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]",
@@ -383,7 +394,7 @@ bool SEN5XSensor::loadState()
             lastCleaningValid = sen5xstate.last_cleaning_valid;
             oneShotMode = sen5xstate.one_shot_mode;
 
-            if (model == SEN55) {
+            if (model != SEN50) {
                 vocTime = sen5xstate.voc_state_time;
                 vocValid = sen5xstate.voc_state_valid;
                 // Unpack state
@@ -429,7 +440,7 @@ bool SEN5XSensor::saveState()
     sen5xstate.last_cleaning_valid = lastCleaningValid;
     sen5xstate.one_shot_mode = oneShotMode;
 
-    if (model == SEN55) {
+    if (model != SEN50) {
         sen5xstate.has_voc_state_time = true;
         sen5xstate.has_voc_state_valid = true;
         sen5xstate.has_voc_state_array = true;
@@ -474,18 +485,19 @@ bool SEN5XSensor::isActive(){
 }
 
 uint32_t SEN5XSensor::wakeUp(){
-    uint32_t now;
-    now = getValidTime(RTCQuality::RTCQualityDevice);
+    // uint32_t now;
+    // now = getValidTime(RTCQuality::RTCQualityDevice);
     LOG_DEBUG("SEN5X: Waking up sensor");
 
-    // Check if state is recent, less than 10 minutes (600 seconds)
-    if (vocStateRecent(now) && vocStateValid()) {
-        if (!vocStateToSensor()){
-            LOG_ERROR("SEN5X: Sending VOC state to sensor failed");
-        }
-    } else {
-        LOG_DEBUG("SEN5X: No valid VOC state found. Ignoring");
-    }
+    // NOTE - No need to send it everytime if we switch to RHT/gas only mode
+    // // Check if state is recent, less than 10 minutes (600 seconds)
+    // if (vocStateRecent(now) && vocStateValid()) {
+    //     if (!vocStateToSensor()){
+    //         LOG_ERROR("SEN5X: Sending VOC state to sensor failed");
+    //     }
+    // } else {
+    //     LOG_DEBUG("SEN5X: No valid VOC state found. Ignoring");
+    // }
 
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_ERROR("SEN5X: Error starting measurement");
@@ -497,7 +509,7 @@ uint32_t SEN5XSensor::wakeUp(){
     // TODO - This is currently "problematic"
     // If time is updated in between reads, there is no way to
     // keep track of how long it has passed
-    measureStarted = getTime();
+    pmMeasureStarted = getTime();
     state = SEN5X_MEASUREMENT;
     if (state == SEN5X_MEASUREMENT)
         LOG_INFO("SEN5X: Started measurement mode");
@@ -508,9 +520,9 @@ bool SEN5XSensor::vocStateStable()
 {
     uint32_t now;
     now = getTime();
-    uint32_t sinceFirstMeasureStarted = (now - firstMeasureStarted);
+    uint32_t sinceFirstMeasureStarted = (now - rhtGasMeasureStarted);
     LOG_DEBUG("sinceFirstMeasureStarted: %us", sinceFirstMeasureStarted);
-    return sinceFirstMeasureStarted > SEN55_VOC_STATE_WARMUP_S;
+    return sinceFirstMeasureStarted > SEN5X_VOC_STATE_WARMUP_S;
 }
 
 bool SEN5XSensor::startCleaning()
@@ -622,7 +634,7 @@ int32_t SEN5XSensor::runOnce()
             saveState();
         }
 
-        if (model == SEN55) {
+        if (model != SEN50) {
             if (!vocValid) {
                 LOG_INFO("SEN5X: No valid VOC's state found");
             } else {
@@ -643,6 +655,9 @@ int32_t SEN5XSensor::runOnce()
         LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved state. Trying again later");
     }
 
+    idle(false);
+    rhtGasMeasureStarted = now;
+
     return initI2CSensor();
 }
 
@@ -659,7 +674,7 @@ bool SEN5XSensor::readValues()
     LOG_DEBUG("SEN5X: Reading PM Values");
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[24];
+    uint8_t dataBuffer[16];
     size_t receivedNumber = readBuffer(&dataBuffer[0], 24);
     if (receivedNumber == 0) {
         LOG_ERROR("SEN5X: Error getting values");
@@ -671,6 +686,7 @@ bool SEN5XSensor::readValues()
     uint16_t uint_pM2p5        = static_cast<uint16_t>((dataBuffer[2]  << 8) | dataBuffer[3]);
     uint16_t uint_pM4p0        = static_cast<uint16_t>((dataBuffer[4]  << 8) | dataBuffer[5]);
     uint16_t uint_pM10p0       = static_cast<uint16_t>((dataBuffer[6]  << 8) | dataBuffer[7]);
+
     int16_t  int_humidity      = static_cast<int16_t>((dataBuffer[8]   << 8) | dataBuffer[9]);
     int16_t  int_temperature   = static_cast<int16_t>((dataBuffer[10]  << 8) | dataBuffer[11]);
     int16_t  int_vocIndex      = static_cast<int16_t>((dataBuffer[12]  << 8) | dataBuffer[13]);
@@ -690,21 +706,21 @@ bool SEN5XSensor::readValues()
                 sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
                 sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
-    if (model == SEN54 || model == SEN55) {
-        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, noxIndex=%.2f",
+    if (model != SEN50) {
+        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, vocIndex=%.2f",
                     sen5xmeasurement.humidity, sen5xmeasurement.temperature,
-                    sen5xmeasurement.noxIndex);
+                    sen5xmeasurement.vocIndex);
     }
 
     if (model == SEN55) {
-        LOG_DEBUG("Got: vocIndex=%.2f",
-            sen5xmeasurement.vocIndex);
+        LOG_DEBUG("Got: noxIndex=%.2f",
+            sen5xmeasurement.noxIndex);
     }
 
     return true;
 }
 
-bool SEN5XSensor::readPnValues(bool cumulative)
+bool SEN5XSensor::readPNValues(bool cumulative)
 {
     if (!sendCommand(SEN5X_READ_PM_VALUES)){
         LOG_ERROR("SEN5X: Error sending read command");
@@ -714,7 +730,7 @@ bool SEN5XSensor::readPnValues(bool cumulative)
     LOG_DEBUG("SEN5X: Reading PN Values");
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[30];
+    uint8_t dataBuffer[20];
     size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
     if (receivedNumber == 0) {
         LOG_ERROR("SEN5X: Error getting PN values");
@@ -735,11 +751,11 @@ bool SEN5XSensor::readPnValues(bool cumulative)
 
     // Convert values based on Sensirion Arduino lib
     // Multiply by 100 for converting from #/cm3 to #/0.1l for PN values
-    sen5xmeasurement.pN0p5   = !isnan(uint_pN0p5) ? uint_pN0p5  / 10 * 100: UINT32_MAX;
-    sen5xmeasurement.pN1p0   = !isnan(uint_pN1p0) ? uint_pN1p0  / 10 * 100: UINT32_MAX;
-    sen5xmeasurement.pN2p5   = !isnan(uint_pN2p5) ? uint_pN2p5  / 10 * 100: UINT32_MAX;
-    sen5xmeasurement.pN4p0   = !isnan(uint_pN4p0) ? uint_pN4p0  / 10 * 100: UINT32_MAX;
-    sen5xmeasurement.pN10p0  = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100: UINT32_MAX;
+    sen5xmeasurement.pN0p5   = !isnan(uint_pN0p5) ? uint_pN0p5  / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN1p0   = !isnan(uint_pN1p0) ? uint_pN1p0  / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN2p5   = !isnan(uint_pN2p5) ? uint_pN2p5  / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN4p0   = !isnan(uint_pN4p0) ? uint_pN4p0  / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN10p0  = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100 : UINT32_MAX;
     sen5xmeasurement.tSize   = !isnan(uint_tSize) ? uint_tSize  / 1000.0f : FLT_MAX;
 
     // Remove accumuluative values:
@@ -769,7 +785,7 @@ bool SEN5XSensor::readPnValues(bool cumulative)
 //     }
 //     delay(20); // From Sensirion Datasheet
 
-//     uint8_t dataBuffer[12];
+//     uint8_t dataBuffer[8];
 //     size_t receivedNumber = readBuffer(&dataBuffer[0], 12);
 //     if (receivedNumber == 0) {
 //         LOG_ERROR("SEN5X: Error getting Raw values");
@@ -813,7 +829,7 @@ uint8_t SEN5XSensor::getMeasurements()
         return 2;
     }
 
-    if(!readPnValues(false)) {
+    if(!readPNValues(false)) {
         LOG_ERROR("SEN5X: Error getting PN readings");
         return 2;
     }
@@ -829,36 +845,37 @@ uint8_t SEN5XSensor::getMeasurements()
 int32_t SEN5XSensor::pendingForReady(){
     uint32_t now;
     now = getTime();
-    uint32_t sinceMeasureStarted = (now - measureStarted)*1000;
-    LOG_DEBUG("SEN5X: Since measure started: %ums", sinceMeasureStarted);
+    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted)*1000;
+    LOG_DEBUG("SEN5X: Since measure started: %ums", sincePmMeasureStarted);
+
     switch (state) {
         case SEN5X_MEASUREMENT: {
 
-            if (sinceMeasureStarted < SEN5X_WARMUP_MS_1) {
+            if (sincePmMeasureStarted < SEN5X_WARMUP_MS_1) {
                 LOG_INFO("SEN5X: not enough time passed since starting measurement");
-                return SEN5X_WARMUP_MS_1 - sinceMeasureStarted;
+                return SEN5X_WARMUP_MS_1 - sincePmMeasureStarted;
             }
 
-            if (!firstMeasureStarted) {
-                firstMeasureStarted = now;
+            if (!pmMeasureStarted) {
+                pmMeasureStarted = now;
             }
 
             // Get PN values to check if we are above or below threshold
-            readPnValues(true);
+            readPNValues(true);
 
             // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
-            if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sinceMeasureStarted < SEN5X_WARMUP_MS_2) {
+            if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
                 LOG_INFO("SEN5X: Concentration is low, we will ask again in the second warm up period");
                 state = SEN5X_MEASUREMENT_2;
                 // Report how many seconds are pending to cover the first warm up period
-                return SEN5X_WARMUP_MS_2 - sinceMeasureStarted;
+                return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
             }
             return 0;
         }
         case SEN5X_MEASUREMENT_2: {
-            if (sinceMeasureStarted < SEN5X_WARMUP_MS_2) {
+            if (sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
                 // Report how many seconds are pending to cover the first warm up period
-                return SEN5X_WARMUP_MS_2 - sinceMeasureStarted;
+                return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
             }
             return 0;
         }
@@ -921,7 +938,7 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
             measurement->variant.air_quality_metrics.particles_tps = sen5xmeasurement.tSize;
         }
 
-        if (model == SEN54 || model == SEN55) {
+        if (model != SEN50) {
             if (sen5xmeasurement.humidity!= FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_humidity = true;
                 measurement->variant.air_quality_metrics.pm_humidity = sen5xmeasurement.humidity;
@@ -931,15 +948,15 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
                 measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
             }
             if (sen5xmeasurement.noxIndex!= FLT_MAX) {
-                measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
-                measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
+                measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
+                measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
             }
         }
 
         if (model == SEN55) {
             if (sen5xmeasurement.noxIndex!= FLT_MAX) {
-                measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
-                measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
+                measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
+                measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
             }
         }
 
