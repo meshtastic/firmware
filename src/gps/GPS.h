@@ -236,7 +236,7 @@ class GPS : private concurrency::OSThread
 
     virtual int32_t runOnce() override;
 
-    GnssModel_t getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap);
+    GnssModel_t getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap, int serialSpeed);
 
     // Get GNSS model
     GnssModel_t probe(int serialSpeed);
