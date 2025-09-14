@@ -1,7 +1,10 @@
 #include "FloodingRouter.h"
 
+#include "MeshTypes.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -90,14 +93,64 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
             if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-                tosend->hop_limit--; // bump down the hop count
-#if USERPREFS_EVENT_MODE
-                if (tosend->hop_limit > 2) {
-                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                    tosend->hop_start -= (tosend->hop_limit - 2);
-                    tosend->hop_limit = 2;
+                // Check if both local device and previous relay are routers (including CLIENT_BASE)
+                bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                                meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                                meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+                
+                bool prevRelayIsRouter = false;
+                
+                // Try to find the previous relay node from the last byte
+                // If it's the first hop (relay_node is 0 or NO_RELAY_NODE), check the original sender
+                if (p->relay_node == 0 || p->relay_node == NO_RELAY_NODE) {
+                    // First hop - check if original sender is a router
+                    meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(p->from);
+                    if (senderNode && senderNode->has_user) {
+                        prevRelayIsRouter = IS_ONE_OF(senderNode->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                                      meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                                      meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+                    }
+                } else {
+                    // Search for favorite routers with matching last byte
+                    // Only preserve hop count if we can definitively identify a favorite router
+                    meshtastic_NodeInfoLite *favoriteRouterMatch = nullptr;
+                    
+                    for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+                        if (node && nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
+                            // Found a node with matching last byte
+                            if (node->has_user && 
+                                node->is_favorite &&  // Must be a favorite
+                                IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                         meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                         meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+                                favoriteRouterMatch = node;
+                                break;  // Found our favorite router, no need to continue
+                            }
+                        }
+                    }
+                    
+                    // Only set prevRelayIsRouter if we found a favorite router
+                    if (favoriteRouterMatch) {
+                        prevRelayIsRouter = true;
+                        LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", favoriteRouterMatch->num, p->relay_node);
+                    }
                 }
+                
+                // Only preserve hop_limit for router/CLIENT_BASE-to-favorite-router/CLIENT_BASE communication
+                if (!(localIsRouter && prevRelayIsRouter)) {
+                    tosend->hop_limit--; // bump down the hop count
+#if USERPREFS_EVENT_MODE
+                    if (tosend->hop_limit > 2) {
+                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                        tosend->hop_start -= (tosend->hop_limit - 2);
+                        tosend->hop_limit = 2;
+                    }
 #endif
+                } else {
+                    LOG_INFO("Router/CLIENT_BASE-to-favorite-router/CLIENT_BASE flood: preserving hop_limit");
+                }
+                
                 tosend->next_hop = NO_NEXT_HOP_PREFERENCE; // this should already be the case, but just in case
 
                 LOG_INFO("Rebroadcast received floodmsg");
