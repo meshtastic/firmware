@@ -46,11 +46,14 @@ the new node can build its node db)
 
 MeshService *service;
 
-static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
+#define MAX_MQTT_PROXY_MESSAGES 16
+static MemoryPool<meshtastic_MqttClientProxyMessage, MAX_MQTT_PROXY_MESSAGES> staticMqttClientProxyMessagePool;
 
-static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+#define MAX_QUEUE_STATUS 4
+static MemoryPool<meshtastic_QueueStatus, MAX_QUEUE_STATUS> staticQueueStatusPool;
 
-static MemoryDynamic<meshtastic_ClientNotification> staticClientNotificationPool;
+#define MAX_CLIENT_NOTIFICATIONS 4
+static MemoryPool<meshtastic_ClientNotification, MAX_CLIENT_NOTIFICATIONS> staticClientNotificationPool;
 
 Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
@@ -193,11 +196,9 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                                                  // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
-    auto heapBefore = memGet.getFreeHeap();
+    DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
-    auto heapAfter = memGet.getFreeHeap();
-    LOG_HEAP("Alloc in MeshService::handleToRadio() pointer 0x%x, size: %u, free: %u", a, heapBefore - heapAfter, heapAfter);
-
+    DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
     sendToMesh(a, RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
@@ -254,10 +255,9 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
-        auto heapBefore = memGet.getFreeHeap();
+        DEBUG_HEAP_BEFORE;
         auto a = packetPool.allocCopy(*p);
-        auto heapAfter = memGet.getFreeHeap();
-        LOG_HEAP("Alloc in MeshService::sendToMesh() pointer 0x%x, size: %u, free: %u", a, heapBefore - heapAfter, heapAfter);
+        DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
 
         sendToPhone(a);
     }
