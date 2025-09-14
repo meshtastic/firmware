@@ -274,7 +274,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
             lastTimeValidationWarning = millis();
         }
         return RTCSetResultInvalidTime;
-    } else if (tv->tv_sec > (time_t)(BUILD_EPOCH + FORTY_YEARS)) {
+    } else if (tv.tv_sec > (time_t)(BUILD_EPOCH + FORTY_YEARS)) {
         if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
             // Calculate max allowed time safely to avoid overflow in logging
             uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
