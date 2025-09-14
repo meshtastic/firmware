@@ -159,7 +159,7 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
 
-    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
+    uint32_t fixHoldEnds = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 
@@ -236,7 +236,7 @@ class GPS : private concurrency::OSThread
 
     virtual int32_t runOnce() override;
 
-    GnssModel_t getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap);
+    GnssModel_t getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap, int serialSpeed);
 
     // Get GNSS model
     GnssModel_t probe(int serialSpeed);

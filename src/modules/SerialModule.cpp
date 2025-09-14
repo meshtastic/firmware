@@ -49,8 +49,8 @@
 #include "meshSolarApp.h"
 #endif
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
+    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
@@ -67,7 +67,7 @@ SerialModuleRadio *serialModuleRadio;
     defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172)
 SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial1;
 #else
@@ -173,7 +173,18 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-
+#elif defined(ARCH_STM32WL)
+#ifndef RAK3172
+            HardwareSerial *serialInstance = &Serial2;
+#else
+            HardwareSerial *serialInstance = &Serial1;
+#endif
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                serialInstance->setTx(moduleConfig.serial.txd);
+                serialInstance->setRx(moduleConfig.serial.rxd);
+            }
+            serialInstance->begin(baud);
+            serialInstance->setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #elif defined(ARCH_ESP32)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
@@ -260,8 +271,13 @@ int32_t SerialModule::runOnce()
                 while (Serial1.available()) {
                     serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #else
-                while (Serial2.available()) {
-                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+#ifndef RAK3172
+                HardwareSerial *serialInstance = &Serial2;
+#else
+                HardwareSerial *serialInstance = &Serial1;
+#endif
+                while (serialInstance->available()) {
+                    serialPayloadSize = serialInstance->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #endif
                     serialModuleRadio->sendPayload();
                 }
@@ -511,7 +527,7 @@ ParsedLine parseLine(const char *line)
 void SerialModule::processWXSerial()
 {
 #if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
-    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
+    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;

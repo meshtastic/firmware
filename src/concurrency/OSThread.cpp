@@ -86,9 +86,9 @@ void OSThread::run()
 #ifdef DEBUG_HEAP
     auto newHeap = memGet.getFreeHeap();
     if (newHeap < heap)
-        LOG_DEBUG("------ Thread %s leaked heap %d -> %d (%d) ------", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+        LOG_HEAP("------ Thread %s leaked heap %d -> %d (%d) ------", ThreadName.c_str(), heap, newHeap, newHeap - heap);
     if (heap < newHeap)
-        LOG_DEBUG("++++++ Thread %s freed heap %d -> %d (%d) ++++++", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+        LOG_HEAP("++++++ Thread %s freed heap %d -> %d (%d) ++++++", ThreadName.c_str(), heap, newHeap, newHeap - heap);
 #endif
 
     runned();

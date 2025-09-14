@@ -263,12 +263,6 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
             display->drawString(x + 1, y, "USB");
     }
 
-    //    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
-
-    //    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
-    //    if (config.display.heading_bold)
-    //        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
-
     uint32_t currentMillis = millis();
     uint32_t seconds = currentMillis / 1000;
     uint32_t minutes = seconds / 60;
@@ -398,7 +392,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
 
     // === Second Row: Radio Preset ===
-    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
     if (region != nullptr) {

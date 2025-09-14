@@ -34,8 +34,9 @@ class PacketHistory
     void insert(const PacketRecord &r); // Insert or replace a packet record in the history
 
     /* Check if a certain node was a relayer of a packet in the history given iterator
+     * If wasSole is not nullptr, it will be set to true if the relayer was the only relayer of that packet
      * @return true if node was indeed a relayer, false if not */
-    bool wasRelayer(const uint8_t relayer, const PacketRecord &r);
+    bool wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole = nullptr);
 
     PacketHistory(const PacketHistory &);            // non construction-copyable
     PacketHistory &operator=(const PacketHistory &); // non copyable
@@ -54,8 +55,12 @@ class PacketHistory
                          bool *weWereNextHop = nullptr);
 
     /* Check if a certain node was a relayer of a packet in the history given an ID and sender
+     * If wasSole is not nullptr, it will be set to true if the relayer was the only relayer of that packet
      * @return true if node was indeed a relayer, false if not */
-    bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
+    bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole = nullptr);
+
+    // Check if a certain node was the *only* relayer of a packet in the history given an ID and sender
+    bool wasSoleRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);

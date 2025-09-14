@@ -59,7 +59,8 @@ void onConnect(uint16_t conn_handle)
     LOG_INFO("BLE Connected to %s", central_name);
 
     // Notify UI (or any other interested firmware components)
-    bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 /**
  * Callback invoked when a connection is dropped
@@ -74,7 +75,8 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
     }
 
     // Notify UI (or any other interested firmware components)
-    bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -326,7 +328,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         textkey += (char)passkey[i];
 
     // Notify UI (or other components) of pairing event and passkey
-    bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(textkey));
+    meshtastic::BluetoothStatus newStatus(textkey);
+    bluetoothStatus->updateStatus(&newStatus);
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
     if (screen) {
@@ -398,12 +401,13 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         LOG_INFO("BLE pair success");
-        bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
+        meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+        bluetoothStatus->updateStatus(&newConnectedStatus);
     } else {
         LOG_INFO("BLE pair failed");
         // Notify UI (or any other interested firmware components)
-        bluetoothStatus->updateStatus(
-            new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+        meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+        bluetoothStatus->updateStatus(&newDisconnectedStatus);
     }
 
     // Todo: migrate this display code back into Screen class, and observe bluetoothStatus

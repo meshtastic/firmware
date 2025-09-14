@@ -13,7 +13,11 @@ void CardKbI2cImpl::init()
     if (cardkb_found.address == 0x00) {
         LOG_DEBUG("Rescan for I2C keyboard");
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR, MPR121_KB_ADDR, TCA8418_KB_ADDR};
+#if defined(T_LORA_PAGER)
         uint8_t i2caddr_asize = sizeof(i2caddr_scan) / sizeof(i2caddr_scan[0]);
+#else
+        uint8_t i2caddr_asize = 5;
+#endif
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 
 #if WIRE_INTERFACES_COUNT == 2

@@ -3,6 +3,11 @@
 PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
 CHANGE_MODE=false
 
+# Constants
+FLASH_BAUD=115200
+RESET_BAUD=1200
+UPDATE_OFFSET=0x10000
+
 # Determine the correct esptool command to use
 if "$PYTHON" -m esptool version >/dev/null 2>&1; then
     ESPTOOL_CMD="$PYTHON -m esptool"
@@ -64,7 +69,7 @@ done
 shift "$((OPTIND-1))"
 
 if [ "$CHANGE_MODE" = true ]; then
-	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+	$ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
     exit 0
 fi
 
@@ -75,7 +80,7 @@ fi
 
 if [ -f "${FILENAME}" ] && [ -z "${FILENAME##*"update"*}" ]; then
     echo "Trying to flash update ${FILENAME}"
-    $ESPTOOL_CMD --baud 115200 write_flash 0x10000 "${FILENAME}"
+    $ESPTOOL_CMD --baud $FLASH_BAUD write-flash $UPDATE_OFFSET "${FILENAME}"
 else
     show_help
     echo "Invalid file: ${FILENAME}"

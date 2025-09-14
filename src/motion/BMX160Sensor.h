@@ -7,7 +7,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
-#if defined(RAK_4631) && !defined(RAK2560) && __has_include(<Rak_BMX160.h>)
+#if !defined(RAK2560) && __has_include(<Rak_BMX160.h>)
 
 #include "Fusion/Fusion.h"
 #include <Rak_BMX160.h>

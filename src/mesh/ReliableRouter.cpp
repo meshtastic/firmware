@@ -2,6 +2,7 @@
 #include "Default.h"
 #include "MeshTypes.h"
 #include "configuration.h"
+#include "memGet.h"
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
@@ -21,8 +22,10 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         if (p->hop_limit == 0) {
             p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
-
+        DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
+        DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
+
         startRetransmission(copy, NUM_RELIABLE_RETX);
     }
 
@@ -58,7 +61,10 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
-            stopRetransmission(key);
+            // Only stop retransmissions if the rebroadcast came via LoRa
+            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+                stopRetransmission(key);
+            }
         } else {
             LOG_DEBUG("Didn't find pending packet");
         }

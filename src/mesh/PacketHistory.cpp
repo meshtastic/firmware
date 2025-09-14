@@ -294,7 +294,7 @@ void PacketHistory::insert(const PacketRecord &r)
 
 /* Check if a certain node was a relayer of a packet in the history given an ID and sender
  * @return true if node was indeed a relayer, false if not */
-bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
+bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {
         LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED!");
@@ -322,27 +322,42 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
               found->sender, found->id, found->next_hop, millis() - found->rxTimeMsec, found->relayed_by[0], found->relayed_by[1],
               found->relayed_by[2], relayer);
 #endif
-    return wasRelayer(relayer, *found);
+    return wasRelayer(relayer, *found, wasSole);
 }
 
 /* Check if a certain node was a relayer of a packet in the history given iterator
  * @return true if node was indeed a relayer, false if not */
-bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r)
+bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole)
 {
-    for (uint8_t i = 0; i < NUM_RELAYERS; i++) {
+    bool found = false;
+    bool other_present = false;
+
+    for (uint8_t i = 0; i < NUM_RELAYERS; ++i) {
         if (r.relayed_by[i] == relayer) {
-#if VERBOSE_PACKET_HISTORY
-            LOG_DEBUG("Packet History - was rel.PR.: s=%08x id=%08x rls=%02x %02x %02x / rl=%02x? YES", r.sender, r.id,
-                      r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], relayer);
-#endif
-            return true;
+            found = true;
+        } else if (r.relayed_by[i] != 0) {
+            other_present = true;
         }
     }
+
+    if (wasSole) {
+        *wasSole = (found && !other_present);
+    }
+
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG("Packet History - was rel.PR.: s=%08x id=%08x rls=%02x %02x %02x / rl=%02x? NO", r.sender, r.id, r.relayed_by[0],
               r.relayed_by[1], r.relayed_by[2], relayer);
 #endif
-    return false;
+
+    return found;
+}
+
+// Check if a certain node was the *only* relayer of a packet in the history given an ID and sender
+bool PacketHistory::wasSoleRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
+{
+    bool wasSole = false;
+    wasRelayer(relayer, id, sender, &wasSole);
+    return wasSole;
 }
 
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender

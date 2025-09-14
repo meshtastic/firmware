@@ -66,6 +66,8 @@ typedef enum _meshtastic_Language {
     meshtastic_Language_UKRAINIAN = 16,
     /* Bulgarian */
     meshtastic_Language_BULGARIAN = 17,
+    /* Czech */
+    meshtastic_Language_CZECH = 18,
     /* Simplified Chinese (experimental) */
     meshtastic_Language_SIMPLIFIED_CHINESE = 30,
     /* Traditional Chinese (experimental) */

@@ -100,6 +100,7 @@ void PhoneAPI::close()
         config_nonce = 0;
         config_state = 0;
         pauseBluetoothLogging = false;
+        heartbeatReceived = false;
     }
 }
 
