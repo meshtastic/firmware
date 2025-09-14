@@ -1,6 +1,8 @@
 #pragma once
 
-// This is a non-interrupt version of RotaryEncoder which is based on a debounce inherent FSM table (see RotaryEncoder library)
+#ifdef T_LORA_PAGER
+
+// This is a version of RotaryEncoder which is based on a debounce inherent FSM table (see RotaryEncoder library)
 
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
@@ -33,3 +35,5 @@ class RotaryEncoderImpl : public Observable<const InputEvent *>, public concurre
 };
 
 extern RotaryEncoderImpl *rotaryEncoderImpl;
+
+#endif

@@ -3,7 +3,9 @@
 #include "buzz/BuzzerFeedbackThread.h"
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
+#ifdef T_LORA_PAGER
 #include "input/RotaryEncoderImpl.h"
+#endif
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
 #include "input/UpDownInterruptImpl1.h"
