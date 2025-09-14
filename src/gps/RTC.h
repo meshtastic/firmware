@@ -56,5 +56,5 @@ time_t gm_mktime(struct tm *tm);
 #define SEC_PER_HOUR 3600
 #define SEC_PER_MIN 60
 #ifdef BUILD_EPOCH
-#define FORTY_YEARS (40ULL * 365 * SEC_PER_DAY) // Use 64-bit arithmetic to prevent overflow
+static constexpr uint64_t FORTY_YEARS = (40ULL * 365 * SEC_PER_DAY); // Use 64-bit arithmetic to prevent overflow
 #endif
