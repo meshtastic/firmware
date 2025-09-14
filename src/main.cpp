@@ -374,7 +374,7 @@ void setup()
     io.pinMode(EXPANDS_DRV_EN, OUTPUT);
     io.digitalWrite(EXPANDS_DRV_EN, HIGH);
     io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.digitalWrite(EXPANDS_AMP_EN, LOW);
     io.pinMode(EXPANDS_LORA_EN, OUTPUT);
     io.digitalWrite(EXPANDS_LORA_EN, HIGH);
     io.pinMode(EXPANDS_GPS_EN, OUTPUT);
