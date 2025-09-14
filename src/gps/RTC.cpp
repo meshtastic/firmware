@@ -9,6 +9,9 @@
 static RTCQuality currentQuality = RTCQualityNone;
 uint32_t lastSetFromPhoneNtpOrGps = 0;
 
+static uint32_t lastTimeValidationWarning = 0;
+static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
+
 RTCQuality getRTCQuality()
 {
     return currentQuality;
@@ -48,7 +51,9 @@ RTCSetResult readFromRTC()
 
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
-            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            }
             return RTCSetResultInvalidTime;
         }
 #endif
@@ -87,7 +92,10 @@ RTCSetResult readFromRTC()
 
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
-            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
             return RTCSetResultInvalidTime;
         }
 #endif
@@ -130,15 +138,20 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
-#ifdef GPS_DEBUG
-        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-#endif
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            lastTimeValidationWarning = millis();
+        }
         return RTCSetResultInvalidTime;
-    } else if (tv->tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
-#ifdef GPS_DEBUG
-        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
-                 BUILD_EPOCH + FORTY_YEARS);
-#endif
+    } else if ((uint64_t)tv->tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            // Calculate max allowed time safely to avoid overflow in logging
+            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
+            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
+            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
+                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
+            lastTimeValidationWarning = millis();
+        }
         return RTCSetResultInvalidTime;
     }
 #endif
@@ -256,15 +269,20 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
-#ifdef GPS_DEBUG
-        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-#endif
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            lastTimeValidationWarning = millis();
+        }
         return RTCSetResultInvalidTime;
-    } else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
-#ifdef GPS_DEBUG
-        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
-                 BUILD_EPOCH + FORTY_YEARS);
-#endif
+    } else if ((uint64_t)tv.tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            // Calculate max allowed time safely to avoid overflow in logging
+            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
+            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
+            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
+                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
+            lastTimeValidationWarning = millis();
+        }
         return RTCSetResultInvalidTime;
     }
 #endif
