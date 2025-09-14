@@ -129,22 +129,31 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                                                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
                     }
                 } else {
-                    // Search for favorite routers with matching last byte
-                    // Only preserve hop count if we can definitively identify a favorite router
+                    // Optimized search for favorite routers with matching last byte
+                    // Check ordering optimized for IoT devices (cheapest checks first)
                     meshtastic_NodeInfoLite *favoriteRouterMatch = nullptr;
                     
                     for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
                         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-                        if (node && nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
-                            // Found a node with matching last byte
-                            if (node->has_user && 
-                                node->is_favorite &&  // Must be a favorite
-                                IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                         meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                         meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-                                favoriteRouterMatch = node;
-                                break;  // Found our favorite router, no need to continue
-                            }
+                        if (!node) continue;
+                        
+                        // Check 1: is_favorite (cheapest - single bool)
+                        if (!node->is_favorite) continue;
+                        
+                        // Check 2: has_user (cheap - single bool)
+                        if (!node->has_user) continue;
+                        
+                        // Check 3: role check (moderate cost - multiple comparisons)
+                        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+                            continue;
+                        }
+                        
+                        // Check 4: last byte extraction and comparison (most expensive)
+                        if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
+                            favoriteRouterMatch = node;
+                            break;  // Found our favorite router
                         }
                     }
                     
