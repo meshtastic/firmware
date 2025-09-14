@@ -342,14 +342,40 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
 time_t gm_mktime(struct tm *tm)
 {
 #if !MESHTASTIC_EXCLUDE_TZ
-    setenv("TZ", "GMT0", 1);
-    time_t res = mktime(tm);
-    if (*config.device.tzdef) {
-        setenv("TZ", config.device.tzdef, 1);
-    } else {
-        setenv("TZ", "UTC0", 1);
+    time_t result = 0;
+
+    // First, get us to the start of tm->year, by calcuating the number of days since the Unix epoch.
+    int year = 1900 + tm->tm_year; // tm_year is years since 1900
+    int year_minus_one = year - 1;
+    int days_before_this_year = 0;
+    days_before_this_year += year_minus_one * 365;
+    // leap days: every 4 years, except 100s, but including 400s.
+    days_before_this_year += year_minus_one / 4 - year_minus_one / 100 + year_minus_one / 400;
+    // subtract from 1970-01-01 to get days since epoch
+    days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
+
+    // Now, within this tm->year, compute the days *before* this tm->month starts.
+    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
+
+    // If this is a leap year, and we're past February, add a day:
+    if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
+        days_this_year_before_this_month += 1;
     }
-    return res;
+
+    // And within this month:
+    int days_this_month_before_today = tm->tm_mday - 1; // tm->tm_mday is 1..31
+
+    // Now combine them all together, and convert days to seconds:
+    result += (days_before_this_year + days_this_year_before_this_month + days_this_month_before_today);
+    result *= 86400L;
+
+    // Finally, add in the hours, minutes, and seconds of today:
+    result += tm->tm_hour * 3600;
+    result += tm->tm_min * 60;
+    result += tm->tm_sec;
+
+    return result;
 #else
     return mktime(tm);
 #endif
