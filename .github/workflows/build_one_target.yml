@@ -18,7 +18,7 @@ on:
       target:
         type: string
         required: false
-        description: 'choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.'
+        description: Choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.
 
       # find-target:
       #   type: boolean
@@ -58,10 +58,6 @@ jobs:
           echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
           echo "Targets:" >> $GITHUB_STEP_SUMMARY
           echo $TARGETS | sed 's/[][]//g; s/", "/\n- /g; s/"//g; s/^/- /' >> $GITHUB_STEP_SUMMARY
-
-
-
-
 
   version:
     if: ${{ inputs.target != '' }}
@@ -172,11 +168,7 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
-    needs:
-      [
-        version,
-        build-arch,
-      ]
+    needs: [version, build-arch]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
