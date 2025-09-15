@@ -46,7 +46,7 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
-    int32_t interval = 300;
+    int32_t newInterval = 300;
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
@@ -252,7 +252,7 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x84: { // Adafruit TCA8418
-        interval = 3000;  // Less polling, we have interrupts with onNotify()
+        newInterval = 3000;  // Less polling, we have interrupts with onNotify()
         TCAKeyboard.trigger();
         InputEvent e;
         while (TCAKeyboard.hasEvent()) {
@@ -526,7 +526,7 @@ int32_t KbI2cBase::runOnce()
     if (pendingInterruptCount) pendingInterruptCount--;
     if (pendingInterruptCount) return 0;
 
-    return interval;
+    return newInterval;
 }
 
 int KbI2cBase::onNotify(KbInterruptObservable* src)
