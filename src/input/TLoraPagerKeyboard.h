@@ -20,4 +20,7 @@ class TLoraPagerKeyboard : public TCA8418KeyboardBase
 
   private:
     uint8_t modifierFlag;        // Flag to indicate if a modifier key is pressed
+    uint8_t pressedKeysCount;
+    bool onlyOneModifierPressed;
+    bool persistedPreviousModifier;
 };

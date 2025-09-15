@@ -62,7 +62,7 @@ static const uint8_t TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
 static bool TDeckProHeldMap[_TCA8418_NUM_KEYS] = {};
 
 TDeckProKeyboard::TDeckProKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false), persistedPreviousModifier(false)
 {
 }
 
@@ -98,7 +98,15 @@ void TDeckProKeyboard::pressed(uint8_t key)
     }
 
     TDeckProHeldMap[key_index] = true;
-    modifierFlag |= keyToModifierFlag(key_index);
+    pressedKeysCount++;
+
+    uint8_t key_modifier = keyToModifierFlag(key_index);
+    if (key_modifier && pressedKeysCount == 1) {
+        onlyOneModifierPressed = true;
+    } else {
+        onlyOneModifierPressed = false;
+    }
+    modifierFlag |= key_modifier;
 }
 
 void TDeckProKeyboard::released(uint8_t key)
@@ -111,15 +119,27 @@ void TDeckProKeyboard::released(uint8_t key)
         return;
     }
 
-    TDeckProHeldMap[key_index] = false;
-    modifierFlag &= ~keyToModifierFlag(key_index);
-
     if (TDeckProTapMap[key_index][modifierFlag % TDeckProTapMod[key_index]] == Key::BL_TOGGLE) {
         toggleBacklight();
-        return;
+    } else {
+        queueEvent(TDeckProTapMap[key_index][modifierFlag % TDeckProTapMod[key_index]]);
     }
 
-    queueEvent(TDeckProTapMap[key_index][modifierFlag % TDeckProTapMod[key_index]]);
+    TDeckProHeldMap[key_index] = false;
+    pressedKeysCount--;
+
+    if (onlyOneModifierPressed) {
+        onlyOneModifierPressed = false;
+        if (persistedPreviousModifier) {
+            modifierFlag = 0;
+        }
+        persistedPreviousModifier = !persistedPreviousModifier;
+    } else if (persistedPreviousModifier && pressedKeysCount == 0) {
+        modifierFlag = 0;
+        persistedPreviousModifier = false;
+    } else {
+        modifierFlag &= ~keyToModifierFlag(key_index);
+    }
 }
 
 void TDeckProKeyboard::setBacklight(bool on)

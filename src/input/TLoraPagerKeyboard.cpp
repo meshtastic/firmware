@@ -67,7 +67,7 @@ static const uint8_t TLoraPagerTapMap[_TCA8418_NUM_KEYS][3] = {
 static bool TLoraPagerHeldMap[_TCA8418_NUM_KEYS] = {};
 
 TLoraPagerKeyboard::TLoraPagerKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false), persistedPreviousModifier(false)
 {
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     ledcAttach(KB_BL_PIN, LEDC_BACKLIGHT_FREQ, LEDC_BACKLIGHT_BIT_WIDTH);
@@ -121,7 +121,15 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
     }
 
     TLoraPagerHeldMap[key_index] = true;
-    modifierFlag |= keyToModifierFlag(key_index);
+    pressedKeysCount++;
+
+    uint8_t key_modifier = keyToModifierFlag(key_index);
+    if (key_modifier && pressedKeysCount == 1) {
+        onlyOneModifierPressed = true;
+    } else {
+        onlyOneModifierPressed = false;
+    }
+    modifierFlag |= key_modifier;
 }
 
 void TLoraPagerKeyboard::released(uint8_t key)
@@ -134,15 +142,27 @@ void TLoraPagerKeyboard::released(uint8_t key)
         return;
     }
 
-    TLoraPagerHeldMap[key_index] = false;
-    modifierFlag &= ~keyToModifierFlag(key_index);
-
     if (TLoraPagerTapMap[key_index][modifierFlag % TLoraPagerTapMod[key_index]] == Key::BL_TOGGLE) {
         toggleBacklight();
-        return;
+    } else {
+        queueEvent(TLoraPagerTapMap[key_index][modifierFlag % TLoraPagerTapMod[key_index]]);
     }
 
-    queueEvent(TLoraPagerTapMap[key_index][modifierFlag % TLoraPagerTapMod[key_index]]);
+    TLoraPagerHeldMap[key_index] = false;
+    pressedKeysCount--;
+
+    if (onlyOneModifierPressed) {
+        onlyOneModifierPressed = false;
+        if (persistedPreviousModifier) {
+            modifierFlag = 0;
+        }
+        persistedPreviousModifier = !persistedPreviousModifier;
+    } else if (persistedPreviousModifier && pressedKeysCount == 0) {
+        modifierFlag = 0;
+        persistedPreviousModifier = false;
+    } else {
+        modifierFlag &= ~keyToModifierFlag(key_index);
+    }
 }
 
 void TLoraPagerKeyboard::hapticFeedback()
