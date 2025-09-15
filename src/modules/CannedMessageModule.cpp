@@ -155,10 +155,6 @@ int CannedMessageModule::splitConfiguredMessages()
 #if defined(USE_VIRTUAL_KEYBOARD)
     // Add a "Free Text" entry at the top if using a keyboard
     tempMessages[tempCount++] = "[-- Free Text --]";
-#elif !defined(M5STACK_UNITC6L)
-    if (osk_found && screen) {
-        tempMessages[tempCount++] = "[-- Free Text --]";
-    }
 #endif
 
     // First message always starts at buffer start
