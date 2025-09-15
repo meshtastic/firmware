@@ -25,7 +25,7 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
-#ifdef USE_XL9555
+#ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
         setCPUFast(true);
@@ -53,7 +53,7 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
-#ifdef USE_XL9555
+#ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
 #endif
     }
@@ -66,14 +66,14 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-#ifdef USE_XL9555
+#ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
         ESP8266SAM *sam = new ESP8266SAM;
         sam->Say(audioOut, text);
         delete sam;
         setCPUFast(false);
-#ifdef USE_XL9555
+#ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
 #endif
     }
