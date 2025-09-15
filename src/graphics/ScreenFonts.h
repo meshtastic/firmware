@@ -79,6 +79,10 @@
 #define FONT_SMALL FONT_MEDIUM_LOCAL // Height: 19
 #define FONT_MEDIUM FONT_LARGE_LOCAL // Height: 28
 #define FONT_LARGE FONT_LARGE_LOCAL  // Height: 28
+#elif defined(M5STACK_UNITC6L)
+#define FONT_SMALL FONT_SMALL_LOCAL  // Height: 13
+#define FONT_MEDIUM FONT_SMALL_LOCAL // Height: 13
+#define FONT_LARGE FONT_SMALL_LOCAL  // Height: 13
 #else
 #define FONT_SMALL FONT_SMALL_LOCAL   // Height: 13
 #define FONT_MEDIUM FONT_MEDIUM_LOCAL // Height: 19
