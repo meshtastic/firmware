@@ -119,7 +119,7 @@ void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, con
 void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps,
                                     const char *mode)
 {
-    auto gpsFormat = config.display.gps_format;
+    auto gpsFormat = uiconfig.gps_format;
     char displayLine[32];
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
@@ -1037,8 +1037,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         // === Third Row: Line 1 GPS Info ===
         UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line1");
 
-        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC &&
-            config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MLS) {
+        if (uiconfig.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC &&
+            uiconfig.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
         }
