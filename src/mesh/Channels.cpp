@@ -423,6 +423,33 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
     }
 }
 
+bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
+{
+    // Iterate all known presets
+    for (int preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN; preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX;
+         ++preset) {
+        const char *name =
+            DisplayFormatters::getModemPresetDisplayName((meshtastic_Config_LoRaConfig_ModemPreset)preset, false, false);
+        if (!name)
+            continue;
+        if (strcmp(name, "Invalid") == 0)
+            continue; // skip invalid placeholder
+        uint8_t h = xorHash((const uint8_t *)name, strlen(name));
+        // Expand default PSK alias 1 to actual bytes and xor into hash
+        uint8_t tmp = h ^ xorHash(defaultpsk, sizeof(defaultpsk));
+        if (tmp == channelHash) {
+            // Set crypto to defaultpsk and report success
+            CryptoKey k;
+            memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
+            k.length = sizeof(defaultpsk);
+            crypto->setKey(k);
+            LOG_INFO("Matched default preset '%s' for hash 0x%x; set default PSK", name, channelHash);
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
  *
  * This method is called before encoding outbound packets
