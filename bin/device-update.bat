@@ -6,6 +6,8 @@ SET "SCRIPT_NAME=%~nx0"
 SET "DEBUG=0"
 SET "PYTHON="
 SET "ESPTOOL_BAUD=115200"
+SET "RESET_BAUD=1200"
+SET "UPDATE_OFFSET=0x10000"
 SET "ESPTOOL_CMD="
 SET "LOGCOUNTER=0"
 SET "CHANGE_MODE=0"
@@ -85,14 +87,13 @@ IF "!FILENAME:update=!"=="!FILENAME!" (
 )
 
 :skip-filename
-SET "ESPTOOL_BAUD=1200"
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
-    SET "ESPTOOL_CMD=!PYTHON! -m esptool"
+    SET "ESPTOOL_CMD=""!PYTHON!"" -m esptool"
     CALL :LOG_MESSAGE DEBUG "Python interpreter supplied."
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool...
+    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool..."
     WHERE esptool >nul 2>&1
     IF %ERRORLEVEL% EQU 0 (
         @REM WHERE exits with code 0 if esptool is found.
@@ -105,11 +106,11 @@ IF NOT "__%PYTHON%__"=="____" (
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 !ESPTOOL_CMD! >nul 2>&1
-IF %ERRORLEVEL% GEQ 2 (
-    @REM esptool exits with code 1 if help is displayed.
+CALL :LOG_MESSAGE DEBUG "esptool exit code: %ERRORLEVEL%"
+IF %ERRORLEVEL% EQU 9009 (
+    @REM 9009 = command not found on Windows
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
-    GOTO eof
 )
 IF %DEBUG% EQU 1 (
     CALL :LOG_MESSAGE DEBUG "Skipping ESPTOOL_CMD steps."
@@ -127,13 +128,13 @@ CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
 IF %CHANGE_MODE% EQU 1 (
     @REM Attempt to change mode via 1200bps Reset.
-    CALL :RUN_ESPTOOL !ESPTOOL_BAUD! --after no_reset read_flash_status
+    CALL :RUN_ESPTOOL !RESET_BAUD! --after no_reset read_flash_status
     GOTO eof
 )
 
 @REM Flashing operations.
-CALL :LOG_MESSAGE INFO "Trying to flash update "!FILENAME!" at OFFSET 0x10000..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash 0x10000 "!FILENAME!" || GOTO eof
+CALL :LOG_MESSAGE INFO "Trying to flash update "!FILENAME!" at OFFSET !UPDATE_OFFSET!..."
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !UPDATE_OFFSET! "!FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Script complete!."
 
@@ -145,9 +146,9 @@ EXIT /B %ERRORLEVEL%
 :RUN_ESPTOOL
 @REM Subroutine used to run ESPTOOL_CMD with arguments.
 @REM Also handles %ERRORLEVEL%.
-@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write_flash] [OFFSET] [Filename]
+@REM CALL :RUN_ESPTOOL [Baud] [erase-flash|write-flash] [OFFSET] [Filename]
 @REM.
-@REM Example:: CALL :RUN_ESPTOOL 115200 write_flash 0x10000 "firmwarefile.bin"
+@REM Example:: CALL :RUN_ESPTOOL 115200 write-flash 0x10000 "firmwarefile.bin"
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
 !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4

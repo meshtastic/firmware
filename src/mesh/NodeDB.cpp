@@ -663,7 +663,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -830,6 +830,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
+#endif
+#ifdef T_LORA_PAGER
+    moduleConfig.canned_message.updown1_enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;
+    moduleConfig.canned_message.inputbroker_pin_b = ROTARY_B;
+    moduleConfig.canned_message.inputbroker_pin_press = ROTARY_PRESS;
+    moduleConfig.canned_message.inputbroker_event_cw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(28);
+    moduleConfig.canned_message.inputbroker_event_ccw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(29);
+    moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
 #endif
     moduleConfig.has_canned_message = true;
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
@@ -1702,10 +1711,10 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
-    // if (mp.from == getNodeNum()) {
-    //     LOG_DEBUG("Ignore update from self");
-    //     return;
-    // }
+    if (mp.from == getNodeNum()) {
+        LOG_DEBUG("Ignore update from self");
+        return;
+    }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 

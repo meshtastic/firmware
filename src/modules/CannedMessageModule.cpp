@@ -632,10 +632,10 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
+#if CANNED_MESSAGE_ADD_CONFIRMATION
             // Show confirmation dialog before sending canned message
             NodeNum destNode = dest;
             ChannelIndex chan = channel;
-#if CANNED_MESSAGE_ADD_CONFIRMATION
             graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
                 this->sendText(destNode, chan, current, false);
                 payload = runState;
@@ -991,7 +991,6 @@ int32_t CannedMessageModule::runOnce()
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
@@ -1433,10 +1432,17 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
                 if (node) {
                     if (node->is_favorite) {
+#if defined(M5STACK_UNITC6L)
+                        snprintf(entryText, sizeof(entryText), "* %s", node->user.short_name);
+                    } else {
+                        snprintf(entryText, sizeof(entryText), "%s", node->user.short_name);
+                    }
+#else
                         snprintf(entryText, sizeof(entryText), "* %s", node->user.long_name);
                     } else {
                         snprintf(entryText, sizeof(entryText), "%s", node->user.long_name);
                     }
+#endif
                 }
             }
         }
@@ -1607,7 +1613,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         int yOffset = y + 10;
 #else
         display->setFont(FONT_MEDIUM);
+#if defined(M5STACK_UNITC6L)
+        int yOffset = y;
+#else
         int yOffset = y + 10;
+#endif
 #endif
 
         // --- Delivery Status Message ---
@@ -1632,13 +1642,20 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
 
         display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
+#if defined(M5STACK_UNITC6L)
+        yOffset += lineCount * FONT_HEIGHT_MEDIUM - 5; // only 1 line gap, no extra padding
+#else
         yOffset += lineCount * FONT_HEIGHT_MEDIUM; // only 1 line gap, no extra padding
-
+#endif
 #ifndef USE_EINK
         // --- SNR + RSSI Compact Line ---
         if (this->ack) {
             display->setFont(FONT_SMALL);
+#if defined(M5STACK_UNITC6L)
+            snprintf(buffer, sizeof(buffer), "SNR: %.1f dB \nRSSI: %d", this->lastRxSnr, this->lastRxRssi);
+#else
             snprintf(buffer, sizeof(buffer), "SNR: %.1f dB   RSSI: %d", this->lastRxSnr, this->lastRxRssi);
+#endif
             display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
         }
 #endif

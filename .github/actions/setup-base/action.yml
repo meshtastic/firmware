@@ -11,11 +11,6 @@ runs:
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
 
-    - name: Uncomment build epoch
-      shell: bash
-      run: |
-        sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
-
     - name: Install dependencies
       shell: bash
       run: |
@@ -23,7 +18,7 @@ runs:
         sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev lsb-release
 
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: 3.x
         cache: pip

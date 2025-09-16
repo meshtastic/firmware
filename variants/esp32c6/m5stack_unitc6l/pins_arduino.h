@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#define USB_VID 0x303a
-#define USB_PID 0x1001
+#define USB_VID 0x2886
+#define USB_PID 0x0048
 
 static const uint8_t TX = 16;
 static const uint8_t RX = 17;
