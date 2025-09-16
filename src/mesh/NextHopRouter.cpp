@@ -111,6 +111,9 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x", p->relay_node);
 
+                // First hop MUST always decrement to prevent retry issues
+                bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
+                
                 // Check if both local device and previous relay are routers (including CLIENT_BASE)
                 bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
                                                 meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
@@ -118,17 +121,8 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                 
                 bool prevRelayIsRouter = false;
                 
-                // Try to find the previous relay node from the last byte
-                // If it's the first hop (relay_node is 0 or NO_RELAY_NODE), check the original sender
-                if (p->relay_node == 0 || p->relay_node == NO_RELAY_NODE) {
-                    // First hop - check if original sender is a router
-                    meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(p->from);
-                    if (senderNode && senderNode->has_user) {
-                        prevRelayIsRouter = IS_ONE_OF(senderNode->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                                      meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                                      meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
-                    }
-                } else {
+                // Only check for router-to-router on subsequent hops (not first hop)
+                if (!isFirstHop) {
                     // Optimized search for favorite routers with matching last byte
                     // Check ordering optimized for IoT devices (cheapest checks first)
                     meshtastic_NodeInfoLite *favoriteRouterMatch = nullptr;
@@ -164,8 +158,8 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                     }
                 }
                 
-                // Only preserve hop_limit for router/CLIENT_BASE-to-favorite-router/CLIENT_BASE communication
-                if (!(localIsRouter && prevRelayIsRouter)) {
+                // Decrement hop_limit UNLESS it's a subsequent hop between favorite routers
+                if (isFirstHop || !(localIsRouter && prevRelayIsRouter)) {
                     tosend->hop_limit--; // bump down the hop count
                 } else {
                     LOG_INFO("Router/CLIENT_BASE-to-favorite-router/CLIENT_BASE relay: preserving hop_limit");
