@@ -81,6 +81,7 @@ class ScanI2C
         BHI260AP,
         BMM150,
         TSL2561,
+        SEN5X,
         DRV2605
     } DeviceType;
 

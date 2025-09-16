@@ -531,6 +531,7 @@ void setup()
     Wire.setSCL(I2C_SCL);
     Wire.begin();
 #elif defined(I2C_SDA) && !defined(ARCH_RP2040)
+    LOG_INFO("Starting Bus with (SDA) %d and (SCL) %d: ", I2C_SDA, I2C_SCL);
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
@@ -742,7 +743,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::TSL2561, meshtastic_TelemetrySensorType_TSL2561);
-
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SEN5X, meshtastic_TelemetrySensorType_SEN5X);
     i2cScanner.reset();
 #endif
 

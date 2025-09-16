@@ -149,18 +149,18 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.air_quality_metrics.has_pm100_standard) {
                         msgPayload["pm100"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_standard);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
-                        msgPayload["pm10_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_environmental);
-                    }
-                    if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
-                        msgPayload["pm25_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_environmental);
-                    }
-                    if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
-                        msgPayload["pm100_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_environmental);
-                    }
+                    // if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
+                    //     msgPayload["pm10_e"] =
+                    //         new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_environmental);
+                    // }
+                    // if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
+                    //     msgPayload["pm25_e"] =
+                    //         new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_environmental);
+                    // }
+                    // if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
+                    //     msgPayload["pm100_e"] =
+                    //         new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_environmental);
+                    // }
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     if (decoded->variant.power_metrics.has_ch1_voltage) {
                         msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
