@@ -47,12 +47,6 @@ class Channels
      */
     void setChannel(const meshtastic_Channel &c);
 
-    /**
-     * Toggles the mute state of the channel associated with the channel index.
-     * I.e. if it's off turn it on and vice-versa.
-     */
-    void setMute(ChannelIndex chIndex);
-
     /** Return a human friendly name for this channel (and expand any short strings as needed)
      */
     const char *getName(size_t chIndex);
