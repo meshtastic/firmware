@@ -1213,7 +1213,7 @@ static const char *DETECTED_MESSAGE = "%s detected";
         LOG_DEBUG(PROBE_MESSAGE, COMMAND, FAMILY_NAME);                                                                          \
         clearBuffer();                                                                                                           \
         _serial_gps->write(COMMAND "\r\n");                                                                                      \
-        GnssModel_t detectedDriver = getProbeResponse(TIMEOUT, RESPONSE_MAP);                                                    \
+        GnssModel_t detectedDriver = getProbeResponse(TIMEOUT, RESPONSE_MAP, serialSpeed);                                       \
         if (detectedDriver != GNSS_MODEL_UNKNOWN) {                                                                              \
             return detectedDriver;                                                                                               \
         }                                                                                                                        \
@@ -1381,9 +1381,18 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UNKNOWN;
 }
 
-GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap)
+GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap, int serialSpeed)
 {
-    char response[256] = {0}; // Fixed buffer instead of String
+    // Calculate buffer size based on baud rate - 256 bytes for 9600 baud as baseline
+    // Higher baud rates get proportionally larger buffers to handle more data
+    int bufferSize = (serialSpeed * 256) / 9600;
+    // Clamp buffer size between reasonable limits
+    if (bufferSize < 128)
+        bufferSize = 128;
+    if (bufferSize > 2048)
+        bufferSize = 2048;
+
+    char *response = new char[bufferSize](); // Dynamically allocate based on baud rate
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
@@ -1391,7 +1400,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             char c = _serial_gps->read();
 
             // Add char to buffer if there's space
-            if (responseLen < sizeof(response) - 1) {
+            if (responseLen < bufferSize - 1) {
                 response[responseLen++] = c;
                 response[responseLen] = '\0';
             }
@@ -1404,6 +1413,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
+                        delete[] response; // Cleanup before return
                         return chipInfo.driver;
                     }
                 }
@@ -1418,6 +1428,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
 #ifdef GPS_DEBUG
     LOG_DEBUG(response);
 #endif
+    delete[] response;         // Cleanup before return
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 

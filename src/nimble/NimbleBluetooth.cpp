@@ -133,7 +133,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(std::to_string(passkey)));
+        meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
+        bluetoothStatus->updateStatus(&newStatus);
 
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (screen) {
@@ -173,7 +174,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE authentication complete");
 
-        bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
+        meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+        bluetoothStatus->updateStatus(&newStatus);
 
         // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (passkeyShowing) {
@@ -187,8 +189,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE disconnect");
 
-        bluetoothStatus->updateStatus(
-            new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+        meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+        bluetoothStatus->updateStatus(&newStatus);
 
         if (bluetoothPhoneAPI) {
             std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
