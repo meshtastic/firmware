@@ -73,7 +73,7 @@ No longer populated on PCB
 #ifndef HELTEC_MESH_SOLAR_OLED
 // I2C bus 0
 #define PIN_WIRE_SDA (0 + 6)
-#define PIN_WIRE_SCL (0 + 26) 
+#define PIN_WIRE_SCL (0 + 26)
 #endif
 
 // I2C bus 1
