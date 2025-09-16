@@ -1,10 +1,8 @@
 #include "FloodingRouter.h"
-
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
-#include "meshUtils.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -93,55 +91,8 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
             if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-                // First hop MUST always decrement to prevent retry issues
-                bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
-                
-                // Check if both local device and previous relay are routers (including CLIENT_BASE)
-                bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                                meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                                meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
-                
-                bool prevRelayIsRouter = false;
-                
-                // Only check for router-to-router on subsequent hops (not first hop)
-                if (!isFirstHop) {
-                    // Optimized search for favorite routers with matching last byte
-                    // Check ordering optimized for IoT devices (cheapest checks first)
-                    meshtastic_NodeInfoLite *favoriteRouterMatch = nullptr;
-                    
-                    for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-                        if (!node) continue;
-                        
-                        // Check 1: is_favorite (cheapest - single bool)
-                        if (!node->is_favorite) continue;
-                        
-                        // Check 2: has_user (cheap - single bool)
-                        if (!node->has_user) continue;
-                        
-                        // Check 3: role check (moderate cost - multiple comparisons)
-                        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-                            continue;
-                        }
-                        
-                        // Check 4: last byte extraction and comparison (most expensive)
-                        if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
-                            favoriteRouterMatch = node;
-                            break;  // Found our favorite router
-                        }
-                    }
-                    
-                    // Only set prevRelayIsRouter if we found a favorite router
-                    if (favoriteRouterMatch) {
-                        prevRelayIsRouter = true;
-                        LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", favoriteRouterMatch->num, p->relay_node);
-                    }
-                }
-                
-                // Decrement hop_limit UNLESS it's a subsequent hop between favorite routers
-                if (isFirstHop || !(localIsRouter && prevRelayIsRouter)) {
+                // Use shared logic to determine if hop_limit should be decremented
+                if (shouldDecrementHopLimit(p)) {
                     tosend->hop_limit--; // bump down the hop count
                 } else {
                     LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE flood: preserving hop_limit");

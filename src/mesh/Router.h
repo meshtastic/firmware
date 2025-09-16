@@ -103,6 +103,18 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * @return true to abandon the packet
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
+    
+    /**
+     * Determine if hop_limit should be decremented for a relay operation.
+     * Returns false (preserve hop_limit) only if all conditions are met:
+     * - It's NOT the first hop (first hop must always decrement)
+     * - Local device is a ROUTER, ROUTER_LATE, or CLIENT_BASE
+     * - Previous relay is a favorite ROUTER, ROUTER_LATE, or CLIENT_BASE
+     * 
+     * @param p The packet being relayed
+     * @return true if hop_limit should be decremented, false to preserve it
+     */
+    bool shouldDecrementHopLimit(const meshtastic_MeshPacket *p);
 
     /**
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to

@@ -98,24 +98,6 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
             auto hopStart = mp->hop_start;
             auto hopLimit = mp->hop_limit;
             uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
-            
-            // Check if both local device and sender are routers (including CLIENT_BASE)
-            bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                            meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                            meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
-            bool senderIsRouter = false;
-            meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(mp->from);
-            if (senderNode && senderNode->has_user) {
-                senderIsRouter = IS_ONE_OF(senderNode->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                            meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                            meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
-            }
-            
-            // For router-to-router communication, don't count the hop
-            if (localIsRouter && senderIsRouter && hopsUsed > 0) {
-                hopsUsed--;
-            }
-            
             if (hopsUsed > config.lora.hop_limit + 2) {
                 LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
             } else {
