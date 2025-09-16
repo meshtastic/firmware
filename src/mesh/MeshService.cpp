@@ -46,11 +46,14 @@ the new node can build its node db)
 
 MeshService *service;
 
-static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
+#define MAX_MQTT_PROXY_MESSAGES 16
+static MemoryPool<meshtastic_MqttClientProxyMessage, MAX_MQTT_PROXY_MESSAGES> staticMqttClientProxyMessagePool;
 
-static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+#define MAX_QUEUE_STATUS 4
+static MemoryPool<meshtastic_QueueStatus, MAX_QUEUE_STATUS> staticQueueStatusPool;
 
-static MemoryDynamic<meshtastic_ClientNotification> staticClientNotificationPool;
+#define MAX_CLIENT_NOTIFICATIONS 4
+static MemoryPool<meshtastic_ClientNotification, MAX_CLIENT_NOTIFICATIONS> staticClientNotificationPool;
 
 Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 

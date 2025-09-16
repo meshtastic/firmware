@@ -115,12 +115,11 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
     bool used[MaxSize];
 
   public:
-    MemoryPool()
+    MemoryPool() : pool{}, used{}
     {
-        // Initialize the used array to false (all slots free)
-        for (int i = 0; i < MaxSize; i++) {
-            used[i] = false;
-        }
+        // Arrays are now zero-initialized by member initializer list
+        // pool array: all elements are default-constructed (zero for POD types)
+        // used array: all elements are false (zero-initialized)
     }
 
     /// Return a buffer for use by others
