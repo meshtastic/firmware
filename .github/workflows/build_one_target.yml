@@ -1,33 +1,32 @@
-name: CI
-concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+name: Build One Target
+
 on:
-  # # Triggers the workflow on push but only for the main branches
-  push:
-    branches:
-      - master
-      - develop
-      - event/*
-    paths-ignore:
-      - "**.md"
-      - version.properties
-
-  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
-  pull_request_target:
-    branches:
-      - master
-      - develop
-      - event/*
-    paths-ignore:
-      - "**.md"
-      #- "**.yml"
-
   workflow_dispatch:
+    inputs:
+      arch:
+        type: choice
+        options:
+          - esp32
+          - esp32s3
+          - esp32c3
+          - esp32c6
+          - nrf52840
+          - rp2040
+          - rp2350
+          - stm32
+          - native
+      target:
+        type: string
+        required: false
+        description: Choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.
 
+      # find-target:
+      #   type: boolean
+      #   default: true
+      #   description: 'Find the available targets'
 jobs:
-  setup:
-    if: github.repository == 'meshtastic/firmware'
+  find-targets:
+    if: ${{ inputs.target == '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -40,11 +39,11 @@ jobs:
           - rp2040
           - rp2350
           - stm32
-          - check
+
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.x
           cache: pip
@@ -52,29 +51,19 @@ jobs:
       - name: Generate matrix
         id: jsonStep
         run: |
-          if [[ "$GITHUB_HEAD_REF" == "" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          else  
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} pr)
-          fi
-          echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF Targets: $TARGETS"
-          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
-    outputs:
-      esp32: ${{ steps.jsonStep.outputs.esp32 }}
-      esp32s3: ${{ steps.jsonStep.outputs.esp32s3 }}
-      esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
-      esp32c6: ${{ steps.jsonStep.outputs.esp32c6 }}
-      nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
-      rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
-      rp2350: ${{ steps.jsonStep.outputs.rp2350 }}
-      stm32: ${{ steps.jsonStep.outputs.stm32 }}
-      check: ${{ steps.jsonStep.outputs.check }}
+          TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} extra)
+          echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
+          echo "Arch: ${{matrix.arch}}" >> $GITHUB_STEP_SUMMARY
+          echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
+          echo "Targets:" >> $GITHUB_STEP_SUMMARY
+          echo $TARGETS | sed 's/[][]//g; s/", "/\n- /g; s/"//g; s/^/- /' >> $GITHUB_STEP_SUMMARY
 
   version:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
@@ -86,112 +75,19 @@ jobs:
       long: ${{ steps.version.outputs.long }}
       deb: ${{ steps.version.outputs.deb }}
 
-  check:
-    needs: setup
+  build-arch:
+    if: ${{ inputs.target != '' && inputs.arch != 'native' }}
+    needs: [version]
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.check) }}
-
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
-    steps:
-      - uses: actions/checkout@v5
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
-      - name: Check ${{ matrix.board }}
-        run: bin/check-all.sh ${{ matrix.board }}
-
-  build-esp32:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.esp32) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
       version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: esp32
-
-  build-esp32s3:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.esp32s3) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: esp32s3
-
-  build-esp32c3:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.esp32c3) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: esp32c3
-
-  build-esp32c6:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.esp32c6) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: esp32c6
-
-  build-nrf52840:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.nrf52840) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: nrf52840
-
-  build-rp2040:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.rp2040) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: rp2040
-
-  build-rp2350:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.rp2350) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: rp2350
-
-  build-stm32:
-    needs: [setup, version]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.stm32) }}
-    uses: ./.github/workflows/build_firmware.yml
-    with:
-      version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.board }}
-      platform: stm32
+      pio_env: ${{ inputs.target }}
+      platform: ${{ inputs.arch }}
 
   build-debian-src:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ github.repository == 'meshtastic/firmware' && inputs.arch == 'native' }}
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -199,18 +95,18 @@ jobs:
     secrets: inherit
 
   package-pio-deps-native-tft:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.arch == 'native' }}
     uses: ./.github/workflows/package_pio_deps.yml
     with:
       pio_env: native-tft
     secrets: inherit
 
   test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'workflow_dispatch' ||  !contains(github.ref_name, 'event/') && inputs.arch == 'native' && inputs.target != '' }}
     uses: ./.github/workflows/test_native.yml
 
   docker-deb-amd64:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -219,7 +115,7 @@ jobs:
       push: false
 
   docker-deb-amd64-tft:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -229,7 +125,7 @@ jobs:
       pio_env: native-tft
 
   docker-alp-amd64:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -238,7 +134,7 @@ jobs:
       push: false
 
   docker-alp-amd64-tft:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -248,7 +144,7 @@ jobs:
       pio_env: native-tft
 
   docker-deb-arm64:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -257,7 +153,7 @@ jobs:
       push: false
 
   docker-deb-armv7:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -266,47 +162,24 @@ jobs:
       push: false
 
   gather-artifacts:
-    # trunk-ignore(checkov/CKV2_GHA_1)
-    if: github.repository == 'meshtastic/firmware'
     permissions:
       contents: write
       pull-requests: write
     strategy:
       fail-fast: false
-      matrix:
-        arch:
-          - esp32
-          - esp32s3
-          - esp32c3
-          - esp32c6
-          - nrf52840
-          - rp2040
-          - rp2350
-          - stm32
     runs-on: ubuntu-latest
-    needs:
-      [
-        version,
-        build-esp32,
-        build-esp32s3,
-        build-esp32c3,
-        build-esp32c6,
-        build-nrf52840,
-        build-rp2040,
-        build-rp2350,
-        build-stm32,
-      ]
+    needs: [version, build-arch]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           path: ./
-          pattern: firmware-${{matrix.arch}}-*
+          pattern: firmware-*-*
           merge-multiple: true
 
       - name: Display structure of downloaded files
@@ -318,7 +191,7 @@ jobs:
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
+          name: firmware-${{inputs.target}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: |
             ./firmware-*.bin
@@ -332,9 +205,9 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
-          name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
+          pattern: firmware-*-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./output
 
@@ -348,12 +221,12 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v4
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          name: debug-elfs-${{inputs.target}}-${{ needs.version.outputs.long }}.zip
           overwrite: true
           path: ./*.elf
           retention-days: 30
@@ -361,13 +234,13 @@ jobs:
       - uses: scruplelesswizard/comment-artifact@main
         if: ${{ github.event_name == 'pull_request' }}
         with:
-          name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
-          description: "Download firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
+          name: firmware-${{inputs.target}}-${{ needs.version.outputs.long }}
+          description: "Download firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   release-artifacts:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target != ''}}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
@@ -377,10 +250,10 @@ jobs:
       - package-pio-deps-native-tft
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
@@ -396,14 +269,14 @@ jobs:
             Autogenerated by github action, developer should edit as required before publishing...
 
       - name: Download source deb
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           pattern: firmware-debian-${{ needs.version.outputs.deb }}~UNRELEASED-src
           merge-multiple: true
           path: ./output/debian-src
 
       - name: Download `native-tft` pio deps
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           pattern: platformio-deps-native-tft-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -431,31 +304,21 @@ jobs:
   release-firmware:
     strategy:
       fail-fast: false
-      matrix:
-        arch:
-          - esp32
-          - esp32s3
-          - esp32c3
-          - esp32c6
-          - nrf52840
-          - rp2040
-          - rp2350
-          - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target != ''}}
     needs: [release-artifacts, version]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
-          pattern: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
+          pattern: firmware-*-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./output
 
@@ -468,16 +331,16 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip ./output
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          pattern: debug-elfs-*-${{ needs.version.outputs.long }}.zip
           merge-multiple: true
           path: ./elfs
 
       - name: Zip debug elfs
-        run: zip -j -9 -r ./debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./elfs
+        run: zip -j -9 -r ./debug-elfs-${{inputs.target}}-${{ needs.version.outputs.long }}.zip ./elfs
 
       # For diagnostics
       - name: Display structure of downloaded files
@@ -487,28 +350,28 @@ jobs:
         # Only run when targeting master branch with workflow_dispatch
         if: ${{ github.ref_name == 'master' }}
         run: |
-          gh release upload v${{ needs.version.outputs.long }} ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
-          gh release upload v${{ needs.version.outputs.long }} ./debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          gh release upload v${{ needs.version.outputs.long }} ./firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip
+          gh release upload v${{ needs.version.outputs.long }} ./debug-elfs-${{inputs.target}}-${{ needs.version.outputs.long }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-firmware:
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && inputs.target != '' }}
     needs: [release-firmware, version]
     env:
       targets: |-
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
           merge-multiple: true
