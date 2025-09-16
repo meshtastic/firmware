@@ -10,7 +10,9 @@
 #define I2C_SDA1 SDA
 #define I2C_SCL1 SCL
 
-#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+#define VEXT_ENABLE Vext    // active low, powers the oled display and the lora antenna boost
+#define VEXT_ENABLE_DELAY 2 // the LDO needs some time to stabilize the power
+
 #define BUTTON_PIN 0
 
 #define ADC_CTRL 37
