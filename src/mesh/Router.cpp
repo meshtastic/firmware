@@ -76,37 +76,39 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     if (isFirstHop) {
         return true; // Always decrement on first hop
     }
-    
+
     // Check if both local device and previous relay are routers (including CLIENT_BASE)
-    bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                    meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                    meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
-    
+    bool localIsRouter =
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+
     // If local device isn't a router, always decrement
     if (!localIsRouter) {
         return true;
     }
-    
+
     // For subsequent hops, check if previous relay is a favorite router
     // Optimized search for favorite routers with matching last byte
     // Check ordering optimized for IoT devices (cheapest checks first)
     for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node) continue;
-        
+        if (!node)
+            continue;
+
         // Check 1: is_favorite (cheapest - single bool)
-        if (!node->is_favorite) continue;
-        
+        if (!node->is_favorite)
+            continue;
+
         // Check 2: has_user (cheap - single bool)
-        if (!node->has_user) continue;
-        
+        if (!node->has_user)
+            continue;
+
         // Check 3: role check (moderate cost - multiple comparisons)
         if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
             continue;
         }
-        
+
         // Check 4: last byte extraction and comparison (most expensive)
         if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
             // Found a favorite router match
@@ -114,7 +116,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
             return false; // Don't decrement hop_limit
         }
     }
-    
+
     // No favorite router match found, decrement hop_limit
     return true;
 }

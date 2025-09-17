@@ -98,13 +98,13 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE flood: preserving hop_limit");
                 }
 #if USERPREFS_EVENT_MODE
-                    if (tosend->hop_limit > 2) {
-                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                        tosend->hop_start -= (tosend->hop_limit - 2);
-                        tosend->hop_limit = 2;
-                    }
+                if (tosend->hop_limit > 2) {
+                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                    tosend->hop_start -= (tosend->hop_limit - 2);
+                    tosend->hop_limit = 2;
+                }
 #endif
-                
+
                 tosend->next_hop = NO_NEXT_HOP_PREFERENCE; // this should already be the case, but just in case
 
                 LOG_INFO("Rebroadcast received floodmsg");

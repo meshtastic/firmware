@@ -115,7 +115,7 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                 } else {
                     LOG_INFO("Router/CLIENT_BASE-to-favorite-router/CLIENT_BASE relay: preserving hop_limit");
                 }
-                
+
                 NextHopRouter::send(tosend);
 
                 return true;
