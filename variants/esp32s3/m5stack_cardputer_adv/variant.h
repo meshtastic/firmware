@@ -24,7 +24,7 @@
 
 // TCA8418 keyboard
 #define TCA8418_INT 11
-//#define KB_BL_PIN -1 // No keyboard backlight
+// #define KB_BL_PIN -1 // No keyboard backlight
 #define I2C_NO_RESCAN
 #define KB_INT TCA8418_INT
 #define CANNED_MESSAGE_MODULE_ENABLE 1
@@ -104,19 +104,23 @@
 
 // LoRa
 #define USE_SX1262 // Currently only SX1262 CAP is available
+#define USE_RF95   // Test
 
 #define LORA_SCK SCK
 #define LORA_MISO MISO
 #define LORA_MOSI MOSI
 #define LORA_CS SS // NSS
 
-#define LORA_DIO1 4 // IRQ
-#define LORA_DIO2 6 // BUSY
+// SX127X/RFM95
+#define LORA_DIO0 4 // RF95 IRQ, SX1262 not connected
+#define LORA_DIO1 6 // RF95 BUSY
 #define LORA_RESET 3
 
+// SX126X
 #define SX126X_CS LORA_CS
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
+#define SX126X_DIO1 4 // IRQ
+#define SX126X_BUSY 6 // BUSY, LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
+#define TCXO_OPTIONAL
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // Check the correct value!
