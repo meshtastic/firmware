@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
 #include <cstring>
@@ -166,6 +167,16 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         print(thread->ThreadName);
         print("] ");
     }
+
+#ifdef DEBUG_HEAP
+    // Add heap free space bytes prefix before every log message
+#ifdef ARCH_PORTDUINO
+    ::printf("[heap %u] ", memGet.getFreeHeap());
+#else
+    printf("[heap %u] ", memGet.getFreeHeap());
+#endif
+#endif // DEBUG_HEAP
+
     r += vprintf(logLevel, format, arg);
 }
 
