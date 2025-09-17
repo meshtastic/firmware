@@ -10,6 +10,7 @@
 #include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
+#include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -21,6 +22,12 @@
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+namespace graphics
+{
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert,
+                             bool show_date);
+}
+
 int32_t PowerTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
@@ -31,7 +38,6 @@ int32_t PowerTelemetryModule::runOnce()
         doDeepSleep(nightyNightMs, true, false);
     }
 
-    uint32_t result = UINT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -46,26 +52,34 @@ int32_t PowerTelemetryModule::runOnce()
         return disable();
     }
 
+    uint32_t sendToMeshIntervalMs = Default::getConfiguredOrDefaultMsScaled(
+        moduleConfig.telemetry.power_update_interval, default_telemetry_broadcast_interval_secs, numOnlineNodes);
+
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+        uint32_t result = UINT32_MAX;
+
+#if HAS_TELEMETRY
         if (moduleConfig.telemetry.power_measurement_enabled) {
             LOG_INFO("Power Telemetry: init");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
-            if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
-                result = ina219Sensor.runOnce();
-            if (ina226Sensor.hasSensor() && !ina226Sensor.isInitialized())
-                result = ina226Sensor.runOnce();
-            if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
-                result = ina260Sensor.runOnce();
-            if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
-                result = ina3221Sensor.runOnce();
-            if (max17048Sensor.hasSensor() && !max17048Sensor.isInitialized())
-                result = max17048Sensor.runOnce();
+            // If sensor is already initialized by EnvironmentTelemetryModule, then we don't need to initialize it again,
+            // but we need to set the result to != UINT32_MAX to avoid it being disabled
+            if (ina219Sensor.hasSensor())
+                result = ina219Sensor.isInitialized() ? 0 : ina219Sensor.runOnce();
+            if (ina226Sensor.hasSensor())
+                result = ina226Sensor.isInitialized() ? 0 : ina226Sensor.runOnce();
+            if (ina260Sensor.hasSensor())
+                result = ina260Sensor.isInitialized() ? 0 : ina260Sensor.runOnce();
+            if (ina3221Sensor.hasSensor())
+                result = ina3221Sensor.isInitialized() ? 0 : ina3221Sensor.runOnce();
+            if (max17048Sensor.hasSensor())
+                result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
         }
-        return result;
+
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        return result == UINT32_MAX ? disable() : setStartDelay();
 #else
         return disable();
 #endif
@@ -74,10 +88,7 @@ int32_t PowerTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.power_measurement_enabled)
             return disable();
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.power_update_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        if (((lastSentToMesh == 0) || !Throttle::isWithinTimespanMs(lastSentToMesh, sendToMeshIntervalMs)) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = millis();
@@ -89,8 +100,9 @@ int32_t PowerTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
     }
-    return min(sendToPhoneIntervalMs, result);
+    return min(sendToPhoneIntervalMs, sendToMeshIntervalMs);
 }
+
 bool PowerTelemetryModule::wantUIFrame()
 {
     return moduleConfig.telemetry.power_screen_enabled;
@@ -98,52 +110,66 @@ bool PowerTelemetryModule::wantUIFrame()
 
 void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x, y, "Power Telemetry");
+    display->setFont(FONT_SMALL);
+    int line = 1;
+
+    // === Set Title
+    const char *titleStr = (graphics::isHighResolution) ? "Power Telem." : "Power";
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
+
     if (lastMeasurementPacket == nullptr) {
-        display->setFont(FONT_SMALL);
-        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "No measurement");
+        // In case of no valid packet, display "Power Telemetry", "No measurement"
+        display->drawString(x, graphics::getTextPositions(display)[line++], "No measurement");
         return;
     }
 
+    // Decode the last power packet
     meshtastic_Telemetry lastMeasurement;
-
     uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->setFont(FONT_SMALL);
-        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "Measurement Error");
+        display->drawString(x, graphics::getTextPositions(display)[line++], "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
+    // Display "Pow. From: ..."
+    char fromStr[64];
+    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
+    display->drawString(x, graphics::getTextPositions(display)[line++], fromStr);
+
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
-    display->setFont(FONT_SMALL);
-    display->drawString(x, y += _fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
-    if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch1 Volt: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) +
-                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+    const auto &m = lastMeasurement.variant.power_metrics;
+    int lineY = textSecondLine;
+
+    auto drawLine = [&](const char *label, float voltage, float current) {
+        char lineStr[64];
+        snprintf(lineStr, sizeof(lineStr), "%s: %.2fV %.0fmA", label, voltage, current);
+        display->drawString(x, lineY, lineStr);
+        lineY += _fontHeight(FONT_SMALL);
+    };
+
+    if (m.has_ch1_voltage || m.has_ch1_current) {
+        drawLine("Ch1", m.ch1_voltage, m.ch1_current);
     }
-    if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch2 Volt: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) +
-                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+    if (m.has_ch2_voltage || m.has_ch2_current) {
+        drawLine("Ch2", m.ch2_voltage, m.ch2_current);
     }
-    if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch3 Volt: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) +
-                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+    if (m.has_ch3_voltage || m.has_ch3_current) {
+        drawLine("Ch3", m.ch3_voltage, m.ch3_current);
     }
 }
 
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_power_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): ch1_voltage=%.1f, ch1_current=%.1f, ch2_voltage=%.1f, ch2_current=%.1f, "
@@ -169,7 +195,7 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     m->which_variant = meshtastic_Telemetry_power_metrics_tag;
 
     m->variant.power_metrics = meshtastic_PowerMetrics_init_zero;
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);
     if (ina226Sensor.hasSensor())

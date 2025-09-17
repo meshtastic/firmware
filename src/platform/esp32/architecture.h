@@ -45,6 +45,9 @@
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
+#ifndef HAS_32768HZ
+#define HAS_32768HZ 0
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU
@@ -144,6 +147,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #elif defined(EBYTE_ESP32_S3)
 #define HW_VENDOR meshtastic_HardwareModel_EBYTE_ESP32_S3
+#elif defined(ELECROW_ThinkNode_M2)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M2
+#elif defined(ELECROW_ThinkNode_M5)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M5
 #elif defined(ESP32_S3_PICO)
 #define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
 #elif defined(SENSELORA_S3)
@@ -176,6 +183,20 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_XIAO_S3
 #elif defined(MESH_TAB)
 #define HW_VENDOR meshtastic_HardwareModel_MESH_TAB
+#elif defined(T_ETH_ELITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ETH_ELITE
+#elif defined(HELTEC_SENSOR_HUB)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_SENSOR_HUB
+#elif defined(ELECROW_PANEL)
+#define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
+#elif defined(RAK3312)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3312
+#elif defined(LINK_32)
+#define HW_VENDOR meshtastic_HardwareModel_LINK_32
+#elif defined(T_DECK_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
+#elif defined(T_LORA_PAGER)
+#define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
 #endif
 
 // -----------------------------------------------------------------------------
@@ -199,3 +220,13 @@
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.
+
+// Setup flag, which indicates if our device supports power management
+#ifdef CONFIG_PM_ENABLE
+#define HAS_ESP32_PM_SUPPORT 1
+#endif
+
+// Setup flag, which indicates if our device supports dynamic light sleep
+#if defined(HAS_ESP32_PM_SUPPORT) && defined(CONFIG_FREERTOS_USE_TICKLESS_IDLE)
+#define HAS_ESP32_DYNAMIC_LIGHT_SLEEP 1
+#endif

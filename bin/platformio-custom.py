@@ -3,8 +3,11 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
+import subprocess
 import json
 import re
+import time
+from datetime import datetime
 
 from readprops import readProps
 
@@ -83,7 +86,7 @@ if platform.name == "espressif32":
 
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
-                      env.VerboseAction(f"{sys.executable} ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                      env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
                                         "Generating UF2 file"))
 
 Import("projenv")
@@ -91,6 +94,17 @@ Import("projenv")
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
 print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
+
+# get repository owner if git is installed
+try:
+    r_owner = (
+        subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
+        .decode("utf-8")
+        .strip().split("/")
+    )
+    repo_owner = r_owner[-2] + "/" + r_owner[-1].replace(".git", "")
+except subprocess.CalledProcessError:
+    repo_owner = "unknown"
 
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
 with open(jsonLoc) as f:
@@ -102,7 +116,7 @@ pref_flags = []
 for pref in userPrefs:
     if userPrefs[pref].startswith("{"):
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
-    elif userPrefs[pref].replace(".", "").isdigit():
+    elif userPrefs[pref].lstrip("-").replace(".", "").isdigit():
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
@@ -113,10 +127,16 @@ for pref in userPrefs:
         pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
 
 # General options that are passed to the C and C++ compilers
+# Calculate unix epoch for current day (midnight)
+current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+build_epoch = int(current_date.timestamp())
+
 flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
+        "-DAPP_REPO=" + repo_owner,
+        "-DBUILD_EPOCH=" + str(build_epoch),
     ] + pref_flags
 
 print ("Using flags:")
@@ -126,3 +146,38 @@ for flag in flags:
 projenv.Append(
     CCFLAGS=flags,
 )
+
+for lb in env.GetLibBuilders():
+    if lb.name == "meshtastic-device-ui":
+        lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
+        break
+
+# Get the display resolution from macros
+def get_display_resolution(build_flags):
+    # Check "DISPLAY_SIZE" to determine the screen resolution
+    for flag in build_flags:
+        if isinstance(flag, tuple) and flag[0] == "DISPLAY_SIZE":
+            screen_width, screen_height = map(int, flag[1].split("x"))
+            return screen_width, screen_height
+    print("No screen resolution defined in build_flags. Please define DISPLAY_SIZE.")
+    exit(1)
+
+def load_boot_logo(source, target, env):
+    build_flags = env.get("CPPDEFINES", [])
+    logo_w, logo_h = get_display_resolution(build_flags)
+    print(f"TFT build with {logo_w}x{logo_h} resolution detected")
+
+    # Load the boot logo from `branding/logo_<width>x<height>.png` if it exists
+    source_path = join(env["PROJECT_DIR"], "branding", f"logo_{logo_w}x{logo_h}.png")
+    dest_dir = join(env["PROJECT_DIR"], "data", "boot")
+    dest_path = join(dest_dir, "logo.png")
+    if env.File(source_path).exists():
+        print(f"Loading boot logo from {source_path}")
+        # Prepare the destination
+        env.Execute(f"mkdir -p {dest_dir} && rm -f {dest_path}")
+        # Copy the logo to the `data/boot` directory
+        env.Execute(f"cp {source_path} {dest_path}")
+
+# Load the boot logo on TFT builds
+if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
+    env.AddPreAction('$BUILD_DIR/littlefs.bin', load_boot_logo)

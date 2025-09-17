@@ -4,6 +4,7 @@
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#include "PacketHistory.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
@@ -11,7 +12,7 @@
 /**
  * A mesh aware router that supports multiple interfaces.
  */
-class Router : protected concurrency::OSThread
+class Router : protected concurrency::OSThread, protected PacketHistory
 {
   private:
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
@@ -50,6 +51,9 @@ class Router : protected concurrency::OSThread
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     bool cancelSending(NodeNum from, PacketId id);
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    bool findInTxQueue(NodeNum from, PacketId id);
+
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
@@ -71,7 +75,7 @@ class Router : protected concurrency::OSThread
      * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
      * freeing the packet
      */
-    void enqueueReceivedMessage(meshtastic_MeshPacket *p);
+    virtual void enqueueReceivedMessage(meshtastic_MeshPacket *p);
 
     /**
      * Send a packet on a suitable interface.  This routine will
@@ -81,6 +85,7 @@ class Router : protected concurrency::OSThread
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
+    virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
@@ -135,12 +140,14 @@ class Router : protected concurrency::OSThread
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
+enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
+
 /** FIXME - move this into a mesh packet class
  * Remove any encryption and decode the protobufs inside this packet (if necessary).
  *
  * @return true for success, false for corrupt packet.
  */
-bool perhapsDecode(meshtastic_MeshPacket *p);
+DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
 /** Return 0 for success or a Routing_Error code for failure
  */

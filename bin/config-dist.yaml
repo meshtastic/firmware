@@ -6,17 +6,17 @@
 ### Including the "Module:" line!
 ---
 Lora:
+  # Default to auto-detecting the module type
+  # This will be overridden by configs from config.d
+  Module: auto
+
+#  # Uncomment to enable Simulation mode, or use --sim
+#  Module: sim
 
 #  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
 #  CS: 7
 #  IRQ: 17
 #  Reset: 22
-
-#  Module: RF95  # Adafruit RFM9x
-#  Reset: 25
-#  CS: 7
-#  IRQ: 22
-#  Busy: 23
 
 #  Module: RF95  # Elecrow Lora RFM95 IOT https://www.elecrow.com/lora-rfm95-iot-board-for-rpi.html
 #  Reset: 22
@@ -28,6 +28,47 @@ Lora:
 #  IRQ: 16
 #  Busy: 20
 #  Reset: 18
+
+### The Radxa Zero 3E/W employs multiple gpio chips.
+### Each gpio pin must be unique, but can be assigned to a specific gpio chip and line.
+### In case solely a no. is given, the default gpio chip and pin == line will be employed.
+###
+#  Module: sx1262  # Radxa Zero 3E/W + Ebyte E22-900M30S
+#  DIO2_AS_RF_SWITCH: true
+#  DIO3_TCXO_VOLTAGE: 1.8
+#  CS:             # NSS     PIN_24 -> chip 4, line 22
+#    pin: 24
+#    gpiochip: 4
+#    line: 22
+#  SCK:            # SCK     PIN_23 -> chip 4, line 18
+#    pin: 23
+#    gpiochip: 4
+#    line: 18
+#  Busy:           # BUSY    PIN_29 -> chip 3!, line 11
+#    pin: 29
+#    gpiochip: 3
+#    line: 11
+#  MOSI:           # MOSI    PIN_19 -> chip 4, line 19
+#    pin: 19
+#    gpiochip: 4
+#    line: 19
+#  MISO:           # MISO    PIN_21 -> chip 4, line 21
+#    pin: 21
+#    gpiochip: 4
+#    line: 21
+#  Reset:          # NRST    PIN_27 -> chip 4, line 10
+#    pin: 27
+#    gpiochip: 4
+#    line: 10
+#  IRQ:            # DIO1    PIN_28 -> chip 4, line 11
+#    pin: 28
+#    gpiochip: 4
+#    line: 11
+#  RXen:           # RXEN    PIN_22 -> chip 3!, line 17
+#    pin: 22
+#    gpiochip: 3
+#    line: 17
+#  TXen: RADIOLIB_NC # TXEN   no PIN, no line, fallback to default gpio chip
 
 #  Module: sx1268  # SX1268-based modules, tested with Ebyte E22 400M33S
 #  CS: 21
@@ -43,9 +84,11 @@ Lora:
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
 
+#  SX126X_MAX_POWER: 8  # Limit the output power to 8 dBm, useful for amped nodes
+
 #  spiSpeed: 2000000
 
-### Set gpio chip to use in /dev/. Defaults to 0.
+### Set default/fallback gpio chip to use in /dev/. Defaults to 0.
 ### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
 #  gpiochip: 4
 
@@ -53,9 +96,9 @@ Lora:
 ### Some devices, like the pinedio, may require spidev0.1 as a workaround.
 #  spidev: spidev0.0
 
-### Define GPIO buttons here:
+### Deprecated location for User Button:
 
-GPIO:
+#GPIO:
 #  User: 6
 
 ### Define GPS
@@ -71,17 +114,6 @@ I2C:
 ### Set up SPI displays here. Note that I2C displays are generally auto-detected.
 
 Display:
-
-### Waveshare 1.44inch LCD HAT
-#  Panel: ST7735S
-#  CS: 8         #Chip Select
-#  DC: 25        # Data/Command pin
-#  Backlight: 24
-#  Width: 128
-#  Height: 128
-#  Reset: 27
-#  OffsetX: 0
-#  OffsetY: 0
 
 ### Adafruit PiTFT 2.8 TFT+Touchscreen
 #  Panel: ILI9341
@@ -137,6 +169,16 @@ Input:
 
 #  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
+### Standard User Button Config
+#  UserButton: 6
+
+### Trackball/Joystick input
+#  TrackballUp: 6
+#  TrackballDown: 19
+#  TrackballLeft: 5
+#  TrackballRight: 26
+#  TrackballPress: 13
+
 ###
 
 Logging:
@@ -145,12 +187,26 @@ Logging:
 #  AsciiLogs: true     # default if not specified is !isatty() on stdout
 
 Webserver:
-#  Port: 443 # Port for Webserver & Webservices
+#  Port: 9443 # Port for Webserver & Webservices
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
+#  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
+#  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
+
+
+HostMetrics:
+#  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled
+#  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.
+#  UserStringCommand: cat /sys/firmware/devicetree/base/serial-number # Command to execute, to send the results as the userString
+
+
+Config:
+#  DisplayMode: TWOCOLOR # uncomment to force BaseUI
+#  DisplayMode: COLOR # uncomment to force MUI
 
 General:
   MaxNodes: 200
   MaxMessageQueue: 100
   ConfigDirectory: /etc/meshtasticd/config.d/
+  AvailableDirectory: /etc/meshtasticd/available.d/
 #  MACAddress: AA:BB:CC:DD:EE:FF
 #  MACAddressSource: eth0

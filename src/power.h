@@ -1,5 +1,4 @@
 #pragma once
-#include "../variants/rak2560/RAK9154Sensor.h"
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -25,6 +24,16 @@
 #define OCV_ARRAY 1400, 1300, 1280, 1270, 1260, 1250, 1240, 1230, 1210, 1150, 1000
 #elif defined(CELL_TYPE_LTO)
 #define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
+#elif defined(TRACKER_T1000_E)
+#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
+#elif defined(HELTEC_MESH_POCKET_BATTERY_5000)
+#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
+#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
+#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
+#elif defined(SEEED_WIO_TRACKER_L1)
+#define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
+#elif defined(SEEED_SOLAR_NODE)
+#define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3087, 2786
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -40,24 +49,49 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/Sensor/nullSensor.h"
+#if __has_include(<Adafruit_INA219.h>)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
-#include "modules/Telemetry/Sensor/INA226Sensor.h"
-#include "modules/Telemetry/Sensor/INA260Sensor.h"
-#include "modules/Telemetry/Sensor/INA3221Sensor.h"
 extern INA219Sensor ina219Sensor;
-extern INA226Sensor ina226Sensor;
-extern INA260Sensor ina260Sensor;
-extern INA3221Sensor ina3221Sensor;
+#else
+extern NullSensor ina219Sensor;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if __has_include(<INA226.h>)
+#include "modules/Telemetry/Sensor/INA226Sensor.h"
+extern INA226Sensor ina226Sensor;
+#else
+extern NullSensor ina226Sensor;
+#endif
+
+#if __has_include(<Adafruit_INA260.h>)
+#include "modules/Telemetry/Sensor/INA260Sensor.h"
+extern INA260Sensor ina260Sensor;
+#else
+extern NullSensor ina260Sensor;
+#endif
+
+#if __has_include(<INA3221.h>)
+#include "modules/Telemetry/Sensor/INA3221Sensor.h"
+extern INA3221Sensor ina3221Sensor;
+#else
+extern NullSensor ina3221Sensor;
+#endif
+
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if __has_include(<Adafruit_MAX1704X.h>)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern MAX17048Sensor max17048Sensor;
+#else
+extern NullSensor max17048Sensor;
+#endif
 #endif
 
-#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
-#include "../variants/rak2560/RAK9154Sensor.h"
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
+#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
 
@@ -76,7 +110,7 @@ class Power : private concurrency::OSThread
 
     Power();
 
-    void shutdown();
+    void powerCommandsCheck();
     void readPowerStatus();
     virtual bool setup();
     virtual int32_t runOnce() override;
@@ -92,8 +126,14 @@ class Power : private concurrency::OSThread
     bool analogInit();
     /// Setup a Lipo battery level sensor
     bool lipoInit();
+    /// Setup a Lipo charger
+    bool lipoChargerInit();
+    /// Setup a meshSolar battery sensor
+    bool meshSolarInit();
 
   private:
+    void shutdown();
+    void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
 #ifdef DEBUG_HEAP

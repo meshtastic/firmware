@@ -6,6 +6,8 @@
 #include "Wire.h"
 #include "concurrency/OSThread.h"
 
+class TCA8418KeyboardBase;
+
 class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
@@ -21,5 +23,6 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
 
     BBQ10Keyboard Q10keyboard;
     MPR121Keyboard MPRkeyboard;
+    TCA8418KeyboardBase &TCAKeyboard;
     bool is_sym = false;
 };

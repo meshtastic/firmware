@@ -1,3 +1,4 @@
+// trunk-ignore-all(gitleaks): These are dummy values. Not real secrets.
 #include "CryptoEngine.h"
 
 #include "TestUtil.h"
@@ -109,7 +110,7 @@ void test_DH25519(void)
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
 }
 
-void test_PKC_Decrypt(void)
+void test_PKC(void)
 {
     uint8_t private_key[32];
     meshtastic_UserLite_public_key_t public_key;
@@ -119,7 +120,8 @@ void test_PKC_Decrypt(void)
     uint8_t decrypted[128] __attribute__((__aligned__));
     uint8_t expected_nonce[16];
 
-    uint32_t fromNode;
+    uint32_t fromNode = 0x0929;
+    uint64_t packetNum = 0x13b2d662;
     HexToBytes(public_key.bytes, "db18fc50eea47f00251cb784819a3cf5fc361882597f589f0d7ff820e8064457");
     public_key.size = 32;
     HexToBytes(private_key, "a00330633e63522f8a4d81ec6d9d1e6617f6c8ffd3a4c698229537d44e522277");
@@ -127,14 +129,26 @@ void test_PKC_Decrypt(void)
     HexToBytes(expected_decrypted, "08011204746573744800");
     HexToBytes(radioBytes, "8c646d7a2909000062d6b2136b00000040df24abfcc30a17a3d9046726099e796a1c036a792b");
     HexToBytes(expected_nonce, "62d6b213036a792b2909000000");
-    fromNode = 0x0929;
     crypto->setDHPrivateKey(private_key);
-    // TEST_ASSERT(crypto->setDHPublicKey(public_key));
-    // crypto->hash(crypto->shared_key, 32);
-    crypto->decryptCurve25519(fromNode, public_key, 0x13b2d662, 22, radioBytes + 16, decrypted);
+
+    TEST_ASSERT(crypto->decryptCurve25519(fromNode, public_key, packetNum, 22, radioBytes + 16, decrypted));
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
     TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
+    TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 
+    uint32_t toNode = 0; // Only impacts logging
+    uint8_t encrypted[128] __attribute__((__aligned__));
+    TEST_ASSERT(crypto->encryptCurve25519(toNode, fromNode, public_key, packetNum, 10, decrypted, encrypted));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
+    // The extraNonce is random, so skip checking the nonce and encrypted output here
+
+    // Copy the nonce to check it after encryption
+    memcpy(expected_nonce, crypto->nonce, 16);
+
+    // Decrypt the re-encrypted bytes and check they are the same as what we expect
+    TEST_ASSERT(crypto->decryptCurve25519(fromNode, public_key, packetNum, 22, encrypted, decrypted));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
+    TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 }
 
@@ -177,7 +191,7 @@ void setup()
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
-    RUN_TEST(test_PKC_Decrypt);
+    RUN_TEST(test_PKC);
     exit(UNITY_END()); // stop unit testing
 }
 

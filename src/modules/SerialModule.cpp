@@ -45,9 +45,12 @@
 
 
 */
+#ifdef HELTEC_MESH_SOLAR
+#include "meshSolarApp.h"
+#endif
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
+    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
@@ -60,10 +63,11 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE)
+#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1) ||                          \
+    defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172)
 SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial1;
 #else
@@ -73,6 +77,27 @@ static Print *serialPrint = &Serial2;
 
 char serialBytes[512];
 size_t serialPayloadSize;
+
+bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+        const char *warning =
+            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        snprintf(cn->message, sizeof(cn->message), "%s", warning);
+        service->sendClientNotification(cn);
+#endif
+        return false;
+    }
+
+    return true;
+}
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -148,7 +173,18 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-
+#elif defined(ARCH_STM32WL)
+#ifndef RAK3172
+            HardwareSerial *serialInstance = &Serial2;
+#else
+            HardwareSerial *serialInstance = &Serial1;
+#endif
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                serialInstance->setTx(moduleConfig.serial.txd);
+                serialInstance->setRx(moduleConfig.serial.rxd);
+            }
+            serialInstance->begin(baud);
+            serialInstance->setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #elif defined(ARCH_ESP32)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
@@ -158,7 +194,8 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#elif !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) &&                             \
+    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -214,17 +251,33 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) &&                               \
+    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
-            } else {
+            }
+#if defined(HELTEC_MESH_SOLAR)
+            else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+                serialPayloadSize = Serial.readBytes(serialBytes, sizeof(serialBytes) - 1);
+                // If the parsing fails, the following parsing will be performed.
+                if ((serialPayloadSize > 0) && (meshSolarCmdHandle(serialBytes) != 0)) {
+                    return runOncePart(serialBytes, serialPayloadSize);
+                }
+            }
+#endif
+            else {
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
                 while (Serial1.available()) {
                     serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #else
-                while (Serial2.available()) {
-                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+#ifndef RAK3172
+                HardwareSerial *serialInstance = &Serial2;
+#else
+                HardwareSerial *serialInstance = &Serial1;
+#endif
+                while (serialInstance->available()) {
+                    serialPayloadSize = serialInstance->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #endif
                     serialModuleRadio->sendPayload();
                 }
@@ -341,7 +394,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 serialPrint->write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-                String sender = (node && node->has_user) ? node->user.short_name : "???";
+                const char *sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
                 serialPrint->println();
@@ -408,6 +461,63 @@ uint32_t SerialModule::getBaudRate()
     return BAUD;
 }
 
+// Add this structure to help with parsing WindGust =       24.4 serial lines.
+struct ParsedLine {
+    char name[64];
+    char value[128];
+};
+
+/**
+ * Parse a line of format "Name = Value" into name/value pair
+ * @param line Input line to parse
+ * @return ParsedLine containing name and value, or empty strings if parse failed
+ */
+ParsedLine parseLine(const char *line)
+{
+    ParsedLine result = {"", ""};
+
+    // Find equals sign
+    const char *equals = strchr(line, '=');
+    if (!equals) {
+        return result;
+    }
+
+    // Extract name by copying substring
+    char nameBuf[64]; // Temporary buffer
+    size_t nameLen = equals - line;
+    if (nameLen >= sizeof(nameBuf)) {
+        nameLen = sizeof(nameBuf) - 1;
+    }
+    strncpy(nameBuf, line, nameLen);
+    nameBuf[nameLen] = '\0';
+
+    // Trim whitespace from name
+    char *nameStart = nameBuf;
+    while (*nameStart && isspace(*nameStart))
+        nameStart++;
+    char *nameEnd = nameStart + strlen(nameStart) - 1;
+    while (nameEnd > nameStart && isspace(*nameEnd))
+        *nameEnd-- = '\0';
+
+    // Copy trimmed name
+    strncpy(result.name, nameStart, sizeof(result.name) - 1);
+    result.name[sizeof(result.name) - 1] = '\0';
+
+    // Extract value part (after equals)
+    const char *valueStart = equals + 1;
+    while (*valueStart && isspace(*valueStart))
+        valueStart++;
+    strncpy(result.value, valueStart, sizeof(result.value) - 1);
+    result.value[sizeof(result.value) - 1] = '\0';
+
+    // Trim trailing whitespace from value
+    char *valueEnd = result.value + strlen(result.value) - 1;
+    while (valueEnd > result.value && isspace(*valueEnd))
+        *valueEnd-- = '\0';
+
+    return result;
+}
+
 /**
  * Process the received weather station serial data, extract wind, voltage, and temperature information,
  * calculate averages and send telemetry data over the mesh network.
@@ -416,7 +526,8 @@ uint32_t SerialModule::getBaudRate()
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
+    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -435,6 +546,10 @@ void SerialModule::processWXSerial()
     static float batVoltageF = 0;
     static float capVoltageF = 0;
     static float temperatureF = 0;
+
+    static char rainStr[] = "5780860000";
+    static int rainSum = 0;
+    static float rain = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -448,6 +563,10 @@ void SerialModule::processWXSerial()
         // WindSpeed    = 0.5
         // WindGust     = 0.6
         // GXTS04Temp   = 24.4
+        // Temperature = 23.4 // WS80
+
+        // RainIntSum     = 0
+        // Rain           = 0.0
         if (serialPayloadSize > 0) {
             // Define variables for line processing
             int lineStart = 0;
@@ -461,64 +580,56 @@ void SerialModule::processWXSerial()
                     // Extract the current line
                     char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
                     memset(line, '\0', sizeof(line));
-                    memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+                    if ((size_t)(lineEnd - lineStart) < sizeof(line) - 1) {
+                        memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
 
-                    if (strstr(line, "Wind") != NULL) // we have a wind line
-                    {
-                        gotwind = true;
-                        // Find the positions of "=" signs in the line
-                        char *windDirPos = strstr(line, "WindDir      = ");
-                        char *windSpeedPos = strstr(line, "WindSpeed    = ");
-                        char *windGustPos = strstr(line, "WindGust     = ");
-
-                        if (windDirPos != NULL) {
-                            // Extract data after "=" for WindDir
-                            strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
-                            double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
-                            dir_sum_sin += sin(radians);
-                            dir_sum_cos += cos(radians);
-                            dirCount++;
-                        } else if (windSpeedPos != NULL) {
-                            // Extract data after "=" for WindSpeed
-                            strcpy(windVel, windSpeedPos + 15); // Add 15 to skip "WindSpeed = "
-                            float newv = strtof(windVel, nullptr);
-                            velSum += newv;
-                            velCount++;
-                            if (newv < lull || lull == -1)
-                                lull = newv;
-
-                        } else if (windGustPos != NULL) {
-                            strcpy(windGust, windGustPos + 15); // Add 15 to skip "WindSpeed = "
-                            float newg = strtof(windGust, nullptr);
-                            if (newg > gust)
-                                gust = newg;
+                        ParsedLine parsed = parseLine(line);
+                        if (strlen(parsed.name) > 0) {
+                            if (strcmp(parsed.name, "WindDir") == 0) {
+                                strlcpy(windDir, parsed.value, sizeof(windDir));
+                                double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
+                                dir_sum_sin += sin(radians);
+                                dir_sum_cos += cos(radians);
+                                dirCount++;
+                                gotwind = true;
+                            } else if (strcmp(parsed.name, "WindSpeed") == 0) {
+                                strlcpy(windVel, parsed.value, sizeof(windVel));
+                                float newv = strtof(windVel, nullptr);
+                                velSum += newv;
+                                velCount++;
+                                if (newv < lull || lull == -1) {
+                                    lull = newv;
+                                }
+                                gotwind = true;
+                            } else if (strcmp(parsed.name, "WindGust") == 0) {
+                                strlcpy(windGust, parsed.value, sizeof(windGust));
+                                float newg = strtof(windGust, nullptr);
+                                if (newg > gust) {
+                                    gust = newg;
+                                }
+                                gotwind = true;
+                            } else if (strcmp(parsed.name, "BatVoltage") == 0) {
+                                strlcpy(batVoltage, parsed.value, sizeof(batVoltage));
+                                batVoltageF = strtof(batVoltage, nullptr);
+                                break; // last possible data we want so break
+                            } else if (strcmp(parsed.name, "CapVoltage") == 0) {
+                                strlcpy(capVoltage, parsed.value, sizeof(capVoltage));
+                                capVoltageF = strtof(capVoltage, nullptr);
+                            } else if (strcmp(parsed.name, "GXTS04Temp") == 0 || strcmp(parsed.name, "Temperature") == 0) {
+                                strlcpy(temperature, parsed.value, sizeof(temperature));
+                                temperatureF = strtof(temperature, nullptr);
+                            } else if (strcmp(parsed.name, "RainIntSum") == 0) {
+                                strlcpy(rainStr, parsed.value, sizeof(rainStr));
+                                rainSum = int(strtof(rainStr, nullptr));
+                            } else if (strcmp(parsed.name, "Rain") == 0) {
+                                strlcpy(rainStr, parsed.value, sizeof(rainStr));
+                                rain = strtof(rainStr, nullptr);
+                            }
                         }
 
-                        // these are also voltage data we care about possibly
-                    } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
-                        char *batVoltagePos = strstr(line, "BatVoltage     = ");
-                        if (batVoltagePos != NULL) {
-                            strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                            batVoltageF = strtof(batVoltage, nullptr);
-                            break; // last possible data we want so break
-                        }
-                    } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
-                        char *capVoltagePos = strstr(line, "CapVoltage     = ");
-                        if (capVoltagePos != NULL) {
-                            strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                            capVoltageF = strtof(capVoltage, nullptr);
-                        }
-                        // GXTS04Temp   = 24.4
-                    } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
-                        char *tempPos = strstr(line, "GXTS04Temp   = ");
-                        if (tempPos != NULL) {
-                            strcpy(temperature, tempPos + 15); // 15 spaces for ws85
-                            temperatureF = strtof(temperature, nullptr);
-                        }
+                        // Update lineStart for the next line
+                        lineStart = lineEnd + 1;
                     }
-
-                    // Update lineStart for the next line
-                    lineStart = lineEnd + 1;
                 }
             }
             break;
@@ -530,8 +641,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
-                 batVoltageF, capVoltageF, temperatureF);
+        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
+                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calculate averages and send to the mesh
@@ -568,12 +679,19 @@ void SerialModule::processWXSerial()
         m.variant.environment_metrics.wind_gust = gust;
         m.variant.environment_metrics.has_wind_gust = true;
 
+        m.variant.environment_metrics.rainfall_24h = rainSum;
+        m.variant.environment_metrics.has_rainfall_24h = true;
+
+        // not sure if this value is actually the 1hr sum so needs to do some testing
+        m.variant.environment_metrics.rainfall_1h = rain;
+        m.variant.environment_metrics.has_rainfall_1h = true;
+
         if (lull == -1)
             lull = 0;
         m.variant.environment_metrics.wind_lull = lull;
         m.variant.environment_metrics.has_wind_lull = true;
 
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
+        LOG_INFO("WS8X Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
                  m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);

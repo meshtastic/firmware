@@ -1,3 +1,5 @@
+# MeshAdv-Pi E22-900M30S
+# https://github.com/chrismyers2000/MeshAdv-Pi-Hat
 Lora:
   Module: sx1262
   CS: 21
@@ -7,3 +9,6 @@ Lora:
   TXen: 13
   RXen: 12
   DIO3_TCXO_VOLTAGE: true
+  # Only for E22-900M33S:
+  # Limit the output power to 8 dBm
+  # SX126X_MAX_POWER: 8

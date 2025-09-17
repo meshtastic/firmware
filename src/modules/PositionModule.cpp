@@ -28,8 +28,9 @@ PositionModule::PositionModule()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
-        setIntervalFromNow(60 * 1000);
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        setIntervalFromNow(setStartDelay());
+    }
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
@@ -160,7 +161,8 @@ bool PositionModule::hasGPS()
 #endif
 }
 
-meshtastic_MeshPacket *PositionModule::allocReply()
+// Allocate a packet with our position data if we have one
+meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 {
     if (precision == 0) {
         LOG_DEBUG("Skip location send because precision is set to 0!");
@@ -262,13 +264,31 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.has_ground_speed = true;
     }
 
-    LOG_INFO("Position reply: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position packet: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
 
+#ifndef MESHTASTIC_EXCLUDE_ATAK
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         return allocAtakPli();
+#endif
 
     return allocDataProtobuf(p);
+}
+
+meshtastic_MeshPacket *PositionModule::allocReply()
+{
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
+        Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
+        LOG_DEBUG("Skip Position reply since we sent a reply <3min ago");
+        ignoreRequest = true; // Mark it as ignored for MeshModule
+        return nullptr;
+    }
+
+    meshtastic_MeshPacket *reply = allocPositionPacket();
+    if (reply) {
+        lastSentReply = millis(); // Track when we sent this reply
+    }
+    return reply;
 }
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
@@ -314,7 +334,13 @@ void PositionModule::sendOurPosition()
 
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-    sendOurPosition(NODENUM_BROADCAST, requestReplies);
+    for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
+        if (channels.getByIndex(channelNum).settings.has_module_settings &&
+            channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
+            sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
+            return;
+        }
+    }
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
@@ -326,16 +352,11 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     // Set's the class precision value for this particular packet
     if (channels.getByIndex(channel).settings.has_module_settings) {
         precision = channels.getByIndex(channel).settings.module_settings.position_precision;
-    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
-        // backwards compatibility for Primary channels created before position_precision was set by default
-        precision = 13;
-    } else {
-        precision = 0;
     }
 
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocPositionPacket();
     if (p == nullptr) {
-        LOG_DEBUG("allocReply returned a nullptr");
+        LOG_DEBUG("allocPositionPacket returned a nullptr");
         return;
     }
 
@@ -356,9 +377,16 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Start next execution in 5s, then sleep");
+        meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+        notification->level = meshtastic_LogRecord_Level_INFO;
+        notification->time = getValidTime(RTCQualityFromNet);
+        sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
+                Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
+                    1000U);
+        service->sendClientNotification(notification);
         sleepOnNextExecution = true;
-        setIntervalFromNow(5000);
+        LOG_DEBUG("Start next execution in 5s, then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
     }
 }
 

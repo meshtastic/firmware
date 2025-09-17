@@ -9,7 +9,12 @@
 #include "MeshRadio.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#ifdef ARCH_PORTDUINO
 #include "PointerQueue.h"
+#else
+#include "StaticPointerQueue.h"
+#endif
+#include "mesh-pb-constants.h"
 #if defined(ARCH_PORTDUINO)
 #include "../platform/portduino/SimRadio.h"
 #endif
@@ -37,16 +42,32 @@ class MeshService
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
     /// we never hang because android hasn't been there in a while
     /// FIXME - save this to flash on deep sleep
+#ifdef ARCH_PORTDUINO
     PointerQueue<meshtastic_MeshPacket> toPhoneQueue;
+#else
+    StaticPointerQueue<meshtastic_MeshPacket, MAX_RX_TOPHONE> toPhoneQueue;
+#endif
 
     // keep list of QueueStatus packets to be send to the phone
+#ifdef ARCH_PORTDUINO
     PointerQueue<meshtastic_QueueStatus> toPhoneQueueStatusQueue;
+#else
+    StaticPointerQueue<meshtastic_QueueStatus, MAX_RX_QUEUESTATUS_TOPHONE> toPhoneQueueStatusQueue;
+#endif
 
     // keep list of MqttClientProxyMessages to be send to the client for delivery
+#ifdef ARCH_PORTDUINO
     PointerQueue<meshtastic_MqttClientProxyMessage> toPhoneMqttProxyQueue;
+#else
+    StaticPointerQueue<meshtastic_MqttClientProxyMessage, MAX_RX_MQTTPROXY_TOPHONE> toPhoneMqttProxyQueue;
+#endif
 
     // keep list of ClientNotifications to be send to the client (phone)
+#ifdef ARCH_PORTDUINO
     PointerQueue<meshtastic_ClientNotification> toPhoneClientNotificationQueue;
+#else
+    StaticPointerQueue<meshtastic_ClientNotification, MAX_RX_NOTIFICATION_TOPHONE> toPhoneClientNotificationQueue;
+#endif
 
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
@@ -64,7 +85,8 @@ class MeshService
             return true;
         }
         return p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP;
+               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
+               p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
@@ -117,7 +139,7 @@ class MeshService
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs
      */
-    bool reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);
@@ -142,10 +164,13 @@ class MeshService
     void sendToPhone(meshtastic_MeshPacket *p);
 
     /// Send an MQTT message to the phone for client proxying
-    void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
+    virtual void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
     /// Send a ClientNotification to the phone
-    void sendClientNotification(meshtastic_ClientNotification *cn);
+    virtual void sendClientNotification(meshtastic_ClientNotification *cn);
+
+    /// Send an error response to the phone
+    void sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp);
 
     bool isToPhoneQueueEmpty();
 

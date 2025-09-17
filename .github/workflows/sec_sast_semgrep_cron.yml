@@ -3,21 +3,25 @@ name: Semgrep Full Scan
 
 on:
   workflow_dispatch:
-    branches:
-      - master
   schedule:
-    - cron: "0 1 * * 6"
+    - cron: 0 1 * * 6
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
 
 jobs:
   semgrep-full:
-    runs-on: ubuntu-latest
+    if: github.repository == 'meshtastic/firmware'
+    runs-on: ubuntu-24.04
     container:
       image: semgrep/semgrep
 
     steps:
       # step 1
       - name: clone application source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # step 2
       - name: full scan

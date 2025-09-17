@@ -15,13 +15,11 @@
 #endif
 
 #if defined(ARCH_STM32WL)
-// STM32WL series 2 Kbytes (8 rows of 256 bytes)
-#include <EEPROM.h>
-#include <OSFS.h>
-
-// Useful consts
-const OSFS::result noerr = OSFS::result::NO_ERROR;
-const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
+// STM32WL
+#include "LittleFS.h"
+#define FSCom InternalFS
+#define FSBegin() FSCom.begin()
+using namespace STM32_LittleFS_Namespace;
 #endif
 
 #if defined(ARCH_RP2040)
@@ -58,6 +56,3 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
-
-extern bool lfs_assert_failed; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our
-                               // modified lfs_util.h)

@@ -23,24 +23,6 @@ struct _file_config {
     char *rootPath;
 };
 
-class PiWebServerThread
-{
-  private:
-    char *key_pem = NULL;
-    char *cert_pem = NULL;
-    // struct _u_map mime_types;
-    std::string webrootpath;
-
-  public:
-    PiWebServerThread();
-    ~PiWebServerThread();
-    int CreateSSLCertificate();
-    int CheckSSLandLoad();
-    uint32_t requestRestart = 0;
-    struct _u_instance instanceWeb;
-    struct _u_instance instanceService;
-};
-
 class HttpAPI : public PhoneAPI
 {
 
@@ -53,6 +35,24 @@ class HttpAPI : public PhoneAPI
   protected:
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
+};
+
+class PiWebServerThread
+{
+  private:
+    char *key_pem = NULL;
+    char *cert_pem = NULL;
+    // struct _u_map mime_types;
+    std::string webrootpath;
+    HttpAPI webAPI;
+
+  public:
+    PiWebServerThread();
+    ~PiWebServerThread();
+    int CreateSSLCertificate();
+    int CheckSSLandLoad();
+    uint32_t requestRestart = 0;
+    struct _u_instance instanceWeb;
 };
 
 extern PiWebServerThread *piwebServerThread;

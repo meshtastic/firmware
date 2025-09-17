@@ -131,7 +131,6 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
         }
 
         // Decompress for Phone (EUD)
-        auto decompressedCopy = packetPool.allocCopy(mp);
         auto uncompressed = cloneTAKPacketData(t);
         uncompressed.is_compressed = false;
         if (t->has_contact) {
@@ -188,6 +187,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                 LOG_DEBUG("Decompressed chat to_callsign: %d bytes", length);
             }
         }
+        auto decompressedCopy = packetPool.allocCopy(mp);
         decompressedCopy->decoded.payload.size =
             pb_encode_to_bytes(decompressedCopy->decoded.payload.bytes, sizeof(decompressedCopy->decoded.payload),
                                meshtastic_TAKPacket_fields, &uncompressed);

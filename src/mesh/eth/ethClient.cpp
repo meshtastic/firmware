@@ -5,9 +5,6 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "target_specific.h"
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
@@ -66,17 +63,19 @@ static int32_t reconnectETH()
                 syslog.enable();
             }
 
-            // initWebServer();
-            initApiServer();
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
+            if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+                initApiServer();
+            }
+#endif
+#if HAS_UDP_MULTICAST
+            if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+                udpHandler->start();
+            }
+#endif
 
             ethStartupComplete = true;
         }
-#if !MESHTASTIC_EXCLUDE_MQTT
-        // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-        if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
-            mqtt->reconnect();
-        }
-#endif
     }
 
 #ifndef DISABLE_NTP
@@ -107,6 +106,11 @@ static int32_t reconnectETH()
 bool initEthernet()
 {
     if (config.network.eth_enabled) {
+#ifdef PIN_ETH_POWER_EN
+        pinMode(PIN_ETH_POWER_EN, OUTPUT);
+        digitalWrite(PIN_ETH_POWER_EN, HIGH); // Power up.
+        delay(100);
+#endif
 
 #ifdef PIN_ETHERNET_RESET
         pinMode(PIN_ETHERNET_RESET, OUTPUT);
@@ -115,6 +119,12 @@ bool initEthernet()
         digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
+#ifdef RAK11310 // Initialize the SPI port
+        ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
+        ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
+        ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
+        ETH_SPI_PORT.begin();
+#endif
         Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 
         uint8_t mac[6];

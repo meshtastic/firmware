@@ -2,16 +2,18 @@
 name: Semgrep Differential Scan
 on: pull_request
 
+permissions: read-all
+
 jobs:
   semgrep-diff:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     container:
       image: semgrep/semgrep
 
     steps:
       # step 1
       - name: clone application source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 

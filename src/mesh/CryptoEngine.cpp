@@ -3,12 +3,17 @@
 #include "architecture.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
+#include <RNG.h>
 #include <SHA256.h>
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+#if !defined(ARCH_STM32WL)
+#define CryptRNG RNG
+#endif
 
 /**
  * Create a public/private key pair with Curve25519.
@@ -18,6 +23,14 @@
  */
 void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
+    // Mix in any randomness we can, to make key generation stronger.
+    CryptRNG.begin(optstr(APP_VERSION));
+    if (myNodeInfo.device_id.size == 16) {
+        CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
+    }
+    auto noise = random();
+    CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
+
     LOG_DEBUG("Generate Curve25519 keypair");
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
@@ -74,7 +87,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     auth = bytesOut + numBytes;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
-    LOG_INFO("Random nonce value: %d", extraNonceTmp);
+    LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
@@ -161,10 +174,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
-    if (aes) {
-        delete aes;
-        aes = nullptr;
-    }
+    delete aes;
+    aes = nullptr;
     if (key_len != 0) {
         aes = new AESSmall256();
         aes->setKey(key_bytes, key_len);
@@ -225,10 +236,8 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    if (ctr) {
-        delete ctr;
-        ctr = nullptr;
-    }
+    delete ctr;
+    ctr = nullptr;
     if (_key.length == 16)
         ctr = new CTR<AES128>();
     else

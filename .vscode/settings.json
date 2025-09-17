@@ -7,5 +7,8 @@
   "cmake.configureOnOpen": false,
   "[cpp]": {
     "editor.defaultFormatter": "trunk.io"
+  },
+  "[powershell]": {
+    "editor.defaultFormatter": "ms-vscode.powershell"
   }
 }

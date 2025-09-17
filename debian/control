@@ -1,0 +1,39 @@
+Source: meshtasticd
+Section: misc
+Priority: optional
+Maintainer: Austin Lane <vidplace7@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               lsb-release,
+               tar,
+               gzip,
+               platformio,
+               python3-protobuf,
+               python3-grpcio,
+               git,
+               g++,
+               pkg-config,
+               libyaml-cpp-dev,
+               libgpiod-dev,
+               libbluetooth-dev,
+               libusb-1.0-0-dev,
+               libi2c-dev,
+               libuv1-dev,
+               openssl,
+               libssl-dev,
+               libulfius-dev,
+               liborcania-dev,
+               libx11-dev,
+               libinput-dev,
+               libxkbcommon-x11-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/meshtastic/firmware
+Rules-Requires-Root: no
+
+Package: meshtasticd
+Architecture: any
+Depends: adduser,
+         ${misc:Depends},
+         ${shlibs:Depends}
+Description: Meshtastic daemon for communicating with Meshtastic devices
+ Meshtastic is an off-grid text communication platform that uses inexpensive 
+ LoRa radios.

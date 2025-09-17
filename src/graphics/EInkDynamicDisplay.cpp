@@ -238,7 +238,7 @@ void EInkDynamicDisplay::checkRateLimiting()
 
     // Skip update: too soon for BACKGROUND
     if (frameFlags == BACKGROUND) {
-        if (Throttle::isWithinTimespanMs(previousRunMs, EINK_LIMIT_RATE_BACKGROUND_SEC * 1000)) {
+        if (Throttle::isWithinTimespanMs(previousRunMs, 30000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FULL;
             return;
@@ -251,7 +251,7 @@ void EInkDynamicDisplay::checkRateLimiting()
 
     // Skip update: too soon for RESPONSIVE
     if (frameFlags & RESPONSIVE) {
-        if (Throttle::isWithinTimespanMs(previousRunMs, EINK_LIMIT_RATE_RESPONSIVE_SEC * 1000)) {
+        if (Throttle::isWithinTimespanMs(previousRunMs, 1000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FAST;
             LOG_DEBUG("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x", frameFlags);
@@ -323,6 +323,14 @@ void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
     // If a decision was already reached, don't run the check
     if (refresh != UNSPECIFIED)
         return;
+
+    // Bypass limit if UNLIMITED_FAST mode is active
+    if (frameFlags & UNLIMITED_FAST) {
+        refresh = FAST;
+        reason = NO_OBJECTIONS;
+        LOG_DEBUG("refresh=FAST, reason=UNLIMITED_FAST_MODE_ACTIVE, frameFlags=0x%x", frameFlags);
+        return;
+    }
 
     // If too many FAST refreshes consecutively - force a FULL refresh
     if (fastRefreshCount >= EINK_LIMIT_FASTREFRESH) {

@@ -7,7 +7,7 @@
 
 #include "../configuration.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #include "../PowerFSM.h"
 #include "../detect/ScanI2C.h"
@@ -40,6 +40,8 @@ class MotionSensor
     // Refer to /src/concurrency/OSThread.h for more information
     inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
 
+    virtual void calibrate(uint16_t forSeconds){};
+
   protected:
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
@@ -47,12 +49,16 @@ class MotionSensor
     // Register a button press when a double-tap is detected
     virtual void buttonPress();
 
-#if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
     ScanI2C::FoundDevice device;
+
+    // Do calibration if true
+    bool doCalibration = false;
+    uint32_t endCalibrationAt = 0;
 };
 
 namespace MotionSensorI2C

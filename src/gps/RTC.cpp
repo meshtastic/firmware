@@ -9,6 +9,9 @@
 static RTCQuality currentQuality = RTCQualityNone;
 uint32_t lastSetFromPhoneNtpOrGps = 0;
 
+static uint32_t lastTimeValidationWarning = 0;
+static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
+
 RTCQuality getRTCQuality()
 {
     return currentQuality;
@@ -23,7 +26,7 @@ static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only upda
  * Reads the current date and time from the RTC module and updates the system time.
  * @return True if the RTC was successfully read and the system time was updated, false otherwise.
  */
-void readFromRTC()
+RTCSetResult readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
@@ -44,15 +47,25 @@ void readFromRTC()
         t.tm_sec = rtc.getSecond();
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
-
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            }
+            return RTCSetResultInvalidTime;
+        }
+#endif
+
         LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        timeStartMsec = now;
-        zeroOffsetSecs = tv.tv_sec;
         if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
         }
+        return RTCSetResultSuccess;
     }
 #elif defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
@@ -75,15 +88,26 @@ void readFromRTC()
         t.tm_sec = tc.second;
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
-
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
+            return RTCSetResultInvalidTime;
+        }
+#endif
+
         LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        timeStartMsec = now;
-        zeroOffsetSecs = tv.tv_sec;
         if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
         }
+        return RTCSetResultSuccess;
     }
 #else
     if (!gettimeofday(&tv, NULL)) {
@@ -92,8 +116,10 @@ void readFromRTC()
         LOG_DEBUG("Read RTC time as %ld", printableEpoch);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
+        return RTCSetResultSuccess;
     }
 #endif
+    return RTCSetResultNotSet;
 }
 
 /**
@@ -101,19 +127,32 @@ void readFromRTC()
  *
  * @param q The quality of the provided time.
  * @param tv A pointer to a timeval struct containing the time to potentially set the RTC to.
- * @return True if the RTC was set, false otherwise.
+ * @return RTCSetResult
  *
  * If we haven't yet set our RTC this boot, set it from a GPS derived time
  */
-bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
     static uint32_t lastSetMsec = 0;
     uint32_t now = millis();
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
-        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-        return false;
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            lastTimeValidationWarning = millis();
+        }
+        return RTCSetResultInvalidTime;
+    } else if ((uint64_t)tv->tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            // Calculate max allowed time safely to avoid overflow in logging
+            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
+            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
+            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
+                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
+            lastTimeValidationWarning = millis();
+        }
+        return RTCSetResultInvalidTime;
     }
 #endif
 
@@ -184,9 +223,9 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
         readFromRTC();
 #endif
 
-        return true;
+        return RTCSetResultSuccess;
     } else {
-        return false;
+        return RTCSetResultNotSet; // RTC was already set with a higher quality time
     }
 }
 
@@ -215,7 +254,7 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-bool perhapsSetRTC(RTCQuality q, struct tm &t)
+RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
@@ -226,12 +265,32 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
     time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
-    tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+    tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+#ifdef BUILD_EPOCH
+    if (tv.tv_sec < BUILD_EPOCH) {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            lastTimeValidationWarning = millis();
+        }
+        return RTCSetResultInvalidTime;
+    } else if ((uint64_t)tv.tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+            // Calculate max allowed time safely to avoid overflow in logging
+            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
+            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
+            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
+                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
+            lastTimeValidationWarning = millis();
+        }
+        return RTCSetResultInvalidTime;
+    }
+#endif
 
     // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300) {
         // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
-        return false;
+        return RTCSetResultInvalidTime;
     } else {
         return perhapsSetRTC(q, &tv);
     }
@@ -244,11 +303,15 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
  */
 int32_t getTZOffset()
 {
+#if MESHTASTIC_EXCLUDE_TZ
+    return 0;
+#else
     time_t now = getTime(false);
     struct tm *gmt;
     gmt = gmtime(&now);
     gmt->tm_isdst = -1;
     return (int32_t)difftime(now, mktime(gmt));
+#endif
 }
 
 /**
@@ -279,14 +342,40 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
 time_t gm_mktime(struct tm *tm)
 {
 #if !MESHTASTIC_EXCLUDE_TZ
-    setenv("TZ", "GMT0", 1);
-    time_t res = mktime(tm);
-    if (*config.device.tzdef) {
-        setenv("TZ", config.device.tzdef, 1);
-    } else {
-        setenv("TZ", "UTC0", 1);
+    time_t result = 0;
+
+    // First, get us to the start of tm->year, by calcuating the number of days since the Unix epoch.
+    int year = 1900 + tm->tm_year; // tm_year is years since 1900
+    int year_minus_one = year - 1;
+    int days_before_this_year = 0;
+    days_before_this_year += year_minus_one * 365;
+    // leap days: every 4 years, except 100s, but including 400s.
+    days_before_this_year += year_minus_one / 4 - year_minus_one / 100 + year_minus_one / 400;
+    // subtract from 1970-01-01 to get days since epoch
+    days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
+
+    // Now, within this tm->year, compute the days *before* this tm->month starts.
+    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
+
+    // If this is a leap year, and we're past February, add a day:
+    if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
+        days_this_year_before_this_month += 1;
     }
-    return res;
+
+    // And within this month:
+    int days_this_month_before_today = tm->tm_mday - 1; // tm->tm_mday is 1..31
+
+    // Now combine them all together, and convert days to seconds:
+    result += (days_before_this_year + days_this_year_before_this_month + days_this_month_before_today);
+    result *= 86400L;
+
+    // Finally, add in the hours, minutes, and seconds of today:
+    result += tm->tm_hour * 3600;
+    result += tm->tm_min * 60;
+    result += tm->tm_sec;
+
+    return result;
 #else
     return mktime(tm);
 #endif

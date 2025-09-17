@@ -22,7 +22,6 @@
  * THE SOFTWARE.
  */
 
-#include <iostream>
 #include <math.h>
 #include <sstream>
 #include <stdio.h>
@@ -851,18 +850,26 @@ std::string JSONValue::StringifyString(const std::string &str)
             str_out += "\\r";
         } else if (chr == '\t') {
             str_out += "\\t";
-        } else if (chr < ' ' || chr > 126) {
-            str_out += "\\u";
-            for (int i = 0; i < 4; i++) {
-                int value = (chr >> 12) & 0xf;
-                if (value >= 0 && value <= 9)
-                    str_out += (char)('0' + value);
-                else if (value >= 10 && value <= 15)
-                    str_out += (char)('A' + (value - 10));
-                chr <<= 4;
-            }
+        } else if (chr < 0x20 || chr == 0x7F) {
+            char buf[7];
+            snprintf(buf, sizeof(buf), "\\u%04x", chr);
+            str_out += buf;
+        } else if (chr < 0x80) {
+            str_out += chr;
         } else {
             str_out += chr;
+            size_t remain = str.end() - iter - 1;
+            if ((chr & 0xE0) == 0xC0 && remain >= 1) {
+                ++iter;
+                str_out += *iter;
+            } else if ((chr & 0xF0) == 0xE0 && remain >= 2) {
+                str_out += *(++iter);
+                str_out += *(++iter);
+            } else if ((chr & 0xF8) == 0xF0 && remain >= 3) {
+                str_out += *(++iter);
+                str_out += *(++iter);
+                str_out += *(++iter);
+            }
         }
 
         ++iter;

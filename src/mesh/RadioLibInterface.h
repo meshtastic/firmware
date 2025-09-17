@@ -16,6 +16,9 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
+// In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
+#define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -132,8 +135,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual bool isActivelyReceiving() = 0;
 
+    /** Are we are currently sending a packet?
+     * This method is public, intending to expose this information to other firmware components
+     */
+    virtual bool isSending();
+
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
+
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
   private:
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
@@ -150,7 +161,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * timer scaled to SNR of to be flooded packet
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimerSNR(float snr);
+    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();

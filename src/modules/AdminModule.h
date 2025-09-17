@@ -7,9 +7,18 @@
 #endif
 
 /**
+ * Datatype passed to Observers by AdminModule, to allow external handling of admin messages
+ */
+struct AdminModule_ObserverData {
+    const meshtastic_AdminMessage *request;
+    meshtastic_AdminMessage *response;
+    AdminMessageHandleResult *result;
+};
+
+/**
  * Admin module for admin messages
  */
-class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<const meshtastic_AdminMessage *>
+class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
 {
   public:
     /** Constructor
@@ -50,10 +59,11 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetOwner(const meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
     void handleSetConfig(const meshtastic_Config &c);
-    void handleSetModuleConfig(const meshtastic_ModuleConfig &c);
+    bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
     void handleSetHamMode(const meshtastic_HamParameters &req);
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
+    void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
 
     void setPassKey(meshtastic_AdminMessage *res);
@@ -63,6 +73,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool messageIsRequest(const meshtastic_AdminMessage *r);
     void sendWarning(const char *message);
 };
+
+static constexpr const char *licensedModeMessage =
+    "Licensed mode activated, removing admin channel and encryption from all channels";
 
 extern AdminModule *adminModule;
 

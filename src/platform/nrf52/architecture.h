@@ -49,10 +49,21 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK2560
 #elif defined(WISMESH_TAP)
 #define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP
+#elif defined(WISMESH_TAG)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAG
+#elif defined(GAT562_MESH_TRIAL_TRACKER)
+#define HW_VENDOR meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER
+#elif defined(NOMADSTAR_METEOR_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+// MAke sure all custom RAK4630 boards are defined before the generic RAK4630
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(T_ECHO_LITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
+#elif defined(ELECROW_ThinkNode_M1)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
@@ -75,6 +86,20 @@
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(MESHLINK)
+#define HW_VENDOR meshtastic_HardwareModel_MESHLINK
+#elif defined(SEEED_XIAO_NRF52840_KIT)
+#define HW_VENDOR meshtastic_HardwareModel_XIAO_NRF52_KIT
+#elif defined(SEEED_SOLAR_NODE)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
+#elif defined(HELTEC_MESH_POCKET)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
+#elif defined(SEEED_WIO_TRACKER_L1_EINK)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
+#elif defined(SEEED_WIO_TRACKER_L1)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
+#elif defined(HELTEC_MESH_SOLAR)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -103,10 +128,6 @@
 
 #ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
-#endif
-
-#ifdef PIN_BUTTON2
-#define BUTTON_PIN_ALT PIN_BUTTON2
 #endif
 
 #ifdef PIN_BUTTON_TOUCH

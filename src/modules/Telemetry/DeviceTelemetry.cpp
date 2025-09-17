@@ -9,6 +9,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "memGet.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <meshUtils.h>
@@ -48,7 +49,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         return false;
 
     if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f", sender,
@@ -99,13 +100,9 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.has_uptime_seconds = true;
 
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
-#if ARCH_PORTDUINO
-    t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
-#else
     t.variant.device_metrics.battery_level = (!powerStatus->getHasBattery() || powerStatus->getIsCharging())
                                                  ? MAGIC_USB_BATTERY_LEVEL
                                                  : powerStatus->getBatteryChargePercent();
-#endif
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
@@ -137,6 +134,9 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = SimRadio::instance->txRelay;
     }
+#else
+    telemetry.variant.local_stats.heap_total_bytes = memGet.getHeapSize();
+    telemetry.variant.local_stats.heap_free_bytes = memGet.getFreeHeap();
 #endif
     if (router) {
         telemetry.variant.local_stats.num_rx_dupe = router->rxDupe;
@@ -172,7 +172,10 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
              telemetry.variant.device_metrics.battery_level, telemetry.variant.device_metrics.voltage,
              telemetry.variant.device_metrics.uptime_seconds);
 
+    DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
+    DEBUG_HEAP_AFTER("DeviceTelemetryModule::sendTelemetry", p);
+
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;

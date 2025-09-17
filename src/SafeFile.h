@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FSCommon.h"
+#include "SPILock.h"
 #include "configuration.h"
 
 #ifdef FSCom

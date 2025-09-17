@@ -12,6 +12,11 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #endif
@@ -149,7 +154,8 @@ void createSSLCert()
                     esp_task_wdt_reset();
 #if HAS_SCREEN
                     if (millis() / 1000 >= 3) {
-                        screen->setSSLFrames();
+                        if (screen)
+                            screen->setSSLFrames();
                     }
 #endif
                 }
@@ -166,14 +172,14 @@ WebServerThread *webServerThread;
 
 WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
 {
-    if (!config.network.wifi_enabled) {
+    if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
 }
 
 int32_t WebServerThread::runOnce()
 {
-    if (!config.network.wifi_enabled) {
+    if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
 

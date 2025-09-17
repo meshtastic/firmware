@@ -41,11 +41,23 @@ class AudioThread : public concurrency::OSThread
             delete i2sRtttl;
             i2sRtttl = nullptr;
         }
-        if (rtttlFile != nullptr) {
-            delete rtttlFile;
-            rtttlFile = nullptr;
+        delete rtttlFile;
+        rtttlFile = nullptr;
+
+        setCPUFast(false);
+    }
+
+    void readAloud(const char *text)
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+            delete i2sRtttl;
+            i2sRtttl = nullptr;
         }
 
+        ESP8266SAM *sam = new ESP8266SAM;
+        sam->Say(audioOut, text);
+        delete sam;
         setCPUFast(false);
     }
 

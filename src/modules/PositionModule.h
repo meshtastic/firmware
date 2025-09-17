@@ -55,6 +55,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     virtual int32_t runOnce() override;
 
   private:
+    meshtastic_MeshPacket *allocPositionPacket();
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
     meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
@@ -62,9 +63,17 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void sendLostAndFoundText();
     bool hasQualityTimesource();
     bool hasGPS();
+    uint32_t lastSentReply = 0; // Last time we sent a position reply (used for reply throttling only)
 
+#if USERPREFS_EVENT_MODE
+    // In event mode we want to prevent excessive position broadcasts
+    // we set the minimum interval to 5m
+    const uint32_t minimumTimeThreshold =
+        max(300000, Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30));
+#else
     const uint32_t minimumTimeThreshold =
         Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
+#endif
 };
 
 struct SmartPosition {

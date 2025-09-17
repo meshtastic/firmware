@@ -18,7 +18,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
         uptimeWrapCount = 0;
         uptimeLastMs = millis();
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-        setIntervalFromNow(45 * 1000); // Wait until NodeInfo is sent
+        setIntervalFromNow(setStartDelay()); // Wait until NodeInfo is sent
     }
     virtual bool wantUIFrame() { return false; }
 

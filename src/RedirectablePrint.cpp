@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
 #include <cstring>
@@ -57,7 +58,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
 #endif
 
 #ifdef ARCH_PORTDUINO
-    bool color = !settingsMap[ascii_logs];
+    bool color = !portduino_config.ascii_logs;
 #else
     bool color = true;
 #endif
@@ -79,17 +80,17 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
     }
     if (color && logLevel != nullptr) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
-            Print::write("\u001b[34m", 6);
+            Print::write("\u001b[34m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
-            Print::write("\u001b[32m", 6);
+            Print::write("\u001b[32m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
-            Print::write("\u001b[33m", 6);
+            Print::write("\u001b[33m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
-            Print::write("\u001b[31m", 6);
+            Print::write("\u001b[31m", 5);
     }
     len = Print::write(printBuf, len);
     if (color && logLevel != nullptr) {
-        Print::write("\u001b[0m", 5);
+        Print::write("\u001b[0m", 4);
     }
     return len;
 }
@@ -99,7 +100,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
     size_t r = 0;
 
 #ifdef ARCH_PORTDUINO
-    bool color = !settingsMap[ascii_logs];
+    bool color = !portduino_config.ascii_logs;
 #else
     bool color = true;
 #endif
@@ -107,15 +108,15 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
     // include the header
     if (color) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
-            Print::write("\u001b[34m", 6);
+            Print::write("\u001b[34m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
-            Print::write("\u001b[32m", 6);
+            Print::write("\u001b[32m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
-            Print::write("\u001b[33m", 6);
+            Print::write("\u001b[33m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
-            Print::write("\u001b[31m", 6);
+            Print::write("\u001b[31m", 5);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0)
-            Print::write("\u001b[35m", 6);
+            Print::write("\u001b[35m", 5);
     }
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
@@ -166,6 +167,16 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         print(thread->ThreadName);
         print("] ");
     }
+
+#ifdef DEBUG_HEAP
+    // Add heap free space bytes prefix before every log message
+#ifdef ARCH_PORTDUINO
+    ::printf("[heap %u] ", memGet.getFreeHeap());
+#else
+    printf("[heap %u] ", memGet.getFreeHeap());
+#endif
+#endif // DEBUG_HEAP
+
     r += vprintf(logLevel, format, arg);
 }
 
@@ -288,7 +299,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-        if (settingsStrings[traceFilename] != "") {
+        if (portduino_config.traceFilename != "") {
             va_list arg;
             va_start(arg, format);
             try {
@@ -297,18 +308,18 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
             }
             va_end(arg);
         }
-        if (settingsMap[logoutputlevel] < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
+        if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
             delete[] newFormat;
             return;
         }
     }
-    if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
+    if (portduino_config.logoutputlevel < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         delete[] newFormat;
         return;
-    } else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
+    } else if (portduino_config.logoutputlevel < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
         delete[] newFormat;
         return;
-    } else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
+    } else if (portduino_config.logoutputlevel < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
         delete[] newFormat;
         return;
     }
@@ -352,8 +363,8 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
     for (uint16_t i = 0; i < len; i += 16) {
         if (i % 128 == 0)
             log(logLevel, "    +------------------------------------------------+ +----------------+");
-        char s[] = "|                                                | |                |\n";
-        uint8_t ix = 1, iy = 52;
+        char s[] = "     |                                                | |                |\n";
+        uint8_t ix = 5, iy = 56;
         for (uint8_t j = 0; j < 16; j++) {
             if (i + j < len) {
                 uint8_t c = buf[i + j];
@@ -367,10 +378,8 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
             }
         }
         uint8_t index = i / 16;
-        if (i < 256)
-            log(logLevel, " ");
-        log(logLevel, "%02x", index);
-        log(logLevel, ".");
+        sprintf(s, "%03x", index);
+        s[3] = '.';
         log(logLevel, s);
     }
     log(logLevel, "    +------------------------------------------------+ +----------------+");

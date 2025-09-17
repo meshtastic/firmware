@@ -1,0 +1,99 @@
+name: Build Docker
+
+# Build Docker image, push untagged (digest-only)
+
+on:
+  workflow_call:
+    secrets:
+      DOCKER_FIRMWARE_TOKEN:
+        required: false # Only required for push
+    inputs:
+      distro:
+        description: Distro to target
+        required: true
+        type: string
+        # choices: [debian, alpine]
+      platform:
+        description: Platform to target
+        required: true
+        type: string
+      runs-on:
+        description: Runner to use
+        required: true
+        type: string
+      push:
+        description: Push images to registry
+        required: false
+        type: boolean
+        default: false
+      pio_env:
+        description: PlatformIO environment to build
+        required: false
+        type: string
+        default: native
+    outputs:
+      digest:
+        description: Digest of built image
+        value: ${{ jobs.docker-build.outputs.digest }}
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  docker-build:
+    outputs:
+      digest: ${{ steps.docker_variant.outputs.digest }}
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Docker login
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          username: meshtastic
+          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Docker setup
+        uses: docker/setup-buildx-action@v3
+
+      - name: Sanitize platform string
+        id: sanitize_platform
+        # Replace slashes with underscores
+        run: echo "cleaned_platform=${{ inputs.platform }}" | sed 's/\//_/g' >> $GITHUB_OUTPUT
+
+      - name: Docker tag
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: meshtastic/meshtasticd
+          tags: |
+            GHA-${{ steps.version.outputs.long }}-${{ inputs.distro }}-${{ steps.sanitize_platform.outputs.cleaned_platform }}
+          flavor: latest=false
+
+      - name: Docker build and push
+        uses: docker/build-push-action@v6
+        id: docker_variant
+        with:
+          context: .
+          file: |
+            ${{ contains(inputs.distro, 'debian') && './Dockerfile' || contains(inputs.distro, 'alpine') && './alpine.Dockerfile' }}
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }} # Tag is only meant to be consumed by the "manifest" job
+          platforms: ${{ inputs.platform }}
+          build-args: |
+            PIO_ENV=${{ inputs.pio_env }}

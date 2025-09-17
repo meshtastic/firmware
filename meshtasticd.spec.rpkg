@@ -1,0 +1,157 @@
+# meshtasticd spec file for RPM-based distributions
+#
+# Build locally with:
+# ```
+# sudo dnf install rpkg-util
+# rpkg local
+# ```
+#
+# See:
+# - https://docs.pagure.org/rpkg-util/v3/index.html
+# - https://docs.fedoraproject.org/en-US/packaging-guidelines/Versioning/
+
+%global  meshtasticd_user          meshtasticd   
+
+Name:           meshtasticd
+# Version Ex:   2.5.19
+Version:        {{{ meshtastic_version }}}
+# Release Ex:   9127.daily.gitd7f5f620.fc41
+Release:        {{{ git_commits_num }}}%{?copr_projectname:.%{copr_projectname}}.git{{{ git_commit_sha }}}%{?dist}
+VCS:            {{{ git_dir_vcs }}}
+Summary:        Meshtastic daemon for communicating with Meshtastic devices
+
+License:        GPL-3.0
+URL:            https://github.com/meshtastic/firmware
+Source0:        {{{ git_dir_pack }}}
+Source1:        https://github.com/meshtastic/web/releases/download/v{{{ web_version }}}/build.tar
+
+BuildRequires: systemd-rpm-macros
+BuildRequires: python3-devel
+BuildRequires: platformio
+BuildRequires: python3dist(protobuf)
+BuildRequires: python3dist(grpcio[protobuf])
+BuildRequires: python3dist(grpcio-tools)
+BuildRequires: git-core
+BuildRequires: gcc-c++
+BuildRequires: pkgconfig(yaml-cpp)
+BuildRequires: pkgconfig(libgpiod)
+BuildRequires: pkgconfig(bluez)
+BuildRequires: pkgconfig(libusb-1.0)
+BuildRequires: libi2c-devel
+BuildRequires: pkgconfig(libuv)
+# Web components:
+BuildRequires: pkgconfig(openssl)
+BuildRequires: pkgconfig(liborcania)
+BuildRequires: pkgconfig(libyder)
+BuildRequires: pkgconfig(libulfius)
+# TFT components:
+BuildRequires: pkgconfig(x11)
+BuildRequires: pkgconfig(libinput)
+BuildRequires: pkgconfig(xkbcommon-x11)
+
+Requires:      systemd-udev
+
+%description
+Meshtastic daemon for controlling Meshtastic devices. Meshtastic is an off-grid
+text communication platform that uses inexpensive LoRa radios.
+
+%prep
+{{{ git_dir_setup_macro }}}
+# Unpack the web files
+mkdir -p web
+tar -xf %{SOURCE1} -C web
+gzip -dr web
+
+%build
+# Use the “native-tft” environment from platformio to build a Linux binary
+platformio run -e native-tft
+
+%install
+# Install meshtasticd binary
+mkdir -p %{buildroot}%{_bindir}
+install -m 0755 .pio/build/native-tft/program %{buildroot}%{_bindir}/meshtasticd
+
+# Install portduino VFS dir
+install -p -d -m 0770 %{buildroot}%{_localstatedir}/lib/meshtasticd
+
+# Install udev rules
+mkdir -p %{buildroot}%{_udevrulesdir}
+install -m 0644 bin/99-meshtasticd-udev.rules %{buildroot}%{_udevrulesdir}/99-meshtasticd-udev.rules
+
+# Install config dirs
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd
+install -m 0644 bin/config-dist.yaml %{buildroot}%{_sysconfdir}/meshtasticd/config.yaml
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/config.d
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/available.d
+cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
+
+# Install systemd service
+install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+
+# Install the web files under /usr/share/meshtasticd/web
+mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
+cp -r web/* %{buildroot}%{_datadir}/meshtasticd/web
+# Install default SSL storage directory (for web)
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/ssl
+
+%pre
+# create spi group (for udev rules)
+getent group spi > /dev/null || groupadd -r spi
+# create a meshtasticd group and user
+getent group %{meshtasticd_user} > /dev/null || groupadd -r %{meshtasticd_user}
+getent passwd %{meshtasticd_user} > /dev/null || \
+    useradd -r -d %{_localstatedir}/lib/meshtasticd -g %{meshtasticd_user} -G spi \
+    -s /sbin/nologin -c "Meshtastic Daemon" %{meshtasticd_user}
+# add meshtasticd user to appropriate groups (if they exist)
+getent group gpio > /dev/null && usermod -a -G gpio %{meshtasticd_user} > /dev/null
+getent group plugdev > /dev/null && usermod -a -G plugdev %{meshtasticd_user} > /dev/null
+getent group dialout > /dev/null && usermod -a -G dialout %{meshtasticd_user} > /dev/null
+getent group i2c > /dev/null && usermod -a -G i2c %{meshtasticd_user} > /dev/null
+getent group video > /dev/null && usermod -a -G video %{meshtasticd_user} > /dev/null
+getent group audio > /dev/null && usermod -a -G audio %{meshtasticd_user} > /dev/null
+getent group input > /dev/null && usermod -a -G input %{meshtasticd_user} > /dev/null
+exit 0
+
+%triggerin -- meshtasticd < 2.6.9
+# migrate .portduino (if it exists and hasn’t already been copied)
+if [ -d /root/.portduino ] && [ ! -e /var/lib/meshtasticd/.portduino ]; then
+    mkdir -p /var/lib/meshtasticd
+    cp -r /root/.portduino /var/lib/meshtasticd/.portduino
+    chown -R %{meshtasticd_user}:%{meshtasticd_user} \
+        %{_localstatedir}/lib/meshtasticd || :
+    # Fix SELinux labels if present (no-op on non-SELinux systems)
+    restorecon -R /var/lib/meshtasticd/.portduino 2>/dev/null || :
+    echo "Migrated meshtasticd VFS from /root/.portduino to /var/lib/meshtasticd/.portduino"
+    echo "meshtasticd now runs as the 'meshtasticd' user, not 'root'."
+    echo "See https://github.com/meshtastic/firmware/pull/6718 for details"
+fi
+
+%post
+%systemd_post meshtasticd.service
+
+%preun
+%systemd_preun meshtasticd.service
+
+%postun
+%systemd_postun_with_restart meshtasticd.service
+
+%files
+%defattr(-,%{meshtasticd_user},%{meshtasticd_user})
+%license LICENSE
+%doc README.md
+%{_bindir}/meshtasticd
+%dir %{_localstatedir}/lib/meshtasticd
+%{_udevrulesdir}/99-meshtasticd-udev.rules
+%dir %{_sysconfdir}/meshtasticd
+%dir %{_sysconfdir}/meshtasticd/config.d
+%dir %{_sysconfdir}/meshtasticd/available.d
+%config(noreplace) %{_sysconfdir}/meshtasticd/config.yaml
+%config %{_sysconfdir}/meshtasticd/available.d/*
+%{_unitdir}/meshtasticd.service
+%dir %{_datadir}/meshtasticd
+%dir %{_datadir}/meshtasticd/web
+%{_datadir}/meshtasticd/web/*
+%dir %{_sysconfdir}/meshtasticd/ssl
+
+%changelog
+%autochangelog

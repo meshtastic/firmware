@@ -1,17 +1,22 @@
 name: Update protobufs and regenerate classes
 on: workflow_dispatch
 
+permissions: read-all
+
 jobs:
   update-protobufs:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
 
       - name: Update submodule
+        if: ${{ github.ref == 'refs/heads/master' }}
         run: |
           git submodule update --remote protobufs
 
@@ -28,7 +33,10 @@ jobs:
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
         with:
+          branch: create-pull-request/update-protobufs
+          labels: submodules
           title: Update protobufs and classes
+          commit-message: Update protobufs
           add-paths: |
             protobufs
             src/mesh

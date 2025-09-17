@@ -9,6 +9,8 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
+#include <WiFiOTA.h>
+
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -26,7 +28,9 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#if HAS_WIFI
+#ifdef USE_WS5500
+    if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
+#elif HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
 #else
     if (config.bluetooth.enabled == true)
@@ -52,13 +56,15 @@ void updateBatteryLevel(uint8_t level) {}
 void getMacAddr(uint8_t *dmac)
 {
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && defined(CONFIG_SOC_IEEE802154_SUPPORTED)
-    assert(esp_base_mac_addr_get(dmac) == ESP_OK);
+    auto res = esp_base_mac_addr_get(dmac);
+    assert(res == ESP_OK);
 #else
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+    auto res = esp_efuse_mac_get_default(dmac);
+    assert(res == ESP_OK);
 #endif
 }
 
-#ifdef HAS_32768HZ
+#if HAS_32768HZ
 #define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
 
 static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
@@ -80,17 +86,17 @@ void enableSlowCLK()
     uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
 
     if (cal_32k == 0) {
-        LOG_DEBUG("32K XTAL OSC has not started up");
+        LOG_DEBUG("32k XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
+        LOG_DEBUG("Switch RTC Source to 32.768kHz succeeded, using 32k XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! ");
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768kHz !!! ");
         return;
     }
 }
@@ -104,6 +110,10 @@ void esp32Setup()
     LOG_DEBUG("Set random seed %u", seed);
     randomSeed(seed);
     */
+
+#ifdef ADC_V
+    pinMode(ADC_V, INPUT);
+#endif
 
     LOG_DEBUG("Total heap: %d", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
@@ -137,12 +147,19 @@ void esp32Setup()
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
-        LOG_INFO("No OTA firmware available");
+        LOG_INFO("No BLE OTA firmware available");
     } else {
-        LOG_INFO("OTA firmware version %s", BLEOTA.c_str());
+        LOG_INFO("BLE OTA firmware version %s", BLEOTA.c_str());
     }
-#else
-    LOG_INFO("No OTA firmware available");
+#endif
+#if !MESHTASTIC_EXCLUDE_WIFI
+    String version = WiFiOTA::getVersion();
+    if (version.isEmpty()) {
+        LOG_INFO("No WiFi OTA firmware available");
+    } else {
+        LOG_INFO("WiFi OTA firmware version %s", version.c_str());
+    }
+    WiFiOTA::initialize();
 #endif
 
     // enableModemSleep();
@@ -165,7 +182,7 @@ void esp32Setup()
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
 
-#ifdef HAS_32768HZ
+#if HAS_32768HZ
     enableSlowCLK();
 #endif
 }
