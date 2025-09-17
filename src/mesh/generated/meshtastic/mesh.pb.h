@@ -259,8 +259,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_DECK_PRO = 102,
     /* Lilygo TLora Pager */
     meshtastic_HardwareModel_T_LORA_PAGER = 103,
-    /* GAT562 Mesh Trial Tracker */
-    meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER = 104,
+    /* M5Stack Reserved */
+    meshtastic_HardwareModel_M5STACK_RESERVED = 104, /* 0x68 */
     /* RAKwireless WisMesh Tag */
     meshtastic_HardwareModel_WISMESH_TAG = 105,
     /* RAKwireless WisBlock Core RAK3312 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/ */
@@ -274,6 +274,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_ECHO_LITE = 109,
     /* New Heltec LoRA32 with ESP32-S3 CPU */
     meshtastic_HardwareModel_HELTEC_V4 = 110,
+    /* M5Stack C6L */
+    meshtastic_HardwareModel_M5STACK_C6L = 111,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

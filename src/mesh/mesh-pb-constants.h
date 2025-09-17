@@ -15,17 +15,21 @@
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
+#if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#define MAX_RX_TOPHONE 8
+#else
 #define MAX_RX_TOPHONE 32
+#endif
 #endif
 
 /// max number of QueueStatus packets which can be waiting for delivery to phone
 #ifndef MAX_RX_QUEUESTATUS_TOPHONE
-#define MAX_RX_QUEUESTATUS_TOPHONE 4
+#define MAX_RX_QUEUESTATUS_TOPHONE 2
 #endif
 
 /// max number of MqttClientProxyMessage packets which can be waiting for delivery to phone
 #ifndef MAX_RX_MQTTPROXY_TOPHONE
-#define MAX_RX_MQTTPROXY_TOPHONE 32
+#define MAX_RX_MQTTPROXY_TOPHONE 8
 #endif
 
 /// max number of ClientNotification packets which can be waiting for delivery to phone
