@@ -35,9 +35,7 @@ bool RotaryEncoderImpl::init()
     inputQueue = xQueueCreate(5, sizeof(input_broker_event));
     interruptFlag = xEventGroupCreate();
     interruptInstance = this;
-    auto interruptHandler = []() {
-        xEventGroupSetBits(interruptInstance->interruptFlag, ROTARY_INTERRUPT_FLAG);
-    };
+    auto interruptHandler = []() { xEventGroupSetBits(interruptInstance->interruptFlag, ROTARY_INTERRUPT_FLAG); };
     attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
     attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
     attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
@@ -78,7 +76,7 @@ void RotaryEncoderImpl::dispatchInputs()
 
 void RotaryEncoderImpl::inputWorker(void *p)
 {
-    RotaryEncoderImpl* instance = (RotaryEncoderImpl*)p;
+    RotaryEncoderImpl *instance = (RotaryEncoderImpl *)p;
     while (true) {
         xEventGroupWaitBits(instance->interruptFlag, ROTARY_INTERRUPT_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
         instance->dispatchInputs();
@@ -86,12 +84,12 @@ void RotaryEncoderImpl::inputWorker(void *p)
     vTaskDelete(NULL);
 }
 
-RotaryEncoderImpl* RotaryEncoderImpl::interruptInstance;
+RotaryEncoderImpl *RotaryEncoderImpl::interruptInstance;
 
 int32_t RotaryEncoderImpl::runOnce()
 {
     InputEvent e{originName, INPUT_BROKER_NONE, 0, 0, 0};
-    while(xQueueReceive(inputQueue, &e.inputEvent, 0) == pdPASS) {
+    while (xQueueReceive(inputQueue, &e.inputEvent, 0) == pdPASS) {
         this->notifyObservers(&e);
     }
     return 10;

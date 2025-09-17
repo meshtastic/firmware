@@ -23,8 +23,8 @@ class RotaryEncoderImpl : public Observable<const InputEvent *>, public concurre
     void dispatchInputs(void);
     TaskHandle_t inputWorkerTask;
     static void inputWorker(void *p);
-    EventGroupHandle_t  interruptFlag;
-    static RotaryEncoderImpl* interruptInstance;
+    EventGroupHandle_t interruptFlag;
+    static RotaryEncoderImpl *interruptInstance;
 
     input_broker_event eventCw = INPUT_BROKER_NONE;
     input_broker_event eventCcw = INPUT_BROKER_NONE;
