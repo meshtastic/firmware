@@ -25,67 +25,66 @@ constexpr uint8_t modifierAltKey = 12 - 1;
 
 // Num chars per key, Modulus for rotating through characters
 // https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/1178/Sch_M5CardputerAdv_v1.0_2025_06_20_17_19_58_page_02.png
-static uint8_t CardputerAdvTapMod[_TCA8418_NUM_KEYS] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-                                                        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-                                                        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-                                                        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
+static uint8_t CardputerAdvTapMod[_TCA8418_NUM_KEYS] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+                                                        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+                                                        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
 
 static unsigned char CardputerAdvTapMap[_TCA8418_NUM_KEYS][3] = {{'`', '~', Key::ESC},
-                                                               {Key::TAB, 0x00, 0x00},
-                                                               {0x00, 0x00, 0x00},          // Fn
-                                                               {0x00, 0x00, 0x00},          // ctrl
-                                                               {'1', '!', 0x00},
-                                                               {'q', 'Q', Key::REBOOT},
-                                                               {0x00, 0x00, 0x00},          // shift
-                                                               {0x00, 0x00, 0x00},          // opt
-                                                               {'2', '@', 0x00},
-                                                               {'w', 'W', 0x00},
-                                                               {'a', 'A', 0x00},
-                                                               {0x00, 0x00, 0x00},          // alt
-                                                               {'3', '#', 0x00},
-                                                               {'e', 'E', 0x00},
-                                                               {'s', 'S', 0x00},
-                                                               {'z', 'Z', 0x00},
-                                                               {'4', '$', 0x00},
-                                                               {'r', 'R', 0x00},
-                                                               {'d', 'D', 0x00},
-                                                               {'x', 'X', 0x00},
-                                                               {'5', '%', 0x00},
-                                                               {'t', 'T', 0x00},
-                                                               {'f', 'F', 0x00},
-                                                               {'c', 'C', 0x00},
-                                                               {'6', '^', 0x00},
-                                                               {'y', 'Y', 0x00},
-                                                               {'g', 'G', Key::GPS_TOGGLE},
-                                                               {'v', 'V', 0x00},
-                                                               {'7', '&', 0x00},
-                                                               {'u', 'U', 0x00},
-                                                               {'h', 'H', 0x00},
-                                                               {'b', 'B', Key::BT_TOGGLE},
-                                                               {'8', '*', 0x00},
-                                                               {'i', 'I', 0x00},
-                                                               {'j', 'J', 0x00},
-                                                               {'n', 'n', 0x00},
-                                                               {'9', '(', 0x00},
-                                                               {'o', 'o', 0x00},
-                                                               {'k', 'k', 0x00},
-                                                               {'m', 'M', Key::MUTE_TOGGLE},
-                                                               {'0', ')', 0x00},
-                                                               {'p', 'P', Key::SEND_PING},
-                                                               {'l', 'L', 0x00},
-                                                               {',', '<', Key::LEFT},
-                                                               {'_', '-', 0x00},
-                                                               {'[', '{', 0x00},
-                                                               {';', ':', Key::UP},
-                                                               {'.', '>', Key::DOWN},
-                                                               {'=', '+', 0x00},
-                                                               {']', '}', 0x00},
-                                                               {'\'', '"', 0x00},
-                                                               {'/', '?', Key::RIGHT},
-                                                               {Key::BSP, 0x00, 0x00},
-                                                               {'\\', '|', 0x00},
-                                                               {Key::SELECT, 0x00, 0x00},   // Enter
-                                                               {' ', ' ', ' '}};            // Space
+                                                                 {Key::TAB, 0x00, 0x00},
+                                                                 {0x00, 0x00, 0x00}, // Fn
+                                                                 {0x00, 0x00, 0x00}, // ctrl
+                                                                 {'1', '!', 0x00},
+                                                                 {'q', 'Q', Key::REBOOT},
+                                                                 {0x00, 0x00, 0x00}, // shift
+                                                                 {0x00, 0x00, 0x00}, // opt
+                                                                 {'2', '@', 0x00},
+                                                                 {'w', 'W', 0x00},
+                                                                 {'a', 'A', 0x00},
+                                                                 {0x00, 0x00, 0x00}, // alt
+                                                                 {'3', '#', 0x00},
+                                                                 {'e', 'E', 0x00},
+                                                                 {'s', 'S', 0x00},
+                                                                 {'z', 'Z', 0x00},
+                                                                 {'4', '$', 0x00},
+                                                                 {'r', 'R', 0x00},
+                                                                 {'d', 'D', 0x00},
+                                                                 {'x', 'X', 0x00},
+                                                                 {'5', '%', 0x00},
+                                                                 {'t', 'T', 0x00},
+                                                                 {'f', 'F', 0x00},
+                                                                 {'c', 'C', 0x00},
+                                                                 {'6', '^', 0x00},
+                                                                 {'y', 'Y', 0x00},
+                                                                 {'g', 'G', Key::GPS_TOGGLE},
+                                                                 {'v', 'V', 0x00},
+                                                                 {'7', '&', 0x00},
+                                                                 {'u', 'U', 0x00},
+                                                                 {'h', 'H', 0x00},
+                                                                 {'b', 'B', Key::BT_TOGGLE},
+                                                                 {'8', '*', 0x00},
+                                                                 {'i', 'I', 0x00},
+                                                                 {'j', 'J', 0x00},
+                                                                 {'n', 'N', 0x00},
+                                                                 {'9', '(', 0x00},
+                                                                 {'o', 'O', 0x00},
+                                                                 {'k', 'K', 0x00},
+                                                                 {'m', 'M', Key::MUTE_TOGGLE},
+                                                                 {'0', ')', 0x00},
+                                                                 {'p', 'P', Key::SEND_PING},
+                                                                 {'l', 'L', 0x00},
+                                                                 {',', '<', Key::LEFT},
+                                                                 {'_', '-', 0x00},
+                                                                 {'[', '{', 0x00},
+                                                                 {';', ':', Key::UP},
+                                                                 {'.', '>', Key::DOWN},
+                                                                 {'=', '+', 0x00},
+                                                                 {']', '}', 0x00},
+                                                                 {'\'', '"', 0x00},
+                                                                 {'/', '?', Key::RIGHT},
+                                                                 {Key::BSP, 0x00, 0x00},
+                                                                 {'\\', '|', 0x00},
+                                                                 {Key::SELECT, 0x00, 0x00}, // Enter
+                                                                 {' ', ' ', ' '}};          // Space
 
 CardputerAdvKeyboard::CardputerAdvKeyboard()
     : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(-1), next_key(-1),
@@ -193,11 +192,11 @@ void CardputerAdvKeyboard::updateModifierFlag(uint8_t key)
     } else if (key == modifierFnKey) {
         modifierFlag ^= modifierFn;
     } else if (key == modifierCtrlKey) {
-        //modifierFlag ^= modifierCtrl;
+        // modifierFlag ^= modifierCtrl;
     } else if (key == modifierOptKey) {
-        //modifierFlag ^= modifierOpt;
+        // modifierFlag ^= modifierOpt;
     } else if (key == modifierAltKey) {
-        //modifierFlag ^= modifierAlt;
+        // modifierFlag ^= modifierAlt;
     }
 }
 
