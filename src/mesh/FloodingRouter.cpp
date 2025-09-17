@@ -25,13 +25,22 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
 
-        // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
-        // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
-        if (iface && p->hop_limit > 0) {
+        // For routers/repeaters, check if we should reprocess with better hop limit
+        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
+             config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) &&
+            iface && p->hop_limit > 0) {
+            // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
+            // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
             if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
-                LOG_DEBUG("Processing packet %d again for rebroadcast with better hop limit (%d)", p->hop_limit - 1);
+                LOG_DEBUG("Processing packet %d again for rebroadcast with better hop limit (%d)", p->id, p->hop_limit - 1);
                 return false;
             }
+        }
+
+        // Handle ROUTER_LATE specific logic
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+            iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
         }
 
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
