@@ -1,7 +1,7 @@
 #include "FloodingRouter.h"
-#include "meshUtils.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -28,14 +28,13 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
             // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
             if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
-                LOG_DEBUG("Processing upgraded packet %d for rebroadcast with better hop limit (%d)", p->id, p->hop_limit - 1);
+                LOG_DEBUG("Processing upgraded packet %u for rebroadcast with better hop limit (%d)", p->id, p->hop_limit - 1);
                 return false; // Reprocess for routing only, skip app delivery
             }
         }
 
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
-
 
         // Handle ROUTER_LATE specific logic. Do not send to the regular queue.
 

@@ -85,7 +85,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     // Check for hop_limit upgrade scenario
     if (seenRecently && wasUpgraded && found->hop_limit == 0 && p->hop_limit > 0) {
-        LOG_DEBUG("Packet History - Hop limit upgrade: packet %d from hop_limit=0 to hop_limit=%d", p->id, p->hop_limit);
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet %u from hop_limit=0 to hop_limit=%d", p->id, p->hop_limit);
         *wasUpgraded = true;
         seenRecently = false; // Allow router processing but prevent duplicate app delivery
     } else if (wasUpgraded) {
