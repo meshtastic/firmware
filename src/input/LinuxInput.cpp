@@ -73,7 +73,7 @@ int32_t LinuxInput::runOnce()
         int rd = read(events[i].data.fd, ev, sizeof(ev));
         assert(rd > ((signed int)sizeof(struct input_event)));
         for (int j = 0; j < rd / ((signed int)sizeof(struct input_event)); j++) {
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             e.kbchar = 0;
