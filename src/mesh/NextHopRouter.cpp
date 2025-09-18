@@ -1,4 +1,5 @@
 #include "NextHopRouter.h"
+#include "MeshTypes.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -38,6 +39,17 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
             rxDupe++;
             stopRetransmission(p->from, p->id);
+        }
+
+        // For routers/repeaters, check if we should reprocess with better hop limit
+        bool localIsRouter = IS_ONE_OF(
+            config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_REPEATER,
+            meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+        if (localIsRouter && iface && p->hop_limit > 0) {
+            if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
+                LOG_DEBUG("Processing packet %d again for relay with better hop limit (%d)", p->id, p->hop_limit - 1);
+                return false;
+            }
         }
 
         // If it was a fallback to flooding, try to relay again
