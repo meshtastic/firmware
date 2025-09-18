@@ -84,8 +84,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
 
     // Check for hop_limit upgrade scenario
-    if (seenRecently && wasUpgraded && found->hop_limit == 0 && p->hop_limit > 0) {
-        LOG_DEBUG("Packet History - Hop limit upgrade: packet %d from hop_limit=0 to hop_limit=%d", p->id, p->hop_limit);
+    if (seenRecently && wasUpgraded && found->hop_limit < p->hop_limit) {
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id, found->hop_limit,
+                  p->hop_limit);
         *wasUpgraded = true;
         seenRecently = false; // Allow router processing but prevent duplicate app delivery
     } else if (wasUpgraded) {
@@ -136,6 +137,11 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                       found->sender, found->id, found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
                       millis() - found->rxTimeMsec);
 #endif
+
+            // Preserve the highest hop_limit we've ever seen for this packet so upgrades aren't lost when a later copy has
+            // fewer hops remaining.
+            if (found->hop_limit > r.hop_limit)
+                r.hop_limit = found->hop_limit;
 
             // Add the existing relayed_by to the new record
             for (uint8_t i = 0; i < (NUM_RELAYERS - 1); i++) {
