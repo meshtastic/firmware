@@ -177,7 +177,7 @@ jobs:
 
       - name: Comment test results on PR
         if: github.event_name == 'pull_request' && needs.native-tests.result != 'skipped'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
