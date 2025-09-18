@@ -45,7 +45,8 @@ PacketHistory::~PacketHistory()
 }
 
 /** Update recentPackets and return true if we have already seen this packet */
-bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop,
+                                    bool *wasUpgraded)
 {
     if (!initOk()) {
         LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED!");
@@ -66,6 +67,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.id = p->id;
     r.sender = getFrom(p); // If 0 then use our ID
     r.next_hop = p->next_hop;
+    r.hop_limit = p->hop_limit;
     r.relayed_by[0] = p->relay_node;
 
     r.rxTimeMsec = millis(); //
@@ -80,6 +82,15 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
+
+    // Check for hop_limit upgrade scenario
+    if (seenRecently && wasUpgraded && found->hop_limit == 0 && p->hop_limit > 0) {
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet %d from hop_limit=0 to hop_limit=%d", p->id, p->hop_limit);
+        *wasUpgraded = true;
+        seenRecently = false; // Allow router processing but prevent duplicate app delivery
+    } else if (wasUpgraded) {
+        *wasUpgraded = false; // Initialize to false if not an upgrade
+    }
 
     if (seenRecently) {
         uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()); // Get our relay ID from our node number
