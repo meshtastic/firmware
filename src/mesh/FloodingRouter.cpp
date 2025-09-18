@@ -1,4 +1,5 @@
 #include "FloodingRouter.h"
+#include "MeshTypes.h"
 
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -26,10 +27,11 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         rxDupe++;
 
         // For routers/repeaters, check if we should reprocess with better hop limit
-        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
-             config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) &&
-            iface && p->hop_limit > 0) {
+        bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                        meshtastic_Config_DeviceConfig_Role_REPEATER,
+                                        meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                        meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+        if (localIsRouter && iface && p->hop_limit > 0) {
             // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
             // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
             if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
