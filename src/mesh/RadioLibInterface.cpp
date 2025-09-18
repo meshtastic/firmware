@@ -362,6 +362,21 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     }
 }
 
+/**
+ * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+ * @return Whether a pending packet was removed
+ */
+bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt)
+{
+    meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
+    if (p) {
+        LOG_DEBUG("Dropping pending-TX packet %d with hop limit %d", p->id, p->hop_limit);
+        packetPool.release(p);
+        return true;
+    }
+    return false;
+}
+
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
