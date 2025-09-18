@@ -1,7 +1,7 @@
 #include "FloodingRouter.h"
-#include "meshUtils.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -35,7 +35,6 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
-
 
         // Handle ROUTER_LATE specific logic. Do not send to the regular queue.
 

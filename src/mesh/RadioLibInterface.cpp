@@ -377,7 +377,6 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     return false;
 }
 
-
 /**
  * Remove a packet that is eligible for replacement from the TX queue
  */
