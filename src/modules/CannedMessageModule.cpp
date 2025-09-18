@@ -404,14 +404,14 @@ bool CannedMessageModule::isUpEvent(const InputEvent *event)
     return event->inputEvent == INPUT_BROKER_UP ||
            ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
              runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
-            event->inputEvent == INPUT_BROKER_ALT_PRESS);
+            (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS));
 }
 bool CannedMessageModule::isDownEvent(const InputEvent *event)
 {
     return event->inputEvent == INPUT_BROKER_DOWN ||
            ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
              runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
-            event->inputEvent == INPUT_BROKER_USER_PRESS);
+            (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS));
 }
 bool CannedMessageModule::isSelectEvent(const InputEvent *event)
 {
