@@ -41,8 +41,10 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     // Handle hop_limit upgrade scenario for routers
     if (wasUpgraded && IS_ROUTER_ROLE() && iface && p->hop_limit > 0) {
         // Upgrade detection bypasses the duplicate short-circuit so we replace the queued packet before exiting
-        if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
-            LOG_DEBUG("Processing upgraded packet 0x%08x for relay with better hop limit (%d)", p->id, p->hop_limit - 1);
+        uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
+        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for relay with hop limit %d (dropping queued < %d)", p->id, p->hop_limit,
+                      dropThreshold);
             return false; // Reprocess for routing only, skip app delivery
         }
     }

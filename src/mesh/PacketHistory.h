@@ -16,7 +16,7 @@ class PacketHistory
         PacketId id;
         uint32_t rxTimeMsec;              // Unix time in msecs - the time we received it,  0 means empty
         uint8_t next_hop;                 // The next hop asked for this packet
-        uint8_t hop_limit;                // The hop limit when we received this packet
+        uint8_t hop_limit;                // Highest hop limit observed for this packet
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
     };                                    // 4B + 4B + 4B + 1B + 1B + 3B = 17B (will be padded to 20B)
 

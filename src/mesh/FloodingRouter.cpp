@@ -30,8 +30,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         // wasSeenRecently() reports false in upgrade cases so we handle replacement before the duplicate short-circuit
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
-        if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
-            LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with better hop limit (%d)", p->id, p->hop_limit - 1);
+        uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
+        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
+                      p->hop_limit, dropThreshold);
             return false; // Reprocess for routing only, skip app delivery
         }
     }

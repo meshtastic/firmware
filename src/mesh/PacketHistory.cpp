@@ -138,6 +138,11 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                       millis() - found->rxTimeMsec);
 #endif
 
+            // Preserve the highest hop_limit we've ever seen for this packet so upgrades aren't lost when a later copy has
+            // fewer hops remaining.
+            if (found->hop_limit > r.hop_limit)
+                r.hop_limit = found->hop_limit;
+
             // Add the existing relayed_by to the new record
             for (uint8_t i = 0; i < (NUM_RELAYERS - 1); i++) {
                 if (found->relayed_by[i] != 0)
