@@ -1,6 +1,8 @@
 #define I2C_SDA 15
 #define I2C_SCL 16
 
+extern bool elecrow_v2; // false = v1, true = v2
+
 #if CROW_SELECT == 1
 #define WAKE_ON_TOUCH
 #define SCREEN_TOUCH_INT 47
@@ -72,7 +74,7 @@
 #define SENSOR_POWER_ON LOW
 #else
 // 4.3", 5.0", 7.0"
-#define LORA_CS 0
+#define LORA_CS (elecrow_v2 ? 8 : 0)
 #define LORA_SCK 5
 #define LORA_MISO 4
 #define LORA_MOSI 6
