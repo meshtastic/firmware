@@ -1,4 +1,6 @@
 #include "NextHopRouter.h"
+#include "MeshTypes.h"
+#include "meshUtils.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -32,7 +34,16 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     bool wasFallback = false;
     bool weWereNextHop = false;
-    if (wasSeenRecently(p, true, &wasFallback, &weWereNextHop)) { // Note: this will also add a recent packet record
+    bool wasUpgraded = false;
+    if (wasSeenRecently(p, true, &wasFallback, &weWereNextHop, &wasUpgraded)) { // Note: this will also add a recent packet record
+        // Handle hop_limit upgrade scenario for routers
+        if (wasUpgraded && IS_ROUTER_ROLE() && iface && p->hop_limit > 0) {
+            if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
+                LOG_DEBUG("Processing upgraded packet %d for relay with better hop limit (%d)", p->id, p->hop_limit - 1);
+                return false; // Reprocess for routing only, skip app delivery
+            }
+        }
+
         printPacket("Ignore dupe incoming msg", p);
 
         if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {

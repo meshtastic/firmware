@@ -36,3 +36,8 @@ bool isOneOf(int item, int count, ...);
 const std::string vformat(const char *const zcFormat, ...);
 
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)
+
+// Macro to check if the current device role is a router-type role
+#define IS_ROUTER_ROLE()                                                                                                         \
+    IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_REPEATER,      \
+              meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)

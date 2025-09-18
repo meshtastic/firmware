@@ -377,6 +377,12 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     return false;
 }
 
+
+/**
+ * Remove a packet that is eligible for replacement from the TX queue
+ */
+// void RadioLibInterface::removePending
+
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case

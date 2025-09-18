@@ -1,0 +1,144 @@
+diff --git a/src/mesh/FloodingRouter.cpp b/src/mesh/FloodingRouter.cpp
+index f805055c8..2e412f2f2 100644
+--- a/src/mesh/FloodingRouter.cpp
++++ b/src/mesh/FloodingRouter.cpp
+@@ -25,6 +25,24 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+         printPacket("Ignore dupe incoming msg", p);
+         rxDupe++;
+ 
++        // For routers/repeaters, check if we should reprocess with better hop limit
++        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
++             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
++             config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) &&
++            iface && p->hop_limit > 0) {
++            // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
++            // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
++            if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
++                LOG_DEBUG("Processing packet %d again for rebroadcast with better hop limit (%d)", p->id, p->hop_limit - 1);
++                return false;
++            }
++        }
++
++        // Handle ROUTER_LATE specific logic
++        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
++            iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
++        }
++
+         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
+         the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
+         bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+diff --git a/src/mesh/MeshPacketQueue.cpp b/src/mesh/MeshPacketQueue.cpp
+index a64678a7f..8d6397f95 100644
+--- a/src/mesh/MeshPacketQueue.cpp
++++ b/src/mesh/MeshPacketQueue.cpp
+@@ -103,12 +103,26 @@ meshtastic_MeshPacket *MeshPacketQueue::getFront()
+     return p;
+ }
+ 
++/** Attempt to find a packet in this queue. Returns a pointer to the found packet, or NULL if not found. */
++meshtastic_MeshPacket *MeshPacketQueue::find(NodeNum from, PacketId id)
++{
++    for (auto it = queue.begin(); it != queue.end(); it++) {
++        auto p = (*it);
++        if (getFrom(p) == from && p->id == id) {
++            return p;
++        }
++    }
++
++    return NULL;
++}
++
+ /** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
+-meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late)
++meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late, uint8_t hop_limit_lt)
+ {
+     for (auto it = queue.begin(); it != queue.end(); it++) {
+         auto p = (*it);
+-        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after))) {
++        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after)) &&
++            (!hop_limit_lt || p->hop_limit < hop_limit_lt)) {
+             queue.erase(it);
+             return p;
+         }
+diff --git a/src/mesh/MeshPacketQueue.h b/src/mesh/MeshPacketQueue.h
+index 1b338f9ed..5ed09e85e 100644
+--- a/src/mesh/MeshPacketQueue.h
++++ b/src/mesh/MeshPacketQueue.h
+@@ -35,8 +35,12 @@ class MeshPacketQueue
+ 
+     meshtastic_MeshPacket *getFront();
+ 
++    /** Attempt to find a packet in this queue. Returns a pointer to the found packet, or NULL if not found. */
++    meshtastic_MeshPacket *find(NodeNum from, PacketId id);
++
+     /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
+-    meshtastic_MeshPacket *remove(NodeNum from, PacketId id, bool tx_normal = true, bool tx_late = true);
++    meshtastic_MeshPacket *remove(NodeNum from, PacketId id, bool tx_normal = true, bool tx_late = true,
++                                  uint8_t hop_limit_lt = 0);
+ 
+     /* Attempt to find a packet from this queue. Return true if it was found. */
+     bool find(const NodeNum from, const PacketId id);
+diff --git a/src/mesh/RadioInterface.h b/src/mesh/RadioInterface.h
+index eff284747..2c362441a 100644
+--- a/src/mesh/RadioInterface.h
++++ b/src/mesh/RadioInterface.h
+@@ -189,6 +189,12 @@ class RadioInterface
+     /** If the packet is not already in the late rebroadcast window, move it there */
+     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
+ 
++    /**
++     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
++     * @return Whether a pending packet was removed
++     */
++    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) { return false; }
++
+     /**
+      * Calculate airtime per
+      * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+diff --git a/src/mesh/RadioLibInterface.cpp b/src/mesh/RadioLibInterface.cpp
+index 19d0f794a..0652ae371 100644
+--- a/src/mesh/RadioLibInterface.cpp
++++ b/src/mesh/RadioLibInterface.cpp
+@@ -362,6 +362,26 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
+     }
+ }
+ 
++/**
++ * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
++ * @return Whether a pending packet was removed
++ */
++bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt)
++{
++    meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
++    if (p) {
++        LOG_DEBUG("Dropping pending-TX packet %d with hop limit %d", p->id, p->hop_limit);
++        packetPool.release(p);
++        return true;
++    }
++    return false;
++}
++
++/**
++ * Remove a packet that is eligible for replacement from the TX queue
++ */
++// void RadioLibInterface::removePending
++
+ void RadioLibInterface::handleTransmitInterrupt()
+ {
+     // This can be null if we forced the device to enter standby mode.  In that case
+diff --git a/src/mesh/RadioLibInterface.h b/src/mesh/RadioLibInterface.h
+index 9f497812f..ec8debc6e 100644
+--- a/src/mesh/RadioLibInterface.h
++++ b/src/mesh/RadioLibInterface.h
+@@ -215,4 +215,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
+      * If the packet is not already in the late rebroadcast window, move it there
+      */
+     void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
++
++    /**
++     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
++     * @return Whether a pending packet was removed
++     */
++    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt);
+ };
+\ No newline at end of file
