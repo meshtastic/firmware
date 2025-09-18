@@ -103,8 +103,8 @@ meshtastic_MeshPacket *MeshPacketQueue::getFront()
     return p;
 }
 
-/** Attempt to find a packet in this queue. Returns a pointer to the found packet, or NULL if not found. */
-meshtastic_MeshPacket *MeshPacketQueue::find(NodeNum from, PacketId id)
+/** Get a packet from this queue. Returns a pointer to the packet, or NULL if not found. */
+meshtastic_MeshPacket *MeshPacketQueue::getPacketFromQueue(NodeNum from, PacketId id)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
@@ -134,14 +134,7 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
 /* Attempt to find a packet from this queue. Return true if it was found. */
 bool MeshPacketQueue::find(const NodeNum from, const PacketId id)
 {
-    for (auto it = queue.begin(); it != queue.end(); it++) {
-        const auto *p = *it;
-        if (getFrom(p) == from && p->id == id) {
-            return true;
-        }
-    }
-
-    return false;
+    return getPacketFromQueue(from, id) != NULL;
 }
 
 /**

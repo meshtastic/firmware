@@ -35,8 +35,8 @@ class MeshPacketQueue
 
     meshtastic_MeshPacket *getFront();
 
-    /** Attempt to find a packet in this queue. Returns a pointer to the found packet, or NULL if not found. */
-    meshtastic_MeshPacket *find(NodeNum from, PacketId id);
+    /** Get a packet from this queue. Returns a pointer to the packet, or NULL if not found. */
+    meshtastic_MeshPacket *getPacketFromQueue(NodeNum from, PacketId id);
 
     /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
     meshtastic_MeshPacket *remove(NodeNum from, PacketId id, bool tx_normal = true, bool tx_late = true,
