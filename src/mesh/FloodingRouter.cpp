@@ -1,4 +1,5 @@
 #include "FloodingRouter.h"
+#include "meshUtils.h"
 
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -26,10 +27,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         rxDupe++;
 
         // For routers/repeaters, check if we should reprocess with better hop limit
-        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
-             config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) &&
-            iface && p->hop_limit > 0) {
+        if (IS_ROUTER_ROLE() && iface && p->hop_limit > 0) {
             // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
             // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
             if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
@@ -38,7 +36,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             }
         }
 
-        // Handle ROUTER_LATE specific logic
+        // Handle ROUTER_LATE specific logic. Do not send to the regular queue.
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
             iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
         }
@@ -63,9 +61,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 {
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+    if (IS_ROUTER_ROLE()) {
         // ROUTER, REPEATER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
         return false;
