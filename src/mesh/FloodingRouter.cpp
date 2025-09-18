@@ -22,18 +22,21 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     bool wasUpgraded = false;
-    if (wasSeenRecently(p, true, nullptr, nullptr, &wasUpgraded)) { // Note: this will also add a recent packet record
-        // Handle hop_limit upgrade scenario for routers
-        if (wasUpgraded && IS_ROUTER_ROLE() && iface && p->hop_limit > 0) {
-            // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
-            // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
-            if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
-                LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with better hop limit (%d)", p->id,
-                          p->hop_limit - 1);
-                return false; // Reprocess for routing only, skip app delivery
-            }
-        }
+    bool seenRecently =
+        wasSeenRecently(p, true, nullptr, nullptr, &wasUpgraded); // Updates history; returns false when an upgrade is detected
 
+    // Handle hop_limit upgrade scenario for routers
+    if (wasUpgraded && IS_ROUTER_ROLE() && iface && p->hop_limit > 0) {
+        // wasSeenRecently() reports false in upgrade cases so we handle replacement before the duplicate short-circuit
+        // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
+        // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
+        if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with better hop limit (%d)", p->id, p->hop_limit - 1);
+            return false; // Reprocess for routing only, skip app delivery
+        }
+    }
+
+    if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
 
