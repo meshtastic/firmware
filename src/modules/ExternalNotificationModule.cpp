@@ -440,7 +440,7 @@ ExternalNotificationModule::ExternalNotificationModule()
 
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (moduleConfig.external_notification.enabled && !isMuted) {
+    if (moduleConfig.external_notification.enabled && !isSilenced) {
 #ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
@@ -451,11 +451,14 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
-            for (int i = 0; i < p.payload.size; i++) {
+            for (size_t i = 0; i < p.payload.size; i++) {
                 if (p.payload.bytes[i] == ASCII_BELL) {
                     containsBell = true;
                 }
             }
+
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+            meshtastic_Channel ch = channels.getByIndex(sender->channel ? sender->channel : channels.getPrimaryIndex());
 
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
@@ -507,7 +510,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message) {
+            if (moduleConfig.external_notification.alert_message && !sender->is_muted && !ch.settings.mute) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
                 setExternalState(0, true);
@@ -518,7 +521,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra) {
+            if (moduleConfig.external_notification.alert_message_vibra && !sender->is_muted && !ch.settings.mute) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
                 setExternalState(1, true);
@@ -529,7 +532,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer) {
+            if (moduleConfig.external_notification.alert_message_buzzer && !sender->is_muted && !ch.settings.mute) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 isNagging = true;
                 if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
