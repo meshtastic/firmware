@@ -43,7 +43,7 @@ void RotaryEncoderInterruptBase::init(
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
 
