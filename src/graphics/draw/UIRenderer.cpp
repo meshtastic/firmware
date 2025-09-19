@@ -117,10 +117,7 @@ void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, con
 
 // Draw GPS status coordinates
 void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps,
-                                    const char *mode) void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x,
-                                                                                          int16_t y,
-                                                                                          const meshtastic::GPSStatus *gps,
-                                                                                          const char *mode)
+                                    const char *mode)
 {
     auto gpsFormat = uiconfig.gps_format;
     char displayLine[32];
@@ -1377,4 +1374,5 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
 
 } // namespace graphics
 
+#endif // HAS_GPS
 #endif // HAS_SCREEN
