@@ -94,7 +94,7 @@ int32_t KbI2cBase::runOnce()
         while (keyCount--) {
             const BBQ10Keyboard::KeyEvent key = Q10keyboard.keyEvent();
             if ((key.key != 0x00) && (key.state == BBQ10Keyboard::StateRelease)) {
-                InputEvent e;
+                InputEvent e = {};
                 e.inputEvent = INPUT_BROKER_NONE;
                 e.source = this->_originName;
                 switch (key.key) {
@@ -191,7 +191,7 @@ int32_t KbI2cBase::runOnce()
     }
     case 0x37: { // MPR121
         MPRkeyboard.trigger();
-        InputEvent e;
+        InputEvent e = {};
 
         while (MPRkeyboard.hasEvent()) {
             char nextEvent = MPRkeyboard.dequeueEvent();
@@ -254,7 +254,7 @@ int32_t KbI2cBase::runOnce()
     }
     case 0x84: { // Adafruit TCA8418
         TCAKeyboard.trigger();
-        InputEvent e;
+        InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
             char nextEvent = TCAKeyboard.dequeueEvent();
             e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -354,7 +354,7 @@ int32_t KbI2cBase::runOnce()
         }
         if (PrintDataBuf != 0) {
             LOG_DEBUG("RAK14004 key 0x%x pressed", PrintDataBuf);
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_MATRIXKEY;
             e.source = this->_originName;
             e.kbchar = PrintDataBuf;
@@ -369,7 +369,7 @@ int32_t KbI2cBase::runOnce()
 
         if (i2cBus->available()) {
             char c = i2cBus->read();
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             switch (c) {
