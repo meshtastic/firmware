@@ -428,7 +428,8 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
     // Iterate all known presets
     for (int preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN; preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX;
          ++preset) {
-        const char *name = DisplayFormatters::getModemPresetDisplayName((meshtastic_Config_LoRaConfig_ModemPreset)preset, false);
+        const char *name =
+            DisplayFormatters::getModemPresetDisplayName((meshtastic_Config_LoRaConfig_ModemPreset)preset, false, false);
         if (!name)
             continue;
         if (strcmp(name, "Invalid") == 0)
