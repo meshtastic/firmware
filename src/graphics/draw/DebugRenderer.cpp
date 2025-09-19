@@ -693,32 +693,6 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->drawString(textX, getTextPositions(display)[line++], "World!");
 }
 
-// ****************************
-// * Chirpy Screen      *
-// ****************************
-void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-    int line = 1;
-    int iconX = SCREEN_WIDTH - chirpy_width - (chirpy_width / 3);
-    int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
-    int textX_offset = 10;
-    if (isHighResolution) {
-        iconX = SCREEN_WIDTH - chirpy_width_hirez - (chirpy_width_hirez / 3);
-        iconY = (SCREEN_HEIGHT - chirpy_height_hirez) / 2;
-        textX_offset = textX_offset * 4;
-        display->drawXbm(iconX, iconY, chirpy_width_hirez, chirpy_height_hirez, chirpy_hirez);
-    } else {
-        display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
-    }
-
-    int textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("Hello") / 2);
-    display->drawString(textX, getTextPositions(display)[line++], "Hello");
-    textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("World!") / 2);
-    display->drawString(textX, getTextPositions(display)[line++], "World!");
-}
 } // namespace DebugRenderer
 } // namespace graphics
 #endif
