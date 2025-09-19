@@ -1154,7 +1154,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
     }
 #endif
-#endif
 }
 
 #ifdef USERPREFS_OEM_TEXT
