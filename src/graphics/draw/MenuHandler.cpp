@@ -791,36 +791,40 @@ void menuHandler::GPSFormatMenu()
                                          isHighResolution ? "Universal Transverse Mercator" : "UTM",
                                          isHighResolution ? "Military Grid Reference System" : "MGRS",
                                          isHighResolution ? "Open Location Code" : "OLC",
-                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR"};
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 7;
+    bannerOptions.optionsCount = 8;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 2) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 3) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 4) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 5) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 6) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 7) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
             screen->runNow();
         }
     };
-    bannerOptions.InitialSelected = config.display.gps_format + 1;
+    bannerOptions.InitialSelected = uiconfig.gps_format + 1;
     screen->showOverlayBanner(bannerOptions);
 }
 #endif
