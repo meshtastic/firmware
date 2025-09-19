@@ -1602,6 +1602,9 @@ void loop()
 #endif
 
     service->loop();
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+    inputBroker->processInputEventQueue();
+#endif
 #if defined(LGFX_SDL)
     if (screen) {
         auto dispdev = screen->getDisplayDevice();
