@@ -81,6 +81,8 @@ class Screen
 #include <SSD1306Wire.h>
 #elif defined(USE_ST7789)
 #include <ST7789Spi.h>
+#elif defined(USE_SPISSD1306)
+#include <SSD1306Spi.h>
 #else
 // the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
@@ -669,6 +671,7 @@ class Screen : public concurrency::OSThread
             uint8_t nodelist_distance = 255;
             uint8_t nodelist_bearings = 255;
             uint8_t clock = 255;
+            uint8_t chirpy = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
             uint8_t lora = 255;
@@ -698,6 +701,7 @@ class Screen : public concurrency::OSThread
 #endif
         bool lora = false;
         bool show_favorites = false;
+        bool chirpy = true;
     } hiddenFrames;
 
     /// Try to start drawing ASAP

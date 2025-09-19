@@ -1128,6 +1128,15 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 #endif
 }
 
+TFTDisplay::~TFTDisplay()
+{
+    // Clean up allocated line pixel buffer to prevent memory leak
+    if (linePixelBuffer != nullptr) {
+        free(linePixelBuffer);
+        linePixelBuffer = nullptr;
+    }
+}
+
 // Write the buffer to the display memory
 void TFTDisplay::display(bool fromBlank)
 {

@@ -431,15 +431,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
 
-#ifdef T_LORA_PAGER
-    LOG_DEBUG("power down XL9555 io");
-    io.digitalWrite(EXPANDS_DRV_EN, LOW);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.digitalWrite(EXPANDS_KB_EN, LOW);
-    io.digitalWrite(EXPANDS_SD_EN, LOW);
-    io.digitalWrite(EXPANDS_GPIO_EN, LOW);
-#endif
-
     auto res = esp_sleep_enable_gpio_wakeup();
     if (res != ESP_OK) {
         LOG_ERROR("esp_sleep_enable_gpio_wakeup result %d", res);
@@ -479,14 +470,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (radioType == RF95_RADIO) {
         gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
     }
-#endif
-#ifdef T_LORA_PAGER
-    LOG_DEBUG("power up XL9555 io");
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
 #endif
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();

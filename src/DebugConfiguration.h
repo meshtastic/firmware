@@ -2,6 +2,12 @@
 
 #include "configuration.h"
 
+// Forward declarations
+#if defined(DEBUG_HEAP)
+class MemGet;
+extern MemGet memGet;
+#endif
+
 // DEBUG LED
 #ifndef LED_STATE_ON
 #define LED_STATE_ON 1
@@ -23,6 +29,7 @@
 #define MESHTASTIC_LOG_LEVEL_ERROR "ERROR"
 #define MESHTASTIC_LOG_LEVEL_CRIT "CRIT "
 #define MESHTASTIC_LOG_LEVEL_TRACE "TRACE"
+#define MESHTASTIC_LOG_LEVEL_HEAP "HEAP"
 
 #include "SerialConsole.h"
 
@@ -60,6 +67,25 @@
 #define LOG_CRIT(...)
 #define LOG_TRACE(...)
 #endif
+#endif
+
+#if defined(DEBUG_HEAP)
+#define LOG_HEAP(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__)
+
+// Macro-based heap debugging
+#define DEBUG_HEAP_BEFORE auto heapBefore = memGet.getFreeHeap();
+#define DEBUG_HEAP_AFTER(context, ptr)                                                                                           \
+    do {                                                                                                                         \
+        auto heapAfter = memGet.getFreeHeap();                                                                                   \
+        if (heapBefore != heapAfter) {                                                                                           \
+            LOG_HEAP("Alloc in %s pointer 0x%x, size: %u, free: %u", context, ptr, heapBefore - heapAfter, heapAfter);           \
+        }                                                                                                                        \
+    } while (0)
+
+#else
+#define LOG_HEAP(...)
+#define DEBUG_HEAP_BEFORE
+#define DEBUG_HEAP_AFTER(context, ptr)
 #endif
 
 /// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
