@@ -1,35 +1,19 @@
-name: CI
-concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+name: Merge Queue
+# Not sure how concurrency works in merge_queue, removing for now.
+# concurrency:
+#   group: merge-queue-${{ github.head_ref || github.run_id }}
+#   cancel-in-progress: true
 on:
-  # # Triggers the workflow on push but only for the main branches
-  push:
-    branches:
-      - master
-      - develop
-      - event/*
-    paths-ignore:
-      - "**.md"
-      - version.properties
+  # Merge group is a special trigger that is used to trigger the workflow when a merge group is created.
+  merge_group:
 
-  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
-  pull_request_target:
-    branches:
-      - master
-      - develop
-      - event/*
-    paths-ignore:
-      - "**.md"
-      #- "**.yml"
-
-  workflow_dispatch:
+env:
+  FAIL_FAST_PER_ARCH: true
 
 jobs:
   setup:
-    if: github.repository == 'meshtastic/firmware'
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         arch:
           - esp32
@@ -49,10 +33,6 @@ jobs:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
-      - name: Uncomment build epoch
-        shell: bash
-        run: |
-          sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
       - name: Generate matrix
         id: jsonStep
         run: |
@@ -75,7 +55,6 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
-    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -93,11 +72,11 @@ jobs:
   check:
     needs: setup
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix: ${{ fromJson(needs.setup.outputs.check) }}
 
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v5
       - name: Build base
@@ -109,7 +88,7 @@ jobs:
   build-esp32:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -120,7 +99,7 @@ jobs:
   build-esp32s3:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32s3) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -131,7 +110,7 @@ jobs:
   build-esp32c3:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32c3) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -142,7 +121,7 @@ jobs:
   build-esp32c6:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32c6) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -153,7 +132,7 @@ jobs:
   build-nrf52840:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.nrf52840) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -164,7 +143,7 @@ jobs:
   build-rp2040:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.rp2040) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -175,7 +154,7 @@ jobs:
   build-rp2350:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.rp2350) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -186,7 +165,7 @@ jobs:
   build-stm32:
     needs: [setup, version]
     strategy:
-      fail-fast: false
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH == true }}
       matrix: ${{ fromJson(needs.setup.outputs.stm32) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -210,11 +189,10 @@ jobs:
     secrets: inherit
 
   test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
+    if: ${{ !contains(github.ref_name, 'event/') }}
     uses: ./.github/workflows/test_native.yml
 
   docker-deb-amd64:
-    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -223,7 +201,6 @@ jobs:
       push: false
 
   docker-deb-amd64-tft:
-    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -233,7 +210,6 @@ jobs:
       pio_env: native-tft
 
   docker-alp-amd64:
-    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -242,7 +218,6 @@ jobs:
       push: false
 
   docker-alp-amd64-tft:
-    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -252,7 +227,6 @@ jobs:
       pio_env: native-tft
 
   docker-deb-arm64:
-    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -261,7 +235,6 @@ jobs:
       push: false
 
   docker-deb-armv7:
-    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -270,9 +243,7 @@ jobs:
       push: false
 
   gather-artifacts:
-    if: github.repository == 'meshtastic/firmware'
     # trunk-ignore(checkov/CKV2_GHA_1)
-    if: github.repository == 'meshtastic/firmware'
     permissions:
       contents: write
       pull-requests: write
@@ -372,7 +343,7 @@ jobs:
 
   release-artifacts:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
@@ -447,7 +418,7 @@ jobs:
           - rp2350
           - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [release-artifacts, version]
     steps:
       - name: Checkout

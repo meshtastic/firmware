@@ -387,7 +387,6 @@ void setup()
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
     io.pinMode(EXPANDS_SD_PULLEN, INPUT);
 #endif
-
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
     SPISettings spiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
@@ -544,6 +543,12 @@ void setup()
 #elif HAS_WIRE
     Wire.begin();
 #endif
+#endif
+
+#if defined(M5STACK_UNITC6L)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, 1);
+    c6l_init();
 #endif
 
 #ifdef PIN_LCD_RESET
@@ -879,7 +884,8 @@ void setup()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
+    defined(USE_SPISSD1306)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
@@ -1142,7 +1148,8 @@ void setup()
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
+    defined(USE_SPISSD1306)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
