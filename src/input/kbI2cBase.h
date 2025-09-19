@@ -9,14 +9,18 @@
 
 class TCA8418KeyboardBase;
 
-class KbI2cBase : public Observable<const InputEvent *>, public KbInterruptObserver, public concurrency::OSThread
+class KbI2cBase : public Observable<const InputEvent *>,
+                  public InputPollable,
+                  public KbInterruptObserver,
+                  public concurrency::OSThread
 {
   public:
     explicit KbI2cBase(const char *name);
+    virtual void pollOnce() override;
 
   protected:
+    virtual int onNotify(KbInterruptObservable *src) override;
     virtual int32_t runOnce() override;
-    virtual int onNotify(KbInterruptObservable* src) override;
 
   private:
     const char *_originName;
@@ -26,6 +30,5 @@ class KbI2cBase : public Observable<const InputEvent *>, public KbInterruptObser
     BBQ10Keyboard Q10keyboard;
     MPR121Keyboard MPRkeyboard;
     TCA8418KeyboardBase &TCAKeyboard;
-    volatile uint8_t pendingInterruptCount = 0;
     bool is_sym = false;
 };

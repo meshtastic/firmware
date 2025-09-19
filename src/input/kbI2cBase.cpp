@@ -44,9 +44,104 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
     return readflag;
 }
 
+void KbI2cBase::pollOnce()
+{
+    // Called right after an interrupt by InputBroker
+    switch (kb_model) {
+    case 0x84: { // Adafruit TCA8418
+        TCAKeyboard.trigger();
+        InputEvent e = {};
+        while (TCAKeyboard.hasEvent()) {
+            char nextEvent = TCAKeyboard.dequeueEvent();
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0x00;
+            e.source = this->_originName;
+            switch (nextEvent) {
+            case TCA8418KeyboardBase::NONE:
+                e.inputEvent = INPUT_BROKER_NONE;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::REBOOT:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_REBOOT;
+                break;
+            case TCA8418KeyboardBase::LEFT:
+                e.inputEvent = INPUT_BROKER_LEFT;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::UP:
+                e.inputEvent = INPUT_BROKER_UP;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::DOWN:
+                e.inputEvent = INPUT_BROKER_DOWN;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::RIGHT:
+                e.inputEvent = INPUT_BROKER_RIGHT;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::BSP:
+                e.inputEvent = INPUT_BROKER_BACK;
+                e.kbchar = 0x08;
+                break;
+            case TCA8418KeyboardBase::SELECT:
+                e.inputEvent = INPUT_BROKER_SELECT;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::ESC:
+                e.inputEvent = INPUT_BROKER_CANCEL;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::GPS_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_GPS_TOGGLE;
+                break;
+            case TCA8418KeyboardBase::SEND_PING:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_SEND_PING;
+                break;
+            case TCA8418KeyboardBase::MUTE_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE;
+                break;
+            case TCA8418KeyboardBase::BT_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
+                break;
+            case TCA8418KeyboardBase::BL_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
+                break;
+            case TCA8418KeyboardBase::TAB:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_TAB;
+                break;
+            default:
+                if (nextEvent > 127) {
+                    e.inputEvent = INPUT_BROKER_NONE;
+                    e.kbchar = 0x00;
+                    break;
+                }
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = nextEvent;
+                break;
+            }
+            if (e.inputEvent != INPUT_BROKER_NONE) {
+                LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
+                inputBroker->queueInputEvent(&e);
+            }
+        }
+        break;
+    }
+    default:
+        LOG_WARN("Unknown kb_model 0x%02x", kb_model);
+    }
+}
+
 int32_t KbI2cBase::runOnce()
 {
-    int32_t newInterval = 300;
+    // Called periodically at 300ms interval
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
@@ -62,6 +157,8 @@ int32_t KbI2cBase::runOnce()
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
                 TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire1);
+                // Disable polling via OSThread, we use interrupts instead
+                disable();
                 observe(&TCAKeyboard);
             }
             break;
@@ -78,6 +175,8 @@ int32_t KbI2cBase::runOnce()
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
                 TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire);
+                // Disable polling via OSThread, we use interrupts instead
+                disable();
                 observe(&TCAKeyboard);
             }
             break;
@@ -246,93 +345,6 @@ int32_t KbI2cBase::runOnce()
             }
             if (e.inputEvent != INPUT_BROKER_NONE) {
                 LOG_DEBUG("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
-                this->notifyObservers(&e);
-            }
-        }
-        break;
-    }
-    case 0x84: { // Adafruit TCA8418
-        newInterval = 3000;  // Less polling, we have interrupts with onNotify()
-        TCAKeyboard.trigger();
-        InputEvent e = {};
-        while (TCAKeyboard.hasEvent()) {
-            char nextEvent = TCAKeyboard.dequeueEvent();
-            e.inputEvent = INPUT_BROKER_ANYKEY;
-            e.kbchar = 0x00;
-            e.source = this->_originName;
-            switch (nextEvent) {
-            case TCA8418KeyboardBase::NONE:
-                e.inputEvent = INPUT_BROKER_NONE;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::REBOOT:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_REBOOT;
-                break;
-            case TCA8418KeyboardBase::LEFT:
-                e.inputEvent = INPUT_BROKER_LEFT;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::UP:
-                e.inputEvent = INPUT_BROKER_UP;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::DOWN:
-                e.inputEvent = INPUT_BROKER_DOWN;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::RIGHT:
-                e.inputEvent = INPUT_BROKER_RIGHT;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::BSP:
-                e.inputEvent = INPUT_BROKER_BACK;
-                e.kbchar = 0x08;
-                break;
-            case TCA8418KeyboardBase::SELECT:
-                e.inputEvent = INPUT_BROKER_SELECT;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::ESC:
-                e.inputEvent = INPUT_BROKER_CANCEL;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::GPS_TOGGLE:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_GPS_TOGGLE;
-                break;
-            case TCA8418KeyboardBase::SEND_PING:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_SEND_PING;
-                break;
-            case TCA8418KeyboardBase::MUTE_TOGGLE:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE;
-                break;
-            case TCA8418KeyboardBase::BT_TOGGLE:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
-                break;
-            case TCA8418KeyboardBase::BL_TOGGLE:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
-                break;
-            case TCA8418KeyboardBase::TAB:
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_TAB;
-                break;
-            default:
-                if (nextEvent > 127) {
-                    e.inputEvent = INPUT_BROKER_NONE;
-                    e.kbchar = 0x00;
-                    break;
-                }
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = nextEvent;
-                break;
-            }
-            if (e.inputEvent != INPUT_BROKER_NONE) {
-                LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
         }
@@ -521,17 +533,12 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
-
-    // If new interrupt triggered while we were processing the previous, reinvoke with 0 interval right away
-    if (pendingInterruptCount) pendingInterruptCount--;
-    if (pendingInterruptCount) return 0;
-
-    return newInterval;
+    return 300;
 }
 
-int KbI2cBase::onNotify(KbInterruptObservable* src)
+int KbI2cBase::onNotify(KbInterruptObservable *src)
 {
-    pendingInterruptCount++;
-    setInterval(0);
+    // Called from interrupt context, request polling after exiting the ISR
+    inputBroker->pollSoonRequestFromIsr(this);
     return 0;
 }
