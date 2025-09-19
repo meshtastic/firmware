@@ -216,9 +216,11 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     }
 
     // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
+        inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
         curSelected--;
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
+               inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         alertBannerCallback(selectedNodenum);
@@ -333,9 +335,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // Handle input
     if (alertBannerOptions > 0) {
-        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
+            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
-        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
+                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
         } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
             if (optionsEnumPtr != nullptr) {
