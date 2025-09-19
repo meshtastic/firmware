@@ -272,6 +272,7 @@ jobs:
   gather-artifacts:
     if: github.repository == 'meshtastic/firmware'
     # trunk-ignore(checkov/CKV2_GHA_1)
+    if: github.repository == 'meshtastic/firmware'
     permissions:
       contents: write
       pull-requests: write
