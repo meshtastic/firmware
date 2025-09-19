@@ -11,10 +11,10 @@
 // Use different pin with 3V and connect with 48
 // and change this setup for the chosen pin (for example 38)
 // static const uint8_t LED_BUILTIN = SOC_GPIO_PIN_COUNT + 48;
-//#define BUILTIN_LED LED_BUILTIN // backward compatibility
-//#define LED_BUILTIN LED_BUILTIN
-//#define RGB_BUILTIN LED_BUILTIN
-//#define RGB_BRIGHTNESS 64
+// #define BUILTIN_LED LED_BUILTIN // backward compatibility
+// #define LED_BUILTIN LED_BUILTIN
+// #define RGB_BUILTIN LED_BUILTIN
+// #define RGB_BRIGHTNESS 64
 
 static const uint8_t TXD2 = 13;
 static const uint8_t RXD2 = 15;
@@ -22,9 +22,8 @@ static const uint8_t RXD2 = 15;
 static const uint8_t SDA = 8;
 static const uint8_t SCL = 9;
 
-
 // external & microSD
-static const uint8_t SS = 5;    // external SS
+static const uint8_t SS = 5; // external SS
 static const uint8_t MOSI = 14;
 static const uint8_t MISO = 39;
 static const uint8_t SCK = 40;
