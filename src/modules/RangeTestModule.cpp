@@ -299,9 +299,14 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
     fileToAppend.flush();
     fileToAppend.close();
-#endif
 
     return 1;
+
+#else
+    LOG_ERROR("Failed to store range test results - feature only available for ESP32");
+
+    return 0;
+#endif
 }
 
 bool RangeTestModuleRadio::removeFile()
@@ -325,7 +330,11 @@ bool RangeTestModuleRadio::removeFile()
         return 0;
     }
     LOG_INFO("Range test removed.");
-#endif
 
     return 1;
+#else
+    LOG_ERROR("Failed to remove range test results - feature only available for ESP32");
+
+    return 0;
+#endif
 }
