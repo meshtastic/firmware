@@ -1184,6 +1184,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
     }
 #endif
+#endif // HAS_GPS
 }
 
 #ifdef USERPREFS_OEM_TEXT
@@ -1374,5 +1375,4 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
 
 } // namespace graphics
 
-#endif // HAS_GPS
 #endif // HAS_SCREEN
