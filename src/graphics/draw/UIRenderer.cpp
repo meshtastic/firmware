@@ -1056,45 +1056,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         display->drawString(x, getTextPositions(display)[line++] + 2, latStr);
 #else
         snprintf(latStr, sizeof(latStr), " Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-        // === Second Row: Last GPS Fix ===
-        if (gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
-            uint32_t days = delta / 86400;
-            uint32_t hours = (delta % 86400) / 3600;
-            uint32_t mins = (delta % 3600) / 60;
-            uint32_t secs = delta % 60;
-
-            char buf[32];
-#if defined(USE_EINK)
-            // E-Ink: skip seconds, show only days/hours/mins
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
-            } else {
-                snprintf(buf, sizeof(buf), " Last: %um", mins);
-            }
-#else
-            // Non E-Ink: include seconds where useful
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
-            } else if (mins > 0) {
-                snprintf(buf, sizeof(buf), "Last: %um %us", mins, secs);
-            } else {
-                snprintf(buf, sizeof(buf), "Last: %us", secs);
-            }
-#endif
-
-            display->drawString(0, getTextPositions(display)[line++], buf);
-        } else {
-            display->drawString(0, getTextPositions(display)[line++], "Last: ?");
-        }
-
-        // === Third Row: Latitude ===
-        char latStr[32];
-        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], latStr);
 #endif
 
@@ -1105,7 +1066,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         display->drawString(x, getTextPositions(display)[line++] + 4, lonStr);
 #else
         snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
         // === Fifth Row: Altitude ===
