@@ -438,7 +438,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_SERIAL 1
 #define MESHTASTIC_EXCLUDE_POWERSTRESS 1
 #define MESHTASTIC_EXCLUDE_ADMIN 1
-#define MESHTASTIC_EXCLUDE_AMBIENTLIGHTING 1
 #endif
 
 // // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)

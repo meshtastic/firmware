@@ -446,7 +446,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(nameX, getTextPositions(display)[line++], frequencyslot);
 
 #if !defined(M5STACK_UNITC6L)
-    // === Fourth Row: Channel Utilization ===
+    // === Fifth Row: Channel Utilization ===
     const char *chUtil = "ChUtil:";
     char chUtilPercentage[10];
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
