@@ -20,7 +20,7 @@
 
 // External variables
 extern graphics::Screen *screen;
-
+static uint32_t lastSwitchTime = 0;
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
@@ -232,7 +232,6 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-
     if (favoritedNodes.empty())
         return;
 
@@ -244,8 +243,15 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
     if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
         return;
-
+    uint32_t now = millis();
     display->clear();
+#if defined(M5STACK_UNITC6L)
+    if (now - lastSwitchTime >= 10000) // 10000 ms = 10 秒
+    {
+        display->display();
+        lastSwitchTime = now;
+    }
+#endif
     currentFavoriteNodeNum = node->num;
     // === Create the shortName and title string ===
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
@@ -264,9 +270,13 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     // List of available macro Y positions in order, from top to bottom.
     int line = 1; // which slot to use next
     std::string usernameStr;
-
     // === 1. Long Name (always try to show first) ===
+#if defined(M5STACK_UNITC6L)
+    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.short_name : nullptr;
+#else
     const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+#endif
+
     if (username) {
         usernameStr = sanitizeString(username); // Sanitize the incoming long_name just in case
         // Print node's long name (e.g. "Backpack Node")
@@ -321,7 +331,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     if (seenStr[0] && line < 5) {
         display->drawString(x, getTextPositions(display)[line++], seenStr);
     }
-
+#if !defined(M5STACK_UNITC6L)
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
@@ -493,6 +503,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         }
         // else show nothing
     }
+#endif
 }
 
 // ****************************
@@ -506,7 +517,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int line = 1;
 
     // === Header ===
+#if defined(M5STACK_UNITC6L)
+    graphics::drawCommonHeader(display, x, y, "Home");
+#else
     graphics::drawCommonHeader(display, x, y, "");
+#endif
 
     // === Content below header ===
 
@@ -521,20 +536,25 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     config.display.heading_bold = false;
 
     // Display Region and Channel Utilization
+#if defined(M5STACK_UNITC6L)
+    drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+#else
     drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
-
+#endif
     char uptimeStr[32] = "";
     uint32_t uptime = millis() / 1000;
     uint32_t days = uptime / 86400;
     uint32_t hours = (uptime % 86400) / 3600;
     uint32_t mins = (uptime % 3600) / 60;
     // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
+#if !defined(M5STACK_UNITC6L)
     if (days)
         snprintf(uptimeStr, sizeof(uptimeStr), "Up: %ud %uh", days, hours);
     else if (hours)
         snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
     else
         snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
+#endif
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
     // === Second Row: Satellites and Voltage ===
@@ -563,6 +583,21 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 #endif
 
+#if defined(M5STACK_UNITC6L)
+    line += 1;
+
+    // === Node Identity ===
+    int textWidth = 0;
+    int nameX = 0;
+    char shortnameble[35];
+    snprintf(shortnameble, sizeof(shortnameble), "%s",
+             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    // === ShortName Centered ===
+    textWidth = display->getStringWidth(shortnameble);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
+#else
     if (powerStatus->getHasBattery()) {
         char batStr[20];
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
@@ -688,6 +723,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
     }
+#endif
 }
 
 // Start Functions to write date/time to the screen
@@ -846,6 +882,28 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     // needs to be drawn relative to x and y
 
     // draw centered icon left to right and centered above the one line of app text
+#if defined(M5STACK_UNITC6L)
+    display->drawXbm(x + (SCREEN_WIDTH - 50) / 2, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
+    display->setFont(FONT_MEDIUM);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    // Draw region in upper left
+    if (upperMsg) {
+        int msgWidth = display->getStringWidth(upperMsg);
+        int msgX = x + (SCREEN_WIDTH - msgWidth) / 2;
+        int msgY = y;
+        display->drawString(msgX, msgY, upperMsg);
+    }
+    // Draw version and short name in bottom middle
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s   %s", xstr(APP_VERSION_SHORT),
+             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->drawString(x + getStringCenteredX(buf), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, buf);
+    screen->forceDisplay();
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+#else
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
                      icon_width, icon_height, icon_bits);
 
@@ -854,7 +912,6 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     const char *title = "meshtastic.org";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
-
     // Draw region in upper left
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
@@ -869,6 +926,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+#endif
 }
 
 // ****************************
@@ -1011,8 +1069,9 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
         }
         display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
+#endif
     }
-
+#if !defined(M5STACK_UNITC6L)
     // === Draw Compass if heading is valid ===
     if (validHeading) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
@@ -1094,6 +1153,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
         }
     }
+#endif
 #endif
 }
 
@@ -1251,7 +1311,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(WHITE);
         }
     }
-
     // Knock the corners off the square
     display->setColor(BLACK);
     display->drawRect(rectX, y - 2, 1, 1);
