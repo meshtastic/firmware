@@ -10,20 +10,14 @@
 
 class RotaryEncoder;
 
-class RotaryEncoderImpl : public Observable<const InputEvent *>, public concurrency::OSThread
+class RotaryEncoderImpl : public InputPollable
 {
   public:
     RotaryEncoderImpl();
     bool init(void);
+    virtual void pollOnce() override;
 
   protected:
-    virtual int32_t runOnce() override;
-
-    QueueHandle_t inputQueue;
-    void dispatchInputs(void);
-    TaskHandle_t inputWorkerTask;
-    static void inputWorker(void *p);
-    EventGroupHandle_t interruptFlag;
     static RotaryEncoderImpl *interruptInstance;
 
     input_broker_event eventCw = INPUT_BROKER_NONE;
@@ -31,7 +25,6 @@ class RotaryEncoderImpl : public Observable<const InputEvent *>, public concurre
     input_broker_event eventPressed = INPUT_BROKER_NONE;
 
     RotaryEncoder *rotary;
-    const char *originName;
 };
 
 extern RotaryEncoderImpl *rotaryEncoderImpl;
