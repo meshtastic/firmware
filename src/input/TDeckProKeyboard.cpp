@@ -62,7 +62,8 @@ static const uint8_t TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
 static bool TDeckProHeldMap[_TCA8418_NUM_KEYS] = {};
 
 TDeckProKeyboard::TDeckProKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false), persistedPreviousModifier(false)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false),
+      persistedPreviousModifier(false)
 {
 }
 

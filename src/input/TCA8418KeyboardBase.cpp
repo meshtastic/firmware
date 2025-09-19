@@ -32,8 +32,7 @@
 #define _TCA8418_REG_LCK_EC_KLEC_0 0x01   // Key event count bit 0
 
 TCA8418KeyboardBase::TCA8418KeyboardBase(uint8_t rows, uint8_t columns)
-    : rows(rows), columns(columns), queue(""), m_wire(nullptr), m_addr(0), readCallback(nullptr),
-      writeCallback(nullptr)
+    : rows(rows), columns(columns), queue(""), m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
 }
 
@@ -46,9 +45,7 @@ void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire)
 
 #ifdef KB_INT
     interruptInstance = this;
-    auto interruptHandler = []() {
-        interruptInstance->notifyObservers(interruptInstance);
-    };
+    auto interruptHandler = []() { interruptInstance->notifyObservers(interruptInstance); };
 
     ::pinMode(KB_INT, INPUT_PULLUP);
     attachInterrupt(KB_INT, interruptHandler, FALLING);
@@ -309,7 +306,7 @@ void TCA8418KeyboardBase::disableInterrupts()
     writeRegister(TCA8418_REG_CFG, value);
 };
 
-TCA8418KeyboardBase* TCA8418KeyboardBase::interruptInstance;
+TCA8418KeyboardBase *TCA8418KeyboardBase::interruptInstance;
 
 void TCA8418KeyboardBase::enableMatrixOverflow()
 {

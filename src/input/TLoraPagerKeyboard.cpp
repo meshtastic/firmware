@@ -67,7 +67,8 @@ static const uint8_t TLoraPagerTapMap[_TCA8418_NUM_KEYS][3] = {
 static bool TLoraPagerHeldMap[_TCA8418_NUM_KEYS] = {};
 
 TLoraPagerKeyboard::TLoraPagerKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false), persistedPreviousModifier(false)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false),
+      persistedPreviousModifier(false)
 {
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     ledcAttach(KB_BL_PIN, LEDC_BACKLIGHT_FREQ, LEDC_BACKLIGHT_BIT_WIDTH);
