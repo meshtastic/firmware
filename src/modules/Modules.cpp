@@ -4,7 +4,7 @@
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #ifdef T_LORA_PAGER
-#include "input/RotaryEncoderImpl.h"
+#include "input/TLoraPagerRotaryEncoder.h"
 #endif
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
@@ -185,10 +185,10 @@ void setupModules()
             }
 #ifdef T_LORA_PAGER
             // use a special FSM based rotary encoder version for T-LoRa Pager
-            rotaryEncoderImpl = new RotaryEncoderImpl();
-            if (!rotaryEncoderImpl->init()) {
-                delete rotaryEncoderImpl;
-                rotaryEncoderImpl = nullptr;
+            tLoraPagerRotaryEncoder = new TLoraPagerRotaryEncoder();
+            if (!tLoraPagerRotaryEncoder->init()) {
+                delete tLoraPagerRotaryEncoder;
+                tLoraPagerRotaryEncoder = nullptr;
             }
 #else
             upDownInterruptImpl1 = new UpDownInterruptImpl1();
