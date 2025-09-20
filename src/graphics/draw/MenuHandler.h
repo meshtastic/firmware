@@ -84,6 +84,7 @@ class menuHandler
     static void screenOptionsMenu();
     static void powerMenu();
     static void FrameToggles_menu();
+    static void textMessageMenu();
 
   private:
     static void saveUIConfig();
