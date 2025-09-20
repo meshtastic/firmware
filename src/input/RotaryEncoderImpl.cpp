@@ -1,3 +1,4 @@
+#include "configuration.h"
 #if defined(T_LORA_PAGER) || defined(FSM_ROTARY_ENCODER)
 
 #include "RotaryEncoderImpl.h"
