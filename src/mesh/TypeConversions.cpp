@@ -53,6 +53,7 @@ meshtastic_PositionLite TypeConversions::ConvertToPositionLite(meshtastic_Positi
     lite.altitude = position.altitude;
     lite.location_source = position.location_source;
     lite.time = position.time;
+    lite.precision_bits = position.precision_bits;
 
     return lite;
 }
@@ -71,6 +72,7 @@ meshtastic_Position TypeConversions::ConvertToPosition(meshtastic_PositionLite l
     position.altitude = lite.altitude;
     position.location_source = lite.location_source;
     position.time = lite.time;
+    position.precision_bits = lite.precision_bits;
 
     return position;
 }
