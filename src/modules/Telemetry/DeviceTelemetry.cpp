@@ -27,7 +27,8 @@ int32_t DeviceTelemetryModule::runOnce()
                                                   default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
+        moduleConfig.telemetry.device_telemetry_enabled) {
         sendTelemetry();
         lastSentToMesh = uptimeLastMs;
     } else if (service->isToPhoneQueueEmpty()) {
