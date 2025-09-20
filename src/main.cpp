@@ -827,6 +827,13 @@ void setup()
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
+#ifdef IMU_CS
+    else {
+        // No I2C accelerometer found; try the SPI-based QMI8658 if present on this board
+        LOG_INFO("No I2C accelerometer; enabling SPI QMI8658 driver");
+        accelerometerThread = new AccelerometerThread(ScanI2C::DeviceType::QMI8658);
+    }
+#endif
 #endif
 
 #if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)

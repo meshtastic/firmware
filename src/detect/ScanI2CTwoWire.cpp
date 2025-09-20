@@ -171,6 +171,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #else
         err = i2cBus->endTransmission();
 #endif
+        // Some boards power the motion sensor from a freshly-enabled rail.
+        // Give QMI8658/LSM6DS3 a short grace period and retry once if not ready.
+        if ((addr.address == QMI8658_ADDR || addr.address == LSM6DS3_ADDR) && err != 0) {
+            delay(250);
+            i2cBus->beginTransmission(addr.address);
+            err = i2cBus->endTransmission();
+        }
         type = NONE;
         if (err == 0) {
             switch (addr.address) {
@@ -407,6 +414,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
 
             case QMI8658_ADDR:
+            case LSM6DS3_ADDR: // 0x6A can be LSM6DS3 or QMI8658
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
                 if (registerValue == 0xC0) {
                     type = BQ24295;
@@ -460,7 +468,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
+                // Handled above together with QMI8658/LSM6DS3 detection
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
             case TSL25911_ADDR:
@@ -568,6 +576,78 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         if (type != NONE) {
             deviceAddresses[type] = addr;
             foundDevices[addr] = type;
+        }
+    }
+
+    // IMU-only late rescan: If neither QMI8658 nor LSM6DS3 was detected on this port,
+    // wait a bit longer and probe just 0x6A/0x6B again.
+    bool imuDetectedOnThisPort = false;
+    for (auto const &kv : foundDevices) {
+        if (kv.first.port == port && (kv.second == LSM6DS3 || kv.second == QMI8658)) {
+            imuDetectedOnThisPort = true;
+            break;
+        }
+    }
+
+    if (!imuDetectedOnThisPort) {
+        LOG_DEBUG("IMU late probe: rescan 0x6a/0x6b on port %d", port);
+        delay(700);
+
+        auto probeAddr = [&](uint8_t a) -> uint8_t {
+            i2cBus->beginTransmission(a);
+            return i2cBus->endTransmission();
+        };
+
+        // Try 0x6A (LSM6DS3/QMI8658 alt) then 0x6B (QMI8658/chargers)
+        uint8_t imuAddrs[2] = {LSM6DS3_ADDR, QMI8658_ADDR};
+        for (uint8_t i = 0; i < 2; ++i) {
+            uint8_t a = imuAddrs[i];
+            DeviceAddress lateAddr(port, a);
+            if (foundDevices.find(lateAddr) != foundDevices.end())
+                continue; // already identified something here
+
+            uint8_t e = probeAddr(a);
+            if (e == 0) {
+                ScanI2C::DeviceType lateType = NONE;
+                uint16_t rv = 0;
+
+                if (a == QMI8658_ADDR) {
+                    // Exclude chargers at 0x6B first
+                    rv = getRegisterValue(RegisterLocation(lateAddr, 0x0A), 1);
+                    if (rv == 0xC0) {
+                        lateType = BQ24295;
+                        logFoundDevice("BQ24295", a);
+                    } else {
+                        rv = getRegisterValue(RegisterLocation(lateAddr, 0x14), 1);
+                        if ((rv & 0b00000011) == 0b00000010) {
+                            lateType = BQ25896;
+                            logFoundDevice("BQ25896", a);
+                        }
+                    }
+                }
+
+                if (lateType == NONE) {
+                    // Distinguish IMU identity by WHO_AM_I register at 0x0F
+                    rv = getRegisterValue(RegisterLocation(lateAddr, 0x0F), 1);
+                    if (rv == 0x6A) {
+                        lateType = LSM6DS3;
+                        logFoundDevice("LSM6DS3", a);
+                    } else {
+                        lateType = QMI8658;
+                        logFoundDevice("QMI8658", a);
+                    }
+                }
+
+                if (lateType != NONE) {
+                    deviceAddresses[lateType] = lateAddr;
+                    foundDevices[lateAddr] = lateType;
+                    imuDetectedOnThisPort = imuDetectedOnThisPort || (lateType == LSM6DS3 || lateType == QMI8658);
+                }
+            }
+        }
+
+        if (!imuDetectedOnThisPort) {
+            LOG_INFO("IMU late probe: no response at 0x6a or 0x6b on port %d", port);
         }
     }
 }
