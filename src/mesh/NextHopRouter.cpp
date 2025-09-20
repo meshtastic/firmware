@@ -1,4 +1,6 @@
 #include "NextHopRouter.h"
+#include "MeshTypes.h"
+#include "meshUtils.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -32,7 +34,37 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     bool wasFallback = false;
     bool weWereNextHop = false;
-    if (wasSeenRecently(p, true, &wasFallback, &weWereNextHop)) { // Note: this will also add a recent packet record
+    bool wasUpgraded = false;
+    bool seenRecently = wasSeenRecently(p, true, &wasFallback, &weWereNextHop,
+                                        &wasUpgraded); // Updates history; returns false when an upgrade is detected
+
+    // Handle hop_limit upgrade scenario for rebroadcasters
+    // isRebroadcaster() is duplicated in perhapsRelay(), but this avoids confusing log messages
+    if (wasUpgraded && isRebroadcaster() && iface && p->hop_limit > 0) {
+        // Upgrade detection bypasses the duplicate short-circuit so we replace the queued packet before exiting
+        uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
+        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for relay with hop limit %d (dropping queued < %d)", p->id, p->hop_limit,
+                      dropThreshold);
+
+            // Re-run modules on the fresher copy so they track the updated route before we relay again
+            // This is for traceeroute - other modules will dedupe from (from, id) pairs or just overwrite
+            // with the new copy. This loses efficiency, but upgrading packets should be an edge case.
+            meshtastic_MeshPacket *processed = packetPool.allocCopy(*p);
+            if (processed) {
+                processForModules(processed, RX_SRC_RADIO, true); // keep this duplicate away from the phone
+                perhapsRelay(processed);                          // queue for directed forwarding with the better hop count
+                packetPool.release(processed);
+            } else {
+                perhapsRelay(p); // fallback: still relay using the original packet if allocation fails
+            }
+
+            // We already enqueued the improved copy, so make sure the incoming packet stops here.
+            return true;
+        }
+    }
+
+    if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
 
         if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {

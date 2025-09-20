@@ -149,6 +149,12 @@ class MeshService
     /// returns true if we sent a position
     bool trySendPosition(NodeNum dest, bool wantReplies = false);
 
+    /// Suppress phone delivery for the given packet (when processing a packet that has been upgraded)
+    void setSuppressPhoneDelivery(bool suppress) { phoneDeliverySuppressed = suppress; }
+
+    /// Check if phone delivery is suppressed for the given packet
+    bool isPhoneDeliverySuppressed() const { return phoneDeliverySuppressed; }
+
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
@@ -188,6 +194,8 @@ class MeshService
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
+
+    bool phoneDeliverySuppressed = false;
 };
 
 extern MeshService *service;

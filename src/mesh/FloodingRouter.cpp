@@ -1,7 +1,7 @@
 #include "FloodingRouter.h"
-
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -21,7 +21,39 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
-    if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
+    bool wasUpgraded = false;
+    bool seenRecently =
+        wasSeenRecently(p, true, nullptr, nullptr, &wasUpgraded); // Updates history; returns false when an upgrade is detected
+
+    // Handle hop_limit upgrade scenario for rebroadcasters
+    // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
+    if (wasUpgraded && isRebroadcaster() && iface && p->hop_limit > 0) {
+        // wasSeenRecently() reports false in upgrade cases so we handle replacement before the duplicate short-circuit
+        // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
+        // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
+        uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
+        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
+                      p->hop_limit, dropThreshold);
+
+            // Re-run modules on the fresher copy so they track the updated route before we relay again
+            // This is for traceeroute - other modules will dedupe from (from, id) pairs or just overwrite
+            // with the new copy. This loses efficiency, but upgrading packets should be an edge case.
+            meshtastic_MeshPacket *processed = packetPool.allocCopy(*p);
+            if (processed) {
+                processForModules(processed, RX_SRC_RADIO, true); // suppress phone delivery while modules run
+                perhapsRebroadcast(processed);                    // enqueue the refreshed packet for rebroadcast
+                packetPool.release(processed);
+            } else {
+                perhapsRebroadcast(p); // fall back to rebroadcasting the allocCopy fails
+            }
+
+            // We already enqueued the improved copy, so make sure the incoming packet stops here.
+            return true;
+        }
+    }
+
+    if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
 
