@@ -151,7 +151,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
         // Logic to prevent bouncing.
         newState = ROTARY_EVENT_CLEARED;
     }
-    setIntervalFromNow(50); // TODO: this modifies a non-volatile variable!
+    setIntervalFromNow(ROTARY_DELAY); // TODO: this modifies a non-volatile variable!
 
     return newState;
 }
