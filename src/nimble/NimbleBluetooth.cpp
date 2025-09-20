@@ -1,8 +1,6 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BluetoothCommon.h"
-#include "NimBLEAdvertising.h"
-#include "NimBLEExtAdvertising.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
 #include "PowerStatus.h"
@@ -818,7 +816,11 @@ void NimbleBluetooth::setup()
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
+#ifdef NIMBLE_TWO
     NimBLEDevice::setPower(9);
+#else
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+#endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     int mtuResult = NimBLEDevice::setMTU(kPreferredBleMtu);
