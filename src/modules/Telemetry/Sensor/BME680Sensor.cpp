@@ -141,7 +141,6 @@ void BME680Sensor::updateState()
                 LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);
             }
             free(bsecState);
-            bsecState = NULL;
         }
     }
     spiLock->unlock();
