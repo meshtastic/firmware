@@ -128,6 +128,9 @@ ButtonThread *CancelButtonThread = nullptr;
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
+#if defined(IMU_CS)
+AccelerometerThread *qmi8658DebugThread = nullptr;
+#endif
 #endif
 
 #ifdef HAS_I2S
@@ -826,6 +829,13 @@ void setup()
 #if !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
+#if defined(IMU_CS) && defined(QMI8658_DEBUG_STREAM)
+        // Also start a parallel SPI QMI8658 thread for debug streaming
+        if (!qmi8658DebugThread) {
+            LOG_INFO("Starting SPI QMI8658 debug thread");
+            qmi8658DebugThread = new AccelerometerThread(ScanI2C::DeviceType::QMI8658);
+        }
+#endif
     }
 #ifdef IMU_CS
     else {

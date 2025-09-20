@@ -11,6 +11,7 @@
 #include "BMA423Sensor.h"
 #endif
 #include "BMM150Sensor.h"
+#include "QMC6310Sensor.h"
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
@@ -123,6 +124,11 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::BMM150:
             sensor = new BMM150Sensor(device);
             break;
+#if __has_include(<SensorQMC6310.hpp>)
+        case ScanI2C::DeviceType::QMC6310:
+            sensor = new QMC6310Sensor(device);
+            break;
+#endif
 #ifdef HAS_QMA6100P
         case ScanI2C::DeviceType::QMA6100P:
             sensor = new QMA6100PSensor(device);

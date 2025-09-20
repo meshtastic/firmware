@@ -68,6 +68,9 @@ extern graphics::Screen *screen;
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
+#if defined(IMU_CS)
+extern AccelerometerThread *qmi8658DebugThread;
+#endif
 #endif
 
 extern bool isVibrating;
