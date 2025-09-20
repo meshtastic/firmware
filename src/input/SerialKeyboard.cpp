@@ -29,7 +29,7 @@ SerialKeyboard::SerialKeyboard(const char *name) : concurrency::OSThread(name)
 
 void SerialKeyboard::erase()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_BACK;
     e.kbchar = 0x08;
     e.source = this->_originName;
@@ -80,7 +80,7 @@ int32_t SerialKeyboard::runOnce()
 
         if (keys < prevKeys) { // a new key has been pressed (and not released), doesn't works for multiple presses at once but
                                // shouldn't be a limitation
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             // SELECT OR SEND OR CANCEL EVENT
