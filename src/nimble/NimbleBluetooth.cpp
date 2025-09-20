@@ -1,11 +1,8 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BluetoothCommon.h"
-#include "NimBLEAdvertising.h"
-#include "NimBLEExtAdvertising.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
-#include "PowerStatus.h"
 
 #include "main.h"
 #include "mesh/PhoneAPI.h"
@@ -316,7 +313,11 @@ void NimbleBluetooth::setup()
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
+#ifdef NIMBLE_TWO
     NimBLEDevice::setPower(9);
+#else
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+#endif
 
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM | BLE_SM_PAIR_AUTHREQ_SC);
