@@ -13,7 +13,9 @@
 
 #ifdef NIMBLE_TWO
 #include "NimBLEAdvertising.h"
+#ifdef CONFIG_BT_NIMBLE_EXT_ADV
 #include "NimBLEExtAdvertising.h"
+#endif
 #include "PowerStatus.h"
 #endif
 
@@ -388,7 +390,7 @@ void NimbleBluetooth::setupService()
 
 void NimbleBluetooth::startAdvertising()
 {
-#ifdef NIMBLE_TWO
+#if defined(NIMBLE_TWO) && defined(CONFIG_BT_NIMBLE_EXT_ADV)
     NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     NimBLEExtAdvertisement legacyAdvertising;
 
