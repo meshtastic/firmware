@@ -103,7 +103,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                     /* A response may be set to want_ack for retransmissions, but we don't need to ACK a response if it received
                       an implicit ACK already. If we received it directly or via NextHopRouter, only ACK with a hop limit of 0 to
                       make sure the other side stops retransmitting. */
-                    if ((!p->decoded.request_id && !p->decoded.reply_id)) {
+                    if (!p->decoded.request_id && !p->decoded.reply_id) {
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel,
                                    routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
                     } else if ((p->hop_start > 0 && p->hop_start == p->hop_limit) || p->next_hop != NO_NEXT_HOP_PREFERENCE) {
