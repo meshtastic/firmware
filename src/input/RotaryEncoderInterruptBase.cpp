@@ -27,7 +27,7 @@ void RotaryEncoderInterruptBase::init(
 
     if (!isRAK || pinPress != 0) {
         pinMode(pinPress, INPUT_PULLUP);
-        attachInterrupt(pinPress, onIntPress, RISING);
+        attachInterrupt(pinPress, onIntPress, CHANGE);
     }
     if (!isRAK || this->_pinA != 0) {
         pinMode(this->_pinA, INPUT_PULLUP);
