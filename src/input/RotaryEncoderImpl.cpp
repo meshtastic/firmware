@@ -1,8 +1,9 @@
-#ifdef T_LORA_PAGER
+#if defined(T_LORA_PAGER) || defined(FSM_ROTARY_ENCODER)
 
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+extern bool osk_found;
 
 #define ORIGIN_NAME "RotaryEncoder"
 
@@ -35,6 +36,7 @@ bool RotaryEncoderImpl::init()
     LOG_INFO("RotaryEncoder initialized pins(%d, %d, %d), events(%d, %d, %d)", moduleConfig.canned_message.inputbroker_pin_a,
              moduleConfig.canned_message.inputbroker_pin_b, moduleConfig.canned_message.inputbroker_pin_press, eventCw, eventCcw,
              eventPressed);
+    osk_found = true;
     return true;
 }
 

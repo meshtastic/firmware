@@ -1441,7 +1441,7 @@ void setup()
 #endif
 #endif
 
-#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2) || defined(FSM_ROTARY_ENCODER)
     osk_found = true;
 #endif
 
