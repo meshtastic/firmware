@@ -8,6 +8,7 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/draw/UIRenderer.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "main.h"

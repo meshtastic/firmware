@@ -691,6 +691,7 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("World!") / 2);
     display->drawString(textX, getTextPositions(display)[line++], "World!");
 }
+
 } // namespace DebugRenderer
 } // namespace graphics
 #endif
