@@ -1,5 +1,4 @@
 #include <cstring> // Include for strstr
-#include <string>
 #include <vector>
 
 #include "configuration.h"
@@ -1214,7 +1213,7 @@ static const char *DETECTED_MESSAGE = "%s detected";
         LOG_DEBUG(PROBE_MESSAGE, COMMAND, FAMILY_NAME);                                                                          \
         clearBuffer();                                                                                                           \
         _serial_gps->write(COMMAND "\r\n");                                                                                      \
-        GnssModel_t detectedDriver = getProbeResponse(TIMEOUT, RESPONSE_MAP);                                                    \
+        GnssModel_t detectedDriver = getProbeResponse(TIMEOUT, RESPONSE_MAP, serialSpeed);                                       \
         if (detectedDriver != GNSS_MODEL_UNKNOWN) {                                                                              \
             return detectedDriver;                                                                                               \
         }                                                                                                                        \
@@ -1382,36 +1381,55 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UNKNOWN;
 }
 
-GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap)
+GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap, int serialSpeed)
 {
-    String response = "";
+    // Calculate buffer size based on baud rate - 256 bytes for 9600 baud as baseline
+    // Higher baud rates get proportionally larger buffers to handle more data
+    int bufferSize = (serialSpeed * 256) / 9600;
+    // Clamp buffer size between reasonable limits
+    if (bufferSize < 128)
+        bufferSize = 128;
+    if (bufferSize > 2048)
+        bufferSize = 2048;
+
+    char *response = new char[bufferSize](); // Dynamically allocate based on baud rate
+    uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
         if (_serial_gps->available()) {
-            response += (char)_serial_gps->read();
+            char c = _serial_gps->read();
 
-            if (response.endsWith(",") || response.endsWith("\r\n")) {
+            // Add char to buffer if there's space
+            if (responseLen < bufferSize - 1) {
+                response[responseLen++] = c;
+                response[responseLen] = '\0';
+            }
+
+            if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
 #ifdef GPS_DEBUG
-                LOG_DEBUG(response.c_str());
+                LOG_DEBUG(response);
 #endif
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
-                    if (strstr(response.c_str(), chipInfo.detectionString.c_str()) != nullptr) {
+                    if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
+                        delete[] response; // Cleanup before return
                         return chipInfo.driver;
                     }
                 }
             }
-            if (response.endsWith("\r\n")) {
-                response.trim();
-                response = ""; // Reset the response string for the next potential message
+            if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
+                // Reset the response buffer for the next potential message
+                responseLen = 0;
+                response[0] = '\0';
             }
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(response.c_str());
+    LOG_DEBUG(response);
 #endif
-    return GNSS_MODEL_UNKNOWN; // Return empty string on timeout
+    delete[] response;         // Cleanup before return
+    return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 
 GPS *GPS::createGps()

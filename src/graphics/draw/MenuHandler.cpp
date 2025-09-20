@@ -102,7 +102,11 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "NP_865",
                                          "BR_902"};
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "LoRa Region";
+#else
     bannerOptions.message = "Set the LoRa region";
+#endif
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 27;
@@ -317,7 +321,11 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
+#if defined(M5STACK_UNITC6L)
+    static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
+#else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+#endif
     enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
@@ -341,8 +349,11 @@ void menuHandler::clockMenu()
 void menuHandler::messageResponseMenu()
 {
     enum optionsNumbers { Back = 0, Dismiss = 1, Preset = 2, Freetext = 3, Aloud = 4, enumEnd = 5 };
-
+#if defined(M5STACK_UNITC6L)
+    static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply Preset"};
+#else
     static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply via Preset"};
+#endif
     static int optionsEnumArray[enumEnd] = {Back, Dismiss, Preset};
     int options = 3;
 
@@ -356,7 +367,11 @@ void menuHandler::messageResponseMenu()
     optionsEnumArray[options++] = Aloud;
 #endif
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Message";
+#else
     bannerOptions.message = "Message Action";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -409,7 +424,11 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = "Send Node Info";
     }
     optionsEnumArray[options++] = Position;
+#if defined(M5STACK_UNITC6L)
+    optionsArray[options] = "New Preset";
+#else
     optionsArray[options] = "New Preset Msg";
+#endif
     optionsEnumArray[options++] = Preset;
     if (kb_found) {
         optionsArray[options] = "New Freetext Msg";
@@ -417,7 +436,11 @@ void menuHandler::homeBaseMenu()
     }
 
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Home";
+#else
     bannerOptions.message = "Home Action";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -454,6 +477,11 @@ void menuHandler::homeBaseMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::textMessageMenu()
+{
+    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
 }
 
 void menuHandler::textMessageBaseMenu()
@@ -502,11 +530,17 @@ void menuHandler::systemBaseMenu()
 
     optionsArray[options] = "Frame Visiblity Toggle";
     optionsEnumArray[options++] = FrameToggles;
-
+#if defined(M5STACK_UNITC6L)
+    optionsArray[options] = "Bluetooth";
+#else
     optionsArray[options] = "Bluetooth Toggle";
+#endif
     optionsEnumArray[options++] = Bluetooth;
-
+#if defined(M5STACK_UNITC6L)
+    optionsArray[options] = "Power";
+#else
     optionsArray[options] = "Reboot/Shutdown";
+#endif
     optionsEnumArray[options++] = PowerMenu;
 
     if (test_enabled) {
@@ -515,7 +549,11 @@ void menuHandler::systemBaseMenu()
     }
 
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "System";
+#else
     bannerOptions.message = "System Action";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -551,7 +589,11 @@ void menuHandler::systemBaseMenu()
 void menuHandler::favoriteBaseMenu()
 {
     enum optionsNumbers { Back, Preset, Freetext, Remove, TraceRoute, enumEnd };
+#if defined(M5STACK_UNITC6L)
+    static const char *optionsArray[enumEnd] = {"Back", "New Preset"};
+#else
     static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
+#endif
     static int optionsEnumArray[enumEnd] = {Back, Preset};
     int options = 2;
 
@@ -559,13 +601,19 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+#if !defined(M5STACK_UNITC6L)
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
+#endif
     optionsArray[options] = "Remove Favorite";
     optionsEnumArray[options++] = Remove;
 
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Favorites";
+#else
     bannerOptions.message = "Favorites Action";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -588,11 +636,11 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
+    enum optionsNumbers { Back, GPSToggle, GPSFormat, CompassMenu, CompassCalibrate, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
-    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
-    int options = 3;
+    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "GPS Format", "Compass"};
+    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, GPSFormat, CompassMenu};
+    int options = 4;
 
     if (accelerometerThread) {
         optionsArray[options] = "Compass Calibrate";
@@ -608,6 +656,9 @@ void menuHandler::positionBaseMenu()
         if (selected == GPSToggle) {
             menuQueue = gps_toggle_menu;
             screen->runNow();
+        } else if (selected == GPSFormat) {
+            menuQueue = gps_format_menu;
+            screen->runNow();
         } else if (selected == CompassMenu) {
             menuQueue = compass_point_north_menu;
             screen->runNow();
@@ -621,11 +672,19 @@ void menuHandler::positionBaseMenu()
 void menuHandler::nodeListMenu()
 {
     enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, enumEnd };
+#if defined(M5STACK_UNITC6L)
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset Node"};
+#else
     static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Key Verification", "Reset NodeDB"};
+#endif
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.optionsCount = 3;
+#else
     bannerOptions.optionsCount = 5;
+#endif
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -726,13 +785,62 @@ void menuHandler::GPSToggleMenu()
     bannerOptions.InitialSelected = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2;
     screen->showOverlayBanner(bannerOptions);
 }
+void menuHandler::GPSFormatMenu()
+{
+
+    static const char *optionsArray[] = {"Back",
+                                         isHighResolution ? "Decimal Degrees" : "DEC",
+                                         isHighResolution ? "Degrees Minutes Seconds" : "DMS",
+                                         isHighResolution ? "Universal Transverse Mercator" : "UTM",
+                                         isHighResolution ? "Military Grid Reference System" : "MGRS",
+                                         isHighResolution ? "Open Location Code" : "OLC",
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "GPS Format";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 8;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 2) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 3) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 4) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 5) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 6) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 7) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else {
+            menuQueue = position_base_menu;
+            screen->runNow();
+        }
+    };
+    bannerOptions.InitialSelected = uiconfig.gps_format + 1;
+    screen->showOverlayBanner(bannerOptions);
+}
 #endif
 
 void menuHandler::BluetoothToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Bluetooth";
+#else
     bannerOptions.message = "Toggle Bluetooth";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -924,7 +1032,11 @@ void menuHandler::rebootMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Reboot";
+#else
     bannerOptions.message = "Reboot Device?";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -944,7 +1056,11 @@ void menuHandler::shutdownMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Shutdown";
+#else
     bannerOptions.message = "Shutdown Device?";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -961,7 +1077,12 @@ void menuHandler::shutdownMenu()
 
 void menuHandler::addFavoriteMenu()
 {
+#if defined(M5STACK_UNITC6L)
+    screen->showNodePicker("Node Favorite", 30000, [](uint32_t nodenum) -> void {
+#else
     screen->showNodePicker("Node To Favorite", 30000, [](uint32_t nodenum) -> void {
+
+#endif
         LOG_WARN("Nodenum: %u", nodenum);
         nodeDB->set_favorite(true, nodenum);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1174,7 +1295,11 @@ void menuHandler::powerMenu()
 #endif
 
     BannerOverlayOptions bannerOptions;
+#if defined(M5STACK_UNITC6L)
+    bannerOptions.message = "Power";
+#else
     bannerOptions.message = "Reboot / Shutdown";
+#endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -1377,6 +1502,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
         GPSToggleMenu();
+        break;
+    case gps_format_menu:
+        GPSFormatMenu();
         break;
 #endif
     case compass_point_north_menu:

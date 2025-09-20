@@ -121,6 +121,9 @@ class NextHopRouter : public FloodingRouter
      */
     PendingPacket *startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx = NUM_INTERMEDIATE_RETX);
 
+    // Return true if we're allowed to cancel a packet in the txQueue (so we may never transmit it even once)
+    bool roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *p);
+
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
      *

@@ -46,11 +46,14 @@ the new node can build its node db)
 
 MeshService *service;
 
-static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
+#define MAX_MQTT_PROXY_MESSAGES 16
+static MemoryPool<meshtastic_MqttClientProxyMessage, MAX_MQTT_PROXY_MESSAGES> staticMqttClientProxyMessagePool;
 
-static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+#define MAX_QUEUE_STATUS 4
+static MemoryPool<meshtastic_QueueStatus, MAX_QUEUE_STATUS> staticQueueStatusPool;
 
-static MemoryDynamic<meshtastic_ClientNotification> staticClientNotificationPool;
+#define MAX_CLIENT_NOTIFICATIONS 4
+static MemoryPool<meshtastic_ClientNotification, MAX_CLIENT_NOTIFICATIONS> staticClientNotificationPool;
 
 Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
@@ -61,8 +64,10 @@ Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 #include "Router.h"
 
 MeshService::MeshService()
-    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE),
-      toPhoneClientNotificationQueue(MAX_RX_TOPHONE / 2)
+#ifdef ARCH_PORTDUINO
+    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_QUEUESTATUS_TOPHONE),
+      toPhoneMqttProxyQueue(MAX_RX_MQTTPROXY_TOPHONE), toPhoneClientNotificationQueue(MAX_RX_NOTIFICATION_TOPHONE)
+#endif
 {
     lastQueueStatus = {0, 0, 16, 0};
 }
@@ -191,8 +196,10 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                                                  // (so we update our nodedb for the local node)
 
     // Send the packet into the mesh
-
-    sendToMesh(packetPool.allocCopy(p), RX_SRC_USER);
+    DEBUG_HEAP_BEFORE;
+    auto a = packetPool.allocCopy(p);
+    DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
+    sendToMesh(a, RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
     if (loopback) {
@@ -248,7 +255,11 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
-        sendToPhone(packetPool.allocCopy(*p));
+        DEBUG_HEAP_BEFORE;
+        auto a = packetPool.allocCopy(*p);
+        DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
+
+        sendToPhone(a);
     }
 
     // Router may ask us to release the packet if it wasn't sent

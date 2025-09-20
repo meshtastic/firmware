@@ -663,7 +663,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -775,9 +775,7 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
-#if !MESHTASTIC_EXCLUDE_RANGETEST
     moduleConfig.has_range_test = true;
-#endif
     moduleConfig.has_serial = true;
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
@@ -843,12 +841,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
 #endif
     moduleConfig.has_canned_message = true;
-#if !MESHTASTIC_EXCLUDE_AUDIO
-    moduleConfig.has_audio = true;
-#endif
-#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
-    moduleConfig.has_paxcounter = true;
-#endif
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
@@ -891,14 +883,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.detection_sensor.detection_trigger_type = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
-#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
     moduleConfig.has_ambient_lighting = true;
     moduleConfig.ambient_lighting.current = 10;
     // Default to a color based on our node number
     moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
-#endif
 
     initModuleConfigIntervals();
 }
@@ -1438,25 +1428,15 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_canned_message = true;
         moduleConfig.has_external_notification = true;
         moduleConfig.has_mqtt = true;
-#if !MESHTASTIC_EXCLUDE_RANGETEST
         moduleConfig.has_range_test = true;
-#endif
         moduleConfig.has_serial = true;
-#if !MESHTASTIC_EXCLUDE_STOREFORWARD
         moduleConfig.has_store_forward = true;
-#endif
         moduleConfig.has_telemetry = true;
         moduleConfig.has_neighbor_info = true;
         moduleConfig.has_detection_sensor = true;
-#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
         moduleConfig.has_ambient_lighting = true;
-#endif
-#if !MESHTASTIC_EXCLUDE_AUDIO
         moduleConfig.has_audio = true;
-#endif
-#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
         moduleConfig.has_paxcounter = true;
-#endif
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
@@ -1768,6 +1748,65 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
+}
+
+bool NodeDB::isFavorite(uint32_t nodeId)
+{
+    // returns true if nodeId is_favorite; false if not or not found
+
+    // NODENUM_BROADCAST will never be in the DB
+    if (nodeId == NODENUM_BROADCAST)
+        return false;
+
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+
+    if (lite) {
+        return lite->is_favorite;
+    }
+    return false;
+}
+
+bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
+{
+    // This method is logically equivalent to:
+    //   return isFavorite(p.from) || isFavorite(p.to);
+    // but is more efficient by:
+    //   1. doing only one pass through the database, instead of two
+    //   2. exiting early when a favorite is found, or if both from and to have been seen
+
+    if (p.to == NODENUM_BROADCAST)
+        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
+
+    meshtastic_NodeInfoLite *lite = NULL;
+
+    bool seenFrom = false;
+    bool seenTo = false;
+
+    for (int i = 0; i < numMeshNodes; i++) {
+        lite = &meshNodes->at(i);
+
+        if (lite->num == p.from) {
+            if (lite->is_favorite)
+                return true;
+
+            seenFrom = true;
+        }
+
+        if (lite->num == p.to) {
+            if (lite->is_favorite)
+                return true;
+
+            seenTo = true;
+        }
+
+        if (seenFrom && seenTo)
+            return false; // we've seen both, and neither is a favorite, so we can stop searching early
+
+        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
+        // all favorited nodes first.
+    }
+
+    return false;
 }
 
 void NodeDB::pause_sort(bool paused)
