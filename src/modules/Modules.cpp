@@ -48,6 +48,9 @@
 #if !MESHTASTIC_EXCLUDE_POWERSTRESS
 #include "modules/PowerStressModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_REPLAY
+#include "modules/ReplayModule.h"
+#endif
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
@@ -171,6 +174,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_POWERSTRESS
         new PowerStressModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_REPLAY
+        replayModule = new ReplayModule();
 #endif
         // Example: Put your module here
         // new ReplyModule();
