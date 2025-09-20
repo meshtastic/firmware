@@ -1,7 +1,9 @@
 #include "FloodingRouter.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/TraceRouteModule.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -36,17 +38,13 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
-            // Re-run modules on the fresher copy so they track the updated route before we relay again
-            // This is for traceeroute - other modules will dedupe from (from, id) pairs or just overwrite
-            // with the new copy. This loses efficiency, but upgrading packets should be an edge case.
-            meshtastic_MeshPacket *processed = packetPool.allocCopy(*p);
-            if (processed) {
-                processForModules(processed, RX_SRC_RADIO, true); // suppress phone delivery while modules run
-                perhapsRebroadcast(processed);                    // enqueue the refreshed packet for rebroadcast
-                packetPool.release(processed);
-            } else {
-                perhapsRebroadcast(p); // fall back to rebroadcasting the allocCopy fails
-            }
+            if (nodeDB)
+                nodeDB->updateFrom(*p);
+            if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+                traceRouteModule->processUpgradedPacket(*p);
+
+            perhapsRebroadcast(p);
 
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;

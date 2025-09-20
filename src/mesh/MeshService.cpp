@@ -109,10 +109,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         }
     }
 
-    if (!phoneDeliverySuppressed) {
-        printPacket("Forwarding to phone", mp);
-        sendToPhone(packetPool.allocCopy(*mp));
-    }
+    printPacket("Forwarding to phone", mp);
+    sendToPhone(packetPool.allocCopy(*mp));
 
     return 0;
 }
@@ -295,11 +293,6 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
-    if (phoneDeliverySuppressed) {
-        releaseToPool(p);
-        return;
-    }
-
     perhapsDecode(p);
 
 #ifdef ARCH_ESP32

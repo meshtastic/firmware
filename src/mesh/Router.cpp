@@ -722,21 +722,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     packetPool.release(p_encrypted); // Release the encrypted packet
 }
 
-void Router::processForModules(meshtastic_MeshPacket *p, RxSource src, bool suppressPhoneDelivery)
-{
-    bool restoreSuppress = false;
-    if (suppressPhoneDelivery && service) {
-        restoreSuppress = service->isPhoneDeliverySuppressed();
-        service->setSuppressPhoneDelivery(true); // let modules run, but keep this copy out of the phone/UI
-    }
-
-    handleReceived(p, src); // reuse the normal decode+module pipeline
-
-    if (suppressPhoneDelivery && service) {
-        service->setSuppressPhoneDelivery(restoreSuppress);
-    }
-}
-
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
 #if ENABLE_JSON_LOGGING

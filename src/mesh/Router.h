@@ -115,8 +115,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
 
-    void processForModules(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO, bool suppressPhoneDelivery = false);
-
   private:
     /**
      * Called from loop()

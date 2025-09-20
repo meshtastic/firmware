@@ -1,6 +1,8 @@
 #include "NextHopRouter.h"
 #include "MeshTypes.h"
+#include "NodeDB.h"
 #include "meshUtils.h"
+#include "modules/TraceRouteModule.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -47,17 +49,13 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for relay with hop limit %d (dropping queued < %d)", p->id, p->hop_limit,
                       dropThreshold);
 
-            // Re-run modules on the fresher copy so they track the updated route before we relay again
-            // This is for traceeroute - other modules will dedupe from (from, id) pairs or just overwrite
-            // with the new copy. This loses efficiency, but upgrading packets should be an edge case.
-            meshtastic_MeshPacket *processed = packetPool.allocCopy(*p);
-            if (processed) {
-                processForModules(processed, RX_SRC_RADIO, true); // keep this duplicate away from the phone
-                perhapsRelay(processed);                          // queue for directed forwarding with the better hop count
-                packetPool.release(processed);
-            } else {
-                perhapsRelay(p); // fallback: still relay using the original packet if allocation fails
-            }
+            if (nodeDB)
+                nodeDB->updateFrom(*p);
+            if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+                traceRouteModule->processUpgradedPacket(*p);
+
+            perhapsRelay(p);
 
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;
