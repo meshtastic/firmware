@@ -7,6 +7,14 @@ extern bool osk_found;
 
 #define ORIGIN_NAME "RotaryEncoder"
 
+#ifndef FSM_ROTARY_ENCODER_DEBOUNCE
+#define FSM_ROTARY_ENCODER_DEBOUNCE 200
+#endif
+
+#ifndef FSM_ROTARY_ENCODER_CHECK_INTERVAL
+#define FSM_ROTARY_ENCODER_CHECK_INTERVAL 10
+#endif
+
 RotaryEncoderImpl *rotaryEncoderImpl;
 
 RotaryEncoderImpl::RotaryEncoderImpl() : concurrency::OSThread(ORIGIN_NAME), originName(ORIGIN_NAME)
@@ -45,7 +53,7 @@ int32_t RotaryEncoderImpl::runOnce()
     InputEvent e{originName, INPUT_BROKER_NONE, 0, 0, 0};
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
-        if (lastPressed + 200 < millis()) {
+        if (lastPressed + FSM_ROTARY_ENCODER_DEBOUNCE < millis()) {
             LOG_DEBUG("Rotary event Press");
             lastPressed = millis();
             e.inputEvent = this->eventPressed;
@@ -69,7 +77,7 @@ int32_t RotaryEncoderImpl::runOnce()
         this->notifyObservers(&e);
     }
 
-    return 10;
+    return FSM_ROTARY_ENCODER_CHECK_INTERVAL;
 }
 
 #endif
