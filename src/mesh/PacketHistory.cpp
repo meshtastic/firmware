@@ -66,7 +66,13 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.id = p->id;
     r.sender = getFrom(p); // If 0 then use our ID
     r.next_hop = p->next_hop;
-    r.relayed_by[0] = p->relay_node;
+    bool weWillRelay = false;
+    uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
+    if (p->relay_node == ourRelayID) { // If the relay_node is us, store it
+        weWillRelay = true;
+        r.ourTxHopLimit = p->hop_limit;
+        r.relayed_by[0] = p->relay_node;
+    }
 
     r.rxTimeMsec = millis(); //
     if (r.rxTimeMsec == 0)   // =0 every 49.7 days? 0 is special
@@ -82,8 +88,6 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
 
     if (seenRecently) {
-        uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()); // Get our relay ID from our node number
-
         if (wasFallback) {
             // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
             // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
@@ -125,11 +129,23 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                       found->sender, found->id, found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
                       millis() - found->rxTimeMsec);
 #endif
+            // Only update the relayer if it heard us directly (meaning hopLimit is decreased by 1)
+            uint8_t startIdx = weWillRelay ? 1 : 0;
+            if (!weWillRelay) {
+                bool weWereRelayer = wasRelayer(ourRelayID, *found);
+                // We were a relayer and the packet came in with a hop limit that is one less than when we sent it out
+                if (weWereRelayer && p->hop_limit == found->ourTxHopLimit - 1) {
+                    r.relayed_by[0] = p->relay_node;
+                    startIdx = 1; // Start copying existing relayers from index 1
+                }
+                // keep the original ourTxHopLimit
+                r.ourTxHopLimit = found->ourTxHopLimit;
+            }
 
             // Add the existing relayed_by to the new record
             for (uint8_t i = 0; i < (NUM_RELAYERS - 1); i++) {
                 if (found->relayed_by[i] != 0)
-                    r.relayed_by[i + 1] = found->relayed_by[i];
+                    r.relayed_by[i + startIdx] = found->relayed_by[i];
             }
             r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
 #if VERBOSE_PACKET_HISTORY
@@ -350,14 +366,6 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, boo
 #endif
 
     return found;
-}
-
-// Check if a certain node was the *only* relayer of a packet in the history given an ID and sender
-bool PacketHistory::wasSoleRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
-{
-    bool wasSole = false;
-    wasRelayer(relayer, id, sender, &wasSole);
-    return wasSole;
 }
 
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender

@@ -2,8 +2,8 @@
 
 #include "NodeDB.h"
 
-#define NUM_RELAYERS                                                                                                             \
-    3 // Number of relayer we keep track of. Use 3 to be efficient with memory alignment of PacketRecord to 16 bytes
+// Number of relayers we keep track of. Use 6 to be efficient with memory alignment of PacketRecord to 20 bytes
+#define NUM_RELAYERS 6
 
 /**
  * This is a mixin that adds a record of past packets we have seen
@@ -16,8 +16,9 @@ class PacketHistory
         PacketId id;
         uint32_t rxTimeMsec;              // Unix time in msecs - the time we received it,  0 means empty
         uint8_t next_hop;                 // The next hop asked for this packet
+        uint8_t ourTxHopLimit;            // The hop limit of the packet when we first transmitted it
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
-    };                                    // 4B + 4B + 4B + 1B + 3B = 16B
+    };                                    // 4B + 4B + 4B + 1B + 1B + 6B = 20B
 
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
@@ -58,9 +59,6 @@ class PacketHistory
      * If wasSole is not nullptr, it will be set to true if the relayer was the only relayer of that packet
      * @return true if node was indeed a relayer, false if not */
     bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole = nullptr);
-
-    // Check if a certain node was the *only* relayer of a packet in the history given an ID and sender
-    bool wasSoleRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
