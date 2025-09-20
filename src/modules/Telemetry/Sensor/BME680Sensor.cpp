@@ -79,10 +79,17 @@ void BME680Sensor::loadState()
     spiLock->lock();
     auto file = FSCom.open(bsecConfigFileName, FILE_O_READ);
     if (file) {
-        file.read((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
-        file.close();
-        bme680.setState(bsecState);
-        LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
+        uint8_t *bsecState = (uint8_t *)malloc(BSEC_MAX_STATE_BLOB_SIZE);
+        if (bsecState == NULL) {
+            LOG_ERROR("Failed to malloc bsecState (%d)", BSEC_MAX_STATE_BLOB_SIZE);
+        } else {
+            file.read(bsecState, BSEC_MAX_STATE_BLOB_SIZE);
+            file.close();
+            bme680.setState(bsecState);
+            LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
+            free(bsecState);
+            bsecState = NULL;
+        }
     } else {
         LOG_INFO("No %s state found (File: %s)", sensorName, bsecConfigFileName);
     }
@@ -117,18 +124,25 @@ void BME680Sensor::updateState()
     }
 
     if (update) {
-        bme680.getState(bsecState);
-        if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
-            LOG_WARN("Can't remove old state file");
-        }
-        auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
-        if (file) {
-            LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
-            file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
-            file.flush();
-            file.close();
+        uint8_t *bsecState = (uint8_t *)malloc(BSEC_MAX_STATE_BLOB_SIZE);
+        if (bsecState == NULL) {
+            LOG_ERROR("Failed to malloc bsecState (%d)", BSEC_MAX_STATE_BLOB_SIZE);
         } else {
-            LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);
+            bme680.getState(bsecState);
+            if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
+                LOG_WARN("Can't remove old state file");
+            }
+            auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
+            if (file) {
+                LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
+                file.write(bsecState, BSEC_MAX_STATE_BLOB_SIZE);
+                file.flush();
+                file.close();
+            } else {
+                LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);
+            }
+            free(bsecState);
+            bsecState = NULL;
         }
     }
     spiLock->unlock();

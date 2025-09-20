@@ -20,7 +20,6 @@ class BME680Sensor : public TelemetrySensor
   protected:
     virtual void setup() override;
     const char *bsecConfigFileName = "/prefs/bsec.dat";
-    uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
     uint8_t accuracy = 0;
     uint16_t stateUpdateCounter = 0;
     bsecSensor sensorList[9] = {BSEC_OUTPUT_IAQ,
