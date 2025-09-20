@@ -237,7 +237,7 @@ void setupModules()
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif
-#if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (moduleConfig.has_telemetry &&
             (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
             new EnvironmentTelemetryModule();
