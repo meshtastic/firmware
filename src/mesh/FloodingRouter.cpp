@@ -1,5 +1,6 @@
 #include "FloodingRouter.h"
-
+#include "MeshTypes.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
@@ -90,7 +91,12 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
             if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-                tosend->hop_limit--; // bump down the hop count
+                // Use shared logic to determine if hop_limit should be decremented
+                if (shouldDecrementHopLimit(p)) {
+                    tosend->hop_limit--; // bump down the hop count
+                } else {
+                    LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE flood: preserving hop_limit");
+                }
 #if USERPREFS_EVENT_MODE
                 if (tosend->hop_limit > 2) {
                     // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
@@ -98,6 +104,7 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     tosend->hop_limit = 2;
                 }
 #endif
+
                 tosend->next_hop = NO_NEXT_HOP_PREFERENCE; // this should already be the case, but just in case
 
                 LOG_INFO("Rebroadcast received floodmsg");

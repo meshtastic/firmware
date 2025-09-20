@@ -1,4 +1,5 @@
 #include "NextHopRouter.h"
+#include "NodeDB.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -108,7 +109,13 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x", p->relay_node);
 
-                tosend->hop_limit--; // bump down the hop count
+                // Use shared logic to determine if hop_limit should be decremented
+                if (shouldDecrementHopLimit(p)) {
+                    tosend->hop_limit--; // bump down the hop count
+                } else {
+                    LOG_INFO("Router/CLIENT_BASE-to-favorite-router/CLIENT_BASE relay: preserving hop_limit");
+                }
+
                 NextHopRouter::send(tosend);
 
                 return true;
