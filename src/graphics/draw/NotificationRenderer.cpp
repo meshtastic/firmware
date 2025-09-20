@@ -216,9 +216,11 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     }
 
     // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
+        inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
         curSelected--;
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
+               inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         alertBannerCallback(selectedNodenum);
@@ -333,9 +335,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // Handle input
     if (alertBannerOptions > 0) {
-        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
+            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
-        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
+                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
         } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
             if (optionsEnumPtr != nullptr) {
@@ -459,6 +463,135 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     // count lines
 
     uint16_t boxWidth = hPadding * 2 + maxWidth;
+#if defined(M5STACK_UNITC6L)
+    if (needs_bell) {
+        if (isHighResolution && boxWidth <= 150)
+            boxWidth += 26;
+        if (!isHighResolution && boxWidth <= 100)
+            boxWidth += 20;
+    }
+
+    uint16_t screenHeight = display->height();
+    uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
+    uint8_t visibleTotalLines = std::min<uint8_t>(lineCount, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
+    uint16_t boxHeight = contentHeight + vPadding * 2;
+    if (visibleTotalLines == 1)
+        boxHeight += (isHighResolution ? 4 : 3);
+
+    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
+    if (totalLines > visibleTotalLines)
+        boxWidth += (isHighResolution ? 4 : 2);
+    int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
+
+    if (visibleTotalLines == 1) {
+        boxTop += 25;
+    }
+    if (alertBannerOptions < 3) {
+        int missingLines = 3 - alertBannerOptions;
+        int moveUp = missingLines * (effectiveLineHeight / 2);
+        boxTop -= moveUp;
+        if (boxTop < 0)
+            boxTop = 0;
+    }
+
+    // === Draw Box ===
+    display->setColor(BLACK);
+    display->fillRect(boxLeft, boxTop, boxWidth, boxHeight);
+    display->setColor(WHITE);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+    display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
+    display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
+    display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+    display->setColor(BLACK);
+    display->fillRect(boxLeft, boxTop, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
+    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
+    display->setColor(WHITE);
+    int16_t lineY = boxTop + vPadding;
+    int swingRange = 8;
+    static int swingOffset = 0;
+    static bool swingRight = true;
+    static unsigned long lastSwingTime = 0;
+    unsigned long now = millis();
+    int swingSpeedMs = 10 / (swingRange * 2);
+    if (now - lastSwingTime >= (unsigned long)swingSpeedMs) {
+        lastSwingTime = now;
+        if (swingRight) {
+            swingOffset++;
+            if (swingOffset >= swingRange)
+                swingRight = false;
+        } else {
+            swingOffset--;
+            if (swingOffset <= 0)
+                swingRight = true;
+        }
+    }
+    for (int i = 0; i < lineCount; i++) {
+        bool isTitle = (i == 0);
+        int globalOptionIndex = (i - 1) + firstOptionToShow;
+        bool isSelectedOption = (!isTitle && globalOptionIndex >= 0 && globalOptionIndex == curSelected);
+
+        uint16_t visibleWidth = 64 - hPadding * 2;
+        if (totalLines > visibleTotalLines)
+            visibleWidth -= 6;
+        char lineBuffer[lineLengths[i] + 1];
+        strncpy(lineBuffer, lines[i], lineLengths[i]);
+        lineBuffer[lineLengths[i]] = '\0';
+
+        if (isTitle) {
+            if (visibleTotalLines == 1) {
+                display->setColor(BLACK);
+                display->fillRect(boxLeft, boxTop, boxWidth, effectiveLineHeight);
+                display->setColor(WHITE);
+                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, boxTop, lineBuffer);
+            } else {
+                display->setColor(WHITE);
+                display->fillRect(boxLeft, boxTop, boxWidth, effectiveLineHeight);
+                display->setColor(BLACK);
+                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, boxTop, lineBuffer);
+                display->setColor(WHITE);
+                if (needs_bell) {
+                    int bellY = boxTop + (FONT_HEIGHT_SMALL - 8) / 2;
+                    display->drawXbm(boxLeft + (boxWidth - lineWidths[i]) / 2 - 10, bellY, 8, 8, bell_alert);
+                    display->drawXbm(boxLeft + (boxWidth + lineWidths[i]) / 2 + 2, bellY, 8, 8, bell_alert);
+                }
+            }
+            lineY = boxTop + effectiveLineHeight + 1;
+        } else if (isSelectedOption) {
+            display->setColor(WHITE);
+            display->fillRect(boxLeft, lineY, boxWidth, effectiveLineHeight);
+            display->setColor(BLACK);
+            if (lineLengths[i] > 15 && lineWidths[i] > visibleWidth) {
+                int textX = boxLeft + hPadding + swingOffset;
+                display->drawString(textX, lineY - 1, lineBuffer);
+            } else {
+                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, lineY - 1, lineBuffer);
+            }
+            display->setColor(WHITE);
+            lineY += effectiveLineHeight;
+        } else {
+            display->setColor(BLACK);
+            display->fillRect(boxLeft, lineY, boxWidth, effectiveLineHeight);
+            display->setColor(WHITE);
+            display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, lineY, lineBuffer);
+            lineY += effectiveLineHeight;
+        }
+    }
+    if (totalLines > visibleTotalLines) {
+        const uint8_t scrollBarWidth = 5;
+        int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
+        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight;
+        uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
+        float ratio = (float)visibleTotalLines / totalLines;
+        uint16_t indicatorHeight = std::max((int)(scrollBarHeight * ratio), 4);
+        float scrollRatio = (float)(firstOptionToShow + lineCount - visibleTotalLines) / (totalLines - visibleTotalLines);
+        uint16_t indicatorY = scrollBarY + scrollRatio * (scrollBarHeight - indicatorHeight);
+        display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
+        display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
+    }
+#else
     if (needs_bell) {
         if (isHighResolution && boxWidth <= 150)
             boxWidth += 26;
@@ -547,6 +680,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
         display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
     }
+#endif
 }
 
 /// Draw the last text message we received

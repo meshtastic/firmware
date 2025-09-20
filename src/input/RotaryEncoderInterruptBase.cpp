@@ -43,7 +43,7 @@ void RotaryEncoderInterruptBase::init(
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
 
@@ -120,7 +120,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
         // Logic to prevent bouncing.
         newState = ROTARY_EVENT_CLEARED;
     }
-    setIntervalFromNow(50); // TODO: this modifies a non-volatile variable!
+    setIntervalFromNow(ROTARY_DELAY); // TODO: this modifies a non-volatile variable!
 
     return newState;
 }

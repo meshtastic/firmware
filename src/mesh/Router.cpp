@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
@@ -27,14 +28,24 @@
 
 // I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
 // And every TX packet might have a retransmission packet or an ack alive at any moment
+
+#ifdef ARCH_PORTDUINO
+// Portduino (native) targets can use dynamic memory pools with runtime-configurable sizes
 #define MAX_PACKETS                                                                                                              \
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-// static MemoryPool<MeshPacket> staticPool(MAX_PACKETS);
-static MemoryDynamic<meshtastic_MeshPacket> staticPool;
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
+#else
+// Embedded targets use static memory pools with compile-time constants
+#define MAX_PACKETS_STATIC                                                                                                       \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+     2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
+static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
+#endif
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
@@ -419,6 +430,36 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             }
         }
     }
+
+#if HAS_UDP_MULTICAST
+    // Fallback: for UDP multicast, try default preset names with default PSK if normal channel match failed
+    if (!decrypted && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP) {
+        if (channels.setDefaultPresetCryptoForHash(p->channel)) {
+            memcpy(bytes, p->encrypted.bytes, rawSize);
+            crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+            meshtastic_Data decodedtmp;
+            memset(&decodedtmp, 0, sizeof(decodedtmp));
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                p->decoded = decodedtmp;
+                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                // Map to our local default channel index (name+PSK default), not necessarily primary
+                ChannelIndex defaultIndex = channels.getPrimaryIndex();
+                for (ChannelIndex i = 0; i < channels.getNumChannels(); ++i) {
+                    if (channels.isDefaultChannel(i)) {
+                        defaultIndex = i;
+                        break;
+                    }
+                }
+                chIndex = defaultIndex;
+                decrypted = true;
+            } else {
+                LOG_WARN("UDP fallback decode attempted but failed for hash 0x%x", p->channel);
+            }
+        }
+    }
+#endif
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash
@@ -449,7 +490,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #if ENABLE_JSON_LOGGING
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
 #elif ARCH_PORTDUINO
-        if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+        if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         }
 #endif
@@ -662,7 +703,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
-    if (!skipHandle && p->from != nodeDB->getNodeNum()) {
+    if (!skipHandle) {
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -676,8 +717,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
-    } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
-        MeshModule::callModules(*p, src);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
@@ -691,7 +730,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
 #elif ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
-    if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+    if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
         p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }

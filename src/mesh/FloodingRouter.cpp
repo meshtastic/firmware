@@ -43,12 +43,30 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
+bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
+{
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        // ROUTER, REPEATER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
+        // even if we've heard another station rebroadcast it already.
+        return false;
+    }
+
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+        // CLIENT_BASE: if the packet is from or to a favorited node,
+        // we should act like a ROUTER and should never cancel a rebroadcast (i.e. we should always rebroadcast),
+        // even if we've heard another station rebroadcast it already.
+        return !nodeDB->isFromOrToFavoritedNode(*p);
+    }
+
+    // All other roles (such as CLIENT) should cancel a rebroadcast if they hear another station's rebroadcast.
+    return true;
+}
+
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE &&
-        p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
         // But only LoRa packets should be able to trigger this.
         if (Router::cancelSending(p->from, p->id))
