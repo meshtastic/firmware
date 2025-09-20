@@ -231,8 +231,10 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE disconnect");
 #endif
+#ifdef NIMBLE_TWO
         if (ble->isDeInit)
             return;
+#endif
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
