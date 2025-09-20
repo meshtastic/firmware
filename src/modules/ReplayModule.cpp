@@ -842,6 +842,8 @@ void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned ch
             // First ever advert received from this server
             server->last_sequence = REPLAY_SEQUENCE_MASK + 1 + wire->header.sequence;
             this_sequence = (server->last_sequence & ~REPLAY_SEQUENCE_MASK) | wire->header.sequence;
+            if (!wire->header.sequence)
+                this_sequence += REPLAY_SEQUENCE_MASK + 1; // The wire sequence just wrapped
             LOG_INFO("Replay: First advertisement from server=0x%08x seq=%u, last_seq=%u", server->id, this_sequence,
                      server->last_sequence);
         }
