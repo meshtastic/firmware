@@ -781,10 +781,24 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
+#ifdef CONFIG_BT_NIMBLE_ROLE_CENTRAL_DISABLED
+        if (handle == BLE_HS_CONN_HANDLE_NONE) {
+            return 0;
+        }
+
+        int8_t rssi = 0;
+        int rc = ble_gap_conn_rssi(handle, &rssi);
+        if (rc != 0) {
+            return 0;
+        }
+
+        return rssi;
+#else
 #ifdef NIMBLE_TWO
         return NimBLEDevice::getClientByHandle(handle)->getRssi();
 #else
         return NimBLEDevice::getClientByID(handle)->getRssi();
+#endif
 #endif
     }
     return 0; // FIXME figure out where to source this
