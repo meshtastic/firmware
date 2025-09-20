@@ -41,6 +41,7 @@ ReplayEntry *ReplayBuffer::adopt(meshtastic_MeshPacket *p)
         if (oldEntry->p) {
             meshtastic_MeshPacket *oldp = oldEntry->p;
             oldEntry->p = NULL;
+            oldp->is_replay_cached = false;
             packets.release(oldp);
             num_cached--;
         }
@@ -158,6 +159,7 @@ void ReplayBuffer::prune(unsigned int keep)
         if (entries[idx].p && entries[idx].p->priority <= threshold) {
             meshtastic_MeshPacket *p = entries[idx].p;
             entries[idx].p = NULL;
+            p->is_replay_cached = false;
             packets.release(p);
             num_cached--;
         }
@@ -175,6 +177,7 @@ void ReplayBuffer::truncate(unsigned int keep)
         if (oldEntry->p) {
             meshtastic_MeshPacket *oldp = oldEntry->p;
             oldEntry->p = NULL;
+            oldp->is_replay_cached = false;
             packets.release(oldp);
             num_cached--;
         }
