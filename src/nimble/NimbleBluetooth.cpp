@@ -779,7 +779,6 @@ bool NimbleBluetooth::isConnected()
 
 int NimbleBluetooth::getRssi()
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     if (!bleServer || !isConnected()) {
         return 0; // No active BLE connection
     }
@@ -805,8 +804,6 @@ int NimbleBluetooth::getRssi()
         return rssi;
     }
     LOG_DEBUG("BLE RSSI read failed, rc=%d", rc);
-#endif
-
     return 0;
 }
 
