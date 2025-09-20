@@ -1,8 +1,11 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BluetoothCommon.h"
+#include "NimBLEAdvertising.h"
+#include "NimBLEExtAdvertising.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
+#include "PowerStatus.h"
 #include "StaticPointerQueue.h"
 
 #include "concurrency/OSThread.h"
@@ -401,7 +404,6 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
 #else
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
-
 #endif
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
@@ -816,7 +818,7 @@ void NimbleBluetooth::setup()
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    NimBLEDevice::setPower(9);
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     int mtuResult = NimBLEDevice::setMTU(kPreferredBleMtu);
@@ -869,7 +871,8 @@ void NimbleBluetooth::setupService()
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         // Allow notifications so phones can stream FromRadio without polling.
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
-        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+        fromNumCharacteristic =
+            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 4);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
@@ -877,9 +880,9 @@ void NimbleBluetooth::setupService()
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
         FromRadioCharacteristic = bleService->createCharacteristic(
             FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        fromNumCharacteristic =
-            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
-                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromNumCharacteristic = bleService->createCharacteristic(
+            FROMNUM_UUID,
+            NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 4);
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
             NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
@@ -946,6 +949,7 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
     pAdvertising->start(0);
 #endif
+    LOG_DEBUG("BLE Advertising started");
 }
 
 /// Given a level between 0-100, update the BLE attribute
