@@ -88,7 +88,6 @@ void BME680Sensor::loadState()
             bme680.setState(bsecState);
             LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
             free(bsecState);
-            bsecState = NULL;
         }
     } else {
         LOG_INFO("No %s state found (File: %s)", sensorName, bsecConfigFileName);
