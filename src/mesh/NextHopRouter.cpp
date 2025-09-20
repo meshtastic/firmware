@@ -76,11 +76,14 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came directly
                 // from the destination
-                if (wasRelayer(p->relay_node, p->decoded.request_id, p->to) ||
-                    (p->hop_start != 0 && p->hop_start == p->hop_limit &&
-                     wasSoleRelayer(ourRelayID, p->decoded.request_id, p->to))) {
+                bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
+                bool weWereSoleRelayer = false;
+                bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
+                if ((weWereRelayer && wasAlreadyRelayer) ||
+                    (p->hop_start != 0 && p->hop_start == p->hop_limit && weWereSoleRelayer)) {
                     if (origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply", p->from, p->relay_node);
+                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+                                 p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
                 }
