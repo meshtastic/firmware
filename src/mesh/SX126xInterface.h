@@ -71,6 +71,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
+
   private:
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);

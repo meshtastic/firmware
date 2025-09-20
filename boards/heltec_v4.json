@@ -4,7 +4,7 @@
       "ldscript": "esp32s3_out.ld",
       "partitions": "default_16MB.csv",
       "memory_type": "qio_qspi"
-      },
+    },
     "core": "esp32",
     "extra_flags": [
       "-DBOARD_HAS_PSRAM",

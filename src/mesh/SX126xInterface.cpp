@@ -54,12 +54,12 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #ifdef HELTEC_V4
     pinMode(LORA_PA_POWER, OUTPUT);
-    digitalWrite(LORA_PA_POWER,HIGH);
-    
+    digitalWrite(LORA_PA_POWER, HIGH);
+
     pinMode(LORA_PA_EN, OUTPUT);
-    digitalWrite(LORA_PA_EN,LOW);
+    digitalWrite(LORA_PA_EN, LOW);
     pinMode(LORA_PA_TX_EN, OUTPUT);
-    digitalWrite(LORA_PA_TX_EN,LOW);
+    digitalWrite(LORA_PA_TX_EN, LOW);
 #endif
 
 #if ARCH_PORTDUINO
@@ -350,11 +350,11 @@ template <typename T> bool SX126xInterface<T>::sleep()
 #endif
 
 #ifdef HELTEC_V4
-/*
-* Do not switch the power on and off frequently.
-* After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
-*  // digitalWrite(LORA_PA_POWER, LOW);
-*/
+    /*
+     * Do not switch the power on and off frequently.
+     * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
+     *  // digitalWrite(LORA_PA_POWER, LOW);
+     */
     digitalWrite(LORA_PA_EN, LOW);
     digitalWrite(LORA_PA_TX_EN, LOW);
 #endif
@@ -365,9 +365,9 @@ template <typename T> bool SX126xInterface<T>::sleep()
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
 #ifdef HELTEC_V4
-    digitalWrite(LORA_PA_POWER,HIGH);
+    digitalWrite(LORA_PA_POWER, HIGH);
     digitalWrite(LORA_PA_EN, HIGH);
-    digitalWrite(LORA_PA_TX_EN,txon ? 1 : 0);
+    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0);
 #endif
 }
 
