@@ -1,5 +1,6 @@
 // Based on the MPR121 Keyboard and Adafruit TCA8418 library
 #include "configuration.h"
+#include "kbInterrupt.h"
 #include <Wire.h>
 
 /**
@@ -8,7 +9,7 @@
  * and handling key states. It is designed to be extended for specific keyboard implementations.
  * It supports both I2C communication and function pointers for custom I2C operations.
  */
-class TCA8418KeyboardBase
+class TCA8418KeyboardBase : public KbInterruptObservable
 {
   public:
     enum TCA8418Key : uint8_t {
@@ -46,8 +47,6 @@ class TCA8418KeyboardBase
     virtual char dequeueEvent(void);
 
   protected:
-    enum KeyState { Init, Idle, Held, Busy };
-
     enum TCA8418Register : uint8_t {
         TCA8418_REG_RESERVED = 0x00,
         TCA8418_REG_CFG = 0x01,
@@ -121,7 +120,7 @@ class TCA8418KeyboardBase
     };
 
     virtual void pressed(uint8_t key);
-    virtual void released(void);
+    virtual void released(uint8_t key);
 
     virtual void queueEvent(char);
 
@@ -144,6 +143,7 @@ class TCA8418KeyboardBase
     // enable / disable interrupts for matrix and GPI pins
     void enableInterrupts();
     void disableInterrupts();
+    static TCA8418KeyboardBase *interruptInstance;
 
     // ignore key events when FIFO buffer is full or not.
     void enableMatrixOverflow();
@@ -159,7 +159,6 @@ class TCA8418KeyboardBase
   protected:
     uint8_t rows;
     uint8_t columns;
-    KeyState state;
     String queue;
 
   private:

@@ -32,8 +32,7 @@
 #define _TCA8418_REG_LCK_EC_KLEC_0 0x01   // Key event count bit 0
 
 TCA8418KeyboardBase::TCA8418KeyboardBase(uint8_t rows, uint8_t columns)
-    : rows(rows), columns(columns), state(Init), queue(""), m_wire(nullptr), m_addr(0), readCallback(nullptr),
-      writeCallback(nullptr)
+    : rows(rows), columns(columns), queue(""), m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
 }
 
@@ -43,6 +42,16 @@ void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire)
     m_wire = wire;
     m_wire->begin();
     reset();
+
+#ifdef KB_INT
+    interruptInstance = this;
+    auto interruptHandler = []() { interruptInstance->notifyObservers(interruptInstance); };
+
+    ::pinMode(KB_INT, INPUT_PULLUP);
+    attachInterrupt(KB_INT, interruptHandler, FALLING);
+
+    enableInterrupts();
+#endif
 }
 
 void TCA8418KeyboardBase::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
@@ -82,7 +91,6 @@ void TCA8418KeyboardBase::reset()
     matrix(rows, columns);
     enableDebounce();
     flush();
-    state = Idle;
 }
 
 bool TCA8418KeyboardBase::matrix(uint8_t rows, uint8_t columns)
@@ -148,27 +156,21 @@ char TCA8418KeyboardBase::dequeueEvent()
 
 void TCA8418KeyboardBase::trigger()
 {
-    if (keyCount() == 0) {
-        return;
-    }
-    if (state != Init) {
+    while (keyCount()) {
         // Read the key register
         uint8_t k = readRegister(TCA8418_REG_KEY_EVENT_A);
         uint8_t key = k & 0x7F;
         if (k & 0x80) {
-            if (state == Idle)
-                pressed(key);
-            return;
+            pressed(key);
         } else {
-            if (state == Held) {
-                released();
-            }
-            state = Idle;
-            return;
+            released(key);
         }
-    } else {
-        reset();
     }
+
+#ifdef KB_INT
+    // Reset interrupt mask so we can receive future interrupts
+    writeRegister(TCA8418_REG_INT_STAT, 3);
+#endif
 }
 
 void TCA8418KeyboardBase::pressed(uint8_t key)
@@ -177,7 +179,7 @@ void TCA8418KeyboardBase::pressed(uint8_t key)
     LOG_ERROR("pressed() not implemented in derived class");
 }
 
-void TCA8418KeyboardBase::released()
+void TCA8418KeyboardBase::released(uint8_t key)
 {
     // must be defined in derived class
     LOG_ERROR("released() not implemented in derived class");
@@ -303,6 +305,8 @@ void TCA8418KeyboardBase::disableInterrupts()
     value &= ~(_TCA8418_REG_CFG_GPI_IEN | _TCA8418_REG_CFG_KE_IEN);
     writeRegister(TCA8418_REG_CFG, value);
 };
+
+TCA8418KeyboardBase *TCA8418KeyboardBase::interruptInstance;
 
 void TCA8418KeyboardBase::enableMatrixOverflow()
 {
