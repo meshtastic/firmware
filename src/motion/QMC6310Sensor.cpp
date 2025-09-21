@@ -47,10 +47,31 @@ bool QMC6310Sensor::init()
 
 int32_t QMC6310Sensor::runOnce()
 {
-    Polar p;
-    if (sensor.readPolar(p)) {
+    // Read and process raw values with simple hard‑iron calibration
+    if (sensor.isDataReady()) {
+        sensor.readData();
+        int16_t rx = sensor.getRawX();
+        int16_t ry = sensor.getRawY();
+        int16_t rz = sensor.getRawZ();
+
+        if (rx < minX) minX = rx; if (rx > maxX) maxX = rx;
+        if (ry < minY) minY = ry; if (ry > maxY) maxY = ry;
+        if (rz < minZ) minZ = rz; if (rz > maxZ) maxZ = rz;
+
+        offsetX = (maxX + minX) * 0.5f;
+        offsetY = (maxY + minY) * 0.5f;
+        offsetZ = (maxZ + minZ) * 0.5f;
+
+        float mx = float(rx) - offsetX;
+        float my = float(ry) - offsetY;
+        (void)rz; // mz is currently unused for heading
+
+        float heading = atan2f(my, mx) * 180.0f / PI;
+        heading += QMC6310_DECLINATION_DEG + QMC6310_YAW_MOUNT_OFFSET;
+        while (heading < 0.0f) heading += 360.0f;
+        while (heading >= 360.0f) heading -= 360.0f;
+
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-        float heading = p.polar;
         switch (config.display.compass_orientation) {
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
@@ -58,24 +79,28 @@ int32_t QMC6310Sensor::runOnce()
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
             heading += 90;
+            if (heading >= 360.0f) heading -= 360.0f;
             break;
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
             heading += 180;
+            if (heading >= 360.0f) heading -= 360.0f;
             break;
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
         case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
             heading += 270;
+            if (heading >= 360.0f) heading -= 360.0f;
             break;
         }
         if (screen)
             screen->setHeading(heading);
 #endif
-        // Throttled debug output (once per second)
+
         uint32_t now = millis();
         if (now - lastLogMs > 1000) {
             lastLogMs = now;
-            LOG_DEBUG("QMC6310: heading=%.1f deg, |B|=%.1f uT", p.polar, p.uT);
+            LOG_DEBUG("QMC6310: head=%.1f off[x=%.0f y=%.0f z=%.0f] raw[x=%d y=%d z=%d]",
+                      heading, offsetX, offsetY, offsetZ, rx, ry, rz);
         }
     }
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
