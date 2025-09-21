@@ -10,15 +10,15 @@
 
 class RotaryEncoder;
 
-class TLoraPagerRotaryEncoder : public InputPollable
+class RotaryEncoderImpl : public InputPollable
 {
   public:
-    TLoraPagerRotaryEncoder();
+    RotaryEncoderImpl();
     bool init(void);
     virtual void pollOnce() override;
 
   protected:
-    static TLoraPagerRotaryEncoder *interruptInstance;
+    static RotaryEncoderImpl *interruptInstance;
 
     input_broker_event eventCw = INPUT_BROKER_NONE;
     input_broker_event eventCcw = INPUT_BROKER_NONE;
@@ -27,6 +27,6 @@ class TLoraPagerRotaryEncoder : public InputPollable
     RotaryEncoder *rotary;
 };
 
-extern TLoraPagerRotaryEncoder *tLoraPagerRotaryEncoder;
+extern RotaryEncoderImpl *rotaryEncoderImpl;
 
 #endif

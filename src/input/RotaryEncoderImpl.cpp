@@ -1,19 +1,19 @@
 #ifdef T_LORA_PAGER
 
-#include "TLoraPagerRotaryEncoder.h"
+#include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
 
 #define ORIGIN_NAME "RotaryEncoder"
 
-TLoraPagerRotaryEncoder *tLoraPagerRotaryEncoder;
+RotaryEncoderImpl *rotaryEncoderImpl;
 
-TLoraPagerRotaryEncoder::TLoraPagerRotaryEncoder()
+RotaryEncoderImpl::RotaryEncoderImpl()
 {
     rotary = nullptr;
 }
 
-bool TLoraPagerRotaryEncoder::init()
+bool RotaryEncoderImpl::init()
 {
     if (!moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.inputbroker_pin_a == 0 ||
         moduleConfig.canned_message.inputbroker_pin_b == 0) {
@@ -41,7 +41,7 @@ bool TLoraPagerRotaryEncoder::init()
     return true;
 }
 
-void TLoraPagerRotaryEncoder::pollOnce()
+void RotaryEncoderImpl::pollOnce()
 {
     InputEvent e{ORIGIN_NAME, INPUT_BROKER_NONE, 0, 0, 0};
 
@@ -71,6 +71,6 @@ void TLoraPagerRotaryEncoder::pollOnce()
     }
 }
 
-TLoraPagerRotaryEncoder *TLoraPagerRotaryEncoder::interruptInstance;
+RotaryEncoderImpl *RotaryEncoderImpl::interruptInstance;
 
 #endif
