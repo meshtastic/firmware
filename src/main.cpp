@@ -23,6 +23,7 @@
 #include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
+#include "detect/ScanI2CConsumer.h"
 #include "detect/ScanI2CTwoWire.h"
 #include <Wire.h>
 #endif
@@ -711,9 +712,7 @@ void setup()
     LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
 
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_3XX, meshtastic_TelemetrySensorType_BMP3XX);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260);
@@ -737,8 +736,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90632, meshtastic_TelemetrySensorType_MLX90632);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::CGRADSENS, meshtastic_TelemetrySensorType_RADSENS);
@@ -750,7 +747,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::TSL2561, meshtastic_TelemetrySensorType_TSL2561);
 
-    i2cScanner.reset();
 #endif
 
 #ifdef HAS_SDCARD
@@ -964,6 +960,12 @@ void setup()
 
     // Now that the mesh service is created, create any modules
     setupModules();
+
+#if !MESHTASTIC_EXCLUDE_I2C
+    // Inform modules about I2C devices
+    ScanI2CCompleted(i2cScanner.get());
+    i2cScanner.reset();
+#endif
 
     // warn the user about a low entropy key
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {

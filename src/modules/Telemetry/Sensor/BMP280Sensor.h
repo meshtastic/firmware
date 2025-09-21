@@ -16,8 +16,8 @@ class BMP280Sensor : public TelemetrySensor
 
   public:
     BMP280Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

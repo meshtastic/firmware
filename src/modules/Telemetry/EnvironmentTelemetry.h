@@ -11,10 +11,13 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include "detect/ScanI2CConsumer.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class EnvironmentTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
+class EnvironmentTelemetryModule : private concurrency::OSThread,
+                                   public ScanI2CConsumer,
+                                   public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *>(this,
@@ -23,7 +26,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
   public:
     EnvironmentTelemetryModule()
         : concurrency::OSThread("EnvironmentTelemetry"),
-          ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
+          ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg), ScanI2CConsumer()
     {
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
@@ -55,6 +58,8 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
+
+    void i2cScanFinished(ScanI2C *i2cScanner);
 
   private:
     bool firstTime = 1;
