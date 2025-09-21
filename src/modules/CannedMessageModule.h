@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
+#include <functional>
 
 // ============================
 //        Enums & Defines
@@ -61,6 +62,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void LaunchWithDestination(NodeNum, uint8_t newChannel = 0);
     void LaunchRepeatDestination();
     void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0);
+    void LaunchFreetextPrompt(const char* header,
+                              const std::string& initial,
+                              std::function<void(const std::string&)> onSubmit);
+    void LaunchFreetextKbPrompt(const char* header,
+                                const std::string& initial,
+                                std::function<void(const std::string&)> onSubmit);
 
     // === Emote Picker navigation ===
     int emotePickerIndex = 0; // Tracks currently selected emote in the picker
@@ -181,6 +188,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     char highlight = 0x00;
     char payload = 0x00;
     unsigned int cursor = 0;
+
+    // === Custom Callback for WiFi prompt ===
+    std::function<void(const std::string&)> customCallback = nullptr;
+    String customHeader = "";
     unsigned long lastTouchMillis = 0;
     uint32_t lastFilterUpdate = 0;
     static constexpr uint32_t filterDebounceMs = 30;
