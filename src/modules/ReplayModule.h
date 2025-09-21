@@ -13,7 +13,7 @@
 #define REPLAY_QUEUE_MASK 0x0F                          // Mask for wrapping the replay queue index
 #define REPLAY_QUEUE_SIZE (REPLAY_QUEUE_MASK + 1)       // Size of the replay
 #define REPLAY_FLUSH_PACKETS 16                         // Send an advertisement after at most this many packets
-#define REPLAY_FLUSH_SECS 15 // Send an advertisement after at most this many seconds (if unadvertised packets are pending)
+#define REPLAY_FLUSH_SECS 20 // Send an advertisement after at most this many seconds (if unadvertised packets are pending)
 #define REPLAY_STARTUP_DELAY_SECS 30   // Wait this many seconds after boot before sending the first advertisement
 #define REPLAY_ADVERT_MAX_PACKETS 64   // Advertise at most this many packets at a time
 #define REPLAY_CHUTIL_THRESHOLD_PCT 35 // If chutil is >= this, only advertise high-priority packets
@@ -22,16 +22,16 @@
 #define REPLAY_HEAP_RESERVE_PCT 5         // Don't prune the cache to below this much of the heap
 #define REPLAY_HEAP_FREE_MIN_PCT 10       // Prune packets if free heap is below this
 #define REPLAY_HEAP_FREE_TARGET_PCT 15    // Prune packets until free heap is above this
-#define REPLAY_SPACING_MS 500             // Spacing between replayed packets (TODO: scale based on radio settings)
+#define REPLAY_SPACING_MS 1000            // Spacing between replayed packets (TODO: scale based on radio settings)
 #define REPLAY_EXPIRED_SPACING_SECS 10    // Minimum spacing between advertisements of expired packets
 #define REPLAY_SEQUENCE_MASK 0x1F         // Mask for wrapping advertisement sequence number
 #define REPLAY_TRACK_SERVERS 8            // Keep track of state for this many servers
 #define REPLAY_REQUEST_MAX_PACKETS 16     // Request at most this many packets at a time
 #define REPLAY_REQUEST_MAX_OUTSTANDING 32 // Keep track of this many outstanding requested packets
-#define REPLAY_REQUEST_TIMEOUT_SECS 30    // Consider a requested packet lost or unfilled after this many seconds
-#define REPLAY_SERVER_STALE_SECS 900      // Consider a server stale if we haven't heard from it in this many seconds
+#define REPLAY_REQUEST_TIMEOUT_SECS 45    // Consider a requested packet lost or unfilled after this many seconds
+#define REPLAY_SERVER_STALE_SECS 300      // Consider a server stale if we haven't heard from it in this many seconds
 #define REPLAY_CLIENT_BURST 16            // Allow at most this many replay requests per client in a burst
-#define REPLAY_CLIENT_RATE_MS 100         // Allow at most one replay request per client every this many milliseconds on average
+#define REPLAY_CLIENT_RATE_MS 1000        // Allow at most one replay request per client every this many milliseconds on average
 #define REPLAY_CLIENT_SIZE 128            // Track at most this many clients
 #define REPLAY_CLIENT_THROTTLE_ADVERT_MAX 64 // Advertise at most this many throttled clients at a time
 
