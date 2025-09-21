@@ -10,6 +10,9 @@ namespace graphics
 namespace MessageRenderer
 {
 
+// Call this to request a page down on the next frame render
+void requestPageDown();
+
 // Text and emote rendering
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
 

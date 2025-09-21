@@ -72,9 +72,9 @@ class VirtualKeyboard
     void moveCursorDelta(int dRow, int dCol);
 
     char getCharForKey(const VirtualKey &key, bool isLongPress = false);
-    void insertCharacter(char c);
-    void deleteCharacter();
-    void submitText();
+    void insertCharacter(char c); // Insert character into input
+    void deleteCharacter();       // Delete character from input
+    void submitText();            // Submit text input
 };
 
 } // namespace graphics

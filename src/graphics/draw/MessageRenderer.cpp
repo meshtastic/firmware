@@ -56,6 +56,10 @@ namespace graphics
 namespace MessageRenderer
 {
 
+// Forward declarations
+static int s_pendingPageDown = 0;
+void requestPageDown() { s_pendingPageDown++; }
+
 // Simple cache based on text hash
 static size_t cachedKey = 0;
 static std::vector<std::string> cachedLines;
@@ -376,6 +380,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
     static bool waitingToReset = false, scrollStarted = false;
+
+    // Handle any pending page down requests
+    if (s_pendingPageDown > 0) {
+        float page = (float)usableScrollHeight * 0.9f;  // 90% page
+        s_pendingPageDown = 0;
+
+        // If we're already at the bottom, reset to top
+        scrollStarted = true;
+        scrollStartDelay = lastTime;
+    }
+
 
     // === Smooth scrolling adjustment ===
     // You can tweak this divisor to change how smooth it scrolls.
