@@ -1016,6 +1016,15 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_compass);
     }
 #endif
+    // After GPS, add QMC6310 and QMI8658 debug screens
+#if !MESHTASTIC_EXCLUDE_I2C
+    normalFrames[numframes++] = graphics::DebugRenderer::drawQMC6310Screen;
+    indicatorIcons.push_back(icon_compass);
+#endif
+#if defined(IMU_CS)
+    normalFrames[numframes++] = graphics::DebugRenderer::drawQMI8658Screen;
+    indicatorIcons.push_back(icon_system);
+#endif
     if (RadioLibInterface::instance && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;

@@ -1,5 +1,6 @@
 #include "QMC6310Sensor.h"
 #include <Arduino.h>
+#include "SensorLiveData.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMC6310.hpp>)
 
@@ -54,9 +55,18 @@ int32_t QMC6310Sensor::runOnce()
         int16_t ry = sensor.getRawY();
         int16_t rz = sensor.getRawZ();
 
-        if (rx < minX) minX = rx; if (rx > maxX) maxX = rx;
-        if (ry < minY) minY = ry; if (ry > maxY) maxY = ry;
-        if (rz < minZ) minZ = rz; if (rz > maxZ) maxZ = rz;
+        if (rx < minX)
+            minX = rx;
+        if (rx > maxX)
+            maxX = rx;
+        if (ry < minY)
+            minY = ry;
+        if (ry > maxY)
+            maxY = ry;
+        if (rz < minZ)
+            minZ = rz;
+        if (rz > maxZ)
+            maxZ = rz;
 
         offsetX = (maxX + minX) * 0.5f;
         offsetY = (maxY + minY) * 0.5f;
@@ -70,6 +80,16 @@ int32_t QMC6310Sensor::runOnce()
         heading += QMC6310_DECLINATION_DEG + QMC6310_YAW_MOUNT_OFFSET;
         while (heading < 0.0f) heading += 360.0f;
         while (heading >= 360.0f) heading -= 360.0f;
+
+        g_qmc6310Live.initialized = true;
+        g_qmc6310Live.rawX = rx;
+        g_qmc6310Live.rawY = ry;
+        g_qmc6310Live.rawZ = rz;
+        g_qmc6310Live.offX = offsetX;
+        g_qmc6310Live.offY = offsetY;
+        g_qmc6310Live.offZ = offsetZ;
+        g_qmc6310Live.heading = heading;
+        g_qmc6310Live.last_ms = millis();
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
         switch (config.display.compass_orientation) {

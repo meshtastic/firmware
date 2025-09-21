@@ -1,5 +1,6 @@
 #include "QMI8658Sensor.h"
 #include "NodeDB.h"
+#include "SensorLiveData.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMI8658.hpp>)
 
@@ -46,7 +47,8 @@ bool QMI8658Sensor::init()
     uint8_t id = qmi.getChipID();
     LOG_DEBUG("QMI8658: chip id=0x%02x", id);
 #ifdef QMI8658_DEBUG_STREAM
-    LOG_INFO("QMI8658 debug stream enabled (10 Hz)");
+    LOG_INFO("QMI8658 debug stream enabled (1 Hz)");
+    lastLogMs = 0;
 #endif
 
     // Basic configuration similar to lewisxhe examples
@@ -78,21 +80,35 @@ bool QMI8658Sensor::init()
     LOG_DEBUG("QMI8658: dump control registers ->");
     qmi.dumpCtrlRegister();
     LOG_DEBUG("QMI8658: init ok");
+    g_qmi8658Live.initialized = true;
     return true;
 }
 
 int32_t QMI8658Sensor::runOnce()
 {
 #ifdef QMI8658_DEBUG_STREAM
-    // Always sample/log when debug stream is enabled
+    // Always sample/log when debug stream is enabled (throttle to ~1 Hz)
     IMUdata acc = {0};
     IMUdata gyr = {0};
     bool ready = qmi.getDataReady();
-    bool gotAcc = qmi.getAccelerometer(acc.x, acc.y, acc.z);
-    bool gotGyr = qmi.getGyroscope(gyr.x, gyr.y, gyr.z);
-    LOG_DEBUG("QMI8658: ready=%d ACC[x=%.3f y=%.3f z=%.3f] m/s^2  GYR[x=%.3f y=%.3f z=%.3f] dps",
-              (int)ready, acc.x, acc.y, acc.z, gyr.x, gyr.y, gyr.z);
-    return 100; // ~10 Hz
+    qmi.getAccelerometer(acc.x, acc.y, acc.z);
+    qmi.getGyroscope(gyr.x, gyr.y, gyr.z);
+
+    uint32_t now = millis();
+    g_qmi8658Live.ready = ready;
+    g_qmi8658Live.acc.x = acc.x;
+    g_qmi8658Live.acc.y = acc.y;
+    g_qmi8658Live.acc.z = acc.z;
+    g_qmi8658Live.gyr.x = gyr.x;
+    g_qmi8658Live.gyr.y = gyr.y;
+    g_qmi8658Live.gyr.z = gyr.z;
+    g_qmi8658Live.last_ms = now;
+    if (now - lastLogMs > 1000) {
+        lastLogMs = now;
+        LOG_DEBUG("QMI8658: ready=%d ACC[x=%.3f y=%.3f z=%.3f] m/s^2  GYR[x=%.3f y=%.3f z=%.3f] dps",
+                  (int)ready, acc.x, acc.y, acc.z, gyr.x, gyr.y, gyr.z);
+    }
+    return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #endif
 
     if (!config.display.wake_on_tap_or_motion)

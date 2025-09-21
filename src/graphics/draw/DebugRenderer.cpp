@@ -30,6 +30,8 @@
 #include <DisplayFormatters.h>
 #include <RadioLibInterface.h>
 #include <target_specific.h>
+#include <math.h>
+#include "motion/SensorLiveData.h"
 
 using namespace meshtastic;
 
@@ -693,6 +695,48 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->drawString(textX, getTextPositions(display)[line++], "World!");
 }
 
+// ---------------- Additional IMU/Magnetometer debug screens ----------------
+void drawQMC6310Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    static uint32_t last = 0;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "QMC6310");
+    int line = 1;
+    if (g_qmc6310Live.initialized) {
+        if (!Throttle::isWithinTimespanMs(last, 1000)) {
+            last = millis();
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Head %3.0f  offX %.0f offY %.0f", g_qmc6310Live.heading, g_qmc6310Live.offX,
+                     g_qmc6310Live.offY);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+            snprintf(buf, sizeof(buf), "rawX %d rawY %d", g_qmc6310Live.rawX, g_qmc6310Live.rawY);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+        }
+    } else {
+        display->drawString(x, getTextPositions(display)[line++], "No data");
+    }
+}
+
+void drawQMI8658Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    (void)state; (void)x; (void)y;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "QMI8658");
+    int line = 1;
+    if (g_qmi8658Live.initialized) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "ACC %.2f %.2f %.2f", g_qmi8658Live.acc.x, g_qmi8658Live.acc.y, g_qmi8658Live.acc.z);
+        display->drawString(x, getTextPositions(display)[line++], buf);
+        snprintf(buf, sizeof(buf), "GYR %.2f %.2f %.2f", g_qmi8658Live.gyr.x, g_qmi8658Live.gyr.y, g_qmi8658Live.gyr.z);
+        display->drawString(x, getTextPositions(display)[line++], buf);
+    } else {
+        display->drawString(x, getTextPositions(display)[line++], "No data");
+    }
+}
 } // namespace DebugRenderer
 } // namespace graphics
 #endif

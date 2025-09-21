@@ -13,6 +13,7 @@ class QMI8658Sensor : public MotionSensor
 {
   private:
     SensorQMI8658 qmi;
+    uint32_t lastLogMs = 0;
 
     // Simple motion threshold in Gs above steady 1g
     static constexpr float MOTION_THRESHOLD_G = 0.15f; // ~0.15 g
