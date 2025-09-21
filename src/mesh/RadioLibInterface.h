@@ -161,7 +161,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * timer scaled to SNR of to be flooded packet
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimerSNR(float snr);
+    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();

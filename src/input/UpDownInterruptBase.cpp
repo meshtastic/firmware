@@ -40,7 +40,7 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
 
 int32_t UpDownInterruptBase::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     unsigned long now = millis();
     if (this->action == UPDOWN_ACTION_PRESSED) {

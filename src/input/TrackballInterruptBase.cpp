@@ -48,7 +48,7 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
 
 int32_t TrackballInterruptBase::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
 #if defined(T_DECK) // T-deck gets a super-simple debounce on trackball
     if (this->action == TB_ACTION_PRESSED) {

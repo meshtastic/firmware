@@ -15,6 +15,7 @@ class NimbleBluetooth : BluetoothApi
 #if defined(NIMBLE_TWO)
     void startAdvertising();
 #endif
+    bool isDeInit = false;
 
   private:
     void setupService();

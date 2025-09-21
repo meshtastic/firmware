@@ -26,6 +26,26 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
+void menuHandler::loraMenu()
+{
+    static const char *optionsArray[] = {"Back", "Region Picker", "Device Role"};
+    enum optionsNumbers { Back = 0, lora_picker = 1, device_role_picker = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "LoRa Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            // No action
+        } else if (selected == lora_picker) {
+            menuHandler::menuQueue = menuHandler::lora_picker;
+        } else if (selected == device_role_picker) {
+            menuHandler::menuQueue = menuHandler::device_role_picker;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::OnboardMessage()
 {
     static const char *optionsArray[] = {"OK", "Got it!"};
@@ -119,6 +139,40 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::DeviceRolePicker()
+{
+    static const char *optionsArray[] = {"Back", "Client", "Client Mute", "Lost and Found", "Tracker"};
+    enum optionsNumbers {
+        Back = 0,
+        devicerole_client = 1,
+        devicerole_clientmute = 2,
+        devicerole_lostandfound = 3,
+        devicerole_tracker = 4
+    };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Device Role";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::lora_Menu;
+            screen->runNow();
+            return;
+        } else if (selected == devicerole_client) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        } else if (selected == devicerole_clientmute) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE;
+        } else if (selected == devicerole_lostandfound) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
+        } else if (selected == devicerole_tracker) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+        }
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -320,7 +374,7 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Dismiss) {
-            screen->dismissCurrentFrame();
+            screen->hideCurrentFrame();
         } else if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
@@ -361,8 +415,11 @@ void menuHandler::homeBaseMenu()
     optionsArray[options] = "Sleep Screen";
     optionsEnumArray[options++] = Sleep;
 #endif
-
-    optionsArray[options] = "Send Position";
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        optionsArray[options] = "Send Position";
+    } else {
+        optionsArray[options] = "Send Node Info";
+    }
     optionsEnumArray[options++] = Position;
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "New Preset";
@@ -455,7 +512,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, FrameToggles, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -467,6 +524,9 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Screen Options";
     optionsEnumArray[options++] = ScreenOptions;
 #endif
+
+    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsEnumArray[options++] = FrameToggles;
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "Bluetooth";
 #else
@@ -503,6 +563,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
+            screen->runNow();
+        } else if (selected == FrameToggles) {
+            menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -570,16 +633,17 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
+    enum optionsNumbers { Back, GPSToggle, GPSFormat, CompassMenu, CompassCalibrate, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
-    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
-    int options = 3;
+    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "GPS Format", "Compass"};
+    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, GPSFormat, CompassMenu};
+    int options = 4;
 
     if (accelerometerThread) {
         optionsArray[options] = "Compass Calibrate";
         optionsEnumArray[options++] = CompassCalibrate;
     }
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -588,6 +652,9 @@ void menuHandler::positionBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == GPSToggle) {
             menuQueue = gps_toggle_menu;
+            screen->runNow();
+        } else if (selected == GPSFormat) {
+            menuQueue = gps_format_menu;
             screen->runNow();
         } else if (selected == CompassMenu) {
             menuQueue = compass_point_north_menu;
@@ -713,6 +780,51 @@ void menuHandler::GPSToggleMenu()
         }
     };
     bannerOptions.InitialSelected = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2;
+    screen->showOverlayBanner(bannerOptions);
+}
+void menuHandler::GPSFormatMenu()
+{
+
+    static const char *optionsArray[] = {"Back",
+                                         isHighResolution ? "Decimal Degrees" : "DEC",
+                                         isHighResolution ? "Degrees Minutes Seconds" : "DMS",
+                                         isHighResolution ? "Universal Transverse Mercator" : "UTM",
+                                         isHighResolution ? "Military Grid Reference System" : "MGRS",
+                                         isHighResolution ? "Open Location Code" : "OLC",
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "GPS Format";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 8;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 2) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 3) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 4) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 5) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 6) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 7) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else {
+            menuQueue = position_base_menu;
+            screen->runNow();
+        }
+    };
+    bannerOptions.InitialSelected = uiconfig.gps_format + 1;
     screen->showOverlayBanner(bannerOptions);
 }
 #endif
@@ -1010,15 +1122,32 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    static const char *optionsArray[] = {"Back", "Number Picker"};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
+    static const char *optionsArray[4] = {"Back"};
+    static int optionsEnumArray[4] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Number Picker";
+    optionsEnumArray[options++] = NumberPicker;
+
+    optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
+    optionsEnumArray[options++] = ShowChirpy;
+
     BannerOverlayOptions bannerOptions;
-    std::string message = "Test to Run?\n";
-    bannerOptions.message = message.c_str();
+    bannerOptions.message = "Hidden Test Menu";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == NumberPicker) {
             menuQueue = number_test;
+            screen->runNow();
+        } else if (selected == ShowChirpy) {
+            screen->toggleFrameVisibility("chirpy");
+            screen->setFrames(Screen::FOCUS_SYSTEM);
+
+        } else {
+            menuQueue = system_base_menu;
             screen->runNow();
         }
     };
@@ -1220,6 +1349,116 @@ void menuHandler::keyVerificationFinalPrompt()
     }
 }
 
+void menuHandler::FrameToggles_menu()
+{
+    enum optionsNumbers {
+        Finish,
+        nodelist,
+        nodelist_lastheard,
+        nodelist_hopsignal,
+        nodelist_distance,
+        nodelist_bearings,
+        gps,
+        lora,
+        clock,
+        show_favorites,
+        enumEnd
+    };
+    static const char *optionsArray[enumEnd] = {"Finish"};
+    static int optionsEnumArray[enumEnd] = {Finish};
+    int options = 1;
+
+    // Track last selected index (not enum value!)
+    static int lastSelectedIndex = 0;
+
+#ifndef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
+    optionsEnumArray[options++] = nodelist;
+#endif
+#ifdef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
+    optionsEnumArray[options++] = nodelist_lastheard;
+    optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";
+    optionsEnumArray[options++] = nodelist_hopsignal;
+    optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
+    optionsEnumArray[options++] = nodelist_distance;
+#endif
+#if HAS_GPS
+    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show Bearings" : "Hide Bearings";
+    optionsEnumArray[options++] = nodelist_bearings;
+
+    optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
+    optionsEnumArray[options++] = gps;
+#endif
+
+    optionsArray[options] = screen->isFrameHidden("lora") ? "Show LoRa" : "Hide LoRa";
+    optionsEnumArray[options++] = lora;
+
+    optionsArray[options] = screen->isFrameHidden("clock") ? "Show Clock" : "Hide Clock";
+    optionsEnumArray[options++] = clock;
+
+    optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
+    optionsEnumArray[options++] = show_favorites;
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Show/Hide Frames";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
+
+    bannerOptions.bannerCallback = [options](int selected) mutable -> void {
+        // Find the index of selected in optionsEnumArray
+        int idx = 0;
+        for (; idx < options; ++idx) {
+            if (optionsEnumArray[idx] == selected)
+                break;
+        }
+        lastSelectedIndex = idx;
+
+        if (selected == Finish) {
+            screen->setFrames(Screen::FOCUS_DEFAULT);
+        } else if (selected == nodelist) {
+            screen->toggleFrameVisibility("nodelist");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_lastheard) {
+            screen->toggleFrameVisibility("nodelist_lastheard");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_hopsignal) {
+            screen->toggleFrameVisibility("nodelist_hopsignal");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_distance) {
+            screen->toggleFrameVisibility("nodelist_distance");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_bearings) {
+            screen->toggleFrameVisibility("nodelist_bearings");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == gps) {
+            screen->toggleFrameVisibility("gps");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == lora) {
+            screen->toggleFrameVisibility("lora");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == clock) {
+            screen->toggleFrameVisibility("clock");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_favorites) {
+            screen->toggleFrameVisibility("show_favorites");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1227,8 +1466,14 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     switch (menuQueue) {
     case menu_none:
         break;
+    case lora_Menu:
+        loraMenu();
+        break;
     case lora_picker:
         LoraRegionPicker();
+        break;
+    case device_role_picker:
+        DeviceRolePicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);
@@ -1254,6 +1499,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
         GPSToggleMenu();
+        break;
+    case gps_format_menu:
+        GPSFormatMenu();
         break;
 #endif
     case compass_point_north_menu:
@@ -1315,6 +1563,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case power_menu:
         powerMenu();
+        break;
+    case FrameToggles:
+        FrameToggles_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);

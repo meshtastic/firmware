@@ -161,6 +161,15 @@ bool NextHopRouter::stopRetransmission(NodeNum from, PacketId id)
     return stopRetransmission(key);
 }
 
+bool NextHopRouter::roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *p)
+{
+    // Return true if we're allowed to cancel a packet in the txQueue (so we may never transmit it even once)
+
+    // Return false for roles like ROUTER, REPEATER, ROUTER_LATE which should always transmit the packet at least once.
+
+    return roleAllowsCancelingDupe(p); // same logic as FloodingRouter::roleAllowsCancelingDupe
+}
+
 bool NextHopRouter::stopRetransmission(GlobalPacketId key)
 {
     auto old = findPendingPacket(key);
@@ -170,9 +179,7 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
             // We only cancel it if we are the original sender or if we're not a router(_late)/repeater
-            if (isFromUs(p) || (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-                                config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-                                config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+            if (isFromUs(p) || roleAllowsCancelingFromTxQueue(p)) {
                 // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
                 cancelSending(getFrom(p), p->id);
             }
