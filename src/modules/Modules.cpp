@@ -181,7 +181,7 @@ void setupModules()
                 delete rotaryEncoderInterruptImpl1;
                 rotaryEncoderInterruptImpl1 = nullptr;
             }
-#if defined(T_LORA_PAGER) || defined(FSM_ROTARY_ENCODER)
+#if defined(FSM_ROTARY_ENCODER)
             // use a special FSM based rotary encoder version for T-LoRa Pager
             rotaryEncoderImpl = new RotaryEncoderImpl();
             if (!rotaryEncoderImpl->init()) {
