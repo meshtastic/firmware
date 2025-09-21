@@ -11,6 +11,8 @@
  * - Scale replay rate based on modem settings
  * - Prioritise replay of packets requested by routers
  * - Lots of testing (and likely a bunch of bugfixes)
+ *   - WARN  | 23:30:46 4214 [Router] Replay: Advertisement sequence went backwards from server=0x056191db seq=36, last_seq=48
+ *   - Back off repeated replay requests?
  * - Implement a periodic stats packet that includes:
  *   - Number of adverts sent
  *   - Number of replays sent
