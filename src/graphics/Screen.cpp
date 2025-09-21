@@ -355,6 +355,14 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_SPISSD1306)
+    dispdev = new SSD1306Spi(SSD1306_RESET, SSD1306_RS, SSD1306_NSS, GEOMETRY_64_48);
+    if (!dispdev->init()) {
+        LOG_DEBUG("Error: SSD1306 not detected!");
+    } else {
+        static_cast<SSD1306Spi *>(dispdev)->setHorizontalOffset(32);
+        LOG_INFO("SSD1306 init success");
+    }
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||    \
     defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
@@ -545,7 +553,7 @@ void Screen::setup()
     // === Apply loaded brightness ===
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
-#elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+#elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SPISSD1306)
     dispdev->setBrightness(brightness);
 #endif
     LOG_INFO("Applied screen brightness: %d", brightness);
@@ -592,7 +600,7 @@ void Screen::setup()
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
-#else
+#elif !defined(M5STACK_UNITC6L)
         dispdev->flipScreenVertically();
 #endif
     }
@@ -730,7 +738,11 @@ int32_t Screen::runOnce()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+#if defined(M5STACK_UNITC6L)
+        menuHandler::LoraRegionPicker();
+#else
         menuHandler::OnboardMessage();
+#endif
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
@@ -943,8 +955,12 @@ void Screen::setFrames(FrameFocus focus)
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
+#if defined(M5STACK_UNITC6L)
+        normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
+#else
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
+#endif
         indicatorIcons.push_back(digital_icon_clock);
     }
 #endif
@@ -1021,7 +1037,7 @@ void Screen::setFrames(FrameFocus focus)
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
-        indicatorIcons.push_back(small_chirpy);
+        indicatorIcons.push_back(chirpy_small);
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -1283,7 +1299,8 @@ void Screen::blink()
         delay(50);
         count = count - 1;
     }
-    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in OLEDDisplay.
+    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in
+    // OLEDDisplay.
     dispdev->setBrightness(brightness);
 }
 
@@ -1371,6 +1388,10 @@ void Screen::handleShowNextFrame()
 
 void Screen::setFastFramerate()
 {
+#if defined(M5STACK_UNITC6L)
+    dispdev->clear();
+    dispdev->display();
+#endif
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
 
@@ -1442,13 +1463,23 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 }
             } else {
                 if (longName && longName[0]) {
+#if defined(M5STACK_UNITC6L)
+                    strcpy(banner, "New Message");
+#else
                     snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+#endif
+
                 } else {
                     strcpy(banner, "New Message");
                 }
             }
-
+#if defined(M5STACK_UNITC6L)
+            screen->setOn(true);
+            screen->showSimpleBanner(banner, 1500);
+            playLongBeep();
+#else
             screen->showSimpleBanner(banner, 3000);
+#endif
         }
     }
 
@@ -1546,7 +1577,11 @@ int Screen::handleInputEvent(const InputEvent *event)
                     if (devicestate.rx_text_message.from) {
                         menuHandler::messageResponseMenu();
                     } else {
+#if defined(M5STACK_UNITC6L)
+                        menuHandler::textMessageMenu();
+#else
                         menuHandler::textMessageBaseMenu();
+#endif
                     }
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
