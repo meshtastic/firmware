@@ -50,7 +50,7 @@ extern "C" {
 #define LORA_MISO (6)
 #define LORA_MOSI (5)
 #define LORA_CS (7)
-    
+
 #define LORA_RXEN RADIOLIB_NC
 #define LORA_TXEN RADIOLIB_NC
 #define SX126X_DIO2_AS_RF_SWITCH

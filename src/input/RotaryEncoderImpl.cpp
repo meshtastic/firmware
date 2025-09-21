@@ -1,9 +1,9 @@
 #include "configuration.h"
 #if defined(FSM_ROTARY_ENCODER)
 
-#include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+#include "RotaryEncoderImpl.h"
 extern bool osk_found;
 
 #define ORIGIN_NAME "RotaryEncoder"
