@@ -173,28 +173,10 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
-/* How the GPS coordinates are displayed on the OLED screen. */
-typedef enum _meshtastic_Config_DisplayConfig_GpsCoordinateFormat {
-    /* GPS coordinates are displayed in the normal decimal degrees format:
- DD.DDDDDD DDD.DDDDDD */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC = 0,
-    /* GPS coordinates are displayed in the degrees minutes seconds format:
- DD°MM'SS"C DDD°MM'SS"C, where C is the compass point representing the locations quadrant */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS = 1,
-    /* Universal Transverse Mercator format:
- ZZB EEEEEE NNNNNNN, where Z is zone, B is band, E is easting, N is northing */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM = 2,
-    /* Military Grid Reference System format:
- ZZB CD EEEEE NNNNN, where Z is zone, B is band, C is the east 100k square, D is the north 100k square,
- E is easting, N is northing */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS = 3,
-    /* Open Location Code (aka Plus Codes). */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC = 4,
-    /* Ordnance Survey Grid Reference (the National Grid System of the UK).
- Format: AB EEEEE NNNNN, where A is the east 100k square, B is the north 100k square,
- E is the easting, N is the northing */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR = 5
-} meshtastic_Config_DisplayConfig_GpsCoordinateFormat;
+/* Deprecated in 2.7.4: Unused */
+typedef enum _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat {
+    meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED = 0
+} meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat;
 
 /* Unit display preference */
 typedef enum _meshtastic_Config_DisplayConfig_DisplayUnits {
@@ -491,7 +473,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     uint32_t screen_on_secs;
     /* Deprecated in 2.7.4: Unused
  How the GPS coordinates are formatted on the OLED screen. */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat gps_format;
+    meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat gps_format;
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
     uint32_t auto_screen_carousel_secs;
@@ -515,6 +497,9 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* If false (default), the device will display the time in 24-hour format on screen.
  If true, the device will display the time in 12-hour format on screen. */
     bool use_12h_clock;
+    /* If false (default), the device will use short names for various display screens.
+ If true, node names will show in long format */
+    bool use_long_node_name;
 } meshtastic_Config_DisplayConfig;
 
 /* Lora Config */
@@ -678,9 +663,9 @@ extern "C" {
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST+1))
 
-#define _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC
-#define _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR
-#define _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_ARRAYSIZE ((meshtastic_Config_DisplayConfig_GpsCoordinateFormat)(meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR+1))
+#define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
+#define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
+#define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat)(meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_MIN meshtastic_Config_DisplayConfig_DisplayUnits_METRIC
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_MAX meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL
@@ -721,7 +706,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_address_mode_ENUMTYPE meshtastic_Config_NetworkConfig_AddressMode
 
 
-#define meshtastic_Config_DisplayConfig_gps_format_ENUMTYPE meshtastic_Config_DisplayConfig_GpsCoordinateFormat
+#define meshtastic_Config_DisplayConfig_gps_format_ENUMTYPE meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat
 #define meshtastic_Config_DisplayConfig_units_ENUMTYPE meshtastic_Config_DisplayConfig_DisplayUnits
 #define meshtastic_Config_DisplayConfig_oled_ENUMTYPE meshtastic_Config_DisplayConfig_OledType
 #define meshtastic_Config_DisplayConfig_displaymode_ENUMTYPE meshtastic_Config_DisplayConfig_DisplayMode
@@ -742,7 +727,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0}
+#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
@@ -753,7 +738,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0}
+#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
@@ -820,6 +805,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_wake_on_tap_or_motion_tag 10
 #define meshtastic_Config_DisplayConfig_compass_orientation_tag 11
 #define meshtastic_Config_DisplayConfig_use_12h_clock_tag 12
+#define meshtastic_Config_DisplayConfig_use_long_node_name_tag 13
 #define meshtastic_Config_LoRaConfig_use_preset_tag 1
 #define meshtastic_Config_LoRaConfig_modem_preset_tag 2
 #define meshtastic_Config_LoRaConfig_bandwidth_tag 3
@@ -965,7 +951,8 @@ X(a, STATIC,   SINGULAR, UENUM,    displaymode,       8) \
 X(a, STATIC,   SINGULAR, BOOL,     heading_bold,      9) \
 X(a, STATIC,   SINGULAR, BOOL,     wake_on_tap_or_motion,  10) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_orientation,  11) \
-X(a, STATIC,   SINGULAR, BOOL,     use_12h_clock,    12)
+X(a, STATIC,   SINGULAR, BOOL,     use_12h_clock,    12) \
+X(a, STATIC,   SINGULAR, BOOL,     use_long_node_name,  13)
 #define meshtastic_Config_DisplayConfig_CALLBACK NULL
 #define meshtastic_Config_DisplayConfig_DEFAULT NULL
 
@@ -1043,7 +1030,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
 #define meshtastic_Config_BluetoothConfig_size   10
 #define meshtastic_Config_DeviceConfig_size      100
-#define meshtastic_Config_DisplayConfig_size     32
+#define meshtastic_Config_DisplayConfig_size     34
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     204

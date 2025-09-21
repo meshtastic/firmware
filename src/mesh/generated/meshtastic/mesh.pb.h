@@ -276,6 +276,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_V4 = 110,
     /* M5Stack C6L */
     meshtastic_HardwareModel_M5STACK_C6L = 111,
+    /* M5Stack Cardputer Adv */
+    meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV = 112,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
