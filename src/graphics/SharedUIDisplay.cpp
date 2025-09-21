@@ -5,6 +5,7 @@
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "power.h"
+#include "modules/ChatHistoryStore.h"
 #include <OLEDDisplay.h>
 #include <graphics/images.h>
 
@@ -229,56 +230,31 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
         timeX = screenW - xOffset - timeStrWidth + 3;
 
-        // === Show Mail or Mute Icon to the Left of Time ===
+        // === Show Unread Messages Count or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 2;
 
-        bool showMail = false;
+        // Get unread message count
+        int unreadCount = chat::ChatHistoryStore::instance().getTotalUnreadCount();
 
-#ifndef USE_EINK
-        if (hasUnreadMessage) {
-            if (now - lastMailBlink > 500) {
-                isMailIconVisible = !isMailIconVisible;
-                lastMailBlink = now;
-            }
-            showMail = isMailIconVisible;
-        }
-#else
-        if (hasUnreadMessage) {
-            showMail = true;
-        }
-#endif
+        if (unreadCount > 0) {
+            // Show unread message counter
+            char countStr[16];
+            snprintf(countStr, sizeof(countStr), "(%d)", unreadCount);
 
-        if (showMail) {
-            if (useHorizontalBattery) {
-                int iconW = 16, iconH = 12;
-                int iconX = iconRightEdge - iconW;
-                int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-                if (isInverted && !force_no_invert) {
-                    display->setColor(WHITE);
-                    display->fillRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
-                    display->setColor(BLACK);
-                } else {
-                    display->setColor(BLACK);
-                    display->fillRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
-                    display->setColor(WHITE);
-                }
-                display->drawRect(iconX, iconY, iconW + 1, iconH);
-                display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
-                display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);
+            display->setFont(ArialMT_Plain_10);
+            int countWidth = display->getStringWidth(countStr);
+            int countX = iconRightEdge - countWidth;
+            int countY = textY;
+
+            if (isInverted && !force_no_invert) {
+                display->setColor(BLACK);
             } else {
-                int iconX = iconRightEdge - (mail_width - 2);
-                int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-                if (isInverted && !force_no_invert) {
-                    display->setColor(WHITE);
-                    display->fillRect(iconX - 1, iconY - 1, mail_width + 2, mail_height + 2);
-                    display->setColor(BLACK);
-                } else {
-                    display->setColor(BLACK);
-                    display->fillRect(iconX - 1, iconY - 1, mail_width + 2, mail_height + 2);
-                    display->setColor(WHITE);
-                }
-                display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+                display->setColor(WHITE);
             }
+            display->drawString(countX, countY, countStr);
+
+            // Update iconRightEdge for next elements
+            iconRightEdge = countX - 2;
         } else if (isMuted) {
             if (isHighResolution) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
