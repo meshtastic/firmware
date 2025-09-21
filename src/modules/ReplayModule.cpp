@@ -504,6 +504,11 @@ void ReplayModule::requestReplay(ReplayServerInfo *server)
         request &= server->priority;
     if (!request.any())
         return; // Nothing to request
+    if (server->last_advert_millis + REPLAY_SERVER_STALE_SECS * 1000 < millis()) {
+        LOG_DEBUG("Replay: Cancelling requests for missing packets from stale server=0x%08x", server->id);
+        invalidateServer(server);
+        return;
+    }
     unsigned long request_millis = millis() + REPLAY_REQUEST_TIMEOUT_SECS * 1000;
     ReplayRequestInfo *requests[REPLAY_BUFFER_SIZE] = {};
     for (int i = 0; i < REPLAY_BUFFER_SIZE; i++) {
@@ -731,6 +736,11 @@ void ReplayModule::handleAdvertisement(const meshtastic_MeshPacket *p)
     for (unsigned int i = 0; i < REPLAY_TRACK_SERVERS; i++) {
         if (servers[i].id == p->from) {
             server = &servers[i];
+            if (server->last_advert_millis + REPLAY_SERVER_STALE_SECS * 1000 < millis()) {
+                LOG_INFO("Replay: Stale server 0x%08x has become active again after %u seconds", server->id,
+                         (millis() - server->last_advert_millis) / 1000);
+                invalidateServer(server);
+            }
             break;
         }
     }
@@ -738,14 +748,9 @@ void ReplayModule::handleAdvertisement(const meshtastic_MeshPacket *p)
     server->flag_priority = wire->header.priority;
     server->flag_router = wire->header.router;
 
-    if (wire->header.boot) {
+    if (wire->header.boot)
         // The server has rebooted, so reset its availability state
-        server->available.reset();
-        server->priority.reset();
-        server->missing.reset();
-        server->last_sequence = 0;
-        server->missing_sequence = 0;
-    }
+        invalidateServer(server);
 
     switch (wire->header.type) {
     case REPLAY_ADVERT_TYPE_AVAILABLE:
@@ -852,15 +857,22 @@ void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned ch
         }
         if (this_sequence <= server->last_sequence - 15)
             this_sequence += REPLAY_SEQUENCE_MASK + 1; // This is a forward wrap, not a reference to an old sequence
-        if (this_sequence < server->last_sequence && !wire->header.aggregate) {
-            // If the sequence number went backwards, then we have likely missed many intervening
-            // adverts and should reset our tracking state & start with a blank slate. Do not ask
-            // for missing adverts, because we have missed way too much for this to be sensible.
-            LOG_WARN("Replay: Advertisement sequence went backwards from server=0x%08x seq=%u, last_seq=%u", server->id,
-                     this_sequence, server->last_sequence);
-            server->available.reset();
-            server->priority.reset();
-            server->missing.reset();
+        if (!wire->header.aggregate &&
+            ((this_sequence < server->last_sequence) ||
+             (server->max_sequence > server->last_sequence && server->max_sequence - server->last_sequence > 15))) {
+            if (this_sequence < server->last_sequence)
+                // If the sequence number went backwards, then we have likely missed many intervening
+                // adverts and should reset our tracking state & start with a blank slate. Do not ask
+                // for missing adverts, because we have missed way too much for this to be sensible.
+                LOG_WARN("Replay: Advertisement sequence went backwards from server=0x%08x seq=%u, last_seq=%u", server->id,
+                         this_sequence, server->last_sequence);
+            else if (server->max_sequence - server->last_sequence > 15)
+                // If we have missed so many adverts that we are this far behind, we are probably never
+                // going to catch up via aggregates, so reset our tracking state & start with a blank slate.
+                LOG_WARN("Replay: Too many missed adverts from server=0x%08x seq=%u, last_seq=%u, max_seq=%u", server->id,
+                         this_sequence, server->last_sequence, server->max_sequence);
+
+            invalidateServer(server);
             server->last_sequence = REPLAY_SEQUENCE_MASK + 1 + wire->header.sequence;
             this_sequence = (server->last_sequence & ~REPLAY_SEQUENCE_MASK) | wire->header.sequence;
             server->max_sequence = this_sequence;
@@ -1038,6 +1050,25 @@ meshtastic_MeshPacket *ReplayModule::queuePop()
         queue_length--;
     }
     return p;
+}
+
+/**
+ * Invalidate a server record's state and prepare it for reuse
+ */
+void ReplayModule::invalidateServer(ReplayServerInfo *server, bool stats)
+{
+    server->last_sequence = 0;
+    server->max_sequence = 0;
+    server->missing_sequence = 0;
+    server->available.reset();
+    server->priority.reset();
+    server->missing.reset();
+
+    if (stats) {
+        server->adverts_received = 0;
+        server->replays_requested = 0;
+        server->last_advert_millis = 0;
+    }
 }
 
 /**

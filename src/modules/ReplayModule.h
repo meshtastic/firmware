@@ -212,6 +212,7 @@ class ReplayModule : public SinglePortModule, private concurrency::NotifiedWorke
                                     ReplayServerInfo *server);
     ReplayRequestInfo *requestInfo(ReplayHash hash);
     bool queuePush(ReplayCursor idx);
+    void invalidateServer(ReplayServerInfo *server, bool stats = false);
     void onNotify(uint32_t notification);
 };
 
