@@ -22,7 +22,7 @@
 #define LORA_RESET 12
 #define LORA_DIO1 14 // SX1262 IRQ
 #define LORA_DIO2 13 // SX1262 BUSY
-#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TCXO is enabled
 
 #define LORA_SCK 9
 #define LORA_MISO 11
