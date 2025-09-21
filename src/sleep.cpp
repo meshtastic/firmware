@@ -545,6 +545,12 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
+#ifdef HELTEC_V4
+    gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
+    gpio_pullup_en((gpio_num_t)LORA_PA_EN);
+    gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
+#endif
+
     LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
 
