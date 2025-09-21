@@ -1374,6 +1374,9 @@ void Screen::handleShowPrevFrame()
         ui->previousFrame();
         lastScreenTransition = millis();
         setFastFramerate();
+
+        // Reset scroll state if we’re leaving the text message frame
+        graphics::MessageRenderer::resetScrollState();
     }
 }
 
@@ -1385,6 +1388,9 @@ void Screen::handleShowNextFrame()
         ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
+
+        // Reset scroll state if we’re leaving the text message frame
+        graphics::MessageRenderer::resetScrollState();
     }
 }
 

@@ -91,7 +91,7 @@ void MessageStore::saveToFlash()
         f.write((uint8_t *)&m.sender, sizeof(m.sender));
         f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
         f.write((uint8_t *)&m.dest, sizeof(m.dest));
-        f.write((uint8_t *)m.text.c_str(), std::min(MAX_MESSAGE_SIZE, (uint32_t)m.text.size()));
+        f.write((uint8_t *)m.text.c_str(), std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size()));
         f.write('\0'); // null terminator
     }
     spiLock->unlock();
