@@ -227,7 +227,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     }
     LOG_INFO("Environment Telemetry adding I2C devices...");
 
-    // order by priority of values (low top, high bottom)
+    // order by priority of metrics/values (low top, high bottom)
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #if __has_include(<DFRobot_LarkWeatherStation.h>)
     addSensor<DFRobotLarkSensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_LARK);
 #endif
@@ -239,6 +241,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<Adafruit_BMP280.h>)
     addSensor<BMP280Sensor>(i2cScanner, ScanI2C::DeviceType::BMP_280);
+#endif
 #endif
 }
 
