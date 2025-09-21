@@ -286,9 +286,7 @@ const uint8_t digital_icon_clock[] PROGMEM = {0b00111100, 0b01000010, 0b10000101
 #define analog_icon_clock_height 8
 const uint8_t analog_icon_clock[] PROGMEM = {0b11111111, 0b01000010, 0b00100100, 0b00011000,
                                              0b00100100, 0b01000010, 0b01000010, 0b11111111};
-#ifdef M5STACK_UNITC6L
-#include "img/icon_small.xbm"
-#else
+
 #define chirpy_width 38
 #define chirpy_height 50
 static unsigned char chirpy[] = {
@@ -361,6 +359,9 @@ static unsigned char chirpy_hirez[] = {
 #define chirpy_small_image_height 8
 static unsigned char small_chirpy[] = {0x7f, 0x41, 0x55, 0x55, 0x55, 0x55, 0x41, 0x7f};
 
+#ifdef M5STACK_UNITC6L
+#include "img/icon_small.xbm"
+#else
 #include "img/icon.xbm"
 #endif
 static_assert(sizeof(icon_bits) >= 0, "Silence unused variable warning");
