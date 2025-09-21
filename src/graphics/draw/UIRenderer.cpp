@@ -26,6 +26,9 @@ static uint32_t lastSwitchTime = 0;
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+bool UIRenderer::showingMqttStatus = false;
+#endif
 std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
 
 void graphics::UIRenderer::rebuildFavoritedNodes()
@@ -551,6 +554,204 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     }
 #endif
 }
+
+// === Node Info direct (by node number, not favorite) ===
+// screen draw function that shows a specific node's info
+// without requiring it to be a favorite or calculating frame indices.
+void UIRenderer::drawNodeInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // --- Only display if we have a valid node number ---
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentFavoriteNodeNum);
+    if (!node || node->num == nodeDB->getNodeNum())
+        return;
+
+    display->clear();
+
+    // === Title ===
+    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+    char titlestr[32] = {0};
+    snprintf(titlestr, sizeof(titlestr), "Node: %s", shortName);
+
+    // === Draw battery/time/mail header (common across screens) ===
+    graphics::drawCommonHeader(display, x, y, titlestr);
+
+    // ==== DYNAMIC ROW STACKING WITH YOUR MACROS =====
+    int line = 1;
+    std::string usernameStr;
+
+    // 1) Long name
+    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+    if (username) {
+        usernameStr = sanitizeString(username);
+        display->drawString(x, getTextPositions(display)[line++], usernameStr.c_str());
+    }
+
+    // 2) Signal + Hops
+    char signalHopsStr[32] = "";
+    bool haveSignal = false;
+    int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
+    if ((int)((node->snr + 10) * 5) >= 0 && node->snr > -100) {
+        snprintf(signalHopsStr, sizeof(signalHopsStr), " Sig: %d%%", percentSignal);
+        haveSignal = true;
+    }
+    if (node->hops_away > 0) {
+        size_t len = strlen(signalHopsStr);
+        snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, "%s[%d %s]",
+                 haveSignal ? " " : "", node->hops_away, (node->hops_away == 1 ? "Hop" : "Hops"));
+    }
+    if (signalHopsStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], signalHopsStr);
+    }
+
+    // 3) Heard (last seen)
+    char seenStr[20] = "";
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds != 0 && seconds != UINT32_MAX) {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        snprintf(seenStr, sizeof(seenStr), (days > 365 ? " Heard: ?" : " Heard: %d%c ago"),
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
+    }
+    if (seenStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], seenStr);
+    }
+
+    // 4) Uptime
+    char uptimeStr[32] = "";
+    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
+        uint32_t uptime = node->device_metrics.uptime_seconds;
+        uint32_t days = uptime / 86400;
+        uint32_t hours = (uptime % 86400) / 3600;
+        uint32_t mins = (uptime % 3600) / 60;
+        if (days)
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
+        else if (hours)
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
+        else
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+    }
+    if (uptimeStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], uptimeStr);
+    }
+
+    // 5) Distance
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    char distStr[24] = "";
+    bool haveDistance = false;
+
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
+        double lat1 = ourNode->position.latitude_i * 1e-7;
+        double lon1 = ourNode->position.longitude_i * 1e-7;
+        double lat2 = node->position.latitude_i * 1e-7;
+        double lon2 = node->position.longitude_i * 1e-7;
+        double earthRadiusKm = 6371.0;
+        double dLat = (lat2 - lat1) * DEG_TO_RAD;
+        double dLon = (lon2 - lon1) * DEG_TO_RAD;
+        double a = sin(dLat/2)*sin(dLat/2) + cos(lat1*DEG_TO_RAD)*cos(lat2*DEG_TO_RAD)*sin(dLon/2)*sin(dLon/2);
+        double c = 2 * atan2(sqrt(a), sqrt(1-a));
+        double distanceKm = earthRadiusKm * c;
+
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            double miles = distanceKm * 0.621371;
+            if (miles < 0.1) {
+                int feet = (int)(miles * 5280);
+                if (feet > 0 && feet < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dft", feet); haveDistance = true; }
+                else if (feet >= 1000)       { snprintf(distStr, sizeof(distStr), " Distance: ┬╝mi");      haveDistance = true; }
+            } else {
+                int roundedMiles = (int)(miles + 0.5);
+                if (roundedMiles > 0 && roundedMiles < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dmi", roundedMiles); haveDistance = true; }
+            }
+        } else {
+            if (distanceKm < 1.0) {
+                int meters = (int)(distanceKm * 1000);
+                if (meters > 0 && meters < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dm",  meters); haveDistance = true; }
+                else if (meters >= 1000)         { snprintf(distStr, sizeof(distStr), " Distance: 1km");        haveDistance = true; }
+            } else {
+                int km = (int)(distanceKm + 0.5);
+                if (km > 0 && km < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dkm", km); haveDistance = true; }
+            }
+        }
+    }
+    if (haveDistance && distStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], distStr);
+    }
+
+    // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
+    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node))
+            showCompass = true;
+
+        if (showCompass) {
+            const int16_t topY = getTextPositions(display)[1];
+            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+            const int16_t usableHeight = bottomY - topY - 5;
+            int16_t compassRadius = usableHeight / 2;
+            if (compassRadius < 8) compassRadius = 8;
+            const int16_t compassDiam = compassRadius * 2;
+            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+            const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+
+            const auto &p = node->position;
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING)  myHeading = 0;
+            else                                                                  bearing -= myHeading;
+
+            display->drawCircle(compassX, compassY, compassRadius);
+            CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+        }
+    } else {
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node))
+            showCompass = true;
+
+        if (showCompass) {
+            int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
+                                                        : getTextPositions(display)[1];
+            const int margin = 4;
+#if defined(USE_EINK)
+            const int iconSize = (isHighResolution) ? 16 : 8;
+            const int navBarHeight = iconSize + 6;
+#else
+            const int navBarHeight = 0;
+#endif
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
+            if (availableHeight < FONT_HEIGHT_SMALL * 2) return;
+
+            int compassRadius = availableHeight / 2;
+            if (compassRadius < 8) compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16) compassRadius = (SCREEN_WIDTH - 16) / 2;
+
+            int compassX = x + SCREEN_WIDTH / 2;
+            int compassY = yBelowContent + availableHeight / 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = 0;
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+                myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                 : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            }
+            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+
+            const auto &p = node->position;
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) bearing -= myHeading;
+
+            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+            display->drawCircle(compassX, compassY, compassRadius);
+        }
+    }
+}
+
 
 // ****************************
 // * Device Focused Screen    *
@@ -1374,6 +1575,87 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
         uptime = std::to_string(seconds) + "s";
     return uptime;
 }
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+// Direct draw MQTT status info screen without overlay or focus handling
+void UIRenderer::drawMqttInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
+
+    // === Set Title
+    const char *titleStr = "MQTT Status";
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
+
+    // === MQTT Enable Status ===
+    char enabledStr[32];
+    if (moduleConfig.mqtt.enabled) {
+        snprintf(enabledStr, sizeof(enabledStr), "Status: ENABLED");
+    } else {
+        snprintf(enabledStr, sizeof(enabledStr), "Status: DISABLED");
+    }
+    int textWidth = display->getStringWidth(enabledStr);
+    int nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, graphics::getTextPositions(display)[line++], enabledStr);
+
+    if (moduleConfig.mqtt.enabled) {
+        // === Server Address ===
+        char serverStr[48];
+        if (moduleConfig.mqtt.address[0] != '\0') {
+            snprintf(serverStr, sizeof(serverStr), "Server: %s", moduleConfig.mqtt.address);
+        } else {
+            snprintf(serverStr, sizeof(serverStr), "Server: Not configured");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], serverStr);
+
+        // === Security Settings ===
+        char securityStr[32];
+        if (moduleConfig.mqtt.tls_enabled && moduleConfig.mqtt.encryption_enabled) {
+            snprintf(securityStr, sizeof(securityStr), "Security: TLS + Encryption");
+        } else if (moduleConfig.mqtt.tls_enabled) {
+            snprintf(securityStr, sizeof(securityStr), "Security: TLS Only");
+        } else if (moduleConfig.mqtt.encryption_enabled) {
+            snprintf(securityStr, sizeof(securityStr), "Security: Encryption Only");
+        } else {
+            snprintf(securityStr, sizeof(securityStr), "Security: None");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], securityStr);
+
+        // === Credentials ===
+        char credentialsStr[32];
+        bool hasUsername = moduleConfig.mqtt.username[0] != '\0';
+        bool hasPassword = moduleConfig.mqtt.password[0] != '\0';
+
+        if (hasUsername && hasPassword) {
+            snprintf(credentialsStr, sizeof(credentialsStr), "Auth: Username + Password");
+        } else if (hasUsername) {
+            snprintf(credentialsStr, sizeof(credentialsStr), "Auth: Username Only");
+        } else {
+            snprintf(credentialsStr, sizeof(credentialsStr), "Auth: Anonymous");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], credentialsStr);
+
+        // === Root Topic ===
+        char rootStr[32];
+        if (moduleConfig.mqtt.root[0] != '\0') {
+            snprintf(rootStr, sizeof(rootStr), "Root: %s", moduleConfig.mqtt.root);
+        } else {
+            snprintf(rootStr, sizeof(rootStr), "Root: Default");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], rootStr);
+    } else {
+        // Show message when MQTT is disabled
+        const char *disabledMsg = "MQTT is currently disabled";
+        textWidth = display->getStringWidth(disabledMsg);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, graphics::getTextPositions(display)[line + 1], disabledMsg);
+    }
+}
+#endif // HAS_WIFI && !defined(ARCH_PORTDUINO)
 
 } // namespace graphics
 
