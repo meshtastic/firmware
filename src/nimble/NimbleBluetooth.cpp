@@ -231,6 +231,10 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE disconnect");
 #endif
+#ifdef NIMBLE_TWO
+        if (ble->isDeInit)
+            return;
+#endif
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
@@ -270,6 +274,7 @@ void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
+    isDeInit = true;
 
 #ifdef BLE_LED
 #ifdef BLE_LED_INVERTED
@@ -278,7 +283,9 @@ void NimbleBluetooth::deinit()
     digitalWrite(BLE_LED, LOW);
 #endif
 #endif
+#ifndef NIMBLE_TWO
     NimBLEDevice::deinit();
+#endif
 #endif
 }
 
