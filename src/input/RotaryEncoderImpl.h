@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef T_LORA_PAGER
-
 // This is a version of RotaryEncoder which is based on a debounce inherent FSM table (see RotaryEncoder library)
 
 #include "InputBroker.h"
@@ -28,5 +26,3 @@ class RotaryEncoderImpl : public InputPollable
 };
 
 extern RotaryEncoderImpl *rotaryEncoderImpl;
-
-#endif
