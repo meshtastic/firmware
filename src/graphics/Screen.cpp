@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "FSCommon.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "RadioLibInterface.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
@@ -64,6 +65,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
+extern MessageStore messageStore;
 
 using graphics::Emote;
 using graphics::emotes;
@@ -650,6 +652,10 @@ void Screen::setup()
         textMessageObserver.observe(textMessageModule);
     if (inputBroker)
         inputObserver.observe(inputBroker);
+
+    // === Load persisted messages into RAM ===
+    messageStore.loadFromFlash();
+    LOG_INFO("MessageStore loaded from flash");
 
     // === Notify modules that support UI events ===
     MeshModule::observeUIEvents(&uiFrameEventObserver);
@@ -1414,21 +1420,41 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 
     return 0;
 }
-
 // Handles when message is received; will jump to text message frame.
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
         if (packet->from == 0) {
-            // Outgoing message (likely sent from phone)
+            // === Outgoing message (likely sent from phone) ===
             devicestate.has_rx_text_message = false;
             memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
             hiddenFrames.textMessage = true;
             hasUnreadMessage = false; // Clear unread state when user replies
 
             setFrames(FOCUS_PRESERVE); // Stay on same frame, silently update frame list
+
+            // === Save our own outgoing message to live RAM ===
+            StoredMessage sm;
+            sm.timestamp = millis() / 1000;
+            sm.sender = nodeDB->getNodeNum(); // us
+            sm.channelIndex = packet->channel;
+            sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
+
+            // ✅ Distinguish between broadcast vs DM to us
+            if (packet->decoded.dest == NODENUM_BROADCAST) {
+                sm.dest = NODENUM_BROADCAST;
+                sm.type = MessageType::BROADCAST;
+            } else {
+                sm.dest = nodeDB->getNodeNum();
+                sm.type = MessageType::DM_TO_US;
+            }
+
+            messageStore.addLiveMessage(sm); // RAM only (flash updated at shutdown)
+
+            // 🔹 Reset scroll so newest message starts from the top
+            graphics::MessageRenderer::resetScrollState();
         } else {
-            // Incoming message
+            // === Incoming message ===
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
@@ -1438,12 +1464,12 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
             }
+
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-
             char banner[256];
 
             // Check for bell character in message to determine alert type
@@ -1468,11 +1494,11 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 #else
                     snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
 #endif
-
                 } else {
                     strcpy(banner, "New Message");
                 }
             }
+
 #if defined(M5STACK_UNITC6L)
             screen->setOn(true);
             screen->showSimpleBanner(banner, 1500);
@@ -1480,6 +1506,27 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 #else
             screen->showSimpleBanner(banner, 3000);
 #endif
+
+            // === Save this incoming message to live RAM ===
+            StoredMessage sm;
+            sm.timestamp = packet->rx_time ? packet->rx_time : (millis() / 1000);
+            sm.sender = packet->from;
+            sm.channelIndex = packet->channel;
+            sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
+
+            // ✅ Distinguish between broadcast vs DM to us
+            if (packet->to == NODENUM_BROADCAST || packet->decoded.dest == NODENUM_BROADCAST) {
+                sm.dest = NODENUM_BROADCAST;
+                sm.type = MessageType::BROADCAST;
+            } else {
+                sm.dest = nodeDB->getNodeNum(); // DM to us
+                sm.type = MessageType::DM_TO_US;
+            }
+
+            messageStore.addLiveMessage(sm); // RAM only (flash updated at shutdown)
+
+            // 🔹 Reset scroll so newest message starts from the top
+            graphics::MessageRenderer::resetScrollState();
         }
     }
 

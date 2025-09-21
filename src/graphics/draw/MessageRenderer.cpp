@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MessageRenderer.h"
 
 // Core includes
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "configuration.h"
 #include "gps/RTC.h"
@@ -148,7 +149,8 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
 
         // Render the emote (if found)
         if (matchedEmote && i == nextEmotePos) {
-            int iconY = fontMidline - matchedEmote->height / 2 - 1;
+            // Center vertically — padding handled in calculateLineHeights
+            int iconY = fontMidline - matchedEmote->height / 2;
             display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
             cursorX += matchedEmote->width + 1;
             i += emojiLen;
@@ -170,13 +172,39 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     }
 }
 
+// === Scroll state (file scope so we can reset on new message) ===
+float scrollY = 0.0f;
+uint32_t lastTime = 0;
+uint32_t scrollStartDelay = 0;
+uint32_t pauseStart = 0;
+bool waitingToReset = false;
+bool scrollStarted = false;
+static bool didReset = false; // <-- add here
+
+// === Reset scroll state when new messages arrive ===
+void resetScrollState()
+{
+    scrollY = 0.0f;
+    scrollStarted = false;
+    waitingToReset = false;
+    scrollStartDelay = millis();
+    lastTime = millis();
+
+    didReset = false; // <-- now valid
+}
+
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    if (!didReset) {
+        resetScrollState();
+        didReset = true;
+    }
+
     // Clear the unread message indicator when viewing the message
     hasUnreadMessage = false;
 
-    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+    // === Use live RAM buffer directly (boot handles flash load) ===
+    const auto &msgs = messageStore.getMessages();
 
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -192,20 +220,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = SCREEN_WIDTH;
-
 #endif
-    bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    bool isBold = config.display.heading_bold;
 
     // === Set Title
     const char *titleStr = "Messages";
 
-    // Check if we have more than an empty message to show
-    char messageBuf[237];
-    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
-    if (strlen(messageBuf) == 0) {
-        // === Header ===
+    if (msgs.empty()) {
         graphics::drawCommonHeader(display, x, y, titleStr);
+        didReset = false;
         const char *messageString = "No messages";
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
 #if defined(M5STACK_UNITC6L)
@@ -216,176 +238,103 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         return;
     }
 
-    // === Header Construction ===
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    char headerStr[80];
-    const char *sender = "???";
+    // === Build lines for all messages (newest first) ===
+    std::vector<std::string> allLines;
+    std::vector<bool> isMine;   // track alignment
+    std::vector<bool> isHeader; // track header lines
+
+    for (auto it = msgs.rbegin(); it != msgs.rend(); ++it) {
+        const auto &m = *it;
+
+        // --- Build header line for this message ---
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
+        const char *sender = "???";
 #if defined(M5STACK_UNITC6L)
-    if (node && node->has_user)
-        sender = node->user.short_name;
-#else
-    if (node && node->has_user) {
-        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
-            sender = node->user.long_name;
-        } else {
+        if (node && node->has_user)
             sender = node->user.short_name;
-        }
-    }
-#endif
-    uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
-    uint8_t timestampHours, timestampMinutes;
-    int32_t daysAgo;
-    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
-
-    if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-        std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
-        if (config.display.use_12h_clock) {
-            bool isPM = timestampHours >= 12;
-            timestampHours = timestampHours % 12;
-            if (timestampHours == 0)
-                timestampHours = 12;
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     isPM ? "p" : "a", sender);
-        } else {
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     sender);
-        }
-    } else {
-#if defined(M5STACK_UNITC6L)
-        snprintf(headerStr, sizeof(headerStr), "%s from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                 sender);
 #else
-        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                 sender);
-#endif
-    }
-#if defined(M5STACK_UNITC6L)
-    graphics::drawCommonHeader(display, x, y, titleStr);
-    int headerY = getTextPositions(display)[1];
-    display->drawString(x, headerY, headerStr);
-    for (int separatorX = 0; separatorX < SCREEN_WIDTH; separatorX += 2) {
-        display->setPixel(separatorX, fixedTopHeight - 1);
-    }
-    cachedLines.clear();
-    std::string fullMsg(messageBuf);
-    std::string currentLine;
-    for (size_t i = 0; i < fullMsg.size();) {
-        unsigned char c = fullMsg[i];
-        size_t charLen = 1;
-        if ((c & 0xE0) == 0xC0)
-            charLen = 2;
-        else if ((c & 0xF0) == 0xE0)
-            charLen = 3;
-        else if ((c & 0xF8) == 0xF0)
-            charLen = 4;
-        std::string nextChar = fullMsg.substr(i, charLen);
-        std::string testLine = currentLine + nextChar;
-        if (display->getStringWidth(testLine.c_str()) > windowWidth) {
-            cachedLines.push_back(currentLine);
-            currentLine = nextChar;
-        } else {
-            currentLine = testLine;
-        }
-
-        i += charLen;
-    }
-    if (!currentLine.empty())
-        cachedLines.push_back(currentLine);
-    cachedHeights = calculateLineHeights(cachedLines, emotes);
-    int yOffset = windowY;
-    int linesDrawn = 0;
-    for (size_t i = 0; i < cachedLines.size(); ++i) {
-        if (linesDrawn >= 2)
-            break;
-        int lineHeight = cachedHeights[i];
-        if (yOffset + lineHeight > windowY + windowHeight)
-            break;
-        drawStringWithEmotes(display, windowX, yOffset, cachedLines[i], emotes, numEmotes);
-        yOffset += lineHeight;
-        linesDrawn++;
-    }
-    screen->forceDisplay();
-#else
-    uint32_t now = millis();
-#ifndef EXCLUDE_EMOJI
-    // === Bounce animation setup ===
-    static uint32_t lastBounceTime = 0;
-    static int bounceY = 0;
-    const int bounceRange = 2;     // Max pixels to bounce up/down
-    const int bounceInterval = 10; // How quickly to change bounce direction (ms)
-
-    if (now - lastBounceTime >= bounceInterval) {
-        lastBounceTime = now;
-        bounceY = (bounceY + 1) % (bounceRange * 2);
-    }
-    for (int i = 0; i < numEmotes; ++i) {
-        const Emote &e = emotes[i];
-        if (strcmp(msg, e.label) == 0) {
-            int headerY = getTextPositions(display)[1]; // same as scrolling header line
-            display->drawString(x + 3, headerY, headerStr);
-            if (isInverted && isBold)
-                display->drawString(x + 4, headerY, headerStr);
-
-            // Draw separator (same as scroll version)
-            for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
-                display->setPixel(separatorX, headerY + ((isHighResolution) ? 19 : 13));
+        if (node && node->has_user) {
+            if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
+                sender = node->user.long_name;
+            } else {
+                sender = node->user.short_name;
             }
+        }
+#endif
 
-            // Center the emote below the header line + separator + nav
-            int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
-            int emoteY = headerY + 6 + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
-            display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+        // If this is *our own* message, override sender to "Me"
+        bool mine = (m.sender == nodeDB->getNodeNum());
+        if (mine) {
+            sender = "Me";
+        }
 
-            // Draw header at the end to sort out overlapping elements
-            graphics::drawCommonHeader(display, x, y, titleStr);
-            return;
+        // === Channel / destination labeling ===
+        char chanType[32];
+        if (m.dest == NODENUM_BROADCAST) {
+            // Broadcast to a channel
+            snprintf(chanType, sizeof(chanType), "(Ch%d)", m.channelIndex + 1);
+        } else {
+            // Direct message (always to us if it shows up)
+            snprintf(chanType, sizeof(chanType), "(DM)");
+        }
+
+        // === Calculate how long ago ===
+        uint32_t nowSecs = millis() / 1000;
+        uint32_t seconds = (nowSecs > m.timestamp) ? (nowSecs - m.timestamp) : 0;
+
+        // Fallback if timestamp looks bogus (0 or way too large)
+        bool invalidTime = (m.timestamp == 0 || seconds > 315360000); // >10 years
+
+        char timeBuf[16];
+        if (invalidTime) {
+            snprintf(timeBuf, sizeof(timeBuf), "???");
+        } else if (seconds < 60) {
+            snprintf(timeBuf, sizeof(timeBuf), "%us ago", seconds);
+        } else if (seconds < 3600) {
+            snprintf(timeBuf, sizeof(timeBuf), "%um ago", seconds / 60);
+        } else if (seconds < 86400) {
+            snprintf(timeBuf, sizeof(timeBuf), "%uh ago", seconds / 3600);
+        } else {
+            snprintf(timeBuf, sizeof(timeBuf), "%ud ago", seconds / 86400);
+        }
+
+        char headerStr[96];
+        if (mine) {
+            snprintf(headerStr, sizeof(headerStr), "me %s %s", timeBuf, chanType);
+        } else {
+            snprintf(headerStr, sizeof(headerStr), "%s from %s %s", timeBuf, sender, chanType);
+        }
+
+        // Push header line
+        allLines.push_back(std::string(headerStr));
+        isMine.push_back(mine);
+        isHeader.push_back(true);
+
+        // --- Split message text into wrapped lines ---
+        std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
+        for (auto &ln : wrapped) {
+            allLines.push_back(ln);
+            isMine.push_back(mine);
+            isHeader.push_back(false);
         }
     }
-#endif
-    // === Generate the cache key ===
-    size_t currentKey = (size_t)mp.from;
-    currentKey ^= ((size_t)mp.to << 8);
-    currentKey ^= ((size_t)mp.rx_time << 16);
-    currentKey ^= ((size_t)mp.id << 24);
 
-    if (cachedKey != currentKey) {
-        LOG_INFO("Onscreen message scroll cache key needs updating: cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
+    // === Cache lines and heights ===
+    cachedLines = allLines;
+    cachedHeights = calculateLineHeights(cachedLines, emotes);
 
-        // Cache miss - regenerate lines and heights
-        cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
-        cachedHeights = calculateLineHeights(cachedLines, emotes);
-        cachedKey = currentKey;
-    } else {
-        // Cache hit but update the header line with current time information
-        cachedLines[0] = std::string(headerStr);
-        // The header always has a fixed height since it doesn't contain emotes
-        // As per calculateLineHeights logic for lines without emotes:
-        cachedHeights[0] = FONT_HEIGHT_SMALL - 2;
-        if (cachedHeights[0] < 8)
-            cachedHeights[0] = 8; // minimum safety
-    }
-
-    // === Scrolling logic ===
+    // === Scrolling logic (unchanged) ===
+    uint32_t now = millis();
     int totalHeight = 0;
-    for (size_t i = 1; i < cachedHeights.size(); ++i) {
+    for (size_t i = 0; i < cachedHeights.size(); ++i)
         totalHeight += cachedHeights[i];
-    }
-    int usableScrollHeight = usableHeight - cachedHeights[0]; // remove header height
+    int usableScrollHeight = usableHeight;
     int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
-    static float scrollY = 0.0f;
-    static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
-    static bool waitingToReset = false, scrollStarted = false;
-
-    // === Smooth scrolling adjustment ===
-    // You can tweak this divisor to change how smooth it scrolls.
-    // Lower = smoother, but can feel slow.
     float delta = (now - lastTime) / 400.0f;
     lastTime = now;
+    const float scrollSpeed = 2.0f;
 
-    const float scrollSpeed = 2.0f; // pixels per second
-
-    // Delay scrolling start by 2 seconds
     if (scrollStartDelay == 0)
         scrollStartDelay = now;
     if (!scrollStarted && now - scrollStartDelay > 2000)
@@ -413,22 +362,49 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
-        display->setPixel(separatorX, yOffset + ((isHighResolution) ? 19 : 13));
-    }
 
     // === Render visible lines ===
-    renderMessageContent(display, cachedLines, cachedHeights, x, yOffset, scrollBottom, emotes, numEmotes, isInverted, isBold);
+    for (size_t i = 0; i < cachedLines.size(); ++i) {
+        int lineY = yOffset;
+        for (size_t j = 0; j < i; ++j)
+            lineY += cachedHeights[j];
 
-    // Draw header at the end to sort out overlapping elements
+        if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
+            if (isHeader[i]) {
+                // Render header
+                int w = display->getStringWidth(cachedLines[i].c_str());
+                int headerX = isMine[i] ? (SCREEN_WIDTH - w - 2) : x;
+                display->drawString(headerX, lineY, cachedLines[i].c_str());
+
+                // Draw underline just under header text
+                int underlineY = lineY + FONT_HEIGHT_SMALL;
+                for (int px = 0; px < w; ++px) {
+                    display->setPixel(headerX + px, underlineY);
+                }
+            } else {
+                // Render message line
+                if (isMine[i]) {
+                    int w = display->getStringWidth(cachedLines[i].c_str());
+                    int rightX = SCREEN_WIDTH - w - 2;
+                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
+                } else {
+                    drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
+                }
+            }
+        }
+    }
+    // Draw screen title header last
     graphics::drawCommonHeader(display, x, y, titleStr);
-#endif
 }
 
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
 {
     std::vector<std::string> lines;
-    lines.push_back(std::string(headerStr)); // Header line is always first
+
+    // Only push headerStr if it's not empty (prevents extra blank line after headers)
+    if (headerStr && headerStr[0] != '\0') {
+        lines.push_back(std::string(headerStr));
+    }
 
     std::string line, word;
     for (int i = 0; messageBuf[i]; ++i) {
@@ -451,10 +427,6 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         } else {
             word += ch;
             std::string test = line + word;
-// Keep these lines for diagnostics
-// LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
-// LOG_INFO("Current String: %s", test.c_str());
-// Note: there are boolean comparison uint16 (getStringWidth) with int (textWidth), hope textWidth is always positive :)
 #if defined(OLED_UA) || defined(OLED_RU)
             uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
 #else
@@ -481,10 +453,13 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 {
     std::vector<int> rowHeights;
 
-    for (const auto &_line : lines) {
+    for (size_t idx = 0; idx < lines.size(); ++idx) {
+        const auto &_line = lines[idx];
         int lineHeight = FONT_HEIGHT_SMALL;
         bool hasEmote = false;
+        bool isHeader = false;
 
+        // Detect emotes in this line
         for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
             if (_line.find(e.label) != std::string::npos) {
@@ -493,11 +468,34 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
             }
         }
 
-        // Apply tighter spacing if no emotes on this line
-        if (!hasEmote) {
-            lineHeight -= 2; // reduce by 2px for tighter spacing
+        // Detect header lines (start of a message, or time stamps like "5m ago")
+        if (idx == 0 || _line.find("ago") != std::string::npos || _line.rfind("me ", 0) == 0) {
+            isHeader = true;
+        }
+
+        // Look ahead to see if next line is a header → this is the last line of a message
+        bool beforeHeader =
+            (idx + 1 < lines.size() && (lines[idx + 1].find("ago") != std::string::npos || lines[idx + 1].rfind("me ", 0) == 0));
+
+        if (isHeader) {
+            // Headers always keep full line height
+            lineHeight = FONT_HEIGHT_SMALL;
+        } else if (beforeHeader) {
+            if (hasEmote) {
+                // Last line has emote → preserve its height + padding
+                lineHeight = std::max(lineHeight, FONT_HEIGHT_SMALL) + 4;
+            } else {
+                // Plain last line → full spacing only
+                lineHeight = FONT_HEIGHT_SMALL;
+            }
+        } else if (!hasEmote) {
+            // Plain body line, tighter spacing
+            lineHeight -= 4;
             if (lineHeight < 8)
-                lineHeight = 8; // minimum safety
+                lineHeight = 8; // safe minimum
+        } else {
+            // Line has emotes, don’t compress
+            lineHeight += 4; // add breathing room
         }
 
         rowHeights.push_back(lineHeight);

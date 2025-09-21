@@ -1,0 +1,75 @@
+#pragma once
+#include "mesh/generated/meshtastic/mesh.pb.h" // for meshtastic_MeshPacket
+#include <cstdint>
+#include <deque>
+#include <string>
+
+// Max number of messages we’ll keep in history
+constexpr size_t MAX_MESSAGES_SAVED = 20;
+constexpr size_t MAX_MESSAGE_SIZE = 220; // safe bound for text payload
+
+// Explicit message classification
+enum class MessageType : uint8_t { BROADCAST = 0, DM_TO_US = 1 };
+
+struct StoredMessage {
+    uint32_t timestamp;   // When message was created (secs since boot/RTC)
+    uint32_t sender;      // NodeNum of sender
+    uint8_t channelIndex; // Channel index used
+    std::string text;     // UTF-8 text payload
+
+    // Destination node.
+    // 0xffffffff (NODENUM_BROADCAST) means broadcast,
+    // otherwise this is the NodeNum of the DM recipient.
+    uint32_t dest;
+
+    // Explicit classification (derived from dest when loading old messages)
+    MessageType type;
+};
+
+class MessageStore
+{
+  public:
+    explicit MessageStore(const std::string &label);
+
+    // === Live RAM methods (always current, used by UI and runtime) ===
+    void addLiveMessage(const StoredMessage &msg);
+    const std::deque<StoredMessage> &getLiveMessages() const { return liveMessages; }
+
+    // === Persistence methods (used only on boot/shutdown) ===
+    void addMessage(const StoredMessage &msg);           // Add to persistence queue
+    void addFromPacket(const meshtastic_MeshPacket &mp); // Incoming → RAM only
+    void addFromString(uint32_t sender, uint8_t channelIndex,
+                       const std::string &text); // Outgoing/manual → RAM only
+    void saveToFlash();                          // Persist RAM → flash
+    void loadFromFlash();                        // Restore flash → RAM
+
+    // === Clear all messages (RAM + persisted queue) ===
+    void clearAllMessages();
+
+    // === Dismiss helpers ===
+    void dismissOldestMessage(); // Drop front() from history
+    void dismissNewestMessage(); // Drop back() from history (useful for current screen)
+
+    // === Unified accessor (for UI code, defaults to RAM buffer) ===
+    const std::deque<StoredMessage> &getMessages() const { return liveMessages; }
+
+    // Optional: direct access to persisted copy (mainly for debugging/inspection)
+    const std::deque<StoredMessage> &getPersistedMessages() const { return messages; }
+
+    // === Helper filters for future use ===
+    std::deque<StoredMessage> getChannelMessages(uint8_t channel) const;
+    std::deque<StoredMessage> getDirectMessages() const;
+    std::deque<StoredMessage> getConversationWith(uint32_t peer) const;
+
+  private:
+    // RAM buffer (always current, main source for UI)
+    std::deque<StoredMessage> liveMessages;
+
+    // Persisted storage (only updated on shutdown, loaded at boot)
+    std::deque<StoredMessage> messages;
+
+    std::string filename;
+};
+
+// === Global instance (defined in MessageStore.cpp) ===
+extern MessageStore messageStore;

@@ -156,7 +156,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     String temporaryMessage;
 
     // === Message Storage ===
-    char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
+    char messageBuffer[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
     int messagesCount = 0;
     int currentMessageIndex = -1;

@@ -5,6 +5,7 @@
 #include "MenuHandler.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
@@ -348,14 +349,14 @@ void menuHandler::clockMenu()
 
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, Dismiss = 1, Preset = 2, Freetext = 3, Aloud = 4, enumEnd = 5 };
+    enum optionsNumbers { Back = 0, DismissAll = 1, DismissOldest = 2, Preset = 3, Freetext = 4, Aloud = 5, enumEnd = 6 };
 #if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply Preset"};
+    static const char *optionsArray[enumEnd] = {"Back", "Dismiss All", "Dismiss Oldest", "Reply Preset"};
 #else
-    static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply via Preset"};
+    static const char *optionsArray[enumEnd] = {"Back", "Dismiss All", "Dismiss Oldest", "Reply via Preset"};
 #endif
-    static int optionsEnumArray[enumEnd] = {Back, Dismiss, Preset};
-    int options = 3;
+    static int optionsEnumArray[enumEnd] = {Back, DismissAll, DismissOldest, Preset};
+    int options = 4;
 
     if (kb_found) {
         optionsArray[options] = "Reply via Freetext";
@@ -376,8 +377,12 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Dismiss) {
-            screen->hideCurrentFrame();
+        if (selected == DismissAll) {
+            // Remove all messages
+            messageStore.clearAllMessages();
+        } else if (selected == DismissOldest) {
+            // Remove only the oldest message
+            messageStore.dismissOldestMessage();
         } else if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
@@ -1043,6 +1048,7 @@ void menuHandler::rebootMenu()
         if (selected == 1) {
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
+            messageStore.saveToFlash();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         } else {
             menuQueue = power_menu;

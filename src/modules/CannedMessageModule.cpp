@@ -7,6 +7,7 @@
 #include "Channels.h"
 #include "FSCommon.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "buzz.h"
@@ -20,6 +21,7 @@
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
+extern MessageStore messageStore;
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"
 #endif
@@ -149,7 +151,7 @@ int CannedMessageModule::splitConfiguredMessages()
     String canned_messages = cannedMessageModuleConfig.messages;
 
     // Copy all message parts into the buffer
-    strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
+    strncpy(this->messageBuffer, canned_messages.c_str(), sizeof(this->messageBuffer));
 
     // Temporary array to allow for insertion
     const char *tempMessages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT + 3] = {0};
@@ -166,16 +168,16 @@ int CannedMessageModule::splitConfiguredMessages()
 #endif
 
     // First message always starts at buffer start
-    tempMessages[tempCount++] = this->messageStore;
-    int upTo = strlen(this->messageStore) - 1;
+    tempMessages[tempCount++] = this->messageBuffer;
+    int upTo = strlen(this->messageBuffer) - 1;
 
     // Walk buffer, splitting on '|'
     while (i < upTo) {
-        if (this->messageStore[i] == '|') {
-            this->messageStore[i] = '\0'; // End previous message
+        if (this->messageBuffer[i] == '|') {
+            this->messageBuffer[i] = '\0'; // End previous message
             if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
                 break;
-            tempMessages[tempCount++] = (this->messageStore + i + 1);
+            tempMessages[tempCount++] = (this->messageBuffer + i + 1);
         }
         i += 1;
     }
@@ -946,49 +948,42 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
-    // === Prepare packet ===
+
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
+    p->decoded.dest = dest; // <-- Mirror picker: NODENUM_BROADCAST or node->num
 
-    // Save destination for ACK/NACK UI fallback
     this->lastSentNode = dest;
     this->incoming = dest;
 
-    // Copy message payload
+    // Copy payload
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    // Optionally add bell character
     if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;  // Bell
-        p->decoded.payload.bytes[p->decoded.payload.size] = '\0'; // Null-terminate
+        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
+        p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }
 
-    // Mark as waiting for ACK to trigger ACK/NACK screen
     this->waitingForAck = true;
 
-    // Log outgoing message
-    LOG_INFO("Send message id=%u, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
-
-    if (p->to != 0xffffffff) {
-        LOG_INFO("Proactively adding %x as favorite node", p->to);
-        nodeDB->set_favorite(true, p->to);
-        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-    }
-
-    // Send to mesh and phone (even if no phone connected, to track ACKs)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    // === Simulate local message to clear unread UI ===
-    if (screen) {
-        meshtastic_MeshPacket simulatedPacket = {};
-        simulatedPacket.from = 0; // Local device
-        screen->handleTextMessage(&simulatedPacket);
-    }
+    // Save outgoing message
+    StoredMessage sm;
+    sm.timestamp = millis() / 1000;
+    sm.sender = nodeDB->getNodeNum();
+    sm.channelIndex = channel;
+    sm.text = std::string(message);
+    sm.dest = dest; // ✅ Will be NODENUM_BROADCAST or node->num
+
+    messageStore.addLiveMessage(sm);
+
     playComboTune();
 }
+
 int32_t CannedMessageModule::runOnce()
 {
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && needsUpdate) {
