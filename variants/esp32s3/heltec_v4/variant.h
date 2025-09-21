@@ -1,6 +1,6 @@
 #define LED_PIN 35
 
-#define USE_SSD1306 // Heltec_v4 has a SSD1315 display
+#define USE_SSD1306 // Heltec_v4 has an SSD1315 display (compatible with SSD1306 driver)
 
 #define RESET_OLED 21
 #define I2C_SDA 17 // I2C pins for this board
