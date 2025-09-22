@@ -19,7 +19,7 @@ extern bool elecrow_v2; // false = v1, true = v2
 #define DAC_I2S_DOUT 12
 #define DAC_I2S_MCLK 8 // don't use GPIO0 because it's assigned to LoRa or button
 #else
-#define PIN_BUZZER 8
+#define PIN_BUZZER (elecrow_v2 ? 0 : 8)
 #endif
 
 // GPS via UART1 connector
