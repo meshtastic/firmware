@@ -111,6 +111,11 @@ class Channels
      */
     int16_t generateHash(ChannelIndex channelNum);
 
+    /** Generate hash using alternate preset name for UDP bridging between MediumFast/LongFast
+     * Returns -1 if cross-preset bridging not applicable
+     */
+    int16_t generateCrossPresetHash(ChannelIndex channelNum);
+
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
     /**

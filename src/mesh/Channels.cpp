@@ -49,6 +49,35 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
     }
 }
 
+/** Generate hash using alternate preset name for UDP bridging between MediumFast/LongFast
+ * Returns -1 if cross-preset bridging not applicable
+ */
+int16_t Channels::generateCrossPresetHash(ChannelIndex channelNum)
+{
+    if (channelNum != 0 || !config.lora.use_preset)
+        return -1;
+
+    auto k = getKey(channelNum);
+    if (k.length < 0)
+        return -1;
+
+    // Generate hash with alternate preset name
+    const char *alternateName = nullptr;
+    if (config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST) {
+        alternateName = "LongFast";
+    } else if (config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST) {
+        alternateName = "MediumFast";
+    }
+
+    if (alternateName) {
+        uint8_t h = xorHash((const uint8_t *)alternateName, strlen(alternateName));
+        h ^= xorHash(k.bytes, k.length);
+        return h;
+    }
+
+    return -1;
+}
+
 /**
  * Validate a channel, fixing any errors as needed
  */
@@ -413,6 +442,21 @@ bool Channels::hasDefaultChannel()
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
     if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+
+        // NEW: Try cross-preset bridge for channel 0 only
+        if (chIndex == 0 && config.lora.use_preset &&
+            (config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST ||
+             config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST)) {
+
+            ChannelHash bridgeHash = generateCrossPresetHash(chIndex);
+            if (bridgeHash != -1 && bridgeHash == channelHash) {
+                LOG_DEBUG("UDP Bridge: Using cross-preset hash for channel 0 (our=%s, packet=%x)",
+                         getName(chIndex), channelHash);
+                setCrypto(chIndex);
+                return true;
+            }
+        }
+
         // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;
