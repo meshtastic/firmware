@@ -10,6 +10,7 @@
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -349,14 +350,30 @@ void menuHandler::clockMenu()
 
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, DismissAll = 1, DismissOldest = 2, Preset = 3, Freetext = 4, Aloud = 5, enumEnd = 6 };
+    enum optionsNumbers { Back = 0, ViewMode, DismissAll, DismissOldest, Preset, Freetext, Aloud, enumEnd };
+
+    static const char *optionsArray[enumEnd];
+    static int optionsEnumArray[enumEnd];
+    int options = 0;
+
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+
+    optionsArray[options] = "View Mode";
+    optionsEnumArray[options++] = ViewMode;
+
+    optionsArray[options] = "Dismiss All";
+    optionsEnumArray[options++] = DismissAll;
+
+    optionsArray[options] = "Dismiss Oldest";
+    optionsEnumArray[options++] = DismissOldest;
+
 #if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[enumEnd] = {"Back", "Dismiss All", "Dismiss Oldest", "Reply Preset"};
+    optionsArray[options] = "Reply Preset";
 #else
-    static const char *optionsArray[enumEnd] = {"Back", "Dismiss All", "Dismiss Oldest", "Reply via Preset"};
+    optionsArray[options] = "Reply via Preset";
 #endif
-    static int optionsEnumArray[enumEnd] = {Back, DismissAll, DismissOldest, Preset};
-    int options = 4;
+    optionsEnumArray[options++] = Preset;
 
     if (kb_found) {
         optionsArray[options] = "Reply via Freetext";
@@ -367,6 +384,7 @@ void menuHandler::messageResponseMenu()
     optionsArray[options] = "Read Aloud";
     optionsEnumArray[options++] = Aloud;
 #endif
+
     BannerOverlayOptions bannerOptions;
 #if defined(M5STACK_UNITC6L)
     bannerOptions.message = "Message";
@@ -377,11 +395,14 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == DismissAll) {
-            // Remove all messages
+        LOG_DEBUG("messageResponseMenu: selected %d", selected);
+        if (selected == ViewMode) {
+            LOG_DEBUG("Switching to message_viewmode_menu");
+            menuHandler::menuQueue = menuHandler::message_viewmode_menu;
+            screen->runNow();
+        } else if (selected == DismissAll) {
             messageStore.clearAllMessages();
         } else if (selected == DismissOldest) {
-            // Remove only the oldest message
             messageStore.dismissOldestMessage();
         } else if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
@@ -395,16 +416,134 @@ void menuHandler::messageResponseMenu()
             } else {
                 cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
             }
-        }
 #ifdef HAS_I2S
-        else if (selected == Aloud) {
+        } else if (selected == Aloud) {
             const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
             const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-
             audioThread->readAloud(msg);
-        }
 #endif
+        }
     };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::messageViewModeMenu()
+{
+    // Collect menu entries
+    static std::vector<std::string> labels;
+    static std::vector<int> ids;
+
+    labels.clear();
+    ids.clear();
+
+    // Back
+    labels.push_back("Back");
+    ids.push_back(-1);
+
+    // View All
+    labels.push_back("View All");
+    ids.push_back(-2);
+
+    // --- Add channels with live messages ---
+    for (int ch = 0; ch < 8; ++ch) {
+        auto msgs = messageStore.getChannelMessages(ch);
+        if (!msgs.empty()) {
+            char buf[20];
+            snprintf(buf, sizeof(buf), "Channel %d", ch);
+            labels.push_back(buf);
+            ids.push_back(100 + ch);
+        }
+    }
+
+    // --- Add channels from registry ---
+    for (int ch : graphics::MessageRenderer::getSeenChannels()) {
+        if (std::find(ids.begin(), ids.end(), 100 + ch) == ids.end()) {
+            char buf[20];
+            snprintf(buf, sizeof(buf), "Channel %d", ch);
+            labels.push_back(buf);
+            ids.push_back(100 + ch);
+        }
+    }
+
+    // --- Add DMs from live store ---
+    auto dms = messageStore.getDirectMessages();
+    std::vector<uint32_t> uniqueSenders;
+    for (auto &m : dms) {
+        if (std::find(uniqueSenders.begin(), uniqueSenders.end(), m.sender) == uniqueSenders.end()) {
+            uniqueSenders.push_back(m.sender);
+        }
+    }
+
+    // --- Add DMs from registry ---
+    for (uint32_t peer : graphics::MessageRenderer::getSeenPeers()) {
+        if (std::find(uniqueSenders.begin(), uniqueSenders.end(), peer) == uniqueSenders.end()) {
+            uniqueSenders.push_back(peer);
+        }
+    }
+
+    std::sort(uniqueSenders.begin(), uniqueSenders.end());
+
+    for (auto sender : uniqueSenders) {
+        auto node = nodeDB->getMeshNode(sender);
+        std::string name;
+        if (node && node->has_user) {
+            name = sanitizeString(node->user.long_name).substr(0, 15);
+        } else {
+            char buf[20];
+            snprintf(buf, sizeof(buf), "Node %08X", sender);
+            name = buf;
+        }
+        labels.push_back("DM: " + name);
+        ids.push_back(sender);
+    }
+
+    // --- Determine active ID ---
+    int activeId = -2;
+    auto mode = graphics::MessageRenderer::getThreadMode();
+    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+        activeId = -2;
+    } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+        activeId = 100 + graphics::MessageRenderer::getThreadChannel();
+    } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+        activeId = (int)graphics::MessageRenderer::getThreadPeer();
+    }
+
+    // Prepare arrays for banner
+    static std::vector<const char *> options;
+    static std::vector<int> optionIds;
+    options.clear();
+    optionIds.clear();
+
+    int initialIndex = 0;
+    for (size_t i = 0; i < labels.size(); i++) {
+        options.push_back(labels[i].c_str());
+        optionIds.push_back(ids[i]);
+        if (ids[i] == activeId) {
+            initialIndex = i;
+        }
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Select View Mode";
+    bannerOptions.optionsArrayPtr = options.data();
+    bannerOptions.optionsEnumPtr = optionIds.data();
+    bannerOptions.optionsCount = options.size();
+    bannerOptions.InitialSelected = initialIndex;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == -1) {
+            menuHandler::menuQueue = menuHandler::message_response_menu;
+            screen->runNow();
+        } else if (selected == -2) {
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::ALL);
+        } else if (selected >= 100) {
+            int ch = selected - 100;
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, ch);
+        } else {
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, selected);
+        }
+    };
+
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -1578,6 +1717,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
+        break;
+    case message_response_menu:
+        messageResponseMenu();
+        break;
+    case message_viewmode_menu:
+        messageViewModeMenu();
         break;
     }
     menuQueue = menu_none;

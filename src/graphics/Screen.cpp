@@ -1446,7 +1446,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             sm.channelIndex = packet->channel;
             sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
 
-            // ✅ Distinguish between broadcast vs DM to us
+            // Distinguish between broadcast vs DM to us
             if (packet->decoded.dest == NODENUM_BROADCAST) {
                 sm.dest = NODENUM_BROADCAST;
                 sm.type = MessageType::BROADCAST;
@@ -1456,6 +1456,13 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             }
 
             messageStore.addLiveMessage(sm); // RAM only (flash updated at shutdown)
+
+            // 🔹 Auto-switch thread view
+            if (sm.type == MessageType::BROADCAST) {
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
+            } else if (sm.type == MessageType::DM_TO_US) {
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.sender);
+            }
 
             // 🔹 Reset scroll so newest message starts from the top
             graphics::MessageRenderer::resetScrollState();
@@ -1520,7 +1527,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             sm.channelIndex = packet->channel;
             sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
 
-            // ✅ Distinguish between broadcast vs DM to us
+            // Distinguish between broadcast vs DM to us
             if (packet->to == NODENUM_BROADCAST || packet->decoded.dest == NODENUM_BROADCAST) {
                 sm.dest = NODENUM_BROADCAST;
                 sm.type = MessageType::BROADCAST;
@@ -1531,7 +1538,14 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             messageStore.addLiveMessage(sm); // RAM only (flash updated at shutdown)
 
-            // 🔹 Reset scroll so newest message starts from the top
+            // Auto-switch thread view
+            if (sm.type == MessageType::BROADCAST) {
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
+            } else if (sm.type == MessageType::DM_TO_US) {
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.sender);
+            }
+
+            // Reset scroll so newest message starts from the top
             graphics::MessageRenderer::resetScrollState();
         }
     }

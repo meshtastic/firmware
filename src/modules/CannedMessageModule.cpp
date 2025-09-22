@@ -14,6 +14,7 @@
 #include "detect/ScanI2C.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
@@ -953,7 +954,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
-    p->decoded.dest = dest; // <-- Mirror picker: NODENUM_BROADCAST or node->num
+    p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
     this->lastSentNode = dest;
     this->incoming = dest;
@@ -977,9 +978,24 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     sm.sender = nodeDB->getNodeNum();
     sm.channelIndex = channel;
     sm.text = std::string(message);
-    sm.dest = dest; // ✅ Will be NODENUM_BROADCAST or node->num
+
+    // Classify broadcast vs DM
+    if (dest == NODENUM_BROADCAST) {
+        sm.dest = NODENUM_BROADCAST;
+        sm.type = MessageType::BROADCAST;
+    } else {
+        sm.dest = dest;
+        sm.type = MessageType::DM_TO_US;
+    }
 
     messageStore.addLiveMessage(sm);
+
+    // Auto-switch thread view on outgoing message
+    if (sm.type == MessageType::BROADCAST) {
+        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
+    } else {
+        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.dest);
+    }
 
     playComboTune();
 }

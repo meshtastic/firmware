@@ -94,13 +94,13 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         }
     }
 
-    // === Step 2: Baseline alignment ===
+    // Step 2: Baseline alignment
     int lineHeight = std::max(fontHeight, maxIconHeight);
     int baselineOffset = (lineHeight - fontHeight) / 2;
     int fontY = y + baselineOffset;
     int fontMidline = fontY + fontHeight / 2;
 
-    // === Step 3: Render line in segments ===
+    // Step 3: Render line in segments
     size_t i = 0;
     bool inBold = false;
 
@@ -172,7 +172,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     }
 }
 
-// === Scroll state (file scope so we can reset on new message) ===
+// Scroll state (file scope so we can reset on new message)
 float scrollY = 0.0f;
 uint32_t lastTime = 0;
 uint32_t scrollStartDelay = 0;
@@ -181,7 +181,7 @@ bool waitingToReset = false;
 bool scrollStarted = false;
 static bool didReset = false; // <-- add here
 
-// === Reset scroll state when new messages arrive ===
+// Reset scroll state when new messages arrive
 void resetScrollState()
 {
     scrollY = 0.0f;
@@ -191,6 +191,60 @@ void resetScrollState()
     lastTime = millis();
 
     didReset = false; // <-- now valid
+}
+// --- Current thread state ---
+static ThreadMode currentMode = ThreadMode::ALL;
+static int currentChannel = -1;
+static uint32_t currentPeer = 0;
+
+// --- Registry of seen threads for manual toggle ---
+static std::vector<int> seenChannels;
+static std::vector<uint32_t> seenPeers;
+
+// Setter so other code can switch threads
+void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0 */)
+{
+    currentMode = mode;
+    currentChannel = channel;
+    currentPeer = peer;
+    didReset = false; // force reset when mode changes
+
+    // Track channels we’ve seen
+    if (mode == ThreadMode::CHANNEL && channel >= 0) {
+        if (std::find(seenChannels.begin(), seenChannels.end(), channel) == seenChannels.end())
+            seenChannels.push_back(channel);
+    }
+
+    // Track DMs we’ve seen
+    if (mode == ThreadMode::DIRECT && peer != 0) {
+        if (std::find(seenPeers.begin(), seenPeers.end(), peer) == seenPeers.end())
+            seenPeers.push_back(peer);
+    }
+}
+
+ThreadMode getThreadMode()
+{
+    return currentMode;
+}
+
+int getThreadChannel()
+{
+    return currentChannel;
+}
+
+uint32_t getThreadPeer()
+{
+    return currentPeer;
+}
+
+// === Accessors for menuHandler ===
+const std::vector<int> &getSeenChannels()
+{
+    return seenChannels;
+}
+const std::vector<uint32_t> &getSeenPeers()
+{
+    return seenPeers;
 }
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -203,8 +257,26 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Clear the unread message indicator when viewing the message
     hasUnreadMessage = false;
 
-    // === Use live RAM buffer directly (boot handles flash load) ===
-    const auto &msgs = messageStore.getMessages();
+    // Filter messages based on thread mode
+    std::deque<StoredMessage> filtered;
+    for (const auto &m : messageStore.getMessages()) {
+        bool include = false;
+        switch (currentMode) {
+        case ThreadMode::ALL:
+            include = true;
+            break;
+        case ThreadMode::CHANNEL:
+            if (m.type == MessageType::BROADCAST && (int)m.channelIndex == currentChannel)
+                include = true;
+            break;
+        case ThreadMode::DIRECT:
+            if (m.type == MessageType::DM_TO_US && m.sender == currentPeer)
+                include = true;
+            break;
+        }
+        if (include)
+            filtered.push_back(m);
+    }
 
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -222,10 +294,30 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int textWidth = SCREEN_WIDTH;
 #endif
 
-    // === Set Title
+    // Title string depending on mode
+    static char titleBuf[32];
     const char *titleStr = "Messages";
+    switch (currentMode) {
+    case ThreadMode::ALL:
+        titleStr = "Messages";
+        break;
+    case ThreadMode::CHANNEL:
+        snprintf(titleBuf, sizeof(titleBuf), "Ch%d", currentChannel);
+        titleStr = titleBuf;
+        break;
+    case ThreadMode::DIRECT: {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
+        if (node && node->has_user) {
+            snprintf(titleBuf, sizeof(titleBuf), "DM: %s", node->user.short_name);
+        } else {
+            snprintf(titleBuf, sizeof(titleBuf), "DM: %08x", currentPeer);
+        }
+        titleStr = titleBuf;
+        break;
+    }
+    }
 
-    if (msgs.empty()) {
+    if (filtered.empty()) {
         graphics::drawCommonHeader(display, x, y, titleStr);
         didReset = false;
         const char *messageString = "No messages";
@@ -238,12 +330,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         return;
     }
 
-    // === Build lines for all messages (newest first) ===
+    // Build lines for filtered messages (newest first)
     std::vector<std::string> allLines;
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
 
-    for (auto it = msgs.rbegin(); it != msgs.rend(); ++it) {
+    for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
 
         // --- Build header line for this message ---
@@ -268,21 +360,20 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             sender = "Me";
         }
 
-        // === Channel / destination labeling ===
-        char chanType[32];
-        if (m.dest == NODENUM_BROADCAST) {
-            // Broadcast to a channel
-            snprintf(chanType, sizeof(chanType), "(Ch%d)", m.channelIndex + 1);
-        } else {
-            // Direct message (always to us if it shows up)
-            snprintf(chanType, sizeof(chanType), "(DM)");
+        // Channel / destination labeling
+        char chanType[32] = "";
+        if (currentMode == ThreadMode::ALL) {
+            if (m.dest == NODENUM_BROADCAST) {
+                snprintf(chanType, sizeof(chanType), "(Ch%d)", m.channelIndex);
+            } else {
+                snprintf(chanType, sizeof(chanType), "(DM)");
+            }
         }
+        // else: leave empty for thread views
 
-        // === Calculate how long ago ===
+        // Calculate how long ago
         uint32_t nowSecs = millis() / 1000;
         uint32_t seconds = (nowSecs > m.timestamp) ? (nowSecs - m.timestamp) : 0;
-
-        // Fallback if timestamp looks bogus (0 or way too large)
         bool invalidTime = (m.timestamp == 0 || seconds > 315360000); // >10 years
 
         char timeBuf[16];
@@ -298,11 +389,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             snprintf(timeBuf, sizeof(timeBuf), "%ud ago", seconds / 86400);
         }
 
+        // Final header line
         char headerStr[96];
         if (mine) {
             snprintf(headerStr, sizeof(headerStr), "me %s %s", timeBuf, chanType);
         } else {
-            snprintf(headerStr, sizeof(headerStr), "%s from %s %s", timeBuf, sender, chanType);
+            snprintf(headerStr, sizeof(headerStr), "%s @%s %s", timeBuf, sender, chanType);
         }
 
         // Push header line
@@ -319,11 +411,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 
-    // === Cache lines and heights ===
+    // Cache lines and heights
     cachedLines = allLines;
     cachedHeights = calculateLineHeights(cachedLines, emotes);
 
-    // === Scrolling logic (unchanged) ===
+    // Scrolling logic (unchanged)
     uint32_t now = millis();
     int totalHeight = 0;
     for (size_t i = 0; i < cachedHeights.size(); ++i)
@@ -363,7 +455,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
 
-    // === Render visible lines ===
+    // Render visible lines
     for (size_t i = 0; i < cachedLines.size(); ++i) {
         int lineY = yOffset;
         for (size_t j = 0; j < i; ++j)
@@ -393,6 +485,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         }
     }
+
     // Draw screen title header last
     graphics::drawCommonHeader(display, x, y, titleStr);
 }

@@ -4,6 +4,10 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "configuration.h" // for millis()
+#include "graphics/draw/MessageRenderer.h"
+
+using graphics::MessageRenderer::setThreadMode;
+using graphics::MessageRenderer::ThreadMode;
 
 MessageStore::MessageStore(const std::string &label)
 {
@@ -50,6 +54,13 @@ void MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
     }
 
     addLiveMessage(sm);
+
+    // === Auto-switch thread view on new message ===
+    if (sm.type == MessageType::BROADCAST) {
+        setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
+    } else if (sm.type == MessageType::DM_TO_US) {
+        setThreadMode(ThreadMode::DIRECT, -1, sm.sender);
+    }
 }
 
 // === Outgoing/manual message ===

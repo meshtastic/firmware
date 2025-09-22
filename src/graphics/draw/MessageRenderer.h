@@ -10,6 +10,25 @@ namespace graphics
 namespace MessageRenderer
 {
 
+// === Thread filter modes ===
+enum class ThreadMode { ALL, CHANNEL, DIRECT };
+
+// Setter for switching thread mode
+void setThreadMode(ThreadMode mode, int channel = -1, uint32_t peer = 0);
+
+// Getter for current mode
+ThreadMode getThreadMode();
+
+// Getter for current channel (valid if mode == CHANNEL)
+int getThreadChannel();
+
+// Getter for current peer (valid if mode == DIRECT)
+uint32_t getThreadPeer();
+
+// --- Registry accessors for menuHandler ---
+const std::vector<int> &getSeenChannels();
+const std::vector<uint32_t> &getSeenPeers();
+
 // Text and emote rendering
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
 
