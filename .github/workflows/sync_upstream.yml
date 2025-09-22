@@ -54,6 +54,8 @@ jobs:
       uses: actions/checkout@v5
       with:     
         ref: 'master'
+        fetch-depth: 0
+
 
 
     - name: Set up Git user
@@ -64,8 +66,8 @@ jobs:
     - name: Create temp branch
       run: git checkout -b temp
     
-    - name: fetch patch
-      run: git fetch 8171aa4445be96b7051cd71c43afbe967eb89e0e
+    # - name: fetch patch
+    #   run: git fetch 8171aa4445be96b7051cd71c43afbe967eb89e0e
 
 
     - name: Cherry-pick commit
