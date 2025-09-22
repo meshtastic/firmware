@@ -1113,7 +1113,7 @@ int32_t GPS::runOnce()
     // In GPS_ACTIVE state, GPS is powered on and we're receiving NMEA messages.
     // We use the following logic to determine when to update the local position
     // or time by running GPS::publishUpdate.
-    // Note: Local position update is ascynchronous to position broadcast. We
+    // Note: Local position update is asynchronous to position broadcast. We
     // generally run this state every gps_update_interval seconds, and in most cases
     // gps_update_interval is faster than the position broadcast interval so there's a
     // fresh position ready when the device wants to broadcast one on the mesh.
