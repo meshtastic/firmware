@@ -45,7 +45,7 @@ jobs:
 
       - name: Build ${{ inputs.platform }}
         id: build
-        uses: meshtastic/gh-action-firmware@main
+        uses: fifieldt/gh-action-firmware@fifield
         with:
           pio_platform: ${{ inputs.platform }}
           pio_env: ${{ inputs.pio_env }}
