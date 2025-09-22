@@ -1667,9 +1667,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             return false;
         }
         LOG_INFO("Public Key set for node, not updating!");
-        // we copy the key into the incoming packet, to prevent overwrite
-        p.public_key.size = 32;
-        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
     } else if (p.public_key.size == 32) {
         LOG_INFO("Update Node Pubkey!");
     }
