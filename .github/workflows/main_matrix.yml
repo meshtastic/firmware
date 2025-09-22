@@ -19,6 +19,7 @@ on:
       - master
       - develop
       - event/*
+      - self-hosted-testing
     paths-ignore:
       - "**.md"
       #- "**.yml"
