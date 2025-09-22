@@ -42,3 +42,30 @@ jobs:
           merge_args: ${{ env.MERGE_ARGS }}
           push_args: ${{ env.PUSH_ARGS }}
           spawn_logs: ${{ env.SPAWN_LOGS }}
+
+
+  apply_patch:
+    runs-on: ubuntu-latest
+    steps: 
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Git user
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Checkout master branch
+      run: git checkout master
+
+    - name: Create temp branch
+      run: git checkout -b temp
+
+    - name: Cherry-pick commit
+      run: git cherry-pick 8171aa4445be96b7051cd71c43afbe967eb89e0e
+
+    - name: Force push temp branch to flamingo_updated
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git push --force origin temp:flamingo_updated
