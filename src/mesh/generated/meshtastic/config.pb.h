@@ -515,8 +515,6 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* If false (default), the device will display the time in 24-hour format on screen.
  If true, the device will display the time in 12-hour format on screen. */
     bool use_12h_clock;
-    /* If false(default), the device will use short names for various display screens */
-    bool use_long_node_name;
 } meshtastic_Config_DisplayConfig;
 
 /* Lora Config */
@@ -744,7 +742,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
+#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
@@ -755,7 +753,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
+#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
@@ -822,7 +820,6 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_wake_on_tap_or_motion_tag 10
 #define meshtastic_Config_DisplayConfig_compass_orientation_tag 11
 #define meshtastic_Config_DisplayConfig_use_12h_clock_tag 12
-#define meshtastic_Config_DisplayConfig_use_long_node_name_tag 13
 #define meshtastic_Config_LoRaConfig_use_preset_tag 1
 #define meshtastic_Config_LoRaConfig_modem_preset_tag 2
 #define meshtastic_Config_LoRaConfig_bandwidth_tag 3
@@ -968,8 +965,7 @@ X(a, STATIC,   SINGULAR, UENUM,    displaymode,       8) \
 X(a, STATIC,   SINGULAR, BOOL,     heading_bold,      9) \
 X(a, STATIC,   SINGULAR, BOOL,     wake_on_tap_or_motion,  10) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_orientation,  11) \
-X(a, STATIC,   SINGULAR, BOOL,     use_12h_clock,    12) \
-X(a, STATIC,   SINGULAR, BOOL,     use_long_node_name,    13)
+X(a, STATIC,   SINGULAR, BOOL,     use_12h_clock,    12)
 #define meshtastic_Config_DisplayConfig_CALLBACK NULL
 #define meshtastic_Config_DisplayConfig_DEFAULT NULL
 
