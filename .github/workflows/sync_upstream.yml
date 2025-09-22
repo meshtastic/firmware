@@ -66,12 +66,15 @@ jobs:
     - name: Create temp branch
       run: git checkout -b temp
     
+    - name: debug 
+      run: git remote -v 
+    
     # - name: fetch patch
     #   run: git fetch 8171aa4445be96b7051cd71c43afbe967eb89e0e
 
 
     - name: Cherry-pick commit
-      run: git cherry-pick origin 8171aa4445be96b7051cd71c43afbe967eb89e0e
+      run: git cherry-pick 8171aa4445be96b7051cd71c43afbe967eb89e0e
 
     - name: Force push temp branch to flamingo_updated
       env:
