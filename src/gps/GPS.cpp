@@ -1120,10 +1120,10 @@ int32_t GPS::runOnce()
     //
     // 1. Got a time for the first time --> publishUpdate
     // 2. Got a lock for the first time
-    //   --> If gps_update_interval is <= 10 --> publishUpdate
+    //   --> If gps_update_interval is <= 10s --> publishUpdate
     //   --> Otherwise, hold for MIN(gps_update_interval - 1, 20s)
     //  3. Got a lock after turning back on
-    //   --> If gps_update_interval is <= 10 --> publishUpdate
+    //   --> If gps_update_interval is <= 10s --> publishUpdate
     //   --> Otherwise, hold for MIN(gps_update_interval - 1, 20s)
     // 4. Hold has expired
     //   --> If we have a time and a location --> publishUpdate
