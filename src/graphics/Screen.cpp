@@ -1468,7 +1468,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     strcpy(banner, "Alert Received");
                 }
                 screen->showSimpleBanner(banner, 3000);
-            } else if (!node->is_muted && !channel.settings.mute) {
+            } else if (!channel.settings.mute) {
                 if (longName && longName[0]) {
 #if defined(M5STACK_UNITC6L)
                     strcpy(banner, "New Message");
