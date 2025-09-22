@@ -1155,37 +1155,28 @@ int32_t GPS::runOnce()
         shouldPublish = true;
     }
 
-    // 2. Got a lock for the first time
+    // 2. Got a lock for the first time, or 3. Got a lock after turning back on
     bool gotLoc = lookForLocation();
-    if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
-        LOG_DEBUG("hasValidLocation RISING EDGE");
-        hasValidLocation = true;
-        if (updateInterval <= 10 * 1000UL) {
-            shouldPublish = true;
-        } else {
-            // Hold for up to 20secs after getting a lock to download ephemeris etc
-            uint32_t holdTime = updateInterval - 1000;
-            if (holdTime > 20000)
-                holdTime = 20000;
-            fixHoldEnds = millis() + holdTime;
+    if (gotLoc) {
 #ifdef GPS_DEBUG
-            LOG_DEBUG("Holding for %ums (first Lock)", holdTime);
-#endif
+        if (!hasValidLocation) { // declare that we have location ASAP
+            LOG_DEBUG("hasValidLocation RISING EDGE");
         }
-    }
-    //  3. Got a lock after turning back on
-    if (gotLoc && prev_fixQual == 0) { // just got a lock after turning back on.
-        if (updateInterval <= 10 * 1000UL) {
-            shouldPublish = true;
-        } else {
-            // Hold for up to 20secs after getting a lock to download ephemeris etc
-            uint32_t holdTime = updateInterval - 1000;
-            if (holdTime > 20000)
-                holdTime = 20000;
-            fixHoldEnds = millis() + holdTime;
-#ifdef GPS_DEBUG
-            LOG_DEBUG("Holding for %ums (Lock after GPS_OFF)", holdTime);
 #endif
+        if (!hasValidLocation || prev_fixQual == 0) {
+            hasValidLocation = true;
+            if (updateInterval <= 10 * 1000UL) {
+                shouldPublish = true;
+            } else {
+                // Hold for up to 20secs after getting a lock to download ephemeris etc
+                uint32_t holdTime = updateInterval - 1000;
+                if (holdTime > 20000)
+                    holdTime = 20000;
+                fixHoldEnds = millis() + holdTime;
+#ifdef GPS_DEBUG
+                LOG_DEBUG("Holding for %ums after lock", holdTime);
+#endif
+            }
         }
     }
 
