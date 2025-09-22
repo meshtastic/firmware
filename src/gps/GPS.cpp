@@ -1188,7 +1188,7 @@ int32_t GPS::runOnce()
             p = meshtastic_Position_init_default;
             hasValidLocation = false;
             shouldPublish = true;
-#if GPS_DEBUG
+#ifdef GPS_DEBUG
             LOG_DEBUG("hasValidLocation FALLING EDGE");
 #endif
         }
