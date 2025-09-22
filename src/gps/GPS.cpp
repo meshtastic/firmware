@@ -1033,7 +1033,7 @@ void GPS::down()
     LOG_DEBUG("%us until next search", sleepTime / 1000);
 
     // If update interval less than 10 seconds, no attempt to sleep
-    if (updateInterval <= 10 * 1000UL || sleepTime == 0)
+    if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS || sleepTime == 0)
         setPowerState(GPS_IDLE);
 
     else {
@@ -1165,13 +1165,13 @@ int32_t GPS::runOnce()
 #endif
         if (!hasValidLocation || prev_fixQual == 0) {
             hasValidLocation = true;
-            if (updateInterval <= 10 * 1000UL) {
+            if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 shouldPublish = true;
             } else {
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - 1000;
-                if (holdTime > 20000)
-                    holdTime = 20000;
+                if (holdTime > GPS_FIX_HOLD_MAX_MS)
+                    holdTime = GPS_FIX_HOLD_MAX_MS;
                 fixHoldEnds = millis() + holdTime;
 #ifdef GPS_DEBUG
                 LOG_DEBUG("Holding for %ums after lock", holdTime);
