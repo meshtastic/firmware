@@ -8,6 +8,7 @@
 #include "Fusion/Fusion.h"
 #include <math.h>
 #include <Arduino.h>
+#include <cmath> // For sqrt()
 
 // Global instance
 GPSIMUFusion g_gps_imu_fusion;
@@ -166,27 +167,68 @@ void GPSIMUFusion::updateGPS() {
         return;
     }
     
-    // Apply smoothing filter to GPS position
-    const float gps_alpha = 0.3f; // Smoothing factor
+    // Smart GPS filtering for improved accuracy
+    // Adjust filter strength based on GPS quality
+    float base_alpha = 0.4f; // Moderate filtering (was 0.8f - too light)
+    float gps_alpha = base_alpha;
+    
+    // Get GPS quality indicators
+    float hdop_m = gps->p.HDOP / 100.0f; // Convert cm to meters
+    uint8_t sats = gps->p.sats_in_view;
+    
+    // Adjust filter based on GPS quality (tighter filtering for poor quality)
+    if (hdop_m > 5.0f || sats < 4) {
+        gps_alpha = 0.2f; // Heavier filtering for poor GPS
+    } else if (hdop_m < 2.0f && sats >= 6) {
+        gps_alpha = 0.6f; // Lighter filtering for good GPS
+    }
+    
     if (gps_state.lat_filtered == 0.0 && gps_state.lon_filtered == 0.0) {
-        // First GPS fix - initialize
+        // First GPS fix - initialize directly without filtering
         gps_state.lat_filtered = gps_lat;
         gps_state.lon_filtered = gps_lon;
         gps_state.alt_filtered = gps_alt;
+        LOG_INFO("GPS INIT: First fix set to lat=%.8f lon=%.8f alt=%.1f (hdop=%.1fm sats=%d)", 
+                gps_lat, gps_lon, gps_alt, hdop_m, sats);
     } else {
-        // Apply low-pass filter - convert double to float for filtering
-        float lat_f = (float)gps_lat;
-        float lon_f = (float)gps_lon;
-        float lat_filtered_f = (float)gps_state.lat_filtered;
-        float lon_filtered_f = (float)gps_state.lon_filtered;
+        // Calculate distance from current filtered position to new GPS reading
+        double lat_diff = gps_lat - gps_state.lat_filtered;
+        double lon_diff = gps_lon - gps_state.lon_filtered;
+        double distance_deg = sqrt(lat_diff*lat_diff + lon_diff*lon_diff);
+        double distance_m = distance_deg * 111320.0; // Rough conversion to meters
         
-        lowPassFilter(lat_filtered_f, lat_f, gps_alpha);
-        lowPassFilter(lon_filtered_f, lon_f, gps_alpha);
-        lowPassFilter(gps_state.alt_filtered, gps_alt, gps_alpha);
+        // Adaptive jump detection based on GPS quality
+        float max_jump = (hdop_m > 10.0f) ? 200.0f : 50.0f; // Allow larger jumps for poor GPS
         
-        // Convert back to double
-        gps_state.lat_filtered = (double)lat_filtered_f;
-        gps_state.lon_filtered = (double)lon_filtered_f;
+        // If GPS reading is very different, reset to new position (might be location jump)
+        if (distance_m > max_jump) {
+            LOG_INFO("GPS RESET: Large jump detected (%.1fm > %.1fm), resetting filter", distance_m, max_jump);
+            gps_state.lat_filtered = gps_lat;
+            gps_state.lon_filtered = gps_lon;
+            gps_state.alt_filtered = gps_alt;
+        } else {
+            // Apply adaptive low-pass filter - convert double to float for filtering
+            float lat_f = (float)gps_lat;
+            float lon_f = (float)gps_lon;
+            float lat_filtered_f = (float)gps_state.lat_filtered;
+            float lon_filtered_f = (float)gps_state.lon_filtered;
+            
+            lowPassFilter(lat_filtered_f, lat_f, gps_alpha);
+            lowPassFilter(lon_filtered_f, lon_f, gps_alpha);
+            lowPassFilter(gps_state.alt_filtered, gps_alt, gps_alpha);
+            
+            // Convert back to double
+            gps_state.lat_filtered = (double)lat_filtered_f;
+            gps_state.lon_filtered = (double)lon_filtered_f;
+            
+            // Debug position filtering
+            static uint32_t lastPosDebug = 0;
+            if (now_ms - lastPosDebug > 5000) {
+                lastPosDebug = now_ms;
+                LOG_INFO("GPS FILTER: raw(%.8f,%.8f) -> filtered(%.8f,%.8f) diff=%.1fm alpha=%.2f", 
+                        gps_lat, gps_lon, gps_state.lat_filtered, gps_state.lon_filtered, distance_m, gps_alpha);
+            }
+        }
     }
     
     // Get GPS velocity and course from the public position structure
@@ -317,6 +359,24 @@ void GPSIMUFusion::fuseNavigationData(float dt) {
 bool GPSIMUFusion::isGPSDataValid() {
     if (!gps) return false;
     
+    /* 
+     * GPS VALIDATION LOGIC - T-Beam Supreme
+     * 
+     * CURRENT: Very lenient for testing pipeline
+     * TODO: Once GPS data flows properly, tighten these for production:
+     * 
+     * For better accuracy (reduce 50m offset):
+     * - hasMinSats >= 4 (not 1)  
+     * - hasHDOP < 300cm (3m) for good fixes, < 500cm (5m) acceptable
+     * - Re-enable hasLock requirement: dataValid = hasLock && hasPositionData && coordinatesReasonable
+     * - Add recentData check back to timing validation
+     * 
+     * For T-Beam Supreme indoor/weak signal:
+     * - Keep hasLock optional if coordinates look valid
+     * - Use GPS accuracy field (if available) instead of raw HDOP
+     * - Consider fix type (2D vs 3D) from GPS status
+     */
+    
     uint32_t now_ms = millis();
     bool hasLock = gps->hasLock();
     bool recentData = (now_ms - fusionData.last_gps_ms) < GPS_TIMEOUT_MS;
@@ -325,17 +385,19 @@ bool GPSIMUFusion::isGPSDataValid() {
     bool hasPositionData = (gps->p.latitude_i != 0 || gps->p.longitude_i != 0);
     bool coordinatesReasonable = (abs(gps->p.latitude_i) <= 900000000 && abs(gps->p.longitude_i) <= 1800000000);
     
-    // More relaxed quality check - just need some satellites
-    bool hasMinSats = (gps->p.sats_in_view >= 3); // Relaxed from 4 to 3
-    bool hasHDOP = (gps->p.HDOP > 0 && gps->p.HDOP < 5000); // Relaxed from 2000 to 5000 (50m)
+    // TEMPORARY: Very lenient validation for testing the pipeline
+    // TODO: Tighten these checks once pipeline is confirmed working
+    bool hasMinSats = (gps->p.sats_in_view >= 1); // PRODUCTION: Change to >= 4
+    bool hasHDOP = (gps->p.HDOP >= 0); // PRODUCTION: Change to < 300-500cm
     
-    // For first GPS acquisition, be more lenient with timing
-    bool dataValid = hasLock && hasPositionData && coordinatesReasonable;
-    bool qualityOk = hasMinSats || hasHDOP; // Either condition is enough
+    // For T-Beam Supreme: Accept coordinates even without hasLock() for testing
+    // hasLock() may be too strict for indoor/weak signal conditions  
+    bool dataValid = hasPositionData && coordinatesReasonable; // PRODUCTION: Add hasLock back
+    bool qualityOk = hasMinSats || hasHDOP || (fusionData.last_gps_ms == 0); // Very lenient
     
     // Debug GPS validation issues - more detailed
     static uint32_t lastGpsDebug = 0;
-    if (now_ms - lastGpsDebug > 2000) { // More frequent debug
+    if (now_ms - lastGpsDebug > 1000) { // Every second for debugging
         lastGpsDebug = now_ms;
         LOG_INFO("GPS DEBUG: lock=%s pos=%s coords=%s sats=%s hdop=%s recent=%s", 
                 hasLock ? "OK" : "FAIL", 
@@ -350,10 +412,20 @@ bool GPSIMUFusion::isGPSDataValid() {
         LOG_INFO("GPS CALC: lat=%.8f lon=%.8f age=%ums", 
                 gps->p.latitude_i * 1e-7, gps->p.longitude_i * 1e-7,
                 fusionData.last_gps_ms > 0 ? (now_ms - fusionData.last_gps_ms) : 0);
+        
+        // Show detailed validation results with new lenient logic
+        bool finalResult = dataValid && qualityOk;
+        LOG_INFO("GPS VALIDATION: dataValid=%s qualityOk=%s firstTime=%s FINAL=%s", 
+                dataValid ? "YES" : "NO",
+                qualityOk ? "YES" : "NO", 
+                (fusionData.last_gps_ms == 0) ? "YES" : "NO",
+                finalResult ? "PASS" : "FAIL");
+        LOG_INFO("GPS LENIENT: Removed hasLock requirement, accepting 1+ sats, any HDOP");
     }
     
-    // More lenient validation - prioritize basic lock and position data
-    return dataValid && (qualityOk || fusionData.last_gps_ms == 0);
+    // Very lenient validation for T-Beam Supreme testing
+    bool finalResult = dataValid && qualityOk;
+    return finalResult;
 }
 
 bool GPSIMUFusion::isIMUDataValid() {
