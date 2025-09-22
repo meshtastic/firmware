@@ -130,7 +130,7 @@ int32_t TrackballInterruptBase::runOnce()
 
     if (e.inputEvent != INPUT_BROKER_NONE) {
         e.source = this->_originName;
-        e.kbchar = 0x00;
+        e.kbchar = e.inputEvent; // Set kbchar to match inputEvent like cardKB does
         this->notifyObservers(&e);
     }
 

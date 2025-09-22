@@ -20,6 +20,9 @@ void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLe
                                  TrackballInterruptImpl1::handleIntUp, TrackballInterruptImpl1::handleIntLeft,
                                  TrackballInterruptImpl1::handleIntRight, TrackballInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+    
+    // Log for debugging BaseUI navigation
+    LOG_INFO("Trackball initialized for BaseUI navigation");
 }
 
 void TrackballInterruptImpl1::handleIntDown()

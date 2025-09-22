@@ -424,6 +424,16 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
 #endif
+#if defined(T_DECK)
+    // Enable trackball wake-up for BaseUI navigation
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        gpio_wakeup_enable((gpio_num_t)TB_UP, GPIO_INTR_LOW_LEVEL);
+        gpio_wakeup_enable((gpio_num_t)TB_DOWN, GPIO_INTR_LOW_LEVEL);
+        gpio_wakeup_enable((gpio_num_t)TB_LEFT, GPIO_INTR_LOW_LEVEL);
+        gpio_wakeup_enable((gpio_num_t)TB_RIGHT, GPIO_INTR_LOW_LEVEL);
+        LOG_DEBUG("Enabled trackball wake-up for BaseUI");
+    }
+#endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
@@ -460,6 +470,15 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
+#endif
+#if defined(T_DECK)
+    // Disable trackball wake-up when waking up
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        gpio_wakeup_disable((gpio_num_t)TB_UP);
+        gpio_wakeup_disable((gpio_num_t)TB_DOWN);
+        gpio_wakeup_disable((gpio_num_t)TB_LEFT);
+        gpio_wakeup_disable((gpio_num_t)TB_RIGHT);
+    }
 #endif
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {
