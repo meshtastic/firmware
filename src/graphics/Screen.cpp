@@ -1037,7 +1037,7 @@ void Screen::setFrames(FrameFocus focus)
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
-        indicatorIcons.push_back(small_chirpy);
+        indicatorIcons.push_back(chirpy_small);
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
