@@ -74,9 +74,37 @@ int32_t QMC6310Sensor::runOnce()
 
         float mx = float(rx) - offsetX;
         float my = float(ry) - offsetY;
-        (void)rz; // mz is currently unused for heading
+        float mz = float(rz) - offsetZ;
 
-        float heading = atan2f(my, mx) * 180.0f / PI;
+        // Soft-iron scaling based on radii along axes
+        float radiusX = (maxX - minX) * 0.5f;
+        float radiusY = (maxY - minY) * 0.5f;
+        float radiusZ = (maxZ - minZ) * 0.5f;
+        float avgR = 0.0f; int rcount = 0;
+        if (radiusX > 1) { avgR += radiusX; rcount++; }
+        if (radiusY > 1) { avgR += radiusY; rcount++; }
+        if (radiusZ > 1) { avgR += radiusZ; rcount++; }
+        if (rcount > 0) avgR /= rcount; else avgR = 1.0f;
+        scaleX = (radiusX > 1) ? (avgR / radiusX) : 1.0f;
+        scaleY = (radiusY > 1) ? (avgR / radiusY) : 1.0f;
+        scaleZ = (radiusZ > 1) ? (avgR / radiusZ) : 1.0f;
+
+        mx *= scaleX; my *= scaleY; mz *= scaleZ;
+
+        // Axis mapping / sign
+        float hx = mx, hy = my;
+#if QMC6310_SWAP_XY
+        hx = my; hy = mx;
+#endif
+        hx *= (float)QMC6310_X_SIGN;
+        hy *= (float)QMC6310_Y_SIGN;
+
+        float heading;
+#if QMC6310_HEADING_STYLE == 1
+        heading = atan2f(hx, -hy) * 180.0f / PI; // QST library style
+#else
+        heading = atan2f(hy, hx) * 180.0f / PI;  // Arduino sketch style
+#endif
         heading += QMC6310_DECLINATION_DEG + QMC6310_YAW_MOUNT_OFFSET;
         while (heading < 0.0f) heading += 360.0f;
         while (heading >= 360.0f) heading -= 360.0f;
@@ -88,6 +116,14 @@ int32_t QMC6310Sensor::runOnce()
         g_qmc6310Live.offX = offsetX;
         g_qmc6310Live.offY = offsetY;
         g_qmc6310Live.offZ = offsetZ;
+        // Update live data (also publish scaled µT)
+        const float GAUSS_PER_LSB = QMC6310_SENS_GAUSS_PER_LSB;
+        g_qmc6310Live.uT_X = mx * GAUSS_PER_LSB * 100.0f;
+        g_qmc6310Live.uT_Y = my * GAUSS_PER_LSB * 100.0f;
+        g_qmc6310Live.uT_Z = mz * GAUSS_PER_LSB * 100.0f;
+        g_qmc6310Live.scaleX = scaleX;
+        g_qmc6310Live.scaleY = scaleY;
+        g_qmc6310Live.scaleZ = scaleZ;
         g_qmc6310Live.heading = heading;
         g_qmc6310Live.last_ms = millis();
 

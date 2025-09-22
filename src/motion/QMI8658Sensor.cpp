@@ -1,6 +1,7 @@
 #include "QMI8658Sensor.h"
 #include "NodeDB.h"
 #include "SensorLiveData.h"
+#include "Fusion/Fusion.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMI8658.hpp>)
 
@@ -108,6 +109,49 @@ int32_t QMI8658Sensor::runOnce()
         LOG_DEBUG("QMI8658: ready=%d ACC[x=%.3f y=%.3f z=%.3f] m/s^2  GYR[x=%.3f y=%.3f z=%.3f] dps",
                   (int)ready, acc.x, acc.y, acc.z, gyr.x, gyr.y, gyr.z);
     }
+    // AHRS fusion (roll/pitch/yaw) using accelerometer, gyroscope and (optionally) magnetometer
+    {
+        static bool ahrsInit = false;
+        static FusionAhrs ahrs;
+        static uint32_t lastTime = 0;
+        const uint32_t now_ms = millis();
+        const float dt = (lastTime == 0) ? 0.01f : (now_ms - lastTime) / 1000.0f;
+        lastTime = now_ms;
+
+        if (!ahrsInit) {
+            FusionAhrsInitialise(&ahrs);
+            FusionAhrsSettings settings;
+            settings.convention = FusionConventionNed;   // NED frame
+            settings.gain = 0.5f;                        // fusion gain
+            settings.gyroscopeRange = 512.0f;            // dps range (matches config)
+            settings.accelerationRejection = 10.0f;      // deg
+            settings.magneticRejection = 10.0f;          // deg
+            settings.recoveryTriggerPeriod = 5;          // cycles
+            FusionAhrsSetSettings(&ahrs, &settings);
+            ahrsInit = true;
+        }
+
+        // Map live sensor values into Fusion vectors
+        FusionVector g = {.axis = {.x = g_qmi8658Live.gyr.x, .y = g_qmi8658Live.gyr.y, .z = g_qmi8658Live.gyr.z}};   // dps
+        FusionVector a = {.axis = {.x = g_qmi8658Live.acc.x, .y = g_qmi8658Live.acc.y, .z = g_qmi8658Live.acc.z}};   // m/s2
+
+        // Use magnetometer if recent (<= 200 ms old). Use µT values; the library normalises internally.
+        const bool magFresh = (now_ms - g_qmc6310Live.last_ms) <= 200 && g_qmc6310Live.initialized;
+        FusionVector m = {.axis = {.x = g_qmc6310Live.uT_X, .y = g_qmc6310Live.uT_Y, .z = g_qmc6310Live.uT_Z}};
+
+        if (magFresh) {
+            FusionAhrsUpdate(&ahrs, g, a, m, dt);
+        } else {
+            FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, dt);
+        }
+
+        const FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+        const FusionEuler e = FusionQuaternionToEuler(q);
+        g_qmi8658Live.roll = e.angle.roll;
+        g_qmi8658Live.pitch = e.angle.pitch;
+        g_qmi8658Live.yaw = e.angle.yaw; // degrees
+    }
+
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #endif
 
@@ -127,6 +171,46 @@ int32_t QMI8658Sensor::runOnce()
                 return 500; // pause a little after waking screen
             }
         }
+    }
+
+    // When not streaming, we still update AHRS at the same cadence
+    {
+        static bool ahrsInit = false;
+        static FusionAhrs ahrs;
+        static uint32_t lastTime = 0;
+        const uint32_t now_ms = millis();
+        const float dt = (lastTime == 0) ? 0.01f : (now_ms - lastTime) / 1000.0f;
+        lastTime = now_ms;
+
+        if (!ahrsInit) {
+            FusionAhrsInitialise(&ahrs);
+            FusionAhrsSettings settings;
+            settings.convention = FusionConventionNed;
+            settings.gain = 0.5f;
+            settings.gyroscopeRange = 512.0f;
+            settings.accelerationRejection = 10.0f;
+            settings.magneticRejection = 10.0f;
+            settings.recoveryTriggerPeriod = 5;
+            FusionAhrsSetSettings(&ahrs, &settings);
+            ahrsInit = true;
+        }
+
+        FusionVector g = {.axis = {.x = g_qmi8658Live.gyr.x, .y = g_qmi8658Live.gyr.y, .z = g_qmi8658Live.gyr.z}};
+        FusionVector a = {.axis = {.x = g_qmi8658Live.acc.x, .y = g_qmi8658Live.acc.y, .z = g_qmi8658Live.acc.z}};
+        const bool magFresh = (now_ms - g_qmc6310Live.last_ms) <= 200 && g_qmc6310Live.initialized;
+        FusionVector m = {.axis = {.x = g_qmc6310Live.uT_X, .y = g_qmc6310Live.uT_Y, .z = g_qmc6310Live.uT_Z}};
+
+        if (magFresh) {
+            FusionAhrsUpdate(&ahrs, g, a, m, dt);
+        } else {
+            FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, dt);
+        }
+
+        const FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+        const FusionEuler e = FusionQuaternionToEuler(q);
+        g_qmi8658Live.roll = e.angle.roll;
+        g_qmi8658Live.pitch = e.angle.pitch;
+        g_qmi8658Live.yaw = e.angle.yaw;
     }
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;

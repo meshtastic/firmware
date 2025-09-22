@@ -711,7 +711,14 @@ void drawQMC6310Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
             snprintf(buf, sizeof(buf), "Head %3.0f  offX %.0f offY %.0f", g_qmc6310Live.heading, g_qmc6310Live.offX,
                      g_qmc6310Live.offY);
             display->drawString(x, getTextPositions(display)[line++], buf);
-            snprintf(buf, sizeof(buf), "rawX %d rawY %d", g_qmc6310Live.rawX, g_qmc6310Live.rawY);
+            snprintf(buf, sizeof(buf), "uT X %.1f  Y %.1f", g_qmc6310Live.uT_X, g_qmc6310Live.uT_Y);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+            snprintf(buf, sizeof(buf), "scale X %.2f Y %.2f", g_qmc6310Live.scaleX, g_qmc6310Live.scaleY);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+            // total field vs expected
+            float mag = sqrtf(g_qmc6310Live.uT_X * g_qmc6310Live.uT_X + g_qmc6310Live.uT_Y * g_qmc6310Live.uT_Y +
+                              g_qmc6310Live.uT_Z * g_qmc6310Live.uT_Z);
+            snprintf(buf, sizeof(buf), "|B| %.1f uT vs %.1f", mag, (float)QMC6310_EXPECTED_FIELD_uT);
             display->drawString(x, getTextPositions(display)[line++], buf);
         }
     } else {
@@ -732,6 +739,8 @@ void drawQMI8658Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         snprintf(buf, sizeof(buf), "ACC %.2f %.2f %.2f", g_qmi8658Live.acc.x, g_qmi8658Live.acc.y, g_qmi8658Live.acc.z);
         display->drawString(x, getTextPositions(display)[line++], buf);
         snprintf(buf, sizeof(buf), "GYR %.2f %.2f %.2f", g_qmi8658Live.gyr.x, g_qmi8658Live.gyr.y, g_qmi8658Live.gyr.z);
+        display->drawString(x, getTextPositions(display)[line++], buf);
+        snprintf(buf, sizeof(buf), "RPY %.1f %.1f %.1f", g_qmi8658Live.roll, g_qmi8658Live.pitch, g_qmi8658Live.yaw);
         display->drawString(x, getTextPositions(display)[line++], buf);
     } else {
         display->drawString(x, getTextPositions(display)[line++], "No data");

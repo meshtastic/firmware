@@ -55,13 +55,15 @@ Dependency pulled via PlatformIO:
 
   If `Δ` exceeds a small threshold (`0.15 g`), we wake the screen.
 
-### Debug Stream
+### Debug Stream & Fused Orientation (RPY)
 
 - The debug line (1 Hz) prints:
 
   `QMI8658: ready=<0/1> ACC[x y z] m/s^2 GYR[x y z] dps`
 
   This is also mirrored into the live data struct `g_qmi8658Live` that the UI reads.
+
+- An AHRS (Fusion library by Seb Madgwick) runs in the IMU thread using gyroscope + accelerometer and, when fresh, magnetometer from QMC6310. It outputs roll/pitch/yaw (ZYX, degrees) into `g_qmi8658Live.roll/pitch/yaw`. The QMI8658 UI screen displays “RPY r p y”.
 
 ---
 
@@ -96,6 +98,26 @@ mz = rawZ − offsetZ
 
 This removes hard‑iron bias (DC offset) and is adequate for real‑time heading stabilization. For best results, slowly rotate the device on all axes for several seconds to let min/max settle.
 
+### Soft‑Iron Compensation (axis scaling)
+
+Ferric materials and PCB + enclosure can distort the local field, making the calibration cloud elliptical. We approximate this by computing per‑axis radii and scaling them toward the average radius:
+
+```
+R_x = (maxX − minX)/2
+R_y = (maxY − minY)/2
+R_z = (maxZ − minZ)/2
+R_avg = mean of available radii (ignore zeros)
+s_x = R_avg / R_x   (if R_x > 0 else 1)
+s_y = R_avg / R_y
+s_z = R_avg / R_z
+
+mx' = (rawX − offsetX) * s_x
+my' = (rawY − offsetY) * s_y
+mz' = (rawZ − offsetZ) * s_z
+```
+
+This improves the circularity of the cloud and reduces heading bias caused by anisotropy. For fully accurate compensation, an ellipsoid fit can be added later.
+
 Soft‑iron distortion (elliptical scaling) is NOT corrected here. A future enhancement can compute per‑axis scale from `(max−min)/2` or use an ellipsoid fit.
 
 ### Heading Computation
@@ -103,7 +125,7 @@ Soft‑iron distortion (elliptical scaling) is NOT corrected here. A future enha
 Raw 2‑D horizontal heading (no tilt compensation):
 
 ```
-heading_deg = atan2(my, mx) * 180/π
+heading_deg = atan2(my, mx) * 180/π     (Arduino‑style)
 heading_true = wrap_0_360( heading_deg + declination_deg + yaw_mount_offset )
 ```
 
@@ -114,6 +136,14 @@ Where:
 - `wrap_0_360(θ)` folds θ into `[0, 360)` by repeated add/subtract 360.
 
 Screen orientation (0/90/180/270) is applied after heading is computed and normalized.
+
+Heading style and axis mapping are configurable via build flags:
+
+- `QMC6310_SWAP_XY` (0/1) – swap X and Y axes before heading.
+- `QMC6310_X_SIGN`, `QMC6310_Y_SIGN` (+1/−1) – flip axes if needed.
+- `QMC6310_HEADING_STYLE` (0/1)
+  - 0 → `atan2(my, mx)` (Arduino sketch style)
+  - 1 → `atan2(x, −y)` (Lewis He QST library `readPolar()` style)
 
 ### Tilt‑Compensated Heading (future option)
 
@@ -129,7 +159,7 @@ Where `φ` is roll and `θ` is pitch (radians), derived from accelerometer. This
 
 ### Live Data
 
-The magnetometer thread writes the latest raw XYZ, offsets and heading into `g_qmc6310Live` for the UI to display without touching hardware.
+The magnetometer thread writes the latest raw XYZ, offsets, µT (scaled), scale factors, and heading into `g_qmc6310Live` for the UI to display without touching hardware.
 
 ---
 
@@ -208,4 +238,3 @@ The values on the UI screens should match these, because both screens read from 
 - If QMI8658 shows zeros on the UI screen, ensure `QMI8658_DEBUG_STREAM` is enabled or let the background IMU thread initialize first (it sets `g_qmi8658Live.initialized`).
 - If QMC6310 heading appears constrained or jumps, rotate the device slowly on all axes for 10–20 seconds to update min/max; verify you’re on the correct I2C port and address (`0x1C`).
 - If the I2C scan does not find the IMU on power‑on, check that the late‑rescan log appears; some boards power the sensor rail slightly later.
-
