@@ -1130,6 +1130,7 @@ int32_t GPS::runOnce()
     //   --> down()
     // 5. Search time has expired
     //   --> If we have a time and a location --> publishUpdate
+    //   --> If we had a location before but don't now --> publishUpdate
     //   --> down()
 
     if (whileActive()) {
@@ -1189,8 +1190,18 @@ int32_t GPS::runOnce()
     }
 
     bool tooLong = scheduling.searchedTooLong();
-    if (tooLong)
+    if (tooLong && !gotLoc) {
         LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time");
+        // we didn't get a location during this ack window, therefore declare loss of lock
+        if (hasValidLocation) {
+            p = meshtastic_Position_init_default;
+            hasValidLocation = false;
+            shouldPublish = true;
+#if GPS_DEBUG
+            LOG_DEBUG("hasValidLocation FALLING EDGE");
+#endif
+        }
+    }
 
     // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
     if (shouldPublish || tooLong || millis() > fixHoldEnds) {
