@@ -2,6 +2,9 @@
 
 #include <stdint.h>
 
+// Forward declaration for GPS+IMU fusion
+struct GPSIMUFusionData;
+
 struct Vec3f {
     float x = 0;
     float y = 0;
@@ -34,3 +37,9 @@ struct QMC6310LiveData {
 
 extern QMI8658LiveData g_qmi8658Live;
 extern QMC6310LiveData g_qmc6310Live;
+
+// GPS+IMU fusion data access
+#if !MESHTASTIC_EXCLUDE_GPS
+extern class GPSIMUFusion g_gps_imu_fusion;
+const GPSIMUFusionData* getGPSIMUFusionData();
+#endif

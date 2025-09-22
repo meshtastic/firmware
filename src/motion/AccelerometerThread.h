@@ -26,6 +26,10 @@
 #include "STK8XXXSensor.h"
 #endif
 
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPSIMUFusion.h"
+#endif
+
 extern ScanI2C::DeviceAddress accelerometer_found;
 
 class AccelerometerThread : public concurrency::OSThread
@@ -64,8 +68,18 @@ class AccelerometerThread : public concurrency::OSThread
         // Assume we should not keep the board awake
         canSleep = true;
 
-        if (isInitialised)
-            return sensor->runOnce();
+        if (isInitialised) {
+            int32_t result = sensor->runOnce();
+            
+#if !MESHTASTIC_EXCLUDE_GPS
+            // Update GPS+IMU fusion after sensor data is updated
+            if (g_gps_imu_fusion.update()) {
+                // Fusion data was updated
+            }
+#endif
+            
+            return result;
+        }
 
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
@@ -146,6 +160,12 @@ class AccelerometerThread : public concurrency::OSThread
         LOG_DEBUG("AccelerometerThread::init %s", isInitialised ? "ok" : "failed");
 
         if (isInitialised) {
+#if !MESHTASTIC_EXCLUDE_GPS
+            // Initialize GPS+IMU fusion system
+            if (g_gps_imu_fusion.initialize()) {
+                LOG_DEBUG("GPS+IMU Fusion initialized successfully");
+            }
+#endif
             // Kick the scheduler so we start running immediately
             setIntervalFromNow(0);
         }
