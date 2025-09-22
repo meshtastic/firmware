@@ -23,6 +23,9 @@ env:
 on:
   schedule:
     - cron: '01 18 * * *'
+  push: 
+    branches:
+      - "main"
 
   # Allows manual workflow run (must in default branch to work)
   workflow_dispatch:
@@ -48,15 +51,15 @@ jobs:
     runs-on: ubuntu-latest
     steps: 
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v5
+      with:     
+        ref: 'master'
+
 
     - name: Set up Git user
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-    - name: Checkout master branch
-      run: git checkout master
 
     - name: Create temp branch
       run: git checkout -b temp
