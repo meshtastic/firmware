@@ -359,7 +359,7 @@ void menuHandler::messageResponseMenu()
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
 
-    optionsArray[options] = "View Mode";
+    optionsArray[options] = "Conversations";
     optionsEnumArray[options++] = ViewMode;
 
     optionsArray[options] = "Dismiss All";
