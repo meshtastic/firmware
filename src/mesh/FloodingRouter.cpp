@@ -1,7 +1,11 @@
 #include "FloodingRouter.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
 
 FloodingRouter::FloodingRouter() {}
 
@@ -25,8 +29,9 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     bool seenRecently =
         wasSeenRecently(p, true, nullptr, nullptr, &wasUpgraded); // Updates history; returns false when an upgrade is detected
 
-    // Handle hop_limit upgrade scenario for routers
-    if (wasUpgraded && IS_ROUTER_ROLE() && iface && p->hop_limit > 0) {
+    // Handle hop_limit upgrade scenario for rebroadcasters
+    // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
+    if (wasUpgraded && isRebroadcaster() && iface && p->hop_limit > 0) {
         // wasSeenRecently() reports false in upgrade cases so we handle replacement before the duplicate short-circuit
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
@@ -34,19 +39,33 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
-            return false; // Reprocess for routing only, skip app delivery
+
+            const meshtastic_MeshPacket *upgradePacket = p;
+            meshtastic_MeshPacket *processed = packetPool.allocCopy(*p);
+            if (processed)
+                upgradePacket = processed;
+
+            if (nodeDB)
+                nodeDB->updateFrom(*upgradePacket);
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+            if (traceRouteModule && upgradePacket->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                upgradePacket->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+                traceRouteModule->processUpgradedPacket(*upgradePacket);
+#endif
+
+            perhapsRebroadcast(upgradePacket);
+
+            if (processed)
+                packetPool.release(processed);
+
+            // We already enqueued the improved copy, so make sure the incoming packet stops here.
+            return true;
         }
     }
 
     if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
-
-        // Handle ROUTER_LATE specific logic. Do not send to the regular queue.
-
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
-            iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
-        }
 
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
         the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
@@ -68,7 +87,9 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 {
-    if (IS_ROUTER_ROLE()) {
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
         // ROUTER, REPEATER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
         return false;

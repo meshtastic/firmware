@@ -153,6 +153,20 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     }
 }
 
+void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
+{
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || mp.decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP)
+        return;
+
+    meshtastic_RouteDiscovery decoded = meshtastic_RouteDiscovery_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_RouteDiscovery_msg, &decoded))
+        return;
+
+    handleReceivedProtobuf(mp, &decoded);
+    meshtastic_MeshPacket copy = mp;
+    alterReceivedProtobuf(copy, &decoded);
+}
+
 void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r, bool isTowardsDestination)
 {
     pb_size_t *route_count;
