@@ -247,6 +247,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             bluetoothPhoneAPI->numBytes = 0;
             bluetoothPhoneAPI->queue_size = 0;
         }
+
+        // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+        memset(lastToRadio, 0, sizeof(lastToRadio));
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();
