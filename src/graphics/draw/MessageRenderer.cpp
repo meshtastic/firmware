@@ -199,9 +199,18 @@ static uint32_t currentPeer = 0;
 static std::vector<int> seenChannels;
 static std::vector<uint32_t> seenPeers;
 
+// Public helper so menus / store can clear stale registries
+void clearThreadRegistries()
+{
+    LOG_DEBUG("[MessageRenderer] Clearing thread registries (seenChannels/seenPeers)");
+    seenChannels.clear();
+    seenPeers.clear();
+}
+
 // Setter so other code can switch threads
 void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0 */)
 {
+    LOG_DEBUG("[MessageRenderer] setThreadMode(mode=%d, ch=%d, peer=0x%08x)", (int)mode, channel, (unsigned int)peer);
     currentMode = mode;
     currentChannel = channel;
     currentPeer = peer;
@@ -209,14 +218,18 @@ void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0
 
     // Track channels we’ve seen
     if (mode == ThreadMode::CHANNEL && channel >= 0) {
-        if (std::find(seenChannels.begin(), seenChannels.end(), channel) == seenChannels.end())
+        if (std::find(seenChannels.begin(), seenChannels.end(), channel) == seenChannels.end()) {
+            LOG_DEBUG("[MessageRenderer] Track seen channel: %d", channel);
             seenChannels.push_back(channel);
+        }
     }
 
     // Track DMs we’ve seen
     if (mode == ThreadMode::DIRECT && peer != 0) {
-        if (std::find(seenPeers.begin(), seenPeers.end(), peer) == seenPeers.end())
+        if (std::find(seenPeers.begin(), seenPeers.end(), peer) == seenPeers.end()) {
+            LOG_DEBUG("[MessageRenderer] Track seen peer: 0x%08x", (unsigned int)peer);
             seenPeers.push_back(peer);
+        }
     }
 }
 

@@ -75,18 +75,16 @@ CannedMessageModule::CannedMessageModule()
 
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    // Use the requested destination, unless it's "broadcast" and we have a previous node/channel
-    if (newDest == NODENUM_BROADCAST && lastDestSet) {
-        newDest = lastDest;
-        newChannel = lastChannel;
-    }
+    // 🚫 Do NOT override explicit broadcast replies
+    // Only reuse lastDest in LaunchRepeatDestination()
+
     dest = newDest;
     channel = newChannel;
+
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
 
-    // Rest of function unchanged...
     // Upon activation, highlight "[Select Destination]"
     int selectDestination = 0;
     for (int i = 0; i < messagesCount; ++i) {
@@ -103,6 +101,8 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
+
+    LOG_DEBUG("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
 void CannedMessageModule::LaunchRepeatDestination()
@@ -116,13 +116,12 @@ void CannedMessageModule::LaunchRepeatDestination()
 
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    // Use the requested destination, unless it's "broadcast" and we have a previous node/channel
-    if (newDest == NODENUM_BROADCAST && lastDestSet) {
-        newDest = lastDest;
-        newChannel = lastChannel;
-    }
+    // 🚫 Do NOT override explicit broadcast replies
+    // Only reuse lastDest in LaunchRepeatDestination()
+
     dest = newDest;
     channel = newChannel;
+
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
@@ -132,6 +131,8 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
+
+    LOG_DEBUG("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
 static bool returnToCannedList = false;

@@ -65,11 +65,14 @@ void MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 
     addLiveMessage(sm);
 
-    // === Auto-switch thread view on new message ===
-    if (sm.type == MessageType::BROADCAST) {
-        setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
-    } else if (sm.type == MessageType::DM_TO_US) {
-        setThreadMode(ThreadMode::DIRECT, -1, sm.sender);
+    // === Auto-switch ONLY if we're currently in ALL-mode ===
+    using graphics::MessageRenderer::getThreadMode;
+    if (getThreadMode() == ThreadMode::ALL) {
+        if (sm.type == MessageType::BROADCAST) {
+            setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
+        } else if (sm.type == MessageType::DM_TO_US) {
+            setThreadMode(ThreadMode::DIRECT, -1, sm.sender);
+        }
     }
 }
 

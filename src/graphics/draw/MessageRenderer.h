@@ -29,6 +29,8 @@ uint32_t getThreadPeer();
 const std::vector<int> &getSeenChannels();
 const std::vector<uint32_t> &getSeenPeers();
 
+void clearThreadRegistries();
+
 // Text and emote rendering
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
 
