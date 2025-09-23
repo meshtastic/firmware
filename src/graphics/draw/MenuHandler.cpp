@@ -409,6 +409,7 @@ void menuHandler::messageResponseMenu()
             screen->runNow();
         } else if (selected == DismissAll) {
             messageStore.clearAllMessages();
+            graphics::MessageRenderer::clearThreadRegistries();
         } else if (selected == DismissOldest) {
             messageStore.dismissOldestMessage();
         } else if (selected == Preset || selected == Freetext) {
