@@ -449,7 +449,7 @@ void menuHandler::messageViewModeMenu()
         auto msgs = messageStore.getChannelMessages(ch);
         if (!msgs.empty()) {
             char buf[40];
-            const char* cname = channels.getName(ch);
+            const char *cname = channels.getName(ch);
             if (cname && cname[0]) {
                 snprintf(buf, sizeof(buf), "#%s", cname);
             } else {
@@ -464,7 +464,7 @@ void menuHandler::messageViewModeMenu()
     for (int ch : graphics::MessageRenderer::getSeenChannels()) {
         if (std::find(ids.begin(), ids.end(), 100 + ch) == ids.end()) {
             char buf[40];
-            const char* cname = channels.getName(ch);
+            const char *cname = channels.getName(ch);
             if (cname && cname[0]) {
                 snprintf(buf, sizeof(buf), "#%s", cname);
             } else {
