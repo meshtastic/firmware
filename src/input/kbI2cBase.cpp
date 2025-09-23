@@ -441,6 +441,7 @@ int32_t KbI2cBase::runOnce()
                 this->notifyObservers(&e);
             }
         }
+        TCAKeyboard.clearInt();
         break;
     }
 #endif
@@ -628,6 +629,13 @@ int32_t KbI2cBase::runOnce()
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
     return 300;
+}
+
+void KbI2cBase::toggleBacklight(bool on)
+{
+#if defined(T_LORA_PAGER)
+    TCAKeyboard.setBacklight(on);
+#endif
 }
 
 int KbI2cBase::onNotify(KbInterruptObservable *src)

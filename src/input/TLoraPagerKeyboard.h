@@ -23,4 +23,5 @@ class TLoraPagerKeyboard : public TCA8418KeyboardBase
     uint8_t pressedKeysCount;
     bool onlyOneModifierPressed;
     bool persistedPreviousModifier;
+    uint32_t brightness = 0;
 };

@@ -89,7 +89,14 @@ void TLoraPagerKeyboard::reset(void)
 
 void TLoraPagerKeyboard::setBacklight(bool on)
 {
-    toggleBacklight(!on);
+    uint32_t _brightness = 0;
+    if (on)
+        _brightness = brightness;
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    ledcWrite(KB_BL_PIN, _brightness);
+#else
+    ledcWrite(LEDC_BACKLIGHT_CHANNEL, _brightness);
+#endif
 }
 
 int8_t TLoraPagerKeyboard::keyToIndex(uint8_t key)
@@ -176,7 +183,6 @@ void TLoraPagerKeyboard::hapticFeedback()
 // toggle brightness of the backlight in three steps
 void TLoraPagerKeyboard::toggleBacklight(bool off)
 {
-    static uint32_t brightness = 0;
     if (off) {
         brightness = 0;
     } else {
@@ -190,11 +196,7 @@ void TLoraPagerKeyboard::toggleBacklight(bool off)
     }
     LOG_DEBUG("Toggle backlight: %d", brightness);
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-    ledcWrite(KB_BL_PIN, brightness);
-#else
-    ledcWrite(LEDC_BACKLIGHT_CHANNEL, brightness);
-#endif
+    setBacklight(true);
 }
 
 uint8_t TLoraPagerKeyboard::keyToModifierFlag(uint8_t key)

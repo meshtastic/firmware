@@ -16,6 +16,7 @@ class KbI2cBase : public Observable<const InputEvent *>,
 {
   public:
     explicit KbI2cBase(const char *name);
+    void toggleBacklight(bool on);
     virtual void pollOnce() override;
 
   protected:
