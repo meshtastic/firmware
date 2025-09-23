@@ -52,6 +52,9 @@ const char *DisplayFormatters::getDeviceRole(meshtastic_Config_DeviceConfig_Role
     case meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN:
         return "Client Hidden";
         break;
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
+        return "Client Base";
+        break;
     case meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND:
         return "Lost and Found";
         break;

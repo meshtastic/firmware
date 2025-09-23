@@ -1,11 +1,7 @@
-meshtasticd (2.7.9.0) UNRELEASED; urgency=medium
+meshtasticd (2.7.10.0) UNRELEASED; urgency=medium
 
-  [ Austin Lane ]
   * Initial packaging
-  * GitHub Actions Automatic version bump
-  * GitHub Actions Automatic version bump
-  * GitHub Actions Automatic version bump
-  * GitHub Actions Automatic version bump
+  * Version 2.5.19
 
   [  ]
   * GitHub Actions Automatic version bump
@@ -47,4 +43,7 @@ meshtasticd (2.7.9.0) UNRELEASED; urgency=medium
   [  ]
   * GitHub Actions Automatic version bump
 
- --  <github-actions[bot]@users.noreply.github.com>  Wed, 03 Sep 2025 23:39:17 +0000
+  [  ]
+  * GitHub Actions Automatic version bump
+
+ --  <github-actions[bot]@users.noreply.github.com>  Thu, 18 Sep 2025 22:11:37 +0000

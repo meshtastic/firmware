@@ -12,6 +12,7 @@ class menuHandler
         lora_Menu,
         lora_picker,
         device_role_picker,
+        radio_preset_picker,
         no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
@@ -19,6 +20,7 @@ class menuHandler
         clock_menu,
         position_base_menu,
         gps_toggle_menu,
+        gps_format_menu,
         compass_point_north_menu,
         reset_node_db_menu,
         buzzermodemenupicker,
@@ -50,6 +52,7 @@ class menuHandler
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
     static void DeviceRolePicker();
+    static void RadioPresetPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
@@ -64,6 +67,7 @@ class menuHandler
     static void positionBaseMenu();
     static void compassNorthMenu();
     static void GPSToggleMenu();
+    static void GPSFormatMenu();
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
     static void TFTColorPickerMenu(OLEDDisplay *display);
@@ -84,6 +88,7 @@ class menuHandler
     static void powerMenu();
     static void nodeNameLengthMenu();
     static void FrameToggles_menu();
+    static void textMessageMenu();
 
   private:
     static void saveUIConfig();

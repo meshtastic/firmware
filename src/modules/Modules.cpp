@@ -6,9 +6,13 @@
 #include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
-#include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "input/i2cButton.h"
 #include "modules/SystemCommandsModule.h"
+#if HAS_TRACKBALL
+#include "input/TrackballInterruptImpl1.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
 #endif
@@ -135,13 +139,20 @@ void setupModules()
         traceRouteModule = new TraceRouteModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_NEIGHBORINFO
-        neighborInfoModule = new NeighborInfoModule();
+        if (moduleConfig.has_neighbor_info && moduleConfig.neighbor_info.enabled) {
+            neighborInfoModule = new NeighborInfoModule();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
-        detectionSensorModule = new DetectionSensorModule();
+        if (moduleConfig.has_detection_sensor && moduleConfig.detection_sensor.enabled) {
+            detectionSensorModule = new DetectionSensorModule();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
-        atakPluginModule = new AtakPluginModule();
+        if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TAK,
+                      meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
+            atakPluginModule = new AtakPluginModule();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
         keyVerificationModule = new KeyVerificationModule();
@@ -186,6 +197,9 @@ void setupModules()
 #endif
             cardKbI2cImpl = new CardKbI2cImpl();
             cardKbI2cImpl->init();
+#if defined(M5STACK_UNITC6L)
+            i2cButton = new i2cButtonThread("i2cButtonThread");
+#endif
 #ifdef INPUTBROKER_MATRIX_TYPE
             kbMatrixImpl = new KbMatrixImpl();
             kbMatrixImpl->init();
@@ -207,7 +221,7 @@ void setupModules()
             aLinuxInputImpl->init();
         }
 #endif
-#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             trackballInterruptImpl1 = new TrackballInterruptImpl1();
             trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);
@@ -227,11 +241,14 @@ void setupModules()
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif
-// TODO: How to improve this?
-#if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        new EnvironmentTelemetryModule();
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+        if (moduleConfig.has_telemetry &&
+            (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
+            new EnvironmentTelemetryModule();
+        }
 #if __has_include("Adafruit_PM25AQI.h")
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
+        if (moduleConfig.has_telemetry && moduleConfig.telemetry.air_quality_enabled &&
+            nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
 #endif
@@ -243,12 +260,16 @@ void setupModules()
 #endif
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        new PowerTelemetryModule();
+        if (moduleConfig.has_telemetry &&
+            (moduleConfig.telemetry.power_measurement_enabled || moduleConfig.telemetry.power_screen_enabled)) {
+            new PowerTelemetryModule();
+        }
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 #if !MESHTASTIC_EXCLUDE_SERIAL
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (moduleConfig.has_serial && moduleConfig.serial.enabled &&
+            config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             new SerialModule();
         }
 #endif
@@ -259,19 +280,26 @@ void setupModules()
         audioModule = new AudioModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
-        paxcounterModule = new PaxcounterModule();
+        if (moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled) {
+            paxcounterModule = new PaxcounterModule();
+        }
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-        storeForwardModule = new StoreForwardModule();
+        if (moduleConfig.has_store_forward && moduleConfig.store_forward.enabled) {
+            storeForwardModule = new StoreForwardModule();
+        }
 #endif
 #endif
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
-        externalNotificationModule = new ExternalNotificationModule();
+        if (moduleConfig.has_external_notification && moduleConfig.external_notification.enabled) {
+            externalNotificationModule = new ExternalNotificationModule();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
-        new RangeTestModule();
+        if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)
+            new RangeTestModule();
 #endif
     } else {
 #if !MESHTASTIC_EXCLUDE_ADMIN

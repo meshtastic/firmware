@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "PointerQueue.h"
+#include "configuration.h" // For LOG_WARN, LOG_DEBUG, LOG_HEAP
 
 template <class T> class Allocator
 {
@@ -14,13 +15,14 @@ template <class T> class Allocator
     Allocator() : deleter([this](T *p) { this->release(p); }) {}
     virtual ~Allocator() {}
 
-    /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
+    /// Return a queable object which has been prefilled with zeros.  Return nullptr if no buffer is available
     /// Note: this method is safe to call from regular OR ISR code
     T *allocZeroed()
     {
         T *p = allocZeroed(0);
-
-        assert(p); // FIXME panic instead
+        if (!p) {
+            LOG_WARN("Failed to allocate zeroed memory");
+        }
         return p;
     }
 
@@ -39,10 +41,12 @@ template <class T> class Allocator
     T *allocCopy(const T &src, TickType_t maxWait = portMAX_DELAY)
     {
         T *p = alloc(maxWait);
-        assert(p);
+        if (!p) {
+            LOG_WARN("Failed to allocate memory for copy");
+            return nullptr;
+        }
 
-        if (p)
-            *p = src;
+        *p = src;
         return p;
     }
 
@@ -83,7 +87,11 @@ template <class T> class MemoryDynamic : public Allocator<T>
     /// Return a buffer for use by others
     virtual void release(T *p) override
     {
-        assert(p);
+        if (p == nullptr)
+            return;
+
+        LOG_HEAP("Freeing 0x%x", p);
+
         free(p);
     }
 
@@ -94,5 +102,60 @@ template <class T> class MemoryDynamic : public Allocator<T>
         T *p = (T *)malloc(sizeof(T));
         assert(p);
         return p;
+    }
+};
+
+/**
+ * A static memory pool that uses a fixed buffer instead of heap allocation
+ */
+template <class T, int MaxSize> class MemoryPool : public Allocator<T>
+{
+  private:
+    T pool[MaxSize];
+    bool used[MaxSize];
+
+  public:
+    MemoryPool() : pool{}, used{}
+    {
+        // Arrays are now zero-initialized by member initializer list
+        // pool array: all elements are default-constructed (zero for POD types)
+        // used array: all elements are false (zero-initialized)
+    }
+
+    /// Return a buffer for use by others
+    virtual void release(T *p) override
+    {
+        if (!p) {
+            LOG_DEBUG("Failed to release memory, pointer is null");
+            return;
+        }
+
+        // Find the index of this pointer in our pool
+        int index = p - pool;
+        if (index >= 0 && index < MaxSize) {
+            assert(used[index]); // Should be marked as used
+            used[index] = false;
+            LOG_HEAP("Released static pool item %d at 0x%x", index, p);
+        } else {
+            LOG_WARN("Pointer 0x%x not from our pool!", p);
+        }
+    }
+
+  protected:
+    // Alloc some storage from our static pool
+    virtual T *alloc(TickType_t maxWait) override
+    {
+        // Find first free slot
+        for (int i = 0; i < MaxSize; i++) {
+            if (!used[i]) {
+                used[i] = true;
+                LOG_HEAP("Allocated static pool item %d at 0x%x", i, &pool[i]);
+                return &pool[i];
+            }
+        }
+
+        // No free slots available - return nullptr instead of asserting
+        LOG_WARN("No free slots available in static memory pool!");
+        return nullptr;
     }
 };
