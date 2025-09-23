@@ -1195,6 +1195,8 @@ void ReplayModule::sendStats()
             rs.requests_received += s->requests_from;
             rs.unique_requestors++;
         }
+        if (s->requests_to)
+            rs.requests_sent += s->requests_to;
         if (s->throttled)
             rs.throttled_requestors++;
     }
