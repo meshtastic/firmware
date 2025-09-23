@@ -563,7 +563,7 @@ void menuHandler::messageViewModeMenu()
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Select View Mode";
+    bannerOptions.message = "Select Conversation";
     bannerOptions.optionsArrayPtr = options.data();
     bannerOptions.optionsEnumPtr = optionIds.data();
     bannerOptions.optionsCount = options.size();
