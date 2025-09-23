@@ -37,6 +37,8 @@ class TCA8418KeyboardBase
     virtual void begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr = TCA8418_KB_ADDR);
 
     virtual void reset(void);
+    void clearInt(void);
+
     virtual void trigger(void);
 
     virtual void setBacklight(bool on);
