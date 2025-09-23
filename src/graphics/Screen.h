@@ -261,15 +261,7 @@ class Screen : public concurrency::OSThread
     void setup();
 
     /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
-    void setOn(bool on, FrameCallback einkScreensaver = NULL)
-    {
-        if (!on)
-            // We handle off commands immediately, because they might be called because the CPU is shutting down
-            handleSetOn(false, einkScreensaver);
-        else
-            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
-    }
-
+    void setOn(bool on, FrameCallback einkScreensaver = NULL);
     /**
      * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
      * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code

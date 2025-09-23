@@ -83,6 +83,11 @@ extern uint16_t TFT_MESH;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
+#if defined(T_LORA_PAGER)
+// KB backlight control
+#include "input/cardKbI2cImpl.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -656,6 +661,19 @@ void Screen::setup()
 
     // === Notify modules that support UI events ===
     MeshModule::observeUIEvents(&uiFrameEventObserver);
+}
+
+void Screen::setOn(bool on, FrameCallback einkScreensaver)
+{
+#if defined(T_LORA_PAGER)
+    if (cardKbI2cImpl)
+        cardKbI2cImpl->toggleBacklight(on);
+#endif
+    if (!on)
+        // We handle off commands immediately, because they might be called because the CPU is shutting down
+        handleSetOn(false, einkScreensaver);
+    else
+        enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
 }
 
 void Screen::forceDisplay(bool forceUiUpdate)
