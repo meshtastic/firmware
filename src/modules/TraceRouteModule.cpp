@@ -163,8 +163,8 @@ void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
         return;
 
     handleReceivedProtobuf(mp, &decoded);
-    meshtastic_MeshPacket copy = mp;
-    alterReceivedProtobuf(copy, &decoded);
+    // Intentionally modify the packet in-place so downstream relays see our updates.
+    alterReceivedProtobuf(const_cast<meshtastic_MeshPacket &>(mp), &decoded);
 }
 
 void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r, bool isTowardsDestination)
