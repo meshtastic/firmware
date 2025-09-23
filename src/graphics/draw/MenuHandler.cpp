@@ -31,19 +31,21 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Region Picker", "Device Role"};
-    enum optionsNumbers { Back = 0, lora_picker = 1, device_role_picker = 2 };
+    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "LoRa Region"};
+    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, lora_picker = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
-        } else if (selected == lora_picker) {
-            menuHandler::menuQueue = menuHandler::lora_picker;
         } else if (selected == device_role_picker) {
             menuHandler::menuQueue = menuHandler::device_role_picker;
+        } else if (selected == radio_preset_picker) {
+            menuHandler::menuQueue = menuHandler::radio_preset_picker;
+        } else if (selected == lora_picker) {
+            menuHandler::menuQueue = menuHandler::lora_picker;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -173,6 +175,53 @@ void menuHandler::DeviceRolePicker()
             config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
         } else if (selected == devicerole_tracker) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+        }
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::RadioPresetPicker()
+{
+    static const char *optionsArray[] = {"Back",       "LongSlow",  "LongModerate", "LongFast",  "MediumSlow",
+                                         "MediumFast", "ShortSlow", "ShortFast",    "ShortTurbo"};
+    enum optionsNumbers {
+        Back = 0,
+        radiopreset_LongSlow = 1,
+        radiopreset_LongModerate = 2,
+        radiopreset_LongFast = 3,
+        radiopreset_MediumSlow = 4,
+        radiopreset_MediumFast = 5,
+        radiopreset_ShortSlow = 6,
+        radiopreset_ShortFast = 7,
+        radiopreset_ShortTurbo = 8
+    };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radio Preset";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 9;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::lora_Menu;
+            screen->runNow();
+            return;
+        } else if (selected == radiopreset_LongSlow) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+        } else if (selected == radiopreset_LongModerate) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
+        } else if (selected == radiopreset_LongFast) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        } else if (selected == radiopreset_MediumSlow) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+        } else if (selected == radiopreset_MediumFast) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+        } else if (selected == radiopreset_ShortSlow) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW;
+        } else if (selected == radiopreset_ShortFast) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
+        } else if (selected == radiopreset_ShortTurbo) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
         }
         service->reloadConfig(SEGMENT_CONFIG);
         rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
@@ -794,36 +843,40 @@ void menuHandler::GPSFormatMenu()
                                          isHighResolution ? "Universal Transverse Mercator" : "UTM",
                                          isHighResolution ? "Military Grid Reference System" : "MGRS",
                                          isHighResolution ? "Open Location Code" : "OLC",
-                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR"};
+                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 7;
+    bannerOptions.optionsCount = 8;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 2) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 3) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 4) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 5) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC;
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 6) {
-            config.display.gps_format = meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR;
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 7) {
+            uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS;
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
             screen->runNow();
         }
     };
-    bannerOptions.InitialSelected = config.display.gps_format + 1;
+    bannerOptions.InitialSelected = uiconfig.gps_format + 1;
     screen->showOverlayBanner(bannerOptions);
 }
 #endif
@@ -1473,6 +1526,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case device_role_picker:
         DeviceRolePicker();
+        break;
+    case radio_preset_picker:
+        RadioPresetPicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);

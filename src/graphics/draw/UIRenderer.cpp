@@ -20,7 +20,9 @@
 
 // External variables
 extern graphics::Screen *screen;
+#if defined(M5STACK_UNITC6L)
 static uint32_t lastSwitchTime = 0;
+#endif
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
@@ -119,38 +121,40 @@ void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, con
 void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps,
                                     const char *mode)
 {
-    auto gpsFormat = config.display.gps_format;
+    auto gpsFormat = uiconfig.gps_format;
     char displayLine[32];
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
         strcpy(displayLine, "No GPS present");
         display->drawString(x, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
-        strcpy(displayLine, "No GPS Lock");
-        display->drawString(x, y, displayLine);
+        if (strcmp(mode, "line1") == 0) {
+            strcpy(displayLine, "No GPS Lock");
+            display->drawString(x, y, displayLine);
+        }
     } else {
 
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
 
-        if (gpsFormat != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) {
+        if (gpsFormat != meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine_1[22];
             char coordinateLine_2[22];
-            if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
+            if (gpsFormat == meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
                 snprintf(coordinateLine_1, sizeof(coordinateLine_1), "Lat: %f", geoCoord.getLatitude() * 1e-7);
                 snprintf(coordinateLine_2, sizeof(coordinateLine_2), "Lon: %f", geoCoord.getLongitude() * 1e-7);
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
+            } else if (gpsFormat == meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
                 snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %06u E", geoCoord.getUTMZone(),
                          geoCoord.getUTMBand(), geoCoord.getUTMEasting());
                 snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%07u N", geoCoord.getUTMNorthing());
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
+            } else if (gpsFormat == meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
                 snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%2i%1c %1c%1c", geoCoord.getMGRSZone(),
                          geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k());
                 snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getMGRSEasting(),
                          geoCoord.getMGRSNorthing());
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
+            } else if (gpsFormat == meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine_1);
                 coordinateLine_2[0] = '\0';
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
+            } else if (gpsFormat == meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') { // OSGR is only valid around the UK region
                     snprintf(coordinateLine_1, sizeof(coordinateLine_1), "%s", "Out of Boundary");
                     coordinateLine_2[0] = '\0';
@@ -160,6 +164,48 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
                     snprintf(coordinateLine_2, sizeof(coordinateLine_2), "%05u E %05u N", geoCoord.getOSGREasting(),
                              geoCoord.getOSGRNorthing());
                 }
+            } else if (gpsFormat == meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) { // Maidenhead Locator System
+                double lat = geoCoord.getLatitude() * 1e-7;
+                double lon = geoCoord.getLongitude() * 1e-7;
+
+                // Normalize
+                if (lat > 90.0)
+                    lat = 90.0;
+                if (lat < -90.0)
+                    lat = -90.0;
+                while (lon < -180.0)
+                    lon += 360.0;
+                while (lon >= 180.0)
+                    lon -= 360.0;
+
+                double adjLon = lon + 180.0;
+                double adjLat = lat + 90.0;
+
+                char maiden[10]; // enough for 8-char + null
+
+                // Field (2 letters)
+                int lonField = int(adjLon / 20.0);
+                int latField = int(adjLat / 10.0);
+                adjLon -= lonField * 20.0;
+                adjLat -= latField * 10.0;
+
+                // Square (2 digits)
+                int lonSquare = int(adjLon / 2.0);
+                int latSquare = int(adjLat / 1.0);
+                adjLon -= lonSquare * 2.0;
+                adjLat -= latSquare * 1.0;
+
+                // Subsquare (2 letters)
+                double lonUnit = 2.0 / 24.0;
+                double latUnit = 1.0 / 24.0;
+                int lonSub = int(adjLon / lonUnit);
+                int latSub = int(adjLat / latUnit);
+
+                snprintf(maiden, sizeof(maiden), "%c%c%c%c%c%c", 'A' + lonField, 'A' + latField, '0' + lonSquare, '0' + latSquare,
+                         'A' + lonSub, 'A' + latSub);
+
+                snprintf(coordinateLine_1, sizeof(coordinateLine_1), "MH: %s", maiden);
+                coordinateLine_2[0] = '\0'; // only need one line
             }
 
             if (strcmp(mode, "line1") == 0) {
@@ -243,9 +289,9 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
     if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
         return;
-    uint32_t now = millis();
     display->clear();
 #if defined(M5STACK_UNITC6L)
+    uint32_t now = millis();
     if (now - lastSwitchTime >= 10000) // 10000 ms = 10 秒
     {
         display->display();
@@ -690,7 +736,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int textWidth = 0;
     int nameX = 0;
     int yOffset = (isHighResolution) ? 0 : 5;
-    const char *longName = nullptr;
     std::string longNameStr;
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -1026,11 +1071,11 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 #if defined(USE_EINK)
             // E-Ink: skip seconds, show only days/hours/mins
             if (days > 0) {
-                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
+                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
             } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
+                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
             } else {
-                snprintf(buf, sizeof(buf), " Last: %um", mins);
+                snprintf(buf, sizeof(buf), "Last: %um", mins);
             }
 #else
             // Non E-Ink: include seconds where useful
@@ -1053,23 +1098,11 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         // === Third Row: Line 1 GPS Info ===
         UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line1");
 
-        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) {
+        if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
+            uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
         }
-
-        // === Fourth/Fifth Row: Altitude ===
-        char DisplayLineTwo[32] = {0};
-        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
-                          ? ourNode->position.altitude
-                          : geoCoord.getAltitude();
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
-        } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
-        }
-        display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
-#endif
     }
 #if !defined(M5STACK_UNITC6L)
     // === Draw Compass if heading is valid ===
@@ -1154,6 +1187,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
     }
 #endif
+#endif // HAS_GPS
 }
 
 #ifdef USERPREFS_OEM_TEXT
@@ -1246,14 +1280,13 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
-    // Only show bar briefly after switching frames
-    static uint32_t navBarLastShown = 0;
-    static bool cosmeticRefreshDone = false;
-
     bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
     int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
 
 #if defined(USE_EINK)
+    // Only show bar briefly after switching frames
+    static uint32_t navBarLastShown = 0;
+    static bool cosmeticRefreshDone = false;
     static bool navBarPrevVisible = false;
 
     if (navBarVisible && !navBarPrevVisible) {

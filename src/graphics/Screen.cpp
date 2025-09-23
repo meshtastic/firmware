@@ -955,13 +955,13 @@ void Screen::setFrames(FrameFocus focus)
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
-    #if defined(M5STACK_UNITC6L)
-    normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
+#if defined(M5STACK_UNITC6L)
+        normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
 #else
-    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
-    #endif
-    indicatorIcons.push_back(digital_icon_clock);
+#endif
+        indicatorIcons.push_back(digital_icon_clock);
     }
 #endif
 
@@ -1046,7 +1046,7 @@ void Screen::setFrames(FrameFocus focus)
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
-        indicatorIcons.push_back(small_chirpy);
+        indicatorIcons.push_back(chirpy_small);
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -1308,7 +1308,8 @@ void Screen::blink()
         delay(50);
         count = count - 1;
     }
-    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in OLEDDisplay.
+    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in
+    // OLEDDisplay.
     dispdev->setBrightness(brightness);
 }
 
