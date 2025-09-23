@@ -448,8 +448,13 @@ void menuHandler::messageViewModeMenu()
     for (int ch = 0; ch < 8; ++ch) {
         auto msgs = messageStore.getChannelMessages(ch);
         if (!msgs.empty()) {
-            char buf[20];
-            snprintf(buf, sizeof(buf), "Channel %d", ch);
+            char buf[40];
+            const char* cname = channels.getName(ch);
+            if (cname && cname[0]) {
+                snprintf(buf, sizeof(buf), "#%s", cname);
+            } else {
+                snprintf(buf, sizeof(buf), "#Ch%d", ch);
+            }
             labels.push_back(buf);
             ids.push_back(100 + ch);
         }
@@ -458,8 +463,13 @@ void menuHandler::messageViewModeMenu()
     // --- Add channels from registry ---
     for (int ch : graphics::MessageRenderer::getSeenChannels()) {
         if (std::find(ids.begin(), ids.end(), 100 + ch) == ids.end()) {
-            char buf[20];
-            snprintf(buf, sizeof(buf), "Channel %d", ch);
+            char buf[40];
+            const char* cname = channels.getName(ch);
+            if (cname && cname[0]) {
+                snprintf(buf, sizeof(buf), "#%s", cname);
+            } else {
+                snprintf(buf, sizeof(buf), "#Ch%d", ch);
+            }
             labels.push_back(buf);
             ids.push_back(100 + ch);
         }

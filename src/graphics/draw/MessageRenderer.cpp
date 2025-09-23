@@ -301,10 +301,16 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     case ThreadMode::ALL:
         titleStr = "Messages";
         break;
-    case ThreadMode::CHANNEL:
-        snprintf(titleBuf, sizeof(titleBuf), "Ch%d", currentChannel);
+    case ThreadMode::CHANNEL: {
+        const char *cname = channels.getName(currentChannel);
+        if (cname && cname[0]) {
+            snprintf(titleBuf, sizeof(titleBuf), "#%s", cname);
+        } else {
+            snprintf(titleBuf, sizeof(titleBuf), "Ch%d", currentChannel);
+        }
         titleStr = titleBuf;
         break;
+    }
     case ThreadMode::DIRECT: {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
         if (node && node->has_user) {

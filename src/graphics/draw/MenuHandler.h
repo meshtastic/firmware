@@ -44,7 +44,7 @@ class menuHandler
         throttle_message,
         FrameToggles,
         message_response_menu,
-        message_viewmode_menu // <-- View Mode menu entry
+        message_viewmode_menu
     };
     static screenMenus menuQueue;
 
@@ -59,7 +59,7 @@ class menuHandler
     static void TwelveHourPicker();
     static void ClockFacePicker();
     static void messageResponseMenu();
-    static void messageViewModeMenu(); // <-- prototype already here
+    static void messageViewModeMenu();
     static void homeBaseMenu();
     static void textMessageBaseMenu();
     static void systemBaseMenu();
