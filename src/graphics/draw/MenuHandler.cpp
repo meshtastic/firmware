@@ -444,7 +444,7 @@ void menuHandler::messageViewModeMenu()
     labels.push_back("View All");
     ids.push_back(-2);
 
-    // --- Add channels with live messages ---
+    // Add channels with live messages
     for (int ch = 0; ch < 8; ++ch) {
         auto msgs = messageStore.getChannelMessages(ch);
         if (!msgs.empty()) {
@@ -460,7 +460,7 @@ void menuHandler::messageViewModeMenu()
         }
     }
 
-    // --- Add channels from registry ---
+    // Add channels from registry
     for (int ch : graphics::MessageRenderer::getSeenChannels()) {
         if (std::find(ids.begin(), ids.end(), 100 + ch) == ids.end()) {
             char buf[40];
@@ -475,39 +475,40 @@ void menuHandler::messageViewModeMenu()
         }
     }
 
-    // --- Add DMs from live store ---
+    // Add DMs from live store
     auto dms = messageStore.getDirectMessages();
-    std::vector<uint32_t> uniqueSenders;
+    std::vector<uint32_t> uniquePeers;
     for (auto &m : dms) {
-        if (std::find(uniqueSenders.begin(), uniqueSenders.end(), m.sender) == uniqueSenders.end()) {
-            uniqueSenders.push_back(m.sender);
+        uint32_t peer = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+        if (peer != nodeDB->getNodeNum() && std::find(uniquePeers.begin(), uniquePeers.end(), peer) == uniquePeers.end()) {
+            uniquePeers.push_back(peer);
         }
     }
 
-    // --- Add DMs from registry ---
+    // Add DMs from registry
     for (uint32_t peer : graphics::MessageRenderer::getSeenPeers()) {
-        if (std::find(uniqueSenders.begin(), uniqueSenders.end(), peer) == uniqueSenders.end()) {
-            uniqueSenders.push_back(peer);
+        if (peer != nodeDB->getNodeNum() && std::find(uniquePeers.begin(), uniquePeers.end(), peer) == uniquePeers.end()) {
+            uniquePeers.push_back(peer);
         }
     }
 
-    std::sort(uniqueSenders.begin(), uniqueSenders.end());
+    std::sort(uniquePeers.begin(), uniquePeers.end());
 
-    for (auto sender : uniqueSenders) {
-        auto node = nodeDB->getMeshNode(sender);
+    for (auto peer : uniquePeers) {
+        auto node = nodeDB->getMeshNode(peer);
         std::string name;
         if (node && node->has_user) {
             name = sanitizeString(node->user.long_name).substr(0, 15);
         } else {
             char buf[20];
-            snprintf(buf, sizeof(buf), "Node %08X", sender);
+            snprintf(buf, sizeof(buf), "Node %08X", peer);
             name = buf;
         }
         labels.push_back("DM: " + name);
-        ids.push_back(sender);
+        ids.push_back(peer);
     }
 
-    // --- Determine active ID ---
+    // Determine active ID
     int activeId = -2;
     auto mode = graphics::MessageRenderer::getThreadMode();
     if (mode == graphics::MessageRenderer::ThreadMode::ALL) {

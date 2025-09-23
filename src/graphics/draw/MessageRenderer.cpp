@@ -192,12 +192,12 @@ void resetScrollState()
 
     didReset = false; // <-- now valid
 }
-// --- Current thread state ---
+// Current thread state
 static ThreadMode currentMode = ThreadMode::ALL;
 static int currentChannel = -1;
 static uint32_t currentPeer = 0;
 
-// --- Registry of seen threads for manual toggle ---
+// Registry of seen threads for manual toggle
 static std::vector<int> seenChannels;
 static std::vector<uint32_t> seenPeers;
 
@@ -270,7 +270,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 include = true;
             break;
         case ThreadMode::DIRECT:
-            if (m.type == MessageType::DM_TO_US && m.sender == currentPeer)
+            if (m.type == MessageType::DM_TO_US && (m.sender == currentPeer || m.dest == currentPeer))
                 include = true;
             break;
         }
@@ -344,7 +344,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
 
-        // --- Build header line for this message ---
+        // Build header line for this message
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
         const char *sender = "???";
 #if defined(M5STACK_UNITC6L)
@@ -408,7 +408,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         isMine.push_back(mine);
         isHeader.push_back(true);
 
-        // --- Split message text into wrapped lines ---
+        // Split message text into wrapped lines
         std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
         for (auto &ln : wrapped) {
             allLines.push_back(ln);

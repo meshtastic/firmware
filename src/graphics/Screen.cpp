@@ -1446,12 +1446,12 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             sm.channelIndex = packet->channel;
             sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
 
-            // Distinguish between broadcast vs DM to us
+            // Distinguish between broadcast vs DM to peer
             if (packet->decoded.dest == NODENUM_BROADCAST) {
                 sm.dest = NODENUM_BROADCAST;
                 sm.type = MessageType::BROADCAST;
             } else {
-                sm.dest = nodeDB->getNodeNum();
+                sm.dest = packet->decoded.dest; // peer node, not us
                 sm.type = MessageType::DM_TO_US;
             }
 
@@ -1461,7 +1461,9 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             if (sm.type == MessageType::BROADCAST) {
                 graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
             } else if (sm.type == MessageType::DM_TO_US) {
-                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.sender);
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
+                                                         sm.dest // use peer node
+                );
             }
 
             // 🔹 Reset scroll so newest message starts from the top
@@ -1532,7 +1534,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 sm.dest = NODENUM_BROADCAST;
                 sm.type = MessageType::BROADCAST;
             } else {
-                sm.dest = nodeDB->getNodeNum(); // DM to us
+                sm.dest = nodeDB->getNodeNum(); // our node (we are DM target)
                 sm.type = MessageType::DM_TO_US;
             }
 
@@ -1542,7 +1544,9 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             if (sm.type == MessageType::BROADCAST) {
                 graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
             } else if (sm.type == MessageType::DM_TO_US) {
-                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.sender);
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
+                                                         sm.sender // use peer node
+                );
             }
 
             // Reset scroll so newest message starts from the top

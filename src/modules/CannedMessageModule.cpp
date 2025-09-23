@@ -808,7 +808,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 #endif // USE_VIRTUAL_KEYBOARD
 
-    // ---- All hardware keys fall through to here (CardKB, physical, etc.) ----
+    // All hardware keys fall through to here (CardKB, physical, etc.)
 
     if (event->kbchar == INPUT_BROKER_MSG_EMOTE_LIST) {
         runState = CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
@@ -975,7 +975,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // Save outgoing message
     StoredMessage sm;
     sm.timestamp = millis() / 1000;
-    sm.sender = nodeDB->getNodeNum();
+    sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
     sm.text = std::string(message);
 
@@ -1759,7 +1759,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 #endif
 #endif
 
-        // --- Delivery Status Message ---
+        // Delivery Status Message
         if (this->ack) {
             if (this->lastSentNode == NODENUM_BROADCAST) {
                 snprintf(buffer, sizeof(buffer), "Broadcast Sent to\n%s", channels.getName(this->channel));
@@ -1787,7 +1787,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         yOffset += lineCount * FONT_HEIGHT_MEDIUM; // only 1 line gap, no extra padding
 #endif
 #ifndef USE_EINK
-        // --- SNR + RSSI Compact Line ---
+        // SNR + RSSI Compact Line
         if (this->ack) {
             display->setFont(FONT_SMALL);
 #if defined(M5STACK_UNITC6L)
@@ -1837,10 +1837,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
 
-        // --- Draw node/channel header at the top ---
+        // Draw node/channel header at the top
         drawHeader(display, x, y, buffer);
 
-        // --- Char count right-aligned ---
+        // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
@@ -1848,7 +1848,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
-        // --- Draw Free Text input with multi-emote support and proper line wrapping ---
+        // Draw Free Text input with multi-emote support and proper line wrapping
         display->setColor(WHITE);
         {
             int inputY = 0 + y + FONT_HEIGHT_SMALL;
@@ -2019,7 +2019,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                      : 0;
         int countRows = std::min(messagesCount, _visibleRows);
 
-        // --- Build per-row max height based on all emotes in line ---
+        // Build per-row max height based on all emotes in line
         for (int i = 0; i < countRows; i++) {
             const char *msg = getMessageByIndex(topMsg + i);
             int maxEmoteHeight = 0;
@@ -2037,7 +2037,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             rowHeights.push_back(std::max(baseRowSpacing, maxEmoteHeight + 2));
         }
 
-        // --- Draw all message rows with multi-emote support ---
+        // Draw all message rows with multi-emote support
         int yCursor = listYOffset;
         for (int vis = 0; vis < countRows; vis++) {
             int msgIdx = topMsg + vis;
@@ -2046,7 +2046,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int rowHeight = rowHeights[vis];
             bool _highlight = (msgIdx == currentMessageIndex);
 
-            // --- Multi-emote tokenization ---
+            // Multi-emote tokenization
             std::vector<std::pair<bool, String>> tokens; // (isEmote, token)
             int pos = 0;
             int msgLen = strlen(msg);
@@ -2091,7 +2091,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                     }
                 }
             }
-            // --- End multi-emote tokenization ---
+            // End multi-emote tokenization
 
             // Vertically center based on rowHeight
             int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
