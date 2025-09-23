@@ -51,23 +51,15 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for relay with hop limit %d (dropping queued < %d)", p->id, p->hop_limit,
                       dropThreshold);
 
-            const meshtastic_MeshPacket *upgradePacket = p;
-            meshtastic_MeshPacket *processed = packetPool.allocCopy(*p);
-            if (processed)
-                upgradePacket = processed;
-
             if (nodeDB)
-                nodeDB->updateFrom(*upgradePacket);
+                nodeDB->updateFrom(*p);
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-            if (traceRouteModule && upgradePacket->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-                upgradePacket->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
-                traceRouteModule->processUpgradedPacket(*upgradePacket);
+            if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+                traceRouteModule->processUpgradedPacket(*p);
 #endif
 
-            perhapsRelay(upgradePacket);
-
-            if (processed)
-                packetPool.release(processed);
+            perhapsRelay(p);
 
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;
