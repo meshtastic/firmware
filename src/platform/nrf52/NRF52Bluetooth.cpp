@@ -74,6 +74,9 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
         bluetoothPhoneAPI->close();
     }
 
+    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
