@@ -419,6 +419,7 @@ void ReplayModule::advertiseExpired()
     memcpy(p->decoded.payload.bytes, &payload, p->decoded.payload.size);
 
     service->sendToMesh(p);
+    last_expired_millis = millis();
     want_replay_expired = false;
 }
 
