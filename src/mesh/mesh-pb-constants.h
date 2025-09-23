@@ -51,14 +51,20 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #include "Esp.h"
 static inline int get_max_num_nodes()
 {
-    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
+    uint32_t psram_size = ESP.getPsramSize() / (1024 * 1024); // Convert Bytes to MB
+    if (psram_size >= 8) {
+        return 800;
+    } else if (psram_size >= 4) {
+        return 400;
+    }
+
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Fallback based on flash size
     if (flash_size >= 15) {
         return 250;
     } else if (flash_size >= 7) {
         return 200;
-    } else {
-        return 100;
     }
+    return 100;
 }
 #define MAX_NUM_NODES get_max_num_nodes()
 #else
