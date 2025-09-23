@@ -2364,9 +2364,9 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                     oldest = hot.last_heard;
                     oldestIndex = i;
                 }
-                const auto &node = psramMeshNodes[i];
-                if (!(hot.flags & HOT_FLAG_IS_FAVORITE) && !(hot.flags & HOT_FLAG_IS_IGNORED) && node.user.public_key.size == 0 &&
-                    hot.last_heard < oldestBoring) {
+                const auto &coldNode = psramMeshNodes[i];
+                if (!(hot.flags & HOT_FLAG_IS_FAVORITE) && !(hot.flags & HOT_FLAG_IS_IGNORED) &&
+                    coldNode.user.public_key.size == 0 && hot.last_heard < oldestBoring) {
                     oldestBoring = hot.last_heard;
                     oldestBoringIndex = i;
                 }
