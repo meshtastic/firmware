@@ -29,11 +29,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("SensorPCF8563.hpp")
-#include "SensorPCF8563.hpp"
-#endif
-#if __has_include("SensorPCF85063.hpp")
-#include "SensorPCF85063.hpp"
+#if __has_include("SensorRtcHelper.hpp")
+#include "SensorRtcHelper.hpp"
 #endif
 
 // -----------------------------------------------------------------------------
