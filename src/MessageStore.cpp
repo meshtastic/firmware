@@ -4,6 +4,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "configuration.h" // for millis()
+#include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 
 using graphics::MessageRenderer::setThreadMode;
@@ -36,7 +37,16 @@ void MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
     StoredMessage sm;
 
-    sm.timestamp = packet.rx_time ? packet.rx_time : (millis() / 1000);
+    // Always use our local time, ignore packet.rx_time
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs > 0) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true; // mark for later upgrade
+    }
+
     sm.sender = packet.from;
     sm.channelIndex = packet.channel;
     sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
@@ -67,7 +77,17 @@ void MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text)
 {
     StoredMessage sm;
-    sm.timestamp = millis() / 1000;
+
+    // Always use our local time
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs > 0) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true; // mark for later upgrade
+    }
+
     sm.sender = sender;
     sm.channelIndex = channelIndex;
     sm.text = text;
@@ -104,6 +124,8 @@ void MessageStore::saveToFlash()
         f.write((uint8_t *)&m.dest, sizeof(m.dest));
         f.write((uint8_t *)m.text.c_str(), std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size()));
         f.write('\0'); // null terminator
+        uint8_t bootFlag = m.isBootRelative ? 1 : 0;
+        f.write(&bootFlag, 1); // persist boot-relative flag
     }
     spiLock->unlock();
 
@@ -144,6 +166,20 @@ void MessageStore::loadFromFlash()
             if (c == '\0')
                 break;
             m.text.push_back(c);
+        }
+
+        // Try to read boot-relative flag (new format)
+        uint8_t bootFlag = 0;
+        if (f.available() > 0) {
+            if (f.readBytes((char *)&bootFlag, 1) == 1) {
+                m.isBootRelative = (bootFlag != 0);
+            } else {
+                // Old format, fallback heuristic
+                m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
+            }
+        } else {
+            // Old format, fallback heuristic
+            m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
         }
 
         // Recompute type from dest
@@ -219,6 +255,36 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
         }
     }
     return result;
+}
+
+// === Upgrade boot-relative timestamps once RTC is valid ===
+// Only same-boot boot-relative messages are healed.
+// Persisted boot-relative messages from old boots stay ??? forever.
+void MessageStore::upgradeBootRelativeTimestamps()
+{
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs == 0)
+        return; // Still no valid RTC
+
+    uint32_t bootNow = millis() / 1000;
+
+    for (auto &m : liveMessages) {
+        if (m.isBootRelative && m.timestamp <= bootNow) {
+            uint32_t bootOffset = nowSecs - bootNow;
+            m.timestamp += bootOffset;
+            m.isBootRelative = false;
+        }
+        // else: persisted from old boot → stays ??? forever
+    }
+
+    for (auto &m : messages) {
+        if (m.isBootRelative && m.timestamp <= bootNow) {
+            uint32_t bootOffset = nowSecs - bootNow;
+            m.timestamp += bootOffset;
+            m.isBootRelative = false;
+        }
+        // else: persisted from old boot → stays ??? forever
+    }
 }
 
 // === Global definition ===

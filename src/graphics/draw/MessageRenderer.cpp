@@ -57,8 +57,6 @@ namespace graphics
 namespace MessageRenderer
 {
 
-// Simple cache based on text hash
-static size_t cachedKey = 0;
 static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 
@@ -249,6 +247,9 @@ const std::vector<uint32_t> &getSeenPeers()
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Ensure any boot-relative timestamps are upgraded if RTC is valid
+    messageStore.upgradeBootRelativeTimestamps();
+
     if (!didReset) {
         resetScrollState();
         didReset = true;
@@ -375,12 +376,33 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 snprintf(chanType, sizeof(chanType), "(DM)");
             }
         }
-        // else: leave empty for thread views
 
         // Calculate how long ago
-        uint32_t nowSecs = millis() / 1000;
-        uint32_t seconds = (nowSecs > m.timestamp) ? (nowSecs - m.timestamp) : 0;
-        bool invalidTime = (m.timestamp == 0 || seconds > 315360000); // >10 years
+        uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+        uint32_t seconds = 0;
+        bool invalidTime = true;
+
+        if (m.timestamp > 0 && nowSecs > 0) {
+            if (nowSecs >= m.timestamp) {
+                seconds = nowSecs - m.timestamp;
+                invalidTime = (seconds > 315360000); // >10 years
+            } else {
+                uint32_t ahead = m.timestamp - nowSecs;
+                if (ahead <= 600) { // allow small skew
+                    seconds = 0;
+                    invalidTime = false;
+                }
+            }
+        } else if (m.timestamp > 0 && nowSecs == 0) {
+            // RTC not valid: only trust boot-relative if same boot
+            uint32_t bootNow = millis() / 1000;
+            if (m.isBootRelative && m.timestamp <= bootNow) {
+                seconds = bootNow - m.timestamp;
+                invalidTime = false;
+            } else {
+                invalidTime = true; // old persisted boot-relative, ignore until healed
+            }
+        }
 
         char timeBuf[16];
         if (invalidTime) {
@@ -492,7 +514,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 
-    // Draw screen title header last
     graphics::drawCommonHeader(display, x, y, titleStr);
 }
 

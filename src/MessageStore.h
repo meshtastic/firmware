@@ -24,6 +24,17 @@ struct StoredMessage {
 
     // Explicit classification (derived from dest when loading old messages)
     MessageType type;
+
+    // Marks whether the timestamp was stored relative to boot time
+    // (true = millis()/1000 fallback, false = epoch/RTC absolute)
+    bool isBootRelative;
+
+    // Default constructor to initialize all fields safely
+    StoredMessage()
+        : timestamp(0), sender(0), channelIndex(0), text(""), dest(0xffffffff), type(MessageType::BROADCAST),
+          isBootRelative(false)
+    {
+    }
 };
 
 class MessageStore
@@ -60,6 +71,9 @@ class MessageStore
     std::deque<StoredMessage> getChannelMessages(uint8_t channel) const;
     std::deque<StoredMessage> getDirectMessages() const;
     std::deque<StoredMessage> getConversationWith(uint32_t peer) const;
+
+    // Upgrade boot-relative timestamps once RTC is valid
+    void upgradeBootRelativeTimestamps();
 
   private:
     // RAM buffer (always current, main source for UI)

@@ -12,6 +12,7 @@
 #include "SPILock.h"
 #include "buzz.h"
 #include "detect/ScanI2C.h"
+#include "gps/RTC.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
@@ -974,7 +975,17 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     // Save outgoing message
     StoredMessage sm;
-    sm.timestamp = millis() / 1000;
+
+    // Always use our local time, consistent with other paths
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs > 0) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true; // mark for later upgrade
+    }
+
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
     sm.text = std::string(message);

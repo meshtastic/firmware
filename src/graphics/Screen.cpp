@@ -338,9 +338,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         uint8_t TFT_MESH_b = rawRGB & 0xFF;
         LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
-            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
-        }
+        // Values are always 0–255, no need to check
+        TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
     }
 
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
@@ -801,6 +800,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::STOP_ALERT_FRAME:
             NotificationRenderer::pauseBanner = false;
+            break;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
@@ -970,9 +970,6 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(digital_icon_clock);
     }
 #endif
-
-    // Declare this early so it’s available in FOCUS_PRESERVE block
-    bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
     if (!hiddenFrames.home) {
         fsi.positions.home = numframes;
@@ -1441,7 +1438,17 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             // === Save our own outgoing message to live RAM ===
             StoredMessage sm;
-            sm.timestamp = millis() / 1000;
+
+            // Always use our local time
+            uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+            if (nowSecs > 0) {
+                sm.timestamp = nowSecs;
+                sm.isBootRelative = false;
+            } else {
+                sm.timestamp = millis() / 1000;
+                sm.isBootRelative = true; // mark for later upgrade
+            }
+
             sm.sender = nodeDB->getNodeNum(); // us
             sm.channelIndex = packet->channel;
             sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
@@ -1524,7 +1531,17 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             // === Save this incoming message to live RAM ===
             StoredMessage sm;
-            sm.timestamp = packet->rx_time ? packet->rx_time : (millis() / 1000);
+
+            // Always use our local time
+            uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+            if (nowSecs > 0) {
+                sm.timestamp = nowSecs;
+                sm.isBootRelative = false;
+            } else {
+                sm.timestamp = millis() / 1000;
+                sm.isBootRelative = true; // mark for later upgrade
+            }
+
             sm.sender = packet->from;
             sm.channelIndex = packet->channel;
             sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
