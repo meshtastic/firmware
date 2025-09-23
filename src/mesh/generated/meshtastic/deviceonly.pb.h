@@ -228,8 +228,8 @@ extern "C" {
 #define meshtastic_NodeInfoLite_hops_away_tag    9
 #define meshtastic_NodeInfoLite_is_favorite_tag  10
 #define meshtastic_NodeInfoLite_is_ignored_tag   11
-#define meshtastic_NodeInfoLite_next_hop_tag     13
-#define meshtastic_NodeInfoLite_bitfield_tag     14
+#define meshtastic_NodeInfoLite_next_hop_tag     12
+#define meshtastic_NodeInfoLite_bitfield_tag     13
 #define meshtastic_DeviceState_my_node_tag       2
 #define meshtastic_DeviceState_owner_tag         3
 #define meshtastic_DeviceState_receive_queue_tag 5
@@ -284,8 +284,8 @@ X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
 X(a, STATIC,   OPTIONAL, UINT32,   hops_away,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
 X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11) \
-X(a, STATIC,   SINGULAR, UINT32,   next_hop,         13) \
-X(a, STATIC,   SINGULAR, UINT32,   bitfield,         14)
+X(a, STATIC,   SINGULAR, UINT32,   next_hop,         12) \
+X(a, STATIC,   SINGULAR, UINT32,   bitfield,         13)
 #define meshtastic_NodeInfoLite_CALLBACK NULL
 #define meshtastic_NodeInfoLite_DEFAULT NULL
 #define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_UserLite

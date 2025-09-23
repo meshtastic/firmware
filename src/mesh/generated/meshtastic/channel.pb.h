@@ -97,7 +97,7 @@ typedef struct _meshtastic_ChannelSettings {
     /* Per-channel module settings. */
     bool has_module_settings;
     meshtastic_ModuleSettings module_settings;
-    /* Whether or not we should receive notifactions / alerts from this channel */
+    /* Whether or not we should receive notifactions / alerts through this channel */
     bool mute;
 } meshtastic_ChannelSettings;
 
