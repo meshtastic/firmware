@@ -12,6 +12,8 @@
 #define REPLAY_BUFFER_CACHE_MAX REPLAY_BUFFER_SIZE      // Cache at most this many packets
 #define REPLAY_QUEUE_MASK 0x0F                          // Mask for wrapping the replay queue index
 #define REPLAY_QUEUE_SIZE (REPLAY_QUEUE_MASK + 1)       // Size of the replay
+#define REPLAY_STATS_MASK 0x7F                          // Mask for wrapping the stats index
+#define REPLAY_STATS_SIZE (REPLAY_STATS_MASK + 1)       // Size of the stats array
 #define REPLAY_FLUSH_PACKETS 16                         // Send an advertisement after at most this many packets
 #define REPLAY_FLUSH_SECS 20 // Send an advertisement after at most this many seconds (if unadvertised packets are pending)
 #define REPLAY_STARTUP_DELAY_SECS 30   // Wait this many seconds after boot before sending the first advertisement
@@ -34,6 +36,7 @@
 #define REPLAY_CLIENT_RATE_MS 1000        // Allow at most one replay request per client every this many milliseconds on average
 #define REPLAY_CLIENT_SIZE 128            // Track at most this many clients
 #define REPLAY_CLIENT_THROTTLE_ADVERT_MAX 64 // Advertise at most this many throttled clients at a time
+#define REPLAY_STATS_INTERVAL_SECS 900       // Send statistics every n seconds
 
 #define REPLAY_REQUEST_TYPE_ADVERTISEMENT 0 // Request an advertisement
 #define REPLAY_REQUEST_TYPE_PACKETS 1       // Request a replay of the specified packets
@@ -116,6 +119,7 @@ typedef struct ReplayServerInfo {
     unsigned long missing_sequence = 0;
     unsigned int replays_requested = 0;
     unsigned int adverts_received = 0;
+    unsigned int packets_missed = 0;
     bool flag_priority = false;
     bool flag_router = false;
     bool is_tracked = false;
@@ -136,6 +140,26 @@ typedef struct ReplayRequestInfo {
     ReplayHash hash = 0;
     unsigned long timeout_millis = 0;
 } ReplayRequestInfo;
+
+typedef struct ReplayStats {
+    NodeNum id = 0;
+    uint8_t adverts_from = 0;   // Number of adverts received from this node
+    uint8_t expired_from = 0;   // Number of expiry adverts received from this node
+    uint8_t missed_from = 0;    // Number of missed adverts & packets sent by this node
+    uint8_t requests_from = 0;  // Number of requests received from this node
+    uint8_t throttled_from = 0; // Number of times we were throttled by this node
+    uint8_t requests_to = 0;    // Number of requests sent to this node
+    uint8_t replays_for = 0;    // Number of packets replayed for this node
+    union {
+        uint8_t bitfield = 0;
+        struct {
+            uint8_t is_router : 1; // This node is a router
+            uint8_t throttled : 1; // This node was throttled at some point within the stats window
+            uint8_t priority : 1;  // This node indicated priority constraints at some point within the stats window
+            uint8_t reserved : 5;  // Reserved for future use
+        };
+    };
+} ReplayStats;
 
 class ReplayBuffer
 {
@@ -179,6 +203,7 @@ class ReplayModule : public SinglePortModule, private concurrency::NotifiedWorke
     ReplayCursor last_advert_cursor = 0;
     unsigned long last_advert_millis = 0;
     unsigned long last_expired_millis = 0;
+    unsigned long last_stats_millis = 0;
     unsigned int packets_since_advert = 0;
     unsigned int next_sequence = 0;
     std::bitset<REPLAY_BUFFER_SIZE> dirty = {};
@@ -189,6 +214,8 @@ class ReplayModule : public SinglePortModule, private concurrency::NotifiedWorke
     ReplayServerInfo servers[REPLAY_TRACK_SERVERS] = {};
     ReplayClientInfo clients[REPLAY_CLIENT_SIZE] = {};
     ReplayRequestInfo requests[REPLAY_REQUEST_MAX_OUTSTANDING] = {};
+    ReplayStats stats[REPLAY_STATS_SIZE] = {};
+    ReplayCursor stats_next = 0;
     ReplayCursor memory_next = 1;
     ReplayCursor replay_from = 0;
     ReplayCursor queue[REPLAY_QUEUE_SIZE] = {};
@@ -197,6 +224,18 @@ class ReplayModule : public SinglePortModule, private concurrency::NotifiedWorke
     ReplayCursor queue_length = 0;
     bool want_replay_prio = false;
     bool want_replay_expired = false;
+    struct {
+        unsigned int adverts_sent = 0;
+        unsigned int adverts_sent_agg = 0;
+        unsigned int adverts_sent_expired = 0;
+        unsigned int packets_rebroadcast = 0;
+        unsigned int packets_rebroadcast_prio = 0;
+        unsigned int packets_replayed = 0;
+        unsigned int packets_replayed_prio = 0;
+        unsigned int packets_requested = 0;
+        unsigned int packets_requested_prio = 0;
+        unsigned int window_start_millis = 0;
+    } metrics;
     ReplayClientInfo *client(NodeNum id);
     void advertise(bool aggregate = false, unsigned int from_sequence = 0, ReplayMap aggregate_mask = 0);
     void advertiseExpired();
@@ -213,6 +252,10 @@ class ReplayModule : public SinglePortModule, private concurrency::NotifiedWorke
     ReplayRequestInfo *requestInfo(ReplayHash hash);
     bool queuePush(ReplayCursor idx);
     void invalidateServer(ReplayServerInfo *server, bool stats = false);
+    ReplayStats *getStats(NodeNum id);
+    void resetStats();
+    void sendStats();
+    void printStats(meshtastic_ReplayStats *rs);
     void onNotify(uint32_t notification);
 };
 

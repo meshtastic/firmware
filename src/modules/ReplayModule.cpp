@@ -10,21 +10,11 @@
  * - What should the tunable default values be?
  * - Scale replay rate based on modem settings
  * - Prioritise replay of packets requested by routers
+ * - Cache replay stats packets normally
  * - Lots of testing (and likely a bunch of bugfixes)
  *   - WARN  | 23:30:46 4214 [Router] Replay: Advertisement sequence went backwards from server=0x056191db seq=36, last_seq=48
  *   - Back off repeated replay requests?
- * - Implement a periodic stats packet that includes:
- *   - Number of adverts sent
- *   - Number of replays sent
- *   - Number of replay requests received
- *   - Number of replays requested
- *   - Number of adverts received
- *   - For each server we are tracking:
- *     - Age of last advert
- *     - Number of adverts received
- *     - Number of packets requested from this server
- *     - Number of packets requested by this server
- *     - router flag
+ *   - Frequent reboots since implementing stats
  */
 
 ReplayModule *replayModule = NULL;
@@ -197,6 +187,10 @@ void ReplayModule::adopt(meshtastic_MeshPacket *p)
     ReplayEntry *entry = buffer.adopt(p);
     if (!entry)
         return; // Already cached
+
+    metrics.packets_rebroadcast++;
+    if (p->priority >= REPLAY_CHUTIL_PRIORITY)
+        metrics.packets_rebroadcast_prio++;
 
     LOG_DEBUG("Replay: Adopting packet from=0x%08x id=0x%08x priority=%u packets=%u cached=%u cache_bytes=%u", p->from, p->id,
               p->priority, buffer.getLength(), buffer.getNumCached(), buffer.getNumCached() * sizeof(meshtastic_MeshPacket));
@@ -382,6 +376,10 @@ void ReplayModule::advertise(bool aggregate, unsigned int from_sequence, ReplayM
         packets_since_advert -= packets;
     service->sendToMesh(p);
 
+    metrics.adverts_sent++;
+    if (aggregate)
+        metrics.adverts_sent_agg++;
+
     if (again) {
         advertise();
     }
@@ -420,6 +418,7 @@ void ReplayModule::advertiseExpired()
 
     service->sendToMesh(p);
     last_expired_millis = millis();
+    metrics.adverts_sent_expired++;
     want_replay_expired = false;
 }
 
@@ -489,6 +488,9 @@ void ReplayModule::replay()
         } else {
             to_send->last_replay_millis = millis();
             to_send->replay_count++;
+            metrics.packets_replayed++;
+            if (to_send->p->priority >= REPLAY_CHUTIL_PRIORITY)
+                metrics.packets_replayed_prio++;
             want_replay.reset(to_send_idx);
         }
     } else {
@@ -580,6 +582,9 @@ void ReplayModule::requestReplay(ReplayServerInfo *server)
                 *map |= (1 << i);
                 *payload |= (1 << j);
                 server->replays_requested++;
+                metrics.packets_requested++;
+                if (server->priority.test(idx))
+                    metrics.packets_requested_prio++;
             }
         }
         if (*map & (1 << i))
@@ -590,6 +595,7 @@ void ReplayModule::requestReplay(ReplayServerInfo *server)
     LOG_INFO("Replay: Requesting %u missing packets server=0x%08x prio=%u ranges=%u size=%u", request.count(), server->id,
              wire.header.priority, (uint16_t)*map, p->decoded.payload.size);
     service->sendToMesh(p);
+    getStats(server->id)->requests_to++;
 }
 
 /**
@@ -658,6 +664,13 @@ void ReplayModule::handleRequest(const meshtastic_MeshPacket *p)
         client->bucket = REPLAY_CLIENT_BURST;
     client->last_request_millis = millis();
 
+    ReplayStats *stats = getStats(p->from);
+    stats->requests_from++;
+    if (wire->header.router)
+        stats->is_router = true;
+    if (wire->header.priority)
+        stats->priority = true;
+
     switch (wire->header.type) {
     case REPLAY_REQUEST_TYPE_ADVERTISEMENT: {
         if (payload_words < 2) {
@@ -671,6 +684,7 @@ void ReplayModule::handleRequest(const meshtastic_MeshPacket *p)
         }
         LOG_INFO("Replay: Advertisement request from=0x%08x seq=%u missing=%u", p->from, wire->header.sequence, missing);
         advertise(true, wire->header.sequence, missing);
+        stats->replays_for++;
     } break;
     case REPLAY_REQUEST_TYPE_PACKETS: {
         if (payload_words < 3 || payload_words < 1 /*header*/ + 1 /*map*/ + __builtin_popcount(payload[1]) /*ranges*/) {
@@ -693,6 +707,7 @@ void ReplayModule::handleRequest(const meshtastic_MeshPacket *p)
                         continue; // Don't replay packets that are already in our TX queue
                     if (!wire->header.priority || (entry->p && entry->p->priority >= REPLAY_CHUTIL_PRIORITY)) {
                         want_replay.set(idx);
+                        stats->replays_for++;
                         requested++;
                         client->bucket--;
                         LOG_INFO("Replay: Request for %s packet hash=0x%04x client=0x%08x", entry->p ? "cached" : "expired",
@@ -704,8 +719,10 @@ void ReplayModule::handleRequest(const meshtastic_MeshPacket *p)
             }
             range++;
         }
-        if (!client->bucket)
+        if (!client->bucket) {
             LOG_WARN("Replay: Client 0x%08x is being rate limited", client->id);
+            stats->throttled = true;
+        }
         replay_from = buffer.getHeadCursor();
         LOG_INFO("Replay: Pending replay of %u packets, requested=%u, want_expired=%u", want_replay.count(), requested,
                  want_replay_expired);
@@ -768,6 +785,18 @@ void ReplayModule::handleAdvertisement(const meshtastic_MeshPacket *p)
         handleExpiredAdvertisement(wire, (unsigned char *)payload,
                                    ((unsigned char *)p->decoded.payload.bytes) + p->decoded.payload.size, server);
         break;
+    case REPLAY_ADVERT_TYPE_STATISTICS: {
+        meshtastic_ReplayStats rs = {};
+        bool success = pb_decode_from_bytes((unsigned char *)payload, p->decoded.payload.size - sizeof(ReplayWire),
+                                            meshtastic_ReplayStats_fields, &rs);
+        if (!success)
+            LOG_WARN("Replay: Failed to decode invalid stats advertisement from=0x%08x", p->from);
+        else {
+            LOG_INFO("Replay: Received stats summary from=0x%08x", p->from);
+            printStats(&rs);
+        }
+    }
+        return; // Stats packets aren't a normal advertisement, so don't set up tracking for this node
     default:
         LOG_WARN("Replay: Unknown advertisement type %u", wire->header.type);
         return;
@@ -809,6 +838,13 @@ void ReplayModule::handleAdvertisement(const meshtastic_MeshPacket *p)
 void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned char *data, unsigned char *data_end,
                                                    ReplayServerInfo *server)
 {
+    ReplayStats *stats = getStats(server->id);
+    stats->adverts_from++;
+    if (wire->header.router)
+        stats->is_router = true;
+    if (wire->header.priority)
+        stats->priority = true;
+
     int payload_words = (data_end - data) / sizeof(uint16_t);
     if (payload_words < 2 || payload_words < 1 /*map*/ + __builtin_popcount(((uint16_t *)data)[0]) * 2 /*ranges*/) {
         LOG_WARN("Replay: Availability advert payload too small");
@@ -839,6 +875,8 @@ void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned ch
                 if (!isKnown(server->packets[idx])) {
                     LOG_WARN("Replay: Discovered missing packet hash=0x%04x via=0x%08x", server->packets[idx], server->id);
                     server->missing.set(idx);
+                    server->packets_missed++;
+                    stats->missed_from++;
                 } else {
                     LOG_DEBUG("Replay: Discovered known packet hash=0x%04x via=0x%08x", server->packets[idx], server->id);
                     server->missing.reset(idx);
@@ -889,6 +927,9 @@ void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned ch
             if (seq >= this_sequence)
                 break;
             server->missing_sequence |= (1 << i);
+            server->packets_missed++;
+            stats->missed_from++;
+            metrics.packets_requested++;
             LOG_WARN("Replay: Noticed missing advertisement seq=%u from server=0x%08x", seq, server->id);
         }
         while (server->last_sequence < server->max_sequence && !(server->missing_sequence & 3)) {
@@ -930,8 +971,10 @@ void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned ch
         uint8_t *throttled = (uint8_t *)payload;
         uint8_t me = nodeDB->getNodeNum() & 0x000F;
         while (throttled <= data_end) {
-            if (*throttled++ == me)
+            if (*throttled++ == me) {
+                stats->throttled_from++;
                 return; // We are being throttled by the server, so don't ask for anything
+            }
         }
     }
 
@@ -958,6 +1001,13 @@ void ReplayModule::handleAvailabilityAdvertisement(ReplayWire *wire, unsigned ch
 void ReplayModule::handleExpiredAdvertisement(ReplayWire *wire, unsigned char *data, unsigned char *data_end,
                                               ReplayServerInfo *server)
 {
+    ReplayStats *stats = getStats(server->id);
+    stats->expired_from++;
+    if (wire->header.router)
+        stats->is_router = true;
+    if (wire->header.priority)
+        stats->priority = true;
+
     unsigned int expired = 0;
     uint16_t *payload = (uint16_t *)data;
     ReplayMap map = *payload++;
@@ -1075,6 +1125,132 @@ void ReplayModule::invalidateServer(ReplayServerInfo *server, bool stats)
 }
 
 /**
+ * Get the current stats object for a node
+ */
+ReplayStats *ReplayModule::getStats(NodeNum id)
+{
+    for (unsigned int i = 0; i < REPLAY_STATS_SIZE; i++) {
+        if (servers[i].id == id)
+            return &stats[i];
+    }
+    ReplayStats *s = &stats[stats_next++ & REPLAY_STATS_MASK];
+    *s = {};
+    s->id = id;
+    return s;
+}
+
+/**
+ * Reset stats for all nodes
+ */
+void ReplayModule::resetStats()
+{
+    metrics = {};
+    stats_next = 0;
+    memset(stats, 0, sizeof(stats));
+    metrics.window_start_millis = millis();
+}
+
+/**
+ * Broadcast a stats packet to the mesh
+ */
+void ReplayModule::sendStats()
+{
+    if (!metrics.adverts_sent && !IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                            meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+        LOG_DEBUG("Replay: Skipping stats broadcast because no adverts sent and not a router");
+        resetStats();
+        return;
+    }
+
+    ReplayWire wire = {};
+    wire.header.type = REPLAY_ADVERT_TYPE_STATISTICS;
+    wire.header.priority = airTime->channelUtilizationPercent() >= REPLAY_CHUTIL_THRESHOLD_PCT;
+    wire.header.router = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                   meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
+
+    meshtastic_ReplayStats rs = {};
+    rs.window_length_secs = (millis() - metrics.window_start_millis) / 1000;
+    rs.current_size = buffer.getLength();
+    rs.current_cached = buffer.getNumCached();
+    rs.adverts_sent = metrics.adverts_sent;
+    rs.expired_sent = metrics.adverts_sent_expired;
+    rs.requests_sent_packets = metrics.packets_requested;
+    rs.requests_sent_packets_prio = metrics.packets_requested_prio;
+    rs.packets_replayed = metrics.packets_replayed;
+    rs.packets_replayed_prio = metrics.packets_replayed_prio;
+    rs.packets_rebroadcast = metrics.packets_rebroadcast;
+    rs.packets_rebroadcast_prio = metrics.packets_rebroadcast_prio;
+
+    for (unsigned int i = 0; i < REPLAY_STATS_SIZE; i++) {
+        ReplayStats *s = &stats[i];
+        rs.expired_received += s->expired_from;
+        rs.requests_sent += s->requests_to;
+        rs.packets_missed += s->missed_from;
+
+        if (s->adverts_from) {
+            rs.unique_advertisers++;
+            rs.adverts_received += s->adverts_from;
+        }
+        if (s->requests_from) {
+            rs.requests_received += s->requests_from;
+            rs.unique_requestors++;
+        }
+        if (s->throttled)
+            rs.throttled_requestors++;
+    }
+
+    for (unsigned int i = 0; i < REPLAY_TRACK_SERVERS; i++) {
+        ReplayServerInfo *server = &servers[i];
+        if (!server->is_tracked)
+            continue;
+        meshtastic_ReplayServerStats *ss = &rs.servers[rs.servers_count++];
+        ss->id = server->id;
+        ss->adverts_received = server->adverts_received;
+        ss->requests_sent = server->replays_requested;
+        ss->packets_missed = server->packets_missed;
+        ss->last_advert_secs = (millis() - server->last_advert_millis) / 1000;
+        ss->is_router = server->flag_router;
+        ss->priority = server->flag_priority;
+    }
+
+    meshtastic_MeshPacket *p = allocDataPacket();
+    assert(p);
+    unsigned char *pos = p->decoded.payload.bytes;
+    p->to = NODENUM_BROADCAST;
+    p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
+    memcpy(pos, &wire.header.bitfield, sizeof(wire.header.bitfield));
+    pos += sizeof(wire.header.bitfield);
+    pos += pb_encode_to_bytes(pos, sizeof(p->decoded.payload.bytes) - (pos - p->decoded.payload.bytes),
+                              meshtastic_ReplayStats_fields, &rs);
+    p->decoded.payload.size = pos - p->decoded.payload.bytes;
+
+    LOG_INFO("Replay: Broadcasting statistics to mesh");
+    printStats(&rs);
+
+    service->sendToMesh(p);
+    resetStats();
+    last_stats_millis = millis();
+}
+
+void ReplayModule::printStats(meshtastic_ReplayStats *rs)
+{
+    LOG_INFO("Replay statistics (last %u seconds):", rs->window_length_secs);
+    LOG_INFO("  Buffer: size=%u cached=%u", rs->current_size, rs->current_cached);
+    LOG_INFO("  Advertisements: sent=%u expired=%u received=%u advertisers=%u missed_packets=%u", rs->adverts_sent,
+             rs->expired_sent, rs->adverts_received, rs->unique_advertisers, rs->packets_missed);
+    LOG_INFO("  Requests: sent=%u packets=%u prio=%u received=%u requestors=%u throttled=%u", rs->requests_sent,
+             rs->requests_sent_packets, rs->requests_sent_packets_prio, rs->requests_received, rs->unique_requestors,
+             rs->throttled_requestors);
+    LOG_INFO("  Replays: packets=%u prio=%u", rs->packets_replayed, rs->packets_replayed_prio);
+    LOG_INFO("  Rebroadcasts: packets=%u prio=%u", rs->packets_rebroadcast, rs->packets_rebroadcast_prio);
+    for (unsigned int i = 0; i < rs->servers_count; i++) {
+        meshtastic_ReplayServerStats *s = &rs->servers[i];
+        LOG_INFO("  Server 0x%08x: adverts=%u requests=%u missed=%u last_advert=%us router=%u prio=%u", s->id,
+                 s->adverts_received, s->requests_sent, s->packets_missed, s->last_advert_secs, s->is_router, s->priority);
+    }
+}
+
+/**
  * Handle thread notifications
  */
 void ReplayModule::onNotify(uint32_t notification)
@@ -1092,10 +1268,16 @@ void ReplayModule::onNotify(uint32_t notification)
     if (packets_since_advert > REPLAY_FLUSH_PACKETS || deadline <= now)
         advertise();
 
+    if (last_stats_millis + REPLAY_STATS_INTERVAL_SECS * 1000 <= now)
+        sendStats();
+
     if (replay_from >= buffer.getTailCursor() && replay_from) {
         // We still have packets pending replay
         notifyLater(REPLAY_SPACING_MS, REPLAY_NOTIFY_REPLAY, true);
     } else if (deadline > now) {
+        if (last_stats_millis + REPLAY_STATS_INTERVAL_SECS * 1000 < deadline)
+            deadline = last_stats_millis + REPLAY_STATS_INTERVAL_SECS * 1000;
+
         // Sleep until the next advert deadline
         LOG_DEBUG("Sleep to deadline %ld", deadline - now);
         notifyLater(deadline - now, REPLAY_NOTIFY_INTERVAL, false);
