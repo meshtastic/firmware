@@ -21,6 +21,13 @@
 #include "cas.h"
 #include "ubx.h"
 
+// Optional GPS+IMU fusion support: enable with -DGPS_IMU_FUSION_ENABLE in build flags
+#if defined(GPS_IMU_FUSION_ENABLE)
+#include "motion/GPSIMUFusion.h"
+// Optional runtime gate: if future config flag is added, we can check it here.
+// For now, fusion overrides are enabled whenever the build flag is set and fusion reports valid data.
+#endif
+
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
@@ -1710,6 +1717,45 @@ bool GPS::lookForLocation()
     if (reader.speed.isUpdated() && reader.speed.isValid()) {
         p.ground_speed = reader.speed.kmph();
     }
+
+#if defined(GPS_IMU_FUSION_ENABLE)
+    // If fusion is active, override final lat/lon/heading/speed before returning
+    if (g_gps_imu_fusion.isValid()) {
+        const auto &fusion = g_gps_imu_fusion.getFusionData();
+
+        auto clampLat = [](int32_t v) {
+            if (v > 900000000) return 900000000;   // +90 deg
+            if (v < -900000000) return -900000000; // -90 deg
+            return v;
+        };
+        auto clampLon = [](int32_t v) {
+            if (v > 1800000000) return 1800000000;    // +180 deg
+            if (v < -1800000000) return -1800000000;  // -180 deg
+            return v;
+        };
+
+        // Replace coordinates if fusion has sane values (degrees -> int32 degrees*1e7)
+        int32_t fused_lat_i = (int32_t)(fusion.latitude * 1e7);
+        int32_t fused_lon_i = (int32_t)(fusion.longitude * 1e7);
+        if (fused_lat_i != 0 || fused_lon_i != 0) {
+            p.latitude_i = clampLat(fused_lat_i);
+            p.longitude_i = clampLon(fused_lon_i);
+        }
+
+        // Replace heading (yaw in degrees -> degrees*1e5)
+        if (fusion.imu_valid || fusion.gps_valid) {
+            float yaw = fusion.yaw;
+            while (yaw < 0.0f) yaw += 360.0f;
+            while (yaw >= 360.0f) yaw -= 360.0f;
+            p.ground_track = (uint32_t)(yaw * 1e5f);
+        }
+
+        // Replace speed (fusion.speed is m/s -> km/h)
+        if (fusion.speed >= 0.0f) {
+            p.ground_speed = fusion.speed * 3.6f;
+        }
+    }
+#endif // GPS_IMU_FUSION_ENABLE
 
     return true;
 }
