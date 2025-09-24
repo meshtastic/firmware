@@ -293,9 +293,7 @@ void setupModules()
 #endif
 #endif
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
-        if (moduleConfig.has_external_notification && moduleConfig.external_notification.enabled) {
-            externalNotificationModule = new ExternalNotificationModule();
-        }
+        externalNotificationModule = new ExternalNotificationModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
         if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)

@@ -83,6 +83,11 @@ extern uint16_t TFT_MESH;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
+#if defined(T_LORA_PAGER)
+// KB backlight control
+#include "input/cardKbI2cImpl.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -655,6 +660,19 @@ void Screen::setup()
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
+void Screen::setOn(bool on, FrameCallback einkScreensaver)
+{
+#if defined(T_LORA_PAGER)
+    if (cardKbI2cImpl)
+        cardKbI2cImpl->toggleBacklight(on);
+#endif
+    if (!on)
+        // We handle off commands immediately, because they might be called because the CPU is shutting down
+        handleSetOn(false, einkScreensaver);
+    else
+        enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
+}
+
 void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
@@ -1037,7 +1055,7 @@ void Screen::setFrames(FrameFocus focus)
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
-        indicatorIcons.push_back(small_chirpy);
+        indicatorIcons.push_back(chirpy_small);
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
