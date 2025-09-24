@@ -1607,6 +1607,9 @@ void loop()
 
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {
+#ifdef DEBUG_LOOP_TIMING
+        LOG_DEBUG("main loop delay: %d", delayMsec);
+#endif
         mainDelay.delay(delayMsec);
     }
 }
