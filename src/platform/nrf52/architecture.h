@@ -149,3 +149,5 @@
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif
+
+#define xPortInIsrContext() ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0 ? pdFALSE : pdTRUE)
