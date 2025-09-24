@@ -1,7 +1,7 @@
 #pragma once
 
 #include "configuration.h"
-#include "SensorLiveData.h"
+#include "motion/SensorLiveData.h"
 #include "Fusion/Fusion.h"
 #include <stdint.h>
 

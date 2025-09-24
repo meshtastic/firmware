@@ -1,9 +1,10 @@
+#include "GPSIMUFusionDemo.h"
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
 
 #include "GPSIMUFusion.h"
-#include "SensorLiveData.h"
+#include "motion/SensorLiveData.h"
 #include <Arduino.h>
 
 // Forward declarations for easy access to debug functions

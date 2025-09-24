@@ -27,7 +27,7 @@
 #endif
 
 #if !MESHTASTIC_EXCLUDE_GPS
-#include "GPSIMUFusion.h"
+#include "Fusion/GPSIMUFusion.h"
 #endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;

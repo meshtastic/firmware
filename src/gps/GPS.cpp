@@ -23,7 +23,7 @@
 
 // Optional GPS+IMU fusion support: enable with -DGPS_IMU_FUSION_ENABLE in build flags
 #if defined(GPS_IMU_FUSION_ENABLE)
-#include "motion/GPSIMUFusion.h"
+#include "Fusion/GPSIMUFusion.h"
 // Optional runtime gate: if future config flag is added, we can check it here.
 // For now, fusion overrides are enabled whenever the build flag is set and fusion reports valid data.
 #endif

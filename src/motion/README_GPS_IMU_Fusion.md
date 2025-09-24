@@ -99,7 +99,7 @@ if (fusion && fusion->initialized) {
 
 ## Configuration
 
-Key parameters can be adjusted in `GPSIMUFusion.cpp`:
+Key parameters can be adjusted in `src/Fusion/GPSIMUFusion.cpp`:
 
 ```cpp
 GPS_VELOCITY_THRESHOLD = 1.0f;  // m/s - min speed for GPS heading
@@ -118,9 +118,10 @@ The fusion system automatically:
 ## Files Added/Modified
 
 ### New Files
-- `src/motion/GPSIMUFusion.h` - Main fusion class header
-- `src/motion/GPSIMUFusion.cpp` - Fusion implementation
-- `src/motion/GPSIMUFusionDemo.cpp` - Usage examples and demo code
+- `src/Fusion/GPSIMUFusion.h` - Main fusion class header
+- `src/Fusion/GPSIMUFusion.cpp` - Fusion implementation  
+- `src/Fusion/GPSIMUFusionDemo.cpp` - Usage examples and demo code
+- `src/Fusion/GPSIMUFusionDebug.h` - Debug macros and helper functions
 
 ### Modified Files
 - `src/motion/SensorLiveData.h` - Added fusion data accessor

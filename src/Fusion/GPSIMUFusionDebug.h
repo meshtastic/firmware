@@ -11,7 +11,7 @@
  * Include this in any file where you want to access fusion debug data.
  * 
  * Usage:
- * 1. Include this header: #include "motion/GPSIMUFusionDebug.h"
+ * 1. Include this header: #include "Fusion/GPSIMUFusionDebug.h"
  * 2. Call debug functions as needed
  * 
  * Auto Logging:

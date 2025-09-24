@@ -35,7 +35,7 @@ Timing: GPS=234ms IMU=45ms Fusion=12ms ago
 
 ### Option 1: Include Debug Header (Recommended)
 ```cpp
-#include "motion/GPSIMUFusionDebug.h"
+#include "Fusion/GPSIMUFusionDebug.h"
 
 // In your code:
 DEBUG_FUSION_NOW();     // Detailed debug output immediately
@@ -44,7 +44,7 @@ DEBUG_FUSION_QUICK();   // Quick status check
 
 ### Option 2: Direct Function Calls
 ```cpp
-#include "motion/GPSIMUFusion.h"
+#include "Fusion/GPSIMUFusion.h"
 
 // Force immediate debug output
 debugGPSIMUFusionNow();        // Detailed debug
@@ -178,7 +178,7 @@ if (speed >= 0) {
 ## Customization
 
 ### Adjust Log Frequency
-Edit `GPSIMUFusion.cpp`:
+Edit `src/Fusion/GPSIMUFusion.cpp`:
 ```cpp
 // Change logging intervals
 if (now_ms - lastDetailedLog > 10000) { // 10 seconds instead of 5

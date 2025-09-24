@@ -4,7 +4,7 @@ QMI8658LiveData g_qmi8658Live;
 QMC6310LiveData g_qmc6310Live;
 
 #if !MESHTASTIC_EXCLUDE_GPS
-#include "GPSIMUFusion.h"
+#include "Fusion/GPSIMUFusion.h"
 
 const GPSIMUFusionData* getGPSIMUFusionData() {
     if (g_gps_imu_fusion.isValid()) {
