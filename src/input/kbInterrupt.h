@@ -2,10 +2,10 @@
 
 #include "Observer.h"
 
-class KbInterruptObservable : public Observable<bool>
+class KbInterruptObservable : public Observable<KbInterruptObservable *>
 {
 };
 
-class KbInterruptObserver : public Observer<bool>
+class KbInterruptObserver : public Observer<KbInterruptObservable *>
 {
 };

@@ -130,7 +130,7 @@ void KbI2cBase::pollOnce()
             }
             if (e.inputEvent != INPUT_BROKER_NONE) {
                 LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
-                inputBroker->queueInputEvent(&e, false);
+                inputBroker->queueInputEvent(&e);
             }
         }
 #endif
@@ -637,11 +637,11 @@ void KbI2cBase::toggleBacklight(bool on)
 #endif
 }
 
-int KbI2cBase::onNotify(bool fromIsr)
+int KbI2cBase::onNotify(KbInterruptObservable *src)
 {
     // Called from interrupt context, request polling after exiting the ISR
 #ifdef KB_INT
-    inputBroker->requestPollSoon(this, fromIsr);
+    inputBroker->requestPollSoon(this);
 #endif
     return 0;
 }

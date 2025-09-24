@@ -60,8 +60,8 @@ class InputBroker : public Observable<const InputEvent *>
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
 #ifdef HAS_FREE_RTOS
-    void requestPollSoon(InputPollable *pollable, bool fromIsr);
-    void queueInputEvent(const InputEvent *event, bool fromIsr);
+    void requestPollSoon(InputPollable *pollable);
+    void queueInputEvent(const InputEvent *event);
     void processInputEventQueue();
 #endif
 

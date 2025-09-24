@@ -18,18 +18,18 @@ void InputBroker::registerSource(Observable<const InputEvent *> *source)
 }
 
 #ifdef HAS_FREE_RTOS
-void InputBroker::requestPollSoon(InputPollable *pollable, bool fromIsr)
+void InputBroker::requestPollSoon(InputPollable *pollable)
 {
-    if (fromIsr) {
+    if (xPortInIsrContext() == pdTRUE) {
         xQueueSendFromISR(pollSoonQueue, &pollable, NULL);
     } else {
         xQueueSend(pollSoonQueue, &pollable, 0);
     }
 }
 
-void InputBroker::queueInputEvent(const InputEvent *event, bool fromIsr)
+void InputBroker::queueInputEvent(const InputEvent *event)
 {
-    if (fromIsr) {
+    if (xPortInIsrContext() == pdTRUE) {
         xQueueSendFromISR(inputEventQueue, event, NULL);
     } else {
         xQueueSend(inputEventQueue, event, portMAX_DELAY);
