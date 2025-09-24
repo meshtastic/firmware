@@ -70,7 +70,6 @@ No longer populated on PCB
 #define WIRE_INTERFACES_COUNT 2
 
 #ifndef HELTEC_MESH_SOLAR_OLED
-#ifndef HELTEC_MESH_SOLAR_OLED
 // I2C bus 0
 #define PIN_WIRE_SDA (0 + 6)
 #define PIN_WIRE_SCL (0 + 26)
@@ -78,8 +77,6 @@ No longer populated on PCB
 
 // I2C bus 1
 // Available on header pins, for general use
-#define PIN_WIRE1_SDA (0 + 30)
-#define PIN_WIRE1_SCL (0 + 5)
 #define PIN_WIRE1_SDA (0 + 30)
 #define PIN_WIRE1_SCL (0 + 5)
 
