@@ -102,7 +102,7 @@ void TCA8418KeyboardBase::reset()
 void TCA8418KeyboardBase::attachInterruptHandler()
 {
     interruptInstance = this;
-    auto interruptHandler = []() { interruptInstance->notifyObservers(interruptInstance); };
+    auto interruptHandler = []() { interruptInstance->notifyObservers(true); };
     attachInterrupt(KB_INT, interruptHandler, FALLING);
 }
 
@@ -126,8 +126,8 @@ int TCA8418KeyboardBase::beforeLightSleep(void *unused)
 int TCA8418KeyboardBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 {
     attachInterruptHandler();
-    this->notifyObservers(this); // Trigger a one-off poll in case a keypress woke us
-    return 0;                    // Indicates success
+    this->notifyObservers(false); // Trigger a one-off poll in case a keypress woke us
+    return 0;                     // Indicates success
 }
 #endif // ARCH_ESP32
 

@@ -20,7 +20,7 @@ class KbI2cBase : public Observable<const InputEvent *>,
     virtual void pollOnce() override;
 
   protected:
-    virtual int onNotify(KbInterruptObservable *src) override;
+    virtual int onNotify(bool fromIsr) override;
     virtual int32_t runOnce() override;
 
   private:
