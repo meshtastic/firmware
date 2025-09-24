@@ -1627,6 +1627,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showPrevFrame();
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showNextFrame();
+            } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
+                // Long press up button for fast frame switching
+                showPrevFrame();
+            } else if (event->inputEvent == INPUT_BROKER_DOWN_LONG) {
+                // Long press down button for fast frame switching
+                showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
