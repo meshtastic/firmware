@@ -641,6 +641,6 @@ void KbI2cBase::toggleBacklight(bool on)
 int KbI2cBase::onNotify(KbInterruptObservable *src)
 {
     // Called from interrupt context, request polling after exiting the ISR
-    inputBroker->pollSoonRequestFromIsr(this);
+    inputBroker->requestPollSoon(this);
     return 0;
 }
