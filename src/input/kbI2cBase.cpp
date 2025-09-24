@@ -48,8 +48,8 @@ void KbI2cBase::pollOnce()
 {
     // Called right after an interrupt by InputBroker
     switch (kb_model) {
-#ifdef KB_INT
     case 0x84: { // Adafruit TCA8418
+#ifdef KB_INT
         TCAKeyboard.trigger();
         InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
@@ -133,9 +133,9 @@ void KbI2cBase::pollOnce()
                 inputBroker->queueInputEvent(&e);
             }
         }
+#endif
         break;
     }
-#endif
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
@@ -356,8 +356,8 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
-#ifndef KB_INT
     case 0x84: { // Adafruit TCA8418
+#ifndef KB_INT
         TCAKeyboard.trigger();
         InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
@@ -442,9 +442,9 @@ int32_t KbI2cBase::runOnce()
             }
         }
         TCAKeyboard.clearInt();
+#endif
         break;
     }
-#endif
     case 0x02: {
         // RAK14004
         uint8_t rDataBuf[8] = {0};
