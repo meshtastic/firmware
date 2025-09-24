@@ -30,7 +30,7 @@ bool RotaryEncoderImpl::init()
     rotary->resetButton();
 
     interruptInstance = this;
-    auto interruptHandler = []() { inputBroker->pollSoonRequestFromIsr(interruptInstance); };
+    auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
     attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
     attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
     attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
