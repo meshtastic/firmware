@@ -6,6 +6,14 @@
 #include "configuration.h"
 #include "time.h"
 
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+#define IS_USB_SERIAL
+#ifdef SERIAL_HAS_ON_RECEIVE
+#undef SERIAL_HAS_ON_RECEIVE
+#endif
+#include "HWCDC.h"
+#endif
+
 #ifdef RP2040_SLOW_CLOCK
 #define Port Serial2
 #else
@@ -23,7 +31,9 @@ SerialConsole *console;
 void consoleInit()
 {
     auto sc = new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
-#ifdef SERIAL_HAS_ON_RECEIVE
+
+#if defined(SERIAL_HAS_ON_RECEIVE)
+    // onReceive does only exist for HardwareSerial not for USB CDC serial
     Port.onReceive([sc]() { sc->rxInt(); });
 #endif
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
@@ -74,11 +84,14 @@ int32_t SerialConsole::runOnce()
         return 250;
     }
 #endif
-#ifdef SERIAL_HAS_ON_RECEIVE
+
     int32_t delay = runOncePart();
+#if defined(SERIAL_HAS_ON_RECEIVE)
     return Port.available() ? delay : INT32_MAX;
+#elif defined(IS_USB_SERIAL)
+    return HWCDC::isPlugged() ? delay : (1000 * 20);
 #else
-    return runOncePart();
+    return delay;
 #endif
 }
 
