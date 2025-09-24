@@ -163,9 +163,29 @@ class TCA8418KeyboardBase : public KbInterruptObservable
     uint8_t columns;
     String queue;
 
+#ifdef KB_INT
+    void attachInterruptHandler();
+    void detachInterruptHandler();
+
+#ifdef ARCH_ESP32
+    // Disconnect and reconnect interrupts for light sleep
+    int beforeLightSleep(void *unused);
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
+#endif // ARCH_ESP32
+
+#endif // KB_INT
+
   private:
     TwoWire *m_wire;
     uint8_t m_addr;
     i2c_com_fptr_t readCallback;
     i2c_com_fptr_t writeCallback;
+
+#if defined(KB_INT) && defined(ARCH_ESP32)
+    // Get notified when lightsleep begins and ends
+    CallbackObserver<TCA8418KeyboardBase, void *> lsObserver =
+        CallbackObserver<TCA8418KeyboardBase, void *>(this, &TCA8418KeyboardBase::beforeLightSleep);
+    CallbackObserver<TCA8418KeyboardBase, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<TCA8418KeyboardBase, esp_sleep_wakeup_cause_t>(this, &TCA8418KeyboardBase::afterLightSleep);
+#endif
 };

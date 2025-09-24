@@ -441,7 +441,6 @@ int32_t KbI2cBase::runOnce()
                 this->notifyObservers(&e);
             }
         }
-        TCAKeyboard.clearInt();
 #endif
         break;
     }

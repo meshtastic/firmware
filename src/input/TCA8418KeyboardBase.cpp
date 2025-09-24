@@ -2,6 +2,7 @@
 
 #include "TCA8418KeyboardBase.h"
 #include "configuration.h"
+#include "sleep.h"
 
 #include <Arduino.h>
 
@@ -44,14 +45,18 @@ void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire)
     reset();
 
 #ifdef KB_INT
-    interruptInstance = this;
-    auto interruptHandler = []() { interruptInstance->notifyObservers(interruptInstance); };
-
     ::pinMode(KB_INT, INPUT_PULLUP);
-    attachInterrupt(KB_INT, interruptHandler, FALLING);
-
+    attachInterruptHandler();
     enableInterrupts();
-#endif
+
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif // ARCH_ESP32
+
+#endif // KB_INT
 }
 
 void TCA8418KeyboardBase::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
@@ -92,6 +97,41 @@ void TCA8418KeyboardBase::reset()
     enableDebounce();
     flush();
 }
+
+#ifdef KB_INT
+void TCA8418KeyboardBase::attachInterruptHandler()
+{
+    interruptInstance = this;
+    auto interruptHandler = []() { interruptInstance->notifyObservers(interruptInstance); };
+    attachInterrupt(KB_INT, interruptHandler, FALLING);
+}
+
+void TCA8418KeyboardBase::detachInterruptHandler()
+{
+    detachInterrupt(KB_INT);
+    interruptInstance = nullptr;
+}
+
+#ifdef ARCH_ESP32
+// Detach our class' interrupts before lightsleep
+// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
+int TCA8418KeyboardBase::beforeLightSleep(void *unused)
+{
+    detachInterruptHandler();
+    return 0; // Indicates success
+}
+
+// Reconfigure our interrupts
+// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
+int TCA8418KeyboardBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachInterruptHandler();
+    this->notifyObservers(this); // Trigger a one-off poll in case a keypress woke us
+    return 0;                    // Indicates success
+}
+#endif // ARCH_ESP32
+
+#endif // KB_INT
 
 bool TCA8418KeyboardBase::matrix(uint8_t rows, uint8_t columns)
 {
@@ -169,7 +209,7 @@ void TCA8418KeyboardBase::trigger()
 
 #ifdef KB_INT
     // Reset interrupt mask so we can receive future interrupts
-    writeRegister(TCA8418_REG_INT_STAT, 3);
+    clearInt();
 #endif
 }
 
