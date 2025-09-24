@@ -22,7 +22,10 @@ SerialConsole *console;
 
 void consoleInit()
 {
-    new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
+    auto sc = new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
+#ifdef SERIAL_HAS_ON_RECEIVE
+    Port.onReceive([sc]() { sc->rxInt(); });
+#endif
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }
 
@@ -65,19 +68,35 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 int32_t SerialConsole::runOnce()
 {
 #ifdef HELTEC_MESH_SOLAR
-    //After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
-    if(moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port
-        && moduleConfig.serial.mode==meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)
-    {
+    // After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
+    if (moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port &&
+        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG) {
         return 250;
     }
 #endif
+#ifdef SERIAL_HAS_ON_RECEIVE
+    int32_t delay = runOncePart();
+    return Port.available() ? delay : INT32_MAX;
+#else
     return runOncePart();
+#endif
 }
 
 void SerialConsole::flush()
 {
     Port.flush();
+}
+
+// trigger tx of serial data
+void SerialConsole::onNowHasData(uint32_t fromRadioNum)
+{
+    setIntervalFromNow(0);
+}
+
+// trigger rx of serial data
+void SerialConsole::rxInt()
+{
+    setIntervalFromNow(0);
 }
 
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
