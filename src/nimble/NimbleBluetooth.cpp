@@ -174,11 +174,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->setFont(FONT_MEDIUM);
                 display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-
+#if !defined(M5STACK_UNITC6L)
                 display->setFont(FONT_SMALL);
                 y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
                 display->drawString(x_offset + x, y_offset + y, "Enter this code");
-
+#endif
                 display->setFont(FONT_LARGE);
                 char pin[8];
                 snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
@@ -247,6 +247,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             bluetoothPhoneAPI->numBytes = 0;
             bluetoothPhoneAPI->queue_size = 0;
         }
+
+        // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+        memset(lastToRadio, 0, sizeof(lastToRadio));
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();
