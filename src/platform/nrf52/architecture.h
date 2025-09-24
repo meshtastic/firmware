@@ -150,4 +150,5 @@
 #define USE_SEGGER
 #endif
 
+// Detect if running in ISR context (ARM Cortex-M4)
 #define xPortInIsrContext() ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0 ? pdFALSE : pdTRUE)
