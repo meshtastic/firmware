@@ -5,6 +5,7 @@
 #include "MotionSensor.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMI8658.hpp>) && defined(IMU_CS)
+#define HAS_QMI8658_SENSOR 1
 
 #include <SPI.h>
 #include <SensorQMI8658.hpp>

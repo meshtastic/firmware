@@ -3,7 +3,7 @@
 #include "SensorLiveData.h"
 #include "Fusion/Fusion.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMI8658.hpp>)
+#if defined(HAS_QMI8658_SENSOR)
 
 #include <math.h>
 
