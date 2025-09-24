@@ -1,6 +1,10 @@
-meshtasticd (2.7.10.0) UNRELEASED; urgency=medium
+meshtasticd (2.7.11.0) UNRELEASED; urgency=medium
 
+  [ Austin Lane ]
   * Initial packaging
   * Version 2.5.19
 
- -- Austin Lane <vidplace7@gmail.com>  Thu, 02 Jan 2025 12:00:00 +0000
+  [  ]
+  * GitHub Actions Automatic version bump
+
+ --  <github-actions[bot]@users.noreply.github.com>  Wed, 24 Sep 2025 11:01:13 +0000
