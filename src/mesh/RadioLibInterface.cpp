@@ -553,3 +553,11 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         return res == RADIOLIB_ERR_NONE;
     }
 }
+
+bool RadioLibInterface::checkOutputPower(int8_t power)
+{
+    if (iface->checkOutputPower(power, nullptr) != RADIOLIB_ERR_UNSUPPORTED) {
+        return true;
+    }
+    return false;
+}
