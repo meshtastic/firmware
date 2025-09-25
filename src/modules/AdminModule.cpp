@@ -104,6 +104,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             (config.security.admin_key[2].size == 32 &&
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
+            auto remoteNode = nodeDB->getMeshNode(mp.from);
+            if (remoteNode && !remoteNode->is_favorite) {
+                remoteNode->is_favorite = true;
+            }
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
             LOG_INFO("Received PKC admin payload, but the sender public key does not match the admin authorized key!");

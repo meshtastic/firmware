@@ -39,16 +39,15 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-
-#define PIN_LED1 (0 + 12) // green (confirmed on 1.0 board)
+#define PIN_LED1 (0 + 4)  // green (confirmed on 1.0 board)
 #define LED_BLUE PIN_LED1 // fake for bluefruit library
 #define LED_GREEN PIN_LED1
 #define LED_BUILTIN LED_GREEN
-#define LED_STATE_ON 0  // State when LED is lit
+#define LED_STATE_ON 0 // State when LED is lit
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
 #define NEOPIXEL_COUNT 1                     // How many neopixels are connected
-#define NEOPIXEL_DATA (32+15)                // gpio pin used to send data to the neopixels
+#define NEOPIXEL_DATA (32 + 15)              // gpio pin used to send data to the neopixels
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 
 /*
@@ -63,7 +62,6 @@ No longer populated on PCB
 */
 #define PIN_SERIAL2_RX (0 + 9)
 #define PIN_SERIAL2_TX (0 + 10)
-//  #define PIN_SERIAL2_EN (0 + 17)
 
 /*
  * I2C
@@ -71,16 +69,16 @@ No longer populated on PCB
 
 #define WIRE_INTERFACES_COUNT 2
 
+#ifndef HELTEC_MESH_SOLAR_OLED
 // I2C bus 0
-// Routed to footprint for PCF8563TS RTC
-// Not populated on T114 V1, maybe in future?
-#define PIN_WIRE_SDA (0 + 6) // P0.26
-#define PIN_WIRE_SCL (0 + 26) // P0.26
+#define PIN_WIRE_SDA (0 + 6)
+#define PIN_WIRE_SCL (0 + 26)
+#endif
 
 // I2C bus 1
 // Available on header pins, for general use
-#define PIN_WIRE1_SDA (0 + 30) // P0.30
-#define PIN_WIRE1_SCL (0 + 5) // P0.13
+#define PIN_WIRE1_SDA (0 + 30)
+#define PIN_WIRE1_SCL (0 + 5)
 
 /*
  * Lora radio
@@ -89,14 +87,14 @@ No longer populated on PCB
 #define USE_SX1262
 // #define USE_SX1268
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
-#define LORA_CS  (0 + 24)
+#define LORA_CS (0 + 24)
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 // #define SX1262_DIO3 (0 + 21)
 // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the
 //    main
 // CPU?
-#define SX126X_BUSY  (0 + 17)
+#define SX126X_BUSY (0 + 17)
 #define SX126X_RESET (0 + 25)
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
@@ -129,21 +127,20 @@ No longer populated on PCB
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 1
 
 // For LORA, spi 0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
-#define PIN_SPI_SCK  (0 + 19)
+#define PIN_SPI_SCK (0 + 19)
 
 // #define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
 
-#define BQ4050_SDA_PIN                      (32+1) // I2C data line pin
-#define BQ4050_SCL_PIN                      (32+0) // I2C clock line pin
-#define BQ4050_EMERGENCY_SHUTDOWN_PIN       (32+3) // Emergency shutdown pin
+#define BQ4050_SDA_PIN (32 + 1)                // I2C data line pin
+#define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
+#define BQ4050_EMERGENCY_SHUTDOWN_PIN (32 + 3) // Emergency shutdown pin
 
 #define HAS_RTC 0
 #ifdef __cplusplus

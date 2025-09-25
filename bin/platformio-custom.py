@@ -6,6 +6,8 @@ from os.path import join
 import subprocess
 import json
 import re
+import time
+from datetime import datetime
 
 from readprops import readProps
 
@@ -125,11 +127,16 @@ for pref in userPrefs:
         pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
 
 # General options that are passed to the C and C++ compilers
+# Calculate unix epoch for current day (midnight)
+current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+build_epoch = int(current_date.timestamp())
+
 flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
         "-DAPP_REPO=" + repo_owner,
+        "-DBUILD_EPOCH=" + str(build_epoch),
     ] + pref_flags
 
 print ("Using flags:")

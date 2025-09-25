@@ -294,6 +294,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = AHT10;
                 break;
 #endif
+#if !defined(M5STACK_UNITC6L)
             case INA_ADDR:
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
@@ -340,6 +341,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
+#endif
             case MCP9808_ADDR:
                 // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
                 // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.

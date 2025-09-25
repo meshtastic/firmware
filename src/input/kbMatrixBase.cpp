@@ -72,7 +72,7 @@ int32_t KbMatrixBase::runOnce()
             if (key != 0) {
                 LOG_DEBUG("Key 0x%x pressed", key);
                 // reset shift now that we have a keypress
-                InputEvent e;
+                InputEvent e = {};
                 e.inputEvent = INPUT_BROKER_NONE;
                 e.source = this->_originName;
                 switch (key) {

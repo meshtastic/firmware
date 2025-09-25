@@ -12,12 +12,12 @@ NodeInfoModule *nodeInfoModule;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
-    auto p = *pptr;
-
     if (mp.from == nodeDB->getNodeNum()) {
         LOG_WARN("Ignoring packet supposed to be from our own node: %08x", mp.from);
         return false;
     }
+
+    auto p = *pptr;
     if (p.is_licensed != owner.is_licensed) {
         LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
         return true;
@@ -44,7 +44,10 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
+    DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocReply();
+    DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
+
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
         p->decoded.want_response = (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&

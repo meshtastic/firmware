@@ -66,11 +66,39 @@ typedef enum _meshtastic_Language {
     meshtastic_Language_UKRAINIAN = 16,
     /* Bulgarian */
     meshtastic_Language_BULGARIAN = 17,
+    /* Czech */
+    meshtastic_Language_CZECH = 18,
     /* Simplified Chinese (experimental) */
     meshtastic_Language_SIMPLIFIED_CHINESE = 30,
     /* Traditional Chinese (experimental) */
     meshtastic_Language_TRADITIONAL_CHINESE = 31
 } meshtastic_Language;
+
+/* How the GPS coordinates are displayed on the OLED screen. */
+typedef enum _meshtastic_DeviceUIConfig_GpsCoordinateFormat {
+    /* GPS coordinates are displayed in the normal decimal degrees format:
+ DD.DDDDDD DDD.DDDDDD */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC = 0,
+    /* GPS coordinates are displayed in the degrees minutes seconds format:
+ DD°MM'SS"C DDD°MM'SS"C, where C is the compass point representing the locations quadrant */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS = 1,
+    /* Universal Transverse Mercator format:
+ ZZB EEEEEE NNNNNNN, where Z is zone, B is band, E is easting, N is northing */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM = 2,
+    /* Military Grid Reference System format:
+ ZZB CD EEEEE NNNNN, where Z is zone, B is band, C is the east 100k square, D is the north 100k square,
+ E is easting, N is northing */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS = 3,
+    /* Open Location Code (aka Plus Codes). */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC = 4,
+    /* Ordnance Survey Grid Reference (the National Grid System of the UK).
+ Format: AB EEEEE NNNNN, where A is the east 100k square, B is the north 100k square,
+ E is the easting, N is the northing */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR = 5,
+    /* Maidenhead Locator System
+ Described here: https://en.wikipedia.org/wiki/Maidenhead_Locator_System */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS = 6
+} meshtastic_DeviceUIConfig_GpsCoordinateFormat;
 
 /* Struct definitions */
 typedef struct _meshtastic_NodeFilter {
@@ -161,6 +189,8 @@ typedef struct _meshtastic_DeviceUIConfig {
     /* Clockface analog style
  true for analog clockface, false for digital clockface */
     bool is_clockface_analog;
+    /* How the GPS coordinates are formatted on the OLED screen. */
+    meshtastic_DeviceUIConfig_GpsCoordinateFormat gps_format;
 } meshtastic_DeviceUIConfig;
 
 
@@ -181,9 +211,14 @@ extern "C" {
 #define _meshtastic_Language_MAX meshtastic_Language_TRADITIONAL_CHINESE
 #define _meshtastic_Language_ARRAYSIZE ((meshtastic_Language)(meshtastic_Language_TRADITIONAL_CHINESE+1))
 
+#define _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC
+#define _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MAX meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS
+#define _meshtastic_DeviceUIConfig_GpsCoordinateFormat_ARRAYSIZE ((meshtastic_DeviceUIConfig_GpsCoordinateFormat)(meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS+1))
+
 #define meshtastic_DeviceUIConfig_theme_ENUMTYPE meshtastic_Theme
 #define meshtastic_DeviceUIConfig_language_ENUMTYPE meshtastic_Language
 #define meshtastic_DeviceUIConfig_compass_mode_ENUMTYPE meshtastic_CompassMode
+#define meshtastic_DeviceUIConfig_gps_format_ENUMTYPE meshtastic_DeviceUIConfig_GpsCoordinateFormat
 
 
 
@@ -191,12 +226,12 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0}
+#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0, _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN}
 #define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_default         {0, 0, 0}
 #define meshtastic_Map_init_default              {false, meshtastic_GeoPoint_init_default, "", 0}
-#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero, _meshtastic_CompassMode_MIN, 0, 0}
+#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero, _meshtastic_CompassMode_MIN, 0, 0, _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN}
 #define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_zero       {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_zero            {0, 0, 0}
@@ -239,6 +274,7 @@ extern "C" {
 #define meshtastic_DeviceUIConfig_compass_mode_tag 16
 #define meshtastic_DeviceUIConfig_screen_rgb_color_tag 17
 #define meshtastic_DeviceUIConfig_is_clockface_analog_tag 18
+#define meshtastic_DeviceUIConfig_gps_format_tag 19
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
@@ -259,7 +295,8 @@ X(a, STATIC,   SINGULAR, BYTES,    calibration_data,  14) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_mode,     16) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_rgb_color,  17) \
-X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18)
+X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18) \
+X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter
@@ -316,7 +353,7 @@ extern const pb_msgdesc_t meshtastic_Map_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_MAX_SIZE meshtastic_DeviceUIConfig_size
-#define meshtastic_DeviceUIConfig_size           201
+#define meshtastic_DeviceUIConfig_size           204
 #define meshtastic_GeoPoint_size                 33
 #define meshtastic_Map_size                      58
 #define meshtastic_NodeFilter_size               47
