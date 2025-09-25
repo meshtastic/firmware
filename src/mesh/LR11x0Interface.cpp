@@ -155,7 +155,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setBandwidth(bw);
+    err = lora.setBandwidth(bw, wideLora() && (getFreq() > 1000.0f));
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
