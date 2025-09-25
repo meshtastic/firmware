@@ -18,8 +18,8 @@ extern QMI8658LiveData g_qmi8658Live;
 extern QMC6310LiveData g_qmc6310Live;
 extern GPS *gps;
 
-GPSIMUFusion::GPSIMUFusion() {
-    // Constructor - initialization done in initialize()
+GPSIMUFusion::GPSIMUFusion() : ahrs{} {
+    // ahrs explicitly value-initialized; remaining runtime setup occurs in initializeAHRS()
 }
 
 bool GPSIMUFusion::initialize() {
