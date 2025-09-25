@@ -16,8 +16,9 @@ class PacketHistory
         PacketId id;
         uint32_t rxTimeMsec;              // Unix time in msecs - the time we received it,  0 means empty
         uint8_t next_hop;                 // The next hop asked for this packet
+        uint8_t hop_limit;                // Highest hop limit observed for this packet
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
-    };                                    // 4B + 4B + 4B + 1B + 3B = 16B
+    };                                    // 4B + 4B + 4B + 1B + 1B + 3B = 17B (will be padded to 20B)
 
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
@@ -50,9 +51,10 @@ class PacketHistory
      * @param withUpdate if true and not found we add an entry to recentPackets
      * @param wasFallback if not nullptr, packet will be checked for fallback to flooding and value will be set to true if so
      * @param weWereNextHop if not nullptr, packet will be checked for us being the next hop and value will be set to true if so
+     * @param wasUpgraded if not nullptr, will be set to true if this packet has better hop_limit than previously seen
      */
     bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true, bool *wasFallback = nullptr,
-                         bool *weWereNextHop = nullptr);
+                         bool *weWereNextHop = nullptr, bool *wasUpgraded = nullptr);
 
     /* Check if a certain node was a relayer of a packet in the history given an ID and sender
      * If wasSole is not nullptr, it will be set to true if the relayer was the only relayer of that packet
