@@ -80,10 +80,9 @@ template <typename T> bool SX126xInterface<T>::init()
     RadioLibInterface::init();
 
     limitPower(SX126X_MAX_POWER);
-    // Make sure we reach the minimum power supported to turn the chip on (eg -9dBm)
-    while (power < 0 && !checkOutputPower(power)) {
-        power++;
-    }
+    // Make sure we reach the minimum power supported to turn the chip on (-9dBm)
+    if (power < -9)
+        power = -9;
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
@@ -122,8 +121,8 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
     }
 
-    // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
-    // no effect
+// If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
+// no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", portduino_config.lora_rxen_pin.pin,
