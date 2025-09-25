@@ -81,6 +81,8 @@ class Screen
 #include <SSD1306Wire.h>
 #elif defined(USE_ST7789)
 #include <ST7789Spi.h>
+#elif defined(USE_SPISSD1306)
+#include <SSD1306Spi.h>
 #else
 // the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
@@ -257,15 +259,7 @@ class Screen : public concurrency::OSThread
     void setup();
 
     /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
-    void setOn(bool on, FrameCallback einkScreensaver = NULL)
-    {
-        if (!on)
-            // We handle off commands immediately, because they might be called because the CPU is shutting down
-            handleSetOn(false, einkScreensaver);
-        else
-            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
-    }
-
+    void setOn(bool on, FrameCallback einkScreensaver = NULL);
     /**
      * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
      * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
