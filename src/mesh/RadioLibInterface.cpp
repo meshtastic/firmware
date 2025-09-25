@@ -496,6 +496,8 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             airTime->logAirtime(RX_LOG, xmitMsec);
 
+            printPacket("Lora RX", mp);
+
 #if !MESHTASTIC_EXCLUDE_REPLAY
             if (REPLAY_FAKE_PACKET_LOSS_PERCENT && (rand() % 100 < REPLAY_FAKE_PACKET_LOSS_PERCENT)) {
                 packetPool.release(mp);
