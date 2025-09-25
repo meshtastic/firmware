@@ -64,7 +64,7 @@ void getMacAddr(uint8_t *dmac)
 #endif
 }
 
-#ifdef HAS_32768HZ
+#if HAS_32768HZ
 #define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
 
 static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
@@ -86,17 +86,17 @@ void enableSlowCLK()
     uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
 
     if (cal_32k == 0) {
-        LOG_DEBUG("32K XTAL OSC has not started up");
+        LOG_DEBUG("32k XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
+        LOG_DEBUG("Switch RTC Source to 32.768kHz succeeded, using 32k XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! ");
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768kHz !!! ");
         return;
     }
 }
@@ -182,7 +182,7 @@ void esp32Setup()
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
 
-#ifdef HAS_32768HZ
+#if HAS_32768HZ
     enableSlowCLK();
 #endif
 }
