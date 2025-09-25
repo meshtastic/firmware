@@ -45,7 +45,8 @@ PacketHistory::~PacketHistory()
 }
 
 /** Update recentPackets and return true if we have already seen this packet */
-bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop,
+                                    bool *wasUpgraded)
 {
     if (!initOk()) {
         LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED!");
@@ -87,6 +88,16 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
+
+    // Check for hop_limit upgrade scenario
+    if (seenRecently && wasUpgraded && found->hop_limit < p->hop_limit) {
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id, found->hop_limit,
+                  p->hop_limit);
+        *wasUpgraded = true;
+        seenRecently = false; // Allow router processing but prevent duplicate app delivery
+    } else if (wasUpgraded) {
+        *wasUpgraded = false; // Initialize to false if not an upgrade
+    }
 
     if (seenRecently) {
         if (wasFallback) {
