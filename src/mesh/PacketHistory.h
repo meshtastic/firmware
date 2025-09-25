@@ -4,6 +4,9 @@
 
 // Number of relayers we keep track of. Use 6 to be efficient with memory alignment of PacketRecord to 20 bytes
 #define NUM_RELAYERS 6
+#define HOP_LIMIT_HIGHEST_MASK 0x07 // Bits 0-2
+#define HOP_LIMIT_OUR_TX_MASK 0x38  // Bits 3-5
+#define HOP_LIMIT_OUR_TX_SHIFT 3    // Bits 3-5
 
 /**
  * This is a mixin that adds a record of past packets we have seen
@@ -16,7 +19,8 @@ class PacketHistory
         PacketId id;
         uint32_t rxTimeMsec;              // Unix time in msecs - the time we received it,  0 means empty
         uint8_t next_hop;                 // The next hop asked for this packet
-        uint8_t ourTxHopLimit;            // The hop limit of the packet when we first transmitted it
+        uint8_t hop_limit;                // bit 0-2: Highest hop limit observed for this packet,
+                                          // bit 3-5: our hop limit when we first transmitted it
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
     };                                    // 4B + 4B + 4B + 1B + 1B + 6B = 20B
 
@@ -38,6 +42,11 @@ class PacketHistory
      * If wasSole is not nullptr, it will be set to true if the relayer was the only relayer of that packet
      * @return true if node was indeed a relayer, false if not */
     bool wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole = nullptr);
+
+    uint8_t getHighestHopLimit(PacketRecord &r);
+    void setHighestHopLimit(PacketRecord &r, uint8_t hopLimit);
+    uint8_t getOurTxHopLimit(PacketRecord &r);
+    void setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit);
 
     PacketHistory(const PacketHistory &);            // non construction-copyable
     PacketHistory &operator=(const PacketHistory &); // non copyable

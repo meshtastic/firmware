@@ -66,11 +66,12 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.id = p->id;
     r.sender = getFrom(p); // If 0 then use our ID
     r.next_hop = p->next_hop;
+    setHighestHopLimit(r, p->hop_limit);
     bool weWillRelay = false;
     uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
     if (p->relay_node == ourRelayID) { // If the relay_node is us, store it
         weWillRelay = true;
-        r.ourTxHopLimit = p->hop_limit;
+        setOurTxHopLimit(r, p->hop_limit);
         r.relayed_by[0] = p->relay_node;
     }
 
@@ -134,18 +135,35 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
             if (!weWillRelay) {
                 bool weWereRelayer = wasRelayer(ourRelayID, *found);
                 // We were a relayer and the packet came in with a hop limit that is one less than when we sent it out
-                if (weWereRelayer && p->hop_limit == found->ourTxHopLimit - 1) {
+                if (weWereRelayer && (p->hop_limit == getOurTxHopLimit(*found) || p->hop_limit == getOurTxHopLimit(*found) - 1)) {
                     r.relayed_by[0] = p->relay_node;
                     startIdx = 1; // Start copying existing relayers from index 1
                 }
                 // keep the original ourTxHopLimit
-                r.ourTxHopLimit = found->ourTxHopLimit;
+                setOurTxHopLimit(r, getOurTxHopLimit(*found));
             }
 
-            // Add the existing relayed_by to the new record
-            for (uint8_t i = 0; i < (NUM_RELAYERS - 1); i++) {
-                if (found->relayed_by[i] != 0)
+            // Preserve the highest hop_limit we've ever seen for this packet so upgrades aren't lost when a later copy has
+            // fewer hops remaining.
+            if (getHighestHopLimit(*found) > getHighestHopLimit(r))
+                setHighestHopLimit(r, getHighestHopLimit(*found));
+
+            // Add the existing relayed_by to the new record, avoiding duplicates
+            for (uint8_t i = 0; i < (NUM_RELAYERS - startIdx); i++) {
+                if (found->relayed_by[i] == 0)
+                    continue;
+
+                bool exists = false;
+                for (uint8_t j = 0; j < NUM_RELAYERS; j++) {
+                    if (r.relayed_by[j] == found->relayed_by[i]) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists) {
                     r.relayed_by[i + startIdx] = found->relayed_by[i];
+                }
             }
             r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
 #if VERBOSE_PACKET_HISTORY
@@ -408,4 +426,25 @@ void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, cons
     LOG_DEBUG("Packet History - remove Relayer s=%08x id=%08x rby=%02x %02x %02x  rl:%02x AFTER - removed?%d", found->sender,
               found->id, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2], relayer, i != j);
 #endif
+}
+
+// Getters and setters for hop limit fields packed in hop_limit
+inline uint8_t PacketHistory::getHighestHopLimit(PacketRecord &r)
+{
+    return r.hop_limit & HOP_LIMIT_HIGHEST_MASK;
+}
+
+inline void PacketHistory::setHighestHopLimit(PacketRecord &r, uint8_t hopLimit)
+{
+    r.hop_limit = (r.hop_limit & ~HOP_LIMIT_HIGHEST_MASK) | (hopLimit & HOP_LIMIT_HIGHEST_MASK);
+}
+
+inline uint8_t PacketHistory::getOurTxHopLimit(PacketRecord &r)
+{
+    return (r.hop_limit & HOP_LIMIT_OUR_TX_MASK) >> HOP_LIMIT_OUR_TX_SHIFT;
+}
+
+inline void PacketHistory::setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit)
+{
+    r.hop_limit = (r.hop_limit & ~HOP_LIMIT_OUR_TX_MASK) | ((hopLimit << HOP_LIMIT_OUR_TX_SHIFT) & HOP_LIMIT_OUR_TX_MASK);
 }
