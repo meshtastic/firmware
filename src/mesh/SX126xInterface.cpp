@@ -80,6 +80,10 @@ template <typename T> bool SX126xInterface<T>::init()
     RadioLibInterface::init();
 
     limitPower(SX126X_MAX_POWER);
+    // Make sure we reach the minimum power supported to turn the chip on (eg -9dBm)
+    while (power < 0 && !checkOutputPower(power)) {
+        power++;
+    }
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
