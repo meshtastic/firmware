@@ -69,7 +69,7 @@ bool ascending = true;
 #endif
 #define EXT_NOTIFICATION_MODULE_OUTPUT_MS 1000
 
-#define EXT_NOTIFICATION_DEFAULT_THREAD_MS 25
+#define EXT_NOTIFICATION_FAST_THREAD_MS 25
 
 #define ASCII_BELL 0x07
 
@@ -88,7 +88,7 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-
+        uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
         bool isPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
         isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
@@ -116,21 +116,16 @@ int32_t ExternalNotificationModule::runOnce()
 
         // If the output is turned on, turn it back off after the given period of time.
         if (isNagging) {
-            if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
+            delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+                                                                  : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
+            if (externalTurnedOn[0] + delay < millis()) {
                 setExternalState(0, !getExternal(0));
             }
-            if (externalTurnedOn[1] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
+            if (externalTurnedOn[1] + delay < millis()) {
                 setExternalState(1, !getExternal(1));
             }
             // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
-            if (!moduleConfig.external_notification.use_pwm &&
-                externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                    millis()) {
+            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < millis()) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
                 setExternalState(2, !getExternal(2));
@@ -181,6 +176,8 @@ int32_t ExternalNotificationModule::runOnce()
                     colorState = 1;
                 }
             }
+            // we need fast updates for the color change
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
 #ifdef T_WATCH_S3
@@ -206,9 +203,11 @@ int32_t ExternalNotificationModule::runOnce()
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
+            // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 
-        return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
+        return delay;
     }
 }
 
