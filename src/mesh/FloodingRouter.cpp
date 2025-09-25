@@ -3,6 +3,10 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
 
 FloodingRouter::FloodingRouter() {}
 
@@ -22,7 +26,37 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
-    if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
+    bool wasUpgraded = false;
+    bool seenRecently =
+        wasSeenRecently(p, true, nullptr, nullptr, &wasUpgraded); // Updates history; returns false when an upgrade is detected
+
+    // Handle hop_limit upgrade scenario for rebroadcasters
+    // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
+    if (wasUpgraded && isRebroadcaster() && iface && p->hop_limit > 0) {
+        // wasSeenRecently() reports false in upgrade cases so we handle replacement before the duplicate short-circuit
+        // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
+        // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
+        uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
+        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
+                      p->hop_limit, dropThreshold);
+
+            if (nodeDB)
+                nodeDB->updateFrom(*p);
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+            if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+                traceRouteModule->processUpgradedPacket(*p);
+#endif
+
+            perhapsRebroadcast(p);
+
+            // We already enqueued the improved copy, so make sure the incoming packet stops here.
+            return true;
+        }
+    }
+
+    if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
 
