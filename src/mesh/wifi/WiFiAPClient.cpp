@@ -4,6 +4,9 @@
 #include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "mesh/wifi/WiFiAPClient.h"
+#if HAS_SCREEN
+#include "graphics/Screen.h"
+#endif
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
@@ -356,11 +359,19 @@ static void WiFiEvent(WiFiEvent_t event)
 #ifdef WIFI_LED
         digitalWrite(WIFI_LED, HIGH);
 #endif
+        // WiFi frame is no longer in carousel, so no need to hide it
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point");
 #ifdef WIFI_LED
         digitalWrite(WIFI_LED, LOW);
+#endif
+#if HAS_SCREEN
+        // Show WiFi frame in carousel when disconnected so user can see connection status
+        if (screen) {
+            screen->showFrame("wifi");
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+        }
 #endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);

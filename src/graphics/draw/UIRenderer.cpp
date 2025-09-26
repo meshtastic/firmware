@@ -28,6 +28,11 @@ namespace graphics
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+bool UIRenderer::showingMqttStatus = false;
+bool UIRenderer::showingWifiStatus = false;
+#endif
+
 void graphics::UIRenderer::rebuildFavoritedNodes()
 {
     favoritedNodes.clear();
@@ -1374,6 +1379,149 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
         uptime = std::to_string(seconds) + "s";
     return uptime;
 }
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+void UIRenderer::drawMqttInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 0;
+
+    // === MQTT Enable Status ===
+    char enabledStr[32];
+    if (moduleConfig.mqtt.enabled) {
+        snprintf(enabledStr, sizeof(enabledStr), "Status: ENABLED");
+    } else {
+        snprintf(enabledStr, sizeof(enabledStr), "Status: DISABLED");
+    }
+    int textWidth = display->getStringWidth(enabledStr);
+    int nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, graphics::getTextPositions(display)[line++], enabledStr);
+
+    if (moduleConfig.mqtt.enabled) {
+        // === Server Address ===
+        char serverStr[48];
+        if (moduleConfig.mqtt.address[0] != '\0') {
+            snprintf(serverStr, sizeof(serverStr), "Server: %s", moduleConfig.mqtt.address);
+        } else {
+            snprintf(serverStr, sizeof(serverStr), "Server: Not configured");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], serverStr);
+
+        // === Security Settings ===
+        char securityStr[32];
+        if (moduleConfig.mqtt.tls_enabled && moduleConfig.mqtt.encryption_enabled) {
+            snprintf(securityStr, sizeof(securityStr), "Security: TLS + Encryption");
+        } else if (moduleConfig.mqtt.tls_enabled) {
+            snprintf(securityStr, sizeof(securityStr), "Security: TLS Only");
+        } else if (moduleConfig.mqtt.encryption_enabled) {
+            snprintf(securityStr, sizeof(securityStr), "Security: Encryption Only");
+        } else {
+            snprintf(securityStr, sizeof(securityStr), "Security: None");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], securityStr);
+
+        // === Credentials ===
+        char credentialsStr[32];
+        bool hasUsername = moduleConfig.mqtt.username[0] != '\0';
+        bool hasPassword = moduleConfig.mqtt.password[0] != '\0';
+
+        if (hasUsername && hasPassword) {
+            snprintf(credentialsStr, sizeof(credentialsStr), "Auth: Username + Password");
+        } else if (hasUsername) {
+            snprintf(credentialsStr, sizeof(credentialsStr), "Auth: Username Only");
+        } else {
+            snprintf(credentialsStr, sizeof(credentialsStr), "Auth: Anonymous");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], credentialsStr);
+
+        // === Root Topic ===
+        char rootStr[32];
+        if (moduleConfig.mqtt.root[0] != '\0') {
+            snprintf(rootStr, sizeof(rootStr), "Root: %s", moduleConfig.mqtt.root);
+        } else {
+            snprintf(rootStr, sizeof(rootStr), "Root: Default");
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], rootStr);
+    } else {
+        // Show message when MQTT is disabled
+        const char *disabledMsg = "MQTT is currently disabled";
+        textWidth = display->getStringWidth(disabledMsg);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, graphics::getTextPositions(display)[line + 1], disabledMsg);
+    }
+}
+
+void UIRenderer::drawWifiInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 0;
+
+    const char *wifiName = config.network.wifi_ssid;
+
+    // === WiFi Enable Status ===
+    char enabledStr[32];
+    if (config.network.wifi_enabled) {
+        snprintf(enabledStr, sizeof(enabledStr), "Status: ENABLED");
+    } else {
+        snprintf(enabledStr, sizeof(enabledStr), "Status: DISABLED");
+    }
+    display->drawString(x, graphics::getTextPositions(display)[line++], enabledStr);
+
+    if (config.network.wifi_enabled && WiFi.status() == WL_CONNECTED) {
+        // === SSID ===
+        char ssidStr[64];
+        snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
+        display->drawString(x, graphics::getTextPositions(display)[line++], ssidStr);
+
+        // === Connection Status ===
+        display->drawString(x, graphics::getTextPositions(display)[line++], "Connection: Connected");
+
+        // === IP Address ===
+        char ipStr[64];
+        snprintf(ipStr, sizeof(ipStr), "IP: %s", WiFi.localIP().toString().c_str());
+        display->drawString(x, graphics::getTextPositions(display)[line++], ipStr);
+
+        // === RSSI ===
+        char rssiStr[32];
+        snprintf(rssiStr, sizeof(rssiStr), "RSSI: %d dBm", WiFi.RSSI());
+        display->drawString(x, graphics::getTextPositions(display)[line++], rssiStr);
+
+        // === URL ===
+        display->drawString(x, graphics::getTextPositions(display)[line++], "URL: http://meshtastic.local");
+
+    } else if (config.network.wifi_enabled) {
+        // === SSID when not connected ===
+        char ssidStr[64];
+        snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
+        display->drawString(x, graphics::getTextPositions(display)[line++], ssidStr);
+
+        // === Connection Status ===
+        const char *statusMsg;
+        if (WiFi.status() == WL_NO_SSID_AVAIL) {
+            statusMsg = "Connection: SSID Not Found";
+        } else if (WiFi.status() == WL_CONNECTION_LOST) {
+            statusMsg = "Connection: Connection Lost";
+        } else if (WiFi.status() == WL_IDLE_STATUS) {
+            statusMsg = "Connection: Reconnecting...";
+        } else if (WiFi.status() == WL_CONNECT_FAILED) {
+            statusMsg = "Connection: Failed";
+        } else {
+            statusMsg = "Connection: Disconnected";
+        }
+        display->drawString(x, graphics::getTextPositions(display)[line++], statusMsg);
+    } else {
+        // Show message when WiFi is disabled
+        const char *disabledMsg = "WiFi is currently disabled";
+        int textWidth = display->getStringWidth(disabledMsg);
+        int nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, graphics::getTextPositions(display)[line + 1], disabledMsg);
+    }
+}
+#endif // HAS_WIFI && !defined(ARCH_PORTDUINO)
 
 } // namespace graphics
 

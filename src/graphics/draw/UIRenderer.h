@@ -87,6 +87,16 @@ class UIRenderer
     static bool shouldDrawMessage(const meshtastic_MeshPacket *packet);
     // Check if the display can render a string (detect special chars; emoji)
     static bool haveGlyphs(const char *str);
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    // MQTT status screen
+    static void drawMqttInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static bool showingMqttStatus;
+
+    // WiFi status screen
+    static void drawWifiInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static bool showingWifiStatus;
+#endif
 }; // namespace UIRenderer
 
 } // namespace graphics

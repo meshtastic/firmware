@@ -34,6 +34,7 @@ class menuHandler
         test_menu,
         number_test,
         wifi_toggle_menu,
+        wifi_scan_menu,
         bluetooth_toggle_menu,
         notifications_menu,
         screen_options_menu,
@@ -43,7 +44,17 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
-        FrameToggles
+        FrameToggles,
+        wifi_config_menu,
+        wifi_password_prompt,
+        mqtt_base_menu,
+        mqtt_toggle_menu,
+        mqtt_server_config,
+        mqtt_credentials_config,
+        mqtt_server_prompt,
+        mqtt_username_prompt,
+        mqtt_password_prompt,
+        mqtt_root_prompt
     };
     static screenMenus menuQueue;
 
@@ -82,6 +93,12 @@ class menuHandler
     static void numberTest();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
+    static void wifiScanMenu();
+    static void wifiConfigMenu();
+    static void mqttBaseMenu();
+    static void mqttToggleMenu();
+    static void mqttServerConfig();
+    static void mqttCredentialsConfig();
     static void notificationsMenu();
     static void screenOptionsMenu();
     static void powerMenu();
@@ -96,4 +113,4 @@ class menuHandler
 };
 
 } // namespace graphics
-#endif
+#endif // HAS_SCREEN

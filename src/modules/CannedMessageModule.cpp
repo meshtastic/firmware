@@ -43,6 +43,7 @@
 extern ScanI2C::DeviceAddress cardkb_found;
 extern bool graphics::isMuted;
 extern bool osk_found;
+std::string g_pendingKeyboardHeader; // Global variable to hold pending keyboard header text
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 static NodeNum lastDest = NODENUM_BROADCAST;
@@ -130,6 +131,35 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     notifyObservers(&e);
 }
 
+void CannedMessageModule::LaunchFreetextKbPrompt(const char *header, const std::string &initial,
+                                                 std::function<void(const std::string &)> onSubmit)
+{
+    // Store custom callback and header for later use
+    customCallback = onSubmit;
+    customHeader = header ? header : "Input";
+
+    // Set pending header for virtual keyboard (when CardKB not available)
+    g_pendingKeyboardHeader = customHeader.c_str();
+
+    // Set initial text if provided
+    freetext = initial.c_str();
+    cursor = freetext.length();
+
+    // Restore the last valid destination if we have one
+    // This prevents WiFi/MQTT configuration from leaving invalid destinations
+    if (lastDestSet) {
+        dest = lastDest;
+        channel = lastChannel;
+    }
+
+    // Enter freetext mode (same as LaunchFreetextWithDestination)
+    runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+    requestFocus();
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    notifyObservers(&e);
+}
+
 static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
@@ -193,15 +223,22 @@ int CannedMessageModule::splitConfiguredMessages()
 }
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
+    // Check if we have a custom header (for WiFi prompts, etc.)
+    if (customHeader.length() > 0) {
+        display->drawString(x, y, customHeader.c_str());
+        return;
+    }
+
+    // Normal header behavior
     if (graphics::isHighResolution) {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: @%s", channels.getName(this->channel));
         } else {
             display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
     } else {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: Broadc@%.5s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: @%.9s", channels.getName(this->channel));
         } else {
             display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
@@ -818,6 +855,29 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (isSelect) {
         LOG_DEBUG("[SELECT] handleFreeTextInput: runState=%d, dest=%u, channel=%d, freetext='%s'", (int)runState, dest, channel,
                   freetext.c_str());
+
+        // If we have a custom callback (WiFi/MQTT config), process it immediately
+        if (customCallback) {
+            LOG_INFO("Processing custom callback with text: '%s'", this->freetext.c_str());
+            customCallback(this->freetext.c_str());
+            // Clear the custom callback after use
+            customCallback = nullptr;
+            customHeader = "";
+            // Go directly to inactive state
+            runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            freetext = "";
+            cursor = 0;
+            payload = 0;
+            currentMessageIndex = -1;
+            // Notify UI that we want to redraw/close this screen
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            screen->forceDisplay();
+            return true;
+        }
+
+        // Normal message flow
         if (dest == 0)
             dest = NODENUM_BROADCAST;
         // Defensive: If channel isn't valid, pick the first available channel
@@ -858,6 +918,14 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
         (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
+
+        // If there's a custom callback (WiFi/MQTT config), clean it up properly
+        if (customCallback) {
+            LOG_INFO("Canceling custom callback configuration");
+            customCallback = nullptr;
+            customHeader = "";
+        }
+
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -1019,7 +1087,18 @@ int32_t CannedMessageModule::runOnce()
         // Virtual keyboard message sending case - text was not empty
         if (this->freetext.length() > 0) {
             LOG_INFO("Processing delayed virtual keyboard send: '%s'", this->freetext.c_str());
-            sendText(this->dest, this->channel, this->freetext.c_str(), true);
+
+            // Check if we have a custom callback (WiFi/MQTT config)
+            if (customCallback) {
+                LOG_INFO("Processing custom callback with virtual keyboard text: '%s'", this->freetext.c_str());
+                customCallback(this->freetext.c_str());
+                // Clear the custom callback after use
+                customCallback = nullptr;
+                customHeader = "";
+            } else {
+                // Normal message sending
+                sendText(this->dest, this->channel, this->freetext.c_str(), true);
+            }
 
             // Clean up virtual keyboard after sending
             if (graphics::NotificationRenderer::virtualKeyboard) {
@@ -1098,8 +1177,19 @@ int32_t CannedMessageModule::runOnce()
             this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         } else if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
-                sendText(this->dest, this->channel, this->freetext.c_str(), true);
-                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+                // Check if we have a custom callback (WiFi/MQTT config)
+                if (customCallback) {
+                    LOG_INFO("Processing custom callback with text: '%s'", this->freetext.c_str());
+                    customCallback(this->freetext.c_str());
+                    // Clear the custom callback after use
+                    customCallback = nullptr;
+                    customHeader = "";
+                    this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                } else {
+                    // Normal message sending
+                    sendText(this->dest, this->channel, this->freetext.c_str(), true);
+                    this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+                }
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
@@ -1830,7 +1920,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         drawHeader(display, x, y, buffer);
 
         // --- Char count right-aligned ---
-        if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        // Only show character count for normal messages (not WiFi/MQTT config)
+        if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && !customCallback) {
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
