@@ -89,11 +89,12 @@ int32_t ExternalNotificationModule::runOnce()
         return INT32_MAX; // we don't need this thread here...
     } else {
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
-        bool isPlaying = rtttl::isPlaying();
+        bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
-        isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
+        // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
+        isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff < millis()) && !isPlaying) {
+        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
@@ -187,12 +188,14 @@ int32_t ExternalNotificationModule::runOnce()
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
-        if (moduleConfig.external_notification.use_i2s_as_buzzer && canBuzz()) {
+        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
             } else if (isNagging && (nagCycleCutoff >= millis())) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
+            // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
         // now let the PWM buzzer play
