@@ -25,8 +25,8 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
 
   public:
     EnvironmentTelemetryModule()
-        : concurrency::OSThread("EnvironmentTelemetry"),
-          ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg), ScanI2CConsumer()
+        : concurrency::OSThread("EnvironmentTelemetry"), ScanI2CConsumer(),
+          ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);

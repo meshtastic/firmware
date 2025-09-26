@@ -26,8 +26,6 @@ bool BMP280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     return status;
 }
 
-void BMP280Sensor::setup() {}
-
 bool BMP280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.has_temperature = true;

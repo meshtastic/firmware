@@ -10,22 +10,17 @@
 
 DFRobotGravitySensor::DFRobotGravitySensor() : TelemetrySensor(meshtastic_TelemetrySensorType_DFROBOT_RAIN, "DFROBOT_RAIN") {}
 
-int32_t DFRobotGravitySensor::runOnce()
+bool DFRobotGravitySensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
 
-    gravity = DFRobot_RainfallSensor_I2C(nodeTelemetrySensorsMap[sensorType].second);
+    gravity = DFRobot_RainfallSensor_I2C(bus);
     status = gravity.begin();
 
-    return initI2CSensor();
-}
-
-void DFRobotGravitySensor::setup()
-{
     LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity.vid, gravity.pid, gravity.getFirmwareVersion().c_str());
+
+    initI2CSensor();
+    return status;
 }
 
 bool DFRobotGravitySensor::getMetrics(meshtastic_Telemetry *measurement)
