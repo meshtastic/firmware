@@ -233,6 +233,33 @@ const std::vector<uint32_t> &getSeenPeers()
     return seenPeers;
 }
 
+// Helpers for drawing status marks
+void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
+{
+    int h = size;
+    int w = size;
+
+    // Center mark vertically with the text row
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    int topY = midY - (h / 2);
+
+    display->drawLine(x, topY + h / 2, x + w / 3, topY + h);
+    display->drawLine(x + w / 3, topY + h, x + w, topY);
+}
+
+void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
+{
+    int h = size;
+    int w = size;
+
+    // Center mark vertically with the text row
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    int topY = midY - (h / 2);
+
+    display->drawLine(x, topY, x + w, topY + h);
+    display->drawLine(x + w, topY, x, topY + h);
+}
+
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Ensure any boot-relative timestamps are upgraded if RTC is valid
@@ -329,6 +356,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<std::string> allLines;
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
+    std::vector<AckStatus> ackForLine;
 
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
@@ -417,6 +445,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         allLines.push_back(std::string(headerStr));
         isMine.push_back(mine);
         isHeader.push_back(true);
+        ackForLine.push_back(m.ackStatus);
 
         // Split message text into wrapped lines
         std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
@@ -424,6 +453,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             allLines.push_back(ln);
             isMine.push_back(mine);
             isHeader.push_back(false);
+            ackForLine.push_back(AckStatus::UNKNOWN);
         }
     }
 
@@ -483,6 +513,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 int w = display->getStringWidth(cachedLines[i].c_str());
                 int headerX = isMine[i] ? (SCREEN_WIDTH - w - 2) : x;
                 display->drawString(headerX, lineY, cachedLines[i].c_str());
+
+                // Draw ACK/NACK mark for our own messages
+                if (isMine[i]) {
+                    int markX = headerX - 10;
+                    int markY = lineY;
+                    if (ackForLine[i] == AckStatus::ACKED) {
+                        drawCheckMark(display, markX, markY, 8);
+                    } else if (ackForLine[i] == AckStatus::NACKED || ackForLine[i] == AckStatus::TIMEOUT) {
+                        drawXMark(display, markX, markY, 8);
+                    }
+                }
 
                 // Draw underline just under header text
                 int underlineY = lineY + FONT_HEIGHT_SMALL;

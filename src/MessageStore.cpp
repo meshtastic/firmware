@@ -59,6 +59,9 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
             sm.dest = packet.decoded.dest;
             sm.type = MessageType::DM_TO_US;
         }
+
+        // Outgoing messages start as UNKNOWN until ACK/NACK arrives
+        sm.ackStatus = AckStatus::UNKNOWN;
     } else {
         // Normal incoming
         sm.sender = packet.from;
@@ -72,6 +75,9 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
             sm.dest = NODENUM_BROADCAST; // fallback
             sm.type = MessageType::BROADCAST;
         }
+
+        // Received messages don’t wait for ACK mark as ACKED
+        sm.ackStatus = AckStatus::ACKED;
     }
 
     addLiveMessage(sm);
@@ -103,6 +109,9 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     sm.dest = NODENUM_BROADCAST;
     sm.type = MessageType::BROADCAST;
 
+    // Manual/outgoing messages start as UNKNOWN until ACK/NACK arrives
+    sm.ackStatus = AckStatus::UNKNOWN;
+
     addLiveMessage(sm);
 }
 
@@ -131,8 +140,12 @@ void MessageStore::saveToFlash()
         f.write((uint8_t *)&m.dest, sizeof(m.dest));
         f.write((uint8_t *)m.text.c_str(), std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size()));
         f.write('\0'); // null terminator
+
         uint8_t bootFlag = m.isBootRelative ? 1 : 0;
         f.write(&bootFlag, 1); // persist boot-relative flag
+
+        uint8_t statusByte = static_cast<uint8_t>(m.ackStatus);
+        f.write(&statusByte, 1); // persist ackStatus
     }
     spiLock->unlock();
 
@@ -187,6 +200,18 @@ void MessageStore::loadFromFlash()
         } else {
             // Old format, fallback heuristic
             m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
+        }
+
+        // Try to read ackStatus (newer format)
+        if (f.available() > 0) {
+            uint8_t statusByte = 0;
+            if (f.readBytes((char *)&statusByte, 1) == 1) {
+                m.ackStatus = static_cast<AckStatus>(statusByte);
+            } else {
+                m.ackStatus = AckStatus::UNKNOWN; // fallback
+            }
+        } else {
+            m.ackStatus = AckStatus::UNKNOWN; // legacy files
         }
 
         // Recompute type from dest

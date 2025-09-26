@@ -11,6 +11,14 @@ constexpr size_t MAX_MESSAGE_SIZE = 220; // safe bound for text payload
 // Explicit message classification
 enum class MessageType : uint8_t { BROADCAST = 0, DM_TO_US = 1 };
 
+// Delivery status for messages we sent
+enum class AckStatus : uint8_t {
+    UNKNOWN = 0, // default (not yet resolved)
+    ACKED = 1,   // got a valid ACK
+    NACKED = 2,  // explicitly failed
+    TIMEOUT = 3  // no ACK after retry window
+};
+
 struct StoredMessage {
     uint32_t timestamp;   // When message was created (secs since boot/RTC)
     uint32_t sender;      // NodeNum of sender
@@ -29,10 +37,13 @@ struct StoredMessage {
     // (true = millis()/1000 fallback, false = epoch/RTC absolute)
     bool isBootRelative;
 
+    // Delivery status (only meaningful for our own sent messages)
+    AckStatus ackStatus;
+
     // Default constructor to initialize all fields safely
     StoredMessage()
         : timestamp(0), sender(0), channelIndex(0), text(""), dest(0xffffffff), type(MessageType::BROADCAST),
-          isBootRelative(false)
+          isBootRelative(false), ackStatus(AckStatus::UNKNOWN)
     {
     }
 };

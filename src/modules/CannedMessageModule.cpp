@@ -1008,6 +1008,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
     }
+    sm.ackStatus = AckStatus::UNKNOWN;
 
     messageStore.addLiveMessage(sm);
 
@@ -2184,6 +2185,20 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             this->ack = isAck && (wasBroadcast || isFromDest);
 
             waitingForAck = false;
+
+            // Update last sent StoredMessage with ACK/NACK result
+            if (!messageStore.getMessages().empty()) {
+                StoredMessage &last = const_cast<StoredMessage &>(messageStore.getMessages().back());
+                if (last.sender == nodeDB->getNodeNum()) { // only update our own messages
+                    if (this->ack) {
+                        last.ackStatus = AckStatus::ACKED;
+                    } else {
+                        // If error_reason was explicit, you can map to NACKED; otherwise TIMEOUT
+                        last.ackStatus =
+                            (decoded.error_reason == meshtastic_Routing_Error_NONE) ? AckStatus::ACKED : AckStatus::NACKED;
+                    }
+                }
+            }
 
             // Capture radio metrics from this ACK/NACK packet
             this->lastRxRssi = mp.rx_rssi;
