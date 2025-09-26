@@ -16,6 +16,8 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
+#define THIRY_SECONDS_MS 30000
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
@@ -181,7 +183,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     uint32_t activeReceiveStart = 0;
 
+    /** Track when we should next perform an AGC/AFC reset */
+    uint32_t nextAgcResetMs = 0;
+
     bool receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag);
+
+    /**
+     * Perform AGC/AFC reset by issuing a startReceive() call if enough time has passed
+     * and we're not currently receiving or transmitting.
+     * Based on MeshCore's approach of using RadioLib startReceive() to reset AGC.
+     */
+    void checkAndPerformAgcReset();
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */

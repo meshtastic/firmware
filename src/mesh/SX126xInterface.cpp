@@ -228,6 +228,9 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
+    // Initialize AGC/AFC reset timing (30 second interval)
+    nextAgcResetMs = millis() + THIRY_SECONDS_MS;
+
     startReceive(); // restart receiving
 
     return RADIOLIB_ERR_NONE;

@@ -37,7 +37,7 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
-    : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
+    : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface), nextAgcResetMs(0)
 {
     instance = this;
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
@@ -245,6 +245,9 @@ currently active.
 */
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+    // Check for AGC reset before processing notifications
+    checkAndPerformAgcReset();
+
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
@@ -552,4 +555,46 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
         return res == RADIOLIB_ERR_NONE;
     }
+}
+
+void RadioLibInterface::checkAndPerformAgcReset()
+{
+    // Use a sensible default of 30 seconds for AGC/AFC reset
+    // Based on MeshCore's approach and SX126x datasheet recommendations
+    static const uint32_t AGC_RESET_INTERVAL_MS = 30 * 1000U;
+
+    uint32_t now = millis();
+
+    // Add debug info on first call or when nextAgcResetMs is not set
+    static bool first_call = true;
+    if (first_call || nextAgcResetMs == 0) {
+        LOG_DEBUG("AGC reset: now=%u, nextAgcResetMs=%u, first_call=%d", now, nextAgcResetMs, first_call);
+        first_call = false;
+        if (nextAgcResetMs == 0) {
+            // Initialize if not set by reconfigure()
+            nextAgcResetMs = now + AGC_RESET_INTERVAL_MS;
+            LOG_DEBUG("AGC reset initialized to %u", nextAgcResetMs);
+        }
+    }
+
+    if (now < nextAgcResetMs) {
+        return; // Not time yet
+    }
+
+    // Only reset if we're not actively sending, receiving, or processing packets
+    if (isSending() || isActivelyReceiving() || isReceiving) {
+        // Postpone reset by a short delay to avoid interfering with active operations
+        nextAgcResetMs = now + 1000; // Retry in 1 second
+        LOG_DEBUG("AGC reset postponed - radio busy");
+        return;
+    }
+
+    LOG_INFO("Performing AGC/AFC reset via startReceive()");
+
+    // Use MeshCore's approach: issue startReceive() to reset AGC/AFC
+    // This is cleaner than direct register manipulation and works across all radio types
+    startReceive();
+
+    // Schedule next reset
+    nextAgcResetMs = now + AGC_RESET_INTERVAL_MS;
 }

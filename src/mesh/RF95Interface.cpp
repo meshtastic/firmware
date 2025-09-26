@@ -248,6 +248,9 @@ bool RF95Interface::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
+    // Initialize AGC reset timing
+    nextAgcResetMs = millis() + 30000;
+
     startReceive(); // restart receiving
 
     return RADIOLIB_ERR_NONE;

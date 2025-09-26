@@ -181,6 +181,9 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
+    // Initialize AGC/AFC reset timing (30 second interval)
+    nextAgcResetMs = millis() + THIRY_SECONDS_MS;
+
     startReceive(); // restart receiving
 
     return RADIOLIB_ERR_NONE;
