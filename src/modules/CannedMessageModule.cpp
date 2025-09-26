@@ -75,7 +75,7 @@ CannedMessageModule::CannedMessageModule()
 
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    // 🚫 Do NOT override explicit broadcast replies
+    // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
 
     dest = newDest;
@@ -116,7 +116,7 @@ void CannedMessageModule::LaunchRepeatDestination()
 
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    // 🚫 Do NOT override explicit broadcast replies
+    // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
 
     dest = newDest;
@@ -578,7 +578,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         return false;
 
-    // === Handle Cancel key: go inactive, clear UI state ===
+    // Handle Cancel key: go inactive, clear UI state
     if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
         (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG)) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
@@ -607,7 +607,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
     } else if (isSelect) {
         const char *current = messages[currentMessageIndex];
 
-        // === [Select Destination] triggers destination selection UI ===
+        // [Select Destination] triggers destination selection UI
         if (strcmp(current, "[Select Destination]") == 0) {
             returnToCannedList = true;
             runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
@@ -618,7 +618,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             return true;
         }
 
-        // === [Exit] returns to the main/inactive screen ===
+        // [Exit] returns to the main/inactive screen
         if (strcmp(current, "[Exit]") == 0) {
             // Set runState to inactive so we return to main UI
             runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
@@ -632,7 +632,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             return true;
         }
 
-        // === [Free Text] triggers the free text input (virtual keyboard) ===
+        // [Free Text] triggers the free text input (virtual keyboard)
 #if defined(USE_VIRTUAL_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
             runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
@@ -972,7 +972,16 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     this->waitingForAck = true;
 
+    // Send to mesh
     service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+    // Show banner immediately
+    if (screen) {
+        graphics::BannerOverlayOptions opts;
+        opts.message = "Sending...";
+        opts.durationMs = 2000;
+        screen->showOverlayBanner(opts);
+    }
 
     // Save outgoing message
     StoredMessage sm;
@@ -1010,6 +1019,22 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     }
 
     playComboTune();
+
+    // Important
+    // Instead of INACTIVE here, use SENDING_ACTIVE so runOnce() does the cleanup.
+    this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+    this->payload = wantReplies ? 1 : 0;
+    requestFocus();
+
+    // Tell Screen to switch to TextMessage frame via UIFrameEvent
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+    notifyObservers(&e);
+
+    // Now mark ourselves as sending
+    this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+    this->payload = wantReplies ? 1 : 0;
+    requestFocus(); // focus only after event is dispatched
 }
 
 int32_t CannedMessageModule::runOnce()
@@ -1086,15 +1111,11 @@ int32_t CannedMessageModule::runOnce()
     }
     // Handle SENDING_ACTIVE state transition after virtual keyboard message
     else if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == 0) {
-        // This happens after virtual keyboard message sending is complete
-        LOG_INFO("Virtual keyboard message sending completed, returning to inactive state");
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        temporaryMessage = "";
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
-        this->notifyObservers(&e);
+        return INT32_MAX;
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module on inactivity
@@ -1122,7 +1143,21 @@ int32_t CannedMessageModule::runOnce()
         } else if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
                 sendText(this->dest, this->channel, this->freetext.c_str(), true);
-                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
+
+                // Clean up state but *don’t* deactivate yet
+                this->currentMessageIndex = -1;
+                this->freetext = "";
+                this->cursor = 0;
+
+                // Tell Screen to jump straight to the TextMessage frame
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+                this->notifyObservers(&e);
+
+                // Now deactivate this module
+                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+
+                return INT32_MAX; // don’t fall back into canned list
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
@@ -1136,30 +1171,53 @@ int32_t CannedMessageModule::runOnce()
                     return INT32_MAX;
                 } else {
                     sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
+
+                    // Clean up state
+                    this->currentMessageIndex = -1;
+                    this->freetext = "";
+                    this->cursor = 0;
+
+                    // Tell Screen to jump straight to the TextMessage frame
+                    UIFrameEvent e;
+                    e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+                    this->notifyObservers(&e);
+
+                    // Now deactivate this module
+                    this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+
+                    return INT32_MAX; // don’t fall back into canned list
                 }
-                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
+        // fallback clean-up if nothing above returned
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
+
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->notifyObservers(&e);
-        return 2000;
+
+        // Immediately stop, don’t linger on canned screen
+        return INT32_MAX;
     }
     // Highlight [Select Destination] initially when entering the message list
     else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
-        int selectDestination = 0;
-        for (int i = 0; i < this->messagesCount; ++i) {
-            if (strcmp(this->messages[i], "[Select Destination]") == 0) {
-                selectDestination = i;
-                break;
+        // Only auto-highlight [Select Destination] if we’re ACTIVELY browsing,
+        // not when coming back from a sent message.
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+            int selectDestination = 0;
+            for (int i = 0; i < this->messagesCount; ++i) {
+                if (strcmp(this->messages[i], "[Select Destination]") == 0) {
+                    selectDestination = i;
+                    break;
+                }
             }
+            this->currentMessageIndex = selectDestination;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         }
-        this->currentMessageIndex = selectDestination;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
@@ -1280,7 +1338,10 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
 
 bool CannedMessageModule::shouldDraw()
 {
-    return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
+    // Only allow drawing when we're in an interactive UI state.
+    return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
 }
 
 // Has the user defined any canned messages?
@@ -1539,7 +1600,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    // === Header ===
+    // Header
     int titleY = 2;
     String titleText = "Select Destination";
     titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
@@ -1547,7 +1608,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
     display->drawString(display->getWidth() / 2, titleY, titleText);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // === List Items ===
+    // List Items
     int rowYOffset = titleY + (FONT_HEIGHT_SMALL - 4);
     int numActiveChannels = this->activeChannelIndices.size();
     int totalEntries = numActiveChannels + this->filteredNodes.size();
@@ -1556,7 +1617,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
     if (this->visibleRows < 1)
         this->visibleRows = 1;
 
-    // === Clamp scrolling ===
+    // Clamp scrolling
     if (scrollIndex > totalEntries / columns)
         scrollIndex = totalEntries / columns;
     if (scrollIndex < 0)
@@ -1601,18 +1662,18 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         if (strlen(entryText) == 0 || strcmp(entryText, "Unknown") == 0)
             strcpy(entryText, "?");
 
-        // === Highlight background (if selected) ===
+        // Highlight background (if selected)
         if (itemIndex == destIndex) {
             int scrollPadding = 8; // Reserve space for scrollbar
             display->fillRect(0, yOffset + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
             display->setColor(BLACK);
         }
 
-        // === Draw entry text ===
+        // Draw entry text
         display->drawString(xOffset + 2, yOffset, entryText);
         display->setColor(WHITE);
 
-        // === Draw key icon (after highlight) ===
+        // Draw key icon (after highlight)
         if (itemIndex >= numActiveChannels) {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
@@ -1731,7 +1792,13 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    // === Draw temporary message if available ===
+    // Never draw if state is outside our UI modes
+    if (!(runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
+          runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER)) {
+        return; // bail if not in a UI state that should render
+    }
+
+    // Draw temporary message if available
     if (temporaryMessage.length() != 0) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
         LOG_DEBUG("Draw temporary message: %s", temporaryMessage.c_str());
@@ -1741,94 +1808,19 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         return;
     }
 
-    // === Emote Picker Screen ===
+    // Emote Picker Screen
     if (this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
         drawEmotePickerScreen(display, state, x, y); // <-- Call your emote picker drawer here
         return;
     }
 
-    // === Destination Selection ===
+    // Destination Selection
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
         drawDestinationSelectionScreen(display, state, x, y);
         return;
     }
 
-    // === ACK/NACK Screen ===
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
-        requestFocus();
-        EINK_ADD_FRAMEFLAG(display, COSMETIC);
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-
-#ifdef USE_EINK
-        display->setFont(FONT_SMALL);
-        int yOffset = y + 10;
-#else
-        display->setFont(FONT_MEDIUM);
-#if defined(M5STACK_UNITC6L)
-        int yOffset = y;
-#else
-        int yOffset = y + 10;
-#endif
-#endif
-
-        // Delivery Status Message
-        if (this->ack) {
-            if (this->lastSentNode == NODENUM_BROADCAST) {
-                snprintf(buffer, sizeof(buffer), "Broadcast Sent to\n%s", channels.getName(this->channel));
-            } else if (this->lastAckHopLimit > this->lastAckHopStart) {
-                snprintf(buffer, sizeof(buffer), "Delivered (%d hops)\nto %s", this->lastAckHopLimit - this->lastAckHopStart,
-                         getNodeName(this->incoming));
-            } else {
-                snprintf(buffer, sizeof(buffer), "Delivered\nto %s", getNodeName(this->incoming));
-            }
-        } else {
-            snprintf(buffer, sizeof(buffer), "Delivery failed\nto %s", getNodeName(this->incoming));
-        }
-
-        // Draw delivery message and compute y-offset after text height
-        int lineCount = 1;
-        for (const char *ptr = buffer; *ptr; ptr++) {
-            if (*ptr == '\n')
-                lineCount++;
-        }
-
-        display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
-#if defined(M5STACK_UNITC6L)
-        yOffset += lineCount * FONT_HEIGHT_MEDIUM - 5; // only 1 line gap, no extra padding
-#else
-        yOffset += lineCount * FONT_HEIGHT_MEDIUM; // only 1 line gap, no extra padding
-#endif
-#ifndef USE_EINK
-        // SNR + RSSI Compact Line
-        if (this->ack) {
-            display->setFont(FONT_SMALL);
-#if defined(M5STACK_UNITC6L)
-            snprintf(buffer, sizeof(buffer), "SNR: %.1f dB \nRSSI: %d", this->lastRxSnr, this->lastRxRssi);
-#else
-            snprintf(buffer, sizeof(buffer), "SNR: %.1f dB   RSSI: %d", this->lastRxSnr, this->lastRxRssi);
-#endif
-            display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
-        }
-#endif
-
-        return;
-    }
-
-    // === Sending Screen ===
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
-        EINK_ADD_FRAMEFLAG(display, COSMETIC);
-        requestFocus();
-#ifdef USE_EINK
-        display->setFont(FONT_SMALL);
-#else
-        display->setFont(FONT_MEDIUM);
-#endif
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
-        return;
-    }
-
-    // === Disabled Screen ===
+    // Disabled Screen
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
@@ -1836,7 +1828,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         return;
     }
 
-    // === Free Text Input Screen ===
+    // Free Text Input Screen
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus();
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
@@ -1911,7 +1903,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 }
             }
 
-            // ===== Advanced word-wrapping (emotes + text, split by word, wrap by char if needed) =====
+            // Advanced word-wrapping (emotes + text, split by word, wrap by char if needed)
             std::vector<std::vector<std::pair<bool, String>>> lines;
             std::vector<std::pair<bool, String>> currentLine;
             int lineWidth = 0;
@@ -2006,12 +1998,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         return;
     }
 
-    // === Canned Messages List ===
+    // Canned Messages List
     if (this->messagesCount > 0) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
 
-        // ====== Precompute per-row heights based on emotes (centered if present) ======
+        // Precompute per-row heights based on emotes (centered if present)
         const int baseRowSpacing = FONT_HEIGHT_SMALL - 4;
 
         int topMsg;
@@ -2167,12 +2159,6 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 {
     if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
         if (mp.decoded.request_id != 0) {
-            // Trigger screen refresh for ACK/NACK feedback
-            UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-            requestFocus();
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
-
             // Decode the routing response
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
@@ -2198,8 +2184,37 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             this->ack = isAck && (wasBroadcast || isFromDest);
 
             waitingForAck = false;
-            this->notifyObservers(&e);
-            setIntervalFromNow(3000); // Time to show ACK/NACK screen
+
+            // Capture radio metrics from this ACK/NACK packet
+            this->lastRxRssi = mp.rx_rssi;
+            this->lastRxSnr = mp.rx_snr;
+
+            // Show ACK/NACK as overlay banner
+            if (screen) {
+                graphics::BannerOverlayOptions opts;
+                static char buf[96];
+
+                if (this->ack) {
+                    if (this->lastSentNode == NODENUM_BROADCAST) {
+                        snprintf(buf, sizeof(buf), "Broadcast sent to \n%s\n\nSNR: %.1f dB RSSI: %d dBm",
+                                 channels.getName(this->channel), this->lastRxSnr, this->lastRxRssi);
+                    } else if (this->lastAckHopLimit > this->lastAckHopStart) {
+                        snprintf(buf, sizeof(buf), "Delivered (%d hops) to \n%s\n\nSNR: %.1f dB RSSI: %d dBm",
+                                 this->lastAckHopLimit - this->lastAckHopStart, getNodeName(this->incoming), this->lastRxSnr,
+                                 this->lastRxRssi);
+                    } else {
+                        snprintf(buf, sizeof(buf), "Delivered to %s\n\nSNR: \n%.1f dB RSSI: %d dBm", getNodeName(this->incoming),
+                                 this->lastRxSnr, this->lastRxRssi);
+                    }
+                } else {
+                    snprintf(buf, sizeof(buf), "Delivery failed to \n%s", getNodeName(this->incoming), this->lastRxSnr,
+                             this->lastRxRssi);
+                }
+
+                opts.message = buf;
+                opts.durationMs = 3000;
+                screen->showOverlayBanner(opts);
+            }
         }
     }
 

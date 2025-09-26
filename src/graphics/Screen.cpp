@@ -1437,16 +1437,26 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
     if (showingNormalScreen) {
         // Regenerate the frameset, potentially honoring a module's internal requestFocus() call
-        if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
+        if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET) {
             setFrames(FOCUS_MODULE);
+        }
 
-        // Regenerate the frameset, while Attempt to maintain focus on the current frame
-        else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
+        // Regenerate the frameset, while attempting to maintain focus on the current frame
+        else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND) {
             setFrames(FOCUS_PRESERVE);
+        }
 
         // Don't regenerate the frameset, just re-draw whatever is on screen ASAP
-        else if (event->action == UIFrameEvent::Action::REDRAW_ONLY)
+        else if (event->action == UIFrameEvent::Action::REDRAW_ONLY) {
             setFastFramerate();
+        }
+
+        // Jump directly to the Text Message screen
+        else if (event->action == UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE) {
+            setFrames(FOCUS_PRESERVE); // preserve current frame ordering
+            ui->switchToFrame(framesetInfo.positions.textMessage);
+            setFastFramerate(); // force redraw ASAP
+        }
     }
 
     return 0;
