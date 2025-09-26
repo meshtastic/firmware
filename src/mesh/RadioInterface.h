@@ -83,6 +83,7 @@ class RadioInterface
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 5;
+    uint8_t originalCr = cr; // Store original coding rate for restoration after adaptive retransmissions
 
     const uint8_t NUM_SYM_CAD = 2;       // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
     const uint8_t NUM_SYM_CAD_24GHZ = 4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
@@ -156,6 +157,14 @@ class RadioInterface
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) { return false; }
 
+    /**
+     * Get the frequency we saved.
+     */
+    virtual float getFreq();
+
+    // Whether we use the default frequency slot given our LoRa config (region and modem preset)
+    static bool uses_default_frequency_slot;
+
     // methods from radiohead
 
     /// Initialise the Driver transport hardware and software.
@@ -203,23 +212,38 @@ class RadioInterface
      * @return num msecs for the packet
      */
     uint32_t getPacketTime(const meshtastic_MeshPacket *p);
-    uint32_t getPacketTime(uint32_t totalPacketLen);
 
+    uint32_t getPacketTime(uint32_t payloadSize);
+
+    /**
+     * Adaptive coding rate for retransmissions
+     * Set a more robust coding rate for better reliability on retries
+     * @param retryCount How many retries this is (0 = first retry, 1 = second retry, etc.)
+     * @return true if coding rate was changed and radio was reconfigured
+     */
+    virtual bool setAdaptiveCodingRate(uint8_t retryCount);
+
+    /**
+     * Restore the original coding rate after adaptive transmission
+     * @return true if coding rate was restored and radio was reconfigured
+     */
+    virtual bool restoreOriginalCodingRate();
+
+    /**
+     * Set the radio coding rate directly (more efficient than full reconfigure)
+     * @param cr Coding rate (5-8, representing 4/5 to 4/8)
+     * @return true if coding rate was set successfully
+     */
+    virtual bool setRadioCodingRate(uint8_t cr);
+
+  protected:
     /**
      * Get the channel we saved.
      */
     uint32_t getChannelNum();
 
-    /**
-     * Get the frequency we saved.
-     */
-    virtual float getFreq();
-
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
-
-    // Whether we use the default frequency slot given our LoRa config (region and modem preset)
-    static bool uses_default_frequency_slot;
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()

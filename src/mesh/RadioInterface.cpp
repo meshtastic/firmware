@@ -530,7 +530,7 @@ void RadioInterface::applyModemConfig()
                 cr = 5;
                 sf = 10;
                 break;
-            default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
+            default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default
                 bw = (myRegion->wideLora) ? 812.5 : 250;
                 cr = 5;
                 sf = 11;
@@ -564,6 +564,7 @@ void RadioInterface::applyModemConfig()
             if (bw == 1600)
                 bw = 1625.0;
         }
+        originalCr = cr;
 
         if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
             static const char *err_string = "Regional frequency range is smaller than bandwidth. Fall back to default preset";
@@ -637,6 +638,10 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec", slotTimeMsec);
+
+    // Save the original coding rate for potential adaptive retransmissions
+    originalCr = cr;
+    LOG_DEBUG("Default coding rate: 4/%d", originalCr);
 }
 
 /** Slottime is the time to detect a transmission has started, consisting of:
@@ -724,4 +729,49 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     sendingPacket = p;
     return p->encrypted.size + sizeof(PacketHeader);
+}
+
+bool RadioInterface::setAdaptiveCodingRate(uint8_t retryCount)
+{
+    // Save original coding rate if this is the first retry
+    if (retryCount == 0) {
+        originalCr = cr;
+    }
+
+    // Progressive coding rate adaptation for better reliability
+    // Always increase from the current/original coding rate, never decrease
+    uint8_t newCr = originalCr + retryCount + 1;
+
+    // Clamp to maximum coding rate of 8
+    if (newCr > 8) {
+        newCr = 8;
+    }
+
+    if (newCr != cr) {
+        LOG_INFO("Adaptive coding rate: retry %d, changing CR from 4/%d to 4/%d", retryCount, cr, newCr);
+        cr = newCr;
+        // Use the more efficient direct coding rate change method if available
+        return setRadioCodingRate(cr);
+    }
+
+    return false; // No change made
+}
+
+bool RadioInterface::restoreOriginalCodingRate()
+{
+    if (cr != originalCr) {
+        LOG_INFO("Restoring original coding rate from 4/%d to 4/%d", cr, originalCr);
+        cr = originalCr;
+        // Use the more efficient direct coding rate change method if available
+        return setRadioCodingRate(cr);
+    }
+
+    return false; // No change made
+}
+
+bool RadioInterface::setRadioCodingRate(uint8_t cr)
+{
+    // Default implementation falls back to full reconfigure
+    // Subclasses should override this for more efficient direct coding rate changes
+    return reconfigure();
 }

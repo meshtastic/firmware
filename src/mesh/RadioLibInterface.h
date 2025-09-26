@@ -205,6 +205,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
     /**
+     * Set the coding rate on the radio hardware directly
+     * Base implementation just calls reconfigure(), but subclasses should override
+     * for more efficient direct coding rate changes
+     * @param cr The coding rate to set (5-8 for 4/5 to 4/8)
+     * @return true if successful
+     */
+    virtual bool setRadioCodingRate(uint8_t cr);
+
+    /**
      * Subclasses must override, implement and then call into this base class implementation
      */
     virtual void setStandby();

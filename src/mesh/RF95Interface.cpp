@@ -337,4 +337,17 @@ bool RF95Interface::sleep()
 
     return true;
 }
+
+bool RF95Interface::setRadioCodingRate(uint8_t cr)
+{
+    // Direct hardware call for efficient coding rate change
+    int state = lora->setCodingRate(cr);
+    if (state != RADIOLIB_ERR_NONE) {
+        LOG_WARN("Failed to set coding rate to 4/%d, error %d", cr, state);
+        return false;
+    }
+    LOG_DEBUG("Set coding rate to 4/%d", cr);
+    return true;
+}
+
 #endif

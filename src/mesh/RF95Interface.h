@@ -65,6 +65,9 @@ class RF95Interface : public RadioLibInterface
      */
     virtual void configHardwareForSend() override;
 
+    /// Efficient method to set coding rate without full reconfiguration
+    virtual bool setRadioCodingRate(uint8_t cr) override;
+
   private:
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);

@@ -215,6 +215,14 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
     auto old = findPendingPacket(key);
     if (old) {
         auto p = old->packet;
+
+        // Restore original coding rate since retransmissions are no longer needed
+        if (iface) {
+            if (iface->restoreOriginalCodingRate()) {
+                LOG_DEBUG("Restored default CR after successful ACK for packet 0x%x", p->id);
+            }
+        }
+
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
@@ -274,6 +282,11 @@ int32_t NextHopRouter::doRetransmissions()
         // FIXME, handle 51 day rolloever here!!!
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
+                // Final failure - restore original coding rate before giving up
+                if (iface) {
+                    iface->restoreOriginalCodingRate();
+                }
+
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
                               p.packet->id);
@@ -285,6 +298,23 @@ int32_t NextHopRouter::doRetransmissions()
             } else {
                 LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
+
+                // Calculate retry count (NUM_RELIABLE_RETX-1 = 2 initially, counts down)
+                uint8_t retryCount = (NUM_RELIABLE_RETX - 1) - p.numRetransmissions;
+
+                LOG_DEBUG("Retransmit packet id=0x%x, numRetransmissions=%d, retryCount=%d", p.packet->id, p.numRetransmissions,
+                          retryCount);
+
+                // Apply adaptive coding rate for better reliability on retries
+                bool adaptiveCrApplied = false;
+                if (iface) {
+                    adaptiveCrApplied = iface->setAdaptiveCodingRate(retryCount);
+                    if (adaptiveCrApplied) {
+                        LOG_INFO("Applied adaptive coding rate for retry %d", retryCount);
+                    } else {
+                        LOG_DEBUG("No adaptive coding rate change needed for retry %d", retryCount);
+                    }
+                }
 
                 if (!isBroadcast(p.packet->to)) {
                     if (p.numRetransmissions == 1) {
@@ -304,6 +334,13 @@ int32_t NextHopRouter::doRetransmissions()
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
                     FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                }
+
+                // Restore original coding rate after transmission
+                if (adaptiveCrApplied && iface) {
+                    if (iface->restoreOriginalCodingRate()) {
+                        LOG_DEBUG("Restored original coding rate after retransmission");
+                    }
                 }
 
                 // Queue again

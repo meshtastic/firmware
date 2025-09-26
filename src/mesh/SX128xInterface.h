@@ -67,4 +67,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
+
+    /// Efficient method to set coding rate without full reconfiguration
+    virtual bool setRadioCodingRate(uint8_t cr) override;
 };

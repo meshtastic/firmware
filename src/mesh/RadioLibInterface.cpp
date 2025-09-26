@@ -553,3 +553,10 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         return res == RADIOLIB_ERR_NONE;
     }
 }
+
+bool RadioLibInterface::setRadioCodingRate(uint8_t cr)
+{
+    // Default implementation just calls reconfigure()
+    // Subclasses should override this for more efficient direct coding rate changes
+    return reconfigure();
+}
