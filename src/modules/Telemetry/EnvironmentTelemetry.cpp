@@ -185,12 +185,15 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
     // order by priority of metrics/values (low top, high bottom)
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 #if __has_include(<DFRobot_LarkWeatherStation.h>)
     addSensor<DFRobotLarkSensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_LARK);
 #endif
 #if __has_include(<DFRobot_RainfallSensor.h>)
     addSensor<DFRobotGravitySensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN);
+#endif
+#if __has_include(<Adafruit_AHTX0.h>)
+    addSensor<AHT10Sensor>(i2cScanner, ScanI2C::DeviceType::AHT10);
 #endif
 #if __has_include(<Adafruit_BMP085.h>)
     addSensor<BMP085Sensor>(i2cScanner, ScanI2C::DeviceType::BMP_085);
@@ -201,9 +204,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_LTR390.h>)
     addSensor<LTR390UVSensor>(i2cScanner, ScanI2C::DeviceType::LTR390UV);
 #endif
-#if __has_include(<Adafruit_AHTX0.h>)
-    addSensor<AHT10Sensor>(i2cScanner, ScanI2C::DeviceType::AHT10);
-#endif
 #if __has_include(<bsec2.h>)
     addSensor<BME680Sensor>(i2cScanner, ScanI2C::DeviceType::BME_680);
 #endif
@@ -213,7 +213,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_DPS310.h>)
     addSensor<DPS310Sensor>(i2cScanner, ScanI2C::DeviceType::DPS310);
 #endif
-
 #if __has_include(<Adafruit_MCP9808.h>)
     addSensor<MCP9808Sensor>(i2cScanner, ScanI2C::DeviceType::MCP9808);
 #endif
@@ -317,11 +316,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #ifdef HAS_RAKPROT
 
             result = rak9154Sensor.runOnce();
-#endif
-#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
-            if (rak12035Sensor.hasSensor()) {
-                result = rak12035Sensor.runOnce();
-            }
 #endif
 #endif
         }
@@ -614,14 +608,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
 #endif
-#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) &&                                                             \
-                  RAK_4631 ==                                                                                                    \
-                      1 // Not really needed, but may as well just skip at a lower level it if no library or not a RAK_4631
-    if (rak12035Sensor.hasSensor()) {
-        valid = valid && rak12035Sensor.getMetrics(m);
-        hasSensor = true;
-    }
-#endif
 #endif
     return valid && hasSensor;
 }
@@ -772,15 +758,6 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
-#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) &&                                                             \
-                  RAK_4631 ==                                                                                                    \
-                      1 // Not really needed, but may as well just skip it at a lower level if no library or not a RAK_4631
-    if (rak12035Sensor.hasSensor()) {
-        result = rak12035Sensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
-#endif
 #endif
     return result;
 }
