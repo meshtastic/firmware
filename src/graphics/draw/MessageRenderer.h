@@ -1,7 +1,9 @@
 #pragma once
+#include "MessageStore.h" // for StoredMessage
 #include "OLEDDisplay.h"
 #include "OLEDDisplayUi.h"
 #include "graphics/emotes.h"
+#include "mesh/generated/meshtastic/mesh.pb.h" // for meshtastic_MeshPacket
 #include <string>
 #include <vector>
 
@@ -10,7 +12,7 @@ namespace graphics
 namespace MessageRenderer
 {
 
-// === Thread filter modes ===
+// Thread filter modes
 enum class ThreadMode { ALL, CHANNEL, DIRECT };
 
 // Setter for switching thread mode
@@ -49,6 +51,12 @@ void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &
 
 // Reset scroll state when new messages arrive
 void resetScrollState();
+
+// Helper to auto-select the correct thread mode from a message
+void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet);
+
+// Handles a new incoming/outgoing message: banner, wake, thread select, scroll reset
+void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet);
 
 } // namespace MessageRenderer
 } // namespace graphics

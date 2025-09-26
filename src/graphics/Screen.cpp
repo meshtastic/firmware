@@ -283,12 +283,6 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     pi.drawFrame(display, state, x, y);
 }
 
-// Ignore messages originating from phone (from the current node 0x0) unless range test or store and forward module are enabled
-static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
-{
-    return packet->from != 0 && !moduleConfig.store_forward.enabled;
-}
-
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
@@ -514,10 +508,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 void Screen::setup()
 {
 
-    // === Enable display rendering ===
+    // Enable display rendering
     useDisplay = true;
 
-    // === Load saved brightness from UI config ===
+    // Load saved brightness from UI config
     // For OLED displays (SSD1306), default brightness is 255 if not set
     if (uiconfig.screen_brightness == 0) {
 #if defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
@@ -529,7 +523,7 @@ void Screen::setup()
         brightness = uiconfig.screen_brightness;
     }
 
-    // === Detect OLED subtype (if supported by board variant) ===
+    // Detect OLED subtype (if supported by board variant)
 #ifdef AutoOLEDWire_h
     if (isAUTOOled)
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
@@ -544,7 +538,7 @@ void Screen::setup()
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
-    // === Initialize display and UI system ===
+    // Initialize display and UI system
     ui->init();
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
@@ -556,7 +550,7 @@ void Screen::setup()
     ui->disableAllIndicators();            // Disable page indicator dots
     ui->getUiState()->userData = this;     // Allow static callbacks to access Screen instance
 
-    // === Apply loaded brightness ===
+    // Apply loaded brightness
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SPISSD1306)
@@ -564,20 +558,20 @@ void Screen::setup()
 #endif
     LOG_INFO("Applied screen brightness: %d", brightness);
 
-    // === Set custom overlay callbacks ===
+    // Set custom overlay callbacks
     static OverlayCallback overlays[] = {
         graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    // === Enable UTF-8 to display mapping ===
+    // Enable UTF-8 to display mapping
     dispdev->setFontTableLookupFunction(customFontTableLookup);
 
 #ifdef USERPREFS_OEM_TEXT
     logo_timeout *= 2; // Give more time for branded boot logos
 #endif
 
-    // === Configure alert frames (e.g., "Resuming..." or region name) ===
+    // Configure alert frames (e.g., "Resuming..." or region name)
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip slow refresh
     alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
 #ifdef ARCH_ESP32
@@ -593,10 +587,10 @@ void Screen::setup()
     ui->setFrames(alertFrames, 1);
     ui->disableAutoTransition(); // Require manual navigation between frames
 
-    // === Log buffer for on-screen logs (3 lines max) ===
+    // Log buffer for on-screen logs (3 lines max)
     dispdev->setLogBuffer(3, 32);
 
-    // === Optional screen mirroring or flipping (e.g. for T-Beam orientation) ===
+    // Optional screen mirroring or flipping (e.g. for T-Beam orientation)
 #ifdef SCREEN_MIRROR
     dispdev->mirrorScreen();
 #else
@@ -612,7 +606,7 @@ void Screen::setup()
     }
 #endif
 
-    // === Generate device ID from MAC address ===
+    // Generate device ID from MAC address
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
@@ -621,7 +615,7 @@ void Screen::setup()
     handleSetOn(false); // Ensure proper init for Arduino targets
 #endif
 
-    // === Turn on display and trigger first draw ===
+    //  Turn on display and trigger first draw
     handleSetOn(true);
     determineResolution(dispdev->height(), dispdev->width());
     ui->update();
@@ -644,7 +638,7 @@ void Screen::setup()
     touchScreenImpl1->init();
 #endif
 
-    // === Subscribe to device status updates ===
+    // Subscribe to device status updates
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
@@ -652,16 +646,14 @@ void Screen::setup()
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminMessageObserver.observe(adminModule);
 #endif
-    if (textMessageModule)
-        textMessageObserver.observe(textMessageModule);
     if (inputBroker)
         inputObserver.observe(inputBroker);
 
-    // === Load persisted messages into RAM ===
+    // Load persisted messages into RAM
     messageStore.loadFromFlash();
     LOG_INFO("MessageStore loaded from flash");
 
-    // === Notify modules that support UI events ===
+    // Notify modules that support UI events
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
@@ -1130,7 +1122,7 @@ void Screen::setFrames(FrameFocus focus)
     }
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
-    this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
+    this->frameCount = numframes; // Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
 
     ui->setFrames(normalFrames, numframes);
@@ -1149,10 +1141,6 @@ void Screen::setFrames(FrameFocus focus)
         break;
     case FOCUS_FAULT:
         ui->switchToFrame(fsi.positions.fault);
-        break;
-    case FOCUS_TEXTMESSAGE:
-        hasUnreadMessage = false; // ✅ Clear when message is *viewed*
-        ui->switchToFrame(fsi.positions.textMessage);
         break;
     case FOCUS_MODULE:
         // Whichever frame was marked by MeshModule::requestFocus(), if any
@@ -1435,120 +1423,6 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         nodeDB->updateGUI = false;
         break;
     }
-
-    return 0;
-}
-// Handles when message is received; will jump to text message frame.
-int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
-{
-    if (!showingNormalScreen)
-        return 0;
-
-    // === Build stored message ===
-    StoredMessage sm;
-
-    // Always use our local time
-    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-    if (nowSecs > 0) {
-        sm.timestamp = nowSecs;
-        sm.isBootRelative = false;
-    } else {
-        sm.timestamp = millis() / 1000;
-        sm.isBootRelative = true; // mark for later upgrade
-    }
-
-    sm.channelIndex = packet->channel;
-    sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
-
-    if (packet->from == 0) {
-        // Outgoing message (sent by us, typically via phone)
-        sm.sender = nodeDB->getNodeNum(); // us
-        if (packet->decoded.dest == 0 || packet->decoded.dest == NODENUM_BROADCAST) {
-            // Fix: treat 0 as broadcast, not DM:00000000
-            sm.dest = NODENUM_BROADCAST;
-            sm.type = MessageType::BROADCAST;
-        } else {
-            sm.dest = packet->decoded.dest;
-            sm.type = MessageType::DM_TO_US;
-        }
-
-    } else {
-        // === Incoming message ===
-        sm.sender = packet->from;
-        if (packet->to == NODENUM_BROADCAST || packet->decoded.dest == NODENUM_BROADCAST) {
-            sm.dest = NODENUM_BROADCAST;
-            sm.type = MessageType::BROADCAST;
-        } else {
-            sm.dest = nodeDB->getNodeNum(); // our node (we are DM target)
-            sm.type = MessageType::DM_TO_US;
-        }
-
-        hasUnreadMessage = true; // only incoming triggers mail icon
-
-        // Wake/force display if configured
-        if (shouldWakeOnReceivedMessage()) {
-            setOn(true);
-            forceDisplay();
-        }
-
-        // Prepare banner
-        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-        const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
-
-        const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-        char banner[256];
-
-        bool isAlert = false;
-        for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-            if (msgRaw[i] == '\x07') { // bell
-                isAlert = true;
-                break;
-            }
-        }
-
-        if (isAlert) {
-            if (longName && longName[0]) {
-                snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
-            } else {
-                strcpy(banner, "Alert Received");
-            }
-        } else {
-            if (longName && longName[0]) {
-#if defined(M5STACK_UNITC6L)
-                strcpy(banner, "New Message");
-#else
-                snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-#endif
-                } else {
-                    strcpy(banner, "New Message");
-                }
-        }
-
-#if defined(M5STACK_UNITC6L)
-            screen->setOn(true);
-            screen->showSimpleBanner(banner, 1500);
-            playLongBeep();
-#else
-            screen->showSimpleBanner(banner, 3000);
-#endif
-    }
-
-    // Save to store (both outgoing + incoming)
-    messageStore.addLiveMessage(sm);
-
-    // Keep frame set active
-    setFrames(FOCUS_PRESERVE);
-
-    // Auto-switch thread view
-    if (sm.type == MessageType::BROADCAST) {
-        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
-    } else if (sm.type == MessageType::DM_TO_US) {
-        uint32_t peer = (packet->from == 0) ? sm.dest : sm.sender;
-        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, peer);
-    }
-
-    // Reset scroll so newest message starts from the top
-    graphics::MessageRenderer::resetScrollState();
 
     return 0;
 }

@@ -1,9 +1,9 @@
 #include "MessageStore.h"
 #include "FSCommon.h"
-#include "NodeDB.h" // for nodeDB->getNodeNum()
+#include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
-#include "configuration.h" // for millis()
+#include "configuration.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 
@@ -15,7 +15,7 @@ MessageStore::MessageStore(const std::string &label)
     filename = "/Messages_" + label + ".msgs";
 }
 
-// === Live message handling (RAM only) ===
+// Live message handling (RAM only)
 void MessageStore::addLiveMessage(const StoredMessage &msg)
 {
     if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
@@ -24,7 +24,7 @@ void MessageStore::addLiveMessage(const StoredMessage &msg)
     liveMessages.push_back(msg);
 }
 
-// === Persistence queue (used only on shutdown/reboot) ===
+// Persistence queue (used only on shutdown/reboot)
 void MessageStore::addMessage(const StoredMessage &msg)
 {
     if (messages.size() >= MAX_MESSAGES_SAVED) {
@@ -32,8 +32,7 @@ void MessageStore::addMessage(const StoredMessage &msg)
     }
     messages.push_back(msg);
 }
-
-void MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
+const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
     StoredMessage sm;
 
@@ -47,26 +46,41 @@ void MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
         sm.isBootRelative = true; // mark for later upgrade
     }
 
-    sm.sender = packet.from;
     sm.channelIndex = packet.channel;
     sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
 
-    // Classification logic
-    if (packet.to == NODENUM_BROADCAST || packet.decoded.dest == NODENUM_BROADCAST) {
-        sm.dest = NODENUM_BROADCAST;
-        sm.type = MessageType::BROADCAST;
-    } else if (packet.to == nodeDB->getNodeNum()) {
-        sm.dest = nodeDB->getNodeNum(); // DM to us
-        sm.type = MessageType::DM_TO_US;
+    if (packet.from == 0) {
+        // Phone-originated (outgoing)
+        sm.sender = nodeDB->getNodeNum(); // our node ID
+        if (packet.decoded.dest == 0 || packet.decoded.dest == NODENUM_BROADCAST) {
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+        } else {
+            sm.dest = packet.decoded.dest;
+            sm.type = MessageType::DM_TO_US;
+        }
     } else {
-        sm.dest = NODENUM_BROADCAST; // fallback
-        sm.type = MessageType::BROADCAST;
+        // Normal incoming
+        sm.sender = packet.from;
+        if (packet.to == NODENUM_BROADCAST || packet.decoded.dest == NODENUM_BROADCAST) {
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+        } else if (packet.to == nodeDB->getNodeNum()) {
+            sm.dest = nodeDB->getNodeNum(); // DM to us
+            sm.type = MessageType::DM_TO_US;
+        } else {
+            sm.dest = NODENUM_BROADCAST; // fallback
+            sm.type = MessageType::BROADCAST;
+        }
     }
 
     addLiveMessage(sm);
+
+    // Return reference to the most recently stored message
+    return liveMessages.back();
 }
 
-// === Outgoing/manual message ===
+// Outgoing/manual message
 void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text)
 {
     StoredMessage sm;
@@ -92,7 +106,7 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     addLiveMessage(sm);
 }
 
-// === Save RAM queue to flash (called on shutdown) ===
+// Save RAM queue to flash (called on shutdown)
 void MessageStore::saveToFlash()
 {
 #ifdef FSCom
@@ -128,7 +142,7 @@ void MessageStore::saveToFlash()
 #endif
 }
 
-// === Load persisted messages into RAM (called at boot) ===
+// Load persisted messages into RAM (called at boot)
 void MessageStore::loadFromFlash()
 {
     messages.clear();
@@ -189,7 +203,7 @@ void MessageStore::loadFromFlash()
 #endif
 }
 
-// === Clear all messages (RAM + persisted queue) ===
+// Clear all messages (RAM + persisted queue)
 void MessageStore::clearAllMessages()
 {
     liveMessages.clear();
@@ -203,7 +217,7 @@ void MessageStore::clearAllMessages()
 #endif
 }
 
-// === Dismiss oldest message (RAM + persisted queue) ===
+// Dismiss oldest message (RAM + persisted queue)
 void MessageStore::dismissOldestMessage()
 {
     if (!liveMessages.empty()) {
@@ -215,7 +229,7 @@ void MessageStore::dismissOldestMessage()
     saveToFlash();
 }
 
-// === Dismiss newest message (RAM + persisted queue) ===
+// Dismiss newest message (RAM + persisted queue)
 void MessageStore::dismissNewestMessage()
 {
     if (!liveMessages.empty()) {
@@ -227,7 +241,7 @@ void MessageStore::dismissNewestMessage()
     saveToFlash();
 }
 
-// === Helper filters for future use ===
+// Helper filters for future use
 std::deque<StoredMessage> MessageStore::getChannelMessages(uint8_t channel) const
 {
     std::deque<StoredMessage> result;
@@ -250,7 +264,7 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
     return result;
 }
 
-// === Upgrade boot-relative timestamps once RTC is valid ===
+// Upgrade boot-relative timestamps once RTC is valid
 // Only same-boot boot-relative messages are healed.
 // Persisted boot-relative messages from old boots stay ??? forever.
 void MessageStore::upgradeBootRelativeTimestamps()
@@ -280,5 +294,5 @@ void MessageStore::upgradeBootRelativeTimestamps()
     }
 }
 
-// === Global definition ===
+// Global definition
 MessageStore messageStore("default");

@@ -1,5 +1,5 @@
 #pragma once
-#include "mesh/generated/meshtastic/mesh.pb.h" // for meshtastic_MeshPacket
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
 #include <deque>
 #include <string>
@@ -42,32 +42,31 @@ class MessageStore
   public:
     explicit MessageStore(const std::string &label);
 
-    // === Live RAM methods (always current, used by UI and runtime) ===
+    // Live RAM methods (always current, used by UI and runtime)
     void addLiveMessage(const StoredMessage &msg);
     const std::deque<StoredMessage> &getLiveMessages() const { return liveMessages; }
 
-    // === Persistence methods (used only on boot/shutdown) ===
-    void addMessage(const StoredMessage &msg);           // Add to persistence queue
-    void addFromPacket(const meshtastic_MeshPacket &mp); // Incoming → RAM only
-    void addFromString(uint32_t sender, uint8_t channelIndex,
-                       const std::string &text); // Outgoing/manual → RAM only
-    void saveToFlash();                          // Persist RAM → flash
-    void loadFromFlash();                        // Restore flash → RAM
+    // Persistence methods (used only on boot/shutdown)
+    void addMessage(const StoredMessage &msg);
+    const StoredMessage &addFromPacket(const meshtastic_MeshPacket &mp); // Incoming/outgoing → RAM only
+    void addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text);
+    void saveToFlash();
+    void loadFromFlash();
 
-    // === Clear all messages (RAM + persisted queue) ===
+    // Clear all messages (RAM + persisted queue)
     void clearAllMessages();
 
-    // === Dismiss helpers ===
-    void dismissOldestMessage(); // Drop front() from history
-    void dismissNewestMessage(); // Drop back() from history (useful for current screen)
+    // Dismiss helpers
+    void dismissOldestMessage();
+    void dismissNewestMessage();
 
-    // === Unified accessor (for UI code, defaults to RAM buffer) ===
+    // Unified accessor (for UI code, defaults to RAM buffer)
     const std::deque<StoredMessage> &getMessages() const { return liveMessages; }
 
     // Optional: direct access to persisted copy (mainly for debugging/inspection)
     const std::deque<StoredMessage> &getPersistedMessages() const { return messages; }
 
-    // === Helper filters for future use ===
+    // Helper filters for future use
     std::deque<StoredMessage> getChannelMessages(uint8_t channel) const;
     std::deque<StoredMessage> getDirectMessages() const;
     std::deque<StoredMessage> getConversationWith(uint32_t peer) const;
@@ -76,14 +75,10 @@ class MessageStore
     void upgradeBootRelativeTimestamps();
 
   private:
-    // RAM buffer (always current, main source for UI)
     std::deque<StoredMessage> liveMessages;
-
-    // Persisted storage (only updated on shutdown, loaded at boot)
-    std::deque<StoredMessage> messages;
-
+    std::deque<StoredMessage> messages; // persisted copy
     std::string filename;
 };
 
-// === Global instance (defined in MessageStore.cpp) ===
+// Global instance (defined in MessageStore.cpp)
 extern MessageStore messageStore;

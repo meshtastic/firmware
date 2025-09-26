@@ -1,26 +1,3 @@
-/*
-BaseUI
-
-Developed and Maintained By:
-- Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (Tropho) – Project management, structural planning, and testing
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-*/
-
 #include "configuration.h"
 #if HAS_SCREEN
 #include "MessageRenderer.h"
@@ -28,25 +5,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Core includes
 #include "MessageStore.h"
 #include "NodeDB.h"
+#include "UIRenderer.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TimeFormatters.h"
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
-
-// Additional includes for UI rendering
-#include "UIRenderer.h"
-#include "graphics/TimeFormatters.h"
-
-// Additional includes for dependencies
 #include <string>
 #include <vector>
 
 // External declarations
 extern bool hasUnreadMessage;
 extern meshtastic_DeviceState devicestate;
+extern graphics::Screen *screen;
 
 using graphics::Emote;
 using graphics::emotes;
@@ -65,7 +40,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
 
-    // === Step 1: Find tallest emote in the line ===
+    // Step 1: Find tallest emote in the line
     int maxIconHeight = fontHeight;
     for (size_t i = 0; i < line.length();) {
         bool matched = false;
@@ -248,7 +223,7 @@ uint32_t getThreadPeer()
     return currentPeer;
 }
 
-// === Accessors for menuHandler ===
+// Accessors for menuHandler
 const std::vector<int> &getSeenChannels()
 {
     return seenChannels;
@@ -653,6 +628,73 @@ void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &
                 drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
+    }
+}
+
+void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
+{
+    if (packet.from != 0) {
+        hasUnreadMessage = true;
+
+        if (shouldWakeOnReceivedMessage()) {
+            screen->setOn(true);
+            // screen->forceDisplay();  <-- remove, let Screen handle this
+        }
+
+        // Banner logic
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
+        const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+        const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
+
+        char banner[256];
+        bool isAlert = false;
+        for (size_t i = 0; i < packet.decoded.payload.size && i < 100; i++) {
+            if (msgRaw[i] == '\x07') {
+                isAlert = true;
+                break;
+            }
+        }
+
+        if (isAlert) {
+            if (longName && longName[0])
+                snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+            else
+                strcpy(banner, "Alert Received");
+        } else {
+            if (longName && longName[0]) {
+#if defined(M5STACK_UNITC6L)
+                strcpy(banner, "New Message");
+#else
+                snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+#endif
+            } else
+                strcpy(banner, "New Message");
+        }
+
+        // Shorter banner if already in a conversation (Channel or Direct)
+        bool inThread = (getThreadMode() != ThreadMode::ALL);
+
+#if defined(M5STACK_UNITC6L)
+        screen->setOn(true);
+        screen->showSimpleBanner(banner, inThread ? 1000 : 1500);
+        playLongBeep();
+#else
+        screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+#endif
+    }
+
+    // No setFrames() here anymore
+    setThreadFor(sm, packet);
+    resetScrollState();
+}
+
+void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
+{
+    if (sm.type == MessageType::BROADCAST) {
+        setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
+    } else if (sm.type == MessageType::DM_TO_US) {
+        uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
+        setThreadMode(ThreadMode::DIRECT, -1, peer);
     }
 }
 
