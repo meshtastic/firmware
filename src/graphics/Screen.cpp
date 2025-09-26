@@ -1272,11 +1272,8 @@ void Screen::hideCurrentFrame()
 {
     uint8_t currentFrame = ui->getUiState()->currentFrame;
     bool dismissed = false;
-    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
-        LOG_INFO("Hide Text Message");
-        devicestate.has_rx_text_message = false;
-        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-    } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+
+    if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Hide Waypoint");
         devicestate.has_rx_waypoint = false;
         hiddenFrames.waypoint = true;
@@ -1292,7 +1289,7 @@ void Screen::hideCurrentFrame()
     }
 
     if (dismissed) {
-        setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
+        setFrames(FOCUS_DEFAULT);
     }
 }
 
@@ -1444,100 +1441,88 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 // Handles when message is received; will jump to text message frame.
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
-    if (showingNormalScreen) {
-        if (packet->from == 0) {
-            // === Outgoing message (likely sent from phone) ===
-            devicestate.has_rx_text_message = false;
-            memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-            hiddenFrames.textMessage = true;
-            hasUnreadMessage = false; // Clear unread state when user replies
+    if (!showingNormalScreen)
+        return 0;
 
-            setFrames(FOCUS_PRESERVE); // Stay on same frame, silently update frame list
+    // === Build stored message ===
+    StoredMessage sm;
 
-            // === Save our own outgoing message to live RAM ===
-            StoredMessage sm;
+    // Always use our local time
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs > 0) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true; // mark for later upgrade
+    }
 
-            // Always use our local time
-            uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-            if (nowSecs > 0) {
-                sm.timestamp = nowSecs;
-                sm.isBootRelative = false;
-            } else {
-                sm.timestamp = millis() / 1000;
-                sm.isBootRelative = true; // mark for later upgrade
-            }
+    sm.channelIndex = packet->channel;
+    sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
 
-            sm.sender = nodeDB->getNodeNum(); // us
-            sm.channelIndex = packet->channel;
-            sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
-
-            // Distinguish between broadcast vs DM to peer
-            if (packet->decoded.dest == NODENUM_BROADCAST) {
-                sm.dest = NODENUM_BROADCAST;
-                sm.type = MessageType::BROADCAST;
-            } else {
-                sm.dest = packet->decoded.dest; // peer node, not us
-                sm.type = MessageType::DM_TO_US;
-            }
-
-            messageStore.addLiveMessage(sm); // RAM only (flash updated at shutdown)
-
-            // 🔹 Auto-switch thread view
-            if (sm.type == MessageType::BROADCAST) {
-                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
-            } else if (sm.type == MessageType::DM_TO_US) {
-                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
-                                                         sm.dest // use peer node
-                );
-            }
-
-            // 🔹 Reset scroll so newest message starts from the top
-            graphics::MessageRenderer::resetScrollState();
+    if (packet->from == 0) {
+        // Outgoing message (sent by us, typically via phone)
+        sm.sender = nodeDB->getNodeNum(); // us
+        if (packet->decoded.dest == 0 || packet->decoded.dest == NODENUM_BROADCAST) {
+            // Fix: treat 0 as broadcast, not DM:00000000
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
         } else {
-            // === Incoming message ===
-            devicestate.has_rx_text_message = true; // Needed to include the message frame
-            hasUnreadMessage = true;                // Enables mail icon in the header
-            setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
+            sm.dest = packet->decoded.dest;
+            sm.type = MessageType::DM_TO_US;
+        }
 
-            // Only wake/force display if the configuration allows it
-            if (shouldWakeOnReceivedMessage()) {
-                setOn(true);    // Wake up the screen first
-                forceDisplay(); // Forces screen redraw
+    } else {
+        // === Incoming message ===
+        sm.sender = packet->from;
+        if (packet->to == NODENUM_BROADCAST || packet->decoded.dest == NODENUM_BROADCAST) {
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+        } else {
+            sm.dest = nodeDB->getNodeNum(); // our node (we are DM target)
+            sm.type = MessageType::DM_TO_US;
+        }
+
+        hasUnreadMessage = true; // only incoming triggers mail icon
+
+        // Wake/force display if configured
+        if (shouldWakeOnReceivedMessage()) {
+            setOn(true);
+            forceDisplay();
+        }
+
+        // Prepare banner
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+        const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+
+        const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+        char banner[256];
+
+        bool isAlert = false;
+        for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+            if (msgRaw[i] == '\x07') { // bell
+                isAlert = true;
+                break;
             }
+        }
 
-            // === Prepare banner content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
-
-            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-            char banner[256];
-
-            // Check for bell character in message to determine alert type
-            bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
-
-            if (isAlert) {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
-                } else {
-                    strcpy(banner, "Alert Received");
-                }
+        if (isAlert) {
+            if (longName && longName[0]) {
+                snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
             } else {
-                if (longName && longName[0]) {
+                strcpy(banner, "Alert Received");
+            }
+        } else {
+            if (longName && longName[0]) {
 #if defined(M5STACK_UNITC6L)
-                    strcpy(banner, "New Message");
+                strcpy(banner, "New Message");
 #else
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
 #endif
                 } else {
                     strcpy(banner, "New Message");
                 }
-            }
+        }
 
 #if defined(M5STACK_UNITC6L)
             screen->setOn(true);
@@ -1546,48 +1531,24 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 #else
             screen->showSimpleBanner(banner, 3000);
 #endif
-
-            // === Save this incoming message to live RAM ===
-            StoredMessage sm;
-
-            // Always use our local time
-            uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-            if (nowSecs > 0) {
-                sm.timestamp = nowSecs;
-                sm.isBootRelative = false;
-            } else {
-                sm.timestamp = millis() / 1000;
-                sm.isBootRelative = true; // mark for later upgrade
-            }
-
-            sm.sender = packet->from;
-            sm.channelIndex = packet->channel;
-            sm.text = std::string(reinterpret_cast<const char *>(packet->decoded.payload.bytes));
-
-            // Distinguish between broadcast vs DM to us
-            if (packet->to == NODENUM_BROADCAST || packet->decoded.dest == NODENUM_BROADCAST) {
-                sm.dest = NODENUM_BROADCAST;
-                sm.type = MessageType::BROADCAST;
-            } else {
-                sm.dest = nodeDB->getNodeNum(); // our node (we are DM target)
-                sm.type = MessageType::DM_TO_US;
-            }
-
-            messageStore.addLiveMessage(sm); // RAM only (flash updated at shutdown)
-
-            // Auto-switch thread view
-            if (sm.type == MessageType::BROADCAST) {
-                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
-            } else if (sm.type == MessageType::DM_TO_US) {
-                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
-                                                         sm.sender // use peer node
-                );
-            }
-
-            // Reset scroll so newest message starts from the top
-            graphics::MessageRenderer::resetScrollState();
-        }
     }
+
+    // Save to store (both outgoing + incoming)
+    messageStore.addLiveMessage(sm);
+
+    // Keep frame set active
+    setFrames(FOCUS_PRESERVE);
+
+    // Auto-switch thread view
+    if (sm.type == MessageType::BROADCAST) {
+        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
+    } else if (sm.type == MessageType::DM_TO_US) {
+        uint32_t peer = (packet->from == 0) ? sm.dest : sm.sender;
+        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, peer);
+    }
+
+    // Reset scroll so newest message starts from the top
+    graphics::MessageRenderer::resetScrollState();
 
     return 0;
 }
@@ -1680,7 +1641,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::loraMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
-                    if (devicestate.rx_text_message.from) {
+                    if (!messageStore.getMessages().empty()) {
                         menuHandler::messageResponseMenu();
                     } else {
 #if defined(M5STACK_UNITC6L)

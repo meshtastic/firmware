@@ -453,7 +453,6 @@ void menuHandler::messageResponseMenu()
         LOG_DEBUG("[ReplyCtx] mode=%d ch=%d peer=0x%08x", (int)mode, ch, (unsigned int)peer);
 
         if (selected == ViewMode) {
-            LOG_DEBUG("Switching to message_viewmode_menu");
             menuHandler::menuQueue = menuHandler::message_viewmode_menu;
             screen->runNow();
         } else if (selected == DismissAll) {
