@@ -10,7 +10,7 @@
 namespace graphics
 {
 
-VirtualKeyboard::VirtualKeyboard() : cursorRow(0), cursorCol(0), lastActivityTime(millis())
+VirtualKeyboard::VirtualKeyboard() : cursorRow(0), cursorCol(0), upperCaseLayer(false), lastActivityTime(millis())
 {
     initializeKeyboard();
     // Set cursor to H(2, 5)
@@ -22,15 +22,25 @@ VirtualKeyboard::~VirtualKeyboard() {}
 
 void VirtualKeyboard::initializeKeyboard()
 {
-    // New 4 row, 11 column keyboard layout:
-    static const char LAYOUT[KEYBOARD_ROWS][KEYBOARD_COLS] = {{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\b'},
-                                                              {'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '\n'},
-                                                              {'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', ' '},
-                                                              {'z', 'x', 'c', 'v', 'b', 'n', 'm', '.', ',', '?', '\x1b'}};
+    // Define two layouts: lowercase and uppercase/symbols
+    static const char LAYOUT_LOWER[KEYBOARD_ROWS][KEYBOARD_COLS] = {
+        {'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\b'},
+        {'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '\n'},
+        {'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '?', ' '},
+        {'z', 'x', 'c', 'v', 'b', 'n', 'm', '.', ',', '\x01', '\x1b'}};
+
+    // Uppercase layout with WiFi-friendly symbols in top row
+    static const char LAYOUT_UPPER[KEYBOARD_ROWS][KEYBOARD_COLS] = {{'!', '@', '#', '$', '%', '&', '*', '-', '_', '+', '\b'},
+                                                                    {'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '\n'},
+                                                                    {'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', ' '},
+                                                                    {'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', '\x1b'}};
+
+    // Choose current layout based on layer state
+    const char(*currentLayout)[KEYBOARD_COLS] = upperCaseLayer ? LAYOUT_UPPER : LAYOUT_LOWER;
 
     // Derive layout dimensions and assert they match the configured keyboard grid
-    constexpr int LAYOUT_ROWS = (int)(sizeof(LAYOUT) / sizeof(LAYOUT[0]));
-    constexpr int LAYOUT_COLS = (int)(sizeof(LAYOUT[0]) / sizeof(LAYOUT[0][0]));
+    constexpr int LAYOUT_ROWS = (int)(sizeof(LAYOUT_LOWER) / sizeof(LAYOUT_LOWER[0]));
+    constexpr int LAYOUT_COLS = (int)(sizeof(LAYOUT_LOWER[0]) / sizeof(LAYOUT_LOWER[0][0]));
     static_assert(LAYOUT_ROWS == KEYBOARD_ROWS, "LAYOUT rows must equal KEYBOARD_ROWS");
     static_assert(LAYOUT_COLS == KEYBOARD_COLS, "LAYOUT cols must equal KEYBOARD_COLS");
 
@@ -41,11 +51,10 @@ void VirtualKeyboard::initializeKeyboard()
         }
     }
 
-    // Fill keyboard from the 2D layout
+    // Fill keyboard from the current layout
     for (int row = 0; row < LAYOUT_ROWS; row++) {
         for (int col = 0; col < LAYOUT_COLS; col++) {
-            char ch = LAYOUT[row][col];
-            // No empty slots in the simplified layout
+            char ch = currentLayout[row][col];
 
             VirtualKeyType type = VK_CHAR;
             if (ch == '\b') {
@@ -56,10 +65,14 @@ void VirtualKeyboard::initializeKeyboard()
                 type = VK_ESC;
             } else if (ch == ' ') {
                 type = VK_SPACE;
+            } else if (ch == '\x01') { // SHIFT (using control character as marker)
+                type = VK_SHIFT;
             }
 
             // Make action keys wider to fit text while keeping the last column aligned
-            uint8_t width = (type == VK_BACKSPACE || type == VK_ENTER || type == VK_SPACE) ? (KEY_WIDTH * 3) : KEY_WIDTH;
+            uint8_t width =
+                (type == VK_BACKSPACE || type == VK_ENTER || type == VK_SPACE || type == VK_ESC) ? (KEY_WIDTH * 3) : KEY_WIDTH;
+
             keyboard[row][col] = {ch, type, (uint8_t)(col * KEY_WIDTH), (uint8_t)(row * KEY_HEIGHT), width, KEY_HEIGHT};
         }
     }
@@ -204,6 +217,11 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
             headerHeight = FONT_HEIGHT_SMALL; // no extra padding baked in
         }
     }
+
+    // Draw layer indicator in top right corner
+    std::string layerIndicator = upperCaseLayer ? "ABC" : "abc";
+    int indicatorWidth = display->getStringWidth(layerIndicator.c_str());
+    display->drawString(screenWidth - indicatorWidth - 2, offsetY, layerIndicator.c_str());
 
     const int boxX = offsetX;
     const int boxWidth = screenWidth;
@@ -353,8 +371,6 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         if (screenHeight <= 64) {
             textY = boxY + (boxHeight - inputLineH) / 2;
         } else {
-            const int innerLeft = boxX + 1;
-            const int innerRight = boxX + boxWidth - 2;
             const int innerTop = boxY + 1;
             const int innerBottom = boxY + boxHeight - 2;
 
@@ -417,18 +433,17 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
     const int fontH = FONT_HEIGHT_SMALL;
     // Build label and metrics first
     std::string keyText;
-    if (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC) {
+    if (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC || key.type == VK_SHIFT) {
         // Keep literal text labels for the action keys on the rightmost column
         keyText = (key.type == VK_BACKSPACE) ? "BACK"
                   : (key.type == VK_ENTER)   ? "ENTER"
                   : (key.type == VK_SPACE)   ? "SPACE"
+                  : (key.type == VK_SHIFT)   ? "SH"
                   : (key.type == VK_ESC)     ? "ESC"
                                              : "";
     } else {
         char c = getCharForKey(key, false);
-        if (c >= 'a' && c <= 'z') {
-            c = c - 'a' + 'A';
-        }
+        // Display characters as they are in the current layer layout
         keyText = (key.character == ' ' || key.character == '_') ? "_" : std::string(1, c);
     }
 
@@ -453,7 +468,8 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
     int contentH = height;
     if (selected) {
         display->setColor(WHITE);
-        bool isAction = (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC);
+        bool isAction = (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC ||
+                         key.type == VK_SHIFT);
 
         if (display->getHeight() <= 64 && !isAction) {
             display->fillRect(x, y, width, height);
@@ -516,10 +532,12 @@ char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
 
     char c = key.character;
 
-    // Long-press: only keep letter lowercase->uppercase conversion; remove other symbol mappings
+    // Long-press functionality: convert lowercase letters to uppercase
+    // This works alongside the SHIFT key functionality
     if (isLongPress && c >= 'a' && c <= 'z') {
         c = (char)(c - 'a' + 'A');
     }
+    // Note: Numbers and symbols from long press are handled by the layer system now
 
     return c;
 }
@@ -611,6 +629,9 @@ void VirtualKeyboard::handlePress()
     case VK_SPACE:
         insertCharacter(' ');
         break;
+    case VK_SHIFT:
+        toggleLayer();
+        break;
     case VK_ESC:
         if (onTextEntered) {
             std::function<void(const std::string &)> callback = onTextEntered;
@@ -655,6 +676,9 @@ void VirtualKeyboard::handleLongPress()
         break;
     case VK_SPACE:
         insertCharacter(' ');
+        break;
+    case VK_SHIFT:
+        toggleLayer();
         break;
     case VK_ESC:
         if (onTextEntered) {
@@ -733,6 +757,13 @@ void VirtualKeyboard::resetTimeout()
 bool VirtualKeyboard::isTimedOut() const
 {
     return (millis() - lastActivityTime) > TIMEOUT_MS;
+}
+
+void VirtualKeyboard::toggleLayer()
+{
+    resetTimeout();
+    upperCaseLayer = !upperCaseLayer;
+    initializeKeyboard(); // Rebuild keyboard with new layer
 }
 
 } // namespace graphics

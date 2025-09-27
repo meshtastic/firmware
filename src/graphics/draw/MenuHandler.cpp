@@ -248,10 +248,14 @@ void menuHandler::wifiScanMenu()
         NotificationRenderer::virtualKeyboard = nullptr;
     }
 
+    // Show scanning banner
+    if (screen)
+        screen->showSimpleBanner("Scanning...", 3000);
+
     // Wifi scan - handle platform differences
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true);
-    delay(60);
+    delay(100); // Increase delay for better scanning
 
     // Platform-specific WiFi scanning
 #if defined(ARCH_RP2040) || defined(RPI_PICO)
@@ -1865,7 +1869,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case wifi_password_prompt: {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
         char hdr[48];
-        snprintf(hdr, sizeof(hdr), "WiFi: %s", s_wifiPendingSSID.c_str());
+        snprintf(hdr, sizeof(hdr), "%s", s_wifiPendingSSID.c_str());
 
         // WiFi password callback function
         auto wifiPasswordCallback = [](const std::string &pass) {
@@ -1880,8 +1884,15 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
             WiFi.disconnect(true);
             delay(50);
             WiFi.begin(s_wifiPendingSSID.c_str(), pass.c_str());
-            if (screen)
+            if (screen) {
+                // Small delay to ensure the virtual keyboard has fully closed
+                delay(100);
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
                 screen->showSimpleBanner("Connecting...", 2000);
+            }
         };
 
         // Use CardKB-friendly input when CardKB is available
@@ -1901,8 +1912,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         auto serverCallback = [](const std::string &server) {
             strlcpy(moduleConfig.mqtt.address, server.c_str(), sizeof(moduleConfig.mqtt.address));
             service->reloadConfig(SEGMENT_MODULECONFIG);
-            if (screen)
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
                 screen->showSimpleBanner("Server Saved", 2000);
+            }
         };
 
         if (kb_found && cannedMessageModule) {
@@ -1925,8 +1941,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         auto usernameCallback = [](const std::string &username) {
             strlcpy(moduleConfig.mqtt.username, username.c_str(), sizeof(moduleConfig.mqtt.username));
             service->reloadConfig(SEGMENT_MODULECONFIG);
-            if (screen)
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
                 screen->showSimpleBanner("Username Saved", 2000);
+            }
         };
 
         if (kb_found && cannedMessageModule) {
@@ -1943,8 +1964,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         auto passwordCallback = [](const std::string &password) {
             strlcpy(moduleConfig.mqtt.password, password.c_str(), sizeof(moduleConfig.mqtt.password));
             service->reloadConfig(SEGMENT_MODULECONFIG);
-            if (screen)
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
                 screen->showSimpleBanner("Password Saved", 2000);
+            }
         };
 
         if (kb_found && cannedMessageModule) {
@@ -1961,8 +1987,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         auto rootCallback = [](const std::string &root) {
             strlcpy(moduleConfig.mqtt.root, root.c_str(), sizeof(moduleConfig.mqtt.root));
             service->reloadConfig(SEGMENT_MODULECONFIG);
-            if (screen)
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
                 screen->showSimpleBanner("Root Topic Saved", 2000);
+            }
         };
 
         if (kb_found && cannedMessageModule) {

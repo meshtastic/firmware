@@ -43,6 +43,9 @@ class VirtualKeyboard
     void resetTimeout();
     bool isTimedOut() const;
 
+    // Layer management
+    void toggleLayer();
+
   private:
     static const uint8_t KEYBOARD_ROWS = 4;
     static const uint8_t KEYBOARD_COLS = 11;
@@ -58,6 +61,9 @@ class VirtualKeyboard
 
     uint8_t cursorRow;
     uint8_t cursorCol;
+
+    // Layer management for uppercase/symbols
+    bool upperCaseLayer;
 
     // Timeout management for auto-exit
     uint32_t lastActivityTime;
