@@ -78,11 +78,6 @@ class UdpMulticastHandler final
         if (!mp || !udp) {
             return false;
         }
-        // Validate channel index before accessing
-        if (chIndex < 0 || chIndex >= channels.size()) {
-            LOG_ERROR("Invalid channel index %d in UDP onSend", chIndex);
-            return false;
-        }
         // Check if uplink is enabled for this specific channel
         auto &ch = channels.getByIndex(chIndex);
         if (!ch.settings.uplink_enabled) {
