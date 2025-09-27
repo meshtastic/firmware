@@ -16,6 +16,9 @@
 #define GPS_EN_ACTIVE 1
 #endif
 
+static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
+static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
+
 typedef enum {
     GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
