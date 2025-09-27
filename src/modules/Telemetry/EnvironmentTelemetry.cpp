@@ -149,15 +149,15 @@ template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType ty
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
     if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
         TelemetrySensor *sensor = new T();
-#if WIRE_INTERFACES_COUNT == 1
-        TwoWire *bus = &Wire;
-#else
+#if WIRE_INTERFACES_COUNT > 1
         TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
         if (dev.address.port != ScanI2C::I2CPort::WIRE1 && sensor->onlyWire1()) {
             // This sensor only works on Wire (Wire1 is not supported)
             delete sensor;
             return;
         }
+#else
+        TwoWire *bus = &Wire;
 #endif
         if (sensor->initDevice(bus, &dev)) {
             sensors.push_front(sensor);
@@ -303,9 +303,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
             }
 
-#ifdef SENSECAP_INDICATOR
-            result = indicatorSensor.runOnce();
-#endif
 #ifdef T1000X_SENSOR_EN
 #elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (ina219Sensor.hasSensor())
@@ -553,11 +550,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
-
-#ifdef SENSECAP_INDICATOR
-    valid = valid && indicatorSensor.getMetrics(m);
-    hasSensor = true;
-#endif
 
     for (TelemetrySensor *sensor : sensors) {
         valid = valid && sensor->getMetrics(m);
