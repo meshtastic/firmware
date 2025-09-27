@@ -111,43 +111,27 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 
 #if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
 #include "Sensor/NAU7802Sensor.h"
-NAU7802Sensor nau7802Sensor;
-#else
-NullSensor nau7802Sensor;
 #endif
 
 #if __has_include(<Adafruit_BMP3XX.h>)
 #include "Sensor/BMP3XXSensor.h"
-BMP3XXSensor bmp3xxSensor;
-#else
-NullSensor bmp3xxSensor;
 #endif
 
 #if __has_include(<Adafruit_PCT2075.h>)
 #include "Sensor/PCT2075Sensor.h"
-PCT2075Sensor pct2075Sensor;
-#else
-NullSensor pct2075Sensor;
 #endif
-
-RCWL9620Sensor rcwl9620Sensor;
-CGRadSensSensor cgRadSens;
 
 #endif
 #ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
-T1000xSensor t1000xSensor;
 #endif
+
 #ifdef SENSECAP_INDICATOR
 #include "Sensor/IndicatorSensor.h"
-IndicatorSensor indicatorSensor;
 #endif
 
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
-TSL2561Sensor tsl2561Sensor;
-#else
-NullSensor tsl2561Sensor;
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -163,7 +147,7 @@ static std::forward_list<TelemetrySensor *> sensors;
 template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
 {
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
-    if (dev.type != ScanI2C::DeviceType::NONE) {
+    if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
         TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
 
         TelemetrySensor *sensor = new T();
@@ -184,6 +168,19 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     LOG_INFO("Environment Telemetry adding I2C devices...");
 
     // order by priority of metrics/values (low top, high bottom)
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#ifdef T1000X_SENSOR_EN
+    // Not a real I2C device
+    addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
+#ifdef SENSECAP_INDICATOR
+    // Not a real I2C device
+    addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
+    addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
+    addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
+#endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 #if __has_include(<DFRobot_LarkWeatherStation.h>)
@@ -244,6 +241,19 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<MLX90632Sensor>(i2cScanner, ScanI2C::DeviceType::MLX90632);
 #endif
 
+#if __has_include(<Adafruit_BMP3XX.h>)
+    addSensor<BMP3XXSensor>(i2cScanner, ScanI2C::DeviceType::BMP_3XX);
+#endif
+#if __has_include(<Adafruit_PCT2075.h>)
+    addSensor<PCT2075Sensor>(i2cScanner, ScanI2C::DeviceType::PCT2075);
+#endif
+#if __has_include(<Adafruit_TSL2561_U.h>)
+    addSensor<TSL2561Sensor>(i2cScanner, ScanI2C::DeviceType::TSL2561);
+#endif
+#if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
+    addSensor<NAU7802Sensor>(i2cScanner, ScanI2C::DeviceType::NAU7802);
+#endif
+
 #endif
 }
 
@@ -289,32 +299,18 @@ int32_t EnvironmentTelemetryModule::runOnce()
             result = indicatorSensor.runOnce();
 #endif
 #ifdef T1000X_SENSOR_EN
-            result = t1000xSensor.runOnce();
 #elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
-            if (bmp3xxSensor.hasSensor())
-                result = bmp3xxSensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
             if (ina3221Sensor.hasSensor())
                 result = ina3221Sensor.runOnce();
-            if (rcwl9620Sensor.hasSensor())
-                result = rcwl9620Sensor.runOnce();
-            if (nau7802Sensor.hasSensor())
-                result = nau7802Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
-            if (cgRadSens.hasSensor())
-                result = cgRadSens.runOnce();
-            if (tsl2561Sensor.hasSensor())
-                result = tsl2561Sensor.runOnce();
-            if (pct2075Sensor.hasSensor())
-                result = pct2075Sensor.runOnce();
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
                 // sensormap here.
 #ifdef HAS_RAKPROT
-
             result = rak9154Sensor.runOnce();
 #endif
 #endif
@@ -554,20 +550,13 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && indicatorSensor.getMetrics(m);
     hasSensor = true;
 #endif
-#ifdef T1000X_SENSOR_EN // add by WayenWeng
-    valid = valid && t1000xSensor.getMetrics(m);
-    hasSensor = true;
-#else
 
     for (TelemetrySensor *sensor : sensors) {
         valid = valid && sensor->getMetrics(m);
         hasSensor = true;
     }
 
-    if (bmp3xxSensor.hasSensor()) {
-        valid = valid && bmp3xxSensor.getMetrics(m);
-        hasSensor = true;
-    }
+#ifndef T1000X_SENSOR_EN
     if (ina219Sensor.hasSensor()) {
         valid = valid && ina219Sensor.getMetrics(m);
         hasSensor = true;
@@ -580,34 +569,14 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && ina3221Sensor.getMetrics(m);
         hasSensor = true;
     }
-    if (rcwl9620Sensor.hasSensor()) {
-        valid = valid && rcwl9620Sensor.getMetrics(m);
-        hasSensor = true;
-    }
-    if (nau7802Sensor.hasSensor()) {
-        valid = valid && nau7802Sensor.getMetrics(m);
-        hasSensor = true;
-    }
-    if (tsl2561Sensor.hasSensor()) {
-        valid = valid && tsl2561Sensor.getMetrics(m);
-        hasSensor = true;
-    }
     if (max17048Sensor.hasSensor()) {
         valid = valid && max17048Sensor.getMetrics(m);
         hasSensor = true;
     }
-    if (cgRadSens.hasSensor()) {
-        valid = valid && cgRadSens.getMetrics(m);
-        hasSensor = true;
-    }
-    if (pct2075Sensor.hasSensor()) {
-        valid = valid && pct2075Sensor.getMetrics(m);
-        hasSensor = true;
-    }
+#endif
 #ifdef HAS_RAKPROT
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
-#endif
 #endif
     return valid && hasSensor;
 }
@@ -645,11 +614,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m.time = getTime();
-#ifdef T1000X_SENSOR_EN
-    if (t1000xSensor.getMetrics(&m)) {
-#else
+
     if (getEnvironmentTelemetry(&m)) {
-#endif
         LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
@@ -718,11 +684,6 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
             return result;
     }
 
-    if (bmp3xxSensor.hasSensor()) {
-        result = bmp3xxSensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
     if (ina219Sensor.hasSensor()) {
         result = ina219Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
@@ -738,23 +699,8 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
-    if (rcwl9620Sensor.hasSensor()) {
-        result = rcwl9620Sensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
-    if (nau7802Sensor.hasSensor()) {
-        result = nau7802Sensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
     if (max17048Sensor.hasSensor()) {
         result = max17048Sensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
-    if (cgRadSens.hasSensor()) {
-        result = cgRadSens.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
