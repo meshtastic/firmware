@@ -9,22 +9,22 @@
 
 LTR390UVSensor::LTR390UVSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_LTR390UV, "LTR390UV") {}
 
-int32_t LTR390UVSensor::runOnce()
+bool LTR390UVSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+
+    status = ltr390uv.begin(bus);
+    if (!status) {
+        return status;
     }
 
-    status = ltr390uv.begin(nodeTelemetrySensorsMap[sensorType].second);
     ltr390uv.setMode(LTR390_MODE_UVS);
     ltr390uv.setGain(LTR390_GAIN_18);                // Datasheet default
     ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Datasheet default
 
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void LTR390UVSensor::setup() {}
 
 bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement)
 {

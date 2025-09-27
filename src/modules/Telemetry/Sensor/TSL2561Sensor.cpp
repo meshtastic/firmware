@@ -9,22 +9,19 @@
 
 TSL2561Sensor::TSL2561Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_TSL2561, "TSL2561") {}
 
-int32_t TSL2561Sensor::runOnce()
+bool TSL2561Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
 
     status = tsl.begin(nodeTelemetrySensorsMap[sensorType].second);
-
-    return initI2CSensor();
-}
-
-void TSL2561Sensor::setup()
-{
+    if (!status) {
+        return status;
+    }
     tsl.setGain(TSL2561_GAIN_1X);
     tsl.setIntegrationTime(TSL2561_INTEGRATIONTIME_101MS);
+
+    initI2CSensor();
+    return status;
 }
 
 bool TSL2561Sensor::getMetrics(meshtastic_Telemetry *measurement)

@@ -16,13 +16,10 @@ class DFRobotGravitySensor : public TelemetrySensor
   private:
     DFRobot_RainfallSensor_I2C gravity = DFRobot_RainfallSensor_I2C(nodeTelemetrySensorsMap[sensorType].second);
 
-  protected:
-    virtual void setup() override;
-
   public:
     DFRobotGravitySensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif
