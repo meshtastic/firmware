@@ -701,7 +701,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
     config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
 #else
-    config.network.enabled_protocols = 1;
+    config.network.enabled_protocols = 0;
 #endif
 #endif
 
