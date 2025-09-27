@@ -2022,12 +2022,26 @@ void menuHandler::mqttBaseMenu()
 
 void menuHandler::mqttServerConfig()
 {
-    enum optionsNumbers { Back, Server, TLS, Encryption };
-    static const char *optionsArray[] = {"Back", "Server Address", "TLS Enable", "Encryption"};
+    enum optionsNumbers { Back, Server, TLS, Encryption, IgnoreMQTT, OKtoMQTT };
+    static char optionsArray[6][32];
+    static const char *optionsPtrArray[6];
+
+    // Build dynamic menu options showing current states
+    strcpy(optionsArray[0], "Back");
+    strcpy(optionsArray[1], "Server Address");
+    snprintf(optionsArray[2], sizeof(optionsArray[2]), "TLS: %s", moduleConfig.mqtt.tls_enabled ? "ON" : "OFF");
+    snprintf(optionsArray[3], sizeof(optionsArray[3]), "Encryption: %s", moduleConfig.mqtt.encryption_enabled ? "ON" : "OFF");
+    snprintf(optionsArray[4], sizeof(optionsArray[4]), "Ignore MQTT: %s", config.lora.ignore_mqtt ? "ON" : "OFF");
+    snprintf(optionsArray[5], sizeof(optionsArray[5]), "OK to MQTT: %s", config.lora.config_ok_to_mqtt ? "ON" : "OFF");
+
+    for (int i = 0; i < 6; i++) {
+        optionsPtrArray[i] = optionsArray[i];
+    }
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Server Config";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsArrayPtr = optionsPtrArray;
+    bannerOptions.optionsCount = 6;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Server) {
             menuQueue = mqtt_server_prompt;
@@ -2035,11 +2049,31 @@ void menuHandler::mqttServerConfig()
         } else if (selected == TLS) {
             moduleConfig.mqtt.tls_enabled = !moduleConfig.mqtt.tls_enabled;
             service->reloadConfig(SEGMENT_MODULECONFIG);
-            screen->showSimpleBanner(moduleConfig.mqtt.tls_enabled ? "TLS Enabled" : "TLS Disabled", 2000);
+            screen->showSimpleBanner(moduleConfig.mqtt.tls_enabled ? "TLS Enabled" : "TLS Disabled", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
         } else if (selected == Encryption) {
             moduleConfig.mqtt.encryption_enabled = !moduleConfig.mqtt.encryption_enabled;
             service->reloadConfig(SEGMENT_MODULECONFIG);
-            screen->showSimpleBanner(moduleConfig.mqtt.encryption_enabled ? "Encryption On" : "Encryption Off", 2000);
+            screen->showSimpleBanner(moduleConfig.mqtt.encryption_enabled ? "Encryption On" : "Encryption Off", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        } else if (selected == IgnoreMQTT) {
+            config.lora.ignore_mqtt = !config.lora.ignore_mqtt;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->showSimpleBanner(config.lora.ignore_mqtt ? "Ignore MQTT: ON" : "Ignore MQTT: OFF", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        } else if (selected == OKtoMQTT) {
+            config.lora.config_ok_to_mqtt = !config.lora.config_ok_to_mqtt;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->showSimpleBanner(config.lora.config_ok_to_mqtt ? "OK to MQTT: ON" : "OK to MQTT: OFF", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);

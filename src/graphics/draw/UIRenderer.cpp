@@ -1444,6 +1444,15 @@ void UIRenderer::drawMqttInfoDirect(OLEDDisplay *display, const OLEDDisplayUiSta
             snprintf(rootStr, sizeof(rootStr), "Root: Default");
         }
         display->drawString(x, graphics::getTextPositions(display)[line++], rootStr);
+
+        // === LoRa MQTT Options ===
+        char ignoreMqttStr[32];
+        snprintf(ignoreMqttStr, sizeof(ignoreMqttStr), "Ignore MQTT: %s", config.lora.ignore_mqtt ? "ON" : "OFF");
+        display->drawString(x, graphics::getTextPositions(display)[line++], ignoreMqttStr);
+
+        char okToMqttStr[32];
+        snprintf(okToMqttStr, sizeof(okToMqttStr), "OK to MQTT: %s", config.lora.config_ok_to_mqtt ? "ON" : "OFF");
+        display->drawString(x, graphics::getTextPositions(display)[line++], okToMqttStr);
     } else {
         // Show message when MQTT is disabled
         const char *disabledMsg = "MQTT is currently disabled";
