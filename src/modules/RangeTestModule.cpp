@@ -41,12 +41,12 @@ int32_t RangeTestModule::runOnce()
     // moduleConfig.range_test.enabled = 1;
     // moduleConfig.range_test.sender = 30;
     // moduleConfig.range_test.save = 1;
+    // moduleConfig.range_test.clear_on_reboot = 1;
 
     // Fixed position is useful when testing indoors.
     // config.position.fixed_position = 1;
 
     uint32_t senderHeartbeat = moduleConfig.range_test.sender * 1000;
-
     if (moduleConfig.range_test.enabled) {
 
         if (firstTime) {
@@ -54,6 +54,11 @@ int32_t RangeTestModule::runOnce()
 
             firstTime = 0;
 
+            if (moduleConfig.range_test.clear_on_reboot) {
+                // User wants to delete previous range test(s)
+                LOG_INFO("Range Test Module - Clearing out previous test file");
+                rangeTestModuleRadio->removeFile();
+            }
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Init Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
@@ -141,7 +146,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
         */
 
         if (!isFromUs(&mp)) {
-
             if (moduleConfig.range_test.save) {
                 appendFile(mp);
             }
@@ -295,7 +299,42 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
     fileToAppend.flush();
     fileToAppend.close();
-#endif
 
     return 1;
+
+#else
+    LOG_ERROR("Failed to store range test results - feature only available for ESP32");
+
+    return 0;
+#endif
+}
+
+bool RangeTestModuleRadio::removeFile()
+{
+#ifdef ARCH_ESP32
+    if (!FSBegin()) {
+        LOG_DEBUG("An Error has occurred while mounting the filesystem");
+        return 0;
+    }
+
+    if (!FSCom.exists("/static/rangetest.csv")) {
+        LOG_DEBUG("No range tests found.");
+        return 0;
+    }
+
+    LOG_INFO("Deleting previous range test.");
+    bool result = FSCom.remove("/static/rangetest.csv");
+
+    if (!result) {
+        LOG_ERROR("Failed to delete range test.");
+        return 0;
+    }
+    LOG_INFO("Range test removed.");
+
+    return 1;
+#else
+    LOG_ERROR("Failed to remove range test results - feature only available for ESP32");
+
+    return 0;
+#endif
 }
