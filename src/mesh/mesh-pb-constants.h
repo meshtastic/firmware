@@ -52,7 +52,7 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 static inline int get_max_num_nodes()
 {
     uint32_t psram_size = ESP.getPsramSize() / (1024 * 1024); // Convert Bytes to MB
-    if (psram_size >= 4) {
+    if (psram_size >= 2) {
         return 800;
     }
 
