@@ -1058,13 +1058,7 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(chirpy_small);
     }
 
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    if (!hiddenFrames.wifi && isWifiAvailable()) {
-        fsi.positions.wifi = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoWiFiTrampoline;
-        indicatorIcons.push_back(icon_wifi);
-    }
-#endif
+    // WiFi frame removed from carousel - access via WiFi Config menu only
 
     // Beware of what changes you make in this code!
     // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
@@ -1228,6 +1222,11 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     if (frameName == "chirpy") {
         hiddenFrames.chirpy = !hiddenFrames.chirpy;
     }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    if (frameName == "wifi") {
+        hiddenFrames.wifi = !hiddenFrames.wifi;
+    }
+#endif
 }
 
 bool Screen::isFrameHidden(const std::string &frameName) const
@@ -1258,6 +1257,10 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.show_favorites;
     if (frameName == "chirpy")
         return hiddenFrames.chirpy;
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    if (frameName == "wifi")
+        return hiddenFrames.wifi;
+#endif
 
     return false;
 }
@@ -1561,6 +1564,31 @@ int Screen::handleInputEvent(const InputEvent *event)
         return 0;
     }
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    // Handle input when WiFi status screen is showing
+    if (graphics::UIRenderer::showingWifiStatus) {
+        if (event->inputEvent == INPUT_BROKER_BACK || event->inputEvent == INPUT_BROKER_CANCEL ||
+            event->inputEvent == INPUT_BROKER_SELECT) {
+            // Exit WiFi status screen and return to normal frames
+            graphics::UIRenderer::showingWifiStatus = false;
+            setFrames(FOCUS_DEFAULT);
+            return 0;
+        }
+    }
+
+    // Handle input when MQTT status screen is showing
+    if (graphics::UIRenderer::showingMqttStatus) {
+        if (event->inputEvent == INPUT_BROKER_BACK || event->inputEvent == INPUT_BROKER_CANCEL ||
+            event->inputEvent == INPUT_BROKER_SELECT) {
+            // Exit MQTT status screen and return to normal frames
+            graphics::UIRenderer::showingMqttStatus = false;
+            hiddenFrames.mqtt = false; // Restore MQTT frame to carousel
+            setFrames(FOCUS_DEFAULT);
+            return 0;
+        }
+    }
+#endif
+
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
@@ -1646,6 +1674,126 @@ bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
 }
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+void Screen::openMqttInfoScreen()
+{
+    // Hide MQTT frame from carousel when showing status screen
+    hiddenFrames.mqtt = true;
+
+    // Set flag to track MQTT status screen is showing
+    graphics::UIRenderer::showingMqttStatus = true;
+
+    // Create a FrameCallback with the drawMqttInfoDirect function
+    setFrameImmediateDraw(new FrameCallback([](OLEDDisplay *d, OLEDDisplayUiState *s, int16_t x, int16_t y) {
+        graphics::UIRenderer::drawMqttInfoDirect(d, s, x, y);
+    }));
+}
+
+void Screen::openWifiInfoScreen()
+{
+    // Hide WiFi frame from carousel when showing status screen
+    hiddenFrames.wifi = true;
+
+    // Set flag to track WiFi status screen is showing
+    graphics::UIRenderer::showingWifiStatus = true;
+
+    // Create a FrameCallback with the drawWifiInfoDirect function
+    setFrameImmediateDraw(new FrameCallback([](OLEDDisplay *d, OLEDDisplayUiState *s, int16_t x, int16_t y) {
+        graphics::UIRenderer::drawWifiInfoDirect(d, s, x, y);
+    }));
+}
+
+void Screen::hideFrame(const std::string &frameName)
+{
+#ifndef USE_EINK
+    if (frameName == "nodelist") {
+        hiddenFrames.nodelist = true;
+    }
+#endif
+#ifdef USE_EINK
+    if (frameName == "nodelist_lastheard") {
+        hiddenFrames.nodelist_lastheard = true;
+    }
+    if (frameName == "nodelist_hopsignal") {
+        hiddenFrames.nodelist_hopsignal = true;
+    }
+    if (frameName == "nodelist_distance") {
+        hiddenFrames.nodelist_distance = true;
+    }
+#endif
+#if HAS_GPS
+    if (frameName == "nodelist_bearings") {
+        hiddenFrames.nodelist_bearings = true;
+    }
+    if (frameName == "gps") {
+        hiddenFrames.gps = true;
+    }
+#endif
+    if (frameName == "lora") {
+        hiddenFrames.lora = true;
+    }
+    if (frameName == "clock") {
+        hiddenFrames.clock = true;
+    }
+    if (frameName == "show_favorites") {
+        hiddenFrames.show_favorites = true;
+    }
+    if (frameName == "chirpy") {
+        hiddenFrames.chirpy = true;
+    }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    if (frameName == "wifi") {
+        hiddenFrames.wifi = true;
+    }
+#endif
+}
+
+void Screen::showFrame(const std::string &frameName)
+{
+#ifndef USE_EINK
+    if (frameName == "nodelist") {
+        hiddenFrames.nodelist = false;
+    }
+#endif
+#ifdef USE_EINK
+    if (frameName == "nodelist_lastheard") {
+        hiddenFrames.nodelist_lastheard = false;
+    }
+    if (frameName == "nodelist_hopsignal") {
+        hiddenFrames.nodelist_hopsignal = false;
+    }
+    if (frameName == "nodelist_distance") {
+        hiddenFrames.nodelist_distance = false;
+    }
+#endif
+#if HAS_GPS
+    if (frameName == "nodelist_bearings") {
+        hiddenFrames.nodelist_bearings = false;
+    }
+    if (frameName == "gps") {
+        hiddenFrames.gps = false;
+    }
+#endif
+    if (frameName == "lora") {
+        hiddenFrames.lora = false;
+    }
+    if (frameName == "clock") {
+        hiddenFrames.clock = false;
+    }
+    if (frameName == "show_favorites") {
+        hiddenFrames.show_favorites = false;
+    }
+    if (frameName == "chirpy") {
+        hiddenFrames.chirpy = false;
+    }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    if (frameName == "wifi") {
+        hiddenFrames.wifi = false;
+    }
+#endif
+}
+#endif
 
 } // namespace graphics
 

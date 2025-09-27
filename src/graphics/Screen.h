@@ -305,6 +305,11 @@ class Screen : public concurrency::OSThread
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
     void showOverlayBanner(BannerOverlayOptions);
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    void openMqttInfoScreen(); // Opens direct the MQTT status info screen
+    void openWifiInfoScreen(); // Opens direct the WiFi status info screen
+#endif
+
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
     void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
@@ -591,6 +596,8 @@ class Screen : public concurrency::OSThread
 
     // Menu-driven Show / Hide Toggle
     void toggleFrameVisibility(const std::string &frameName);
+    void hideFrame(const std::string &frameName);
+    void showFrame(const std::string &frameName);
     bool isFrameHidden(const std::string &frameName) const;
 
 #ifdef USE_EINK
@@ -676,6 +683,7 @@ class Screen : public concurrency::OSThread
         bool textMessage = false;
         bool waypoint = false;
         bool wifi = false;
+        bool mqtt = false;
         bool system = false;
         bool home = false;
         bool clock = false;

@@ -6,6 +6,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "NotificationRenderer.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
@@ -17,11 +18,23 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
-
 #include "modules/TraceRouteModule.h"
 #include <functional>
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_I2C
+#include "input/cardKbI2cImpl.h"
+#endif
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+#include <WiFi.h>
+#include <algorithm>
+#include <vector>
+#endif
 
 extern uint16_t TFT_MESH;
+
+extern CannedMessageModule *cannedMessageModule;
+extern bool kb_found;
+
+extern std::string g_pendingKeyboardHeader;
 
 namespace graphics
 {
@@ -29,14 +42,35 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+// SSID password required for WiFi config menu
+static String s_wifiPendingSSID;
+#endif
+
 void menuHandler::loraMenu()
 {
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "LoRa Region", "WiFi Config", "MQTT Config"};
+    enum optionsNumbers {
+        Back = 0,
+        device_role_picker = 1,
+        radio_preset_picker = 2,
+        lora_picker = 3,
+        wifi_config_menu = 4,
+        mqtt_base_menu = 5
+    };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "LoRa Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 6;
+#else
     static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "LoRa Region"};
     enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, lora_picker = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
+#endif
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
@@ -47,6 +81,18 @@ void menuHandler::loraMenu()
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
         }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        else if (selected == wifi_config_menu) {
+            // Close this banner and launch the WiFi menu in the loop
+            NotificationRenderer::pauseBanner = true;
+            NotificationRenderer::alertBannerUntil = 1;
+            NotificationRenderer::optionsArrayPtr = nullptr;
+            NotificationRenderer::optionsEnumPtr = nullptr;
+            menuHandler::menuQueue = menuHandler::wifi_config_menu;
+        } else if (selected == mqtt_base_menu) {
+            menuHandler::menuQueue = menuHandler::mqtt_base_menu;
+        }
+#endif
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -146,6 +192,215 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::wifiBaseMenu()
+{
+    enum optionsNumbers { Back, Toggle, Scan, Status };
+
+    static const char *optionsArray[] = {"Back", "WiFi Toggle", "Scan Networks", "Status"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "WiFi Menu";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Toggle) {
+            menuQueue = wifi_toggle_menu;
+            screen->runNow();
+        } else if (selected == Scan) {
+            menuQueue = wifi_scan_menu;
+            screen->runNow();
+        } else if (selected == Status) {
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+            screen->openWifiInfoScreen();
+#endif
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::wifiToggleMenu()
+{
+    enum optionsNumbers { Back, Wifi_toggle };
+
+    static const char *optionsArray[] = {"Back", "Disable"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Disable Wifi and\nEnable Bluetooth?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Wifi_toggle) {
+            config.network.wifi_enabled = false;
+            config.bluetooth.enabled = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::wifiScanMenu()
+{
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    // close any keyboard that might be open
+    if (NotificationRenderer::virtualKeyboard) {
+        delete NotificationRenderer::virtualKeyboard;
+        NotificationRenderer::virtualKeyboard = nullptr;
+    }
+
+    // Show scanning banner
+    if (screen)
+        screen->showSimpleBanner("Scanning...", 3000);
+
+    // Wifi scan - handle platform differences
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(true);
+    delay(100); // Increase delay for better scanning
+
+    // Platform-specific WiFi scanning
+#if defined(ARCH_RP2040) || defined(RPI_PICO)
+    // RP2040/Pico W uses single parameter scanNetworks()
+    int n = WiFi.scanNetworks();
+#else
+    // ESP32 and other platforms may use two parameters
+    int n = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+#endif
+
+    struct AP {
+        String ssid;
+        int rssi;
+        bool open;
+    };
+    std::vector<AP> aps;
+    aps.reserve(n > 0 ? n : 0);
+
+    for (int i = 0; i < n; ++i) {
+        String ssid = WiFi.SSID(i);
+        if (ssid.length() == 0)
+            continue;
+        int rssi = WiFi.RSSI(i);
+
+        // Platform-specific encryption type check
+        // Try to detect open networks - different platforms use different constants
+        bool open = false;
+        uint8_t encType = WiFi.encryptionType(i);
+
+#if defined(ARCH_RP2040) || defined(RPI_PICO)
+        // RP2040/Pico W typically uses 0 for open networks
+        open = (encType == 0);
+#elif defined(ARCH_ESP32) || defined(ESP32)
+        // ESP32 uses WIFI_AUTH_OPEN constant
+        open = (encType == WIFI_AUTH_OPEN);
+#else
+        // Generic fallback - assume 0 means open for most platforms
+        open = (encType == 0);
+#endif
+
+        auto it = std::find_if(aps.begin(), aps.end(), [&](const AP &a) { return a.ssid == ssid; });
+        if (it == aps.end())
+            aps.push_back({ssid, rssi, open});
+        else if (rssi > it->rssi) {
+            it->rssi = rssi;
+            it->open = open;
+        }
+    }
+
+    std::sort(aps.begin(), aps.end(), [](const AP &a, const AP &b) { return a.rssi > b.rssi; });
+    const int MAX_SHOW = 12;
+    static char labels[MAX_SHOW + 3][40];
+    static const char *options[MAX_SHOW + 3];
+
+    int count = 0;
+    int apShown = (int)std::min(aps.size(), (size_t)MAX_SHOW);
+    for (int i = 0; i < apShown; ++i) {
+        const auto &ap = aps[i];
+        String ss = ap.ssid;
+        if (ss.length() > 22)
+            ss = ss.substring(0, 19) + "...";
+        snprintf(labels[count], sizeof(labels[count]), "%s", ss.c_str());
+        options[count++] = labels[i];
+    }
+
+    if (apShown == 0) {
+        snprintf(labels[count], sizeof(labels[count]), "No networks");
+        options[count] = labels[count];
+        count++;
+    }
+
+    int rescanIdx = count;
+    options[count++] = "Rescan";
+    int backIdx = count;
+    options[count++] = "Back";
+
+    static std::vector<AP> s_aps;
+    static int s_apShown, s_rescanIdx, s_backIdx;
+    s_aps = aps;
+    s_apShown = apShown;
+    s_rescanIdx = rescanIdx;
+    s_backIdx = backIdx;
+
+    BannerOverlayOptions o;
+    o.message = "WiFi Networks";
+    o.durationMs = 0;
+    o.optionsArrayPtr = options;
+    o.optionsCount = count;
+    o.optionsEnumPtr = nullptr; // we return index
+
+    o.bannerCallback = [](int sel) {
+        if (sel == s_rescanIdx) {
+            menuHandler::menuQueue = menuHandler::wifi_scan_menu;
+            if (screen)
+                screen->forceDisplay(true);
+            return;
+        }
+        if (sel == s_backIdx) {
+            if (screen)
+                screen->setFrames(Screen::FOCUS_PRESERVE);
+            return;
+        }
+
+        if (s_apShown == 0)
+            return;
+        if (sel < 0 || sel >= s_apShown)
+            return;
+
+        const String ssidSel = s_aps[sel].ssid;
+        const bool open = s_aps[sel].open;
+
+        if (open) {
+            menuHandler::showConfirmationBanner("Open network. Connect?", [ssidSel]() {
+                config.network.wifi_enabled = true;
+                strlcpy(config.network.wifi_ssid, ssidSel.c_str(), sizeof(config.network.wifi_ssid));
+                config.network.wifi_psk[0] = '\0';
+                service->reloadConfig(SEGMENT_CONFIG);
+
+                WiFi.mode(WIFI_STA);
+                WiFi.disconnect(true);
+                delay(50);
+                WiFi.begin(ssidSel.c_str());
+                if (screen)
+                    screen->showSimpleBanner("Connecting...", 2000);
+            });
+            return;
+        }
+
+        // required password
+        NotificationRenderer::pauseBanner = true;
+        NotificationRenderer::alertBannerUntil = 1;
+        NotificationRenderer::optionsArrayPtr = nullptr;
+        NotificationRenderer::optionsEnumPtr = nullptr;
+
+        s_wifiPendingSSID = ssidSel;
+        menuHandler::menuQueue = menuHandler::wifi_password_prompt;
+        if (screen)
+            screen->forceDisplay(true);
+    };
+
+    screen->showOverlayBanner(o);
+#else
+    if (screen)
+        screen->showSimpleBanner("WiFi not available", 2000);
+#endif
 }
 
 void menuHandler::DeviceRolePicker()
@@ -1212,44 +1467,6 @@ void menuHandler::numberTest()
                              [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
 }
 
-void menuHandler::wifiBaseMenu()
-{
-    enum optionsNumbers { Back, Wifi_toggle };
-
-    static const char *optionsArray[] = {"Back", "WiFi Toggle"};
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "WiFi Menu";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Wifi_toggle) {
-            menuQueue = wifi_toggle_menu;
-            screen->runNow();
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
-}
-
-void menuHandler::wifiToggleMenu()
-{
-    enum optionsNumbers { Back, Wifi_toggle };
-
-    static const char *optionsArray[] = {"Back", "Disable"};
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Disable Wifi and\nEnable Bluetooth?";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Wifi_toggle) {
-            config.network.wifi_enabled = false;
-            config.bluetooth.enabled = true;
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
-}
-
 void menuHandler::notificationsMenu()
 {
     enum optionsNumbers { Back, BuzzerActions };
@@ -1598,9 +1815,16 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case number_test:
         numberTest();
         break;
+#if HAS_WIFI
     case wifi_toggle_menu:
         wifiToggleMenu();
         break;
+#endif
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    case wifi_scan_menu:
+        wifiScanMenu();
+        break;
+#endif
     case key_verification_init:
         keyVerificationInitMenu();
         break;
@@ -1622,6 +1846,165 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case FrameToggles:
         FrameToggles_menu();
         break;
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    case wifi_config_menu:
+        wifiConfigMenu();
+        menuQueue = menu_none;
+        return;
+#endif
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    case mqtt_base_menu:
+        mqttBaseMenu();
+        break;
+    case mqtt_toggle_menu:
+        mqttToggleMenu();
+        break;
+    case mqtt_server_config:
+        mqttServerConfig();
+        break;
+    case mqtt_credentials_config:
+        mqttCredentialsConfig();
+        break;
+#endif
+    case wifi_password_prompt: {
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        char hdr[48];
+        snprintf(hdr, sizeof(hdr), "%s", s_wifiPendingSSID.c_str());
+
+        // WiFi password callback function
+        auto wifiPasswordCallback = [](const std::string &pass) {
+            // persistir config
+            config.network.wifi_enabled = true;
+            strlcpy(config.network.wifi_ssid, s_wifiPendingSSID.c_str(), sizeof(config.network.wifi_ssid));
+            strlcpy(config.network.wifi_psk, pass.c_str(), sizeof(config.network.wifi_psk));
+            service->reloadConfig(SEGMENT_CONFIG);
+
+            // aplicar ahora
+            WiFi.mode(WIFI_STA);
+            WiFi.disconnect(true);
+            delay(50);
+            WiFi.begin(s_wifiPendingSSID.c_str(), pass.c_str());
+            if (screen) {
+                // Small delay to ensure the virtual keyboard has fully closed
+                delay(100);
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
+                screen->showSimpleBanner("Connecting...", 2000);
+            }
+        };
+
+        // Use CardKB-friendly input when CardKB is available
+        if (kb_found && cannedMessageModule) {
+            cannedMessageModule->LaunchFreetextKbPrompt(hdr, "", wifiPasswordCallback);
+        } else {
+            screen->showTextInput(hdr, "", 0, wifiPasswordCallback);
+        }
+#endif
+        menuQueue = menu_none;
+        return;
+    }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    case mqtt_server_prompt: {
+        char hdr[32] = "MQTT Server:";
+
+        auto serverCallback = [](const std::string &server) {
+            strlcpy(moduleConfig.mqtt.address, server.c_str(), sizeof(moduleConfig.mqtt.address));
+            service->reloadConfig(SEGMENT_MODULECONFIG);
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
+                screen->showSimpleBanner("Server Saved", 2000);
+            }
+        };
+
+        if (kb_found && cannedMessageModule) {
+            cannedMessageModule->LaunchFreetextKbPrompt(hdr, moduleConfig.mqtt.address, serverCallback);
+        } else {
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_I2C
+            if (!::cardKbI2cImpl) {
+                ::cardKbI2cImpl = new CardKbI2cImpl();
+                ::cardKbI2cImpl->init();
+            }
+#endif
+            screen->showTextInput(hdr, moduleConfig.mqtt.address, 0, serverCallback);
+        }
+        menuQueue = menu_none;
+        return;
+    }
+    case mqtt_username_prompt: {
+        char hdr[32] = "MQTT Username:";
+
+        auto usernameCallback = [](const std::string &username) {
+            strlcpy(moduleConfig.mqtt.username, username.c_str(), sizeof(moduleConfig.mqtt.username));
+            service->reloadConfig(SEGMENT_MODULECONFIG);
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
+                screen->showSimpleBanner("Username Saved", 2000);
+            }
+        };
+
+        if (kb_found && cannedMessageModule) {
+            cannedMessageModule->LaunchFreetextKbPrompt(hdr, moduleConfig.mqtt.username, usernameCallback);
+        } else {
+            screen->showTextInput(hdr, moduleConfig.mqtt.username, 0, usernameCallback);
+        }
+        menuQueue = menu_none;
+        return;
+    }
+    case mqtt_password_prompt: {
+        char hdr[32] = "MQTT Password:";
+
+        auto passwordCallback = [](const std::string &password) {
+            strlcpy(moduleConfig.mqtt.password, password.c_str(), sizeof(moduleConfig.mqtt.password));
+            service->reloadConfig(SEGMENT_MODULECONFIG);
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
+                screen->showSimpleBanner("Password Saved", 2000);
+            }
+        };
+
+        if (kb_found && cannedMessageModule) {
+            cannedMessageModule->LaunchFreetextKbPrompt(hdr, "********", passwordCallback);
+        } else {
+            screen->showTextInput(hdr, "", 0, passwordCallback);
+        }
+        menuQueue = menu_none;
+        return;
+    }
+    case mqtt_root_prompt: {
+        char hdr[32] = "MQTT Root Topic:";
+
+        auto rootCallback = [](const std::string &root) {
+            strlcpy(moduleConfig.mqtt.root, root.c_str(), sizeof(moduleConfig.mqtt.root));
+            service->reloadConfig(SEGMENT_MODULECONFIG);
+            if (screen) {
+                // Force reset the notification system to clear any residual state
+                NotificationRenderer::resetBanner();
+                // Ensure banner system is ready
+                NotificationRenderer::pauseBanner = false;
+                screen->showSimpleBanner("Root Topic Saved", 2000);
+            }
+        };
+
+        if (kb_found && cannedMessageModule) {
+            cannedMessageModule->LaunchFreetextKbPrompt(hdr, moduleConfig.mqtt.root, rootCallback);
+        } else {
+            screen->showTextInput(hdr, moduleConfig.mqtt.root, 0, rootCallback);
+        }
+        menuQueue = menu_none;
+        return;
+    }
+#endif
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
         break;
@@ -1634,6 +2017,133 @@ void menuHandler::saveUIConfig()
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
 }
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+void menuHandler::wifiConfigMenu()
+{
+    // Instead of doing automatic scan, go to WiFi base menu
+    wifiBaseMenu();
+}
+#endif
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+void menuHandler::mqttBaseMenu()
+{
+    enum optionsNumbers { Back, Toggle, ServerConfig, Credentials, Status };
+    static const char *optionsArray[] = {"Back", "MQTT Toggle", "Server Config", "Credentials", "Status"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "MQTT Menu";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Toggle) {
+            menuQueue = mqtt_toggle_menu;
+            screen->runNow();
+        } else if (selected == ServerConfig) {
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        } else if (selected == Credentials) {
+            menuQueue = mqtt_credentials_config;
+            screen->runNow();
+        } else if (selected == Status) {
+            screen->openMqttInfoScreen();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::mqttServerConfig()
+{
+    enum optionsNumbers { Back, Server, TLS, Encryption, IgnoreMQTT, OKtoMQTT };
+    static char optionsArray[6][32];
+    static const char *optionsPtrArray[6];
+
+    // Build dynamic menu options showing current states
+    strcpy(optionsArray[0], "Back");
+    strcpy(optionsArray[1], "Server Address");
+    snprintf(optionsArray[2], sizeof(optionsArray[2]), "TLS: %s", moduleConfig.mqtt.tls_enabled ? "ON" : "OFF");
+    snprintf(optionsArray[3], sizeof(optionsArray[3]), "Encryption: %s", moduleConfig.mqtt.encryption_enabled ? "ON" : "OFF");
+    snprintf(optionsArray[4], sizeof(optionsArray[4]), "Ignore MQTT: %s", config.lora.ignore_mqtt ? "ON" : "OFF");
+    snprintf(optionsArray[5], sizeof(optionsArray[5]), "OK to MQTT: %s", config.lora.config_ok_to_mqtt ? "ON" : "OFF");
+
+    for (int i = 0; i < 6; i++) {
+        optionsPtrArray[i] = optionsArray[i];
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Server Config";
+    bannerOptions.optionsArrayPtr = optionsPtrArray;
+    bannerOptions.optionsCount = 6;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Server) {
+            menuQueue = mqtt_server_prompt;
+            screen->runNow();
+        } else if (selected == TLS) {
+            moduleConfig.mqtt.tls_enabled = !moduleConfig.mqtt.tls_enabled;
+            service->reloadConfig(SEGMENT_MODULECONFIG);
+            screen->showSimpleBanner(moduleConfig.mqtt.tls_enabled ? "TLS Enabled" : "TLS Disabled", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        } else if (selected == Encryption) {
+            moduleConfig.mqtt.encryption_enabled = !moduleConfig.mqtt.encryption_enabled;
+            service->reloadConfig(SEGMENT_MODULECONFIG);
+            screen->showSimpleBanner(moduleConfig.mqtt.encryption_enabled ? "Encryption On" : "Encryption Off", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        } else if (selected == IgnoreMQTT) {
+            config.lora.ignore_mqtt = !config.lora.ignore_mqtt;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->showSimpleBanner(config.lora.ignore_mqtt ? "Ignore MQTT: ON" : "Ignore MQTT: OFF", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        } else if (selected == OKtoMQTT) {
+            config.lora.config_ok_to_mqtt = !config.lora.config_ok_to_mqtt;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->showSimpleBanner(config.lora.config_ok_to_mqtt ? "OK to MQTT: ON" : "OK to MQTT: OFF", 1000);
+            // Regenerate menu to show updated state
+            menuQueue = mqtt_server_config;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::mqttCredentialsConfig()
+{
+    enum optionsNumbers { Back, Username, Password, Root };
+    static const char *optionsArray[] = {"Back", "Username", "Password", "Root Topic"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Credentials";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Username) {
+            menuQueue = mqtt_username_prompt;
+            screen->runNow();
+        } else if (selected == Password) {
+            menuQueue = mqtt_password_prompt;
+            screen->runNow();
+        } else if (selected == Root) {
+            menuQueue = mqtt_root_prompt;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::mqttToggleMenu()
+{
+    bool currentState = moduleConfig.mqtt.enabled;
+    showConfirmationBanner(currentState ? "Disable MQTT?" : "Enable MQTT?", [currentState]() -> void {
+        moduleConfig.mqtt.enabled = !currentState;
+        service->reloadConfig(SEGMENT_MODULECONFIG);
+        screen->showSimpleBanner(!currentState ? "MQTT Enabled" : "MQTT Disabled", 2000);
+    });
+}
+#endif
+
 } // namespace graphics
 
-#endif
+#endif // HAS_SCREEN
