@@ -35,6 +35,8 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     virtual bool wantUIFrame() override { return shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
 
+    void processUpgradedPacket(const meshtastic_MeshPacket &mp);
+
   protected:
     bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r) override;
 

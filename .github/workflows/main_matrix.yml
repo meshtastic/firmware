@@ -49,6 +49,10 @@ jobs:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
+      - name: Uncomment build epoch
+        shell: bash
+        run: |
+          sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
       - name: Generate matrix
         id: jsonStep
         run: |

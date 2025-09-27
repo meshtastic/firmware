@@ -192,6 +192,8 @@ ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
 uint8_t kb_model;
 // global bool to record that a kb is present
 bool kb_found = false;
+// global bool to record that on-screen keyboard (OSK) is present
+bool osk_found = false;
 
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
@@ -367,6 +369,7 @@ void setup()
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
+    pinMode(KB_INT, INPUT_PULLUP);
     // io expander
     io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
     io.pinMode(EXPANDS_DRV_EN, OUTPUT);
@@ -999,6 +1002,7 @@ void setup()
             config.pullupSense = INPUT_PULLUP;
             config.intRoutine = []() {
                 UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
                 runASAP = true;
                 BaseType_t higherWake = 0;
                 mainDelay.interruptFromISR(&higherWake);
@@ -1019,6 +1023,7 @@ void setup()
     touchConfig.pullupSense = pullup_sense;
     touchConfig.intRoutine = []() {
         TouchButtonThread->userButton.tick();
+        TouchButtonThread->setIntervalFromNow(0);
         runASAP = true;
         BaseType_t higherWake = 0;
         mainDelay.interruptFromISR(&higherWake);
@@ -1038,6 +1043,7 @@ void setup()
     cancelConfig.pullupSense = pullup_sense;
     cancelConfig.intRoutine = []() {
         CancelButtonThread->userButton.tick();
+        CancelButtonThread->setIntervalFromNow(0);
         runASAP = true;
         BaseType_t higherWake = 0;
         mainDelay.interruptFromISR(&higherWake);
@@ -1058,6 +1064,7 @@ void setup()
     backConfig.pullupSense = pullup_sense;
     backConfig.intRoutine = []() {
         BackButtonThread->userButton.tick();
+        BackButtonThread->setIntervalFromNow(0);
         runASAP = true;
         BaseType_t higherWake = 0;
         mainDelay.interruptFromISR(&higherWake);
@@ -1092,6 +1099,7 @@ void setup()
         userConfig.pullupSense = pullup_sense;
         userConfig.intRoutine = []() {
             UserButtonThread->userButton.tick();
+            UserButtonThread->setIntervalFromNow(0);
             runASAP = true;
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
@@ -1109,6 +1117,7 @@ void setup()
         userConfigNoScreen.pullupSense = pullup_sense;
         userConfigNoScreen.intRoutine = []() {
             UserButtonThread->userButton.tick();
+            UserButtonThread->setIntervalFromNow(0);
             runASAP = true;
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
@@ -1439,6 +1448,10 @@ void setup()
 #endif
 #endif
 
+#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+    osk_found = true;
+#endif
+
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
     // Start web server thread.
     webServerThread = new WebServerThread();
@@ -1600,6 +1613,9 @@ void loop()
 
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {
+#ifdef DEBUG_LOOP_TIMING
+        LOG_DEBUG("main loop delay: %d", delayMsec);
+#endif
         mainDelay.delay(delayMsec);
     }
 }
