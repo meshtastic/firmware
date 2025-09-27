@@ -97,6 +97,8 @@ typedef struct _meshtastic_ChannelSettings {
     /* Per-channel module settings. */
     bool has_module_settings;
     meshtastic_ModuleSettings module_settings;
+    /* Whether or not we should receive notifactions / alerts through this channel */
+    bool mute;
 } meshtastic_ChannelSettings;
 
 /* A pair of a channel number, mode and the (sharable) settings for that channel */
@@ -128,10 +130,10 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default}
+#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0}
 #define meshtastic_ModuleSettings_init_default   {0, 0}
 #define meshtastic_Channel_init_default          {0, false, meshtastic_ChannelSettings_init_default, _meshtastic_Channel_Role_MIN}
-#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero}
+#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0}
 #define meshtastic_ModuleSettings_init_zero      {0, 0}
 #define meshtastic_Channel_init_zero             {0, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Channel_Role_MIN}
 
@@ -145,6 +147,7 @@ extern "C" {
 #define meshtastic_ChannelSettings_uplink_enabled_tag 5
 #define meshtastic_ChannelSettings_downlink_enabled_tag 6
 #define meshtastic_ChannelSettings_module_settings_tag 7
+#define meshtastic_ChannelSettings_mute_tag      8
 #define meshtastic_Channel_index_tag             1
 #define meshtastic_Channel_settings_tag          2
 #define meshtastic_Channel_role_tag              3
@@ -157,7 +160,8 @@ X(a, STATIC,   SINGULAR, STRING,   name,              3) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                4) \
 X(a, STATIC,   SINGULAR, BOOL,     uplink_enabled,    5) \
 X(a, STATIC,   SINGULAR, BOOL,     downlink_enabled,   6) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  module_settings,   7)
+X(a, STATIC,   OPTIONAL, MESSAGE,  module_settings,   7) \
+X(a, STATIC,   SINGULAR, BOOL,     mute,              8)
 #define meshtastic_ChannelSettings_CALLBACK NULL
 #define meshtastic_ChannelSettings_DEFAULT NULL
 #define meshtastic_ChannelSettings_module_settings_MSGTYPE meshtastic_ModuleSettings
@@ -187,8 +191,8 @@ extern const pb_msgdesc_t meshtastic_Channel_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CHANNEL_PB_H_MAX_SIZE meshtastic_Channel_size
-#define meshtastic_ChannelSettings_size          72
-#define meshtastic_Channel_size                  87
+#define meshtastic_ChannelSettings_size          74
+#define meshtastic_Channel_size                  89
 #define meshtastic_ModuleSettings_size           8
 
 #ifdef __cplusplus
