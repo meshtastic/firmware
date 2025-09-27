@@ -204,7 +204,7 @@ NodeDB::NodeDB()
 
     int saveWhat = 0;
     // Get device unique id
-#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     uint32_t unique_id[4];
     // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
     // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
@@ -701,7 +701,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
     config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
 #else
-    config.network.enabled_protocols = 1;
+    config.network.enabled_protocols = 0;
 #endif
 #endif
 
@@ -1667,9 +1667,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             return false;
         }
         LOG_INFO("Public Key set for node, not updating!");
-        // we copy the key into the incoming packet, to prevent overwrite
-        p.public_key.size = 32;
-        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
     } else if (p.public_key.size == 32) {
         LOG_INFO("Update Node Pubkey!");
     }
