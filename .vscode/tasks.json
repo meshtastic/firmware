@@ -1,15 +1,26 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "type": "PlatformIO",
-      "task": "Build",
-      "problemMatcher": ["$platformio"],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "label": "PlatformIO: Build"
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "PlatformIO",
+			"task": "Build",
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"label": "PlatformIO: Build"
+		},
+		{
+			"label": "PlatformIO: Build",
+			"type": "shell",
+			"command": "python -m platformio run -e tbeam-s3-core",
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": "build"
+		}
+	]
 }
