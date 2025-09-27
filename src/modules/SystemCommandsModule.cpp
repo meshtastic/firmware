@@ -101,6 +101,22 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         }
 #endif
         return true;
+    case INPUT_BROKER_BT_WIFI_TOGGLE:
+        if (config.network.wifi_enabled)
+        {
+            LOG_WARN("Disabling WiFi, enabling BT");
+            config.network.wifi_enabled = false;
+            config.bluetooth.enabled = true;
+        }
+        else
+        {
+            LOG_WARN("Enabling WiFi, disabling BT");
+            config.network.wifi_enabled = true;
+            config.bluetooth.enabled = false;
+        }
+        nodeDB->saveToDisk();
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        return 0;
     // Mesh ping
     case INPUT_BROKER_SEND_PING:
         service->refreshLocalMeshNode();
