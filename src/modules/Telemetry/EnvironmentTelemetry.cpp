@@ -183,7 +183,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #endif
 #ifdef SENSECAP_INDICATOR
-    // Not a real I2C device
+    // Not a real I2C device, uses UART
     addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #endif
     addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);

@@ -11,6 +11,9 @@ class IndicatorSensor : public TelemetrySensor
     IndicatorSensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+
+  private:
+    void setup();
 };
 
 #endif
