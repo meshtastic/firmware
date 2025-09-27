@@ -356,12 +356,20 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif
+#if HAS_UDP_MULTICAST
+        // Only publish to UDP if we're the original transmitter of the packet
+        if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST &&
+            isFromUs(p)) {
+            udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+        }
+#endif
         packetPool.release(p_decoded);
     }
-
 #if HAS_UDP_MULTICAST
-    if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+    // For packets that are already encrypted, we need to determine the channel from packet info
+    else if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST &&
+             isFromUs(p)) {
+        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), p->channel);
     }
 #endif
 
