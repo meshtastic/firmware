@@ -248,11 +248,19 @@ void menuHandler::wifiScanMenu()
         NotificationRenderer::virtualKeyboard = nullptr;
     }
 
-    // Wifi scan
+    // Wifi scan - handle platform differences
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true);
     delay(60);
+
+    // Platform-specific WiFi scanning
+#if defined(ARCH_RP2040) || defined(RPI_PICO)
+    // RP2040/Pico W uses single parameter scanNetworks()
+    int n = WiFi.scanNetworks();
+#else
+    // ESP32 and other platforms may use two parameters
     int n = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+#endif
 
     struct AP {
         String ssid;
@@ -267,7 +275,22 @@ void menuHandler::wifiScanMenu()
         if (ssid.length() == 0)
             continue;
         int rssi = WiFi.RSSI(i);
-        bool open = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+
+        // Platform-specific encryption type check
+        // Try to detect open networks - different platforms use different constants
+        bool open = false;
+        uint8_t encType = WiFi.encryptionType(i);
+
+#if defined(ARCH_RP2040) || defined(RPI_PICO)
+        // RP2040/Pico W typically uses 0 for open networks
+        open = (encType == 0);
+#elif defined(ARCH_ESP32) || defined(ESP32)
+        // ESP32 uses WIFI_AUTH_OPEN constant
+        open = (encType == WIFI_AUTH_OPEN);
+#else
+        // Generic fallback - assume 0 means open for most platforms
+        open = (encType == 0);
+#endif
 
         auto it = std::find_if(aps.begin(), aps.end(), [&](const AP &a) { return a.ssid == ssid; });
         if (it == aps.end())
@@ -375,8 +398,6 @@ void menuHandler::wifiScanMenu()
         screen->showSimpleBanner("WiFi not available", 2000);
 #endif
 }
-
-#endif
 
 void menuHandler::DeviceRolePicker()
 {
@@ -1827,6 +1848,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         menuQueue = menu_none;
         return;
 #endif
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     case mqtt_base_menu:
         mqttBaseMenu();
         break;
@@ -1839,6 +1861,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case mqtt_credentials_config:
         mqttCredentialsConfig();
         break;
+#endif
     case wifi_password_prompt: {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
         char hdr[48];
@@ -1871,6 +1894,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         menuQueue = menu_none;
         return;
     }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     case mqtt_server_prompt: {
         char hdr[32] = "MQTT Server:";
 
@@ -1949,6 +1973,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         menuQueue = menu_none;
         return;
     }
+#endif
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
         break;
@@ -1969,6 +1994,7 @@ void menuHandler::wifiConfigMenu()
 }
 #endif
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 void menuHandler::mqttBaseMenu()
 {
     enum optionsNumbers { Back, Toggle, ServerConfig, Credentials, Status };
@@ -1988,9 +2014,7 @@ void menuHandler::mqttBaseMenu()
             menuQueue = mqtt_credentials_config;
             screen->runNow();
         } else if (selected == Status) {
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
             screen->openMqttInfoScreen();
-#endif
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -2053,5 +2077,8 @@ void menuHandler::mqttToggleMenu()
         screen->showSimpleBanner(!currentState ? "MQTT Enabled" : "MQTT Disabled", 2000);
     });
 }
+#endif
 
 } // namespace graphics
+
+#endif // HAS_SCREEN
