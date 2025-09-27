@@ -90,7 +90,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     // For subsequent hops, check if previous relay is a favorite router
     // Optimized search for favorite routers with matching last byte
     // Check ordering optimized for IoT devices (cheapest checks first)
-    for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node)
             continue;
