@@ -105,7 +105,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 
         // Check 3: role check (moderate cost - multiple comparisons)
         if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
             continue;
         }
 
