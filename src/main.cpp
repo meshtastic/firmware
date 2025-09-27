@@ -1602,8 +1602,9 @@ void loop()
 #endif
 
     service->loop();
-#if defined(LGFX_SDL)
-    if (screen) {
+#if ARCH_PORTDUINO && HAS_TFT
+    if (screen && portduino_config.displayPanel == x11 &&
+        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();
