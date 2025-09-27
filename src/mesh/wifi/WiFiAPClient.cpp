@@ -354,13 +354,13 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, HIGH);
+        digitalWrite(WIFI_LED, LOW ^ WIFI_STATE_ON);
 #endif
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, LOW);
+        digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);
@@ -411,13 +411,13 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_AP_START:
         LOG_INFO("WiFi access point started");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, HIGH);
+        digitalWrite(WIFI_LED, LOW ^ WIFI_STATE_ON);
 #endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STOP:
         LOG_INFO("WiFi access point stopped");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, LOW);
+        digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
