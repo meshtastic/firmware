@@ -1,10 +1,20 @@
-#ifdef T_LORA_PAGER
+#include "configuration.h"
+#if defined(FSM_ROTARY_ENCODER)
 
-#include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+#include "RotaryEncoderImpl.h"
+extern bool osk_found;
 
 #define ORIGIN_NAME "RotaryEncoder"
+
+#ifndef FSM_ROTARY_ENCODER_DEBOUNCE
+#define FSM_ROTARY_ENCODER_DEBOUNCE 200
+#endif
+
+#ifndef FSM_ROTARY_ENCODER_CHECK_INTERVAL
+#define FSM_ROTARY_ENCODER_CHECK_INTERVAL 10
+#endif
 
 RotaryEncoderImpl *rotaryEncoderImpl;
 
@@ -35,6 +45,7 @@ bool RotaryEncoderImpl::init()
     LOG_INFO("RotaryEncoder initialized pins(%d, %d, %d), events(%d, %d, %d)", moduleConfig.canned_message.inputbroker_pin_a,
              moduleConfig.canned_message.inputbroker_pin_b, moduleConfig.canned_message.inputbroker_pin_press, eventCw, eventCcw,
              eventPressed);
+    osk_found = true;
     return true;
 }
 
@@ -43,7 +54,7 @@ int32_t RotaryEncoderImpl::runOnce()
     InputEvent e{originName, INPUT_BROKER_NONE, 0, 0, 0};
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
-        if (lastPressed + 200 < millis()) {
+        if (lastPressed + FSM_ROTARY_ENCODER_DEBOUNCE < millis()) {
             LOG_DEBUG("Rotary event Press");
             lastPressed = millis();
             e.inputEvent = this->eventPressed;
@@ -67,7 +78,7 @@ int32_t RotaryEncoderImpl::runOnce()
         this->notifyObservers(&e);
     }
 
-    return 10;
+    return FSM_ROTARY_ENCODER_CHECK_INTERVAL;
 }
 
 #endif
