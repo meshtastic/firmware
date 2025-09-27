@@ -153,7 +153,7 @@ template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType ty
         TwoWire *bus = &Wire;
 #else
         TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
-        if (dev.address.port != I2CPort::WIRE1 && sensor->onlyWire1()) {
+        if (dev.address.port != ScanI2C::I2CPort::WIRE1 && sensor->onlyWire1()) {
             // This sensor only works on Wire (Wire1 is not supported)
             delete sensor;
             return;
