@@ -14,6 +14,10 @@ bool LTR390UVSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     LOG_INFO("Init sensor: %s", sensorName);
 
     status = ltr390uv.begin(bus);
+    if (!status) {
+        return status;
+    }
+
     ltr390uv.setMode(LTR390_MODE_UVS);
     ltr390uv.setGain(LTR390_GAIN_18);                // Datasheet default
     ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Datasheet default

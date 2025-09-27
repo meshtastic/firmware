@@ -16,6 +16,9 @@ bool BMP280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     bmp280 = Adafruit_BMP280(bus);
     status = bmp280.begin(dev->address.address);
+    if (!status) {
+        return status;
+    }
 
     bmp280.setSampling(Adafruit_BMP280::MODE_FORCED,
                        Adafruit_BMP280::SAMPLING_X1, // Temp. oversampling

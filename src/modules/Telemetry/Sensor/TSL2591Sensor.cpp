@@ -14,6 +14,9 @@ bool TSL2591Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
     status = tsl.begin(bus);
+    if (!status) {
+        return status;
+    }
     tsl.setGain(TSL2591_GAIN_LOW); // 1x gain
     tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
 

@@ -27,6 +27,9 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_ERROR("RAK12035Sensor Init Failed");
         status = false;
     }
+    if (!status) {
+        return status;
+    }
     setup();
 
     initI2CSensor();

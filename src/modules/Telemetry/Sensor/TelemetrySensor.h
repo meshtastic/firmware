@@ -59,9 +59,10 @@ class TelemetrySensor
     // TODO: delete after migration
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
 
+#if WIRE_INTERFACES_COUNT > 1
     // Set to true if Implementation only works first I2C port (Wire)
     virtual bool onlyWire1() { return false; }
-
+#endif
     virtual int32_t runOnce() { return INT32_MAX; }
     virtual bool isInitialized() { return initialized; }
     virtual bool isRunning() { return status > 0; }

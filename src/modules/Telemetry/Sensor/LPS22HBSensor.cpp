@@ -14,6 +14,9 @@ bool LPS22HBSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
     status = lps22hb.begin_I2C(dev->address.address, bus);
+    if (!status) {
+        return status;
+    }
     lps22hb.setDataRate(LPS22_RATE_10_HZ);
 
     initI2CSensor();

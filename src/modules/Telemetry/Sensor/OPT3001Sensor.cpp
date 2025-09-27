@@ -14,6 +14,9 @@ bool OPT3001Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     LOG_INFO("Init sensor: %s", sensorName);
     auto errorCode = opt3001.begin(dev->address.address);
     status = errorCode == NO_ERROR;
+    if (!status) {
+        return status;
+    }
 
     OPT3001_Config newConfig;
 

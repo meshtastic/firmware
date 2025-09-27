@@ -15,6 +15,9 @@ bool VEML7700Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
     status = veml7700.begin(bus);
+    if (!status) {
+        return status;
+    }
 
     veml7700.setLowThreshold(10000);
     veml7700.setHighThreshold(20000);

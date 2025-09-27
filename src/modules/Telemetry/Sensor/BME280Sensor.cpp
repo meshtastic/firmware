@@ -14,6 +14,9 @@ bool BME280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
     status = bme280.begin(dev->address.address, bus);
+    if (!status) {
+        return status;
+    }
 
     bme280.setSampling(Adafruit_BME280::MODE_FORCED,
                        Adafruit_BME280::SAMPLING_X1, // Temp. oversampling

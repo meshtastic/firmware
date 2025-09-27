@@ -13,6 +13,9 @@ bool DPS310Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
     status = dps310.begin_I2C(dev->address.address, bus);
+    if (!status) {
+        return status;
+    }
 
     dps310.configurePressure(DPS310_1HZ, DPS310_4SAMPLES);
     dps310.configureTemperature(DPS310_1HZ, DPS310_4SAMPLES);

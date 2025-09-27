@@ -148,9 +148,17 @@ template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType ty
 {
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
     if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
-        TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
-
         TelemetrySensor *sensor = new T();
+#if WIRE_INTERFACES_COUNT == 1
+        TwoWire *bus = &Wire;
+#else
+        TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
+        if (dev.address.port != I2CPort::WIRE1 && sensor->onlyWire1()) {
+            // This sensor only works on Wire (Wire1 is not supported)
+            delete sensor;
+            return;
+        }
+#endif
         if (sensor->initDevice(bus, &dev)) {
             sensors.push_front(sensor);
             return;

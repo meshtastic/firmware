@@ -15,7 +15,10 @@ bool SHT4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     uint32_t serialNumber = 0;
 
-    sht4x.begin(bus);
+    status = sht4x.begin(bus);
+    if (!status) {
+        return status;
+    }
 
     serialNumber = sht4x.readSerial();
     if (serialNumber != 0) {

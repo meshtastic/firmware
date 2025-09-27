@@ -13,6 +13,9 @@ bool MCP9808Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
     status = mcp9808.begin(dev->address.address, bus);
+    if (!status) {
+        return status;
+    }
     mcp9808.setResolution(2);
 
     initI2CSensor();
