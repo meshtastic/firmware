@@ -459,6 +459,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
@@ -509,7 +511,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message) {
+            if (moduleConfig.external_notification.alert_message && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
                 setExternalState(0, true);
@@ -520,7 +522,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra) {
+            if (moduleConfig.external_notification.alert_message_vibra && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
                 setExternalState(1, true);
@@ -531,7 +533,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer) {
+            if (moduleConfig.external_notification.alert_message_buzzer && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 isNagging = true;
                 if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
