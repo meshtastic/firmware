@@ -1116,7 +1116,7 @@ void setup()
             mainDelay.interruptFromISR(&higherWake);
         };
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+        userConfigNoScreen.longPress = INPUT_BROKER_BT_WIFI_TOGGLE;
         userConfigNoScreen.longPressTime = 500;
         userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
         userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
