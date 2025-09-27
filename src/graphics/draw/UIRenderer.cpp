@@ -125,8 +125,10 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
     char displayLine[32];
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
-        strcpy(displayLine, "No GPS present");
-        display->drawString(x, y, displayLine);
+        if (strcmp(mode, "line1") == 0) {
+            strcpy(displayLine, "No GPS present");
+            display->drawString(x, y, displayLine);
+        }
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         if (strcmp(mode, "line1") == 0) {
             strcpy(displayLine, "No GPS Lock");
