@@ -739,22 +739,39 @@ bool RadioInterface::setAdaptiveCodingRate(uint8_t retryCount)
     }
 
     // Progressive coding rate adaptation for better reliability
-    // Always increase from the current/original coding rate, never decrease
-    uint8_t newCr = originalCr + retryCount + 1;
+    // Calculate the target coding rate based on retry count
+    uint8_t newCr;
 
-    // Clamp to maximum coding rate of 8
-    if (newCr > 8) {
-        newCr = 8;
+    if (originalCr == 5) {
+        // Special progression for default CR 5: 5 -> 7 -> 8 -> 8 (skip 6)
+        switch (retryCount) {
+        case 0:
+            newCr = 7;
+            break; // Skip 6, go to 7
+        case 1:
+            newCr = 8;
+            break; // Maximum robustness
+        case 2:
+            newCr = 8;
+            break; // Stay at maximum
+        default:
+            newCr = 8;
+            break;
+        }
+    } else {
+        // Standard progression for other coding rates
+        newCr = originalCr + retryCount + 1;
+        // Clamp to maximum coding rate of 8
+        if (newCr > 8) {
+            newCr = 8;
+        }
     }
 
-    if (newCr != cr) {
-        LOG_INFO("Adaptive coding rate: retry %d, changing CR from 4/%d to 4/%d", retryCount, cr, newCr);
-        cr = newCr;
-        // Use the more efficient direct coding rate change method if available
-        return setRadioCodingRate(cr);
-    }
-
-    return false; // No change made
+    // Apply the calculated coding rate for this retry
+    LOG_INFO("Adaptive coding rate: retry %d, changing CR from 4/%d to 4/%d", retryCount, cr, newCr);
+    cr = newCr;
+    // Use the more efficient direct coding rate change method if available
+    return setRadioCodingRate(cr);
 }
 
 bool RadioInterface::restoreOriginalCodingRate()

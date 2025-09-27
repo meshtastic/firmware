@@ -336,14 +336,7 @@ int32_t NextHopRouter::doRetransmissions()
                     FloodingRouter::send(packetPool.allocCopy(*p.packet));
                 }
 
-                // Restore original coding rate after transmission
-                if (adaptiveCrApplied && iface) {
-                    if (iface->restoreOriginalCodingRate()) {
-                        LOG_DEBUG("Restored original coding rate after retransmission");
-                    }
-                }
-
-                // Queue again
+                // Queue again for next retry
                 --p.numRetransmissions;
                 setNextTx(&p);
             }
