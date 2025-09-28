@@ -161,7 +161,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * timer scaled to SNR of to be flooded packet
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimerSNR(float snr);
+    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
@@ -215,4 +215,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * If the packet is not already in the late rebroadcast window, move it there
      */
     void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
+
+    /**
+     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+     * @return Whether a pending packet was removed
+     */
+
+    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 };

@@ -100,6 +100,7 @@ void PhoneAPI::close()
         config_nonce = 0;
         config_state = 0;
         pauseBluetoothLogging = false;
+        heartbeatReceived = false;
     }
 }
 
@@ -192,12 +193,6 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
-    if (!available()) {
-        return 0;
-    }
-    // In case we send a FromRadio packet
-    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-
     // Respond to heartbeat by sending queue status
     if (heartbeatReceived) {
         memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
@@ -208,6 +203,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
         return numbytes;
     }
+
+    if (!available()) {
+        return 0;
+    }
+    // In case we send a FromRadio packet
+    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
     // Advance states as needed
     switch (state) {
@@ -249,6 +250,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
             // If client only wants node info, jump directly to sending nodes
             state = STATE_SEND_OTHER_NODEINFOS;
+            onNowHasData(0);
         } else {
             state = STATE_SEND_METADATA;
         }
@@ -422,6 +424,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 state = STATE_SEND_FILEMANIFEST;
             } else {
                 state = STATE_SEND_OTHER_NODEINFOS;
+                onNowHasData(0);
             }
             config_state = 0;
         }
@@ -587,6 +590,7 @@ bool PhoneAPI::available()
                 nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
                 nodeInfoForPhone.via_mqtt = isUs ? false : nodeInfoForPhone.via_mqtt;
                 nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || isUs; // Our node is always a favorite
+                onNowHasData(0);
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine

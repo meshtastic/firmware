@@ -26,6 +26,7 @@ class AudioThread : public concurrency::OSThread
         i2sRtttl->begin(rtttlFile, audioOut);
     }
 
+    // Also handles actually playing the RTTTL, needs to be called in loop
     bool isPlaying()
     {
         if (i2sRtttl != nullptr) {

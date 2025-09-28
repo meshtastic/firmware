@@ -153,6 +153,20 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     }
 }
 
+void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
+{
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || mp.decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP)
+        return;
+
+    meshtastic_RouteDiscovery decoded = meshtastic_RouteDiscovery_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_RouteDiscovery_msg, &decoded))
+        return;
+
+    handleReceivedProtobuf(mp, &decoded);
+    // Intentionally modify the packet in-place so downstream relays see our updates.
+    alterReceivedProtobuf(const_cast<meshtastic_MeshPacket &>(mp), &decoded);
+}
+
 void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r, bool isTowardsDestination)
 {
     pb_size_t *route_count;
@@ -602,7 +616,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
             int start = 0;
             int newlinePos = resultText.indexOf('\n', start);
 
-            while (newlinePos != -1 || start < resultText.length()) {
+            while (newlinePos != -1 || start < static_cast<int>(resultText.length())) {
                 String segment;
                 if (newlinePos != -1) {
                     segment = resultText.substring(start, newlinePos);
@@ -624,7 +638,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
                         int lastGoodBreak = -1;
                         bool lineComplete = false;
 
-                        for (int i = 0; i < remaining.length(); i++) {
+                        for (int i = 0; i < static_cast<int>(remaining.length()); i++) {
                             char ch = remaining.charAt(i);
                             String testLine = tempLine + ch;
 

@@ -26,10 +26,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 
-#ifdef RV3028_RTC
+#if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#ifdef PCF8563_RTC
+#if __has_include("pcf8563.h")
 #include "pcf8563.h"
 #endif
 
@@ -135,7 +135,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-#if defined(SEEED_WIO_TRACKER_L1)
+#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS 0x3D
 #define USE_SH1106
 #else
@@ -260,6 +260,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
 // Older variant.h files might not be defining this value, so stay with the old default
 #define VEXT_ON_VALUE LOW
+#endif
+
+// -----------------------------------------------------------------------------
+// Rotary encoder
+// -----------------------------------------------------------------------------
+#ifndef ROTARY_DELAY
+#define ROTARY_DELAY 5
 #endif
 
 // -----------------------------------------------------------------------------

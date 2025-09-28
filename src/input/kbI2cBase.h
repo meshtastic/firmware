@@ -12,6 +12,7 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
 {
   public:
     explicit KbI2cBase(const char *name);
+    void toggleBacklight(bool on);
 
   protected:
     virtual int32_t runOnce() override;

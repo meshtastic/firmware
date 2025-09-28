@@ -52,7 +52,6 @@
 #undef GPS_TX_PIN
 
 #define SD_SPI_FREQUENCY 25000000
-#define SDCARD_CS 43
 
 #define LED_PIN 13     // the red part of the RGB LED
 #define LED_STATE_ON 0 // State when LED is lit

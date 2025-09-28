@@ -310,7 +310,7 @@ void RadioLibInterface::setTransmitDelay()
     // So we want to make sure the other side has had a chance to reconfigure its radio.
 
     if (p->tx_after) {
-        unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p->rx_snr) : getTxDelayMsec();
+        unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
         unsigned long now = millis();
         p->tx_after = min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr));
         notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, false);
@@ -323,7 +323,7 @@ void RadioLibInterface::setTransmitDelay()
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
         LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
-        startTransmitTimerSNR(p->rx_snr);
+        startTransmitTimerRebroadcast(p);
     }
 }
 
@@ -336,11 +336,11 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
     }
 }
 
-void RadioLibInterface::startTransmitTimerSNR(float snr)
+void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
-        uint32_t delay = getTxDelayMsecWeighted(snr);
+        uint32_t delay = getTxDelayMsecWeighted(p);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
 }
@@ -361,6 +361,26 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
         }
     }
 }
+
+/**
+ * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+ * @return Whether a pending packet was removed
+ */
+bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt)
+{
+    meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
+    if (p) {
+        LOG_DEBUG("Dropping pending-TX packet 0x%08x with hop limit %d", p->id, p->hop_limit);
+        packetPool.release(p);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Remove a packet that is eligible for replacement from the TX queue
+ */
+// void RadioLibInterface::removePending
 
 void RadioLibInterface::handleTransmitInterrupt()
 {
@@ -417,12 +437,13 @@ void RadioLibInterface::handleReceiveInterrupt()
 
     int state = iface->readData((uint8_t *)&radioBuffer, length);
 #if ARCH_PORTDUINO
-    if (settingsMap[logoutputlevel] == level_trace) {
+    if (portduino_config.logoutputlevel == level_trace) {
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("Ignore received packet due to error=%d", state);
+        LOG_ERROR("Ignore received packet due to error=%d (maybe to=0x%08x, from=0x%08x, flags=0x%02x)", state,
+                  radioBuffer.header.to, radioBuffer.header.from, radioBuffer.header.flags);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, xmitMsec);

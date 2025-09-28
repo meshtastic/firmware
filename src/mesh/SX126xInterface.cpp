@@ -12,7 +12,7 @@
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
 #if ARCH_PORTDUINO
-#define SX126X_MAX_POWER settingsMap[sx126x_max_power]
+#define SX126X_MAX_POWER portduino_config.sx126x_max_power
 #endif
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
@@ -52,18 +52,28 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
+#ifdef HELTEC_V4
+    pinMode(LORA_PA_POWER, OUTPUT);
+    digitalWrite(LORA_PA_POWER, HIGH);
+
+    pinMode(LORA_PA_EN, OUTPUT);
+    digitalWrite(LORA_PA_EN, LOW);
+    pinMode(LORA_PA_TX_EN, OUTPUT);
+    digitalWrite(LORA_PA_TX_EN, LOW);
+#endif
+
 #if ARCH_PORTDUINO
-    tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
-    if (settingsMap[sx126x_ant_sw_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[sx126x_ant_sw_pin], HIGH);
-        pinMode(settingsMap[sx126x_ant_sw_pin], OUTPUT);
+    tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
+        pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
     }
 #endif
     if (tcxoVoltage == 0.0)
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
     else
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", tcxoVoltage);
-
+    setTransmitEnable(false);
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
@@ -98,7 +108,7 @@ template <typename T> bool SX126xInterface<T>::init()
         bool dio2AsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
         bool dio2AsRfSwitch = false;
-        if (settingsMap[dio2_as_rf_switch]) {
+        if (portduino_config.dio2_as_rf_switch) {
             dio2AsRfSwitch = true;
         }
 #else
@@ -112,9 +122,9 @@ template <typename T> bool SX126xInterface<T>::init()
     // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen_pin],
-                  settingsMap[txen_pin]);
-        lora.setRfSwitchPins(settingsMap[rxen_pin], settingsMap[txen_pin]);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", portduino_config.lora_rxen_pin.pin,
+                  portduino_config.lora_txen_pin.pin);
+        lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN
@@ -259,6 +269,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
+    setTransmitEnable(true);
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -271,6 +282,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
     sleep();
 #else
 
+    setTransmitEnable(false);
     setStandby();
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
@@ -298,7 +310,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
-
+    setTransmitEnable(false);
     setStandby();
     result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
@@ -337,6 +349,26 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(SX126X_POWER_EN, LOW);
 #endif
 
+#ifdef HELTEC_V4
+    /*
+     * Do not switch the power on and off frequently.
+     * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
+     *  // digitalWrite(LORA_PA_POWER, LOW);
+     */
+    digitalWrite(LORA_PA_EN, LOW);
+    digitalWrite(LORA_PA_TX_EN, LOW);
+#endif
     return true;
 }
+
+/** Some boards require GPIO control of tx vs rx paths */
+template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
+{
+#ifdef HELTEC_V4
+    digitalWrite(LORA_PA_POWER, HIGH);
+    digitalWrite(LORA_PA_EN, HIGH);
+    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0);
+#endif
+}
+
 #endif

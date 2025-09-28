@@ -61,7 +61,7 @@
 #define LORA_DIO1 SX126X_DIO1
 
 #define USE_EINK
-#define PIN_EINK_EN -1    // Note: this is really just backlight power
+// Note: this is really just backlight power
 #define PCA_PIN_EINK_EN 5 // This is the pin number on the GPIO expander
 #define PIN_EINK_CS 39
 #define PIN_EINK_BUSY 42
