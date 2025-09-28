@@ -357,10 +357,16 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
 #endif
 #if HAS_UDP_MULTICAST
-        // Only publish to UDP if we're the original transmitter of the packet
-        if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST &&
-            isFromUs(p)) {
-            udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+        if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+            // We must have at least one channel setup for with uplink_enabled
+            bool uplinkEnabled = false;
+            for (int i = 0; i <= 7; i++) {
+                if (channels.getByIndex(i).settings.uplink_enabled)
+                    uplinkEnabled = true;
+            }
+            if (uplinkEnabled) {
+                udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+            }
         }
 #endif
         packetPool.release(p_decoded);
@@ -369,7 +375,35 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // For packets that are already encrypted, we need to determine the channel from packet info
     else if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST &&
              isFromUs(p)) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), p->channel);
+        // Check if any channel has uplink enabled (for PKI support)
+        bool uplinkEnabled = false;
+        for (int i = 0; i <= 7; i++) {
+            if (channels.getByIndex(i).settings.uplink_enabled) {
+                uplinkEnabled = true;
+                break;
+            }
+        }
+        if (uplinkEnabled) {
+            ChannelIndex chIndex = 0; // Default to primary channel
+
+            // For PKI encrypted packets, use default channel if at least one channel has uplink
+            if (p->pki_encrypted) {
+                for (int i = 0; i <= 7; i++) {
+                    if (channels.getByIndex(i).settings.uplink_enabled) {
+                        chIndex = i;
+                        break;
+                    }
+                }
+                udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+            } else {
+                // For regular channel PSK encrypted packets, try to find the channel by hash
+                int8_t foundIndex = channels.getIndexByHash(p->channel);
+                if (foundIndex >= 0) {
+                    chIndex = foundIndex;
+                    udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+                }
+            }
+        }
     }
 #endif
 

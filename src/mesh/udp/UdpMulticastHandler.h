@@ -54,10 +54,17 @@ class UdpMulticastHandler final
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            // Convert channel hash to index for downlink check
+            int8_t chIndex = channels.getIndexByHash(mp.channel);
+            if (chIndex < 0) {
+                LOG_DEBUG("UDP received packet with unknown channel hash 0x%x", mp.channel);
+                return;
+            }
+
             // Check if downlink is enabled for this channel
-            auto &ch = channels.getByIndex(mp.channel);
+            auto &ch = channels.getByIndex(chIndex);
             if (!ch.settings.downlink_enabled) {
-                LOG_DEBUG("UDP downlink disabled for channel %d", mp.channel);
+                LOG_DEBUG("UDP downlink disabled for channel %d", chIndex);
                 return;
             }
 

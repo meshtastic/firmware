@@ -460,3 +460,14 @@ int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {
     return setCrypto(channelIndex);
 }
+
+int8_t Channels::getIndexByHash(ChannelHash channelHash)
+{
+    // Iterate through all channels to find the one with matching hash
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        if (getHash(i) == channelHash) {
+            return i;
+        }
+    }
+    return -1; // Hash not found
+}
