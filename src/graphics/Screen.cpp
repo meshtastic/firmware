@@ -1458,7 +1458,8 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             }
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const meshtastic_Channel channel = channels.getByIndex(node->channel ? node->channel : channels.getPrimaryIndex());
+            const meshtastic_Channel channel =
+                channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
