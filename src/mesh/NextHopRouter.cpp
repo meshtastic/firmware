@@ -64,6 +64,10 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;
         }
+
+        // No pending packet was replaced, so we should still treat this upgraded copy as a duplicate.
+        // Otherwise it would be forwarded to the phone with a different hop limit than the first copy.
+        seenRecently = true;
     }
 
     if (seenRecently) {

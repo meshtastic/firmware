@@ -54,6 +54,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;
         }
+
+        // We found an upgraded packet but had nothing pending to replace. Treat it as a duplicate so
+        // applications (and the phone replay queue) do not see the same packet twice with different hop limits.
+        seenRecently = true;
     }
 
     if (seenRecently) {
