@@ -296,16 +296,6 @@ void setupModules()
         if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)
             new RangeTestModule();
 #endif
-    } else {
-#if !MESHTASTIC_EXCLUDE_ADMIN
-        adminModule = new AdminModule();
-#endif
-#if HAS_TELEMETRY
-        new DeviceTelemetryModule();
-#endif
-#if !MESHTASTIC_EXCLUDE_TRACEROUTE
-        traceRouteModule = new TraceRouteModule();
-#endif
     }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
