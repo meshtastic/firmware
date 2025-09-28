@@ -64,6 +64,10 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;
         }
+
+        // No queue entry was replaced by this upgraded copy, so treat it as a duplicate to avoid
+        // delivering the same packet to applications/phone twice with different hop limits.
+        seenRecently = true;
     }
 
     if (seenRecently) {
@@ -110,11 +114,14 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came directly
                 // from the destination
-                if (wasRelayer(p->relay_node, p->decoded.request_id, p->to) ||
-                    (p->hop_start != 0 && p->hop_start == p->hop_limit &&
-                     wasSoleRelayer(ourRelayID, p->decoded.request_id, p->to))) {
+                bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
+                bool weWereSoleRelayer = false;
+                bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
+                if ((weWereRelayer && wasAlreadyRelayer) ||
+                    (p->hop_start != 0 && p->hop_start == p->hop_limit && weWereSoleRelayer)) {
                     if (origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply", p->from, p->relay_node);
+                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+                                 p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
                 }
@@ -167,7 +174,6 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
  */
 uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 {
-    // When we're a repeater router->sniffReceived will call NextHopRouter directly without checking for broadcast
     if (isBroadcast(to))
         return NO_NEXT_HOP_PREFERENCE;
 
@@ -205,7 +211,7 @@ bool NextHopRouter::roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *
 {
     // Return true if we're allowed to cancel a packet in the txQueue (so we may never transmit it even once)
 
-    // Return false for roles like ROUTER, REPEATER, ROUTER_LATE which should always transmit the packet at least once.
+    // Return false for roles like ROUTER, ROUTER_LATE which should always transmit the packet at least once.
 
     return roleAllowsCancelingDupe(p); // same logic as FloodingRouter::roleAllowsCancelingDupe
 }
@@ -226,7 +232,7 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
-            // We only cancel it if we are the original sender or if we're not a router(_late)/repeater
+            // We only cancel it if we are the original sender or if we're not a router(_late)
             if (isFromUs(p) || roleAllowsCancelingFromTxQueue(p)) {
                 // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
                 cancelSending(getFrom(p), p->id);

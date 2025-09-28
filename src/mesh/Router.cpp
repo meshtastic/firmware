@@ -90,7 +90,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     // For subsequent hops, check if previous relay is a favorite router
     // Optimized search for favorite routers with matching last byte
     // Check ordering optimized for IoT devices (cheapest checks first)
-    for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node)
             continue;
@@ -105,7 +105,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 
         // Check 3: role check (moderate cost - multiple comparisons)
         if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
             continue;
         }
 
@@ -399,10 +399,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
-        return DecodeState::DECODE_FAILURE;
-
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
@@ -483,35 +479,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         }
     }
 
-#if HAS_UDP_MULTICAST
-    // Fallback: for UDP multicast, try default preset names with default PSK if normal channel match failed
-    if (!decrypted && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP) {
-        if (channels.setDefaultPresetCryptoForHash(p->channel)) {
-            memcpy(bytes, p->encrypted.bytes, rawSize);
-            crypto->decrypt(p->from, p->id, rawSize, bytes);
-
-            meshtastic_Data decodedtmp;
-            memset(&decodedtmp, 0, sizeof(decodedtmp));
-            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
-                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
-                p->decoded = decodedtmp;
-                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-                // Map to our local default channel index (name+PSK default), not necessarily primary
-                ChannelIndex defaultIndex = channels.getPrimaryIndex();
-                for (ChannelIndex i = 0; i < channels.getNumChannels(); ++i) {
-                    if (channels.isDefaultChannel(i)) {
-                        defaultIndex = i;
-                        break;
-                    }
-                }
-                chIndex = defaultIndex;
-                decrypted = true;
-            } else {
-                LOG_WARN("UDP fallback decode attempted but failed for hash 0x%x", p->channel);
-            }
-        }
-    }
-#endif
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash

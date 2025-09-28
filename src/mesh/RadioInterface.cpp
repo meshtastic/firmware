@@ -317,9 +317,8 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
 /** Returns true if we should rebroadcast early like a ROUTER */
 bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
 {
-    // If we are a ROUTER or REPEATER, we always rebroadcast early
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+    // If we are a ROUTER, we always rebroadcast early
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         return true;
     }
 
