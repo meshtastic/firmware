@@ -42,8 +42,6 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
 
 meshtastic_MeshPacket *RoutingModule::allocReply()
 {
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-        return NULL;
     assert(currentRequest);
 
     return NULL;

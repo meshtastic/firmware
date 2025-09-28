@@ -611,10 +611,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         }
         config.device = c.payload_variant.device;
         if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
-            IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                      meshtastic_Config_DeviceConfig_Role_REPEATER)) {
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
             config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater";
+            const char *warning = "Rebroadcast mode can't be set to NONE for a router";
             LOG_WARN(warning);
             sendWarning(warning);
         }
@@ -627,8 +626,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
         }
-        // Router Client is deprecated; Set it to client
-        if (c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
+        // Router Client and Repeater deprecated; Set it to client
+        if (IS_ONE_OF(c.payload_variant.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT,
+                      meshtastic_Config_DeviceConfig_Role_REPEATER)) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
             if (moduleConfig.store_forward.enabled && !moduleConfig.store_forward.is_server) {
                 moduleConfig.store_forward.is_server = true;
@@ -637,10 +637,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             }
         }
 #if USERPREFS_EVENT_MODE
-        // If we're in event mode, nobody is a Router or Repeater
+        // If we're in event mode, nobody is a Router or Router Late
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
-            config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         }
 #endif
