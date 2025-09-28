@@ -101,6 +101,11 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
+    if (p->is_replay_cached) {
+        // This is a replayed packet, so we have already transmitted it before, and any further retransmissions
+        // are explicitly requested by a replay client and therefore should not be cancelled or delayed.
+        return;
+    }
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
         // But only LoRa packets should be able to trigger this.

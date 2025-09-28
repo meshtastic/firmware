@@ -106,6 +106,29 @@ template <class T> class MemoryDynamic : public Allocator<T>
 };
 
 /**
+ * A version of MemoryDynamic that plays nicely with the replay cache
+ */
+template <class T> class MemoryDynamicReplayAware : public MemoryDynamic<T>
+{
+  public:
+    virtual void release(T *p) override
+    {
+        if (p->is_replay_cached)
+            // Don't free packets that are in the replay cache
+            return;
+        MemoryDynamic<T>::release(p);
+    }
+
+    T *allocCopy(const T &src, TickType_t maxWait = portMAX_DELAY)
+    {
+        T *p = MemoryDynamic<T>::allocCopy(src, maxWait);
+        if (p)
+            p->is_replay_cached = false;
+        return p;
+    }
+};
+
+/**
  * A static memory pool that uses a fixed buffer instead of heap allocation
  */
 template <class T, int MaxSize> class MemoryPool : public Allocator<T>
@@ -141,6 +164,14 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         }
     }
 
+    T *allocCopy(const T &src, TickType_t maxWait = portMAX_DELAY)
+    {
+        T *p = MemoryPool<T, MaxSize>::allocCopy(src, maxWait);
+        if (p)
+            p->is_replay_cached = false;
+        return p;
+    }
+
   protected:
     // Alloc some storage from our static pool
     virtual T *alloc(TickType_t maxWait) override
@@ -157,5 +188,20 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         // No free slots available - return nullptr instead of asserting
         LOG_WARN("No free slots available in static memory pool!");
         return nullptr;
+    }
+};
+
+/**
+ * A version of MemoryPool that plays nicely with the replay cache
+ */
+template <class T, int MaxSize> class MemoryPoolReplayAware : public MemoryPool<T, MaxSize>
+{
+  public:
+    virtual void release(T *p) override
+    {
+        if (p->is_replay_cached)
+            // Don't free packets that are in the replay cache
+            return;
+        MemoryPool<T, MaxSize>::release(p);
     }
 };
