@@ -395,16 +395,6 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef BATTERY_LPCOMP_INPUT
         // Wake up if power rises again
         nrf_lpcomp_config_t c;
-        /* We have AIN3 with a VBAT divider so AIN3 = VBAT * (1.5/2.5)
-         * We have the device going deep sleep under 3.1V, which is AIN3 = 1.86V
-         * So we can wake up when VBAT>=VDD is restored to 3.3V, where AIN3 = 1.98V
-         * 1.98/3.3 = 6/10, but that's close to the VBAT divider, so we
-         * pick 6/8VDD, which means VBAT=4.1V.
-         * Reference:
-         * VDD=3.3V AIN3=5/8*VDD=2.06V VBAT=1.66*AIN3=3.41V
-         * VDD=3.3V AIN3=11/16*VDD=2.26V VBAT=1.66*AIN3=3.76V
-         * VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
-         */
         c.reference = BATTERY_LPCOMP_THRESHOLD;
         c.detection = NRF_LPCOMP_DETECT_UP;
         c.hyst = NRF_LPCOMP_HYST_NOHYST;
