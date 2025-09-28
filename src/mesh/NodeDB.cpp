@@ -554,10 +554,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
-    // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
+    // Restrict ROUTER*, LOST AND FOUND roles for security reasons
     if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_REPEATER,
-                  meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
+                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
         LOG_WARN("ROUTER roles are restricted, falling back to CLIENT role");
         config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     } else {
@@ -906,11 +905,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        owner.has_is_unmessagable = true;
-        owner.is_unmessagable = true;
-        config.display.screen_on_secs = 1;
-        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;

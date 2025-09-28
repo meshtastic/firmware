@@ -112,103 +112,100 @@
  */
 void setupModules()
 {
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            inputBroker = new InputBroker();
-            systemCommandsModule = new SystemCommandsModule();
-            buzzerFeedbackThread = new BuzzerFeedbackThread();
-        }
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        inputBroker = new InputBroker();
+        systemCommandsModule = new SystemCommandsModule();
+        buzzerFeedbackThread = new BuzzerFeedbackThread();
+    }
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
-        adminModule = new AdminModule();
+    adminModule = new AdminModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_NODEINFO
-        nodeInfoModule = new NodeInfoModule();
+    nodeInfoModule = new NodeInfoModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
-        positionModule = new PositionModule();
+    positionModule = new PositionModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
-        waypointModule = new WaypointModule();
+    waypointModule = new WaypointModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_TEXTMESSAGE
-        textMessageModule = new TextMessageModule();
+    textMessageModule = new TextMessageModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-        traceRouteModule = new TraceRouteModule();
+    traceRouteModule = new TraceRouteModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_NEIGHBORINFO
-        if (moduleConfig.has_neighbor_info && moduleConfig.neighbor_info.enabled) {
-            neighborInfoModule = new NeighborInfoModule();
-        }
+    if (moduleConfig.has_neighbor_info && moduleConfig.neighbor_info.enabled) {
+        neighborInfoModule = new NeighborInfoModule();
+    }
 #endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
-        if (moduleConfig.has_detection_sensor && moduleConfig.detection_sensor.enabled) {
-            detectionSensorModule = new DetectionSensorModule();
-        }
+    if (moduleConfig.has_detection_sensor && moduleConfig.detection_sensor.enabled) {
+        detectionSensorModule = new DetectionSensorModule();
+    }
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
-        if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TAK,
-                      meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
-            atakPluginModule = new AtakPluginModule();
-        }
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TAK, meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
+        atakPluginModule = new AtakPluginModule();
+    }
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
-        keyVerificationModule = new KeyVerificationModule();
+    keyVerificationModule = new KeyVerificationModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_DROPZONE
-        dropzoneModule = new DropzoneModule();
+    dropzoneModule = new DropzoneModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
-        new GenericThreadModule();
+    new GenericThreadModule();
 #endif
-        // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
-        // to a global variable.
+    // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
+    // to a global variable.
 
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
-        new RemoteHardwareModule();
+    new RemoteHardwareModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_POWERSTRESS
-        new PowerStressModule();
+    new PowerStressModule();
 #endif
-        // Example: Put your module here
-        // new ReplyModule();
+    // Example: Put your module here
+    // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-            if (!rotaryEncoderInterruptImpl1->init()) {
-                delete rotaryEncoderInterruptImpl1;
-                rotaryEncoderInterruptImpl1 = nullptr;
-            }
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
+        if (!rotaryEncoderInterruptImpl1->init()) {
+            delete rotaryEncoderInterruptImpl1;
+            rotaryEncoderInterruptImpl1 = nullptr;
+        }
 #ifdef T_LORA_PAGER
-            // use a special FSM based rotary encoder version for T-LoRa Pager
-            rotaryEncoderImpl = new RotaryEncoderImpl();
-            if (!rotaryEncoderImpl->init()) {
-                delete rotaryEncoderImpl;
-                rotaryEncoderImpl = nullptr;
-            }
+        // use a special FSM based rotary encoder version for T-LoRa Pager
+        rotaryEncoderImpl = new RotaryEncoderImpl();
+        if (!rotaryEncoderImpl->init()) {
+            delete rotaryEncoderImpl;
+            rotaryEncoderImpl = nullptr;
+        }
 #else
-            upDownInterruptImpl1 = new UpDownInterruptImpl1();
-            if (!upDownInterruptImpl1->init()) {
-                delete upDownInterruptImpl1;
-                upDownInterruptImpl1 = nullptr;
-            }
+        upDownInterruptImpl1 = new UpDownInterruptImpl1();
+        if (!upDownInterruptImpl1->init()) {
+            delete upDownInterruptImpl1;
+            upDownInterruptImpl1 = nullptr;
+        }
 #endif
-            cardKbI2cImpl = new CardKbI2cImpl();
-            cardKbI2cImpl->init();
+        cardKbI2cImpl = new CardKbI2cImpl();
+        cardKbI2cImpl->init();
 #if defined(M5STACK_UNITC6L)
-            i2cButton = new i2cButtonThread("i2cButtonThread");
+        i2cButton = new i2cButtonThread("i2cButtonThread");
 #endif
 #ifdef INPUTBROKER_MATRIX_TYPE
-            kbMatrixImpl = new KbMatrixImpl();
-            kbMatrixImpl->init();
+        kbMatrixImpl = new KbMatrixImpl();
+        kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #ifdef INPUTBROKER_SERIAL_TYPE
-            aSerialKeyboardImpl = new SerialKeyboardImpl();
-            aSerialKeyboardImpl->init();
+        aSerialKeyboardImpl = new SerialKeyboardImpl();
+        aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
-        }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {

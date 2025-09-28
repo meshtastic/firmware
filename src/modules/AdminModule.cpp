@@ -611,10 +611,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         }
         config.device = c.payload_variant.device;
         if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
-            IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                      meshtastic_Config_DeviceConfig_Role_REPEATER)) {
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
             config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater";
+            const char *warning = "Rebroadcast mode can't be set to NONE for a router";
             LOG_WARN(warning);
             sendWarning(warning);
         }
@@ -637,10 +636,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             }
         }
 #if USERPREFS_EVENT_MODE
-        // If we're in event mode, nobody is a Router or Repeater
+        // If we're in event mode, nobody is a Router or Router Late
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
-            config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         }
 #endif
