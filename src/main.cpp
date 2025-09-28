@@ -869,7 +869,7 @@ void setup()
 #if defined(RAK3401) || defined(RAK13302)
     pinMode(WB_IO2, OUTPUT);
     digitalWrite(WB_IO2, HIGH);
-    SPI1.setPins(LORA_MISO, LORA_SCK, LORA_MOSI , LORA_CS);
+    SPI1.setPins(LORA_MISO, LORA_SCK, LORA_MOSI);
     SPI1.begin();
 #else
     SPI.begin();
