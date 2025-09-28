@@ -1,4 +1,10 @@
 #include "NextHopRouter.h"
+#include "MeshTypes.h"
+#include "meshUtils.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
+#include "NodeDB.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -32,7 +38,35 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     bool wasFallback = false;
     bool weWereNextHop = false;
-    if (wasSeenRecently(p, true, &wasFallback, &weWereNextHop)) { // Note: this will also add a recent packet record
+    bool wasUpgraded = false;
+    bool seenRecently = wasSeenRecently(p, true, &wasFallback, &weWereNextHop,
+                                        &wasUpgraded); // Updates history; returns false when an upgrade is detected
+
+    // Handle hop_limit upgrade scenario for rebroadcasters
+    // isRebroadcaster() is duplicated in perhapsRelay(), but this avoids confusing log messages
+    if (wasUpgraded && isRebroadcaster() && iface && p->hop_limit > 0) {
+        // Upgrade detection bypasses the duplicate short-circuit so we replace the queued packet before exiting
+        uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
+        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+            LOG_DEBUG("Processing upgraded packet 0x%08x for relay with hop limit %d (dropping queued < %d)", p->id, p->hop_limit,
+                      dropThreshold);
+
+            if (nodeDB)
+                nodeDB->updateFrom(*p);
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+            if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+                traceRouteModule->processUpgradedPacket(*p);
+#endif
+
+            perhapsRelay(p);
+
+            // We already enqueued the improved copy, so make sure the incoming packet stops here.
+            return true;
+        }
+    }
+
+    if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
 
         if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
@@ -76,11 +110,14 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came directly
                 // from the destination
-                if (wasRelayer(p->relay_node, p->decoded.request_id, p->to) ||
-                    (p->hop_start != 0 && p->hop_start == p->hop_limit &&
-                     wasSoleRelayer(ourRelayID, p->decoded.request_id, p->to))) {
+                bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
+                bool weWereSoleRelayer = false;
+                bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
+                if ((weWereRelayer && wasAlreadyRelayer) ||
+                    (p->hop_start != 0 && p->hop_start == p->hop_limit && weWereSoleRelayer)) {
                     if (origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply", p->from, p->relay_node);
+                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+                                 p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
                 }
@@ -108,7 +145,13 @@ bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x", p->relay_node);
 
-                tosend->hop_limit--; // bump down the hop count
+                // Use shared logic to determine if hop_limit should be decremented
+                if (shouldDecrementHopLimit(p)) {
+                    tosend->hop_limit--; // bump down the hop count
+                } else {
+                    LOG_INFO("Router/CLIENT_BASE-to-favorite-router/CLIENT_BASE relay: preserving hop_limit");
+                }
+
                 NextHopRouter::send(tosend);
 
                 return true;
