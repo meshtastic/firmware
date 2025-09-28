@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 
+#include "memGet.h"
 #include "mesh/generated/meshtastic/admin.pb.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "mesh/generated/meshtastic/localonly.pb.h"
@@ -11,11 +12,42 @@
 // Tricky macro to let you find the sizeof a type member
 #define member_size(type, member) sizeof(((type *)0)->member)
 
+// Minimum PSRAM the firmware expects before enabling the "expanded" queues that
+// rely on off-chip RAM instead of internal DRAM. Currently set to 2MB to
+// accommodate Heltec WiFi LoRa 32 V4 boards (and others)
+static constexpr size_t PSRAM_LARGE_THRESHOLD_BYTES = 2 * 1024 * 1024;
+
+inline bool has_psram(size_t minimumBytes = PSRAM_LARGE_THRESHOLD_BYTES)
+{
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+    return memGet.getPsramSize() >= minimumBytes;
+#else
+    (void)minimumBytes;
+    return false;
+#endif
+}
+
+// Runtime cap used to keep the BLE message queue from overflowing low-memory
+// S3 variants if PSRAM is smaller than expected or temporarily unavailable.
+inline int get_rx_tophone_limit()
+{
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    return has_psram() ? 200 : 32;
+#elif defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+    return 8;
+#else
+    return 32;
+#endif
+}
+
 /// max number of packets which can be waiting for delivery to android - note, this value comes from mesh.options protobuf
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
-#if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+static constexpr int MAX_RX_TOPHONE_WITH_PSRAM = 200;
+#define MAX_RX_TOPHONE MAX_RX_TOPHONE_WITH_PSRAM
+#elif defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 #define MAX_RX_TOPHONE 8
 #else
 #define MAX_RX_TOPHONE 32
@@ -51,9 +83,8 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #include "Esp.h"
 static inline int get_max_num_nodes()
 {
-    uint32_t psram_size = ESP.getPsramSize() / (1024 * 1024); // Convert Bytes to MB
-    if (psram_size >= 2) {
-        return 800;
+    if (has_psram()) {
+        return 5000;
     }
 
     uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Fallback based on flash size

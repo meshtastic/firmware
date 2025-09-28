@@ -52,8 +52,18 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+// Try to put the heavy MeshPacket pool into PSRAM. If that fails we fall back to
+// heap allocation so the radio stays functional (at the cost of fewer packets).
+static PsramMemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> psramPool;
+static MemoryDynamic<meshtastic_MeshPacket> fallbackPool;
+Allocator<meshtastic_MeshPacket> &packetPool = psramPool.isValid()
+                                                   ? static_cast<Allocator<meshtastic_MeshPacket> &>(psramPool)
+                                                   : static_cast<Allocator<meshtastic_MeshPacket> &>(fallbackPool);
+#else
 static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
+#endif
 #endif
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
@@ -65,6 +75,14 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
  */
 Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRADIO)
 {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    if (!psramPool.isValid()) {
+        LOG_WARN("PSRAM packet pool unavailable, falling back to heap allocations");
+    }
+    if (!has_psram() && MAX_RX_TOPHONE > get_rx_tophone_limit()) {
+        LOG_WARN("Detected <2MB PSRAM, limiting phone queue to %d packets", get_rx_tophone_limit());
+    }
+#endif
     // This is called pre main(), don't touch anything here, the following code is not safe
 
     /* LOG_DEBUG("Size of NodeInfo %d", sizeof(NodeInfo));
