@@ -1112,9 +1112,9 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                           ? ourNode->position.altitude
                           : geoCoord.getAltitude();
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+            snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0fft", alt * METERS_TO_FEET);
         } else {
-            snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0im", geoCoord.getAltitude());
+            snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0im", alt);
         }
         display->drawString(x, getTextPositions(display)[line++], altitudeLine);
     }
