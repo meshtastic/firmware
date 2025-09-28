@@ -206,97 +206,97 @@ void setupModules()
         aSerialKeyboardImpl = new SerialKeyboardImpl();
         aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
+    }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            seesawRotary = new SeesawRotary("SeesawRotary");
-            if (!seesawRotary->init()) {
-                delete seesawRotary;
-                seesawRotary = nullptr;
-            }
-            aLinuxInputImpl = new LinuxInputImpl();
-            aLinuxInputImpl->init();
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        seesawRotary = new SeesawRotary("SeesawRotary");
+        if (!seesawRotary->init()) {
+            delete seesawRotary;
+            seesawRotary = nullptr;
         }
+        aLinuxInputImpl = new LinuxInputImpl();
+        aLinuxInputImpl->init();
+    }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            trackballInterruptImpl1 = new TrackballInterruptImpl1();
-            trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);
-        }
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        trackballInterruptImpl1 = new TrackballInterruptImpl1();
+        trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);
+    }
 #endif
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
-        expressLRSFiveWayInput = new ExpressLRSFiveWay();
+    expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            cannedMessageModule = new CannedMessageModule();
-        }
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        cannedMessageModule = new CannedMessageModule();
+    }
 #endif
 #if ARCH_PORTDUINO
-        new HostMetricsModule();
+    new HostMetricsModule();
 #endif
 #if HAS_TELEMETRY
-        new DeviceTelemetryModule();
+    new DeviceTelemetryModule();
 #endif
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        if (moduleConfig.has_telemetry &&
-            (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
-            new EnvironmentTelemetryModule();
-        }
+    if (moduleConfig.has_telemetry &&
+        (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
+        new EnvironmentTelemetryModule();
+    }
 #if __has_include("Adafruit_PM25AQI.h")
-        if (moduleConfig.has_telemetry && moduleConfig.telemetry.air_quality_enabled &&
-            nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
-            new AirQualityTelemetryModule();
-        }
+    if (moduleConfig.has_telemetry && moduleConfig.telemetry.air_quality_enabled &&
+        nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
+        new AirQualityTelemetryModule();
+    }
 #endif
 #if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
-            nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
-            new HealthTelemetryModule();
-        }
+    if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
+        nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
+        new HealthTelemetryModule();
+    }
 #endif
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        if (moduleConfig.has_telemetry &&
-            (moduleConfig.telemetry.power_measurement_enabled || moduleConfig.telemetry.power_screen_enabled)) {
-            new PowerTelemetryModule();
-        }
+    if (moduleConfig.has_telemetry &&
+        (moduleConfig.telemetry.power_measurement_enabled || moduleConfig.telemetry.power_screen_enabled)) {
+        new PowerTelemetryModule();
+    }
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 #if !MESHTASTIC_EXCLUDE_SERIAL
-        if (moduleConfig.has_serial && moduleConfig.serial.enabled &&
-            config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            new SerialModule();
-        }
+    if (moduleConfig.has_serial && moduleConfig.serial.enabled &&
+        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        new SerialModule();
+    }
 #endif
 #endif
 #ifdef ARCH_ESP32
-        // Only run on an esp32 based device.
+    // Only run on an esp32 based device.
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
-        audioModule = new AudioModule();
+    audioModule = new AudioModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
-        if (moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled) {
-            paxcounterModule = new PaxcounterModule();
-        }
+    if (moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled) {
+        paxcounterModule = new PaxcounterModule();
+    }
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-        if (moduleConfig.has_store_forward && moduleConfig.store_forward.enabled) {
-            storeForwardModule = new StoreForwardModule();
-        }
+    if (moduleConfig.has_store_forward && moduleConfig.store_forward.enabled) {
+        storeForwardModule = new StoreForwardModule();
+    }
 #endif
 #endif
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
-        externalNotificationModule = new ExternalNotificationModule();
+    externalNotificationModule = new ExternalNotificationModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
-        if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)
-            new RangeTestModule();
+    if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)
+        new RangeTestModule();
 #endif
-    }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();
