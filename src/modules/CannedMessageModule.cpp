@@ -1719,6 +1719,9 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     int _visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
     int numEmotes = graphics::numEmotes;
 
+    // keep member variable in sync
+    this->visibleRows = _visibleRows;
+
     // Clamp highlight index
     if (emotePickerIndex < 0)
         emotePickerIndex = 0;
@@ -1740,7 +1743,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     // Draw emote rows
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    for (int vis = 0; vis < visibleRows; ++vis) {
+    for (int vis = 0; vis < _visibleRows; ++vis) {
         int emoteIdx = topIndex + vis;
         if (emoteIdx >= numEmotes)
             break;
@@ -1767,11 +1770,11 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     }
 
     // Draw scrollbar if needed
-    if (numEmotes > visibleRows) {
-        int scrollbarHeight = visibleRows * rowHeight;
+    if (numEmotes > _visibleRows) {
+        int scrollbarHeight = _visibleRows * rowHeight;
         int scrollTrackX = display->getWidth() - 6;
         display->drawRect(scrollTrackX, listTop, 4, scrollbarHeight);
-        int scrollBarLen = std::max(6, (scrollbarHeight * visibleRows) / numEmotes);
+        int scrollBarLen = std::max(6, (scrollbarHeight * _visibleRows) / numEmotes);
         int scrollBarPos = listTop + (scrollbarHeight * topIndex) / numEmotes;
         display->fillRect(scrollTrackX, scrollBarPos, 4, scrollBarLen);
     }
