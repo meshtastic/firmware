@@ -75,7 +75,6 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     // === State/UI ===
     bool shouldDraw();
     bool hasMessages();
-    void showTemporaryMessage(const String &message);
     void resetSearch();
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -153,7 +152,6 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastUpdateMillis = 0;
     String searchQuery;
     String freetext;
-    String temporaryMessage;
 
     // === Message Storage ===
     char messageBuffer[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
