@@ -254,6 +254,54 @@ void MessageStore::dismissOldestMessage()
     saveToFlash();
 }
 
+// Dismiss oldest message in a specific channel
+void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
+{
+    auto it = std::find_if(liveMessages.begin(), liveMessages.end(), [channel](const StoredMessage &m) {
+        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
+    });
+    if (it != liveMessages.end()) {
+        liveMessages.erase(it);
+    }
+
+    auto it2 = std::find_if(messages.begin(), messages.end(), [channel](const StoredMessage &m) {
+        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
+    });
+    if (it2 != messages.end()) {
+        messages.erase(it2);
+    }
+
+    saveToFlash();
+}
+
+// Dismiss oldest message in a direct conversation with a peer
+void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
+{
+    auto it = std::find_if(liveMessages.begin(), liveMessages.end(), [peer](const StoredMessage &m) {
+        if (m.type == MessageType::DM_TO_US) {
+            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+            return other == peer;
+        }
+        return false;
+    });
+    if (it != liveMessages.end()) {
+        liveMessages.erase(it);
+    }
+
+    auto it2 = std::find_if(messages.begin(), messages.end(), [peer](const StoredMessage &m) {
+        if (m.type == MessageType::DM_TO_US) {
+            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+            return other == peer;
+        }
+        return false;
+    });
+    if (it2 != messages.end()) {
+        messages.erase(it2);
+    }
+
+    saveToFlash();
+}
+
 // Dismiss newest message (RAM + persisted queue)
 void MessageStore::dismissNewestMessage()
 {

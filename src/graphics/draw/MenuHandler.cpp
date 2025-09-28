@@ -405,14 +405,21 @@ void menuHandler::messageResponseMenu()
     static int optionsEnumArray[enumEnd];
     int options = 0;
 
+    auto mode = graphics::MessageRenderer::getThreadMode();
+    int ch = graphics::MessageRenderer::getThreadChannel();
+    uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
 
     optionsArray[options] = "Conversations";
     optionsEnumArray[options++] = ViewMode;
 
-    optionsArray[options] = "Dismiss All";
-    optionsEnumArray[options++] = DismissAll;
+    // Only show Dismiss All in View All mode
+    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+        optionsArray[options] = "Dismiss All";
+        optionsEnumArray[options++] = DismissAll;
+    }
 
     optionsArray[options] = "Dismiss Oldest";
     optionsEnumArray[options++] = DismissOldest;
@@ -458,8 +465,24 @@ void menuHandler::messageResponseMenu()
         } else if (selected == DismissAll) {
             messageStore.clearAllMessages();
             graphics::MessageRenderer::clearThreadRegistries();
+
+            // Reset back to "View All"
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::ALL);
         } else if (selected == DismissOldest) {
-            messageStore.dismissOldestMessage();
+            auto mode = graphics::MessageRenderer::getThreadMode();
+            int ch = graphics::MessageRenderer::getThreadChannel();
+            uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+
+            if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+                // Global oldest
+                messageStore.dismissOldestMessage();
+            } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+                // Oldest in current channel
+                messageStore.dismissOldestMessageInChannel(ch);
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+                // Oldest in current DM
+                messageStore.dismissOldestMessageWithPeer(peer);
+            }
         } else if (selected == Preset || selected == Freetext) {
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 LOG_DEBUG("Replying to CHANNEL %d", ch);

@@ -72,6 +72,10 @@ class MessageStore
     void dismissOldestMessage();
     void dismissNewestMessage();
 
+    // New targeted dismiss helpers
+    void dismissOldestMessageInChannel(uint8_t channel);
+    void dismissOldestMessageWithPeer(uint32_t peer);
+
     // Unified accessor (for UI code, defaults to RAM buffer)
     const std::deque<StoredMessage> &getMessages() const { return liveMessages; }
 
