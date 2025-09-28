@@ -707,15 +707,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #endif
         config.display = c.payload_variant.display;
         break;
-    case meshtastic_Config_lora_tag:
+
+    case meshtastic_Config_lora_tag: {
+        // Wrap the entire case in a block to scope variables and avoid crossing initialization
+        auto oldLoraConfig = config.lora;
+        auto validatedLora = c.payload_variant.lora;
+
         LOG_INFO("Set config: LoRa");
         config.has_lora = true;
-
-        // Store the old values for reboot comparison
-        auto oldLoraConfig = config.lora;
-
-        // Validate incoming parameters before assignment
-        auto validatedLora = c.payload_variant.lora;
 
         if (validatedLora.coding_rate < 4 || validatedLora.coding_rate > 8) {
             LOG_WARN("Invalid coding_rate %d, setting to 5", validatedLora.coding_rate);
@@ -792,6 +791,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             }
         }
         break;
+    }
     case meshtastic_Config_bluetooth_tag:
         LOG_INFO("Set config: Bluetooth");
         config.has_bluetooth = true;
