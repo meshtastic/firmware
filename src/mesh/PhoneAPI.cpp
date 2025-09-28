@@ -127,6 +127,7 @@ void PhoneAPI::close()
         config_state = 0;
         pauseBluetoothLogging = false;
         heartbeatReceived = false;
+        serialPromiscuousEnabled = false;
     }
 }
 

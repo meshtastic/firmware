@@ -762,6 +762,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         // If serial promiscuous mode is enabled, forward the encrypted form to the phone now
         service->sendToPhone(packetPool.allocCopy(*p));
     }
+    LOG_DEBUG("serialPromiscuousEnabled: %d Encrypted: %d", serialPromiscuousEnabled,
+              p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag);
 
 #if ENABLE_JSON_LOGGING
     // Even ignored packets get logged in the trace
