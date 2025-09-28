@@ -728,8 +728,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         }
 
         if (validatedLora.bandwidth == 0) {
+            int originalBandwidth = validatedLora.bandwidth;
             validatedLora.bandwidth = myRegion->wideLora ? 800 : 250;
-            LOG_WARN("Invalid bandwidth %d, setting to default", validatedLora.bandwidth);
+            LOG_WARN("Invalid bandwidth %d, setting to default", originalBandwidth);
         }
 
         // If no lora radio parameters change, don't need to reboot
