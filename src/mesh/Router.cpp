@@ -758,6 +758,11 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
+    if (serialPromiscuousEnabled) {
+        // If serial promiscuous mode is enabled, forward the encrypted form to the phone now
+        service->sendToPhone(packetPool.allocCopy(*p));
+    }
+
 #if ENABLE_JSON_LOGGING
     // Even ignored packets get logged in the trace
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone

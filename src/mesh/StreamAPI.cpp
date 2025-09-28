@@ -3,6 +3,7 @@
 #include "RTC.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "main.h"
 
 #define START1 0x94
 #define START2 0xc3
@@ -219,9 +220,13 @@ void StreamAPI::onConnectionChanged(bool connected)
 
     if (connected) { // To prevent user confusion, turn off bluetooth while using the serial port api
         powerFSM.trigger(EVENT_SERIAL_CONNECTED);
+        // Reset promiscuous mode on connect
+        serialPromiscuousEnabled = false;
     } else {
         // FIXME, we get no notice of serial going away, we should instead automatically generate this event if we haven't
         // received a packet in a while
         powerFSM.trigger(EVENT_SERIAL_DISCONNECTED);
+        // Reset promiscuous mode on disconnect
+        serialPromiscuousEnabled = false;
     }
 }

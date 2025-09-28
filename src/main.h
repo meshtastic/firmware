@@ -90,6 +90,10 @@ extern bool runASAP;
 
 extern bool pauseBluetoothLogging;
 
+// When true, forward all received LoRa packets to FromRadio as encrypted MeshPacket payloads
+// and avoid sending decrypted duplicates to FromRadio. Reset to false on serial connect/disconnect.
+extern bool serialPromiscuousEnabled;
+
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 
 meshtastic_DeviceMetadata getDeviceMetadata();

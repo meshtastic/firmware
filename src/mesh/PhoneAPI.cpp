@@ -165,6 +165,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             LOG_INFO("Disconnect from phone");
             close();
             break;
+        case meshtastic_ToRadio_set_promiscuous_tag:
+            LOG_INFO("Set serial promiscuous: %s", toRadioScratch.set_promiscuous ? "true" : "false");
+            serialPromiscuousEnabled = toRadioScratch.set_promiscuous;
+            break;
         case meshtastic_ToRadio_xmodemPacket_tag:
             LOG_INFO("Got xmodem packet");
 #ifdef FSCom
