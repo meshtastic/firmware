@@ -167,14 +167,11 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     NodeNum lastSentNode = 0;             // Tracks the most recent node we sent a message to (for UI display)
     ChannelIndex channel = 0;             // Channel index used when sending a message
 
-    bool ack = false;               // True = ACK received, False = NACK or failed
-    bool waitingForAck = false;     // True if we're expecting an ACK and should monitor routing packets
-    bool lastAckWasRelayed = false; // True if the ACK was relayed through intermediate nodes
-    uint8_t lastAckHopStart = 0;    // Hop start value from the received ACK packet
-    uint8_t lastAckHopLimit = 0;    // Hop limit value from the received ACK packet
-
-    float lastRxSnr = 0;    // SNR from last received ACK (used for diagnostics/UI)
-    int32_t lastRxRssi = 0; // RSSI from last received ACK (used for diagnostics/UI)
+    bool ack = false;           // True = ACK received, False = NACK or failed
+    bool waitingForAck = false; // True if we're expecting an ACK and should monitor routing packets
+    float lastRxSnr = 0;        // SNR from last received ACK (used for diagnostics/UI)
+    int32_t lastRxRssi = 0;     // RSSI from last received ACK (used for diagnostics/UI)
+    uint32_t lastRequestId = 0; // tracks the request_id of our last sent packet
 
     // === State Tracking ===
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;

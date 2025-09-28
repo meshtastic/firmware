@@ -233,7 +233,7 @@ const std::vector<uint32_t> &getSeenPeers()
     return seenPeers;
 }
 
-// Helpers for drawing status marks
+// Helpers for drawing status marks (thickened strokes)
 void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
 {
     int h = size;
@@ -243,8 +243,15 @@ void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
     int midY = y + (FONT_HEIGHT_SMALL / 2);
     int topY = midY - (h / 2);
 
+    display->setColor(WHITE); // ensure we use current fg
+
+    // Draw thicker checkmark by overdrawing lines with 1px offset
+    // arm 1
     display->drawLine(x, topY + h / 2, x + w / 3, topY + h);
+    display->drawLine(x, topY + h / 2 + 1, x + w / 3, topY + h + 1);
+    // arm 2
     display->drawLine(x + w / 3, topY + h, x + w, topY);
+    display->drawLine(x + w / 3, topY + h + 1, x + w, topY + 1);
 }
 
 void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
@@ -256,8 +263,31 @@ void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
     int midY = y + (FONT_HEIGHT_SMALL / 2);
     int topY = midY - (h / 2);
 
+    display->setColor(WHITE);
+
+    // Draw thicker X with 1px offset
     display->drawLine(x, topY, x + w, topY + h);
+    display->drawLine(x, topY + 1, x + w, topY + h + 1);
     display->drawLine(x + w, topY, x, topY + h);
+    display->drawLine(x + w, topY + 1, x, topY + h + 1);
+}
+
+void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
+{
+    int r = size / 2;
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    int centerY = midY;
+    int centerX = x + r;
+
+    display->setColor(WHITE);
+
+    // Draw circle outline (relay = uncertain status)
+    display->drawCircle(centerX, centerY, r);
+
+    // Draw "?" inside (approx, 3px wide)
+    display->drawLine(centerX, centerY - 2, centerX, centerY); // stem
+    display->setPixel(centerX, centerY + 2);                   // dot
+    display->drawLine(centerX - 1, centerY - 4, centerX + 1, centerY - 4);
 }
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -453,7 +483,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             allLines.push_back(ln);
             isMine.push_back(mine);
             isHeader.push_back(false);
-            ackForLine.push_back(AckStatus::UNKNOWN);
+            ackForLine.push_back(AckStatus::NONE);
         }
     }
 
@@ -519,10 +549,16 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     int markX = headerX - 10;
                     int markY = lineY;
                     if (ackForLine[i] == AckStatus::ACKED) {
+                        // Destination ACK
                         drawCheckMark(display, markX, markY, 8);
                     } else if (ackForLine[i] == AckStatus::NACKED || ackForLine[i] == AckStatus::TIMEOUT) {
+                        // Failure or timeout
                         drawXMark(display, markX, markY, 8);
+                    } else if (ackForLine[i] == AckStatus::RELAYED) {
+                        // Relay ACK
+                        drawRelayMark(display, markX, markY, 8);
                     }
+                    // AckStatus::NONE → show nothing
                 }
 
                 // Draw underline just under header text

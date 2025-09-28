@@ -200,13 +200,13 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
 {
     if (graphics::isHighResolution) {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: Broadcast#%s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: #%s", channels.getName(this->channel));
         } else {
             display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
     } else {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: Broadc#%.5s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: #%.5s", channels.getName(this->channel));
         } else {
             display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
@@ -961,6 +961,9 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     this->lastSentNode = dest;
     this->incoming = dest;
 
+    // Track this packet’s request ID for matching ACKs
+    this->lastRequestId = p->id;
+
     // Copy payload
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
@@ -1008,7 +1011,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
     }
-    sm.ackStatus = AckStatus::UNKNOWN;
+    sm.ackStatus = AckStatus::NONE;
 
     messageStore.addLiveMessage(sm);
 
@@ -2158,72 +2161,93 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
+    // Only process routing ACK/NACK packets that are responses to our own outbound
+    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck && mp.to == nodeDB->getNodeNum() &&
+        mp.decoded.request_id == this->lastRequestId) // only ACKs for our last sent packet
+    {
         if (mp.decoded.request_id != 0) {
             // Decode the routing response
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
 
-            // Track hop metadata
-            this->lastAckWasRelayed = (mp.hop_limit != mp.hop_start);
-            this->lastAckHopStart = mp.hop_start;
-            this->lastAckHopLimit = mp.hop_limit;
-
-            // Determine ACK status
+            // Determine ACK/NACK status
             bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
             bool isFromDest = (mp.from == this->lastSentNode);
             bool wasBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
 
             // Identify the responding node
             if (wasBroadcast && mp.from != nodeDB->getNodeNum()) {
-                this->incoming = mp.from; // Relayed by another node
+                this->incoming = mp.from; // relayed by another node
             } else {
-                this->incoming = this->lastSentNode; // Direct reply
+                this->incoming = this->lastSentNode; // direct reply
             }
 
-            // Final ACK confirmation logic
-            this->ack = isAck && (wasBroadcast || isFromDest);
+            // Final ACK/NACK logic
+            if (wasBroadcast) {
+                // Any ACK counts for broadcast
+                this->ack = isAck;
+                waitingForAck = false;
+            } else if (isFromDest) {
+                // Only ACK from destination counts as final
+                this->ack = isAck;
+                waitingForAck = false;
+            } else if (isAck) {
+                // Relay ACK → mark as RELAYED, still no final ACK
+                this->ack = false;
+                waitingForAck = false; // don’t wait for more
+            } else {
+                // Explicit failure
+                this->ack = false;
+                waitingForAck = false;
+            }
 
-            waitingForAck = false;
-
-            // Update last sent StoredMessage with ACK/NACK result
+            // Update last sent StoredMessage with ACK/NACK/RELAYED result
             if (!messageStore.getMessages().empty()) {
                 StoredMessage &last = const_cast<StoredMessage &>(messageStore.getMessages().back());
                 if (last.sender == nodeDB->getNodeNum()) { // only update our own messages
-                    if (this->ack) {
+                    if (wasBroadcast && isAck) {
                         last.ackStatus = AckStatus::ACKED;
+                    } else if (isFromDest && isAck) {
+                        last.ackStatus = AckStatus::ACKED;
+                    } else if (!isFromDest && isAck) {
+                        last.ackStatus = AckStatus::RELAYED;
                     } else {
-                        // If error_reason was explicit, you can map to NACKED; otherwise TIMEOUT
-                        last.ackStatus =
-                            (decoded.error_reason == meshtastic_Routing_Error_NONE) ? AckStatus::ACKED : AckStatus::NACKED;
+                        last.ackStatus = AckStatus::NACKED;
                     }
                 }
             }
 
-            // Capture radio metrics from this ACK/NACK packet
+            // Capture radio metrics
             this->lastRxRssi = mp.rx_rssi;
             this->lastRxSnr = mp.rx_snr;
 
-            // Show ACK/NACK as overlay banner
+            // Show overlay banner
             if (screen) {
                 graphics::BannerOverlayOptions opts;
-                static char buf[96];
+                static char buf[128];
+
+                const char *channelName = channels.getName(this->channel);
+                const char *nodeName = getNodeName(this->incoming);
 
                 if (this->ack) {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Broadcast sent to \n%s\n\nSNR: %.1f dB RSSI: %d dBm",
-                                 channels.getName(this->channel), this->lastRxSnr, this->lastRxRssi);
-                    } else if (this->lastAckHopLimit > this->lastAckHopStart) {
-                        snprintf(buf, sizeof(buf), "Delivered (%d hops) to \n%s\n\nSNR: %.1f dB RSSI: %d dBm",
-                                 this->lastAckHopLimit - this->lastAckHopStart, getNodeName(this->incoming), this->lastRxSnr,
-                                 this->lastRxRssi);
+                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSNR: %.1f dB RSSI: %d dBm",
+                                 (channelName && channelName[0]) ? channelName : "unknown", this->lastRxSnr, this->lastRxRssi);
                     } else {
-                        snprintf(buf, sizeof(buf), "Delivered to %s\n\nSNR: \n%.1f dB RSSI: %d dBm", getNodeName(this->incoming),
-                                 this->lastRxSnr, this->lastRxRssi);
+                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSNR: %.1f dB RSSI: %d dBm",
+                                 (nodeName && nodeName[0]) ? nodeName : "unknown", this->lastRxSnr, this->lastRxRssi);
                     }
+                } else if (isAck && !isFromDest) {
+                    // Relay ACK banner
+                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)%s\n\nSNR: %.1f dB RSSI: %d dBm",
+                             (nodeName && nodeName[0]) ? nodeName : "unknown", this->lastRxSnr, this->lastRxRssi);
                 } else {
-                    snprintf(buf, sizeof(buf), "Delivery failed to \n%s", getNodeName(this->incoming), this->lastRxSnr,
-                             this->lastRxRssi);
+                    if (this->lastSentNode == NODENUM_BROADCAST) {
+                        snprintf(buf, sizeof(buf), "Message failed to\n#%s",
+                                 (channelName && channelName[0]) ? channelName : "unknown");
+                    } else {
+                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
+                    }
                 }
 
                 opts.message = buf;

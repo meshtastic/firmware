@@ -60,8 +60,8 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
             sm.type = MessageType::DM_TO_US;
         }
 
-        // Outgoing messages start as UNKNOWN until ACK/NACK arrives
-        sm.ackStatus = AckStatus::UNKNOWN;
+        // Outgoing messages start as NONE until ACK/NACK arrives
+        sm.ackStatus = AckStatus::NONE;
     } else {
         // Normal incoming
         sm.sender = packet.from;
@@ -109,8 +109,8 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     sm.dest = NODENUM_BROADCAST;
     sm.type = MessageType::BROADCAST;
 
-    // Manual/outgoing messages start as UNKNOWN until ACK/NACK arrives
-    sm.ackStatus = AckStatus::UNKNOWN;
+    // Outgoing messages start as NONE until ACK/NACK arrives
+    sm.ackStatus = AckStatus::NONE;
 
     addLiveMessage(sm);
 }
@@ -208,10 +208,10 @@ void MessageStore::loadFromFlash()
             if (f.readBytes((char *)&statusByte, 1) == 1) {
                 m.ackStatus = static_cast<AckStatus>(statusByte);
             } else {
-                m.ackStatus = AckStatus::UNKNOWN; // fallback
+                m.ackStatus = AckStatus::NONE;
             }
         } else {
-            m.ackStatus = AckStatus::UNKNOWN; // legacy files
+            m.ackStatus = AckStatus::NONE;
         }
 
         // Recompute type from dest
