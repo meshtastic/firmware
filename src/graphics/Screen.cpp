@@ -453,7 +453,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOn();
-#ifdef HELTEC_TRACKER_V1_X
+#if defined(HELTEC_TRACKER_V1_X) || defined(HELTEC_WIRELESS_TRACKER_V2)
             ui->init();
 #endif
 #ifdef USE_ST7789
