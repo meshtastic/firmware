@@ -15,7 +15,7 @@
 #define ST7735_RESET 39
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
-#define TFT_BL 21 
+#define TFT_BL 21
 #define ST7735_SPI_HOST SPI3_HOST
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
@@ -28,7 +28,6 @@
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
-
 #define VEXT_ENABLE 3 // active HIGH - powers the GPS, GPS LNA and OLED
 #define VEXT_ON_VALUE HIGH
 #define BUTTON_PIN 0
@@ -37,7 +36,7 @@
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
-#define ADC_CTRL 2     // active HIGH, powers the voltage divider. 
+#define ADC_CTRL 2     // active HIGH, powers the voltage divider.
 #define ADC_USE_PULLUP // Use internal pullup/pulldown instead of actively driving the output
 
 #undef GPS_RX_PIN
@@ -73,6 +72,7 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+#define USE_GC1109_PA   // We have a GC1109 power amplifier+attenuator
 #define LORA_PA_POWER 7 // power en
-#define LORA_PA_EN    4
+#define LORA_PA_EN 4
 #define LORA_PA_TX_EN 46 // enable tx
