@@ -10,6 +10,23 @@
 using graphics::MessageRenderer::setThreadMode;
 using graphics::MessageRenderer::ThreadMode;
 
+static size_t getMessageSize(const StoredMessage &m)
+{
+    // serialized size = fixed 16 bytes + text length (capped at MAX_MESSAGE_SIZE)
+    return 16 + std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
+}
+
+void MessageStore::logMemoryUsage(const char *context) const
+{
+    size_t total = 0;
+    for (const auto &m : messages) {
+        total += getMessageSize(m);
+    }
+
+    LOG_DEBUG("MessageStore[%s]: %u messages, est %u bytes (~%u KB)", context, (unsigned)messages.size(), (unsigned)total,
+              (unsigned)(total / 1024));
+}
+
 MessageStore::MessageStore(const std::string &label)
 {
     filename = "/Messages_" + label + ".msgs";
@@ -150,6 +167,9 @@ void MessageStore::saveToFlash()
     spiLock->unlock();
 
     f.close();
+
+    // Debug after saving
+    logMemoryUsage("saveToFlash");
 #else
     // Filesystem not available, skip persistence
 #endif
@@ -225,6 +245,9 @@ void MessageStore::loadFromFlash()
         liveMessages.push_back(m); // restore into RAM buffer
     }
     f.close();
+
+    // Debug after loading
+    logMemoryUsage("loadFromFlash");
 #endif
 }
 

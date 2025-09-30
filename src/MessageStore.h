@@ -90,6 +90,9 @@ class MessageStore
     // Upgrade boot-relative timestamps once RTC is valid
     void upgradeBootRelativeTimestamps();
 
+    // Debug helper to log serialized size of messages
+    void logMemoryUsage(const char *context) const;
+
   private:
     std::deque<StoredMessage> liveMessages;
     std::deque<StoredMessage> messages; // persisted copy
