@@ -253,8 +253,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1 = 99,
     /* Seeed Tracker L1 EINK driver */
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK = 100,
-    /* Reserved ID for future and past use */
-    meshtastic_HardwareModel_QWANTZ_TINY_ARMS = 101,
+    /* Muzi Works R1 Neo */
+    meshtastic_HardwareModel_MUZI_R1_NEO = 101,
     /* Lilygo T-Deck Pro */
     meshtastic_HardwareModel_T_DECK_PRO = 102,
     /* Lilygo TLora Pager */
