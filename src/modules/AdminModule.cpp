@@ -770,6 +770,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
         }
+        if (config.lora.region != myRegion->code) {
+            //  Region has changed so check whether there is a regulatory one we should be using instead.
+            //  Additionally as a side-effect, assume a new value under myRegion
+            initRegion();
+
+            //  subscribe to appropriate MQTT root topic for this region
+            sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+            changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+        }
         break;
     case meshtastic_Config_bluetooth_tag:
         LOG_INFO("Set config: Bluetooth");
