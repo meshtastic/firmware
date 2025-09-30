@@ -70,6 +70,9 @@
 #define DAC_I2S_DIN 17
 #define DAC_I2S_MCLK 10
 
+// haptic driver
+#define HAS_DRV2605 1
+
 // gyroscope BHI260AP
 #define HAS_BHI260AP
 

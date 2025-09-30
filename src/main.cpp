@@ -202,7 +202,7 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 /// The I2C address of our Air Quality Indicator (if found)
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
 Adafruit_DRV2605 drv;
 #endif
 
@@ -385,6 +385,27 @@ void setup()
     io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
     io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+#elif defined(T_WATCH_ULTRA)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(DISP_CS, OUTPUT);
+    digitalWrite(DISP_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+
+    if (io.begin(Wire, XL9555_SLAVE_ADDRESS0)) {
+        io.pinMode(EXPANDS_DRV_EN, OUTPUT);
+        io.digitalWrite(EXPANDS_DRV_EN, HIGH);
+        delay(1);
+        io.pinMode(EXPANDS_DISP_EN, OUTPUT);
+        io.digitalWrite(EXPANDS_DISP_EN, HIGH);
+        delay(1);
+        io.pinMode(EXPANDS_TOUCH_RST, OUTPUT);
+        io.digitalWrite(EXPANDS_TOUCH_RST, HIGH);
+        delay(1);
+    } else {
+        LOG_ERROR("io expander initialisation failed!");
+    }
 #endif
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
@@ -837,7 +858,7 @@ void setup()
 #endif
 #endif
 
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
     drv.begin();
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
@@ -884,7 +905,7 @@ void setup()
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306)
+    defined(CO5300_CS) || defined(USE_SPISSD1306)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
@@ -1148,7 +1169,7 @@ void setup()
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306)
+    defined(CO5300_CS) || defined(USE_SPISSD1306)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
