@@ -776,7 +776,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             initRegion();
 
             //  subscribe to appropriate MQTT root topic for this region
+#ifdef USERPREFS_MQTT_ROOT_TOPIC
+            sprintf(moduleConfig.mqtt.root, "%s/%s", USERPREFS_MQTT_ROOT_TOPIC, myRegion->name);
+#else
             sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+#endif
             changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
         }
         break;
