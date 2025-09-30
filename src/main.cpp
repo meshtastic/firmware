@@ -297,6 +297,12 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+#if defined(T_REX) // XXX
+    pinMode(DCDC_EN_HOLD, OUTPUT);
+    digitalWrite(DCDC_EN_HOLD, HIGH);
+    pinMode(NRF_ON, OUTPUT);
+    digitalWrite(NRF_ON, HIGH);
+#endif
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
