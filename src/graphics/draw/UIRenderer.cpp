@@ -1105,6 +1105,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
         }
+
+        // === Final Row: Altitude ===
+        char altitudeLine[32] = {0};
+        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
+                          ? ourNode->position.altitude
+                          : geoCoord.getAltitude();
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0fft", alt * METERS_TO_FEET);
+        } else {
+            snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0im", alt);
+        }
+        display->drawString(x, getTextPositions(display)[line++], altitudeLine);
     }
 #if !defined(M5STACK_UNITC6L)
     // === Draw Compass if heading is valid ===

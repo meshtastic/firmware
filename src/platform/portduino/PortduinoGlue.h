@@ -224,7 +224,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
         out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
-            out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << dio3_tcxo_voltage;
+            out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
         if (lora_usb_pid != 0x5512)
             out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
         if (lora_usb_vid != 0x1A86)
