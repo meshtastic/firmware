@@ -38,8 +38,8 @@ extern "C" {
 #endif // __cplusplus
 
 // Number of pins defined in PinDescription array
-#define PINS_COUNT (48)       // ???
-#define NUM_DIGITAL_PINS (48) // ???
+#define PINS_COUNT (48)
+#define NUM_DIGITAL_PINS (48)
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
@@ -60,15 +60,15 @@ extern "C" {
 #define BUTTON_ACTIVE_LOW 0
 #define BUTTON_ACTIVE_PULLUP 0
 
-#define ADC_RESOLUTION 14 // ???
+#define ADC_RESOLUTION 14
 
 // Serial for GPS
 #define PIN_SERIAL1_RX (25)
 #define PIN_SERIAL1_TX (24)
 
 // Connected to Jlink CDC
-#define PIN_SERIAL2_RX (8) // ???
-#define PIN_SERIAL2_TX (6) // ???
+#define PIN_SERIAL2_RX (8)
+#define PIN_SERIAL2_TX (6)
 
 /*
  * SPI Interfaces
@@ -89,7 +89,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define NRF_ON (29)       // P0.29 Tells IO controller device is on
 
 // RAKRGB
-#define HAS_NCP5623 // ???
+#define HAS_NCP5623
 
 #define HAS_SCREEN 0
 
@@ -99,7 +99,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define WIRE_INTERFACES_COUNT 1
 
 #define PIN_WIRE_SDA (19) // P0.19 RTC_SDA
-#define PIN_WIRE_SCL (20) // P0.20 RTC_SDA
+#define PIN_WIRE_SCL (20) // P0.20 RTC_SCL
 
 #define PIN_BUZZER (0 + 3) // P0.03
 
@@ -126,12 +126,12 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Battery
 #define BATTERY_PIN (0 + 31) // P0.31 ADC_VBAT
 // and has 12 bit resolution
-#define BATTERY_SENSE_RESOLUTION_BITS 12 // ???
+#define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER 1.73 // ???
+#define ADC_MULTIPLIER 1.73
 
 #define HAS_RTC 1
 
