@@ -32,7 +32,7 @@ inline bool has_psram(size_t minimumBytes = PSRAM_LARGE_THRESHOLD_BYTES)
 inline int get_rx_tophone_limit()
 {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
-    return has_psram() ? 200 : 32;
+    return has_psram() ? 400 : 32;
 #elif defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
     return 8;
 #else
@@ -45,7 +45,7 @@ inline int get_rx_tophone_limit()
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
-static constexpr int MAX_RX_TOPHONE_WITH_PSRAM = 200;
+static constexpr int MAX_RX_TOPHONE_WITH_PSRAM = 800;
 #define MAX_RX_TOPHONE MAX_RX_TOPHONE_WITH_PSRAM
 #elif defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 #define MAX_RX_TOPHONE 8
