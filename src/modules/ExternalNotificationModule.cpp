@@ -556,7 +556,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     }
                 } else {
                     // Don't beep if buzzer mode is "direct messages only" and it is no direct message
-                    LOG_INFO("Message buzzer was supressed because buzzer mode DIRECT_MSG_ONLY");
+                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                 }
             }
             setIntervalFromNow(0); // run once so we know if we should do something
