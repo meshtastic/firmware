@@ -170,7 +170,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 bool ReliableRouter::shouldSuccessAckWithWantAck(const meshtastic_MeshPacket *p)
 {
     // Don't ACK-with-want-ACK outgoing packets
-    if (getFrom(p) == nodeDB->getNodeNum())
+    if (isFromUs(p))
         return false;
 
     // Only ACK-with-want-ACK if the original packet asked for want_ack
