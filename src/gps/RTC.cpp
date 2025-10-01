@@ -121,11 +121,21 @@ RTCSetResult readFromRTC()
             uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
             LOG_DEBUG("Read RTC time from RX8130CE getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900,
                       t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-            timeStartMsec = now;
-            zeroOffsetSecs = tv.tv_sec;
+#ifdef BUILD_EPOCH
+            if (tv.tv_sec < BUILD_EPOCH) {
+                if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                    lastTimeValidationWarning = millis();
+                }
+                return RTCSetResultInvalidTime;
+            }
+#endif
             if (currentQuality == RTCQualityNone) {
+                timeStartMsec = now;
+                zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
             }
+            return RTCSetResultSuccess;
         }
     }
 #else
