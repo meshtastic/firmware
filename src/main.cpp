@@ -299,7 +299,7 @@ void printInfo()
 {
     LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
 }
-#ifndef PIO_UNIT_TESTING
+#if !defined(PIO_UNIT_TESTING) || !(PIO_UNIT_TESTING)
 void setup()
 {
 #if defined(R1_NEO)
@@ -1619,7 +1619,7 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 }
 #endif
 
-#ifndef PIO_UNIT_TESTING
+#if !defined(PIO_UNIT_TESTING) || !(PIO_UNIT_TESTING)
 void loop()
 {
     runASAP = false;

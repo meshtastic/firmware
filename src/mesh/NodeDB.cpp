@@ -38,6 +38,12 @@
 #include <Preferences.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#if __has_include(<esp_ptr.h>)
+#include <esp_ptr.h>
+#define NODEDB_HAS_ESP_PTR 1
+#else
+#define NODEDB_HAS_ESP_PTR 0
+#endif
 #include <nvs_flash.h>
 #include <soc/efuse_reg.h>
 #include <soc/soc.h>
@@ -68,19 +74,60 @@ meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 3
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+//------------------------------------------------------------------------------
+// Runtime instrumentation helpers
+//------------------------------------------------------------------------------
 
-// Hot/cold storage helpers -------------------------------------------------
-// ESP32-S3 targets (Station G2 and similar) keep the heavy NodeInfoLite payloads
-// in PSRAM while mirroring routing/UI critical fields in a compact DRAM cache.
-// The helpers below keep both views in sync.
+namespace
+{
+
+// Log the pool headroom every 100 inserts (and when we hit MAX) so field logs
+// capture how close we are to exhausting heap/PSRAM on real hardware.
+
+void logNodeInsertStats(size_t count, const char *poolLabel)
+{
+    if (count == 0)
+        return;
+    if ((count % 100) != 0 && count != MAX_NUM_NODES)
+        return;
+
+    LOG_INFO("NodeDB %s pool usage %u/%u nodes, heap free %u, psram free %u", poolLabel, static_cast<unsigned>(count),
+             static_cast<unsigned>(MAX_NUM_NODES), memGet.getFreeHeap(), memGet.getFreePsram());
+}
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+bool logPsramAllocationOnce(void *ptr, size_t capacity)
+{
+    static bool logged = false;
+    if (logged || !ptr)
+        return logged;
+
+#if NODEDB_HAS_ESP_PTR
+    bool inPsram = esp_ptr_external_ram(ptr);
+#else
+    bool inPsram = false;
+#endif
+    LOG_INFO("NodeDB PSRAM backing at %p (%s) capacity %u entries (~%u bytes)", ptr, inPsram ? "PSRAM" : "DRAM",
+             static_cast<unsigned>(capacity), static_cast<unsigned>(capacity * sizeof(meshtastic_NodeInfoLite)));
+    logged = true;
+    return logged;
+}
+#endif
+
+} // namespace
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
 
 void NodeDB::initHotCache()
 {
+    // Pre-reserve the full cold store in PSRAM during boot so the high watermark
+    // shows up immediately in PSRAM usage logs and we avoid fragmented
+    // allocations later in the mission.
     psramMeshNodes.resize(MAX_NUM_NODES);
     hotNodes.resize(MAX_NUM_NODES);
     hotDirty.assign(MAX_NUM_NODES, true);
     meshNodes = &psramMeshNodes;
+    logPsramAllocationOnce(psramMeshNodes.data(), psramMeshNodes.capacity());
 }
 
 void NodeDB::refreshHotCache()
@@ -2393,6 +2440,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         syncHotFromCold(index);
         lite = &psramMeshNodes[index];
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        logNodeInsertStats(numMeshNodes, "PSRAM");
     }
 
     markHotDirty(lite);
@@ -2444,6 +2492,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        logNodeInsertStats(numMeshNodes, "Heap");
     }
 
     return lite;
