@@ -6,6 +6,14 @@
 #include "configuration.h"
 #include "time.h"
 
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+#define IS_USB_SERIAL
+#ifdef SERIAL_HAS_ON_RECEIVE
+#undef SERIAL_HAS_ON_RECEIVE
+#endif
+#include "HWCDC.h"
+#endif
+
 #ifdef RP2040_SLOW_CLOCK
 #define Port Serial2
 #else
@@ -22,7 +30,12 @@ SerialConsole *console;
 
 void consoleInit()
 {
-    new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
+    auto sc = new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
+
+#if defined(SERIAL_HAS_ON_RECEIVE)
+    // onReceive does only exist for HardwareSerial not for USB CDC serial
+    Port.onReceive([sc]() { sc->rxInt(); });
+#endif
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }
 
@@ -65,19 +78,38 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 int32_t SerialConsole::runOnce()
 {
 #ifdef HELTEC_MESH_SOLAR
-    //After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
-    if(moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port
-        && moduleConfig.serial.mode==meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)
-    {
+    // After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
+    if (moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port &&
+        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG) {
         return 250;
     }
 #endif
-    return runOncePart();
+
+    int32_t delay = runOncePart();
+#if defined(SERIAL_HAS_ON_RECEIVE)
+    return Port.available() ? delay : INT32_MAX;
+#elif defined(IS_USB_SERIAL)
+    return HWCDC::isPlugged() ? delay : (1000 * 20);
+#else
+    return delay;
+#endif
 }
 
 void SerialConsole::flush()
 {
     Port.flush();
+}
+
+// trigger tx of serial data
+void SerialConsole::onNowHasData(uint32_t fromRadioNum)
+{
+    setIntervalFromNow(0);
+}
+
+// trigger rx of serial data
+void SerialConsole::rxInt()
+{
+    setIntervalFromNow(0);
 }
 
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
