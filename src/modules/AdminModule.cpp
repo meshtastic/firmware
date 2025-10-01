@@ -765,6 +765,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             if (myRegion->dutyCycle < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
+            //  Compare the entire string, we are sure of the length as a topic has never been set
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
@@ -775,16 +776,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             //  Additionally as a side-effect, assume a new value under myRegion
             initRegion();
 
-            std::string current = moduleConfig.mqtt.root;
-            size_t location = current.find_first_of('/');
-
-            char root[location + 1];
-            memset(root, 0, location);
-            memcpy(root, moduleConfig.mqtt.root, location);
-            root[location] = '\0';
-
-            //  subscribe to the appropriate MQTT root topic for this region
-            sprintf(moduleConfig.mqtt.root, "%s/%s", root, myRegion->name);
+            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, 3) == 0) {
+                //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+            }
 
             changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
         }
