@@ -13,9 +13,9 @@
       ["0x239A", "0x002A"],
       ["0x239A", "0x802A"]
     ],
-    "usb_product": "Muzi T-REX",
+    "usb_product": "Muzi R1 Neo",
     "mcu": "nrf52840",
-    "variant": "t-rex",
+    "variant": "r1-neo",
     "bsp": {
       "name": "adafruit"
     },
