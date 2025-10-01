@@ -16,8 +16,8 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_TREX_
-#define _VARIANT_TREX_
+#ifndef _VARIANT_R1NEO_
+#define _VARIANT_R1NEO_
 
 #define RAK4630
 
@@ -85,7 +85,7 @@ static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-// T-Rex Extras
+// R1 Neo Extras
 #define DCDC_EN_HOLD (13) // P0.13 Keeps DCDC alive after user button  is pressed
 #define NRF_ON (29)       // P0.29 Tells IO controller device is on
 
