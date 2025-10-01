@@ -776,8 +776,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             //  Additionally as a side-effect, assume a new value under myRegion
             initRegion();
 
-            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, 3) == 0) {
-                //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
+            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+                //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
             }
 
