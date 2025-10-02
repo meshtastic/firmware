@@ -1104,11 +1104,6 @@ int32_t GPS::runOnce()
         publishUpdate();
     }
 
-    // Repeaters have no need for GPS
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        return disable();
-    }
-
     if (whileActive()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
