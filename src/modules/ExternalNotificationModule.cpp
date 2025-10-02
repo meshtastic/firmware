@@ -69,7 +69,7 @@ bool ascending = true;
 #endif
 #define EXT_NOTIFICATION_MODULE_OUTPUT_MS 1000
 
-#define EXT_NOTIFICATION_DEFAULT_THREAD_MS 25
+#define EXT_NOTIFICATION_FAST_THREAD_MS 25
 
 #define ASCII_BELL 0x07
 
@@ -88,12 +88,13 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-
-        bool isPlaying = rtttl::isPlaying();
+        uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
+        bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
-        isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
+        // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
+        isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff < millis()) && !isPlaying) {
+        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
@@ -116,21 +117,16 @@ int32_t ExternalNotificationModule::runOnce()
 
         // If the output is turned on, turn it back off after the given period of time.
         if (isNagging) {
-            if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
+            delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+                                                                  : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
+            if (externalTurnedOn[0] + delay < millis()) {
                 setExternalState(0, !getExternal(0));
             }
-            if (externalTurnedOn[1] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
+            if (externalTurnedOn[1] + delay < millis()) {
                 setExternalState(1, !getExternal(1));
             }
             // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
-            if (!moduleConfig.external_notification.use_pwm &&
-                externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                    millis()) {
+            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < millis()) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
                 setExternalState(2, !getExternal(2));
@@ -181,6 +177,8 @@ int32_t ExternalNotificationModule::runOnce()
                     colorState = 1;
                 }
             }
+            // we need fast updates for the color change
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
 #ifdef T_WATCH_S3
@@ -190,12 +188,14 @@ int32_t ExternalNotificationModule::runOnce()
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
-        if (moduleConfig.external_notification.use_i2s_as_buzzer && canBuzz()) {
+        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
             } else if (isNagging && (nagCycleCutoff >= millis())) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
+            // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
         // now let the PWM buzzer play
@@ -206,9 +206,11 @@ int32_t ExternalNotificationModule::runOnce()
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
+            // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 
-        return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
+        return delay;
     }
 }
 
@@ -440,7 +442,7 @@ ExternalNotificationModule::ExternalNotificationModule()
 
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (moduleConfig.external_notification.enabled && !isMuted) {
+    if (moduleConfig.external_notification.enabled && !isSilenced) {
 #ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
@@ -451,14 +453,15 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
-            for (int i = 0; i < p.payload.size; i++) {
+            for (size_t i = 0; i < p.payload.size; i++) {
                 if (p.payload.bytes[i] == ASCII_BELL) {
                     containsBell = true;
                 }
             }
 
             meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
-
+            meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+          
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
@@ -509,7 +512,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message && !sender->is_muted) {
+            if (moduleConfig.external_notification.alert_message && !ch.settings.mute && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
                 setExternalState(0, true);
@@ -520,7 +523,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra && !sender->is_muted) {
+            if (moduleConfig.external_notification.alert_message_vibra && !ch.settings.mute && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
                 setExternalState(1, true);
@@ -531,25 +534,32 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer && !sender->is_muted) {
+            if (moduleConfig.external_notification.alert_message_buzzer && !ch.settings.mute && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
-                isNagging = true;
-                if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
-                    setExternalState(2, true);
-                } else {
+                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
+                    (!isBroadcast(mp.to) && isToUs(&mp))) {
+                    // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
+                    isNagging = true;
+                    if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
+                        setExternalState(2, true);
+                    } else {
 #ifdef HAS_I2S
-                    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-                        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-                    } else
+                        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+                            audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+                        } else
 #endif
-                        if (moduleConfig.external_notification.use_pwm) {
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                            if (moduleConfig.external_notification.use_pwm) {
+                            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                        }
                     }
-                }
-                if (moduleConfig.external_notification.nag_timeout) {
-                    nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    } else {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    }
                 } else {
-                    nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    // Don't beep if buzzer mode is "direct messages only" and it is no direct message
+                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                 }
             }
             setIntervalFromNow(0); // run once so we know if we should do something
