@@ -17,6 +17,11 @@
 // accommodate Heltec WiFi LoRa 32 V4 boards (and others)
 static constexpr size_t PSRAM_LARGE_THRESHOLD_BYTES = 2 * 1024 * 1024;
 
+// Default RX queue size for phone delivery when PSRAM is available
+// This is an arbitrary default bump from default, boards can override
+// this in board.h
+static constexpr int RX_TOPHONE_WITH_PSRAM_DEFAULT = 100;
+
 inline bool has_psram(size_t minimumBytes = PSRAM_LARGE_THRESHOLD_BYTES)
 {
 #if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
@@ -35,7 +40,7 @@ inline int get_rx_tophone_limit()
 #if defined(BOARD_MAX_RX_TOPHONE)
     return BOARD_MAX_RX_TOPHONE;
 #elif defined(BOARD_HAS_PSRAM)
-    return 800;
+    return RX_TOPHONE_WITH_PSRAM_DEFAULT;
 #else
     return 32;
 #endif
@@ -54,8 +59,7 @@ inline int get_rx_tophone_limit()
 #if defined(BOARD_MAX_RX_TOPHONE)
 #define MAX_RX_TOPHONE BOARD_MAX_RX_TOPHONE
 #elif defined(BOARD_HAS_PSRAM)
-static constexpr int MAX_RX_TOPHONE_WITH_PSRAM = 800;
-#define MAX_RX_TOPHONE MAX_RX_TOPHONE_WITH_PSRAM
+#define MAX_RX_TOPHONE RX_TOPHONE_WITH_PSRAM_DEFAULT
 #else
 #define MAX_RX_TOPHONE 32
 #endif
