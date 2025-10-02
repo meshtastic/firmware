@@ -99,8 +99,6 @@ static const uint8_t A0 = PIN_A0;
 
 #define TP_SER_IO (0 + 11)
 
-#define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
-
 /*
 External serial flash WP25R1635FZUIL0
 */
@@ -167,9 +165,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
 
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
-
 /*
  * SPI Interfaces
  */
@@ -196,7 +191,6 @@ External serial flash WP25R1635FZUIL0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.02F)
 
-// #define HAS_RTC 0
 // #define HAS_SCREEN 0
 
 #ifdef __cplusplus

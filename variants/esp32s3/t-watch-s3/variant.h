@@ -40,11 +40,14 @@
 
 #define HAS_AXP2101
 
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
 #define HAS_RTC 1
 
 #define I2C_SDA 10 // For QMC6310 sensors and screens
 #define I2C_SCL 11 // For QMC6310 sensors and screens
 
+#define HAS_BMA423 1
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
 #define HAS_GPS 0
