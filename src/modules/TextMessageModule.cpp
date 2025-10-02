@@ -23,10 +23,10 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
 
     // Store in the central message history
     const StoredMessage &sm = messageStore.addFromPacket(mp);
-
+#if HAS_SCREEN
     // Pass message to renderer (banner + thread switching + scroll reset)
     graphics::MessageRenderer::handleNewMessage(sm, mp);
-
+#endif
     // Only trigger screen wake if configuration allows it
     if (shouldWakeOnReceivedMessage()) {
         powerFSM.trigger(EVENT_RECEIVED_MSG);
