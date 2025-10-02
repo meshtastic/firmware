@@ -56,6 +56,10 @@
 #include <WiFiOTA.h>
 #endif
 
+// stringify
+#define xstr(s) str(s)
+#define str(s) #s
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -1152,6 +1156,18 @@ void NodeDB::loadFromDisk()
     spiLock->unlock();
 #endif
 #ifdef FSCom
+#ifdef FACTORY_INSTALL
+    spiLock->lock();
+    if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
+        LOG_WARN("Factory Install Reset!");
+        FSCom.format();
+        FSCom.mkdir("/prefs");
+        File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
+        f2.flush();
+        f2.close();
+    }
+    spiLock->unlock();
+#endif
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
         spiLock->unlock();
