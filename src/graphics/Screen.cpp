@@ -1499,15 +1499,16 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     strcpy(banner, "New Message");
                 }
 #if defined(M5STACK_UNITC6L)
-            screen->setOn(true);
-            screen->showSimpleBanner(banner, 1500);
-            if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-                (isAlert && moduleConfig.external_notification.alert_bell_buzzer) || (!isBroadcast(packet->to) && isToUs(p))) {
-                // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
-                // - packet contains an alert and alert bell buzzer is enabled
-                // - packet is a non-broadcast that is addressed to this node
-                playLongBeep();
-            }
+                screen->setOn(true);
+                screen->showSimpleBanner(banner, 1500);
+                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
+                    (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
+                    (!isBroadcast(packet->to) && isToUs(p))) {
+                    // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
+                    // - packet contains an alert and alert bell buzzer is enabled
+                    // - packet is a non-broadcast that is addressed to this node
+                    playLongBeep();
+                }
 #else
                 screen->showSimpleBanner(banner, 3000);
 #endif
