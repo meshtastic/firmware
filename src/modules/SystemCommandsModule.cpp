@@ -6,6 +6,7 @@
 #endif
 #include "GPS.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "Module.h"
 #include "NodeDB.h"
 #include "main.h"
@@ -77,6 +78,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_MSG_REBOOT:
         IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
         nodeDB->saveToDisk();
+        messageStore.saveToFlash();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;

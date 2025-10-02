@@ -1,0 +1,394 @@
+#include "MessageStore.h"
+#include "FSCommon.h"
+#include "NodeDB.h"
+#include "SPILock.h"
+#include "SafeFile.h"
+#include "configuration.h"
+#include "gps/RTC.h"
+#include "graphics/draw/MessageRenderer.h"
+
+using graphics::MessageRenderer::setThreadMode;
+using graphics::MessageRenderer::ThreadMode;
+
+static size_t getMessageSize(const StoredMessage &m)
+{
+    // serialized size = fixed 16 bytes + text length (capped at MAX_MESSAGE_SIZE)
+    return 16 + std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
+}
+
+void MessageStore::logMemoryUsage(const char *context) const
+{
+    size_t total = 0;
+    for (const auto &m : messages) {
+        total += getMessageSize(m);
+    }
+
+    LOG_DEBUG("MessageStore[%s]: %u messages, est %u bytes (~%u KB)", context, (unsigned)messages.size(), (unsigned)total,
+              (unsigned)(total / 1024));
+}
+
+MessageStore::MessageStore(const std::string &label)
+{
+    filename = "/Messages_" + label + ".msgs";
+}
+
+// Live message handling (RAM only)
+void MessageStore::addLiveMessage(const StoredMessage &msg)
+{
+    if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
+        liveMessages.pop_front(); // keep only most recent N
+    }
+    liveMessages.push_back(msg);
+}
+
+// Persistence queue (used only on shutdown/reboot)
+void MessageStore::addMessage(const StoredMessage &msg)
+{
+    if (messages.size() >= MAX_MESSAGES_SAVED) {
+        messages.pop_front();
+    }
+    messages.push_back(msg);
+}
+const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
+{
+    StoredMessage sm;
+
+    // Always use our local time, ignore packet.rx_time
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs > 0) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true; // mark for later upgrade
+    }
+
+    sm.channelIndex = packet.channel;
+    sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
+
+    if (packet.from == 0) {
+        // Phone-originated (outgoing)
+        sm.sender = nodeDB->getNodeNum(); // our node ID
+        if (packet.decoded.dest == 0 || packet.decoded.dest == NODENUM_BROADCAST) {
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+        } else {
+            sm.dest = packet.decoded.dest;
+            sm.type = MessageType::DM_TO_US;
+        }
+
+        // Outgoing messages start as NONE until ACK/NACK arrives
+        sm.ackStatus = AckStatus::NONE;
+    } else {
+        // Normal incoming
+        sm.sender = packet.from;
+        if (packet.to == NODENUM_BROADCAST || packet.decoded.dest == NODENUM_BROADCAST) {
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+        } else if (packet.to == nodeDB->getNodeNum()) {
+            sm.dest = nodeDB->getNodeNum(); // DM to us
+            sm.type = MessageType::DM_TO_US;
+        } else {
+            sm.dest = NODENUM_BROADCAST; // fallback
+            sm.type = MessageType::BROADCAST;
+        }
+
+        // Received messages don’t wait for ACK mark as ACKED
+        sm.ackStatus = AckStatus::ACKED;
+    }
+
+    addLiveMessage(sm);
+
+    // Return reference to the most recently stored message
+    return liveMessages.back();
+}
+
+// Outgoing/manual message
+void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text)
+{
+    StoredMessage sm;
+
+    // Always use our local time
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs > 0) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true; // mark for later upgrade
+    }
+
+    sm.sender = sender;
+    sm.channelIndex = channelIndex;
+    sm.text = text;
+
+    // Default manual adds to broadcast
+    sm.dest = NODENUM_BROADCAST;
+    sm.type = MessageType::BROADCAST;
+
+    // Outgoing messages start as NONE until ACK/NACK arrives
+    sm.ackStatus = AckStatus::NONE;
+
+    addLiveMessage(sm);
+}
+
+// Save RAM queue to flash (called on shutdown)
+void MessageStore::saveToFlash()
+{
+#ifdef FSCom
+    // Copy live RAM buffer into persistence queue
+    messages = liveMessages;
+
+    spiLock->lock();
+    FSCom.mkdir("/"); // ensure root exists
+    spiLock->unlock();
+
+    SafeFile f(filename.c_str(), false);
+
+    spiLock->lock();
+    uint8_t count = messages.size();
+    f.write(&count, 1);
+
+    for (uint8_t i = 0; i < messages.size() && i < MAX_MESSAGES_SAVED; i++) {
+        const StoredMessage &m = messages.at(i);
+        f.write((uint8_t *)&m.timestamp, sizeof(m.timestamp));
+        f.write((uint8_t *)&m.sender, sizeof(m.sender));
+        f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
+        f.write((uint8_t *)&m.dest, sizeof(m.dest));
+        f.write((uint8_t *)m.text.c_str(), std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size()));
+        f.write('\0'); // null terminator
+
+        uint8_t bootFlag = m.isBootRelative ? 1 : 0;
+        f.write(&bootFlag, 1); // persist boot-relative flag
+
+        uint8_t statusByte = static_cast<uint8_t>(m.ackStatus);
+        f.write(&statusByte, 1); // persist ackStatus
+    }
+    spiLock->unlock();
+
+    f.close();
+
+    // Debug after saving
+    logMemoryUsage("saveToFlash");
+#else
+    // Filesystem not available, skip persistence
+#endif
+}
+
+// Load persisted messages into RAM (called at boot)
+void MessageStore::loadFromFlash()
+{
+    messages.clear();
+    liveMessages.clear();
+#ifdef FSCom
+    concurrency::LockGuard guard(spiLock);
+
+    if (!FSCom.exists(filename.c_str()))
+        return;
+    auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+    if (!f)
+        return;
+
+    uint8_t count = 0;
+    f.readBytes((char *)&count, 1);
+
+    for (uint8_t i = 0; i < count && i < MAX_MESSAGES_SAVED; i++) {
+        StoredMessage m;
+        f.readBytes((char *)&m.timestamp, sizeof(m.timestamp));
+        f.readBytes((char *)&m.sender, sizeof(m.sender));
+        f.readBytes((char *)&m.channelIndex, sizeof(m.channelIndex));
+        f.readBytes((char *)&m.dest, sizeof(m.dest));
+
+        char c;
+        while (m.text.size() < MAX_MESSAGE_SIZE) {
+            if (f.readBytes(&c, 1) <= 0)
+                break;
+            if (c == '\0')
+                break;
+            m.text.push_back(c);
+        }
+
+        // Try to read boot-relative flag (new format)
+        uint8_t bootFlag = 0;
+        if (f.available() > 0) {
+            if (f.readBytes((char *)&bootFlag, 1) == 1) {
+                m.isBootRelative = (bootFlag != 0);
+            } else {
+                // Old format, fallback heuristic
+                m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
+            }
+        } else {
+            // Old format, fallback heuristic
+            m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
+        }
+
+        // Try to read ackStatus (newer format)
+        if (f.available() > 0) {
+            uint8_t statusByte = 0;
+            if (f.readBytes((char *)&statusByte, 1) == 1) {
+                m.ackStatus = static_cast<AckStatus>(statusByte);
+            } else {
+                m.ackStatus = AckStatus::NONE;
+            }
+        } else {
+            m.ackStatus = AckStatus::NONE;
+        }
+
+        // Recompute type from dest
+        if (m.dest == NODENUM_BROADCAST) {
+            m.type = MessageType::BROADCAST;
+        } else {
+            m.type = MessageType::DM_TO_US;
+        }
+
+        messages.push_back(m);
+        liveMessages.push_back(m); // restore into RAM buffer
+    }
+    f.close();
+
+    // Debug after loading
+    logMemoryUsage("loadFromFlash");
+#endif
+}
+
+// Clear all messages (RAM + persisted queue)
+void MessageStore::clearAllMessages()
+{
+    liveMessages.clear();
+    messages.clear();
+
+#ifdef FSCom
+    SafeFile f(filename.c_str(), false);
+    uint8_t count = 0;
+    f.write(&count, 1); // write "0 messages"
+    f.close();
+#endif
+}
+
+// Dismiss oldest message (RAM + persisted queue)
+void MessageStore::dismissOldestMessage()
+{
+    if (!liveMessages.empty()) {
+        liveMessages.pop_front();
+    }
+    if (!messages.empty()) {
+        messages.pop_front();
+    }
+    saveToFlash();
+}
+
+// Dismiss oldest message in a specific channel
+void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
+{
+    auto it = std::find_if(liveMessages.begin(), liveMessages.end(), [channel](const StoredMessage &m) {
+        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
+    });
+    if (it != liveMessages.end()) {
+        liveMessages.erase(it);
+    }
+
+    auto it2 = std::find_if(messages.begin(), messages.end(), [channel](const StoredMessage &m) {
+        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
+    });
+    if (it2 != messages.end()) {
+        messages.erase(it2);
+    }
+
+    saveToFlash();
+}
+
+// Dismiss oldest message in a direct conversation with a peer
+void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
+{
+    auto it = std::find_if(liveMessages.begin(), liveMessages.end(), [peer](const StoredMessage &m) {
+        if (m.type == MessageType::DM_TO_US) {
+            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+            return other == peer;
+        }
+        return false;
+    });
+    if (it != liveMessages.end()) {
+        liveMessages.erase(it);
+    }
+
+    auto it2 = std::find_if(messages.begin(), messages.end(), [peer](const StoredMessage &m) {
+        if (m.type == MessageType::DM_TO_US) {
+            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+            return other == peer;
+        }
+        return false;
+    });
+    if (it2 != messages.end()) {
+        messages.erase(it2);
+    }
+
+    saveToFlash();
+}
+
+// Dismiss newest message (RAM + persisted queue)
+void MessageStore::dismissNewestMessage()
+{
+    if (!liveMessages.empty()) {
+        liveMessages.pop_back();
+    }
+    if (!messages.empty()) {
+        messages.pop_back();
+    }
+    saveToFlash();
+}
+
+// Helper filters for future use
+std::deque<StoredMessage> MessageStore::getChannelMessages(uint8_t channel) const
+{
+    std::deque<StoredMessage> result;
+    for (const auto &m : liveMessages) {
+        if (m.type == MessageType::BROADCAST && m.channelIndex == channel) {
+            result.push_back(m);
+        }
+    }
+    return result;
+}
+
+std::deque<StoredMessage> MessageStore::getDirectMessages() const
+{
+    std::deque<StoredMessage> result;
+    for (const auto &m : liveMessages) {
+        if (m.type == MessageType::DM_TO_US) {
+            result.push_back(m);
+        }
+    }
+    return result;
+}
+
+// Upgrade boot-relative timestamps once RTC is valid
+// Only same-boot boot-relative messages are healed.
+// Persisted boot-relative messages from old boots stay ??? forever.
+void MessageStore::upgradeBootRelativeTimestamps()
+{
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs == 0)
+        return; // Still no valid RTC
+
+    uint32_t bootNow = millis() / 1000;
+
+    for (auto &m : liveMessages) {
+        if (m.isBootRelative && m.timestamp <= bootNow) {
+            uint32_t bootOffset = nowSecs - bootNow;
+            m.timestamp += bootOffset;
+            m.isBootRelative = false;
+        }
+        // else: persisted from old boot → stays ??? forever
+    }
+
+    for (auto &m : messages) {
+        if (m.isBootRelative && m.timestamp <= bootNow) {
+            uint32_t bootOffset = nowSecs - bootNow;
+            m.timestamp += bootOffset;
+            m.isBootRelative = false;
+        }
+        // else: persisted from old boot → stays ??? forever
+    }
+}
+
+// Global definition
+MessageStore messageStore("default");

@@ -11,6 +11,7 @@
  * For more information, see: https://meshtastic.org/
  */
 #include "power.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
@@ -757,6 +758,8 @@ void Power::shutdown()
     playShutdownMelody();
 #endif
     nodeDB->saveToDisk();
+    // === Save live messages before powering off ===
+    messageStore.saveToFlash();
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1

@@ -1,10 +1,13 @@
 #include "TextMessageModule.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "buzz.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "graphics/draw/MessageRenderer.h"
+
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -15,14 +18,21 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
 #endif
 
     // We only store/display messages destined for us.
-    // Keep a copy of the most recent text message.
     devicestate.rx_text_message = mp;
     devicestate.has_rx_text_message = true;
+
+    // Store in the central message history
+    const StoredMessage &sm = messageStore.addFromPacket(mp);
+
+    // Pass message to renderer (banner + thread switching + scroll reset)
+    graphics::MessageRenderer::handleNewMessage(sm, mp);
 
     // Only trigger screen wake if configuration allows it
     if (shouldWakeOnReceivedMessage()) {
         powerFSM.trigger(EVENT_RECEIVED_MSG);
     }
+
+    // Notify any observers (e.g. external modules that care about packets)
     notifyObservers(&mp);
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want

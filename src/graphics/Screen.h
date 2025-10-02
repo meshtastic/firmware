@@ -40,7 +40,6 @@ class Screen
         FOCUS_DEFAULT,  // No specific frame
         FOCUS_PRESERVE, // Return to the previous frame
         FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
         FOCUS_CLOCK,
         FOCUS_SYSTEM,
@@ -209,8 +208,6 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
-    CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent); // Sent by Mesh Modules
     CallbackObserver<Screen, const InputEvent *> inputObserver =
@@ -229,7 +226,6 @@ class Screen : public concurrency::OSThread
         FOCUS_DEFAULT,  // No specific frame
         FOCUS_PRESERVE, // Return to the previous frame
         FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
         FOCUS_CLOCK,
         FOCUS_SYSTEM,
@@ -575,7 +571,6 @@ class Screen : public concurrency::OSThread
 
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
-    int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
     int handleAdminMessage(AdminModule_ObserverData *arg);
