@@ -100,7 +100,7 @@ namespace graphics
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
-
+#define ASCII_BELL '\x07'
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
@@ -1458,28 +1458,36 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             }
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+            const meshtastic_Channel channel =
+                channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 
             char banner[256];
 
-            // Check for bell character in message to determine alert type
             bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
 
+            if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
+                moduleConfig.external_notification.alert_bell_buzzer)
+                // Check for bell character to determine if this message is an alert
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == ASCII_BELL) {
+                        isAlert = true;
+                        break;
+                    }
+                }
+
+            // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
+            // 'mute' preferences set to any specific node or channel.
             if (isAlert) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
                 } else {
                     strcpy(banner, "Alert Received");
                 }
-            } else {
+                screen->showSimpleBanner(banner, 3000);
+            } else if (!channel.settings.mute) {
                 if (longName && longName[0]) {
 #if defined(M5STACK_UNITC6L)
                     strcpy(banner, "New Message");
@@ -1490,14 +1498,21 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 } else {
                     strcpy(banner, "New Message");
                 }
-            }
 #if defined(M5STACK_UNITC6L)
-            screen->setOn(true);
-            screen->showSimpleBanner(banner, 1500);
-            playLongBeep();
+                screen->setOn(true);
+                screen->showSimpleBanner(banner, 1500);
+                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
+                    (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
+                    (!isBroadcast(packet->to) && isToUs(p))) {
+                    // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
+                    // - packet contains an alert and alert bell buzzer is enabled
+                    // - packet is a non-broadcast that is addressed to this node
+                    playLongBeep();
+                }
 #else
-            screen->showSimpleBanner(banner, 3000);
+                screen->showSimpleBanner(banner, 3000);
 #endif
+            }
         }
     }
 

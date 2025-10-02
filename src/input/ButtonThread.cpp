@@ -279,7 +279,7 @@ int32_t ButtonThread::runOnce()
     if (!userButton.isIdle() || waitingForLongPress) {
         return 50;
     }
-    return INT32_MAX;
+    return 100; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
 }
 
 /*

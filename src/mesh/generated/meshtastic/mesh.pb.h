@@ -253,8 +253,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1 = 99,
     /* Seeed Tracker L1 EINK driver */
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK = 100,
-    /* Reserved ID for future and past use */
-    meshtastic_HardwareModel_QWANTZ_TINY_ARMS = 101,
+    /* Muzi Works R1 Neo */
+    meshtastic_HardwareModel_MUZI_R1_NEO = 101,
     /* Lilygo T-Deck Pro */
     meshtastic_HardwareModel_T_DECK_PRO = 102,
     /* Lilygo TLora Pager */
@@ -278,6 +278,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_M5STACK_C6L = 111,
     /* M5Stack Cardputer Adv */
     meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV = 112,
+    /* ESP32S3 main controller with GPS and TFT screen. */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2 = 113,
+    /* LilyGo T-Watch Ultra */
+    meshtastic_HardwareModel_T_WATCH_ULTRA = 114,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
