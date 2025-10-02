@@ -98,6 +98,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
+#elif defined(R1_NEO)
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_R1_NEO
 #elif defined(HELTEC_MESH_SOLAR)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
 #else
