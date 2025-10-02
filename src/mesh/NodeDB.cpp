@@ -1163,8 +1163,10 @@ void NodeDB::loadFromDisk()
         FSCom.format();
         FSCom.mkdir("/prefs");
         File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
-        f2.flush();
-        f2.close();
+        if (f2) {
+            f2.flush();
+            f2.close();
+        }
     }
     spiLock->unlock();
 #endif
