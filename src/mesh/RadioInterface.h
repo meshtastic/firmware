@@ -190,6 +190,12 @@ class RadioInterface
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
     /**
+     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+     * @return Whether a pending packet was removed
+     */
+    virtual bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) { return false; }
+
+    /**
      * Calculate airtime per
      * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
      * section 4

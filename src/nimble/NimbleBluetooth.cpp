@@ -53,7 +53,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             hasChecked = true;
         }
 
-        return 100;
+        // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
+        return INT32_MAX;
     }
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
@@ -247,6 +248,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             bluetoothPhoneAPI->numBytes = 0;
             bluetoothPhoneAPI->queue_size = 0;
         }
+
+        // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+        memset(lastToRadio, 0, sizeof(lastToRadio));
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();

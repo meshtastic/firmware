@@ -153,6 +153,20 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     }
 }
 
+void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
+{
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || mp.decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP)
+        return;
+
+    meshtastic_RouteDiscovery decoded = meshtastic_RouteDiscovery_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_RouteDiscovery_msg, &decoded))
+        return;
+
+    handleReceivedProtobuf(mp, &decoded);
+    // Intentionally modify the packet in-place so downstream relays see our updates.
+    alterReceivedProtobuf(const_cast<meshtastic_MeshPacket &>(mp), &decoded);
+}
+
 void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r, bool isTowardsDestination)
 {
     pb_size_t *route_count;
@@ -405,6 +419,9 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
         p->decoded.want_response = true;
 
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p->want_ack = true;
+
         // Manually encode the RouteDiscovery payload
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
@@ -517,6 +534,9 @@ void TraceRouteModule::launch(NodeNum node)
         p->to = node;
         p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
         p->decoded.want_response = true;
+
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p->want_ack = true;
 
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);

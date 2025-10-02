@@ -852,24 +852,31 @@ void menuHandler::GPSFormatMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 2) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 3) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 4) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 5) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 6) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else if (selected == 7) {
             uiconfig.gps_format = meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS;
+            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
@@ -904,11 +911,11 @@ void menuHandler::BluetoothToggleMenu()
 
 void menuHandler::BuzzerModeMenu()
 {
-    static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
+    static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only", "DMs Only"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Buzzer Mode";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
         service->reloadConfig(SEGMENT_CONFIG);
