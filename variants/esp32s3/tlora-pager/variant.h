@@ -42,6 +42,7 @@
 #define HAS_RTC 1
 
 // Rotary
+#define FSM_ROTARY_ENCODER
 #define ROTARY_A (40)
 #define ROTARY_B (41)
 #define ROTARY_PRESS (7)
