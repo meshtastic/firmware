@@ -1104,11 +1104,6 @@ int32_t GPS::runOnce()
         publishUpdate();
     }
 
-    // Repeaters have no need for GPS
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        return disable();
-    }
-
     // ======================== GPS_ACTIVE state ========================
     // In GPS_ACTIVE state, GPS is powered on and we're receiving NMEA messages.
     // We use the following logic to determine when to update the local position
@@ -1132,7 +1127,6 @@ int32_t GPS::runOnce()
     //   --> If we have a time and a location --> publishUpdate
     //   --> If we had a location before but don't now --> publishUpdate
     //   --> down()
-
     if (whileActive()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
