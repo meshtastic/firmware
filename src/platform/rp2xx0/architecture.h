@@ -36,3 +36,6 @@
 #elif defined(PRIVATE_HW)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
+
+// Detect if running in ISR context (ARM Cortex-M33 / RISC-V)
+#define xPortInIsrContext() (__get_current_exception() == 0 ? pdFALSE : pdTRUE)

@@ -16,10 +16,10 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_MESHTINY_
-#define _VARIANT_MESHTINY_
+#ifndef _VARIANT_R1NEO_
+#define _VARIANT_R1NEO_
 
-#define MESHTINY
+#define RAK4630
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -40,12 +40,12 @@ extern "C" {
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
-#define NUM_ANALOG_INPUTS (6)
+#define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (35)
-#define PIN_LED2 (36)
+#define PIN_LED1 (32 + 4) // P1.04 Controls Green LED
+#define PIN_LED2 (28)     // P0.28 Controls Blue LED
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
@@ -55,64 +55,17 @@ extern "C" {
 
 #define LED_STATE_ON 1 // State when LED is litted
 
-/*
- * Encoder
- */
-#define INPUTDRIVER_ENCODER_TYPE 2
-#define INPUTDRIVER_ENCODER_UP 26
-#define INPUTDRIVER_ENCODER_DOWN 4
-#define INPUTDRIVER_ENCODER_BTN 28
+// Button
+#define PIN_BUTTON1 (26)
+#define BUTTON_ACTIVE_LOW 0
+#define BUTTON_ACTIVE_PULLUP 0
+#define BUTTON_SENSE_TYPE INPUT_SENSE_HIGH
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
-
-/*
- * Buzzer - PWM
- */
-#define PIN_BUZZER 30
-
-/*
- * Buttons
- */
-
-#define CANCEL_BUTTON_PIN 9
-#define BUTTON_NEED_PULLUP
-#define CANCEL_BUTTON_ACTIVE_LOW true
-#define CANCEL_BUTTON_ACTIVE_PULLUP false
-
-/*
- * Analog pins
- */
-#define PIN_A0 (5)
-#define PIN_A1 (31)
-#define PIN_A2 (28)
-#define PIN_A3 (29)
-#define PIN_A4 (30)
-#define PIN_A5 (31)
-#define PIN_A6 (0xff)
-#define PIN_A7 (0xff)
-
-static const uint8_t A0 = PIN_A0;
-static const uint8_t A1 = PIN_A1;
-static const uint8_t A2 = PIN_A2;
-static const uint8_t A3 = PIN_A3;
-static const uint8_t A4 = PIN_A4;
-static const uint8_t A5 = PIN_A5;
-static const uint8_t A6 = PIN_A6;
-static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
-// Other pins
-#define PIN_AREF (2)
-#define PIN_NFC1 (9)
-#define PIN_NFC2 (10)
-
-static const uint8_t AREF = PIN_AREF;
-
-/*
- * Serial interfaces
- */
-#define PIN_SERIAL1_RX (15)
-#define PIN_SERIAL1_TX (16)
+// Serial for GPS
+#define PIN_SERIAL1_RX (25)
+#define PIN_SERIAL1_TX (24)
 
 // Connected to Jlink CDC
 #define PIN_SERIAL2_RX (8)
@@ -121,43 +74,35 @@ static const uint8_t AREF = PIN_AREF;
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 2
+#define SPI_INTERFACES_COUNT 1
 
 #define PIN_SPI_MISO (45)
 #define PIN_SPI_MOSI (44)
 #define PIN_SPI_SCK (43)
-
-#define PIN_SPI1_MISO (29) // (0 + 29)
-#define PIN_SPI1_MOSI (30) // (0 + 30)
-#define PIN_SPI1_SCK (3)   // (0 + 3)
 
 static const uint8_t SS = 42;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-#define HAS_SCREEN 1
-#define USE_SSD1306
+// R1 Neo Extras
+#define DCDC_EN_HOLD (13) // P0.13 Keeps DCDC alive after user button  is pressed
+#define NRF_ON (29)       // P0.29 Tells IO controller device is on
+
+// RAKRGB
+#define HAS_NCP5623
+
+#define HAS_SCREEN 0
 
 /*
  * Wire Interfaces
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (13)
-#define PIN_WIRE_SCL (14)
+#define PIN_WIRE_SDA (19) // P0.19 RTC_SDA
+#define PIN_WIRE_SCL (20) // P0.20 RTC_SCL
 
-// QSPI Pins
-#define PIN_QSPI_SCK 3
-#define PIN_QSPI_CS 22  // Changed from 26 to avoid conflict with encoder
-#define PIN_QSPI_IO0 27 // Changed from 30 to avoid conflict with buzzer
-#define PIN_QSPI_IO1 29
-#define PIN_QSPI_IO2 21 // Changed from 28 to avoid conflict with encoder button
-#define PIN_QSPI_IO3 2
-
-// On-board QSPI Flash
-#define EXTERNAL_FLASH_DEVICES IS25LP080D
-#define EXTERNAL_FLASH_USE_QSPI
+#define PIN_BUZZER (0 + 3) // P0.03
 
 #define USE_SX1262
 #define SX126X_CS (42)
@@ -165,6 +110,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_BUSY (46)
 #define SX126X_RESET (38)
 #define SX126X_POWER_EN (37)
+
 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
@@ -172,11 +118,14 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Testing USB detection
 #define NRF_APM
 
-#define PIN_3V3_EN (34)
+#define PIN_GPS_EN (32 + 1) // P1.01
+#define PIN_GPS_PPS (2)     // P0.02 Pulse per second input from the GPS
+
+#define GPS_RX_PIN PIN_SERIAL1_RX
+#define GPS_TX_PIN PIN_SERIAL1_TX
 
 // Battery
-// The battery sense is hooked to pin A0 (5)
-#define BATTERY_PIN PIN_A0
+#define BATTERY_PIN (0 + 31) // P0.31 ADC_VBAT
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
@@ -184,6 +133,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
+
+#define HAS_RTC 1
+
+#define RX8130CE_RTC 0x32
 
 #ifdef __cplusplus
 }

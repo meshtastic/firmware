@@ -53,7 +53,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             hasChecked = true;
         }
 
-        return 100;
+        // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
+        return INT32_MAX;
     }
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)

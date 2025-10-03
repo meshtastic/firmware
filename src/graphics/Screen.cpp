@@ -100,7 +100,7 @@ namespace graphics
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
-
+#define ASCII_BELL '\x07'
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
@@ -215,6 +215,44 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     NotificationRenderer::numDigits = digits;
     NotificationRenderer::currentNumber = 0;
 
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setTargetFPS(60);
+    ui->update();
+}
+
+void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
+                           std::function<void(const std::string &)> textCallback)
+{
+    LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+
+    if (NotificationRenderer::virtualKeyboard) {
+        delete NotificationRenderer::virtualKeyboard;
+        NotificationRenderer::virtualKeyboard = nullptr;
+    }
+
+    NotificationRenderer::textInputCallback = nullptr;
+
+    NotificationRenderer::virtualKeyboard = new VirtualKeyboard();
+    if (header) {
+        NotificationRenderer::virtualKeyboard->setHeader(header);
+    }
+    if (initialText) {
+        NotificationRenderer::virtualKeyboard->setInputText(initialText);
+    }
+
+    // Set up callback with safer cleanup mechanism
+    NotificationRenderer::textInputCallback = textCallback;
+    NotificationRenderer::virtualKeyboard->setCallback([textCallback](const std::string &text) { textCallback(text); });
+
+    // Store the message and set the expiration timestamp (use same pattern as other notifications)
+    strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0';
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::text_input;
+
+    // Set the overlay using the same pattern as other notification types
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
@@ -743,13 +781,19 @@ int32_t Screen::runOnce()
             handleSetOn(false);
             break;
         case Cmd::ON_PRESS:
-            handleOnPress();
+            if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
+                handleOnPress();
+            }
             break;
         case Cmd::SHOW_PREV_FRAME:
-            handleShowPrevFrame();
+            if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
+                handleShowPrevFrame();
+            }
             break;
         case Cmd::SHOW_NEXT_FRAME:
-            handleShowNextFrame();
+            if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
+                handleShowNextFrame();
+            }
             break;
         case Cmd::START_ALERT_FRAME: {
             showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
@@ -771,7 +815,9 @@ int32_t Screen::runOnce()
             NotificationRenderer::pauseBanner = false;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
-            setFrames();
+            if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
+                setFrames();
+            }
             break;
         case Cmd::NOOP:
             break;
@@ -807,6 +853,7 @@ int32_t Screen::runOnce()
     if (showingNormalScreen) {
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
+            NotificationRenderer::current_notification_type != notificationTypeEnum::text_input &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
             // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
@@ -897,6 +944,11 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 // Called when a frame should be added / removed, or custom frames should be cleared
 void Screen::setFrames(FrameFocus focus)
 {
+    // Block setFrames calls when virtual keyboard is active to prevent overlay interference
+    if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
+        return;
+    }
+
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
@@ -1003,7 +1055,7 @@ void Screen::setFrames(FrameFocus focus)
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
-        indicatorIcons.push_back(small_chirpy);
+        indicatorIcons.push_back(chirpy_small);
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -1265,7 +1317,8 @@ void Screen::blink()
         delay(50);
         count = count - 1;
     }
-    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in OLEDDisplay.
+    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in
+    // OLEDDisplay.
     dispdev->setBrightness(brightness);
 }
 
@@ -1405,28 +1458,36 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             }
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+            const meshtastic_Channel channel =
+                channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 
             char banner[256];
 
-            // Check for bell character in message to determine alert type
             bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
 
+            if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
+                moduleConfig.external_notification.alert_bell_buzzer)
+                // Check for bell character to determine if this message is an alert
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == ASCII_BELL) {
+                        isAlert = true;
+                        break;
+                    }
+                }
+
+            // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
+            // 'mute' preferences set to any specific node or channel.
             if (isAlert) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
                 } else {
                     strcpy(banner, "Alert Received");
                 }
-            } else {
+                screen->showSimpleBanner(banner, 3000);
+            } else if (!channel.settings.mute) {
                 if (longName && longName[0]) {
 #if defined(M5STACK_UNITC6L)
                     strcpy(banner, "New Message");
@@ -1437,14 +1498,21 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 } else {
                     strcpy(banner, "New Message");
                 }
-            }
 #if defined(M5STACK_UNITC6L)
-            screen->setOn(true);
-            screen->showSimpleBanner(banner, 1500);
-            playLongBeep();
+                screen->setOn(true);
+                screen->showSimpleBanner(banner, 1500);
+                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
+                    (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
+                    (!isBroadcast(packet->to) && isToUs(p))) {
+                    // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
+                    // - packet contains an alert and alert bell buzzer is enabled
+                    // - packet is a non-broadcast that is addressed to this node
+                    playLongBeep();
+                }
 #else
-            screen->showSimpleBanner(banner, 3000);
+                screen->showSimpleBanner(banner, 3000);
 #endif
+            }
         }
     }
 
@@ -1454,6 +1522,11 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
+    // Block UI frame events when virtual keyboard is active
+    if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
+        return 0;
+    }
+
     if (showingNormalScreen) {
         // Regenerate the frameset, potentially honoring a module's internal requestFocus() call
         if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
@@ -1475,6 +1548,16 @@ int Screen::handleInputEvent(const InputEvent *event)
 {
     if (!screenOn)
         return 0;
+
+    // Handle text input notifications specially - pass input to virtual keyboard
+    if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
+        NotificationRenderer::inEvent = *event;
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+        ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+        setFastFramerate(); // Draw ASAP
+        ui->update();
+        return 0;
+    }
 
 #ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please

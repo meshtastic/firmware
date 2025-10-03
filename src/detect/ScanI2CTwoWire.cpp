@@ -197,6 +197,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef PCF8563_RTC
                 SCAN_SIMPLE_CASE(PCF8563_RTC, RTC_PCF8563, "PCF8563", (uint8_t)addr.address)
 #endif
+#ifdef RX8130CE_RTC
+                SCAN_SIMPLE_CASE(RX8130CE_RTC, RTC_RX8130CE, "RX8130CE", (uint8_t)addr.address)
+#endif
 
             case CARDKB_ADDR:
                 // Do we have the RAK14006 instead?
