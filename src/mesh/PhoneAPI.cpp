@@ -710,6 +710,13 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
         return false;
     }
+
+    // Upgrade traceroute requests from phone to use reliable delivery, matching TraceRouteModule
+    if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && !isBroadcast(p.to)) {
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p.want_ack = true;
+    }
+
     lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;

@@ -335,7 +335,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     meshtastic::BluetoothStatus newStatus(textkey);
     bluetoothStatus->updateStatus(&newStatus);
 
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+#if HAS_SCREEN &&                                                                                                                \
+    !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
     if (screen) {
         screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
             char btPIN[16] = "888888";
