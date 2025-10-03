@@ -1199,7 +1199,10 @@ int32_t GPS::runOnce()
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
             }
-            publishUpdate();
+            if (shouldPublish) {
+                fixHoldEnds = 0;
+                publishUpdate();
+            }
 
             // There's a chance we just got a time, so keep going to see if we can get a location too
             if (tooLong || holdExpired) {
