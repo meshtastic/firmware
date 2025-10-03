@@ -25,6 +25,8 @@ PacketHistory::PacketHistory(uint32_t size)
         size = PACKETHISTORY_MAX; // Use default size if invalid
     }
 
+    LOG_DEBUG("Packet History - pre-alloc heap %u psram %u", memGet.getFreeHeap(), memGet.getFreePsram());
+
     // Allocate memory for the recent packets array
     recentPacketsCapacity = size;
     if (has_psram()) {
@@ -33,6 +35,8 @@ PacketHistory::PacketHistory(uint32_t size)
         if (recentPackets) {
             memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
             recentPacketsInPsram = true;
+            LOG_DEBUG("Packet History - allocated %u entries in PSRAM, free heap %u psram %u", recentPacketsCapacity,
+                      memGet.getFreeHeap(), memGet.getFreePsram());
         } else {
             LOG_WARN("Packet History - PSRAM allocation failed, falling back to DRAM");
         }
@@ -50,6 +54,8 @@ PacketHistory::PacketHistory(uint32_t size)
 
         // Initialize the recent packets array to zero
         memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+        LOG_DEBUG("Packet History - allocated %u entries in DRAM, free heap %u psram %u", recentPacketsCapacity,
+                  memGet.getFreeHeap(), memGet.getFreePsram());
     }
 }
 
