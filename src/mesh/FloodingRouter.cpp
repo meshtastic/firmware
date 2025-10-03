@@ -54,6 +54,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
             return true;
         }
+
+        // No queue entry was replaced by this upgraded copy, so treat it as a duplicate to avoid
+        // delivering the same packet to applications/phone twice with different hop limits.
+        seenRecently = true;
     }
 
     if (seenRecently) {
@@ -81,9 +85,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 {
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
-        // ROUTER, REPEATER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
+        // ROUTER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
         return false;
     }
@@ -102,7 +105,7 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
+        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
         // But only LoRa packets should be able to trigger this.
         if (Router::cancelSending(p->from, p->id))
             txRelayCanceled++;
