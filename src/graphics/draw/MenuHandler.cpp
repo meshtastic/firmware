@@ -116,6 +116,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
             config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
+            auto changes = SEGMENT_CONFIG;
+
             // This is needed as we wait til picking the LoRa region to generate keys for the first time.
             if (!owner.is_licensed) {
                 bool keygenSuccess = false;
@@ -124,6 +126,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                     if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                         keygenSuccess = true;
                     }
+
                 } else {
                     LOG_INFO("Generate new PKI keys");
                     crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
@@ -141,7 +144,14 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             if (myRegion->dutyCycle < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
-            service->reloadConfig(SEGMENT_CONFIG);
+
+            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+                //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                changes |= SEGMENT_MODULECONFIG;
+            }
+
+            service->reloadConfig(changes);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
     };

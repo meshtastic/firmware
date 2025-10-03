@@ -553,7 +553,7 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#ifdef HELTEC_V4
+#if defined(USE_GC1109_PA)
     gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
     gpio_pullup_en((gpio_num_t)LORA_PA_EN);
     gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
