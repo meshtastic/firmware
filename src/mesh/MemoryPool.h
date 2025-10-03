@@ -228,4 +228,27 @@ template <class T, int MaxSize> class PsramMemoryPool : public Allocator<T>
         return nullptr;
     }
 };
+
+// Utility helpers for PSRAM-backed array allocations on ESP32 targets.
+template <typename T> inline T *psramAllocArray(size_t count)
+{
+    return static_cast<T *>(heap_caps_malloc(sizeof(T) * count, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
+
+template <typename T> inline void psramFreeArray(T *ptr)
+{
+    if (ptr)
+        heap_caps_free(ptr);
+}
+#else
+template <typename T> inline T *psramAllocArray(size_t count)
+{
+    (void)count;
+    return nullptr;
+}
+
+template <typename T> inline void psramFreeArray(T *ptr)
+{
+    (void)ptr;
+}
 #endif
