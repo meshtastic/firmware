@@ -1189,14 +1189,14 @@ int32_t GPS::runOnce()
     }
 
     // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-    if (shouldPublish || tooLong || millis() > fixHoldEnds) {
+    if (shouldPublish || tooLong || (fixHoldEnds != 0 && millis() > fixHoldEnds)) {
         if (gotTime && hasValidLocation) {
             shouldPublish = true;
         }
         publishUpdate();
         down();
 #ifdef GPS_DEBUG
-    } else {
+    } else if (fixHoldEnds != 0) {
         LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
 #endif
     }
