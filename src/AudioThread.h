@@ -11,6 +11,11 @@
 #include <AudioOutputI2S.h>
 #include <ESP8266SAM.h>
 
+#ifdef USE_XL9555
+#include "ExtensionIOXL9555.hpp"
+extern ExtensionIOXL9555 io;
+#endif
+
 #define AUDIO_THREAD_INTERVAL_MS 100
 
 class AudioThread : public concurrency::OSThread
@@ -20,6 +25,9 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#endif
         setCPUFast(true);
         rtttlFile = new AudioFileSourcePROGMEM(data, len);
         i2sRtttl = new AudioGeneratorRTTTL();
@@ -46,6 +54,9 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#endif
     }
 
     void readAloud(const char *text)
@@ -56,10 +67,16 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#endif
         ESP8266SAM *sam = new ESP8266SAM;
         sam->Say(audioOut, text);
         delete sam;
         setCPUFast(false);
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#endif
     }
 
   protected:

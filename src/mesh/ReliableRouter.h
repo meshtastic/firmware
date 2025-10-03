@@ -31,4 +31,10 @@ class ReliableRouter : public NextHopRouter
      * We hook this method so we can see packets before FloodingRouter says they should be discarded
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
+
+  private:
+    /**
+     * Should this packet be ACKed with a want_ack for reliable delivery?
+     */
+    bool shouldSuccessAckWithWantAck(const meshtastic_MeshPacket *p);
 };
