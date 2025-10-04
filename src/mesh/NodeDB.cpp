@@ -56,10 +56,6 @@
 #include <WiFiOTA.h>
 #endif
 
-// stringify
-#define xstr(s) str(s)
-#define str(s) #s
-
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
