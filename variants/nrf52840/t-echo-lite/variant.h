@@ -145,7 +145,7 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_GPS_STANDBY (32 + 13) // wakeup pin
 #define PIN_GPS_PPS (32 + 15)
 #define GPS_TX_PIN (32 + 10) // L76K module RX PIN
-#define GPS_RX_PIN (0 + 29) // L76K module TX PIN
+#define GPS_RX_PIN (0 + 29)  // L76K module TX PIN
 
 #define GPS_THREAD_INTERVAL 50
 
