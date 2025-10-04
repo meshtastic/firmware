@@ -1,8 +1,9 @@
 #include "configuration.h"
 
-#ifdef T_DECK_ULTRA
+#ifdef T_WATCH_ULTRA
 
-#include "TouchDrvCST92xx.h"
+#include "Arduino.h"
+#include "TouchDrvCSTXXX.hpp"
 #include "input/TouchScreenImpl1.h"
 #include <Wire.h>
 
@@ -17,10 +18,10 @@ static bool readTouch(int16_t *x, int16_t *y)
 void lateInitVariant()
 {
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        pinmode(TP_INT, INPUT_PULLUP);
-        touchDrv.setPins(-1, TP_INT);
-        if (touchDrv.begin(&Wire, 0x1A, I2C_SDA, I2C_SCL)) {
-            touchScreenImpl1 = new TouchScreenImpl1(410, 502, readTouch);
+        pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
+        touchDrv.setPins(-1, SCREEN_TOUCH_INT);
+        if (touchDrv.begin(Wire, TOUCH_SLAVE_ADDRESS, I2C_SDA, I2C_SCL)) {
+            touchScreenImpl1 = new TouchScreenImpl1(TFT_WIDTH, TFT_HEIGHT, readTouch);
             touchScreenImpl1->init();
         } else {
             LOG_ERROR("failed to initialize CST92xx");
