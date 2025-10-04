@@ -13,7 +13,9 @@
 
 #ifdef NIMBLE_TWO
 #include "NimBLEAdvertising.h"
+#ifdef CONFIG_BT_NIMBLE_EXT_ADV
 #include "NimBLEExtAdvertising.h"
+#endif
 #include "PowerStatus.h"
 #endif
 
@@ -95,7 +97,6 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
 #else
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
-
 #endif
     {
         auto val = pCharacteristic->getValue();
@@ -309,10 +310,24 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
+#ifdef CONFIG_BT_NIMBLE_ROLE_CENTRAL_DISABLED
+        if (handle == BLE_HS_CONN_HANDLE_NONE) {
+            return 0;
+        }
+
+        int8_t rssi = 0;
+        int rc = ble_gap_conn_rssi(handle, &rssi);
+        if (rc != 0) {
+            return 0;
+        }
+
+        return rssi;
+#else
 #ifdef NIMBLE_TWO
         return NimBLEDevice::getClientByHandle(handle)->getRssi();
 #else
         return NimBLEDevice::getClientByID(handle)->getRssi();
+#endif
 #endif
     }
     return 0; // FIXME figure out where to source this
@@ -326,7 +341,11 @@ void NimbleBluetooth::setup()
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
+#ifdef NIMBLE_TWO
+    NimBLEDevice::setPower(9);
+#else
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+#endif
 
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM | BLE_SM_PAIR_AUTHREQ_SC);
@@ -354,7 +373,8 @@ void NimbleBluetooth::setupService()
     if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
-        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+        fromNumCharacteristic =
+            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 4);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
@@ -362,9 +382,9 @@ void NimbleBluetooth::setupService()
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
         FromRadioCharacteristic = bleService->createCharacteristic(
             FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        fromNumCharacteristic =
-            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
-                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromNumCharacteristic = bleService->createCharacteristic(
+            FROMNUM_UUID,
+            NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 4);
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
             NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
@@ -397,7 +417,7 @@ void NimbleBluetooth::setupService()
 
 void NimbleBluetooth::startAdvertising()
 {
-#ifdef NIMBLE_TWO
+#if defined(NIMBLE_TWO) && defined(CONFIG_BT_NIMBLE_EXT_ADV)
     NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     NimBLEExtAdvertisement legacyAdvertising;
 
@@ -431,6 +451,7 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
     pAdvertising->start(0);
 #endif
+    LOG_DEBUG("BLE Advertising started");
 }
 
 /// Given a level between 0-100, update the BLE attribute
