@@ -1,0 +1,25 @@
+{
+    "build": {
+      "core": "esp32",
+      "extra_flags": "-DARDUINO_ESP32_PICO_D4",
+      "f_cpu": "240000000L",
+      "f_flash": "40000000L",
+      "flash_mode": "dio",
+      "mcu": "esp32",
+      "variant": "esp32"
+    },
+    "frameworks": [
+      "arduino",
+      "espidf"
+    ],
+    "name": "Espressif ESP32-PICO-D4",
+    "upload": {
+      "flash_size": "4MB",
+      "maximum_ram_size": 327680,
+      "maximum_size": 1310720,
+      "require_upload_port": true,
+      "speed": 115200
+    },
+    "url": "https://www.espressif.com/en/products/socs/esp32-pico-d4",
+    "vendor": "Espressif"
+  }
