@@ -10,19 +10,17 @@
 
 LPS22HBSensor::LPS22HBSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_LPS22, "LPS22HB") {}
 
-int32_t LPS22HBSensor::runOnce()
+bool LPS22HBSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    status = lps22hb.begin_I2C(dev->address.address, bus);
+    if (!status) {
+        return status;
     }
-    status = lps22hb.begin_I2C(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
-    return initI2CSensor();
-}
-
-void LPS22HBSensor::setup()
-{
     lps22hb.setDataRate(LPS22_RATE_10_HZ);
+
+    initI2CSensor();
+    return status;
 }
 
 bool LPS22HBSensor::getMetrics(meshtastic_Telemetry *measurement)
