@@ -1631,8 +1631,6 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     }
     info->num = contact.node_num;
     info->has_user = true;
-    // Ensure user.id is derived from node number
-    snprintf(contact.user.id, sizeof(contact.user.id), "!%08x", contact.node_num);
     info->user = TypeConversions::ConvertToUserLite(contact.user);
     if (contact.should_ignore) {
         // If should_ignore is set,
