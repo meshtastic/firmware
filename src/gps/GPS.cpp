@@ -1164,7 +1164,7 @@ int32_t GPS::runOnce()
             } else if (!hasValidLocation || prev_fixQual == 0 || fixHoldEnds < millis()) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
-                uint32_t holdTime = updateInterval - 1000;
+                uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
                 fixHoldEnds = millis() + holdTime;
@@ -1191,10 +1191,6 @@ int32_t GPS::runOnce()
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
         bool holdExpired = (fixHoldEnds != 0 && millis() > fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
-#ifdef GPS_DEBUG
-            LOG_DEBUG("Publishing GPS update: shouldPublish=%d, tooLong=%d, millis()=%d, fixHoldEnds=%d", shouldPublish, tooLong,
-                      millis(), fixHoldEnds);
-#endif
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
             }
