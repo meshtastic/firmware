@@ -46,6 +46,12 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     return false; // Let others look at this message also if they want
 }
 
+void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_User *p)
+{
+    // Coerce user.id to be derived from the node number
+    snprintf(p->id, sizeof(p->id), "!%08x", getFrom(&mp));
+}
+
 void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
 {
     // cancel any not yet sent (now stale) position packets
@@ -105,7 +111,6 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 
         // Clear the user.id field since it should be derived from node number on the receiving end
         u.id[0] = '\0';
-
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();
         return allocDataProtobuf(u);
