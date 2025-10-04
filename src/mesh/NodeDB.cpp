@@ -56,6 +56,10 @@
 #include <WiFiOTA.h>
 #endif
 
+// stringify
+#define xstr(s) str(s)
+#define str(s) #s
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -1154,6 +1158,20 @@ void NodeDB::loadFromDisk()
     spiLock->unlock();
 #endif
 #ifdef FSCom
+#ifdef FACTORY_INSTALL
+    spiLock->lock();
+    if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
+        LOG_WARN("Factory Install Reset!");
+        FSCom.format();
+        FSCom.mkdir("/prefs");
+        File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
+        if (f2) {
+            f2.flush();
+            f2.close();
+        }
+    }
+    spiLock->unlock();
+#endif
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
         spiLock->unlock();
@@ -1599,8 +1617,17 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 void NodeDB::addFromContact(meshtastic_SharedContact contact)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
-    if (!info) {
+    if (!info || !contact.has_user) {
         return;
+    }
+    // If the local node has this node marked as manually verified
+    // and the client does not, do not allow the client to update the
+    // saved public key.
+    if ((info->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && !contact.manually_verified) {
+        if (contact.user.public_key.size != info->user.public_key.size ||
+            memcmp(contact.user.public_key.bytes, info->user.public_key.bytes, info->user.public_key.size) != 0) {
+            return;
+        }
     }
     info->num = contact.node_num;
     info->has_user = true;
@@ -1618,10 +1645,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     } else {
         info->last_heard = getValidTime(RTCQualityNTP);
         info->is_favorite = true;
-        info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+        // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
+        if (contact.manually_verified) {
+            info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+        }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
-        // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }

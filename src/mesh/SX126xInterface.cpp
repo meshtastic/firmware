@@ -52,7 +52,7 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
-#ifdef HELTEC_V4
+#if defined(USE_GC1109_PA)
     pinMode(LORA_PA_POWER, OUTPUT);
     digitalWrite(LORA_PA_POWER, HIGH);
 
@@ -352,7 +352,7 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(SX126X_POWER_EN, LOW);
 #endif
 
-#ifdef HELTEC_V4
+#if defined(USE_GC1109_PA)
     /*
      * Do not switch the power on and off frequently.
      * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
@@ -367,7 +367,7 @@ template <typename T> bool SX126xInterface<T>::sleep()
 /** Some boards require GPIO control of tx vs rx paths */
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
-#ifdef HELTEC_V4
+#if defined(USE_GC1109_PA)
     digitalWrite(LORA_PA_POWER, HIGH);
     digitalWrite(LORA_PA_EN, HIGH);
     digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0);
