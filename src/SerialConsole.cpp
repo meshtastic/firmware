@@ -86,7 +86,7 @@ int32_t SerialConsole::runOnce()
 #endif
 
     int32_t delay = runOncePart();
-#if defined(SERIAL_HAS_ON_RECEIVE)
+#if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
     return Port.available() ? delay : INT32_MAX;
 #elif defined(IS_USB_SERIAL)
     return HWCDC::isPlugged() ? delay : (1000 * 20);
