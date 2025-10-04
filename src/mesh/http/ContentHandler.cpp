@@ -956,7 +956,30 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
             ssidString.replace("\"", "\\\"");
             ssidString.toCharArray(ssidArray, 50);
 
-            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
+            // Platform-specific encryption type check
+#if defined(ARCH_RP2040)
+            // RP2040/Pico W - check if not open (0 typically means open)
+            if (WiFi.encryptionType(i) != 0) {
+#else
+            // ESP32 and other platforms
+            // Platform-specific encryption type check
+            // Try to detect secured networks - different platforms use different constants
+            uint8_t encType = WiFi.encryptionType(i);
+            bool isSecured = false;
+
+#if defined(ARCH_RP2040) || defined(RPI_PICO)
+            // RP2040/Pico W typically uses 0 for open networks
+            isSecured = (encType != 0);
+#elif defined(ARCH_ESP32) || defined(ESP32)
+            // ESP32 uses WIFI_AUTH_OPEN constant
+            isSecured = (encType != WIFI_AUTH_OPEN);
+#else
+            // Generic fallback - assume 0 means open for most platforms
+            isSecured = (encType != 0);
+#endif
+
+            if (isSecured) {
+#endif
                 JSONObject thisNetwork;
                 thisNetwork["ssid"] = new JSONValue(ssidArray);
                 thisNetwork["rssi"] = new JSONValue(int(WiFi.RSSI(i)));
