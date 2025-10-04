@@ -23,8 +23,8 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         return true;
     }
 
-    // Null out user.id so we can derive it from node number later
-    p.id[0] = '\0';
+    // Coerce user.id to be derived from the node number
+    snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
 
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
 
@@ -39,8 +39,6 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         packetCopy->decoded.payload.size = pb_encode_to_bytes(
             packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
 
-        // Set user.id back to being based on the node number for the phone
-        snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
         service->sendToPhone(packetCopy);
     }
 
