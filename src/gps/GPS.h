@@ -176,8 +176,6 @@ class GPS : private concurrency::OSThread
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool isInPowersave = false;
-
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
 
     bool hasGPS = false; // Do we have a GPS we are talking to

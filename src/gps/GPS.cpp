@@ -1161,7 +1161,7 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (!hasValidLocation || prev_fixQual == 0) {
+            } else if (!hasValidLocation || prev_fixQual == 0 || fixHoldEnds < millis()) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - 1000;
