@@ -10,6 +10,19 @@
 #endif
 
 /* Enum definitions */
+/* per-channel MQTT policy overrides */
+typedef enum _meshtastic_ChannelSettings_MqttAllowOverride {
+    meshtastic_ChannelSettings_MqttAllowOverride_MQTT_ALLOW_UNSET = 0,
+    meshtastic_ChannelSettings_MqttAllowOverride_MQTT_ALLOW_FORCE_DISALLOW = 1,
+    meshtastic_ChannelSettings_MqttAllowOverride_MQTT_ALLOW_FORCE_ALLOW = 2
+} meshtastic_ChannelSettings_MqttAllowOverride;
+
+typedef enum _meshtastic_ChannelSettings_MqttIgnoreOverride {
+    meshtastic_ChannelSettings_MqttIgnoreOverride_MQTT_IGNORE_UNSET = 0,
+    meshtastic_ChannelSettings_MqttIgnoreOverride_MQTT_IGNORE_FORCE_ACCEPT = 1,
+    meshtastic_ChannelSettings_MqttIgnoreOverride_MQTT_IGNORE_FORCE_REJECT = 2
+} meshtastic_ChannelSettings_MqttIgnoreOverride;
+
 /* How this channel is being used (or not).
  Note: this field is an enum to give us options for the future.
  In particular, someday we might make a 'SCANNING' option.
@@ -99,6 +112,8 @@ typedef struct _meshtastic_ChannelSettings {
     meshtastic_ModuleSettings module_settings;
     /* Whether or not we should receive notifactions / alerts through this channel */
     bool mute;
+    meshtastic_ChannelSettings_MqttAllowOverride mqtt_allow;
+    meshtastic_ChannelSettings_MqttIgnoreOverride mqtt_ignore;
 } meshtastic_ChannelSettings;
 
 /* A pair of a channel number, mode and the (sharable) settings for that channel */
@@ -120,20 +135,30 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
+#define _meshtastic_ChannelSettings_MqttAllowOverride_MIN meshtastic_ChannelSettings_MqttAllowOverride_MQTT_ALLOW_UNSET
+#define _meshtastic_ChannelSettings_MqttAllowOverride_MAX meshtastic_ChannelSettings_MqttAllowOverride_MQTT_ALLOW_FORCE_ALLOW
+#define _meshtastic_ChannelSettings_MqttAllowOverride_ARRAYSIZE ((meshtastic_ChannelSettings_MqttAllowOverride)(meshtastic_ChannelSettings_MqttAllowOverride_MQTT_ALLOW_FORCE_ALLOW+1))
+
+#define _meshtastic_ChannelSettings_MqttIgnoreOverride_MIN meshtastic_ChannelSettings_MqttIgnoreOverride_MQTT_IGNORE_UNSET
+#define _meshtastic_ChannelSettings_MqttIgnoreOverride_MAX meshtastic_ChannelSettings_MqttIgnoreOverride_MQTT_IGNORE_FORCE_REJECT
+#define _meshtastic_ChannelSettings_MqttIgnoreOverride_ARRAYSIZE ((meshtastic_ChannelSettings_MqttIgnoreOverride)(meshtastic_ChannelSettings_MqttIgnoreOverride_MQTT_IGNORE_FORCE_REJECT+1))
+
 #define _meshtastic_Channel_Role_MIN meshtastic_Channel_Role_DISABLED
 #define _meshtastic_Channel_Role_MAX meshtastic_Channel_Role_SECONDARY
 #define _meshtastic_Channel_Role_ARRAYSIZE ((meshtastic_Channel_Role)(meshtastic_Channel_Role_SECONDARY+1))
 
+#define meshtastic_ChannelSettings_mqtt_allow_ENUMTYPE meshtastic_ChannelSettings_MqttAllowOverride
+#define meshtastic_ChannelSettings_mqtt_ignore_ENUMTYPE meshtastic_ChannelSettings_MqttIgnoreOverride
 
 
 #define meshtastic_Channel_role_ENUMTYPE meshtastic_Channel_Role
 
 
 /* Initializer values for message structs */
-#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0}
+#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0, _meshtastic_ChannelSettings_MqttAllowOverride_MIN, _meshtastic_ChannelSettings_MqttIgnoreOverride_MIN}
 #define meshtastic_ModuleSettings_init_default   {0, 0}
 #define meshtastic_Channel_init_default          {0, false, meshtastic_ChannelSettings_init_default, _meshtastic_Channel_Role_MIN}
-#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0}
+#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0, _meshtastic_ChannelSettings_MqttAllowOverride_MIN, _meshtastic_ChannelSettings_MqttIgnoreOverride_MIN}
 #define meshtastic_ModuleSettings_init_zero      {0, 0}
 #define meshtastic_Channel_init_zero             {0, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Channel_Role_MIN}
 
@@ -148,6 +173,8 @@ extern "C" {
 #define meshtastic_ChannelSettings_downlink_enabled_tag 6
 #define meshtastic_ChannelSettings_module_settings_tag 7
 #define meshtastic_ChannelSettings_mute_tag      8
+#define meshtastic_ChannelSettings_mqtt_allow_tag 9
+#define meshtastic_ChannelSettings_mqtt_ignore_tag 10
 #define meshtastic_Channel_index_tag             1
 #define meshtastic_Channel_settings_tag          2
 #define meshtastic_Channel_role_tag              3
@@ -161,7 +188,9 @@ X(a, STATIC,   SINGULAR, FIXED32,  id,                4) \
 X(a, STATIC,   SINGULAR, BOOL,     uplink_enabled,    5) \
 X(a, STATIC,   SINGULAR, BOOL,     downlink_enabled,   6) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  module_settings,   7) \
-X(a, STATIC,   SINGULAR, BOOL,     mute,              8)
+X(a, STATIC,   SINGULAR, BOOL,     mute,              8) \
+X(a, STATIC,   SINGULAR, UENUM,    mqtt_allow,        9) \
+X(a, STATIC,   SINGULAR, UENUM,    mqtt_ignore,      10)
 #define meshtastic_ChannelSettings_CALLBACK NULL
 #define meshtastic_ChannelSettings_DEFAULT NULL
 #define meshtastic_ChannelSettings_module_settings_MSGTYPE meshtastic_ModuleSettings
@@ -191,8 +220,8 @@ extern const pb_msgdesc_t meshtastic_Channel_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CHANNEL_PB_H_MAX_SIZE meshtastic_Channel_size
-#define meshtastic_ChannelSettings_size          74
-#define meshtastic_Channel_size                  89
+#define meshtastic_ChannelSettings_size          78
+#define meshtastic_Channel_size                  93
 #define meshtastic_ModuleSettings_size           8
 
 #ifdef __cplusplus
