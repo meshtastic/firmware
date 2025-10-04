@@ -1138,8 +1138,52 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_VBACKUP);
-        }
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA) {
+            PMU->clearIrqStatus();
 
+            // Turn off the PMU charging indicator light, no physical connection
+            PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF); // NO LED
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300); // SD Card
+            PMU->enablePowerOutput(XPOWERS_ALDO1);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300); // Display
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300); // LoRa
+            PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 1800); // Sensor
+            PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300); // GPS
+            PMU->enablePowerOutput(XPOWERS_BLDO1);
+
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300); // Speaker
+            PMU->enablePowerOutput(XPOWERS_BLDO2);
+
+            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300); // RTC Button battery
+            PMU->enablePowerOutput(XPOWERS_VBACKUP);
+
+            //            PMU->enablePowerOutput(XPOWERS_DLDO1); // NFC
+
+            // UNUSED POWER CHANNEL
+            PMU->disablePowerOutput(XPOWERS_DCDC2);
+            PMU->disablePowerOutput(XPOWERS_DCDC3);
+            PMU->disablePowerOutput(XPOWERS_DCDC4);
+            PMU->disablePowerOutput(XPOWERS_DCDC5);
+            PMU->disablePowerOutput(XPOWERS_CPULDO);
+
+            // Enable Measure
+            PMU->enableBattDetection();
+            PMU->enableVbusVoltageMeasure();
+            PMU->enableBattVoltageMeasure();
+            PMU->enableSystemVoltageMeasure();
+            PMU->enableTemperatureMeasure();
+
+            // Clear all PMU interrupts
+            PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+        }
         // disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
 
