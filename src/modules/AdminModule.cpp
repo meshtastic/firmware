@@ -554,10 +554,9 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         changed |= strcmp(owner.short_name, o.short_name);
         strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
     }
-    if (*o.id) {
-        changed |= strcmp(owner.id, o.id);
-        strncpy(owner.id, o.id, sizeof(owner.id));
-    }
+    // User id is not settable
+    owner.id[0] = '\0';
+
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
         owner.is_licensed = o.is_licensed;

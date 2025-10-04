@@ -256,6 +256,8 @@ NodeDB::NodeDB()
     owner.role = config.device.role;
     // Ensure macaddr is set to our macaddr as it will be copied in our info below
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    // Ensure owner.id is always derived from the node number
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
 
     if (!config.has_security) {
         config.has_security = true;
@@ -1179,6 +1181,19 @@ void NodeDB::loadFromDisk()
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
+
+        // Ensure all loaded nodes have properly derived user.id values
+        for (int i = 0; i < numMeshNodes; i++) {
+            meshtastic_NodeInfoLite *node = &meshNodes->at(i);
+            if (node->has_user) {
+                // Force user.id to be derived from node number for consistency
+                char correctId[10];
+                snprintf(correctId, sizeof(correctId), "!%08x", node->num);
+                // We can't directly modify the id in UserLite, so we use ConvertToUser and back
+                meshtastic_User fullUser = TypeConversions::ConvertToUser(node->num, node->user);
+                node->user = TypeConversions::ConvertToUserLite(fullUser);
+            }
+        }
     }
 
     if (numMeshNodes > MAX_NUM_NODES) {
@@ -1602,6 +1617,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     }
     info->num = contact.node_num;
     info->has_user = true;
+    // Ensure user.id is derived from node number
+    snprintf(contact.user.id, sizeof(contact.user.id), "!%08x", contact.node_num);
     info->user = TypeConversions::ConvertToUserLite(contact.user);
     if (contact.should_ignore) {
         // If should_ignore is set,
@@ -1665,6 +1682,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         LOG_INFO("Update Node Pubkey!");
     }
 #endif
+
+    // Always ensure user.id is derived from nodeId, regardless of what was received
+    snprintf(p.id, sizeof(p.id), "!%08x", nodeId);
 
     // Both of info->user and p start as filled with zero so I think this is okay
     auto lite = TypeConversions::ConvertToUserLite(p);
