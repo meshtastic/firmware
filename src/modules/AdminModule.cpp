@@ -554,10 +554,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         changed |= strcmp(owner.short_name, o.short_name);
         strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
     }
-    if (*o.id) {
-        changed |= strcmp(owner.id, o.id);
-        strncpy(owner.id, o.id, sizeof(owner.id));
-    }
+    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
+
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
         owner.is_licensed = o.is_licensed;
