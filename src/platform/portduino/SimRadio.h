@@ -88,6 +88,8 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    virtual uint32_t getPacketTime(uint32_t pl, bool received = false) override;
 };
 
 extern SimRadio *simRadio;
