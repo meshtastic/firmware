@@ -52,6 +52,7 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+    uint16_t txDrop = 0;
 
   protected:
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
