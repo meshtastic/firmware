@@ -13,7 +13,7 @@
 #define SPI_READ_FREQUENCY 16000000 // irrelevant
 #define TFT_HEIGHT 502
 #define TFT_WIDTH 410
-#define TFT_OFFSET_X 0
+#define TFT_OFFSET_X 22
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps

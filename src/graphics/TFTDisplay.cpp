@@ -57,13 +57,13 @@ class LGFX : public lgfx::LGFX_Device
         {                                        // Set the display panel control.
             auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
 
-            cfg.pin_cs = CO5300_CS;        // Pin number where CS is connected (-1 = disable)
-            cfg.pin_rst = CO5300_RESET;    // Pin number where RST is connected  (-1 = disable)
-            cfg.panel_width = TFT_WIDTH;   // actual displayable width
-            cfg.panel_height = TFT_HEIGHT; // actual displayable height
-            cfg.offset_rotation = 0;       // Rotation direction value offset 0~7 (4~7 is upside down)
-            cfg.offset_x = 22;
-            cfg.offset_y = 0;
+            cfg.pin_cs = CO5300_CS;                    // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = CO5300_RESET;                // Pin number where RST is connected  (-1 = disable)
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is upside down)
+            cfg.offset_x = TFT_OFFSET_X;
+            cfg.offset_y = TFT_OFFSET_Y;
             cfg.dummy_read_pixel = 8; // Number of bits for dummy read before pixel readout
             cfg.dummy_read_bits = 1;  // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;      // Set to true if data can be read
@@ -81,6 +81,29 @@ class LGFX : public lgfx::LGFX_Device
         setPanel(&_panel_instance);
     }
 
+    bool enableFrameBuffer(bool auto_display = false)
+    {
+        if (_panel_instance.initPanelFb()) {
+            auto fbPanel = _panel_instance.getPanelFb();
+            if (fbPanel) {
+                fbPanel->setBus(&_bus_instance);
+                fbPanel->setAutoDisplay(auto_display);
+                setPanel(fbPanel);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void disableFrameBuffer()
+    {
+        auto fbPanel = _panel_instance.getPanelFb();
+        if (fbPanel) {
+            _panel_instance.deinitPanelFb();
+            setPanel(&_panel_instance);
+        }
+    }
+
     bool init()
     {
 #ifdef CO5300_RESET
@@ -93,7 +116,7 @@ class LGFX : public lgfx::LGFX_Device
         lgfx::gpio_hi(CO5300_RESET);
         delay(200);
 #endif
-        return lgfx::LGFX_Device::init();
+        return lgfx::LGFX_Device::init() && enableFrameBuffer(false);
     }
 };
 
@@ -1303,8 +1326,8 @@ void TFTDisplay::display(bool fromBlank)
 
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
-            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
-                          &linePixelBuffer[x_FirstPixelUpdate]);
+            tft->pushImage(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+                           &linePixelBuffer[x_FirstPixelUpdate]);
 
             somethingChanged = true;
         }
@@ -1364,7 +1387,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-        // LOG_DEBUG("Display on");
+        LOG_DEBUG("Display on");
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
@@ -1383,12 +1406,13 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK) && !defined(ST7789_CS) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+        LOG_DEBUG("tft->setBrightness(172)");
         tft->setBrightness(172);
 #endif
         break;
     }
     case DISPLAYOFF: {
-        // LOG_DEBUG("Display off");
+        LOG_DEBUG("Display off");
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
@@ -1407,6 +1431,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
+        LOG_DEBUG("tft->setBrightness(0)");
         tft->setBrightness(0);
 #endif
         break;
@@ -1482,8 +1507,8 @@ bool TFTDisplay::connect()
     tft = new LGFX;
 #endif
 
-    backlightEnable->set(true);
     LOG_INFO("Power to TFT Backlight");
+    backlightEnable->set(true);
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
