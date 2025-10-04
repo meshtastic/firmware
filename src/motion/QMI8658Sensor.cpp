@@ -1,0 +1,219 @@
+#include "QMI8658Sensor.h"
+#include "NodeDB.h"
+#include "SensorLiveData.h"
+#include "Fusion/Fusion.h"
+
+#if defined(HAS_QMI8658_SENSOR)
+
+#include <math.h>
+
+QMI8658Sensor::QMI8658Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
+
+bool QMI8658Sensor::init()
+{
+    LOG_DEBUG("QMI8658: init start (SPI)");
+
+    bool ok = false;
+#if defined(ARCH_ESP32)
+    // Use the secondary SPI host (HSPI) shared with SD/IMU on ESP32-S3.
+    // Create a local static instance so we don't depend on a global SPI1 symbol.
+    static SPIClass imuSPI(HSPI);
+    auto &spiBus = imuSPI;
+#else
+    auto &spiBus = SPI;
+#endif
+#if defined(ARCH_ESP32)
+    // Ensure HSPI is initialised with correct pins for this board
+    LOG_DEBUG("QMI8658: SPI(HSPI).begin(sck=%d, miso=%d, mosi=%d, cs=%d)", (int)SPI_SCK, (int)SPI_MISO, (int)SPI_MOSI,
+              (int)IMU_CS);
+    spiBus.begin(SPI_SCK, SPI_MISO, SPI_MOSI, -1);
+    pinMode(IMU_CS, OUTPUT);
+    digitalWrite(IMU_CS, HIGH);
+#endif
+
+#if defined(SPI_MOSI) && defined(SPI_MISO) && defined(SPI_SCK)
+    LOG_DEBUG("QMI8658: qmi.begin(bus=HSPI, cs=%d, mosi=%d, miso=%d, sck=%d)", (int)IMU_CS, (int)SPI_MOSI, (int)SPI_MISO,
+              (int)SPI_SCK);
+    ok = qmi.begin(spiBus, IMU_CS, SPI_MOSI, SPI_MISO, SPI_SCK);
+#else
+    LOG_DEBUG("QMI8658: qmi.begin(bus=?, cs=%d) default pins", (int)IMU_CS);
+    ok = qmi.begin(spiBus, IMU_CS);
+#endif
+
+    if (!ok) {
+        LOG_DEBUG("QMI8658: init failed (qmi.begin)");
+        return false;
+    }
+
+    uint8_t id = qmi.getChipID();
+    LOG_DEBUG("QMI8658: chip id=0x%02x", id);
+#ifdef QMI8658_DEBUG_STREAM
+    LOG_INFO("QMI8658 debug stream enabled (1 Hz)");
+    lastLogMs = 0;
+#endif
+
+    // Basic configuration similar to lewisxhe examples
+    qmi.configAccelerometer(
+        SensorQMI8658::ACC_RANGE_4G,              // sensitivity
+        SensorQMI8658::ACC_ODR_1000Hz,            // ODR
+        SensorQMI8658::LPF_MODE_0                 // low-pass
+    );
+
+    qmi.configGyroscope(
+        SensorQMI8658::GYR_RANGE_64DPS,           // range
+        SensorQMI8658::GYR_ODR_896_8Hz,           // ODR
+        SensorQMI8658::LPF_MODE_3                 // low-pass
+    );
+
+    LOG_DEBUG("QMI8658: enabling sensors (gyro+accel)");
+    qmi.enableGyroscope();
+    qmi.enableAccelerometer();
+
+#ifdef IMU_INT
+    if (config.display.wake_on_tap_or_motion) {
+        LOG_DEBUG("QMI8658: enable INT1, disable INT2");
+        qmi.enableINT(SensorQMI8658::INTERRUPT_PIN_1, true);
+        qmi.enableINT(SensorQMI8658::INTERRUPT_PIN_2, false);
+        LOG_DEBUG("QMI8658: INT enabled on IMU_INT=%d", IMU_INT);
+    }
+#endif
+
+    LOG_DEBUG("QMI8658: dump control registers ->");
+    qmi.dumpCtrlRegister();
+    LOG_DEBUG("QMI8658: init ok");
+    g_qmi8658Live.initialized = true;
+    return true;
+}
+
+int32_t QMI8658Sensor::runOnce()
+{
+#ifdef QMI8658_DEBUG_STREAM
+    // Always sample/log when debug stream is enabled (throttle to ~1 Hz)
+    IMUdata acc = {0};
+    IMUdata gyr = {0};
+    bool ready = qmi.getDataReady();
+    qmi.getAccelerometer(acc.x, acc.y, acc.z);
+    qmi.getGyroscope(gyr.x, gyr.y, gyr.z);
+
+    uint32_t now = millis();
+    g_qmi8658Live.ready = ready;
+    g_qmi8658Live.acc.x = acc.x;
+    g_qmi8658Live.acc.y = acc.y;
+    g_qmi8658Live.acc.z = acc.z;
+    g_qmi8658Live.gyr.x = gyr.x;
+    g_qmi8658Live.gyr.y = gyr.y;
+    g_qmi8658Live.gyr.z = gyr.z;
+    g_qmi8658Live.last_ms = now;
+    if (now - lastLogMs > 1000) {
+        lastLogMs = now;
+        LOG_DEBUG("QMI8658: ready=%d ACC[x=%.3f y=%.3f z=%.3f] m/s^2  GYR[x=%.3f y=%.3f z=%.3f] dps",
+                  (int)ready, acc.x, acc.y, acc.z, gyr.x, gyr.y, gyr.z);
+    }
+    // AHRS fusion (roll/pitch/yaw) using accelerometer, gyroscope and (optionally) magnetometer
+    {
+        static bool ahrsInit = false;
+        static FusionAhrs ahrs;
+        static uint32_t lastTime = 0;
+        const uint32_t now_ms = millis();
+        const float dt = (lastTime == 0) ? 0.01f : (now_ms - lastTime) / 1000.0f;
+        lastTime = now_ms;
+
+        if (!ahrsInit) {
+            FusionAhrsInitialise(&ahrs);
+            FusionAhrsSettings settings;
+            settings.convention = FusionConventionNed;   // NED frame
+            settings.gain = 0.5f;                        // fusion gain
+            settings.gyroscopeRange = 512.0f;            // dps range (matches config)
+            settings.accelerationRejection = 10.0f;      // deg
+            settings.magneticRejection = 10.0f;          // deg
+            settings.recoveryTriggerPeriod = 5;          // cycles
+            FusionAhrsSetSettings(&ahrs, &settings);
+            ahrsInit = true;
+        }
+
+        // Map live sensor values into Fusion vectors
+        FusionVector g = {.axis = {.x = g_qmi8658Live.gyr.x, .y = g_qmi8658Live.gyr.y, .z = g_qmi8658Live.gyr.z}};   // dps
+        FusionVector a = {.axis = {.x = g_qmi8658Live.acc.x, .y = g_qmi8658Live.acc.y, .z = g_qmi8658Live.acc.z}};   // m/s2
+
+        // Use magnetometer if recent (<= 200 ms old). Use µT values; the library normalises internally.
+        const bool magFresh = (now_ms - g_qmc6310Live.last_ms) <= 200 && g_qmc6310Live.initialized;
+        FusionVector m = {.axis = {.x = g_qmc6310Live.uT_X, .y = g_qmc6310Live.uT_Y, .z = g_qmc6310Live.uT_Z}};
+
+        if (magFresh) {
+            FusionAhrsUpdate(&ahrs, g, a, m, dt);
+        } else {
+            FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, dt);
+        }
+
+        const FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+        const FusionEuler e = FusionQuaternionToEuler(q);
+        g_qmi8658Live.roll = e.angle.roll;
+        g_qmi8658Live.pitch = e.angle.pitch;
+        g_qmi8658Live.yaw = e.angle.yaw; // degrees
+    }
+
+    return MOTION_SENSOR_CHECK_INTERVAL_MS;
+#endif
+
+    if (!config.display.wake_on_tap_or_motion)
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+
+    if (qmi.getDataReady()) {
+        IMUdata acc = {0};
+        if (qmi.getAccelerometer(acc.x, acc.y, acc.z)) {
+            // Convert to units of g (library returns m/s^2)
+            const float g = 9.80665f;
+            float magG = sqrtf((acc.x * acc.x + acc.y * acc.y + acc.z * acc.z)) / g;
+            float delta = fabsf(magG - 1.0f);
+            LOG_DEBUG("QMI8658: |a|=%.2fg delta=%.2fg", magG, delta);
+            if (delta > MOTION_THRESHOLD_G) {
+                wakeScreen();
+                return 500; // pause a little after waking screen
+            }
+        }
+    }
+
+    // When not streaming, we still update AHRS at the same cadence
+    {
+        static bool ahrsInit = false;
+        static FusionAhrs ahrs;
+        static uint32_t lastTime = 0;
+        const uint32_t now_ms = millis();
+        const float dt = (lastTime == 0) ? 0.01f : (now_ms - lastTime) / 1000.0f;
+        lastTime = now_ms;
+
+        if (!ahrsInit) {
+            FusionAhrsInitialise(&ahrs);
+            FusionAhrsSettings settings;
+            settings.convention = FusionConventionNed;
+            settings.gain = 0.5f;
+            settings.gyroscopeRange = 512.0f;
+            settings.accelerationRejection = 10.0f;
+            settings.magneticRejection = 10.0f;
+            settings.recoveryTriggerPeriod = 5;
+            FusionAhrsSetSettings(&ahrs, &settings);
+            ahrsInit = true;
+        }
+
+        FusionVector g = {.axis = {.x = g_qmi8658Live.gyr.x, .y = g_qmi8658Live.gyr.y, .z = g_qmi8658Live.gyr.z}};
+        FusionVector a = {.axis = {.x = g_qmi8658Live.acc.x, .y = g_qmi8658Live.acc.y, .z = g_qmi8658Live.acc.z}};
+        const bool magFresh = (now_ms - g_qmc6310Live.last_ms) <= 200 && g_qmc6310Live.initialized;
+        FusionVector m = {.axis = {.x = g_qmc6310Live.uT_X, .y = g_qmc6310Live.uT_Y, .z = g_qmc6310Live.uT_Z}};
+
+        if (magFresh) {
+            FusionAhrsUpdate(&ahrs, g, a, m, dt);
+        } else {
+            FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, dt);
+        }
+
+        const FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+        const FusionEuler e = FusionQuaternionToEuler(q);
+        g_qmi8658Live.roll = e.angle.roll;
+        g_qmi8658Live.pitch = e.angle.pitch;
+        g_qmi8658Live.yaw = e.angle.yaw;
+    }
+
+    return MOTION_SENSOR_CHECK_INTERVAL_MS;
+}
+
+#endif

@@ -35,6 +35,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 // Chirpy screen display
 void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+// IMU/Magnetometer debug screens
+void drawQMI8658Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawQMC6310Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 } // namespace DebugRenderer
 
 } // namespace graphics
