@@ -50,6 +50,10 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 {
     // Coerce user.id to be derived from the node number
     snprintf(p->id, sizeof(p->id), "!%08x", getFrom(&mp));
+
+    // Re-encode the altered protobuf back into the packet
+    mp.decoded.payload.size =
+        pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
 void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
