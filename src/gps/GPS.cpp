@@ -1113,7 +1113,7 @@ int32_t GPS::runOnce()
     // gps_update_interval is faster than the position broadcast interval so there's a
     // fresh position ready when the device wants to broadcast one on the mesh.
     //
-    // 1. Got a time for the first time --> publishUpdate
+    // 1. Got a time for the first time --> set the time, don't publish.
     // 2. Got a lock for the first time
     //   --> If gps_update_interval is <= 10s --> publishUpdate
     //   --> Otherwise, hold for MIN(gps_update_interval - 1, 20s)
@@ -1136,10 +1136,11 @@ int32_t GPS::runOnce()
     if (!config.position.fixed_position && powerState != GPS_ACTIVE && scheduling.isUpdateDue())
         up();
 
+    // quality of the previous fix. We set it to 0 when we go down, so it's a way
+    // to check if we're getting a lock after being GPS_OFF.
+    uint8_t prev_fixQual = fixQual;
+
     if (powerState == GPS_ACTIVE) {
-        // quality of the previous fix. We set it to 0 when we go down, so it's a way
-        // to check if we're getting a lock after being GPS_OFF.
-        uint8_t prev_fixQual = fixQual;
         // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
         uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
@@ -1147,7 +1148,6 @@ int32_t GPS::runOnce()
         bool gotTime = (getRTCQuality() >= RTCQualityGPS);
         if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
             gotTime = true;
-            shouldPublish = true;
         }
 
         // 2. Got a lock for the first time, or 3. Got a lock after turning back on
@@ -1158,20 +1158,19 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("hasValidLocation RISING EDGE");
             }
 #endif
-            if (!hasValidLocation || prev_fixQual == 0) {
+            if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
-                if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
-                    shouldPublish = true;
-                } else {
-                    // Hold for up to 20secs after getting a lock to download ephemeris etc
-                    uint32_t holdTime = updateInterval - 1000;
-                    if (holdTime > GPS_FIX_HOLD_MAX_MS)
-                        holdTime = GPS_FIX_HOLD_MAX_MS;
-                    fixHoldEnds = millis() + holdTime;
+                shouldPublish = true;
+            } else if (!hasValidLocation || prev_fixQual == 0) {
+                hasValidLocation = true;
+                // Hold for up to 20secs after getting a lock to download ephemeris etc
+                uint32_t holdTime = updateInterval - 1000;
+                if (holdTime > GPS_FIX_HOLD_MAX_MS)
+                    holdTime = GPS_FIX_HOLD_MAX_MS;
+                fixHoldEnds = millis() + holdTime;
 #ifdef GPS_DEBUG
-                    LOG_DEBUG("Holding for %ums after lock", holdTime);
+                LOG_DEBUG("Holding for %ums after lock", holdTime);
 #endif
-                }
             }
         }
 
