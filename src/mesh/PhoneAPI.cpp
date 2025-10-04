@@ -250,6 +250,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
             // If client only wants node info, jump directly to sending nodes
             state = STATE_SEND_OTHER_NODEINFOS;
+            onNowHasData(0);
         } else {
             state = STATE_SEND_METADATA;
         }
@@ -423,6 +424,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 state = STATE_SEND_FILEMANIFEST;
             } else {
                 state = STATE_SEND_OTHER_NODEINFOS;
+                onNowHasData(0);
             }
             config_state = 0;
         }
@@ -588,6 +590,7 @@ bool PhoneAPI::available()
                 nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
                 nodeInfoForPhone.via_mqtt = isUs ? false : nodeInfoForPhone.via_mqtt;
                 nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || isUs; // Our node is always a favorite
+                onNowHasData(0);
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine
@@ -707,6 +710,13 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
         return false;
     }
+
+    // Upgrade traceroute requests from phone to use reliable delivery, matching TraceRouteModule
+    if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && !isBroadcast(p.to)) {
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p.want_ack = true;
+    }
+
     lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;
