@@ -13,7 +13,12 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 {
     printPacket("enqueuing for send", p);
 
-    ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
+    bool dropped = false;
+    ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+    if (dropped) {
+        txDrop++;
+    }
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
         packetPool.release(p);
