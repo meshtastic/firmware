@@ -246,6 +246,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define PIN_BUZZER 21 // IO3 is PWM2
 // NEW: set this via protobuf instead!
 
+// Enable RAK12022 sensor in IO Slot
+#define RAK12022_ADDR 0x01  
+
 // Battery
 // The battery sense is hooked to pin A0 (5)
 #define BATTERY_PIN PIN_A0

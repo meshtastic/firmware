@@ -25,12 +25,20 @@
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
 
+#if defined(RAK12022_ADDR)
+#include "Sensor/RAK12022Sensor.h"
+RAK12022Sensor rak12022Sensor;
+#else
+NullSensor rak12022Sensor;
+#endif
+
 #if __has_include(<Adafruit_AHTX0.h>)
 #include "Sensor/AHT10.h"
 AHT10Sensor aht10Sensor;
 #else
 NullSensor aht10Sensor;
 #endif
+
 #if __has_include(<Adafruit_BME280.h>)
 #include "Sensor/BME280Sensor.h"
 BME280Sensor bme280Sensor;
@@ -270,6 +278,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = opt3001Sensor.runOnce();
             if (rcwl9620Sensor.hasSensor())
                 result = rcwl9620Sensor.runOnce();
+            if (rak12022Sensor.hasSensor())
+                result = rak12022Sensor.runOnce();
             if (aht10Sensor.hasSensor())
                 result = aht10Sensor.runOnce();
             if (mlx90632Sensor.hasSensor())
@@ -587,6 +597,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (nau7802Sensor.hasSensor()) {
         valid = valid && nau7802Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (rak12022Sensor.hasSensor()) {
+        valid = valid && rak12022Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (aht10Sensor.hasSensor()) {
