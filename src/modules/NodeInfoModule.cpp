@@ -40,7 +40,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
             packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
 
         // Set user.id back to being based on the node number for the phone
-        snprintf(p.id, sizeof(p.id), "!%08x", mp.from);
+        snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
         service->sendToPhone(packetCopy);
     }
 
