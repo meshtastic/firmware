@@ -1181,19 +1181,6 @@ void NodeDB::loadFromDisk()
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
-
-        // Ensure all loaded nodes have properly derived user.id values
-        for (int i = 0; i < numMeshNodes; i++) {
-            meshtastic_NodeInfoLite *node = &meshNodes->at(i);
-            if (node->has_user) {
-                // Force user.id to be derived from node number for consistency
-                char correctId[10];
-                snprintf(correctId, sizeof(correctId), "!%08x", node->num);
-                // We can't directly modify the id in UserLite, so we use ConvertToUser and back
-                meshtastic_User fullUser = TypeConversions::ConvertToUser(node->num, node->user);
-                node->user = TypeConversions::ConvertToUserLite(fullUser);
-            }
-        }
     }
 
     if (numMeshNodes > MAX_NUM_NODES) {
