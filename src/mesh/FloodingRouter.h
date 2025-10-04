@@ -59,7 +59,7 @@ class FloodingRouter : public Router
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
 
-    // Return false for roles like ROUTER or REPEATER which should always rebroadcast even when we've heard another rebroadcast of
+    // Return false for roles like ROUTER which should always rebroadcast even when we've heard another rebroadcast of
     // the same packet
     bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
 
