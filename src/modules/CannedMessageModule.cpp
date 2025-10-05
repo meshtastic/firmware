@@ -206,7 +206,7 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
         }
     } else {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: #%.5s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: #%.20s", channels.getName(this->channel));
         } else {
             display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
@@ -647,7 +647,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             if (osk_found && screen) {
                 char headerBuffer[64];
                 if (this->dest == NODENUM_BROADCAST) {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: Broadcast#%s", channels.getName(this->channel));
+                    snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
                 } else {
                     snprintf(headerBuffer, sizeof(headerBuffer), "To: %s", getNodeName(this->dest));
                 }
