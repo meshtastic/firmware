@@ -138,7 +138,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     if (shouldDecrementHopLimit(p)) {
                         tosend->hop_limit--; // bump down the hop count
                     } else {
-                        LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE flood: preserving hop_limit");
+                        LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
                     }
 #if USERPREFS_EVENT_MODE
                     if (tosend->hop_limit > 2) {
