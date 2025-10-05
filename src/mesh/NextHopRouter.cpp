@@ -59,14 +59,20 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         if (wasFallback) {
             LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
             // Check if it's still in the Tx queue, if not, we have to relay it again
-            if (!findInTxQueue(p->from, p->id))
-                perhapsRelay(p);
+            if (!findInTxQueue(p->from, p->id)) {
+                reprocessPacket(p);
+                perhapsRebroadcast(p);
+            }
         } else {
             bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
-                if (!findInTxQueue(p->from, p->id) && !perhapsRelay(p) && isToUs(p) && p->want_ack)
-                    sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                if (!findInTxQueue(p->from, p->id)) {
+                    reprocessPacket(p);
+                    if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                    }
+                }
             } else if (!weWereNextHop) {
                 perhapsCancelDupe(p); // If it's a dupe, cancel relay if we were not explicitly asked to relay
             }

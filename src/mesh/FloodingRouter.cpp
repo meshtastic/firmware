@@ -45,8 +45,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         if (isRepeated) {
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
-            if (!findInTxQueue(p->from, p->id))
+            if (!findInTxQueue(p->from, p->id)) {
+                reprocessPacket(p);
                 perhapsRebroadcast(p);
+            }
         } else {
             perhapsCancelDupe(p);
         }
