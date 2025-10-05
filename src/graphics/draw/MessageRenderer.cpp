@@ -763,9 +763,9 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
             if (sm.type == MessageType::BROADCAST) {
                 const char *cname = channels.getName(sm.channelIndex);
                 if (cname && cname[0])
-                    snprintf(contextBuf, sizeof(contextBuf), "on #%s", cname);
+                    snprintf(contextBuf, sizeof(contextBuf), "in #%s", cname);
                 else
-                    snprintf(contextBuf, sizeof(contextBuf), "on Ch%d", sm.channelIndex);
+                    snprintf(contextBuf, sizeof(contextBuf), "in Ch%d", sm.channelIndex);
             } else if (sm.type == MessageType::DM_TO_US) {
                 /* Commenting out to better understand if we need this info in the banner
                 uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
