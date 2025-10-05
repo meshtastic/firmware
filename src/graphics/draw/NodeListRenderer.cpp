@@ -71,11 +71,15 @@ const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
         }
     }
 
-    // Use global sanitizeString function and copy directly into nodeName
+    // Use sanitizeString() function and copy directly into nodeName
     std::string sanitized_name = sanitizeString(name ? name : "");
 
-    strncpy(nodeName, sanitized_name.c_str(), sizeof(nodeName) - 1);
-    nodeName[sizeof(nodeName) - 1] = '\0';
+    if (!sanitized_name.empty()) {
+        strncpy(nodeName, sanitized_name.c_str(), sizeof(nodeName) - 1);
+        nodeName[sizeof(nodeName) - 1] = '\0';
+    } else {
+        snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
+    }
 
     return nodeName;
 }

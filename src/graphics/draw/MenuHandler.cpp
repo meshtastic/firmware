@@ -785,7 +785,6 @@ void menuHandler::nodeNameLengthMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
-    LOG_INFO("Menu option complete");
 }
 
 void menuHandler::resetNodeDBMenu()
@@ -1335,7 +1334,7 @@ void menuHandler::screenOptionsMenu()
     static int optionsEnumArray[5] = {Back};
     int options = 1;
 
-#if defined(T_LORA_PAGER)
+#if defined(T_DECK) || defined(T_LORA_PAGER)
     optionsArray[options] = "Show Long/Short Name";
     optionsEnumArray[options++] = NodeNameLength;
 #endif
