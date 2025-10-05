@@ -65,7 +65,7 @@ void fixPriority(meshtastic_MeshPacket *p)
 }
 
 /** enqueue a packet, return false if full */
-bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
+bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p, bool *dropped)
 {
     // no space - try to replace a lower priority packet in the queue
     if (queue.size() >= maxLen) {
@@ -73,7 +73,14 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
         if (!replaced) {
             LOG_WARN("TX queue is full, and there is no lower-priority packet available to evict in favour of 0x%08x", p->id);
         }
+        if (dropped) {
+            *dropped = true;
+        }
         return replaced;
+    }
+
+    if (dropped) {
+        *dropped = false;
     }
 
     // Find the correct position using upper_bound to maintain a stable order
