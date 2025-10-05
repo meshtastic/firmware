@@ -212,7 +212,7 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
 
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(target);
     if (node && node->next_hop != nextHopByte) {
-        LOG_INFO("Updating next-hop for 0x%08x to 0x%08x based on traceroute", target, nextHopByte);
+        LOG_INFO("Updating next-hop for 0x%08x to 0x%02x based on traceroute", target, nextHopByte);
         node->next_hop = nextHopByte;
     }
 }
