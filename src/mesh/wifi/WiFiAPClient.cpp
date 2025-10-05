@@ -50,6 +50,10 @@ char ourHost[16];
 static unsigned long wifiReconnectStartMillis = 0;
 static bool wifiReconnectPending = false;
 
+// // This will allow 6 attemps to retry every 5 seconds on bootup
+static unsigned char wifiReconnectAttempts=0;
+#define wifiReconnectAttemptsMax 6
+
 bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
@@ -187,9 +191,23 @@ static int32_t reconnectWiFi()
                 WiFi.mode(WIFI_STA);
 #endif
                 WiFi.begin(wifiName, wifiPsw);
+                wifiReconnectAttempts=0;
             }
-            isReconnecting = false;
-            wifiReconnectPending = false;
+
+            if(wifiReconnectAttempts <= wifiReconnectAttemptsMax) {           
+                wifiReconnectAttempts ++;     
+                isReconnecting = true;
+                wifiReconnectPending = true;
+                wifiReconnectStartMillis=millis();
+                LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
+
+            }
+            else {
+                wifiReconnectAttempts =0;
+                wifiReconnectPending = false;
+                LOG_INFO("Multiple connection attempts have failed to WiFi access point %s", wifiName);
+            }
+
         } else {
             // Still waiting for 5s to elapse
             return 100; // Check again soon
