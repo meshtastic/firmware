@@ -466,7 +466,16 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Final header line
         char headerStr[96];
         if (mine) {
-            snprintf(headerStr, sizeof(headerStr), "me %s %s", timeBuf, chanType);
+            if (m.ackStatus == AckStatus::ACKED) {
+                // Destination ACK
+                snprintf(headerStr, sizeof(headerStr), "Sent %s %s", timeBuf, chanType);
+            } else if (m.ackStatus == AckStatus::NACKED || m.ackStatus == AckStatus::TIMEOUT) {
+                // Failure or timeout
+                snprintf(headerStr, sizeof(headerStr), "Failed %s %s", timeBuf, chanType);
+            } else if (m.ackStatus == AckStatus::RELAYED) {
+                // Relay ACK
+                snprintf(headerStr, sizeof(headerStr), "Relayed %s %s", timeBuf, chanType);
+            }
         } else {
             snprintf(headerStr, sizeof(headerStr), "%s @%s %s", timeBuf, sender, chanType);
         }

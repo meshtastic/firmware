@@ -202,13 +202,13 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: #%s", channels.getName(this->channel));
         } else {
-            display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
+            display->drawStringf(x, y, buffer, "To: @%s", getNodeName(this->dest));
         }
     } else {
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: #%.20s", channels.getName(this->channel));
         } else {
-            display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
+            display->drawStringf(x, y, buffer, "To: @%s", getNodeName(this->dest));
         }
     }
 }
@@ -649,7 +649,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
                 if (this->dest == NODENUM_BROADCAST) {
                     snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
                 } else {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: %s", getNodeName(this->dest));
+                    snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
                 }
                 screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
                     if (!text.empty()) {
