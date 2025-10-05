@@ -172,7 +172,7 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
     float easternmost = lngCenter;
     float westernmost = lngCenter;
 
-    for (uint8_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
         // Skip if no position
@@ -349,7 +349,7 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
 bool InkHUD::MapApplet::enoughMarkers()
 {
     uint8_t count = 0;
-    for (uint8_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
         // Count nodes
