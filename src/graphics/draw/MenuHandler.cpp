@@ -597,7 +597,7 @@ void menuHandler::messageViewModeMenu()
             snprintf(buf, sizeof(buf), "Node %08X", peer);
             name = buf;
         }
-        labels.push_back("DM: " + name);
+        labels.push_back("@" + name);
         int encPeer = 1000 + (int)idToPeer.size();
         ids.push_back(encPeer);
         idToPeer.push_back(peer);

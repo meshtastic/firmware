@@ -360,9 +360,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     case ThreadMode::DIRECT: {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
         if (node && node->has_user) {
-            snprintf(titleBuf, sizeof(titleBuf), "DM: %s", node->user.short_name);
+            snprintf(titleBuf, sizeof(titleBuf), "@%s", node->user.short_name);
         } else {
-            snprintf(titleBuf, sizeof(titleBuf), "DM: %08x", currentPeer);
+            snprintf(titleBuf, sizeof(titleBuf), "@%08x", currentPeer);
         }
         titleStr = titleBuf;
         break;
