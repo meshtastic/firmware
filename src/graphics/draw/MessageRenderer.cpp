@@ -757,6 +757,39 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
                 strcpy(banner, "New Message");
         }
 
+        // Append context (which channel or DM) so the banner shows where the message arrived
+        {
+            char contextBuf[64] = "";
+            if (sm.type == MessageType::BROADCAST) {
+                const char *cname = channels.getName(sm.channelIndex);
+                if (cname && cname[0])
+                    snprintf(contextBuf, sizeof(contextBuf), "on #%s", cname);
+                else
+                    snprintf(contextBuf, sizeof(contextBuf), "on Ch%d", sm.channelIndex);
+            } else if (sm.type == MessageType::DM_TO_US) {
+                /* Commenting out to better understand if we need this info in the banner
+                uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
+                const meshtastic_NodeInfoLite *peerNode = nodeDB->getMeshNode(peer);
+                if (peerNode && peerNode->has_user && peerNode->user.short_name)
+                    snprintf(contextBuf, sizeof(contextBuf), "Direct: @%s", peerNode->user.short_name);
+                else
+                    snprintf(contextBuf, sizeof(contextBuf), "Direct Message");
+                */
+            }
+
+            if (contextBuf[0]) {
+                size_t cur = strlen(banner);
+                if (cur + 1 < sizeof(banner)) {
+                    if (cur > 0 && banner[cur - 1] != '\n') {
+                        banner[cur] = '\n';
+                        banner[cur + 1] = '\0';
+                        cur++;
+                    }
+                    strncat(banner, contextBuf, sizeof(banner) - cur - 1);
+                }
+            }
+        }
+
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
 
