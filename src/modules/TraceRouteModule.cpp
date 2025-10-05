@@ -21,6 +21,11 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
 {
     const meshtastic_Data &incoming = p.decoded;
 
+    // Update next-hops using returned route
+    if (incoming.request_id) {
+        updateNextHops(p, r);
+    }
+
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);
 
@@ -150,6 +155,65 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
             LOG_INFO("Trace route result: %s", result.c_str());
             handleTraceRouteResult(result);
         }
+    }
+}
+
+void TraceRouteModule::updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+{
+    // E.g. if the route is A->B->C->D and we are B, we can set C as next-hop for C and D
+    // Similarly, if we are C, we can set D as next-hop for D
+    // If we are A, we can set B as next-hop for B, C and D
+
+    // First check if we were the original sender or in the original route
+    int8_t nextHopIndex = -1;
+    if (isToUs(&p)) {
+        nextHopIndex = 0; // We are the original sender, next hop is first in route
+    } else {
+        // Check if we are in the original route
+        for (uint8_t i = 0; i < r->route_count; i++) {
+            if (r->route[i] == nodeDB->getNodeNum()) {
+                nextHopIndex = i + 1; // Next hop is the one after us
+                break;
+            }
+        }
+    }
+
+    // If we are in the original route, update the next hops
+    if (nextHopIndex != -1) {
+        // For every node after us, we can set the next-hop to the first node after us
+        NodeNum nextHop;
+        if (nextHopIndex == r->route_count) {
+            nextHop = p.from; // We are the last in the route, next hop is destination
+        } else {
+            nextHop = r->route[nextHopIndex];
+        }
+
+        if (nextHop == NODENUM_BROADCAST) {
+            return;
+        }
+        uint8_t nextHopByte = nodeDB->getLastByteOfNodeNum(nextHop);
+
+        // For the rest of the nodes in the route, set their next-hop
+        // Note: if we are the last in the route, this loop will not run
+        for (int8_t i = nextHopIndex; i < r->route_count; i++) {
+            NodeNum targetNode = r->route[i];
+            maybeSetNextHop(targetNode, nextHopByte);
+        }
+
+        // Also set next-hop for the destination node
+        maybeSetNextHop(p.from, nextHopByte);
+    }
+}
+
+void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
+{
+    if (target == NODENUM_BROADCAST)
+        return;
+
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(target);
+    if (node && node->next_hop != nextHopByte) {
+        LOG_INFO("Updating next-hop for 0x%08x to 0x%08x based on traceroute", target, nextHopByte);
+        node->next_hop = nextHopByte;
     }
 }
 
