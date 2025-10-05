@@ -9,7 +9,9 @@
 #define I2C_SCL 22
 
 #define BUTTON_PIN 0
-//#define LED_PIN 25 // If defined we will blink this LED
+// SugarCube has buzzer and LED sharing the same GPIO pin (25).
+// LED activity triggers unintended buzzer noise, so LED functionality is disabled.
+#define PIN_BUZZER 25 
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
