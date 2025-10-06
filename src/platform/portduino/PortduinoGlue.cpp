@@ -202,7 +202,7 @@ void portduinoSetup()
         exit(EXIT_SUCCESS);
     }
 
-    if (portduino_config.lora_module == use_simradio) {
+    if (portduino_config.force_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
         portduino_config.MaxNodes = 200; // Default to 200 nodes
         // Set the random seed equal to TCPPort to have a different seed per instance

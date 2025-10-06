@@ -27,10 +27,6 @@
  */
 class FloodingRouter : public Router
 {
-  private:
-    /* Check if we should rebroadcast this packet, and do so if needed */
-    void perhapsRebroadcast(const meshtastic_MeshPacket *p);
-
   public:
     /**
      * Constructor
@@ -59,7 +55,18 @@ class FloodingRouter : public Router
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
 
-    // Return false for roles like ROUTER or REPEATER which should always rebroadcast even when we've heard another rebroadcast of
+    /* Check if we should rebroadcast this packet, and do so if needed */
+    virtual bool perhapsRebroadcast(const meshtastic_MeshPacket *p) = 0;
+
+    /* Check if we should handle an upgraded packet (with higher hop_limit)
+     * @return true if we handled it (so stop processing)
+     */
+    bool perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p);
+
+    /* Call when we receive a packet that needs some reprocessing, but afterwards should be filtered */
+    void reprocessPacket(const meshtastic_MeshPacket *p);
+
+    // Return false for roles like ROUTER which should always rebroadcast even when we've heard another rebroadcast of
     // the same packet
     bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
 
