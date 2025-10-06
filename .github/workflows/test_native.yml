@@ -40,7 +40,7 @@ jobs:
 
       - name: Integration test
         run: |
-          .pio/build/coverage/program &
+          .pio/build/coverage/program -s &
           PID=$!
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
