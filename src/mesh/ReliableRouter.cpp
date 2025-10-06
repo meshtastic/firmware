@@ -76,7 +76,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
        If we don't add this, we will likely retransmit too early.
     */
     for (auto i = pending.begin(); i != pending.end(); i++) {
-        i->second.nextTxMsec += iface->getPacketTime(p);
+        i->second.nextTxMsec += iface->getPacketTime(p, true);
     }
 
     return isBroadcast(p->to) ? FloodingRouter::shouldFilterReceived(p) : NextHopRouter::shouldFilterReceived(p);
