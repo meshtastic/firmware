@@ -698,20 +698,12 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
 #if CANNED_MESSAGE_ADD_CONFIRMATION
-            // Show confirmation dialog before sending canned message
-            NodeNum destNode = dest;
-            ChannelIndex chan = channel;
-            graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
-                this->sendText(destNode, chan, current, false);
-                payload = runState;
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                currentMessageIndex = -1;
-
-                // Notify UI to regenerate frame set and redraw
-                UIFrameEvent e;
-                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                notifyObservers(&e);
-                screen->forceDisplay();
+            const int savedIndex = currentMessageIndex;
+            graphics::menuHandler::showConfirmationBanner("Send message?", [this, savedIndex]() {
+                this->currentMessageIndex = savedIndex;
+                this->payload = this->runState;
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+                this->setIntervalFromNow(0);
             });
 #else
             payload = runState;
@@ -2220,7 +2212,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                     }
                 } else if (isAck && !isFromDest) {
                     // Relay ACK banner
-                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)%s\n\nSNR: %.1f dB RSSI: %d dBm",
+                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSNR: %.1f dB RSSI: %d dBm",
                              (nodeName && nodeName[0]) ? nodeName : "unknown", this->lastRxSnr, this->lastRxRssi);
                 } else {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
