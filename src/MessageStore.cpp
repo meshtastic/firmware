@@ -1,3 +1,4 @@
+#if HAS_SCREEN
 #include "MessageStore.h"
 #include "FSCommon.h"
 #include "NodeDB.h"
@@ -392,3 +393,4 @@ void MessageStore::upgradeBootRelativeTimestamps()
 
 // Global definition
 MessageStore messageStore("default");
+#endif

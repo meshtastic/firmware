@@ -759,8 +759,9 @@ void Power::shutdown()
 #endif
     nodeDB->saveToDisk();
     // === Save live messages before powering off ===
+#if HAS_SCREEN
     messageStore.saveToFlash();
-
+#endif
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);

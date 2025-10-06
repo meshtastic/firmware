@@ -1,3 +1,4 @@
+#if HAS_SCREEN
 #pragma once
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
@@ -101,3 +102,4 @@ class MessageStore
 
 // Global instance (defined in MessageStore.cpp)
 extern MessageStore messageStore;
+#endif

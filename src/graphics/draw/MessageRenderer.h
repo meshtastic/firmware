@@ -1,3 +1,4 @@
+#if HAS_SCREEN
 #pragma once
 #include "MessageStore.h" // for StoredMessage
 #include "OLEDDisplay.h"
@@ -60,3 +61,5 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
 
 } // namespace MessageRenderer
 } // namespace graphics
+
+#endif
