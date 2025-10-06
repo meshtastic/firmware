@@ -1,6 +1,6 @@
 #include "configuration.h"
-#if HAS_SCREEN
 
+#if HAS_SCREEN
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "NotificationRenderer.h"

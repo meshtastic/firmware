@@ -1,4 +1,17 @@
 #pragma once
+
+#if HAS_SCREEN
+
+// Disable debug logging entirely on release builds
+#if !defined(DEBUG)
+#define LOG_DEBUG(...)
+#endif
+
+// Disable message persistence to flash if you’re short on space
+#ifndef ENABLE_MESSAGE_PERSISTENCE
+#define ENABLE_MESSAGE_PERSISTENCE 1
+#endif
+
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
 #include <deque>
@@ -101,3 +114,5 @@ class MessageStore
 
 // Global instance (defined in MessageStore.cpp)
 extern MessageStore messageStore;
+
+#endif

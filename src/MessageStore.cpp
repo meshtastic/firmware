@@ -1,9 +1,10 @@
-#include "MessageStore.h"
+#include "configuration.h"
+#if HAS_SCREEN
 #include "FSCommon.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
-#include "configuration.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 
@@ -132,6 +133,7 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     addLiveMessage(sm);
 }
 
+#if ENABLE_MESSAGE_PERSISTENCE
 // Save RAM queue to flash (called on shutdown)
 void MessageStore::saveToFlash()
 {
@@ -250,6 +252,11 @@ void MessageStore::loadFromFlash()
     logMemoryUsage("loadFromFlash");
 #endif
 }
+#else
+// Persistence disabled (saves flash space)
+void MessageStore::saveToFlash() {}
+void MessageStore::loadFromFlash() {}
+#endif
 
 // Clear all messages (RAM + persisted queue)
 void MessageStore::clearAllMessages()
@@ -392,3 +399,4 @@ void MessageStore::upgradeBootRelativeTimestamps()
 
 // Global definition
 MessageStore messageStore("default");
+#endif

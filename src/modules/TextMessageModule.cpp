@@ -7,7 +7,6 @@
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "graphics/draw/MessageRenderer.h"
-
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -20,10 +19,10 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     // We only store/display messages destined for us.
     devicestate.rx_text_message = mp;
     devicestate.has_rx_text_message = true;
-
+#if HAS_SCREEN
     // Store in the central message history
     const StoredMessage &sm = messageStore.addFromPacket(mp);
-#if HAS_SCREEN
+
     // Pass message to renderer (banner + thread switching + scroll reset)
     graphics::MessageRenderer::handleNewMessage(sm, mp);
 #endif

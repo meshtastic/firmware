@@ -1,5 +1,6 @@
 #pragma once
 #include "MessageStore.h" // for StoredMessage
+#if HAS_SCREEN
 #include "OLEDDisplay.h"
 #include "OLEDDisplayUi.h"
 #include "graphics/emotes.h"
@@ -60,3 +61,4 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
 
 } // namespace MessageRenderer
 } // namespace graphics
+#endif
