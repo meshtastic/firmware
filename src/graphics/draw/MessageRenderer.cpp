@@ -492,13 +492,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     cachedHeights = calculateLineHeights(cachedLines, emotes);
 
     // Scrolling logic (unchanged)
-    uint32_t now = millis();
     int totalHeight = 0;
     for (size_t i = 0; i < cachedHeights.size(); ++i)
         totalHeight += cachedHeights[i];
     int usableScrollHeight = usableHeight;
     int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
+#ifndef USE_EINK
+    uint32_t now = millis();
     float delta = (now - lastTime) / 400.0f;
     lastTime = now;
     const float scrollSpeed = 2.0f;
@@ -527,6 +528,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         scrollY = 0;
     }
+#else
+    // E-Ink: disable autoscroll
+    scrollY = 0.0f;
+    waitingToReset = false;
+    scrollStarted = false;
+    lastTime = millis(); // keep timebase sane
+#endif
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
