@@ -494,17 +494,6 @@ bool GPS::setup()
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-#ifdef TRACKER_T1000_E
-            // add power up/down strategy, improve ag3335 detection success
-            digitalWrite(PIN_GPS_EN, LOW);
-            delay(500);
-            digitalWrite(GPS_VRTC_EN, LOW);
-            delay(1000);
-            digitalWrite(GPS_VRTC_EN, HIGH);
-            delay(500);
-            digitalWrite(PIN_GPS_EN, HIGH);
-            delay(1000);
-#endif
             if (probeTries < GPS_PROBETRIES) {
                 LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
