@@ -220,7 +220,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_POWER_EN (37)
 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 #define SX126X_DIO2_AS_RF_SWITCH
-#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+// #define SX126X_DIO3_TCXO_VOLTAGE 1.8   // commented out for nrf52840-dk
 
 // Testing USB detection
 #define NRF_APM
