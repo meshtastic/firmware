@@ -49,12 +49,6 @@ Preferences prefs;
 using namespace httpsserver;
 #include "mesh/http/ContentHandler.h"
 
-static const uint32_t ACTIVE_THRESHOLD_MS = 5000;
-static const uint32_t MEDIUM_THRESHOLD_MS = 30000;
-static const int32_t ACTIVE_INTERVAL_MS = 50;
-static const int32_t MEDIUM_INTERVAL_MS = 200;
-static const int32_t IDLE_INTERVAL_MS = 1000;
-
 static SSLCert *cert;
 static HTTPSServer *secureServer;
 static HTTPServer *insecureServer;
@@ -181,32 +175,6 @@ WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
     if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
-    lastActivityTime = millis();
-}
-
-void WebServerThread::markActivity()
-{
-    lastActivityTime = millis();
-}
-
-int32_t WebServerThread::getAdaptiveInterval()
-{
-    uint32_t currentTime = millis();
-    uint32_t timeSinceActivity;
-
-    if (currentTime >= lastActivityTime) {
-        timeSinceActivity = currentTime - lastActivityTime;
-    } else {
-        timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
-    }
-
-    if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
-        return ACTIVE_INTERVAL_MS;
-    } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
-        return MEDIUM_INTERVAL_MS;
-    } else {
-        return IDLE_INTERVAL_MS;
-    }
 }
 
 int32_t WebServerThread::runOnce()
@@ -221,7 +189,8 @@ int32_t WebServerThread::runOnce()
         ESP.restart();
     }
 
-    return getAdaptiveInterval();
+    // Loop every 5ms.
+    return (5);
 }
 
 void initWebServer()
