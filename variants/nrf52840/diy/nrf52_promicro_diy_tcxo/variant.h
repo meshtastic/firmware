@@ -62,9 +62,9 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
 #define VBAT_MV_PER_LSB (0.73242188F)
 // Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
-#define VBAT_DIVIDER (0.39F)
+#define VBAT_DIVIDER (0.6F)
 // Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.65)
+#define VBAT_DIVIDER_COMP (1.73)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
@@ -87,23 +87,23 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define LED_STATE_ON 1 // State when LED is lit
 
 // Button
-#define BUTTON_PIN (32 + 7) // P1.00 // modified
+#define BUTTON_PIN (32 + 0) // P1.00
 
 // GPS
-#define PIN_GPS_TX (0 + 6) // P0.22 // modified
-#define PIN_GPS_RX (0 + 8) // P0.20 // modified
+#define PIN_GPS_TX (0 + 22) // P0.22
+#define PIN_GPS_RX (0 + 20) // P0.20
 
 #define PIN_GPS_EN (0 + 24) // P0.24
-// #define GPS_POWER_TOGGLE  /modified
+#define GPS_POWER_TOGGLE
 #define GPS_UBLOX
 // define GPS_DEBUG
 
-// // UART interfaces  //modified
- #define PIN_SERIAL1_RX PIN_GPS_TX
- #define PIN_SERIAL1_TX PIN_GPS_RX
+// UART interfaces
+#define PIN_SERIAL1_RX PIN_GPS_TX
+#define PIN_SERIAL1_TX PIN_GPS_RX
 
- #define PIN_SERIAL2_RX (0 + 20) // P0.06
- #define PIN_SERIAL2_TX (0 + 22) // P0.08
+#define PIN_SERIAL2_RX (0 + 6) // P0.06
+#define PIN_SERIAL2_TX (0 + 8) // P0.08
 
 // Serial interfaces
 #define SPI_INTERFACES_COUNT 1
@@ -118,11 +118,11 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define LORA_CS (32 + 13) // P1.13
 
 // LORA MODULES
-// #define USE_LLCC68
+#define USE_LLCC68
 #define USE_SX1262
-// #define USE_RF95
-// #define USE_SX1268
-// #define USE_LR1121
+#define USE_RF95
+#define USE_SX1268
+#define USE_LR1121
 
 // RF95 CONFIG
 
