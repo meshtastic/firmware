@@ -55,12 +55,6 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     // Call to add your ID to the route array of a RouteDiscovery message
     void appendMyIDandSNR(meshtastic_RouteDiscovery *r, float snr, bool isTowardsDestination, bool SNRonly);
 
-    // Update next-hops in the routing table based on the returned route
-    void updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r);
-
-    // Helper to update next-hop for a single node
-    void maybeSetNextHop(NodeNum target, uint8_t nextHopByte);
-
     /* Call to print the route array of a RouteDiscovery message.
        Set origin to where the request came from.
        Set dest to the ID of its destination, or NODENUM_BROADCAST if it has not yet arrived there. */
