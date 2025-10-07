@@ -198,12 +198,12 @@ static int32_t reconnectWiFi()
                 WiFi.mode(WIFI_STA);
 #endif
                 WiFi.begin(wifiName, wifiPsw);
-                wifiReconnectStartMillis=millis();
-                if(wifiConnectAttempts<MaxWifiConnectionAttempts){
-                    needReconnect=true;
+                wifiReconnectStartMillis = millis();
+                if(wifiConnectAttempts < MaxWifiConnectionAttempts){
+                    needReconnect = true;
                 }
                 else{
-                    needReconnect=false;
+                    needReconnect = false;
                     wifiReconnectPending = false;
                     LOG_INFO("Maximum connection attempts reached %d", wifiConnectAttempts);
                     LOG_INFO("Unable to connect access point %s", wifiName);
