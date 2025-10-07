@@ -509,7 +509,7 @@ bool GPS::setup()
                 LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                    if (++speedSelect == array_count(serialSpeeds)) {
+                    if (currentStep == 0 && ++speedSelect == array_count(serialSpeeds)) {
                         speedSelect = 0;
                         ++probeTries;
                     }
@@ -521,7 +521,7 @@ bool GPS::setup()
                 LOG_DEBUG("Probe for GPS at %d", rareSerialSpeeds[speedSelect]);
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                    if (++speedSelect == array_count(rareSerialSpeeds)) {
+                    if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
                         LOG_WARN("Give up on GPS probe and set to %d", GPS_BAUDRATE);
                         return true;
                     }
@@ -1404,12 +1404,12 @@ GnssModel_t GPS::probe(int serialSpeed)
                 return GNSS_MODEL_UBLOX10;
             }
         }
-        LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
-        currentDelay = 2000;
-        currentStep = 0;
-        return GNSS_MODEL_UNKNOWN;
     }
     }
+    LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
+    currentDelay = 2000;
+    currentStep = 0;
+    return GNSS_MODEL_UNKNOWN;
 }
 
 GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap, int serialSpeed)
