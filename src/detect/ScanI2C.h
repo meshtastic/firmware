@@ -61,6 +61,7 @@ class ScanI2C
         NAU7802,
         FT6336U,
         STK8BAXX,
+        STC8H1K28,
         ICM20948,
         SCD4X,
         MAX30102,

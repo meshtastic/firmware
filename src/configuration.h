@@ -237,6 +237,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TCA9535_ADDR 0x20
 #define TCA9555_ADDR 0x26
 
+// used for display brightness control
+#define STC8H1K28_ADDR 0x30
+
 // -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
