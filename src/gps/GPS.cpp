@@ -1031,7 +1031,7 @@ void GPS::down()
     LOG_DEBUG("%us until next search", sleepTime / 1000);
 
     // If update interval less than 10 seconds, no attempt to sleep
-    if (updateInterval <= 10 * 1000UL || sleepTime == 0)
+    if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS || sleepTime == 0)
         setPowerState(GPS_IDLE);
 
     else {
@@ -1102,6 +1102,29 @@ int32_t GPS::runOnce()
         publishUpdate();
     }
 
+    // ======================== GPS_ACTIVE state ========================
+    // In GPS_ACTIVE state, GPS is powered on and we're receiving NMEA messages.
+    // We use the following logic to determine when to update the local position
+    // or time by running GPS::publishUpdate.
+    // Note: Local position update is asynchronous to position broadcast. We
+    // generally run this state every gps_update_interval seconds, and in most cases
+    // gps_update_interval is faster than the position broadcast interval so there's a
+    // fresh position ready when the device wants to broadcast one on the mesh.
+    //
+    // 1. Got a time for the first time --> set the time, don't publish.
+    // 2. Got a lock for the first time
+    //   --> If gps_update_interval is <= 10s --> publishUpdate
+    //   --> Otherwise, hold for MIN(gps_update_interval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS, 20s)
+    //  3. Got a lock after turning back on
+    //   --> If gps_update_interval is <= 10s --> publishUpdate
+    //   --> Otherwise, hold for MIN(gps_update_interval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS, 20s)
+    // 4. Hold has expired
+    //   --> If we have a time and a location --> publishUpdate
+    //   --> down()
+    // 5. Search time has expired
+    //   --> If we have a time and a location --> publishUpdate
+    //   --> If we had a location before but don't now --> publishUpdate
+    //   --> down()
     if (whileActive()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
@@ -1111,55 +1134,81 @@ int32_t GPS::runOnce()
     if (!config.position.fixed_position && powerState != GPS_ACTIVE && scheduling.isUpdateDue())
         up();
 
-    // If we've already set time from the GPS, no need to ask the GPS
-    bool gotTime = (getRTCQuality() >= RTCQualityGPS);
-    if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
-        gotTime = true;
-        shouldPublish = true;
-    }
-
+    // quality of the previous fix. We set it to 0 when we go down, so it's a way
+    // to check if we're getting a lock after being GPS_OFF.
     uint8_t prev_fixQual = fixQual;
-    bool gotLoc = lookForLocation();
-    if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
-        LOG_DEBUG("hasValidLocation RISING EDGE");
-        hasValidLocation = true;
-        shouldPublish = true;
-        // Hold for 20secs after getting a lock to download ephemeris etc
-        fixHoldEnds = millis() + 20000;
-    }
 
-    if (gotLoc && prev_fixQual == 0) { // just got a lock after turning back on.
-        fixHoldEnds = millis() + 20000;
-        shouldPublish = true; // Publish immediately, since next publish is at end of hold
-    }
+    if (powerState == GPS_ACTIVE) {
+        // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
+        uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
-    bool tooLong = scheduling.searchedTooLong();
-    if (tooLong)
-        LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time");
+        // 1. Got a time for the first time
+        bool gotTime = (getRTCQuality() >= RTCQualityGPS);
+        if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
+            gotTime = true;
+        }
 
-    // Once we get a location we no longer desperately want an update
-    if ((gotLoc && gotTime) || tooLong) {
+        // 2. Got a lock for the first time, or 3. Got a lock after turning back on
+        bool gotLoc = lookForLocation();
+        if (gotLoc) {
+#ifdef GPS_DEBUG
+            if (!hasValidLocation) { // declare that we have location ASAP
+                LOG_DEBUG("hasValidLocation RISING EDGE");
+            }
+#endif
+            if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
+                hasValidLocation = true;
+                shouldPublish = true;
+            } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {
+                hasValidLocation = true;
+                // Hold for up to 20secs after getting a lock to download ephemeris etc
+                uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
+                if (holdTime > GPS_FIX_HOLD_MAX_MS)
+                    holdTime = GPS_FIX_HOLD_MAX_MS;
+                fixHoldEnds = millis() + holdTime;
+#ifdef GPS_DEBUG
+                LOG_DEBUG("Holding for %ums after lock", holdTime);
+#endif
+            }
+        }
+
+        bool tooLong = scheduling.searchedTooLong();
         if (tooLong && !gotLoc) {
+            LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
-                LOG_DEBUG("hasValidLocation FALLING EDGE");
-            }
-            p = meshtastic_Position_init_default;
-            hasValidLocation = false;
-        }
-        if (millis() > fixHoldEnds) {
-            shouldPublish = true; // publish our update at the end of the lock hold
-            publishUpdate();
-            down();
+                p = meshtastic_Position_init_default;
+                hasValidLocation = false;
+                shouldPublish = true;
 #ifdef GPS_DEBUG
-        } else {
+                LOG_DEBUG("hasValidLocation FALLING EDGE");
+#endif
+            }
+        }
+
+        // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
+        bool holdExpired = (fixHoldEnds != 0 && millis() > fixHoldEnds);
+        if (shouldPublish || tooLong || holdExpired) {
+            if (gotTime && hasValidLocation) {
+                shouldPublish = true;
+            }
+            if (shouldPublish) {
+                fixHoldEnds = 0;
+                publishUpdate();
+            }
+
+            // There's a chance we just got a time, so keep going to see if we can get a location too
+            if (tooLong || holdExpired) {
+                down();
+            }
+
+#ifdef GPS_DEBUG
+        } else if (fixHoldEnds != 0) {
             LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
 #endif
         }
     }
-
-    // If state has changed do a publish
-    publishUpdate();
+    // ===================== end GPS_ACTIVE state ========================
 
     if (config.position.fixed_position == true && hasValidLocation)
         return disable(); // This should trigger when we have a fixed position, and get that first position
