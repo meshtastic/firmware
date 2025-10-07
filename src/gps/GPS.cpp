@@ -506,10 +506,9 @@ bool GPS::setup()
             delay(1000);
 #endif
             if (probeTries < GPS_PROBETRIES) {
-                LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                    if (++speedSelect == array_count(serialSpeeds)) {
+                    if (currentStep == 0 && ++speedSelect == array_count(serialSpeeds)) {
                         speedSelect = 0;
                         ++probeTries;
                     }
@@ -518,10 +517,9 @@ bool GPS::setup()
             // Rare Serial Speeds
 #ifndef CONFIG_IDF_TARGET_ESP32C6
             if (probeTries == GPS_PROBETRIES) {
-                LOG_DEBUG("Probe for GPS at %d", rareSerialSpeeds[speedSelect]);
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                    if (++speedSelect == array_count(rareSerialSpeeds)) {
+                    if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
                         LOG_WARN("Give up on GPS probe and set to %d", GPS_BAUDRATE);
                         return true;
                     }
@@ -1094,7 +1092,7 @@ int32_t GPS::runOnce()
             return disable();
         }
         if (!setup())
-            return 2000; // Setup failed, re-run in two seconds
+            return currentDelay; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
         if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
@@ -1267,163 +1265,197 @@ static const char *DETECTED_MESSAGE = "%s detected";
 
 GnssModel_t GPS::probe(int serialSpeed)
 {
+    uint8_t buffer[768] = {0};
+
+    switch (currentStep) {
+    case 0: {
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
-    _serial_gps->end();
-    _serial_gps->begin(serialSpeed);
+        _serial_gps->end();
+        _serial_gps->begin(serialSpeed);
 #elif defined(ARCH_RP2040)
-    _serial_gps->end();
-    _serial_gps->setFIFOSize(256);
-    _serial_gps->begin(serialSpeed);
+        _serial_gps->end();
+        _serial_gps->setFIFOSize(256);
+        _serial_gps->begin(serialSpeed);
 #else
-    if (_serial_gps->baudRate() != serialSpeed) {
-        LOG_DEBUG("Set Baud to %i", serialSpeed);
-        _serial_gps->updateBaudRate(serialSpeed);
-    }
+        if (_serial_gps->baudRate() != serialSpeed) {
+            LOG_DEBUG("Set GPS Baud to %i", serialSpeed);
+            _serial_gps->updateBaudRate(serialSpeed);
+        }
 #endif
 
-    memset(&ublox_info, 0, sizeof(ublox_info));
-    uint8_t buffer[768] = {0};
-    delay(100);
+        memset(&ublox_info, 0, sizeof(ublox_info));
+        delay(100);
 
-    // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
-    _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
-    delay(20);
-    // Close NMEA sequences on Ublox
-    _serial_gps->write("$PUBX,40,GLL,0,0,0,0,0,0*5C\r\n");
-    _serial_gps->write("$PUBX,40,GSV,0,0,0,0,0,0*59\r\n");
-    _serial_gps->write("$PUBX,40,VTG,0,0,0,0,0,0*5E\r\n");
-    delay(20);
-    // Close NMEA sequences on CM121
-    _serial_gps->write("$CFGMSG,0,1,0,1*1B\r\n");
-    _serial_gps->write("$CFGMSG,0,2,0,1*18\r\n");
-    _serial_gps->write("$CFGMSG,0,3,0,1*19\r\n");
-    delay(20);
-
-    // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
-    std::vector<ChipInfo> unicore = {
-        {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
-    PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
-
-    std::vector<ChipInfo> atgm = {
-        {"ATGM336H", "$GPTXT,01,01,02,HW=ATGM336H", GNSS_MODEL_ATGM336H},
-        /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS)) based on AT6558 */
-        {"ATGM332D", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H}};
-    PROBE_FAMILY("ATGM33xx Family", "$PCAS06,1*1A", atgm, 500);
-
-    /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
-    _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
-    _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
-    _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
-    std::vector<ChipInfo> airoha = {{"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
-                                    {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
-                                    {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
-    PROBE_FAMILY("Airoha Family", "$PAIR021*39", airoha, 1000);
-
-    PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
-    PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
-
-    // Close all NMEA sentences, valid for MTK3333 and MTK3339 platforms
-    _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
-    delay(20);
-    std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B}, {"PA1010D", "1010D", GNSS_MODEL_MTK_PA1010D},
-                                 {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},  {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},
-                                 {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B},   {"L80-R", "_3337_", GNSS_MODEL_MTK_L76B},
-                                 {"L80", "_3339_", GNSS_MODEL_MTK_L76B}};
-
-    PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
-
-    uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
-    UBXChecksum(cfg_rate, sizeof(cfg_rate));
-    clearBuffer();
-    _serial_gps->write(cfg_rate, sizeof(cfg_rate));
-    // Check that the returned response class and message ID are correct
-    GPS_RESPONSE response = getACK(0x06, 0x08, 750);
-    if (response == GNSS_RESPONSE_NONE) {
-        LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
+        // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
+        _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
+        delay(20);
+        // Close NMEA sequences on Ublox
+        _serial_gps->write("$PUBX,40,GLL,0,0,0,0,0,0*5C\r\n");
+        _serial_gps->write("$PUBX,40,GSV,0,0,0,0,0,0*59\r\n");
+        _serial_gps->write("$PUBX,40,VTG,0,0,0,0,0,0*5E\r\n");
+        delay(20);
+        // Close NMEA sequences on CM121
+        _serial_gps->write("$CFGMSG,0,1,0,1*1B\r\n");
+        _serial_gps->write("$CFGMSG,0,2,0,1*18\r\n");
+        _serial_gps->write("$CFGMSG,0,3,0,1*19\r\n");
+        currentDelay = 20;
+        currentStep = 1;
         return GNSS_MODEL_UNKNOWN;
-    } else if (response == GNSS_RESPONSE_FRAME_ERRORS) {
-        LOG_INFO("UBlox Frame Errors (baudrate %d)", serialSpeed);
     }
+    case 1: {
 
-    memset(buffer, 0, sizeof(buffer));
-    uint8_t _message_MONVER[8] = {
-        0xB5, 0x62, // Sync message for UBX protocol
-        0x0A, 0x04, // Message class and ID (UBX-MON-VER)
-        0x00, 0x00, // Length of payload (we're asking for an answer, so no payload)
-        0x00, 0x00  // Checksum
-    };
-    //  Get Ublox gnss module hardware and software info
-    UBXChecksum(_message_MONVER, sizeof(_message_MONVER));
-    clearBuffer();
-    _serial_gps->write(_message_MONVER, sizeof(_message_MONVER));
+        // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
+        std::vector<ChipInfo> unicore = {
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
+        PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
+        currentDelay = 20;
+        currentStep = 2;
+        return GNSS_MODEL_UNKNOWN;
+    }
+    case 2: {
+        std::vector<ChipInfo> atgm = {
+            {"ATGM336H", "$GPTXT,01,01,02,HW=ATGM336H", GNSS_MODEL_ATGM336H},
+            /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS)) based on AT6558 */
+            {"ATGM332D", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H}};
+        PROBE_FAMILY("ATGM33xx Family", "$PCAS06,1*1A", atgm, 500);
+        currentDelay = 20;
+        currentStep = 3;
+        return GNSS_MODEL_UNKNOWN;
+    }
+    case 3: {
+        /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
+        _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
+        _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
+        _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
+        std::vector<ChipInfo> airoha = {{"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+                                        {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+                                        {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
+        PROBE_FAMILY("Airoha Family", "$PAIR021*39", airoha, 1000);
+        currentDelay = 20;
+        currentStep = 4;
+        return GNSS_MODEL_UNKNOWN;
+    }
+    case 4: {
+        PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
+        PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
+        currentDelay = 20;
+        currentStep = 5;
+        return GNSS_MODEL_UNKNOWN;
+    }
+    case 5: {
 
-    uint16_t len = getACK(buffer, sizeof(buffer), 0x0A, 0x04, 1200);
-    if (len) {
-        uint16_t position = 0;
-        for (int i = 0; i < 30; i++) {
-            ublox_info.swVersion[i] = buffer[position];
-            position++;
-        }
-        for (int i = 0; i < 10; i++) {
-            ublox_info.hwVersion[i] = buffer[position];
-            position++;
-        }
+        // Close all NMEA sentences, valid for MTK3333 and MTK3339 platforms
+        _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
+        delay(20);
+        std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B}, {"PA1010D", "1010D", GNSS_MODEL_MTK_PA1010D},
+                                     {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},  {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},
+                                     {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B},   {"L80-R", "_3337_", GNSS_MODEL_MTK_L76B},
+                                     {"L80", "_3339_", GNSS_MODEL_MTK_L76B}};
 
-        while (len >= position + 30) {
-            for (int i = 0; i < 30; i++) {
-                ublox_info.extension[ublox_info.extensionNo][i] = buffer[position];
-                position++;
-            }
-            ublox_info.extensionNo++;
-            if (ublox_info.extensionNo > 9)
-                break;
-        }
-
-        LOG_DEBUG("Module Info : ");
-        LOG_DEBUG("Soft version: %s", ublox_info.swVersion);
-        LOG_DEBUG("Hard version: %s", ublox_info.hwVersion);
-        LOG_DEBUG("Extensions:%d", ublox_info.extensionNo);
-        for (int i = 0; i < ublox_info.extensionNo; i++) {
-            LOG_DEBUG("  %s", ublox_info.extension[i]);
+        PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
+        currentDelay = 20;
+        currentStep = 6;
+        return GNSS_MODEL_UNKNOWN;
+    }
+    case 6: {
+        uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
+        UBXChecksum(cfg_rate, sizeof(cfg_rate));
+        clearBuffer();
+        _serial_gps->write(cfg_rate, sizeof(cfg_rate));
+        // Check that the returned response class and message ID are correct
+        GPS_RESPONSE response = getACK(0x06, 0x08, 750);
+        if (response == GNSS_RESPONSE_NONE) {
+            LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
+            currentDelay = 2000;
+            currentStep = 0;
+            return GNSS_MODEL_UNKNOWN;
+        } else if (response == GNSS_RESPONSE_FRAME_ERRORS) {
+            LOG_INFO("UBlox Frame Errors (baudrate %d)", serialSpeed);
         }
 
         memset(buffer, 0, sizeof(buffer));
+        uint8_t _message_MONVER[8] = {
+            0xB5, 0x62, // Sync message for UBX protocol
+            0x0A, 0x04, // Message class and ID (UBX-MON-VER)
+            0x00, 0x00, // Length of payload (we're asking for an answer, so no payload)
+            0x00, 0x00  // Checksum
+        };
+        //  Get Ublox gnss module hardware and software info
+        UBXChecksum(_message_MONVER, sizeof(_message_MONVER));
+        clearBuffer();
+        _serial_gps->write(_message_MONVER, sizeof(_message_MONVER));
 
-        // tips: extensionNo field is 0 on some 6M GNSS modules
-        for (int i = 0; i < ublox_info.extensionNo; ++i) {
-            if (!strncmp(ublox_info.extension[i], "MOD=", 4)) {
-                strncpy((char *)buffer, &(ublox_info.extension[i][4]), sizeof(buffer));
-            } else if (!strncmp(ublox_info.extension[i], "PROTVER", 7)) {
-                char *ptr = nullptr;
-                memset(buffer, 0, sizeof(buffer));
-                strncpy((char *)buffer, &(ublox_info.extension[i][8]), sizeof(buffer));
-                LOG_DEBUG("Protocol Version:%s", (char *)buffer);
-                if (strlen((char *)buffer)) {
-                    ublox_info.protocol_version = strtoul((char *)buffer, &ptr, 10);
-                    LOG_DEBUG("ProtVer=%d", ublox_info.protocol_version);
-                } else {
-                    ublox_info.protocol_version = 0;
+        uint16_t len = getACK(buffer, sizeof(buffer), 0x0A, 0x04, 1200);
+        if (len) {
+            uint16_t position = 0;
+            for (int i = 0; i < 30; i++) {
+                ublox_info.swVersion[i] = buffer[position];
+                position++;
+            }
+            for (int i = 0; i < 10; i++) {
+                ublox_info.hwVersion[i] = buffer[position];
+                position++;
+            }
+
+            while (len >= position + 30) {
+                for (int i = 0; i < 30; i++) {
+                    ublox_info.extension[ublox_info.extensionNo][i] = buffer[position];
+                    position++;
+                }
+                ublox_info.extensionNo++;
+                if (ublox_info.extensionNo > 9)
+                    break;
+            }
+
+            LOG_DEBUG("Module Info : ");
+            LOG_DEBUG("Soft version: %s", ublox_info.swVersion);
+            LOG_DEBUG("Hard version: %s", ublox_info.hwVersion);
+            LOG_DEBUG("Extensions:%d", ublox_info.extensionNo);
+            for (int i = 0; i < ublox_info.extensionNo; i++) {
+                LOG_DEBUG("  %s", ublox_info.extension[i]);
+            }
+
+            memset(buffer, 0, sizeof(buffer));
+
+            // tips: extensionNo field is 0 on some 6M GNSS modules
+            for (int i = 0; i < ublox_info.extensionNo; ++i) {
+                if (!strncmp(ublox_info.extension[i], "MOD=", 4)) {
+                    strncpy((char *)buffer, &(ublox_info.extension[i][4]), sizeof(buffer));
+                } else if (!strncmp(ublox_info.extension[i], "PROTVER", 7)) {
+                    char *ptr = nullptr;
+                    memset(buffer, 0, sizeof(buffer));
+                    strncpy((char *)buffer, &(ublox_info.extension[i][8]), sizeof(buffer));
+                    LOG_DEBUG("Protocol Version:%s", (char *)buffer);
+                    if (strlen((char *)buffer)) {
+                        ublox_info.protocol_version = strtoul((char *)buffer, &ptr, 10);
+                        LOG_DEBUG("ProtVer=%d", ublox_info.protocol_version);
+                    } else {
+                        ublox_info.protocol_version = 0;
+                    }
                 }
             }
-        }
-        if (strncmp(ublox_info.hwVersion, "00040007", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 6", "6");
-            return GNSS_MODEL_UBLOX6;
-        } else if (strncmp(ublox_info.hwVersion, "00070000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 7", "7");
-            return GNSS_MODEL_UBLOX7;
-        } else if (strncmp(ublox_info.hwVersion, "00080000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 8", "8");
-            return GNSS_MODEL_UBLOX8;
-        } else if (strncmp(ublox_info.hwVersion, "00190000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 9", "9");
-            return GNSS_MODEL_UBLOX9;
-        } else if (strncmp(ublox_info.hwVersion, "000A0000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 10", "10");
-            return GNSS_MODEL_UBLOX10;
+            if (strncmp(ublox_info.hwVersion, "00040007", 8) == 0) {
+                LOG_INFO(DETECTED_MESSAGE, "U-blox 6", "6");
+                return GNSS_MODEL_UBLOX6;
+            } else if (strncmp(ublox_info.hwVersion, "00070000", 8) == 0) {
+                LOG_INFO(DETECTED_MESSAGE, "U-blox 7", "7");
+                return GNSS_MODEL_UBLOX7;
+            } else if (strncmp(ublox_info.hwVersion, "00080000", 8) == 0) {
+                LOG_INFO(DETECTED_MESSAGE, "U-blox 8", "8");
+                return GNSS_MODEL_UBLOX8;
+            } else if (strncmp(ublox_info.hwVersion, "00190000", 8) == 0) {
+                LOG_INFO(DETECTED_MESSAGE, "U-blox 9", "9");
+                return GNSS_MODEL_UBLOX9;
+            } else if (strncmp(ublox_info.hwVersion, "000A0000", 8) == 0) {
+                LOG_INFO(DETECTED_MESSAGE, "U-blox 10", "10");
+                return GNSS_MODEL_UBLOX10;
+            }
         }
     }
+    }
     LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
+    currentDelay = 2000;
+    currentStep = 0;
     return GNSS_MODEL_UNKNOWN;
 }
 

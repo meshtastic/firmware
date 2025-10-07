@@ -148,8 +148,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    if (webServerThread)
-        webServerThread->markActivity();
 
     LOG_DEBUG("webAPI handleAPIv1FromRadio");
 
@@ -393,9 +391,6 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 
 void handleStatic(HTTPRequest *req, HTTPResponse *res)
 {
-    if (webServerThread)
-        webServerThread->markActivity();
-
     // Get access to the parameters
     ResourceParameters *params = req->getParams();
 
