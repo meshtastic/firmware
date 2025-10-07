@@ -1471,15 +1471,11 @@ void menuHandler::FrameToggles_menu()
     optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
     optionsEnumArray[options++] = show_favorites;
 
-    if (moduleConfig.telemetry.environment_measurement_enabled) {
-        optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Telemetry" : "Show Telemetry";
-        optionsEnumArray[options++] = show_telemetry;
-    }
+    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Telemetry" : "Show Telemetry";
+    optionsEnumArray[options++] = show_telemetry;
 
-    if (moduleConfig.telemetry.environment_measurement_enabled) {
-        optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
-        optionsEnumArray[options++] = show_power;
-    }
+    optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
+    optionsEnumArray[options++] = show_power;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Show/Hide Frames";
