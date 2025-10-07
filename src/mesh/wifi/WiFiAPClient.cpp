@@ -211,7 +211,7 @@ static int32_t reconnectWiFi()
                 
             }
             else{
-                LOG_INFO("WiFi succesfully connected to access point %s", wifiName);
+                LOG_INFO("WiFi successfully connected to access point %s", wifiName);
                 LOG_INFO("Connection attempts %d", wifiConnectAttempts);
                 wifiReconnectPending = false;
             }
