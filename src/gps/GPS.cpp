@@ -506,7 +506,6 @@ bool GPS::setup()
             delay(1000);
 #endif
             if (probeTries < GPS_PROBETRIES) {
-                LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
                     if (currentStep == 0 && ++speedSelect == array_count(serialSpeeds)) {
@@ -518,7 +517,6 @@ bool GPS::setup()
             // Rare Serial Speeds
 #ifndef CONFIG_IDF_TARGET_ESP32C6
             if (probeTries == GPS_PROBETRIES) {
-                LOG_DEBUG("Probe for GPS at %d", rareSerialSpeeds[speedSelect]);
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
                     if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
@@ -1231,7 +1229,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->begin(serialSpeed);
 #else
         if (_serial_gps->baudRate() != serialSpeed) {
-            LOG_DEBUG("Set Baud to %i", serialSpeed);
+            LOG_DEBUG("Set GPS Baud to %i", serialSpeed);
             _serial_gps->updateBaudRate(serialSpeed);
         }
 #endif
