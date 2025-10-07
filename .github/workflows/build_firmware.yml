@@ -19,6 +19,8 @@ jobs:
   pio-build:
     name: build-${{ inputs.platform }}
     runs-on: ubuntu-24.04
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -55,6 +57,7 @@ jobs:
 
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
+        id: upload
         with:
           name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}.zip
           overwrite: true
