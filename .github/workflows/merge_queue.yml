@@ -1,29 +1,11 @@
-name: CI
-concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+name: Merge Queue
+# Not sure how concurrency works in merge_queue, removing for now.
+# concurrency:
+#   group: merge-queue-${{ github.head_ref || github.run_id }}
+#   cancel-in-progress: true
 on:
-  # # Triggers the workflow on push but only for the master branch
-  push:
-    branches:
-      - master
-      - develop
-      - event/*
-    paths-ignore:
-      - "**.md"
-      - version.properties
-
-  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
-  pull_request_target:
-    branches:
-      - master
-      - develop
-      - event/*
-    paths-ignore:
-      - "**.md"
-      #- "**.yml"
-
-  workflow_dispatch:
+  # Merge group is a special trigger that is used to trigger the workflow when a merge group is created.
+  merge_group:
 
 jobs:
   setup:
@@ -51,7 +33,6 @@ jobs:
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
-          echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
       check: ${{ steps.jsonStep.outputs.check }}
@@ -74,7 +55,7 @@ jobs:
   check:
     needs: setup
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         check: ${{ fromJson(needs.setup.outputs.check) }}
 
@@ -91,7 +72,6 @@ jobs:
   build:
     needs: [setup, version]
     strategy:
-      fail-fast: false
       matrix:
         build: ${{ fromJson(needs.setup.outputs.all) }}
     uses: ./.github/workflows/build_firmware.yml
@@ -109,7 +89,7 @@ jobs:
     secrets: inherit
 
   package-pio-deps-native-tft:
-    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/package_pio_deps.yml
     with:
       pio_env: native-tft
@@ -170,6 +150,7 @@ jobs:
       push: false
 
   gather-artifacts:
+    # trunk-ignore(checkov/CKV2_GHA_1)
     permissions:
       contents: write
       pull-requests: write
