@@ -332,7 +332,7 @@ void setUp(void)
     };
     channelFile.channels_count = 1;
     owner = meshtastic_User{.id = "!12345678"};
-    myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 10};
+    myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
         meshtastic_Position{.has_latitude_i = true, .latitude_i = 7 * 1e7, .has_longitude_i = true, .longitude_i = 3 * 1e7};
 
