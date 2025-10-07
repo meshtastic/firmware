@@ -119,7 +119,7 @@ jobs:
             ./firmware-*.bin
             ./firmware-*.uf2
             ./firmware-*.hex
-            ./firmware-*-ota.zip
+            ./firmware-*.zip
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
