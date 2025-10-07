@@ -3,7 +3,7 @@ concurrency:
   group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 on:
-  # # Triggers the workflow on push but only for the master branch
+  # # Triggers the workflow on push but only for the main branches
   push:
     branches:
       - master
@@ -27,6 +27,7 @@ on:
 
 jobs:
   setup:
+    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: true
       matrix:
@@ -41,6 +42,10 @@ jobs:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
+      - name: Uncomment build epoch
+        shell: bash
+        run: |
+          sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
       - name: Generate matrix
         id: jsonStep
         run: |
@@ -57,6 +62,7 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
+    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -79,7 +85,7 @@ jobs:
         check: ${{ fromJson(needs.setup.outputs.check) }}
 
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' }}
+    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
       - uses: actions/checkout@v5
       - name: Build base
@@ -116,10 +122,11 @@ jobs:
     secrets: inherit
 
   test-native:
-    if: ${{ !contains(github.ref_name, 'event/') }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
     uses: ./.github/workflows/test_native.yml
 
   docker-deb-amd64:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -128,6 +135,7 @@ jobs:
       push: false
 
   docker-deb-amd64-tft:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -137,6 +145,7 @@ jobs:
       pio_env: native-tft
 
   docker-alp-amd64:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -145,6 +154,7 @@ jobs:
       push: false
 
   docker-alp-amd64-tft:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -154,6 +164,7 @@ jobs:
       pio_env: native-tft
 
   docker-deb-arm64:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -162,6 +173,7 @@ jobs:
       push: false
 
   docker-deb-armv7:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -170,6 +182,8 @@ jobs:
       push: false
 
   gather-artifacts:
+    # trunk-ignore(checkov/CKV2_GHA_1)
+    if: github.repository == 'meshtastic/firmware'
     permissions:
       contents: write
       pull-requests: write
@@ -258,7 +272,7 @@ jobs:
 
   release-artifacts:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
@@ -333,7 +347,7 @@ jobs:
           - rp2350
           - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
     needs: [release-artifacts, version]
     steps:
       - name: Checkout

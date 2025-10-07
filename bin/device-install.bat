@@ -7,6 +7,7 @@ SET "DEBUG=0"
 SET "PYTHON="
 SET "TFT_BUILD=0"
 SET "BIGDB8=0"
+SET "MUIDB8=0"
 SET "BIGDB16=0"
 SET "ESPTOOL_BAUD=115200"
 SET "ESPTOOL_CMD="
@@ -17,7 +18,8 @@ SET "BPS_RESET=0"
 SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone t-eth-elite tlora-pager mesh-tab dreamcatcher ESP32-S3-Pico seeed-sensecap-indicator heltec_capsule_sensor_v3 vision-master icarus tracksenger elecrow-adv"
 SET "C3=esp32c3"
 @REM FIXME: Determine flash size from PlatformIO variant, this is unmaintainable.
-SET "BIGDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
+SET "BIGDB_8MB=crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
+SET "MUIDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator"
 SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite tlora-pager t-watch-s3 elecrow-adv"
 
 GOTO getopts
@@ -162,6 +164,15 @@ FOR %%a IN (%BIGDB_8MB%) DO (
 )
 :end_loop_bigdb_8mb
 
+FOR %%a IN (%MUIDB_8MB%) DO (
+    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
+        @REM We are working with any of %MUIDB_8MB%.
+        SET "MUIDB8=1"
+        GOTO end_loop_muidb_8mb
+    )
+)
+:end_loop_muidb_8mb
+
 FOR %%a IN (%BIGDB_16MB%) DO (
     IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
         @REM We are working with any of %BIGDB_16MB%.
@@ -172,6 +183,7 @@ FOR %%a IN (%BIGDB_16MB%) DO (
 :end_loop_bigdb_16mb
 
 IF %BIGDB8% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 8mb partition selected."
+IF %MUIDB8% EQU 1 CALL :LOG_MESSAGE INFO "MUIDB 8mb partition selected."
 IF %BIGDB16% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 16mb partition selected."
 
 @REM Extract BASENAME from %FILENAME% for later use.
@@ -216,6 +228,12 @@ IF %BIGDB8% EQU 1 (
     SET "SPIFFS_OFFSET=0x670000"
 )
 
+@REM Offsets for MUIDB 8mb.
+IF %MUIDB8% EQU 1 (
+    SET "OTA_OFFSET=0x5D0000"
+    SET "SPIFFS_OFFSET=0x670000"
+)
+
 @REM Offsets for BigDB 16mb.
 IF %BIGDB16% EQU 1 (
     SET "OTA_OFFSET=0x650000"
@@ -232,14 +250,14 @@ IF NOT EXIST !SPIFFS_FILENAME! CALL :LOG_MESSAGE ERROR "File does not exist: "!S
 
 @REM Flashing operations.
 CALL :LOG_MESSAGE INFO "Trying to flash "!FILENAME!", but first erasing and writing system information..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! erase-flash || GOTO eof
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash 0x00 "!FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! erase_flash || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash 0x00 "!FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Trying to flash BLEOTA "!OTA_FILENAME!" at OTA_OFFSET !OTA_OFFSET!..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !OTA_OFFSET! "!OTA_FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash !OTA_OFFSET! "!OTA_FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Trying to flash SPIFFS "!SPIFFS_FILENAME!" at SPIFFS_OFFSET !SPIFFS_OFFSET!..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !SPIFFS_OFFSET! "!SPIFFS_FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash !SPIFFS_OFFSET! "!SPIFFS_FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Script complete!."
 
@@ -251,9 +269,9 @@ EXIT /B %ERRORLEVEL%
 :RUN_ESPTOOL
 @REM Subroutine used to run ESPTOOL_CMD with arguments.
 @REM Also handles %ERRORLEVEL%.
-@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write-flash] [OFFSET] [Filename]
+@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write_flash] [OFFSET] [Filename]
 @REM.
-@REM Example:: CALL :RUN_ESPTOOL 115200 write-flash 0x10000 "firmwarefile.bin"
+@REM Example:: CALL :RUN_ESPTOOL 115200 write_flash 0x10000 "firmwarefile.bin"
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
 !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4

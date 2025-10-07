@@ -6,6 +6,8 @@ from os.path import join
 import subprocess
 import json
 import re
+import time
+from datetime import datetime
 
 from readprops import readProps
 
@@ -84,7 +86,7 @@ if platform.name == "espressif32":
 
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
-                      env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                      env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py \"$BUILD_DIR/firmware.hex\" -c -f 0xADA52840 -o \"$BUILD_DIR/firmware.uf2\"",
                                         "Generating UF2 file"))
 
 Import("projenv")
@@ -125,11 +127,16 @@ for pref in userPrefs:
         pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
 
 # General options that are passed to the C and C++ compilers
+# Calculate unix epoch for current day (midnight)
+current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+build_epoch = int(current_date.timestamp())
+
 flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
         "-DAPP_REPO=" + repo_owner,
+        "-DBUILD_EPOCH=" + str(build_epoch),
     ] + pref_flags
 
 print ("Using flags:")

@@ -181,12 +181,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-
+#if defined(M5STACK_UNITC6L)
+    const int fixedTopHeight = 24;
+    const int windowX = 0;
+    const int windowY = fixedTopHeight;
+    const int windowWidth = 64;
+    const int windowHeight = SCREEN_HEIGHT - fixedTopHeight;
+#else
     const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = SCREEN_WIDTH;
 
+#endif
     bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
 
@@ -201,7 +208,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         graphics::drawCommonHeader(display, x, y, titleStr);
         const char *messageString = "No messages";
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
+#if defined(M5STACK_UNITC6L)
+        display->drawString(center_text, windowY + (windowHeight / 2) - (FONT_HEIGHT_SMALL / 2) - 5, messageString);
+#else
         display->drawString(center_text, getTextPositions(display)[2], messageString);
+#endif
         return;
     }
 
@@ -209,6 +220,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     char headerStr[80];
     const char *sender = "???";
+#if defined(M5STACK_UNITC6L)
+    if (node && node->has_user)
+        sender = node->user.short_name;
+#else
     if (node && node->has_user) {
         if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
             sender = node->user.long_name;
@@ -216,6 +231,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             sender = node->user.short_name;
         }
     }
+#endif
     uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
     uint8_t timestampHours, timestampMinutes;
     int32_t daysAgo;
@@ -235,10 +251,61 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                      sender);
         }
     } else {
+#if defined(M5STACK_UNITC6L)
+        snprintf(headerStr, sizeof(headerStr), "%s from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                 sender);
+#else
         snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
                  sender);
+#endif
     }
+#if defined(M5STACK_UNITC6L)
+    graphics::drawCommonHeader(display, x, y, titleStr);
+    int headerY = getTextPositions(display)[1];
+    display->drawString(x, headerY, headerStr);
+    for (int separatorX = 0; separatorX < SCREEN_WIDTH; separatorX += 2) {
+        display->setPixel(separatorX, fixedTopHeight - 1);
+    }
+    cachedLines.clear();
+    std::string fullMsg(messageBuf);
+    std::string currentLine;
+    for (size_t i = 0; i < fullMsg.size();) {
+        unsigned char c = fullMsg[i];
+        size_t charLen = 1;
+        if ((c & 0xE0) == 0xC0)
+            charLen = 2;
+        else if ((c & 0xF0) == 0xE0)
+            charLen = 3;
+        else if ((c & 0xF8) == 0xF0)
+            charLen = 4;
+        std::string nextChar = fullMsg.substr(i, charLen);
+        std::string testLine = currentLine + nextChar;
+        if (display->getStringWidth(testLine.c_str()) > windowWidth) {
+            cachedLines.push_back(currentLine);
+            currentLine = nextChar;
+        } else {
+            currentLine = testLine;
+        }
 
+        i += charLen;
+    }
+    if (!currentLine.empty())
+        cachedLines.push_back(currentLine);
+    cachedHeights = calculateLineHeights(cachedLines, emotes);
+    int yOffset = windowY;
+    int linesDrawn = 0;
+    for (size_t i = 0; i < cachedLines.size(); ++i) {
+        if (linesDrawn >= 2)
+            break;
+        int lineHeight = cachedHeights[i];
+        if (yOffset + lineHeight > windowY + windowHeight)
+            break;
+        drawStringWithEmotes(display, windowX, yOffset, cachedLines[i], emotes, numEmotes);
+        yOffset += lineHeight;
+        linesDrawn++;
+    }
+    screen->forceDisplay();
+#else
     uint32_t now = millis();
 #ifndef EXCLUDE_EMOJI
     // === Bounce animation setup ===
@@ -355,6 +422,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Draw header at the end to sort out overlapping elements
     graphics::drawCommonHeader(display, x, y, titleStr);
+#endif
 }
 
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)

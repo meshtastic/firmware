@@ -12,12 +12,12 @@ NodeInfoModule *nodeInfoModule;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
-    auto p = *pptr;
-
     if (mp.from == nodeDB->getNodeNum()) {
         LOG_WARN("Ignoring packet supposed to be from our own node: %08x", mp.from);
         return false;
     }
+
+    auto p = *pptr;
     if (p.is_licensed != owner.is_licensed) {
         LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
         return true;
@@ -30,12 +30,30 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     bool wasBroadcast = isBroadcast(mp.to);
 
+    // LOG_DEBUG("did encode");
     // if user has changed while packet was not for us, inform phone
-    if (hasChanged && !wasBroadcast && !isToUs(&mp))
-        service->sendToPhone(packetPool.allocCopy(mp));
+    if (hasChanged && !wasBroadcast && !isToUs(&mp)) {
+        auto packetCopy = packetPool.allocCopy(mp); // Keep a copy of the packet for later analysis
+
+        // Re-encode the user protobuf, as we have stripped out the user.id
+        packetCopy->decoded.payload.size = pb_encode_to_bytes(
+            packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
+
+        service->sendToPhone(packetCopy);
+    }
 
     // LOG_DEBUG("did handleReceived");
     return false; // Let others look at this message also if they want
+}
+
+void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_User *p)
+{
+    // Coerce user.id to be derived from the node number
+    snprintf(p->id, sizeof(p->id), "!%08x", getFrom(&mp));
+
+    // Re-encode the altered protobuf back into the packet
+    mp.decoded.payload.size =
+        pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
 void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
@@ -44,7 +62,10 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
+    DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocReply();
+    DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
+
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
         p->decoded.want_response = (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
@@ -91,12 +112,9 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
             u.public_key.bytes[0] = 0;
             u.public_key.size = 0;
         }
-        // Coerce unmessagable for Repeater role
-        if (u.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-            u.has_is_unmessagable = true;
-            u.is_unmessagable = true;
-        }
 
+        // Clear the user.id field since it should be derived from node number on the receiving end
+        u.id[0] = '\0';
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();
         return allocDataProtobuf(u);

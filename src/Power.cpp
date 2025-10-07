@@ -851,9 +851,9 @@ void Power::readPowerStatus()
                 running++;
             }
         }
-        LOG_DEBUG(threadlist);
-        LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads", memGet.getFreeHeap(), memGet.getHeapSize(),
-                  memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
+        LOG_HEAP(threadlist);
+        LOG_HEAP("Heap status: %d/%d bytes free (%d), running %d/%d threads", memGet.getFreeHeap(), memGet.getHeapSize(),
+                 memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
         lastheap = memGet.getFreeHeap();
     }
 #ifdef DEBUG_HEAP_MQTT

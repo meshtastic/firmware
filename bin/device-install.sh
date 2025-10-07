@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 BPS_RESET=false
@@ -11,31 +11,33 @@ FIRMWARE_OFFSET=0x00
 
 # Variant groups
 BIGDB_8MB=(
-	"picomputer-s3"
-	"unphone"
-	"seeed-sensecap-indicator"
-	"crowpanel-esp32s3"
-	"heltec_capsule_sensor_v3"
-	"heltec-v3"
-	"heltec-vision-master-e213"
-	"heltec-vision-master-e290"
-	"heltec-vision-master-t190"
-	"heltec-wireless-paper"
-	"heltec-wireless-tracker"
-	"heltec-wsl-v3"
-	"icarus"
-	"seeed-xiao-s3"
-	"tbeam-s3-core"
-	"tracksenger"
+    "crowpanel-esp32s3"
+    "heltec_capsule_sensor_v3"
+    "heltec-v3"
+    "heltec-vision-master-e213"
+    "heltec-vision-master-e290"
+    "heltec-vision-master-t190"
+    "heltec-wireless-paper"
+    "heltec-wireless-tracker"
+    "heltec-wsl-v3"
+    "icarus"
+    "seeed-xiao-s3"
+    "tbeam-s3-core"
+    "tracksenger"
+)
+MUIDB_8MB=(
+    "picomputer-s3"
+    "unphone"
+    "seeed-sensecap-indicator"
 )
 BIGDB_16MB=(
-	"t-deck"
-	"mesh-tab"
-	"t-energy-s3"
-	"dreamcatcher"
-	"ESP32-S3-Pico"
-	"m5stack-cores3"
-	"station-g2"
+    "t-deck"
+    "mesh-tab"
+    "t-energy-s3"
+    "dreamcatcher"
+    "ESP32-S3-Pico"
+    "m5stack-cores3"
+    "station-g2"
     "t-eth-elite"
     "tlora-pager"
     "t-watch-s3"
@@ -110,8 +112,8 @@ while [ $# -gt 0 ]; do
         shift
         ;;
     --1200bps-reset)
-		    BPS_RESET=true
-		    ;;
+        BPS_RESET=true
+        ;;
     --) # Stop parsing options
         shift
         break
@@ -162,6 +164,13 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
         fi
     done
 
+    for variant in "${MUIDB_8MB[@]}"; do
+        if [ -z "${FILENAME##*"$variant"*}" ]; then
+            OFFSET=0x670000
+            OTA_OFFSET=0x5D0000
+        fi
+    done
+
     # littlefs* offset for BigDB 16mb and OTA OFFSET.
     for variant in "${BIGDB_16MB[@]}"; do
         if [ -z "${FILENAME##*"$variant"*}" ]; then
@@ -208,9 +217,9 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
     $ESPTOOL_CMD erase-flash
     $ESPTOOL_CMD write-flash $FIRMWARE_OFFSET "${FILENAME}"
     echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
-    $ESPTOOL_CMD write-flash $OTA_OFFSET "${OTAFILE}"
+    $ESPTOOL_CMD write_flash $OTA_OFFSET "${OTAFILE}"
     echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
-    $ESPTOOL_CMD write-flash $OFFSET "${SPIFFSFILE}"
+    $ESPTOOL_CMD write_flash $OFFSET "${SPIFFSFILE}"
 
 else
     show_help
