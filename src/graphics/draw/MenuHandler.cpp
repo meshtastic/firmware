@@ -422,6 +422,18 @@ void menuHandler::messageResponseMenu()
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
 
+#if defined(M5STACK_UNITC6L)
+    optionsArray[options] = "Respond Preset";
+#else
+    optionsArray[options] = "Respond via Preset";
+#endif
+    optionsEnumArray[options++] = Preset;
+
+    if (kb_found) {
+        optionsArray[options] = "Respond via Freetext";
+        optionsEnumArray[options++] = Freetext;
+    }
+
     optionsArray[options] = "Conversations";
     optionsEnumArray[options++] = ViewMode;
 
@@ -433,18 +445,6 @@ void menuHandler::messageResponseMenu()
 
     optionsArray[options] = "Dismiss Oldest";
     optionsEnumArray[options++] = DismissOldest;
-
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Reply Preset";
-#else
-    optionsArray[options] = "Reply via Preset";
-#endif
-    optionsEnumArray[options++] = Preset;
-
-    if (kb_found) {
-        optionsArray[options] = "Reply via Freetext";
-        optionsEnumArray[options++] = Freetext;
-    }
 
 #ifdef HAS_I2S
     optionsArray[options] = "Read Aloud";
