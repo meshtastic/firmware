@@ -381,7 +381,7 @@ void setup()
     io.pinMode(EXPANDS_DRV_EN, OUTPUT);
     io.digitalWrite(EXPANDS_DRV_EN, HIGH);
     io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.digitalWrite(EXPANDS_AMP_EN, LOW);
     io.pinMode(EXPANDS_LORA_EN, OUTPUT);
     io.digitalWrite(EXPANDS_LORA_EN, HIGH);
     io.pinMode(EXPANDS_GPS_EN, OUTPUT);
@@ -1600,8 +1600,13 @@ void loop()
 #endif
 
     service->loop();
-#if defined(LGFX_SDL)
-    if (screen) {
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS)
+    if (inputBroker)
+        inputBroker->processInputEventQueue();
+#endif
+#if ARCH_PORTDUINO && HAS_TFT
+    if (screen && portduino_config.displayPanel == x11 &&
+        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();
