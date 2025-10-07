@@ -439,11 +439,18 @@ void menuHandler::messageResponseMenu()
 
     // Only show Dismiss All in View All mode
     if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
-        optionsArray[options] = "Dismiss All";
+#if defined(M5STACK_UNITC6L)
+        optionsArray[options] = "Delete All";
+#else
+        optionsArray[options] = "Delete All Threads";
+#endif
         optionsEnumArray[options++] = DismissAll;
     }
-
-    optionsArray[options] = "Dismiss Oldest";
+#if defined(M5STACK_UNITC6L)
+    optionsArray[options] = "Delete Oldest";
+#else
+    optionsArray[options] = "Delete Oldest Message";
+#endif
     optionsEnumArray[options++] = DismissOldest;
 
 #ifdef HAS_I2S
