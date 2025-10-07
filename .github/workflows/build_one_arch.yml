@@ -134,7 +134,7 @@ jobs:
             ./firmware-*.bin
             ./firmware-*.uf2
             ./firmware-*.hex
-            ./firmware-*-ota.zip
+            ./firmware-*.zip
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
@@ -163,7 +163,7 @@ jobs:
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v4
         with:
-          name: debug-elfs-${{inputs.arch}}-${{ needs.version.outputs.long }}.zip
+          name: debug-elfs-${{inputs.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: ./*.elf
           retention-days: 30
