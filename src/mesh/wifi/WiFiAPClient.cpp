@@ -49,7 +49,7 @@ char ourHost[16];
 // To replace blocking wifi connect delay with a non-blocking sleep
 static unsigned long wifiReconnectStartMillis = 0;
 static bool wifiReconnectPending = false;
-static unsigned char wifiConnectAttempts=0;
+static unsigned char wifiConnectAttempts = 0;
 
 #ifndef MaxWifiConnectionAttempts
 #define  MaxWifiConnectionAttempts 6
