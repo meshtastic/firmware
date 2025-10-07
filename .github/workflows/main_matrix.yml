@@ -27,7 +27,6 @@ on:
 
 jobs:
   setup:
-    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: true
       matrix:
@@ -42,10 +41,6 @@ jobs:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
-      - name: Uncomment build epoch
-        shell: bash
-        run: |
-          sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
       - name: Generate matrix
         id: jsonStep
         run: |
@@ -62,7 +57,6 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
-    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
