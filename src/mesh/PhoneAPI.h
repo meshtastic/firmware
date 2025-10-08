@@ -3,6 +3,7 @@
 #include "Observer.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <deque>
 #include <iterator>
 #include <string>
 #include <unordered_map>
@@ -79,6 +80,10 @@ class PhoneAPI
 
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
+    // Small cache of node info entries so BLE reads can be served immediately instead of waiting on DB access.
+    std::deque<meshtastic_NodeInfo> nodeInfoQueue;
+
+    static constexpr size_t kNodePrefetchDepth = 4;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -157,6 +162,8 @@ class PhoneAPI
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
+
+    void prefetchNodeInfos();
 
     void releaseMqttClientProxyPhonePacket();
 
