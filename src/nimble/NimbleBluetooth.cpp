@@ -17,7 +17,7 @@
 #include "PowerStatus.h"
 #endif
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 #if defined(CONFIG_NIMBLE_CPP_IDF)
 #include "host/ble_gap.h"
 #else
@@ -238,7 +238,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE incoming connection %s", connInfo.getAddress().toString().c_str());
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
         const uint16_t connHandle = connInfo.getConnHandle();
         int phyResult =
             ble_gap_set_prefered_le_phy(connHandle, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_CODED_ANY);
@@ -364,7 +364,7 @@ void NimbleBluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     int mtuResult = NimBLEDevice::setMTU(kPreferredBleMtu);
     if (mtuResult == 0) {
         LOG_INFO("BLE MTU request set to %u", kPreferredBleMtu);
