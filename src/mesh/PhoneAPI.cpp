@@ -431,7 +431,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_OTHER_NODEINFOS: {
-        LOG_DEBUG("Send known nodes");
         if (nodeInfoForPhone.num != 0) {
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(nodeInfoForPhone.user.id, "!%08x", nodeInfoForPhone.num);
@@ -587,11 +586,17 @@ bool PhoneAPI::available()
             if (nextNode) {
                 nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
                 bool isUs = nodeInfoForPhone.num == nodeDB->getNodeNum();
-                nodeInfoForPhone.hops_away = isUs ? 0 : nodeInfoForPhone.hops_away;
-                nodeInfoForPhone.last_heard = isUs ? getValidTime(RTCQualityFromNet) : nodeInfoForPhone.last_heard;
-                nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
-                nodeInfoForPhone.via_mqtt = isUs ? false : nodeInfoForPhone.via_mqtt;
-                nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || isUs; // Our node is always a favorite
+                if (isUs) {
+                    // Optimize for our own node - batch the field updates
+                    nodeInfoForPhone.hops_away = 0;
+                    nodeInfoForPhone.last_heard = getValidTime(RTCQualityFromNet);
+                    nodeInfoForPhone.snr = 0;
+                    nodeInfoForPhone.via_mqtt = false;
+                    nodeInfoForPhone.is_favorite = true;
+                } else {
+                    // For other nodes, preserve existing values but ensure is_favorite is set correctly
+                    nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || false;
+                }
                 onNowHasData(0);
             }
         }
