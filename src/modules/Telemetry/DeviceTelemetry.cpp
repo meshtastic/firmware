@@ -121,6 +121,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instance->txRelay;
+        telemetry.variant.local_stats.num_tx_dropped = RadioLibInterface::instance->txDrop;
     }
 #ifdef ARCH_PORTDUINO
     if (SimRadio::instance) {
@@ -128,6 +129,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx = SimRadio::instance->rxGood + SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = SimRadio::instance->txRelay;
+        telemetry.variant.local_stats.num_tx_dropped = SimRadio::instance->txDrop;
     }
 #else
     telemetry.variant.local_stats.heap_total_bytes = memGet.getHeapSize();

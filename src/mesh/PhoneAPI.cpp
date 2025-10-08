@@ -433,6 +433,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_OTHER_NODEINFOS: {
         LOG_DEBUG("Send known nodes");
         if (nodeInfoForPhone.num != 0) {
+            // Just in case we stored a different user.id in the past, but should never happen going forward
+            sprintf(nodeInfoForPhone.user.id, "!%08x", nodeInfoForPhone.num);
             LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
                      nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;

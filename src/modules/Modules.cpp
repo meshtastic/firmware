@@ -148,7 +148,8 @@ void setupModules()
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
-    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TAK, meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
         atakPluginModule = new AtakPluginModule();
     }
 #endif

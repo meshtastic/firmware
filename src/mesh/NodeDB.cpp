@@ -256,6 +256,8 @@ NodeDB::NodeDB()
     owner.role = config.device.role;
     // Ensure macaddr is set to our macaddr as it will be copied in our info below
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    // Ensure owner.id is always derived from the node number
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
 
     if (!config.has_security) {
         config.has_security = true;
@@ -1152,6 +1154,20 @@ void NodeDB::loadFromDisk()
     spiLock->unlock();
 #endif
 #ifdef FSCom
+#ifdef FACTORY_INSTALL
+    spiLock->lock();
+    if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
+        LOG_WARN("Factory Install Reset!");
+        FSCom.format();
+        FSCom.mkdir("/prefs");
+        File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
+        if (f2) {
+            f2.flush();
+            f2.close();
+        }
+    }
+    spiLock->unlock();
+#endif
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
         spiLock->unlock();
@@ -1677,6 +1693,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 #endif
 
+    // Always ensure user.id is derived from nodeId, regardless of what was received
+    snprintf(p.id, sizeof(p.id), "!%08x", nodeId);
+
     // Both of info->user and p start as filled with zero so I think this is okay
     auto lite = TypeConversions::ConvertToUserLite(p);
     bool changed = memcmp(&info->user, &lite, sizeof(info->user)) || (info->channel != channelIndex);
@@ -1853,6 +1872,13 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
         return 0; // defaults to PRIMARY
     }
     return info->channel;
+}
+
+std::string NodeDB::getNodeId() const
+{
+    char nodeId[16];
+    snprintf(nodeId, sizeof(nodeId), "!%08x", myNodeInfo.my_node_num);
+    return std::string(nodeId);
 }
 
 /// Find a node in our DB, return null for missing
