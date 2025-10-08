@@ -33,6 +33,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "pcf8563.h"
 #endif
 
+/* Offer chance for variant-specific defines */
+#include "variant.h"
+
 // -----------------------------------------------------------------------------
 // Version
 // -----------------------------------------------------------------------------
@@ -259,9 +262,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
-
-/* Step #1: offer chance for variant-specific defines */
-#include "variant.h"
 
 #if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
 // Older variant.h files might not be defining this value, so stay with the old default
