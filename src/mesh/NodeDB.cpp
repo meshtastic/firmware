@@ -2256,6 +2256,13 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 #endif
 }
 
+std::string NodeDB::getNodeId() const
+{
+    char nodeId[16];
+    snprintf(nodeId, sizeof(nodeId), "!%08x", myNodeInfo.my_node_num);
+    return std::string(nodeId);
+}
+
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
