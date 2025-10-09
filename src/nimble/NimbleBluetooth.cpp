@@ -120,14 +120,19 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
 #endif
     {
-        int tries = 0;
-        bluetoothPhoneAPI->phoneWants = true;
-        while (!bluetoothPhoneAPI->hasChecked && tries < 100) {
-            bluetoothPhoneAPI->setIntervalFromNow(0);
-            delay(20);
-            tries++;
-        }
         std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
+
+        // If we don't have fresh data, trigger a refresh
+        if (!bluetoothPhoneAPI->hasChecked || bluetoothPhoneAPI->numBytes == 0) {
+            bluetoothPhoneAPI->phoneWants = true;
+            bluetoothPhoneAPI->setIntervalFromNow(0);
+
+            // Get fresh data immediately
+            bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
+            bluetoothPhoneAPI->hasChecked = true;
+        }
+
+        // Set the characteristic value with whatever data we have
         pCharacteristic->setValue(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes);
 
         if (bluetoothPhoneAPI->numBytes != 0) // if we did send something, queue it up right away to reload
