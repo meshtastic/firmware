@@ -802,7 +802,9 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
     }
 
     // No setFrames() here anymore
-    setThreadFor(sm, packet);
+    if (packet.from == 0) {
+        setThreadFor(sm, packet);
+    }
     resetScrollState();
 }
 

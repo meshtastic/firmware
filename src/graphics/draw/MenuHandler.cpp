@@ -864,7 +864,7 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, Remove, TraceRoute, enumEnd };
+    enum optionsNumbers { Back, Preset, Freetext, ViewConversation, Remove, TraceRoute, enumEnd };
 #if defined(M5STACK_UNITC6L)
     static const char *optionsArray[enumEnd] = {"Back", "New Preset"};
 #else
@@ -877,6 +877,21 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+
+    // Only show "View Conversation" if a message exists with this node
+    uint32_t peer = graphics::UIRenderer::currentFavoriteNodeNum;
+    bool hasConversation = false;
+    for (const auto &m : messageStore.getMessages()) {
+        if ((m.sender == peer || m.dest == peer)) {
+            hasConversation = true;
+            break;
+        }
+    }
+    if (hasConversation) {
+        optionsArray[options] = "View Conversation";
+        optionsEnumArray[options++] = ViewConversation;
+    }
+
 #if !defined(M5STACK_UNITC6L)
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
@@ -898,7 +913,25 @@ void menuHandler::favoriteBaseMenu()
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if (selected == Remove) {
+        } 
+        // Handle new View Conversation action
+        else if (selected == ViewConversation) {
+            // Switch thread to direct conversation with this node
+            graphics::MessageRenderer::setThreadMode(
+                graphics::MessageRenderer::ThreadMode::DIRECT,
+                -1,
+                graphics::UIRenderer::currentFavoriteNodeNum
+            );
+
+            // Reset scroll state for a fresh view
+            graphics::MessageRenderer::resetScrollState();
+
+            // Manually create and send a UIFrameEvent to trigger the jump
+            UIFrameEvent evt;
+            evt.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+            screen->handleUIFrameEvent(&evt);
+        }
+        else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
         } else if (selected == TraceRoute) {
