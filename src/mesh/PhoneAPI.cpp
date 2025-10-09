@@ -734,7 +734,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
         LOG_INFO("Tell client we have new packets %u", newValue);
         onNowHasData(newValue);
     } else {
-        LOG_DEBUG("(Client not yet interested in packets)");
+        LOG_DEBUG("Client not yet interested in packets (state=%d)", state);
     }
 
     return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one
