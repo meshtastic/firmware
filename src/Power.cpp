@@ -691,6 +691,16 @@ bool Power::setup()
 #ifdef NRF_APM
     found = true;
 #endif
+#ifdef EXT_PWR_DETECT
+    attachInterrupt(
+        EXT_PWR_DETECT,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+        },
+        CHANGE);
+#endif
 
     enabled = found;
     low_voltage_counter = 0;
