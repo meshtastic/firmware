@@ -864,19 +864,11 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, ViewConversation, Remove, TraceRoute, enumEnd };
-#if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[enumEnd] = {"Back", "New Preset"};
-#else
-    static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
-#endif
-    static int optionsEnumArray[enumEnd] = {Back, Preset};
-    int options = 2;
+    enum optionsNumbers { Back, Preset, Freetext, GoToThread, Remove, TraceRoute, enumEnd };
 
-    if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
-        optionsEnumArray[options++] = Freetext;
-    }
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
 
     // Only show "View Conversation" if a message exists with this node
     uint32_t peer = graphics::UIRenderer::currentFavoriteNodeNum;
@@ -888,8 +880,19 @@ void menuHandler::favoriteBaseMenu()
         }
     }
     if (hasConversation) {
-        optionsArray[options] = "View Conversation";
-        optionsEnumArray[options++] = ViewConversation;
+        optionsArray[options] = "Go To Thread";
+        optionsEnumArray[options++] = GoToThread;
+    }
+#if defined(M5STACK_UNITC6L)
+    optionsArray[options] = "New Preset";
+#else
+    optionsArray[options] = "New Preset Msg";
+#endif
+    optionsEnumArray[options++] = Preset;
+
+    if (kb_found) {
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
     }
 
 #if !defined(M5STACK_UNITC6L)
@@ -913,15 +916,12 @@ void menuHandler::favoriteBaseMenu()
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } 
-        // Handle new View Conversation action
-        else if (selected == ViewConversation) {
+        }
+        // Handle new Go To Thread action
+        else if (selected == GoToThread) {
             // Switch thread to direct conversation with this node
-            graphics::MessageRenderer::setThreadMode(
-                graphics::MessageRenderer::ThreadMode::DIRECT,
-                -1,
-                graphics::UIRenderer::currentFavoriteNodeNum
-            );
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
+                                                     graphics::UIRenderer::currentFavoriteNodeNum);
 
             // Reset scroll state for a fresh view
             graphics::MessageRenderer::resetScrollState();
@@ -930,8 +930,7 @@ void menuHandler::favoriteBaseMenu()
             UIFrameEvent evt;
             evt.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
             screen->handleUIFrameEvent(&evt);
-        }
-        else if (selected == Remove) {
+        } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
         } else if (selected == TraceRoute) {
