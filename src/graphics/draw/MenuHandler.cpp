@@ -434,7 +434,7 @@ void menuHandler::messageResponseMenu()
         optionsEnumArray[options++] = Freetext;
     }
 
-    optionsArray[options] = "Conversations";
+    optionsArray[options] = "View Chats";
     optionsEnumArray[options++] = ViewMode;
 
     // Only show Dismiss All in View All mode
@@ -554,7 +554,7 @@ void menuHandler::messageViewModeMenu()
 
     labels.push_back("Back");
     ids.push_back(-1);
-    labels.push_back("View All");
+    labels.push_back("View All Chats");
     ids.push_back(-2);
 
     // Channels with messages
@@ -864,7 +864,7 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, GoToThread, Remove, TraceRoute, enumEnd };
+    enum optionsNumbers { Back, Preset, Freetext, GoToChat, Remove, TraceRoute, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -880,8 +880,8 @@ void menuHandler::favoriteBaseMenu()
         }
     }
     if (hasConversation) {
-        optionsArray[options] = "Go To Thread";
-        optionsEnumArray[options++] = GoToThread;
+        optionsArray[options] = "Go To Chat";
+        optionsEnumArray[options++] = GoToChat;
     }
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "New Preset";
@@ -918,7 +918,7 @@ void menuHandler::favoriteBaseMenu()
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         }
         // Handle new Go To Thread action
-        else if (selected == GoToThread) {
+        else if (selected == GoToChat) {
             // Switch thread to direct conversation with this node
             graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
                                                      graphics::UIRenderer::currentFavoriteNodeNum);
