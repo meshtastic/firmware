@@ -31,11 +31,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     std::vector<NimBLEAttValue> nimble_queue;
     std::mutex nimble_mutex;
     uint8_t queue_size = 0;
-    bool has_fromRadio = false;
     uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
     size_t numBytes = 0;
-    bool hasChecked = false;
-    bool phoneWants = false;
 
   protected:
     virtual int32_t runOnce() override
@@ -48,10 +45,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             LOG_DEBUG("Queue_size %u", queue_size);
             queue_size = 0;
         }
-        if (hasChecked == false && phoneWants == true) {
-            numBytes = getFromRadio(fromRadioBytes);
-            hasChecked = true;
-        }
+        // Note: phoneWants/hasChecked logic removed since onRead() handles getFromRadio() directly
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
         return INT32_MAX;
@@ -122,15 +116,8 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     {
         std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
 
-        // If we don't have fresh data, trigger a refresh
-        if (!bluetoothPhoneAPI->hasChecked || bluetoothPhoneAPI->numBytes == 0) {
-            bluetoothPhoneAPI->phoneWants = true;
-            bluetoothPhoneAPI->setIntervalFromNow(0);
-
-            // Get fresh data immediately
-            bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
-            bluetoothPhoneAPI->hasChecked = true;
-        }
+        // Get fresh data immediately when client reads
+        bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
 
         // Set the characteristic value with whatever data we have
         pCharacteristic->setValue(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes);
@@ -138,8 +125,6 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
         if (bluetoothPhoneAPI->numBytes != 0) // if we did send something, queue it up right away to reload
             bluetoothPhoneAPI->setIntervalFromNow(0);
         bluetoothPhoneAPI->numBytes = 0;
-        bluetoothPhoneAPI->hasChecked = false;
-        bluetoothPhoneAPI->phoneWants = false;
     }
 };
 
@@ -248,8 +233,6 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         if (bluetoothPhoneAPI) {
             std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
             bluetoothPhoneAPI->close();
-            bluetoothPhoneAPI->hasChecked = false;
-            bluetoothPhoneAPI->phoneWants = false;
             bluetoothPhoneAPI->numBytes = 0;
             bluetoothPhoneAPI->queue_size = 0;
         }
