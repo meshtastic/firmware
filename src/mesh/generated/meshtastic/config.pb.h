@@ -357,6 +357,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* Controls buzzer behavior for audio feedback
  Defaults to ENABLED */
     meshtastic_Config_DeviceConfig_BuzzerMode buzzer_mode;
+    /* Tell the node to persist favourited nodes following a NodeDB reset. */
+    bool preserve_favourites;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -723,7 +725,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN, 0}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
@@ -734,7 +736,7 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN, 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
@@ -758,6 +760,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_tzdef_tag 11
 #define meshtastic_Config_DeviceConfig_led_heartbeat_disabled_tag 12
 #define meshtastic_Config_DeviceConfig_buzzer_mode_tag 13
+#define meshtastic_Config_DeviceConfig_preserve_favourites_tag 14
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -883,7 +886,8 @@ X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9) \
 X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10) \
 X(a, STATIC,   SINGULAR, STRING,   tzdef,            11) \
 X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12) \
-X(a, STATIC,   SINGULAR, UENUM,    buzzer_mode,      13)
+X(a, STATIC,   SINGULAR, UENUM,    buzzer_mode,      13) \
+X(a, STATIC,   SINGULAR, BOOL,     preserve_favourites,  14)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -1030,7 +1034,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      100
+#define meshtastic_Config_DeviceConfig_size      102
 #define meshtastic_Config_DisplayConfig_size     34
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
