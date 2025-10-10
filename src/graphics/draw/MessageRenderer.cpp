@@ -722,16 +722,11 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         hasUnreadMessage = true;
 
         // Determine if message belongs to a muted channel
-        bool isMuted = false;
+        bool isChannelMuted = false;
         if (sm.type == MessageType::BROADCAST) {
             const meshtastic_Channel channel = channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
             if (channel.settings.mute)
-                isMuted = true;
-        }
-
-        if (shouldWakeOnReceivedMessage()) {
-            screen->setOn(true);
-            // screen->forceDisplay();  <-- remove, let Screen handle this
+                isChannelMuted = true;
         }
 
         // Banner logic
@@ -760,7 +755,7 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
                 strcpy(banner, "Alert Received");
         } else {
             // Skip muted channels unless it's an alert
-            if (isMuted)
+            if (isChannelMuted)
                 return;
 
             if (longName && longName[0]) {
@@ -809,18 +804,11 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
 
-#if defined(M5STACK_UNITC6L)
-        screen->setOn(true);
-        screen->showSimpleBanner(banner, inThread ? 1000 : 1500);
-
-        // Only beep if allowed by device settings or alert rules
-        if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-            (isAlert && moduleConfig.external_notification.alert_bell_buzzer) || (!isBroadcast(packet.to) && isToUs(packet))) {
-            playLongBeep();
+        if (shouldWakeOnReceivedMessage()) {
+            screen->setOn(true);
         }
-#else
+
         screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
-#endif
     }
 
     // No setFrames() here anymore
