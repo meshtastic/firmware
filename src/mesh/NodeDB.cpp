@@ -402,6 +402,11 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        saveFavourites == true;
+    }
 #ifdef USERPREFS_FIRMWARE_EDITION
     myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #endif
@@ -983,7 +988,18 @@ void NodeDB::resetNodes()
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    if (saveFavourites) {
+        for (size_t i = 0; i < nodeDatabase.nodes.size(); i++) {
+            meshtastic_NodeInfoLite &node = nodeDatabase.nodes[i];
+            if (i > 0 && !node.is_favorite) {
+                node = meshtastic_NodeInfoLite();
+            } else {
+                numMeshNodes += 1;
+            }
+        };
+    } else {
+        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    }
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
