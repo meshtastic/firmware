@@ -2,6 +2,11 @@
 
 #if HAS_SCREEN
 
+// Disable debug logging entirely on release builds of HELTEC_MESH_SOLAR for space constraints
+#if defined(HELTEC_MESH_SOLAR)
+#define LOG_DEBUG(...)
+#endif
+
 // Disable message persistence to flash if you’re short on space
 #ifndef ENABLE_MESSAGE_PERSISTENCE
 #define ENABLE_MESSAGE_PERSISTENCE 1
