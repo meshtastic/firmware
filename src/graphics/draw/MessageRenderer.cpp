@@ -379,28 +379,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
 
-        // Build header line for this message
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
-        const char *sender = "???";
-#if defined(M5STACK_UNITC6L)
-        if (node && node->has_user)
-            sender = node->user.short_name;
-#else
-        if (node && node->has_user) {
-            if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
-                sender = node->user.long_name;
-            } else {
-                sender = node->user.short_name;
-            }
-        }
-#endif
-
-        // If this is *our own* message, override sender to "Me"
-        bool mine = (m.sender == nodeDB->getNodeNum());
-        if (mine) {
-            sender = "Me";
-        }
-
         // Channel / destination labeling
         char chanType[32] = "";
         if (currentMode == ThreadMode::ALL) {
@@ -442,13 +420,44 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (invalidTime) {
             snprintf(timeBuf, sizeof(timeBuf), "???");
         } else if (seconds < 60) {
-            snprintf(timeBuf, sizeof(timeBuf), "%us ago", seconds);
+            snprintf(timeBuf, sizeof(timeBuf), "%us", seconds);
         } else if (seconds < 3600) {
-            snprintf(timeBuf, sizeof(timeBuf), "%um ago", seconds / 60);
+            snprintf(timeBuf, sizeof(timeBuf), "%um", seconds / 60);
         } else if (seconds < 86400) {
-            snprintf(timeBuf, sizeof(timeBuf), "%uh ago", seconds / 3600);
+            snprintf(timeBuf, sizeof(timeBuf), "%uh", seconds / 3600);
         } else {
-            snprintf(timeBuf, sizeof(timeBuf), "%ud ago", seconds / 86400);
+            snprintf(timeBuf, sizeof(timeBuf), "%ud", seconds / 86400);
+        }
+
+        // Build header line for this message
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
+        const char *sender = "???";
+        if (node && node->has_user) {
+            sender = node->user.long_name;
+        }
+
+        // If this is *our own* message, override sender to "Me"
+        bool mine = (m.sender == nodeDB->getNodeNum());
+        if (mine) {
+            sender = "Me";
+        }
+
+        if (display->getStringWidth(sender) + display->getStringWidth(timeBuf) + display->getStringWidth(chanType) +
+                display->getStringWidth(" @") + display->getStringWidth("... ") - 10 >
+            SCREEN_WIDTH) {
+            // truncate sender name if too long
+            int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
+                             display->getStringWidth(" @") - display->getStringWidth("... ") - 10;
+            int len = strlen(sender);
+            while (len > 0 && display->getStringWidth(sender, len) > availWidth) {
+                len--;
+            }
+            if (len < (int)strlen(sender)) {
+                // we need to truncate
+                char truncated[32];
+                snprintf(truncated, sizeof(truncated), "%.*s...", len, sender);
+                sender = truncated;
+            }
         }
 
         // Final header line
