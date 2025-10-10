@@ -2136,6 +2136,48 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     }
 }
 
+// Return SNR limit based on modem preset
+static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    switch (preset) {
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+        return -6.0f;
+    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        return -5.5f;
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        return -4.5f;
+    default:
+        return -6.0f;
+    }
+}
+
+// Return Good/Fair/Bad label and set 1–5 bars based on SNR and RSSI
+static const char *getSignalGrade(float snr, int32_t rssi, float snrLimit, int &bars)
+{
+    // 5-bar logic: strength inside Good/Fair/Bad category
+    if (snr > snrLimit && rssi > -10) {
+        bars = 5; // very strong good
+        return "Good";
+    } else if (snr > snrLimit && rssi > -20) {
+        bars = 4; // normal good
+        return "Good";
+    } else if (snr > 0 && rssi > -50) {
+        bars = 3; // weaker good (on edge of fair)
+        return "Good";
+    } else if (snr > -10 && rssi > -100) {
+        bars = 2; // fair
+        return "Fair";
+    } else {
+        bars = 1; // bad
+        return "Bad";
+    }
+}
+
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     // Only process routing ACK/NACK packets that are responses to our own outbound
@@ -2206,20 +2248,10 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 const char *channelName = channels.getName(this->channel);
                 const char *nodeName = getNodeName(this->incoming);
 
-                // Signal quality calculation (Good / Fair / Bad)
-                const char *qualityLabel;
+                // Calculate signal quality and bars based on preset, SNR, and RSSI
+                float snrLimit = getSnrLimit(config.lora.modem_preset);
                 int bars = 0;
-
-                if (lastRxSnr > -7 && lastRxRssi > -110) {
-                    qualityLabel = "Good";
-                    bars = 4;
-                } else if (lastRxSnr > -15 && lastRxRssi > -120) {
-                    qualityLabel = "Fair";
-                    bars = 2;
-                } else {
-                    qualityLabel = "Bad";
-                    bars = 1;
-                }
+                const char *qualityLabel = getSignalGrade(this->lastRxSnr, this->lastRxRssi, snrLimit, bars);
 
                 if (this->ack) {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
