@@ -38,7 +38,7 @@ extern bool hasUnreadMessage;
 
 namespace graphics
 {
-
+int bannerSignalBars = -1;
 InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
@@ -461,10 +461,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
                                                uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth)
 {
-
     bool is_picker = false;
     uint16_t lineCount = 0;
-    // === Layout Configuration ===
+
+    // Layout Configuration
     constexpr uint16_t hPadding = 5;
     constexpr uint16_t vPadding = 2;
     bool needs_bell = false;
@@ -478,13 +478,31 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    // Measure all lines and calculate widest width
+    uint16_t widestLineWithBars = 0;
+
     while (lines[lineCount] != nullptr) {
         auto newlinePointer = strchr(lines[lineCount], '\n');
         if (newlinePointer)
             lineLengths[lineCount] = (newlinePointer - lines[lineCount]); // Check for newlines first
-        else // if the newline wasn't found, then pull string length from strlen
-            lineLengths[lineCount] = strlen(lines[lineCount]);
+        else
+            lineLengths[lineCount] = strlen(lines[lineCount]); // Fallback to strlen if no newline
+
         lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+
+        // Calculate potential width including signal bars (without altering per-line widths)
+        uint16_t potentialWidth = lineWidths[lineCount];
+        if (bannerSignalBars >= 0 && strstr(lines[lineCount], "Signal:") != nullptr) {
+            const int totalBars = 5;
+            const int barWidth = 3;
+            const int barSpacing = 2;
+            int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + 6;
+            potentialWidth += barsWidth;
+        }
+
+        if (potentialWidth > widestLineWithBars)
+            widestLineWithBars = potentialWidth;
+
         if (!is_picker) {
             needs_bell |= (strstr(alertBannerMessage, "Alert Received") != nullptr);
             if (lineWidths[lineCount] > maxWidth)
@@ -492,10 +510,15 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         }
         lineCount++;
     }
-    // count lines
+
+    // Use widestLineWithBars to size the box if signal bars exist
+    if (widestLineWithBars > maxWidth)
+        maxWidth = widestLineWithBars;
 
     uint16_t boxWidth = hPadding * 2 + maxWidth;
+
 #if defined(M5STACK_UNITC6L)
+    // Special sizing rules for M5STACK_UNITC6L
     if (needs_bell) {
         if (isHighResolution && boxWidth <= 150)
             boxWidth += 26;
@@ -527,7 +550,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             boxTop = 0;
     }
 
-    // === Draw Box ===
+    // Draw Box
     display->setColor(BLACK);
     display->fillRect(boxLeft, boxTop, boxWidth, boxHeight);
     display->setColor(WHITE);
@@ -541,89 +564,71 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
-    int16_t lineY = boxTop + vPadding;
-    int swingRange = 8;
-    static int swingOffset = 0;
-    static bool swingRight = true;
-    static unsigned long lastSwingTime = 0;
-    unsigned long now = millis();
-    int swingSpeedMs = 10 / (swingRange * 2);
-    if (now - lastSwingTime >= (unsigned long)swingSpeedMs) {
-        lastSwingTime = now;
-        if (swingRight) {
-            swingOffset++;
-            if (swingOffset >= swingRange)
-                swingRight = false;
-        } else {
-            swingOffset--;
-            if (swingOffset <= 0)
-                swingRight = true;
-        }
-    }
-    for (int i = 0; i < lineCount; i++) {
-        bool isTitle = (i == 0);
-        int globalOptionIndex = (i - 1) + firstOptionToShow;
-        bool isSelectedOption = (!isTitle && globalOptionIndex >= 0 && globalOptionIndex == curSelected);
 
-        uint16_t visibleWidth = 64 - hPadding * 2;
-        if (totalLines > visibleTotalLines)
-            visibleWidth -= 6;
+    // Draw Content
+    int16_t lineY = boxTop + vPadding;
+    for (int i = 0; i < lineCount; i++) {
         char lineBuffer[lineLengths[i] + 1];
         strncpy(lineBuffer, lines[i], lineLengths[i]);
         lineBuffer[lineLengths[i]] = '\0';
 
-        if (isTitle) {
-            if (visibleTotalLines == 1) {
-                display->setColor(BLACK);
-                display->fillRect(boxLeft, boxTop, boxWidth, effectiveLineHeight);
-                display->setColor(WHITE);
-                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, boxTop, lineBuffer);
-            } else {
-                display->setColor(WHITE);
-                display->fillRect(boxLeft, boxTop, boxWidth, effectiveLineHeight);
-                display->setColor(BLACK);
-                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, boxTop, lineBuffer);
-                display->setColor(WHITE);
-                if (needs_bell) {
-                    int bellY = boxTop + (FONT_HEIGHT_SMALL - 8) / 2;
-                    display->drawXbm(boxLeft + (boxWidth - lineWidths[i]) / 2 - 10, bellY, 8, 8, bell_alert);
-                    display->drawXbm(boxLeft + (boxWidth + lineWidths[i]) / 2 + 2, bellY, 8, 8, bell_alert);
+        bool isSignalLine = (bannerSignalBars >= 0 && strstr(lineBuffer, "Signal:") != nullptr);
+
+        if (isSignalLine) {
+            // Center text + signal bars as a single group
+            const int totalBars = 5;
+            const int barWidth = 3;
+            const int barSpacing = 2;
+            const int barHeightStep = 2;
+
+            int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
+            int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + 6;
+            int totalWidth = textWidth + barsWidth;
+
+            int groupStartX = boxLeft + (boxWidth - totalWidth) / 2;
+
+            display->drawString(groupStartX, lineY, lineBuffer);
+
+            int baseX = groupStartX + textWidth + 6;
+            int baseY = lineY + effectiveLineHeight - 1;
+
+            for (int b = 0; b < totalBars; b++) {
+                int barHeight = (b + 1) * barHeightStep;
+                int x = baseX + b * (barWidth + barSpacing);
+                int y = baseY - barHeight;
+
+                if (b < bannerSignalBars) {
+                    display->fillRect(x, y, barWidth, barHeight);
+                } else {
+                    display->drawRect(x, y, barWidth, barHeight);
                 }
             }
-            lineY = boxTop + effectiveLineHeight + 1;
-        } else if (isSelectedOption) {
-            display->setColor(WHITE);
-            display->fillRect(boxLeft, lineY, boxWidth, effectiveLineHeight);
-            display->setColor(BLACK);
-            if (lineLengths[i] > 15 && lineWidths[i] > visibleWidth) {
-                int textX = boxLeft + hPadding + swingOffset;
-                display->drawString(textX, lineY - 1, lineBuffer);
-            } else {
-                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, lineY - 1, lineBuffer);
-            }
-            display->setColor(WHITE);
-            lineY += effectiveLineHeight;
         } else {
-            display->setColor(BLACK);
-            display->fillRect(boxLeft, lineY, boxWidth, effectiveLineHeight);
-            display->setColor(WHITE);
-            display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, lineY, lineBuffer);
-            lineY += effectiveLineHeight;
+            int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
+            display->drawString(textX, lineY, lineBuffer);
         }
+
+        lineY += effectiveLineHeight;
     }
+
+    // Scroll Bar (Thicker, inside box, not over title)
     if (totalLines > visibleTotalLines) {
         const uint8_t scrollBarWidth = 5;
         int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
         int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight;
         uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
+
         float ratio = (float)visibleTotalLines / totalLines;
         uint16_t indicatorHeight = std::max((int)(scrollBarHeight * ratio), 4);
         float scrollRatio = (float)(firstOptionToShow + lineCount - visibleTotalLines) / (totalLines - visibleTotalLines);
         uint16_t indicatorY = scrollBarY + scrollRatio * (scrollBarHeight - indicatorHeight);
+
         display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
         display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
     }
+
 #else
+    // Default (non-M5STACK) layout
     if (needs_bell) {
         if (isHighResolution && boxWidth <= 150)
             boxWidth += 26;
@@ -647,7 +652,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
     boxHeight += (isHighResolution) ? 2 : 1;
 
-    // === Draw Box ===
+    // Draw Box
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
     display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
@@ -663,46 +668,57 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
 
-    // === Draw Content ===
+    // Draw Content
     int16_t lineY = boxTop + vPadding;
     for (int i = 0; i < lineCount; i++) {
-        int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
-        if (needs_bell && i == 0) {
-            int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;
-            display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
-            display->drawXbm(textX + lineWidths[i] + 2, bellY, 8, 8, bell_alert);
-        }
         char lineBuffer[lineLengths[i] + 1];
         strncpy(lineBuffer, lines[i], lineLengths[i]);
         lineBuffer[lineLengths[i]] = '\0';
-        // Determine if this is a pop-up or a pick list
-        if (alertBannerOptions > 0 && i == 0) {
-            // Pick List
-            display->setColor(WHITE);
-            int background_yOffset = 1;
-            // Determine if we have low hanging characters
-            if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
-                background_yOffset = -1;
+
+        bool isSignalLine = (bannerSignalBars >= 0 && strstr(lineBuffer, "Signal:") != nullptr);
+
+        if (isSignalLine) {
+            // Center text + signal bars as a single group
+            const int totalBars = 5;
+            const int barWidth = 3;
+            const int barSpacing = 2;
+            const int barHeightStep = 2;
+
+            int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
+            int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + 6;
+            int totalWidth = textWidth + barsWidth;
+
+            int groupStartX = boxLeft + (boxWidth - totalWidth) / 2;
+
+            display->drawString(groupStartX, lineY, lineBuffer);
+
+            int baseX = groupStartX + textWidth + 6;
+            int baseY = lineY + effectiveLineHeight - 1;
+
+            for (int b = 0; b < totalBars; b++) {
+                int barHeight = (b + 1) * barHeightStep;
+                int x = baseX + b * (barWidth + barSpacing);
+                int y = baseY - barHeight;
+
+                if (b < bannerSignalBars) {
+                    display->fillRect(x, y, barWidth, barHeight);
+                } else {
+                    display->drawRect(x, y, barWidth, barHeight);
+                }
             }
-            display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
-            display->setColor(BLACK);
-            int yOffset = 3;
-            display->drawString(textX, lineY - yOffset, lineBuffer);
-            display->setColor(WHITE);
-            lineY += (effectiveLineHeight - 2 - background_yOffset);
         } else {
-            // Pop-up
+            int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
             display->drawString(textX, lineY, lineBuffer);
-            lineY += (effectiveLineHeight);
         }
+
+        lineY += effectiveLineHeight;
     }
 
-    // === Scroll Bar (Thicker, inside box, not over title) ===
+    // Scroll Bar (Thicker, inside box, not over title)
     if (totalLines > visibleTotalLines) {
         const uint8_t scrollBarWidth = 5;
-
         int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
-        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight; // start after title line
+        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight;
         uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
 
         float ratio = (float)visibleTotalLines / totalLines;

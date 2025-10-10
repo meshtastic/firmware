@@ -44,6 +44,10 @@ extern MessageStore messageStore;
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+namespace graphics
+{
+extern int bannerSignalBars;
+}
 extern ScanI2C::DeviceAddress cardkb_found;
 extern bool graphics::isMuted;
 extern bool osk_found;
@@ -2167,7 +2171,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             } else if (isAck) {
                 // Relay ACK → mark as RELAYED, still no final ACK
                 this->ack = false;
-                waitingForAck = false; // don’t wait for more
+                waitingForAck = false;
             } else {
                 // Explicit failure
                 this->ack = false;
@@ -2202,18 +2206,33 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 const char *channelName = channels.getName(this->channel);
                 const char *nodeName = getNodeName(this->incoming);
 
+                // Signal quality calculation (Good / Fair / Bad)
+                const char *qualityLabel;
+                int bars = 0;
+
+                if (lastRxSnr > -7 && lastRxRssi > -110) {
+                    qualityLabel = "Good";
+                    bars = 4;
+                } else if (lastRxSnr > -15 && lastRxRssi > -120) {
+                    qualityLabel = "Fair";
+                    bars = 2;
+                } else {
+                    qualityLabel = "Bad";
+                    bars = 1;
+                }
+
                 if (this->ack) {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSNR: %.1f dB RSSI: %d dBm",
-                                 (channelName && channelName[0]) ? channelName : "unknown", this->lastRxSnr, this->lastRxRssi);
+                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
+                                 (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
                     } else {
-                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSNR: %.1f dB RSSI: %d dBm",
-                                 (nodeName && nodeName[0]) ? nodeName : "unknown", this->lastRxSnr, this->lastRxRssi);
+                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
+                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
                     }
                 } else if (isAck && !isFromDest) {
                     // Relay ACK banner
-                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSNR: %.1f dB RSSI: %d dBm",
-                             (nodeName && nodeName[0]) ? nodeName : "unknown", this->lastRxSnr, this->lastRxRssi);
+                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
+                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
                 } else {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
                         snprintf(buf, sizeof(buf), "Message failed to\n#%s",
@@ -2225,7 +2244,8 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
                 opts.message = buf;
                 opts.durationMs = 3000;
-                screen->showOverlayBanner(opts);
+                graphics::bannerSignalBars = bars; // tell banner renderer how many bars to draw
+                screen->showOverlayBanner(opts);   // this triggers drawNotificationBox()
             }
         }
     }
