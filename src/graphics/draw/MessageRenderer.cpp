@@ -724,8 +724,7 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         // Determine if message belongs to a muted channel
         bool isMuted = false;
         if (sm.type == MessageType::BROADCAST) {
-            const meshtastic_Channel channel =
-                channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
+            const meshtastic_Channel channel = channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
             if (channel.settings.mute)
                 isMuted = true;
         }
@@ -744,8 +743,7 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         bool isAlert = false;
 
         // Check if alert detection is enabled via external notification module
-        if (moduleConfig.external_notification.alert_bell ||
-            moduleConfig.external_notification.alert_bell_vibra ||
+        if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
             moduleConfig.external_notification.alert_bell_buzzer) {
             for (size_t i = 0; i < packet.decoded.payload.size && i < 100; i++) {
                 if (msgRaw[i] == '\x07') {
@@ -817,8 +815,7 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
 
         // Only beep if allowed by device settings or alert rules
         if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-            (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
-            (!isBroadcast(packet.to) && isToUs(packet))) {
+            (isAlert && moduleConfig.external_notification.alert_bell_buzzer) || (!isBroadcast(packet.to) && isToUs(packet))) {
             playLongBeep();
         }
 #else
