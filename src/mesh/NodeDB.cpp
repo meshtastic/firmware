@@ -56,10 +56,6 @@
 #include <WiFiOTA.h>
 #endif
 
-// stringify
-#define xstr(s) str(s)
-#define str(s) #s
-
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -260,6 +256,8 @@ NodeDB::NodeDB()
     owner.role = config.device.role;
     // Ensure macaddr is set to our macaddr as it will be copied in our info below
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    // Ensure owner.id is always derived from the node number
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
 
     if (!config.has_security) {
         config.has_security = true;
@@ -1695,6 +1693,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 #endif
 
+    // Always ensure user.id is derived from nodeId, regardless of what was received
+    snprintf(p.id, sizeof(p.id), "!%08x", nodeId);
+
     // Both of info->user and p start as filled with zero so I think this is okay
     auto lite = TypeConversions::ConvertToUserLite(p);
     bool changed = memcmp(&info->user, &lite, sizeof(info->user)) || (info->channel != channelIndex);
@@ -1871,6 +1872,13 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
         return 0; // defaults to PRIMARY
     }
     return info->channel;
+}
+
+std::string NodeDB::getNodeId() const
+{
+    char nodeId[16];
+    snprintf(nodeId, sizeof(nodeId), "!%08x", myNodeInfo.my_node_num);
+    return std::string(nodeId);
 }
 
 /// Find a node in our DB, return null for missing
