@@ -331,14 +331,18 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
     LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
     int32_t rawRGB = uiconfig.screen_rgb_color;
-    if (rawRGB > 0 && rawRGB <= 255255255) {
-        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
-        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
-        uint8_t TFT_MESH_b = rawRGB & 0xFF;
-        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
-            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
+    // Only validate the combined value once
+    if (rawRGB > 0 && rawRGB <= 255255255) {
+        // Extract each component as a normal int first
+        int r = (rawRGB >> 16) & 0xFF;
+        int g = (rawRGB >> 8) & 0xFF;
+        int b = rawRGB & 0xFF;
+
+        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+
+        if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+            TFT_MESH = COLOR565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
         }
     }
 

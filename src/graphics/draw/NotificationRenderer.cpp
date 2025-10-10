@@ -708,16 +708,12 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
         if (inEvent.inputEvent != INPUT_BROKER_NONE) {
             if (inEvent.inputEvent == INPUT_BROKER_UP) {
                 // high frequency for move cursor left/right than up/down with encoders
-                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
                 if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
                     virtualKeyboard->moveCursorLeft();
                 } else {
                     virtualKeyboard->moveCursorUp();
                 }
             } else if (inEvent.inputEvent == INPUT_BROKER_DOWN) {
-                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
                 if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
                     virtualKeyboard->moveCursorRight();
                 } else {

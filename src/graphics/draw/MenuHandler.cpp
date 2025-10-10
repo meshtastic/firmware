@@ -416,8 +416,6 @@ void menuHandler::messageResponseMenu()
     int options = 0;
 
     auto mode = graphics::MessageRenderer::getThreadMode();
-    int ch = graphics::MessageRenderer::getThreadChannel();
-    uint32_t peer = graphics::MessageRenderer::getThreadPeer();
 
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
