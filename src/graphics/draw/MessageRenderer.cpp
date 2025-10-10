@@ -327,18 +327,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-#if defined(M5STACK_UNITC6L)
-    const int fixedTopHeight = 24;
-    const int windowX = 0;
-    const int windowY = fixedTopHeight;
-    const int windowWidth = 64;
-    const int windowHeight = SCREEN_HEIGHT - fixedTopHeight;
-#else
     const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = SCREEN_WIDTH;
-#endif
 
     // Title string depending on mode
     static char titleBuf[32];
@@ -374,11 +366,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         didReset = false;
         const char *messageString = "No messages";
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
-#if defined(M5STACK_UNITC6L)
-        display->drawString(center_text, windowY + (windowHeight / 2) - (FONT_HEIGHT_SMALL / 2) - 5, messageString);
-#else
         display->drawString(center_text, getTextPositions(display)[2], messageString);
-#endif
         return;
     }
 

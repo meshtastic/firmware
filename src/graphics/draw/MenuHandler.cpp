@@ -442,15 +442,15 @@ void menuHandler::messageResponseMenu()
 #if defined(M5STACK_UNITC6L)
         optionsArray[options] = "Delete All";
 #else
-        optionsArray[options] = "Delete All Threads";
+        optionsArray[options] = "Delete All Chats";
 #endif
         optionsEnumArray[options++] = DismissAll;
     }
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Delete Oldest";
-#else
-    optionsArray[options] = "Delete Oldest Message";
-#endif
+    if (isHighResolution) {
+        optionsArray[options] = "Delete Oldest Message";
+    } else {
+        optionsArray[options] = "Delete Oldest Msg";
+    }
     optionsEnumArray[options++] = DismissOldest;
 
 #ifdef HAS_I2S
