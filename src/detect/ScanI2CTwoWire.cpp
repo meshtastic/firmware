@@ -233,6 +233,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
 #ifdef HAS_LP5562
                 SCAN_SIMPLE_CASE(LP5562_ADDR, LP5562, "LP5562", (uint8_t)addr.address);
+#else
+                SCAN_SIMPLE_CASE(STC8H1K28_ADDR, LP5562, "STC8H1K28", (uint8_t)addr.address);
 #endif
             case XPOWERS_AXP192_AXP2101_ADDRESS:
                 // Do we have the axp2101/192 or the TCA8418
