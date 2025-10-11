@@ -1275,6 +1275,20 @@ GnssModel_t GPS::probe(int serialSpeed)
         memset(&ublox_info, 0, sizeof(ublox_info));
         delay(100);
 
+#ifdef PIN_GPS_RESET
+        digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+        delay(10);
+        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+
+        // attempt to detect the chip based on boot messages
+        std::vector<ChipInfo> airoha = {{"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+                                        {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+                                        {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
+        GnssModel_t detectedDriver = getProbeResponse(500, airoha, serialSpeed);
+        if (detectedDriver != GNSS_MODEL_UNKNOWN) {
+            return detectedDriver;
+        }
+#endif
         // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
         _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
         delay(20);
@@ -1575,8 +1589,6 @@ GPS *GPS::createGps()
 
 #ifdef PIN_GPS_RESET
     pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
-    delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
 
