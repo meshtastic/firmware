@@ -27,7 +27,6 @@ on:
 
 jobs:
   setup:
-    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: true
       matrix:
@@ -42,10 +41,6 @@ jobs:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
-      - name: Uncomment build epoch
-        shell: bash
-        run: |
-          sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
       - name: Generate matrix
         id: jsonStep
         run: |
@@ -62,7 +57,6 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
-    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -217,19 +211,17 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R
 
-      - name: Move files up
-        run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
-
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
         with:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: |
+            ./firmware-*.mt.json
             ./firmware-*.bin
             ./firmware-*.uf2
             ./firmware-*.hex
-            ./firmware-*-ota.zip
+            ./firmware-*.zip
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
@@ -258,7 +250,7 @@ jobs:
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v4
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: ./*.elf
           retention-days: 30
@@ -283,11 +275,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: 3.x
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -353,11 +340,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: 3.x
-
       - uses: actions/download-artifact@v5
         with:
           pattern: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
@@ -377,7 +359,7 @@ jobs:
 
       - uses: actions/download-artifact@v5
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./elfs
 
@@ -407,11 +389,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: 3.x
 
       - uses: actions/download-artifact@v5
         with:
