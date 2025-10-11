@@ -431,7 +431,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_OTHER_NODEINFOS: {
-        LOG_DEBUG("Send known nodes");
         if (nodeInfoForPhone.num != 0) {
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(nodeInfoForPhone.user.id, "!%08x", nodeInfoForPhone.num);
@@ -592,6 +591,7 @@ bool PhoneAPI::available()
                 nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
                 nodeInfoForPhone.via_mqtt = isUs ? false : nodeInfoForPhone.via_mqtt;
                 nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || isUs; // Our node is always a favorite
+
                 onNowHasData(0);
             }
         }
@@ -734,7 +734,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
         LOG_INFO("Tell client we have new packets %u", newValue);
         onNowHasData(newValue);
     } else {
-        LOG_DEBUG("(Client not yet interested in packets)");
+        LOG_DEBUG("Client not yet interested in packets (state=%d)", state);
     }
 
     return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one
