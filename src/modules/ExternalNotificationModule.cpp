@@ -459,7 +459,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+          
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
@@ -510,7 +512,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_message && !ch.settings.mute && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
                 setExternalState(0, true);
@@ -521,7 +523,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_message_vibra && !ch.settings.mute && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
                 setExternalState(1, true);
@@ -532,7 +534,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_message_buzzer && !ch.settings.mute && !sender->is_muted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (!isBroadcast(mp.to) && isToUs(&mp))) {
