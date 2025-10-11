@@ -144,8 +144,6 @@ class NodeDB
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
 
-    bool saveFavourites = false;
-
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();

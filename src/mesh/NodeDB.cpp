@@ -402,11 +402,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-    if (config.device.preserve_favourites ||
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
-        saveFavourites = true;
-    }
 #ifdef USERPREFS_FIRMWARE_EDITION
     myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #endif
@@ -988,7 +983,7 @@ void NodeDB::resetNodes()
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    if (saveFavourites) {
+    if (config.device.preserve_favourites) {
         for (size_t i = 0; i < nodeDatabase.nodes.size(); i++) {
             meshtastic_NodeInfoLite &node = nodeDatabase.nodes[i];
             if (i > 0 && !node.is_favorite) {
