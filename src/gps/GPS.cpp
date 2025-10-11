@@ -240,6 +240,9 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(debugmsg.c_str());
+#endif
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
                     LOG_DEBUG("Found: %s", message); // Log the found message
@@ -247,9 +250,6 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
-#ifdef GPS_DEBUG
-                    LOG_DEBUG(debugmsg.c_str());
-#endif
                 }
             }
         }
