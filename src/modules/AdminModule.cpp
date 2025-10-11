@@ -639,7 +639,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         //  https://github.com/meshtastic/firmware/pull/7992
         if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
                       meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
-            config.device.preserve_favourites = true;
+            config.device.preserve_favorites = true;
         };
 #if USERPREFS_EVENT_MODE
         // If we're in event mode, nobody is a Router or Router Late

@@ -357,8 +357,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* Controls buzzer behavior for audio feedback
  Defaults to ENABLED */
     meshtastic_Config_DeviceConfig_BuzzerMode buzzer_mode;
-    /* Tell the node to persist favourited nodes following a NodeDB reset. */
-    bool preserve_favourites;
+    /* When true, favourited nodes are persisted through NodeDB resets. */
+    bool preserve_favorites;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -760,7 +760,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_tzdef_tag 11
 #define meshtastic_Config_DeviceConfig_led_heartbeat_disabled_tag 12
 #define meshtastic_Config_DeviceConfig_buzzer_mode_tag 13
-#define meshtastic_Config_DeviceConfig_preserve_favourites_tag 14
+#define meshtastic_Config_DeviceConfig_preserve_favorites_tag 14
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -887,7 +887,7 @@ X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10) \
 X(a, STATIC,   SINGULAR, STRING,   tzdef,            11) \
 X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12) \
 X(a, STATIC,   SINGULAR, UENUM,    buzzer_mode,      13) \
-X(a, STATIC,   SINGULAR, BOOL,     preserve_favourites,  14)
+X(a, STATIC,   SINGULAR, BOOL,     preserve_favorites,  14)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
