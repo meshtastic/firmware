@@ -1283,7 +1283,8 @@ GnssModel_t GPS::probe(int serialSpeed)
         // attempt to detect the chip based on boot messages
         std::vector<ChipInfo> airoha = {{"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
                                         {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
-                                        {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
+                                        {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
+                                        {"UC6580", "UC6580", GNSS_MODEL_UC6580}};
         GnssModel_t detectedDriver = getProbeResponse(500, airoha, serialSpeed);
         if (detectedDriver != GNSS_MODEL_UNKNOWN) {
             return detectedDriver;
