@@ -431,16 +431,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // Build header line for this message
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
-        const char *sender = "???";
+
+        std::string senderStr_o = "???";
         if (node && node->has_user) {
-            sender = node->user.long_name;
+            senderStr_o = node->user.long_name;
         }
 
         // If this is *our own* message, override sender to "Me"
         bool mine = (m.sender == nodeDB->getNodeNum());
         if (mine) {
-            sender = "Me";
+            senderStr_o = "Me";
         }
+
+        const char *sender = senderStr_o.c_str();
 
         if (display->getStringWidth(sender) + display->getStringWidth(timeBuf) + display->getStringWidth(chanType) +
                 display->getStringWidth(" @") + display->getStringWidth("... ") - 10 >
@@ -448,15 +451,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             // truncate sender name if too long
             int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
                              display->getStringWidth(" @") - display->getStringWidth("... ") - 10;
-            int len = strlen(sender);
+
+            int len = static_cast<int>(senderStr_o.size());
             while (len > 0 && display->getStringWidth(sender, len) > availWidth) {
-                len--;
+                --len;
             }
-            if (len < (int)strlen(sender)) {
-                // we need to truncate
-                char truncated[32];
-                snprintf(truncated, sizeof(truncated), "%.*s...", len, sender);
-                sender = truncated;
+
+            if (len < static_cast<int>(senderStr_o.size())) {
+                senderStr_o = senderStr_o.substr(0, len) + "...";
+                sender = senderStr_o.c_str();
             }
         }
 
