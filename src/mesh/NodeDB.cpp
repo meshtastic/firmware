@@ -983,7 +983,18 @@ void NodeDB::resetNodes()
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    if (config.device.preserve_favorites) {
+        for (size_t i = 0; i < nodeDatabase.nodes.size(); i++) {
+            meshtastic_NodeInfoLite &node = nodeDatabase.nodes[i];
+            if (i > 0 && !node.is_favorite) {
+                node = meshtastic_NodeInfoLite();
+            } else {
+                numMeshNodes += 1;
+            }
+        };
+    } else {
+        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    }
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
