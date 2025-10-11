@@ -574,9 +574,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             } else {
                 // Render message line
                 if (isMine[i]) {
-                    int w = display->getStringWidth(cachedLines[i].c_str());
-                    int rightX = SCREEN_WIDTH - w - 2;
-                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
+                    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+                    drawStringWithEmotes(display, SCREEN_WIDTH, lineY, cachedLines[i], emotes, numEmotes);
+                    display->setTextAlignment(TEXT_ALIGN_LEFT);
                 } else {
                     drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
                 }
