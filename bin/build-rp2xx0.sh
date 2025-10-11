@@ -29,5 +29,7 @@ echo "Copying uf2 file"
 SRCBIN=.pio/build/$1/firmware.uf2
 cp $SRCBIN $OUTDIR/$basename.uf2
 
+cp $OUTDIR/$basename.uf2 $OUTDIR/$basename-update.uf2
+
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR
