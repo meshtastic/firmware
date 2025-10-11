@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "FSCommon.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "RadioLibInterface.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
@@ -64,6 +65,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
+extern MessageStore messageStore;
 
 using graphics::Emote;
 using graphics::emotes;
@@ -281,12 +283,6 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     pi.drawFrame(display, state, x, y);
 }
 
-// Ignore messages originating from phone (from the current node 0x0) unless range test or store and forward module are enabled
-static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
-{
-    return packet->from != 0 && !moduleConfig.store_forward.enabled;
-}
-
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
@@ -335,14 +331,18 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
     LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
     int32_t rawRGB = uiconfig.screen_rgb_color;
-    if (rawRGB > 0 && rawRGB <= 255255255) {
-        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
-        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
-        uint8_t TFT_MESH_b = rawRGB & 0xFF;
-        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
-            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
+    // Only validate the combined value once
+    if (rawRGB > 0 && rawRGB <= 255255255) {
+        // Extract each component as a normal int first
+        int r = (rawRGB >> 16) & 0xFF;
+        int g = (rawRGB >> 8) & 0xFF;
+        int b = rawRGB & 0xFF;
+
+        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+
+        if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+            TFT_MESH = COLOR565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
         }
     }
 
@@ -513,10 +513,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 void Screen::setup()
 {
 
-    // === Enable display rendering ===
+    // Enable display rendering
     useDisplay = true;
 
-    // === Load saved brightness from UI config ===
+    // Load saved brightness from UI config
     // For OLED displays (SSD1306), default brightness is 255 if not set
     if (uiconfig.screen_brightness == 0) {
 #if defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
@@ -528,7 +528,7 @@ void Screen::setup()
         brightness = uiconfig.screen_brightness;
     }
 
-    // === Detect OLED subtype (if supported by board variant) ===
+    // Detect OLED subtype (if supported by board variant)
 #ifdef AutoOLEDWire_h
     if (isAUTOOled)
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
@@ -543,7 +543,7 @@ void Screen::setup()
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
-    // === Initialize display and UI system ===
+    // Initialize display and UI system
     ui->init();
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
@@ -555,7 +555,7 @@ void Screen::setup()
     ui->disableAllIndicators();            // Disable page indicator dots
     ui->getUiState()->userData = this;     // Allow static callbacks to access Screen instance
 
-    // === Apply loaded brightness ===
+    // Apply loaded brightness
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SPISSD1306)
@@ -563,20 +563,20 @@ void Screen::setup()
 #endif
     LOG_INFO("Applied screen brightness: %d", brightness);
 
-    // === Set custom overlay callbacks ===
+    // Set custom overlay callbacks
     static OverlayCallback overlays[] = {
         graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    // === Enable UTF-8 to display mapping ===
+    // Enable UTF-8 to display mapping
     dispdev->setFontTableLookupFunction(customFontTableLookup);
 
 #ifdef USERPREFS_OEM_TEXT
     logo_timeout *= 2; // Give more time for branded boot logos
 #endif
 
-    // === Configure alert frames (e.g., "Resuming..." or region name) ===
+    // Configure alert frames (e.g., "Resuming..." or region name)
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip slow refresh
     alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
 #ifdef ARCH_ESP32
@@ -592,10 +592,10 @@ void Screen::setup()
     ui->setFrames(alertFrames, 1);
     ui->disableAutoTransition(); // Require manual navigation between frames
 
-    // === Log buffer for on-screen logs (3 lines max) ===
+    // Log buffer for on-screen logs (3 lines max)
     dispdev->setLogBuffer(3, 32);
 
-    // === Optional screen mirroring or flipping (e.g. for T-Beam orientation) ===
+    // Optional screen mirroring or flipping (e.g. for T-Beam orientation)
 #ifdef SCREEN_MIRROR
     dispdev->mirrorScreen();
 #else
@@ -611,7 +611,7 @@ void Screen::setup()
     }
 #endif
 
-    // === Generate device ID from MAC address ===
+    // Generate device ID from MAC address
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
@@ -620,7 +620,7 @@ void Screen::setup()
     handleSetOn(false); // Ensure proper init for Arduino targets
 #endif
 
-    // === Turn on display and trigger first draw ===
+    //  Turn on display and trigger first draw
     handleSetOn(true);
     determineResolution(dispdev->height(), dispdev->width());
     ui->update();
@@ -643,7 +643,7 @@ void Screen::setup()
     touchScreenImpl1->init();
 #endif
 
-    // === Subscribe to device status updates ===
+    // Subscribe to device status updates
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
@@ -651,12 +651,14 @@ void Screen::setup()
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminMessageObserver.observe(adminModule);
 #endif
-    if (textMessageModule)
-        textMessageObserver.observe(textMessageModule);
     if (inputBroker)
         inputObserver.observe(inputBroker);
 
-    // === Notify modules that support UI events ===
+    // Load persisted messages into RAM
+    messageStore.loadFromFlash();
+    LOG_INFO("MessageStore loaded from flash");
+
+    // Notify modules that support UI events
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
@@ -813,6 +815,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::STOP_ALERT_FRAME:
             NotificationRenderer::pauseBanner = false;
+            break;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
@@ -983,9 +986,6 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 
-    // Declare this early so it’s available in FOCUS_PRESERVE block
-    bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
-
     if (!hiddenFrames.home) {
         fsi.positions.home = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
@@ -1127,7 +1127,7 @@ void Screen::setFrames(FrameFocus focus)
     }
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
-    this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
+    this->frameCount = numframes; // Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
 
     ui->setFrames(normalFrames, numframes);
@@ -1146,10 +1146,6 @@ void Screen::setFrames(FrameFocus focus)
         break;
     case FOCUS_FAULT:
         ui->switchToFrame(fsi.positions.fault);
-        break;
-    case FOCUS_TEXTMESSAGE:
-        hasUnreadMessage = false; // ✅ Clear when message is *viewed*
-        ui->switchToFrame(fsi.positions.textMessage);
         break;
     case FOCUS_MODULE:
         // Whichever frame was marked by MeshModule::requestFocus(), if any
@@ -1269,11 +1265,8 @@ void Screen::hideCurrentFrame()
 {
     uint8_t currentFrame = ui->getUiState()->currentFrame;
     bool dismissed = false;
-    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
-        LOG_INFO("Hide Text Message");
-        devicestate.has_rx_text_message = false;
-        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-    } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+
+    if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Hide Waypoint");
         devicestate.has_rx_waypoint = false;
         hiddenFrames.waypoint = true;
@@ -1289,7 +1282,7 @@ void Screen::hideCurrentFrame()
     }
 
     if (dismissed) {
-        setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
+        setFrames(FOCUS_DEFAULT);
     }
 }
 
@@ -1386,6 +1379,9 @@ void Screen::handleShowPrevFrame()
         ui->previousFrame();
         lastScreenTransition = millis();
         setFastFramerate();
+
+        // Reset scroll state if we’re leaving the text message frame
+        graphics::MessageRenderer::resetScrollState();
     }
 }
 
@@ -1397,6 +1393,9 @@ void Screen::handleShowNextFrame()
         ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
+
+        // Reset scroll state if we’re leaving the text message frame
+        graphics::MessageRenderer::resetScrollState();
     }
 }
 
@@ -1436,92 +1435,6 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-// Handles when message is received; will jump to text message frame.
-int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
-{
-    if (showingNormalScreen) {
-        if (packet->from == 0) {
-            // Outgoing message (likely sent from phone)
-            devicestate.has_rx_text_message = false;
-            memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-            hiddenFrames.textMessage = true;
-            hasUnreadMessage = false; // Clear unread state when user replies
-
-            setFrames(FOCUS_PRESERVE); // Stay on same frame, silently update frame list
-        } else {
-            // Incoming message
-            devicestate.has_rx_text_message = true; // Needed to include the message frame
-            hasUnreadMessage = true;                // Enables mail icon in the header
-            setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
-
-            // Only wake/force display if the configuration allows it
-            if (shouldWakeOnReceivedMessage()) {
-                setOn(true);    // Wake up the screen first
-                forceDisplay(); // Forces screen redraw
-            }
-            // === Prepare banner content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const meshtastic_Channel channel =
-                channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
-
-            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-
-            char banner[256];
-
-            bool isAlert = false;
-
-            if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
-                moduleConfig.external_notification.alert_bell_buzzer)
-                // Check for bell character to determine if this message is an alert
-                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                    if (msgRaw[i] == ASCII_BELL) {
-                        isAlert = true;
-                        break;
-                    }
-                }
-
-            // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
-            // 'mute' preferences set to any specific node or channel.
-            if (isAlert) {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
-                } else {
-                    strcpy(banner, "Alert Received");
-                }
-                screen->showSimpleBanner(banner, 3000);
-            } else if (!channel.settings.mute) {
-                if (longName && longName[0]) {
-#if defined(M5STACK_UNITC6L)
-                    strcpy(banner, "New Message");
-#else
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-#endif
-
-                } else {
-                    strcpy(banner, "New Message");
-                }
-#if defined(M5STACK_UNITC6L)
-                screen->setOn(true);
-                screen->showSimpleBanner(banner, 1500);
-                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-                    (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
-                    (!isBroadcast(packet->to) && isToUs(packet))) {
-                    // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
-                    // - packet contains an alert and alert bell buzzer is enabled
-                    // - packet is a non-broadcast that is addressed to this node
-                    playLongBeep();
-                }
-#else
-                screen->showSimpleBanner(banner, 3000);
-#endif
-            }
-        }
-    }
-
-    return 0;
-}
-
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
@@ -1532,16 +1445,26 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
     if (showingNormalScreen) {
         // Regenerate the frameset, potentially honoring a module's internal requestFocus() call
-        if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
+        if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET) {
             setFrames(FOCUS_MODULE);
+        }
 
-        // Regenerate the frameset, while Attempt to maintain focus on the current frame
-        else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
+        // Regenerate the frameset, while attempting to maintain focus on the current frame
+        else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND) {
             setFrames(FOCUS_PRESERVE);
+        }
 
         // Don't regenerate the frameset, just re-draw whatever is on screen ASAP
-        else if (event->action == UIFrameEvent::Action::REDRAW_ONLY)
+        else if (event->action == UIFrameEvent::Action::REDRAW_ONLY) {
             setFastFramerate();
+        }
+
+        // Jump directly to the Text Message screen
+        else if (event->action == UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE) {
+            setFrames(FOCUS_PRESERVE); // preserve current frame ordering
+            ui->switchToFrame(framesetInfo.positions.textMessage);
+            setFastFramerate(); // force redraw ASAP
+        }
     }
 
     return 0;
@@ -1610,7 +1533,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::loraMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
-                    if (devicestate.rx_text_message.from) {
+                    if (!messageStore.getMessages().empty()) {
                         menuHandler::messageResponseMenu();
                     } else {
 #if defined(M5STACK_UNITC6L)

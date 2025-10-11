@@ -1,51 +1,27 @@
-/*
-BaseUI
-
-Developed and Maintained By:
-- Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (Tropho) – Project management, structural planning, and testing
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-*/
-
 #include "configuration.h"
 #if HAS_SCREEN
 #include "MessageRenderer.h"
 
 // Core includes
+#include "MessageStore.h"
 #include "NodeDB.h"
+#include "UIRenderer.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TimeFormatters.h"
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
-
-// Additional includes for UI rendering
-#include "UIRenderer.h"
-#include "graphics/TimeFormatters.h"
-
-// Additional includes for dependencies
 #include <string>
 #include <vector>
 
 // External declarations
 extern bool hasUnreadMessage;
 extern meshtastic_DeviceState devicestate;
+extern graphics::Screen *screen;
 
 using graphics::Emote;
 using graphics::emotes;
@@ -56,8 +32,6 @@ namespace graphics
 namespace MessageRenderer
 {
 
-// Simple cache based on text hash
-static size_t cachedKey = 0;
 static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 
@@ -66,7 +40,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
 
-    // === Step 1: Find tallest emote in the line ===
+    // Step 1: Find tallest emote in the line
     int maxIconHeight = fontHeight;
     for (size_t i = 0; i < line.length();) {
         bool matched = false;
@@ -93,13 +67,13 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         }
     }
 
-    // === Step 2: Baseline alignment ===
+    // Step 2: Baseline alignment
     int lineHeight = std::max(fontHeight, maxIconHeight);
     int baselineOffset = (lineHeight - fontHeight) / 2;
     int fontY = y + baselineOffset;
     int fontMidline = fontY + fontHeight / 2;
 
-    // === Step 3: Render line in segments ===
+    // Step 3: Render line in segments
     size_t i = 0;
     bool inBold = false;
 
@@ -148,7 +122,8 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
 
         // Render the emote (if found)
         if (matchedEmote && i == nextEmotePos) {
-            int iconY = fontMidline - matchedEmote->height / 2 - 1;
+            // Center vertically — padding handled in calculateLineHeights
+            int iconY = fontMidline - matchedEmote->height / 2;
             display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
             cursorX += matchedEmote->width + 1;
             i += emojiLen;
@@ -170,222 +145,365 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     }
 }
 
+// Scroll state (file scope so we can reset on new message)
+float scrollY = 0.0f;
+uint32_t lastTime = 0;
+uint32_t scrollStartDelay = 0;
+uint32_t pauseStart = 0;
+bool waitingToReset = false;
+bool scrollStarted = false;
+static bool didReset = false; // <-- add here
+
+// Reset scroll state when new messages arrive
+void resetScrollState()
+{
+    scrollY = 0.0f;
+    scrollStarted = false;
+    waitingToReset = false;
+    scrollStartDelay = millis();
+    lastTime = millis();
+
+    didReset = false; // <-- now valid
+}
+// Current thread state
+static ThreadMode currentMode = ThreadMode::ALL;
+static int currentChannel = -1;
+static uint32_t currentPeer = 0;
+
+// Registry of seen threads for manual toggle
+static std::vector<int> seenChannels;
+static std::vector<uint32_t> seenPeers;
+
+// Public helper so menus / store can clear stale registries
+void clearThreadRegistries()
+{
+    LOG_DEBUG("[MessageRenderer] Clearing thread registries (seenChannels/seenPeers)");
+    seenChannels.clear();
+    seenPeers.clear();
+}
+
+// Setter so other code can switch threads
+void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0 */)
+{
+    LOG_DEBUG("[MessageRenderer] setThreadMode(mode=%d, ch=%d, peer=0x%08x)", (int)mode, channel, (unsigned int)peer);
+    currentMode = mode;
+    currentChannel = channel;
+    currentPeer = peer;
+    didReset = false; // force reset when mode changes
+
+    // Track channels we’ve seen
+    if (mode == ThreadMode::CHANNEL && channel >= 0) {
+        if (std::find(seenChannels.begin(), seenChannels.end(), channel) == seenChannels.end()) {
+            LOG_DEBUG("[MessageRenderer] Track seen channel: %d", channel);
+            seenChannels.push_back(channel);
+        }
+    }
+
+    // Track DMs we’ve seen
+    if (mode == ThreadMode::DIRECT && peer != 0) {
+        if (std::find(seenPeers.begin(), seenPeers.end(), peer) == seenPeers.end()) {
+            LOG_DEBUG("[MessageRenderer] Track seen peer: 0x%08x", (unsigned int)peer);
+            seenPeers.push_back(peer);
+        }
+    }
+}
+
+ThreadMode getThreadMode()
+{
+    return currentMode;
+}
+
+int getThreadChannel()
+{
+    return currentChannel;
+}
+
+uint32_t getThreadPeer()
+{
+    return currentPeer;
+}
+
+// Accessors for menuHandler
+const std::vector<int> &getSeenChannels()
+{
+    return seenChannels;
+}
+const std::vector<uint32_t> &getSeenPeers()
+{
+    return seenPeers;
+}
+
+// Helpers for drawing status marks (thickened strokes)
+void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
+{
+    int h = size;
+    int w = size;
+
+    // Center mark vertically with the text row
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    int topY = midY - (h / 2);
+
+    display->setColor(WHITE); // ensure we use current fg
+
+    // Draw thicker checkmark by overdrawing lines with 1px offset
+    // arm 1
+    display->drawLine(x, topY + h / 2, x + w / 3, topY + h);
+    display->drawLine(x, topY + h / 2 + 1, x + w / 3, topY + h + 1);
+    // arm 2
+    display->drawLine(x + w / 3, topY + h, x + w, topY);
+    display->drawLine(x + w / 3, topY + h + 1, x + w, topY + 1);
+}
+
+void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
+{
+    int h = size;
+    int w = size;
+
+    // Center mark vertically with the text row
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    int topY = midY - (h / 2);
+
+    display->setColor(WHITE);
+
+    // Draw thicker X with 1px offset
+    display->drawLine(x, topY, x + w, topY + h);
+    display->drawLine(x, topY + 1, x + w, topY + h + 1);
+    display->drawLine(x + w, topY, x, topY + h);
+    display->drawLine(x + w, topY + 1, x, topY + h + 1);
+}
+
+void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
+{
+    int r = size / 2;
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    int centerY = midY;
+    int centerX = x + r;
+
+    display->setColor(WHITE);
+
+    // Draw circle outline (relay = uncertain status)
+    display->drawCircle(centerX, centerY, r);
+
+    // Draw "?" inside (approx, 3px wide)
+    display->drawLine(centerX, centerY - 2, centerX, centerY); // stem
+    display->setPixel(centerX, centerY + 2);                   // dot
+    display->drawLine(centerX - 1, centerY - 4, centerX + 1, centerY - 4);
+}
+
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Ensure any boot-relative timestamps are upgraded if RTC is valid
+    messageStore.upgradeBootRelativeTimestamps();
+
+    if (!didReset) {
+        resetScrollState();
+        didReset = true;
+    }
+
     // Clear the unread message indicator when viewing the message
     hasUnreadMessage = false;
 
-    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+    // Filter messages based on thread mode
+    std::deque<StoredMessage> filtered;
+    for (const auto &m : messageStore.getMessages()) {
+        bool include = false;
+        switch (currentMode) {
+        case ThreadMode::ALL:
+            include = true;
+            break;
+        case ThreadMode::CHANNEL:
+            if (m.type == MessageType::BROADCAST && (int)m.channelIndex == currentChannel)
+                include = true;
+            break;
+        case ThreadMode::DIRECT:
+            if (m.type == MessageType::DM_TO_US && (m.sender == currentPeer || m.dest == currentPeer))
+                include = true;
+            break;
+        }
+        if (include)
+            filtered.push_back(m);
+    }
 
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-#if defined(M5STACK_UNITC6L)
-    const int fixedTopHeight = 24;
-    const int windowX = 0;
-    const int windowY = fixedTopHeight;
-    const int windowWidth = 64;
-    const int windowHeight = SCREEN_HEIGHT - fixedTopHeight;
-#else
     const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = SCREEN_WIDTH;
 
-#endif
-    bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    bool isBold = config.display.heading_bold;
-
-    // === Set Title
+    // Title string depending on mode
+    static char titleBuf[32];
     const char *titleStr = "Messages";
+    switch (currentMode) {
+    case ThreadMode::ALL:
+        titleStr = "Messages";
+        break;
+    case ThreadMode::CHANNEL: {
+        const char *cname = channels.getName(currentChannel);
+        if (cname && cname[0]) {
+            snprintf(titleBuf, sizeof(titleBuf), "#%s", cname);
+        } else {
+            snprintf(titleBuf, sizeof(titleBuf), "Ch%d", currentChannel);
+        }
+        titleStr = titleBuf;
+        break;
+    }
+    case ThreadMode::DIRECT: {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
+        if (node && node->has_user) {
+            snprintf(titleBuf, sizeof(titleBuf), "@%s", node->user.short_name);
+        } else {
+            snprintf(titleBuf, sizeof(titleBuf), "@%08x", currentPeer);
+        }
+        titleStr = titleBuf;
+        break;
+    }
+    }
 
-    // Check if we have more than an empty message to show
-    char messageBuf[237];
-    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
-    if (strlen(messageBuf) == 0) {
-        // === Header ===
+    if (filtered.empty()) {
         graphics::drawCommonHeader(display, x, y, titleStr);
+        didReset = false;
         const char *messageString = "No messages";
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
-#if defined(M5STACK_UNITC6L)
-        display->drawString(center_text, windowY + (windowHeight / 2) - (FONT_HEIGHT_SMALL / 2) - 5, messageString);
-#else
         display->drawString(center_text, getTextPositions(display)[2], messageString);
-#endif
         return;
     }
 
-    // === Header Construction ===
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    char headerStr[80];
-    const char *sender = "???";
-#if defined(M5STACK_UNITC6L)
-    if (node && node->has_user)
-        sender = node->user.short_name;
-#else
-    if (node && node->has_user) {
-        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
-            sender = node->user.long_name;
-        } else {
-            sender = node->user.short_name;
-        }
-    }
-#endif
-    uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
-    uint8_t timestampHours, timestampMinutes;
-    int32_t daysAgo;
-    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+    // Build lines for filtered messages (newest first)
+    std::vector<std::string> allLines;
+    std::vector<bool> isMine;   // track alignment
+    std::vector<bool> isHeader; // track header lines
+    std::vector<AckStatus> ackForLine;
 
-    if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-        std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
-        if (config.display.use_12h_clock) {
-            bool isPM = timestampHours >= 12;
-            timestampHours = timestampHours % 12;
-            if (timestampHours == 0)
-                timestampHours = 12;
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     isPM ? "p" : "a", sender);
-        } else {
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     sender);
-        }
-    } else {
-#if defined(M5STACK_UNITC6L)
-        snprintf(headerStr, sizeof(headerStr), "%s from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                 sender);
-#else
-        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                 sender);
-#endif
-    }
-#if defined(M5STACK_UNITC6L)
-    graphics::drawCommonHeader(display, x, y, titleStr);
-    int headerY = getTextPositions(display)[1];
-    display->drawString(x, headerY, headerStr);
-    for (int separatorX = 0; separatorX < SCREEN_WIDTH; separatorX += 2) {
-        display->setPixel(separatorX, fixedTopHeight - 1);
-    }
-    cachedLines.clear();
-    std::string fullMsg(messageBuf);
-    std::string currentLine;
-    for (size_t i = 0; i < fullMsg.size();) {
-        unsigned char c = fullMsg[i];
-        size_t charLen = 1;
-        if ((c & 0xE0) == 0xC0)
-            charLen = 2;
-        else if ((c & 0xF0) == 0xE0)
-            charLen = 3;
-        else if ((c & 0xF8) == 0xF0)
-            charLen = 4;
-        std::string nextChar = fullMsg.substr(i, charLen);
-        std::string testLine = currentLine + nextChar;
-        if (display->getStringWidth(testLine.c_str()) > windowWidth) {
-            cachedLines.push_back(currentLine);
-            currentLine = nextChar;
-        } else {
-            currentLine = testLine;
+    for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
+        const auto &m = *it;
+
+        // Channel / destination labeling
+        char chanType[32] = "";
+        if (currentMode == ThreadMode::ALL) {
+            if (m.dest == NODENUM_BROADCAST) {
+                snprintf(chanType, sizeof(chanType), "(Ch%d)", m.channelIndex);
+            } else {
+                snprintf(chanType, sizeof(chanType), "(DM)");
+            }
         }
 
-        i += charLen;
-    }
-    if (!currentLine.empty())
-        cachedLines.push_back(currentLine);
-    cachedHeights = calculateLineHeights(cachedLines, emotes);
-    int yOffset = windowY;
-    int linesDrawn = 0;
-    for (size_t i = 0; i < cachedLines.size(); ++i) {
-        if (linesDrawn >= 2)
-            break;
-        int lineHeight = cachedHeights[i];
-        if (yOffset + lineHeight > windowY + windowHeight)
-            break;
-        drawStringWithEmotes(display, windowX, yOffset, cachedLines[i], emotes, numEmotes);
-        yOffset += lineHeight;
-        linesDrawn++;
-    }
-    screen->forceDisplay();
-#else
-    uint32_t now = millis();
-#ifndef EXCLUDE_EMOJI
-    // === Bounce animation setup ===
-    static uint32_t lastBounceTime = 0;
-    static int bounceY = 0;
-    const int bounceRange = 2;     // Max pixels to bounce up/down
-    const int bounceInterval = 10; // How quickly to change bounce direction (ms)
+        // Calculate how long ago
+        uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+        uint32_t seconds = 0;
+        bool invalidTime = true;
 
-    if (now - lastBounceTime >= bounceInterval) {
-        lastBounceTime = now;
-        bounceY = (bounceY + 1) % (bounceRange * 2);
-    }
-    for (int i = 0; i < numEmotes; ++i) {
-        const Emote &e = emotes[i];
-        if (strcmp(msg, e.label) == 0) {
-            int headerY = getTextPositions(display)[1]; // same as scrolling header line
-            display->drawString(x + 3, headerY, headerStr);
-            if (isInverted && isBold)
-                display->drawString(x + 4, headerY, headerStr);
+        if (m.timestamp > 0 && nowSecs > 0) {
+            if (nowSecs >= m.timestamp) {
+                seconds = nowSecs - m.timestamp;
+                invalidTime = (seconds > 315360000); // >10 years
+            } else {
+                uint32_t ahead = m.timestamp - nowSecs;
+                if (ahead <= 600) { // allow small skew
+                    seconds = 0;
+                    invalidTime = false;
+                }
+            }
+        } else if (m.timestamp > 0 && nowSecs == 0) {
+            // RTC not valid: only trust boot-relative if same boot
+            uint32_t bootNow = millis() / 1000;
+            if (m.isBootRelative && m.timestamp <= bootNow) {
+                seconds = bootNow - m.timestamp;
+                invalidTime = false;
+            } else {
+                invalidTime = true; // old persisted boot-relative, ignore until healed
+            }
+        }
 
-            // Draw separator (same as scroll version)
-            for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
-                display->setPixel(separatorX, headerY + ((isHighResolution) ? 19 : 13));
+        char timeBuf[16];
+        if (invalidTime) {
+            snprintf(timeBuf, sizeof(timeBuf), "???");
+        } else if (seconds < 60) {
+            snprintf(timeBuf, sizeof(timeBuf), "%us", seconds);
+        } else if (seconds < 3600) {
+            snprintf(timeBuf, sizeof(timeBuf), "%um", seconds / 60);
+        } else if (seconds < 86400) {
+            snprintf(timeBuf, sizeof(timeBuf), "%uh", seconds / 3600);
+        } else {
+            snprintf(timeBuf, sizeof(timeBuf), "%ud", seconds / 86400);
+        }
+
+        // Build header line for this message
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
+
+        std::string senderStr_o = "???";
+        if (node && node->has_user) {
+            senderStr_o = node->user.long_name;
+        }
+
+        // If this is *our own* message, override sender to "Me"
+        bool mine = (m.sender == nodeDB->getNodeNum());
+        if (mine) {
+            senderStr_o = "Me";
+        }
+
+        const char *sender = senderStr_o.c_str();
+
+        if (display->getStringWidth(sender) + display->getStringWidth(timeBuf) + display->getStringWidth(chanType) +
+                display->getStringWidth(" @") + display->getStringWidth("... ") - 10 >
+            SCREEN_WIDTH) {
+            // truncate sender name if too long
+            int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
+                             display->getStringWidth(" @") - display->getStringWidth("... ") - 10;
+
+            int len = static_cast<int>(senderStr_o.size());
+            while (len > 0 && display->getStringWidth(sender, len) > availWidth) {
+                --len;
             }
 
-            // Center the emote below the header line + separator + nav
-            int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
-            int emoteY = headerY + 6 + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
-            display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+            if (len < static_cast<int>(senderStr_o.size())) {
+                senderStr_o = senderStr_o.substr(0, len) + "...";
+                sender = senderStr_o.c_str();
+            }
+        }
 
-            // Draw header at the end to sort out overlapping elements
-            graphics::drawCommonHeader(display, x, y, titleStr);
-            return;
+        // Final header line
+        char headerStr[96];
+        if (mine) {
+            snprintf(headerStr, sizeof(headerStr), "%s %s", timeBuf, chanType);
+        } else {
+            snprintf(headerStr, sizeof(headerStr), "%s @%s %s", timeBuf, sender, chanType);
+        }
+
+        // Push header line
+        allLines.push_back(std::string(headerStr));
+        isMine.push_back(mine);
+        isHeader.push_back(true);
+        ackForLine.push_back(m.ackStatus);
+
+        // Split message text into wrapped lines
+        std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
+        for (auto &ln : wrapped) {
+            allLines.push_back(ln);
+            isMine.push_back(mine);
+            isHeader.push_back(false);
+            ackForLine.push_back(AckStatus::NONE);
         }
     }
-#endif
-    // === Generate the cache key ===
-    size_t currentKey = (size_t)mp.from;
-    currentKey ^= ((size_t)mp.to << 8);
-    currentKey ^= ((size_t)mp.rx_time << 16);
-    currentKey ^= ((size_t)mp.id << 24);
 
-    if (cachedKey != currentKey) {
-        LOG_INFO("Onscreen message scroll cache key needs updating: cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
+    // Cache lines and heights
+    cachedLines = allLines;
+    cachedHeights = calculateLineHeights(cachedLines, emotes);
 
-        // Cache miss - regenerate lines and heights
-        cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
-        cachedHeights = calculateLineHeights(cachedLines, emotes);
-        cachedKey = currentKey;
-    } else {
-        // Cache hit but update the header line with current time information
-        cachedLines[0] = std::string(headerStr);
-        // The header always has a fixed height since it doesn't contain emotes
-        // As per calculateLineHeights logic for lines without emotes:
-        cachedHeights[0] = FONT_HEIGHT_SMALL - 2;
-        if (cachedHeights[0] < 8)
-            cachedHeights[0] = 8; // minimum safety
-    }
-
-    // === Scrolling logic ===
+    // Scrolling logic (unchanged)
     int totalHeight = 0;
-    for (size_t i = 1; i < cachedHeights.size(); ++i) {
+    for (size_t i = 0; i < cachedHeights.size(); ++i)
         totalHeight += cachedHeights[i];
-    }
-    int usableScrollHeight = usableHeight - cachedHeights[0]; // remove header height
+    int usableScrollHeight = usableHeight;
     int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
-    static float scrollY = 0.0f;
-    static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
-    static bool waitingToReset = false, scrollStarted = false;
-
-    // === Smooth scrolling adjustment ===
-    // You can tweak this divisor to change how smooth it scrolls.
-    // Lower = smoother, but can feel slow.
+#ifndef USE_EINK
+    uint32_t now = millis();
     float delta = (now - lastTime) / 400.0f;
     lastTime = now;
+    const float scrollSpeed = 2.0f;
 
-    const float scrollSpeed = 2.0f; // pixels per second
-
-    // Delay scrolling start by 2 seconds
     if (scrollStartDelay == 0)
         scrollStartDelay = now;
     if (!scrollStarted && now - scrollStartDelay > 2000)
@@ -410,25 +528,76 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         scrollY = 0;
     }
+#else
+    // E-Ink: disable autoscroll
+    scrollY = 0.0f;
+    waitingToReset = false;
+    scrollStarted = false;
+    lastTime = millis(); // keep timebase sane
+#endif
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
-        display->setPixel(separatorX, yOffset + ((isHighResolution) ? 19 : 13));
+
+    // Render visible lines
+    for (size_t i = 0; i < cachedLines.size(); ++i) {
+        int lineY = yOffset;
+        for (size_t j = 0; j < i; ++j)
+            lineY += cachedHeights[j];
+
+        if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
+            if (isHeader[i]) {
+                // Render header
+                int w = display->getStringWidth(cachedLines[i].c_str());
+                int headerX = isMine[i] ? (SCREEN_WIDTH - w - 2) : x;
+                display->drawString(headerX, lineY, cachedLines[i].c_str());
+
+                // Draw ACK/NACK mark for our own messages
+                if (isMine[i]) {
+                    int markX = headerX - 10;
+                    int markY = lineY;
+                    if (ackForLine[i] == AckStatus::ACKED) {
+                        // Destination ACK
+                        drawCheckMark(display, markX, markY, 8);
+                    } else if (ackForLine[i] == AckStatus::NACKED || ackForLine[i] == AckStatus::TIMEOUT) {
+                        // Failure or timeout
+                        drawXMark(display, markX, markY, 8);
+                    } else if (ackForLine[i] == AckStatus::RELAYED) {
+                        // Relay ACK
+                        drawRelayMark(display, markX, markY, 8);
+                    }
+                    // AckStatus::NONE → show nothing
+                }
+
+                // Draw underline just under header text
+                int underlineY = lineY + FONT_HEIGHT_SMALL;
+                for (int px = 0; px < w; ++px) {
+                    display->setPixel(headerX + px, underlineY);
+                }
+            } else {
+                // Render message line
+                if (isMine[i]) {
+                    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+                    drawStringWithEmotes(display, SCREEN_WIDTH, lineY, cachedLines[i], emotes, numEmotes);
+                    display->setTextAlignment(TEXT_ALIGN_LEFT);
+                } else {
+                    drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
+                }
+            }
+        }
     }
 
-    // === Render visible lines ===
-    renderMessageContent(display, cachedLines, cachedHeights, x, yOffset, scrollBottom, emotes, numEmotes, isInverted, isBold);
-
-    // Draw header at the end to sort out overlapping elements
     graphics::drawCommonHeader(display, x, y, titleStr);
-#endif
 }
 
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
 {
     std::vector<std::string> lines;
-    lines.push_back(std::string(headerStr)); // Header line is always first
+
+    // Only push headerStr if it's not empty (prevents extra blank line after headers)
+    if (headerStr && headerStr[0] != '\0') {
+        lines.push_back(std::string(headerStr));
+    }
 
     std::string line, word;
     for (int i = 0; messageBuf[i]; ++i) {
@@ -451,10 +620,6 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         } else {
             word += ch;
             std::string test = line + word;
-// Keep these lines for diagnostics
-// LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
-// LOG_INFO("Current String: %s", test.c_str());
-// Note: there are boolean comparison uint16 (getStringWidth) with int (textWidth), hope textWidth is always positive :)
 #if defined(OLED_UA) || defined(OLED_RU)
             uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
 #else
@@ -481,10 +646,13 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 {
     std::vector<int> rowHeights;
 
-    for (const auto &_line : lines) {
+    for (size_t idx = 0; idx < lines.size(); ++idx) {
+        const auto &_line = lines[idx];
         int lineHeight = FONT_HEIGHT_SMALL;
         bool hasEmote = false;
+        bool isHeader = false;
 
+        // Detect emotes in this line
         for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
             if (_line.find(e.label) != std::string::npos) {
@@ -493,11 +661,34 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
             }
         }
 
-        // Apply tighter spacing if no emotes on this line
-        if (!hasEmote) {
-            lineHeight -= 2; // reduce by 2px for tighter spacing
+        // Detect header lines (start of a message, or time stamps like "5m ago")
+        if (idx == 0 || _line.find("ago") != std::string::npos || _line.rfind("me ", 0) == 0) {
+            isHeader = true;
+        }
+
+        // Look ahead to see if next line is a header → this is the last line of a message
+        bool beforeHeader =
+            (idx + 1 < lines.size() && (lines[idx + 1].find("ago") != std::string::npos || lines[idx + 1].rfind("me ", 0) == 0));
+
+        if (isHeader) {
+            // Headers always keep full line height
+            lineHeight = FONT_HEIGHT_SMALL;
+        } else if (beforeHeader) {
+            if (hasEmote) {
+                // Last line has emote → preserve its height + padding
+                lineHeight = std::max(lineHeight, FONT_HEIGHT_SMALL) + 4;
+            } else {
+                // Plain last line → full spacing only
+                lineHeight = FONT_HEIGHT_SMALL;
+            }
+        } else if (!hasEmote) {
+            // Plain body line, tighter spacing
+            lineHeight -= 4;
             if (lineHeight < 8)
-                lineHeight = 8; // minimum safety
+                lineHeight = 8; // safe minimum
+        } else {
+            // Line has emotes, don’t compress
+            lineHeight += 4; // add breathing room
         }
 
         rowHeights.push_back(lineHeight);
@@ -522,6 +713,118 @@ void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &
                 drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
+    }
+}
+
+void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
+{
+    if (packet.from != 0) {
+        hasUnreadMessage = true;
+
+        // Determine if message belongs to a muted channel
+        bool isChannelMuted = false;
+        if (sm.type == MessageType::BROADCAST) {
+            const meshtastic_Channel channel = channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
+            if (channel.settings.mute)
+                isChannelMuted = true;
+        }
+
+        // Banner logic
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
+        const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+        const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
+
+        char banner[256];
+        bool isAlert = false;
+
+        // Check if alert detection is enabled via external notification module
+        if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
+            moduleConfig.external_notification.alert_bell_buzzer) {
+            for (size_t i = 0; i < packet.decoded.payload.size && i < 100; i++) {
+                if (msgRaw[i] == '\x07') {
+                    isAlert = true;
+                    break;
+                }
+            }
+        }
+
+        if (isAlert) {
+            if (longName && longName[0])
+                snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+            else
+                strcpy(banner, "Alert Received");
+        } else {
+            // Skip muted channels unless it's an alert
+            if (isChannelMuted)
+                return;
+
+            if (longName && longName[0]) {
+#if defined(M5STACK_UNITC6L)
+                strcpy(banner, "New Message");
+#else
+                snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+#endif
+            } else
+                strcpy(banner, "New Message");
+        }
+
+        // Append context (which channel or DM) so the banner shows where the message arrived
+        {
+            char contextBuf[64] = "";
+            if (sm.type == MessageType::BROADCAST) {
+                const char *cname = channels.getName(sm.channelIndex);
+                if (cname && cname[0])
+                    snprintf(contextBuf, sizeof(contextBuf), "in #%s", cname);
+                else
+                    snprintf(contextBuf, sizeof(contextBuf), "in Ch%d", sm.channelIndex);
+            } else if (sm.type == MessageType::DM_TO_US) {
+                /* Commenting out to better understand if we need this info in the banner
+                uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
+                const meshtastic_NodeInfoLite *peerNode = nodeDB->getMeshNode(peer);
+                if (peerNode && peerNode->has_user && peerNode->user.short_name)
+                    snprintf(contextBuf, sizeof(contextBuf), "Direct: @%s", peerNode->user.short_name);
+                else
+                    snprintf(contextBuf, sizeof(contextBuf), "Direct Message");
+                */
+            }
+
+            if (contextBuf[0]) {
+                size_t cur = strlen(banner);
+                if (cur + 1 < sizeof(banner)) {
+                    if (cur > 0 && banner[cur - 1] != '\n') {
+                        banner[cur] = '\n';
+                        banner[cur + 1] = '\0';
+                        cur++;
+                    }
+                    strncat(banner, contextBuf, sizeof(banner) - cur - 1);
+                }
+            }
+        }
+
+        // Shorter banner if already in a conversation (Channel or Direct)
+        bool inThread = (getThreadMode() != ThreadMode::ALL);
+
+        if (shouldWakeOnReceivedMessage()) {
+            screen->setOn(true);
+        }
+
+        screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+    }
+
+    // No setFrames() here anymore
+    if (packet.from == 0) {
+        setThreadFor(sm, packet);
+    }
+    resetScrollState();
+}
+
+void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
+{
+    if (sm.type == MessageType::BROADCAST) {
+        setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
+    } else if (sm.type == MessageType::DM_TO_US) {
+        uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
+        setThreadMode(ThreadMode::DIRECT, -1, peer);
     }
 }
 
