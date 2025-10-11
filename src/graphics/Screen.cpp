@@ -1428,6 +1428,9 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         }
         nodeDB->updateGUI = false;
         break;
+    case STATUS_TYPE_POWER:
+        forceDisplay(true);
+        break;
     }
 
     return 0;
