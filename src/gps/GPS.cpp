@@ -1473,12 +1473,12 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             }
 
             if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
-#ifdef GPS_DEBUG
-                LOG_DEBUG(response);
-#endif
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
+#ifdef GPS_DEBUG
+                        LOG_DEBUG(response);
+#endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
                         delete[] response; // Cleanup before return
                         return chipInfo.driver;
@@ -1486,6 +1486,9 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 }
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(response);
+#endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
                 response[0] = '\0';
