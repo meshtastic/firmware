@@ -984,8 +984,8 @@ void NodeDB::resetNodes()
         clearLocalPosition();
     numMeshNodes = 1;
     if (config.device.preserve_favorites) {
-        for (size_t i = 0; i < nodeDatabase.nodes.size(); i++) {
-            meshtastic_NodeInfoLite &node = nodeDatabase.nodes[i];
+        for (size_t i = 0; i < meshNodes->size(); i++) {
+            meshtastic_NodeInfoLite &node = meshNodes->at(i);
             if (i > 0 && !node.is_favorite) {
                 node = meshtastic_NodeInfoLite();
             } else {
