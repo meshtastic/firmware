@@ -36,10 +36,10 @@ enum class AckStatus : uint8_t {
 };
 
 struct StoredMessage {
-    uint32_t timestamp;   // When message was created (secs since boot/RTC)
-    uint32_t sender;      // NodeNum of sender
-    uint8_t channelIndex; // Channel index used
-    char text[MAX_MESSAGE_SIZE];    // UTF-8 text payload
+    uint32_t timestamp;          // When message was created (secs since boot/RTC)
+    uint32_t sender;             // NodeNum of sender
+    uint8_t channelIndex;        // Channel index used
+    char text[MAX_MESSAGE_SIZE]; // UTF-8 text payload
 
     // Destination node.
     // 0xffffffff (NODENUM_BROADCAST) means broadcast,

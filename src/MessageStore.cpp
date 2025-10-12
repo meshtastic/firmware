@@ -269,8 +269,7 @@ void MessageStore::clearAllMessages()
 }
 
 // Internal helper: erase first or last message matching a predicate
-template <typename Predicate>
-static void eraseIf(std::deque<StoredMessage> &deque, Predicate pred, bool fromBack = false)
+template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deque, Predicate pred, bool fromBack = false)
 {
     if (fromBack) {
         // Iterate from the back and erase the first match from the end
@@ -299,9 +298,7 @@ void MessageStore::dismissOldestMessage()
 // Dismiss oldest message in a specific channel
 void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
 {
-    auto pred = [channel](const StoredMessage &m) {
-        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
-    };
+    auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
     eraseIf(liveMessages, pred);
     eraseIf(messages, pred);
     saveToFlash();
@@ -325,8 +322,10 @@ void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
 // Dismiss newest message (RAM + persisted queue)
 void MessageStore::dismissNewestMessage()
 {
-    eraseIf(liveMessages, [](StoredMessage &) { return true; }, true);
-    eraseIf(messages, [](StoredMessage &) { return true; }, true);
+    eraseIf(
+        liveMessages, [](StoredMessage &) { return true; }, true);
+    eraseIf(
+        messages, [](StoredMessage &) { return true; }, true);
     saveToFlash();
 }
 

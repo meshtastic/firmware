@@ -36,10 +36,14 @@ static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 
 // UTF-8 skip helper
-inline size_t utf8CharLen(uint8_t c) {
-    if ((c & 0xE0) == 0xC0) return 2;
-    if ((c & 0xF0) == 0xE0) return 3;
-    if ((c & 0xF8) == 0xF0) return 4;
+inline size_t utf8CharLen(uint8_t c)
+{
+    if ((c & 0xE0) == 0xC0)
+        return 2;
+    if ((c & 0xF0) == 0xE0)
+        return 3;
+    if ((c & 0xF8) == 0xF0)
+        return 4;
     return 1;
 }
 
@@ -229,7 +233,8 @@ const std::vector<uint32_t> &getSeenPeers()
     return seenPeers;
 }
 
-inline int centerYForRow(int y, int size) {
+inline int centerYForRow(int y, int size)
+{
     int midY = y + (FONT_HEIGHT_SMALL / 2);
     return midY - (size / 2);
 }
