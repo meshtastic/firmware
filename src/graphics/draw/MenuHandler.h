@@ -45,7 +45,7 @@ class menuHandler
         throttle_message,
         FrameToggles,
         message_response_menu,
-        message_viewmode_menu
+        message_viewmode_menu,
         node_name_length_menu
     };
     static screenMenus menuQueue;
