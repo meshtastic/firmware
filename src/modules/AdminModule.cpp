@@ -280,7 +280,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_nodedb_reset_tag: {
         disableBluetooth();
         LOG_INFO("Initiate node-db reset");
-        nodeDB->resetNodes();
+        //  CLIENT_BASE, ROUTER and ROUTER_LATE are able to preserve the remaining hop count when relaying a packet via a
+        //  favorited node, so ensure that their favorites are kept on reset
+        bool rolePreference =
+            isOneOf(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
+                    meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
+        nodeDB->resetNodes(rolePreference ? rolePreference : r->nodedb_reset);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -634,13 +639,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 requiresReboot = true;
             }
         }
-        //  Router, Router Late and Client Base roles persist their favourites through NodeDB reset by default.
-        //  In accordance with the ability to preserve hops when relayed via a favorite added in
-        //  https://github.com/meshtastic/firmware/pull/7992
-        if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
-                      meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
-            config.device.preserve_favorites = true;
-        };
 #if USERPREFS_EVENT_MODE
         // If we're in event mode, nobody is a Router or Router Late
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||

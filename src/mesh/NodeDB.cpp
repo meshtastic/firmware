@@ -978,12 +978,12 @@ void NodeDB::installDefaultChannels()
     channelFile.version = DEVICESTATE_CUR_VER;
 }
 
-void NodeDB::resetNodes()
+void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    if (config.device.preserve_favorites) {
+    if (keepFavorites) {
         for (size_t i = 0; i < meshNodes->size(); i++) {
             meshtastic_NodeInfoLite &node = meshNodes->at(i);
             if (i > 0 && !node.is_favorite) {
