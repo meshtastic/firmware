@@ -1679,6 +1679,8 @@ void menuHandler::FrameToggles_menu()
         lora,
         clock,
         show_favorites,
+        show_telemetry,
+        show_power,
         enumEnd
     };
     static const char *optionsArray[enumEnd] = {"Finish"};
@@ -1716,6 +1718,12 @@ void menuHandler::FrameToggles_menu()
 
     optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
     optionsEnumArray[options++] = show_favorites;
+
+    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Telemetry" : "Show Telemetry";
+    optionsEnumArray[options++] = show_telemetry;
+
+    optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
+    optionsEnumArray[options++] = show_power;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Show/Hide Frames";
@@ -1769,6 +1777,14 @@ void menuHandler::FrameToggles_menu()
             screen->runNow();
         } else if (selected == show_favorites) {
             screen->toggleFrameVisibility("show_favorites");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_telemetry) {
+            moduleConfig.telemetry.environment_screen_enabled = !moduleConfig.telemetry.environment_screen_enabled;
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_power) {
+            moduleConfig.telemetry.power_screen_enabled = !moduleConfig.telemetry.power_screen_enabled;
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         }
