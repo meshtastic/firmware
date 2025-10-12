@@ -28,6 +28,9 @@ static BLEDfuSecure bledfusecure;                                             //
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
+// Last ToRadio value received from the phone
+static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+
 static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
@@ -59,7 +62,8 @@ void onConnect(uint16_t conn_handle)
     LOG_INFO("BLE Connected to %s", central_name);
 
     // Notify UI (or any other interested firmware components)
-    bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 /**
  * Callback invoked when a connection is dropped
@@ -73,8 +77,12 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
         bluetoothPhoneAPI->close();
     }
 
+    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
     // Notify UI (or any other interested firmware components)
-    bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -143,8 +151,6 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     }
     authorizeRead(conn_hdl);
 }
-// Last ToRadio value received from the phone
-static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
@@ -326,9 +332,11 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         textkey += (char)passkey[i];
 
     // Notify UI (or other components) of pairing event and passkey
-    bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(textkey));
+    meshtastic::BluetoothStatus newStatus(textkey);
+    bluetoothStatus->updateStatus(&newStatus);
 
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+#if HAS_SCREEN &&                                                                                                                \
+    !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
     if (screen) {
         screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
             char btPIN[16] = "888888";
@@ -398,12 +406,13 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         LOG_INFO("BLE pair success");
-        bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
+        meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+        bluetoothStatus->updateStatus(&newConnectedStatus);
     } else {
         LOG_INFO("BLE pair failed");
         // Notify UI (or any other interested firmware components)
-        bluetoothStatus->updateStatus(
-            new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+        meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+        bluetoothStatus->updateStatus(&newDisconnectedStatus);
     }
 
     // Todo: migrate this display code back into Screen class, and observe bluetoothStatus

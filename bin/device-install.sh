@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 BPS_RESET=false

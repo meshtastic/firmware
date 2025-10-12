@@ -13,7 +13,7 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public
   public:
     explicit RotaryEncoderInterruptBase(const char *name);
     void init(uint8_t pinA, uint8_t pinB, uint8_t pinPress, input_broker_event eventCw, input_broker_event eventCcw,
-              input_broker_event eventPressed,
+              input_broker_event eventPressed, input_broker_event eventPressedLong,
               //        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress);
               void (*onIntA)(), void (*onIntB)(), void (*onIntPress)());
     void intPressHandler();
@@ -33,10 +33,22 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public
     volatile RotaryEncoderInterruptBaseActionType action = ROTARY_ACTION_NONE;
 
   private:
+    // pins and events
     uint8_t _pinA = 0;
     uint8_t _pinB = 0;
+    uint8_t _pinPress = 0;
     input_broker_event _eventCw = INPUT_BROKER_NONE;
     input_broker_event _eventCcw = INPUT_BROKER_NONE;
     input_broker_event _eventPressed = INPUT_BROKER_NONE;
+    input_broker_event _eventPressedLong = INPUT_BROKER_NONE;
     const char *_originName;
+
+    // Long press detection variables
+    uint32_t pressStartTime = 0;
+    bool pressDetected = false;
+    uint32_t lastPressLongEventTime = 0;
+    unsigned long lastPressKeyTime = 0;
+    static const uint32_t LONG_PRESS_DURATION = 300;      // ms
+    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = 0; // 0 = single-shot for rotary select
+    const unsigned long pressDebounceMs = 200;            // ms
 };

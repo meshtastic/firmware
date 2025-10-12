@@ -21,6 +21,10 @@ extern bool haveGlyphs(const char *str);
 // Global screen instance
 extern graphics::Screen *screen;
 
+#if defined(M5STACK_UNITC6L)
+static uint32_t lastSwitchTime = 0;
+#else
+#endif
 namespace graphics
 {
 namespace NodeListRenderer
@@ -393,9 +397,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
-
+#if defined(M5STACK_UNITC6L)
+    int columnWidth = display->getWidth();
+#else
     int columnWidth = display->getWidth() / 2;
-
+#endif
     display->clear();
 
     // Draw the battery/time header
@@ -408,8 +414,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
 
     int visibleNodeRows = totalRowsAvailable;
+#if defined(M5STACK_UNITC6L)
+    int totalColumns = 1;
+#else
     int totalColumns = 2;
-
+#endif
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
     if (nodeDB->getMeshNodeByIndex(startIndex)->num == nodeDB->getNodeNum()) {
         startIndex++; // skip own node
@@ -445,12 +454,14 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         }
     }
 
+#if !defined(M5STACK_UNITC6L)
     // Draw column separator
     if (shownCount > 0) {
         const int firstNodeY = y + 3;
         drawColumnSeparator(display, x, firstNodeY, lastNodeY);
     }
 
+#endif
     const int scrollStartY = y + 3;
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
 }
@@ -468,6 +479,13 @@ void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     unsigned long now = millis();
 
+#if defined(M5STACK_UNITC6L)
+    display->clear();
+    if (now - lastSwitchTime >= 3000) {
+        display->display();
+        lastSwitchTime = now;
+    }
+#endif
     // On very first call (on boot or state enter)
     if (lastRenderedMode == MODE_COUNT) {
         currentMode = MODE_LAST_HEARD;
@@ -522,6 +540,14 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
+#if defined(M5STACK_UNITC6L)
+    display->clear();
+    uint32_t now = millis();
+    if (now - lastSwitchTime >= 2000) {
+        display->display();
+        lastSwitchTime = now;
+    }
+#endif
     if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
 #if HAS_GPS
         if (screen->hasHeading()) {
