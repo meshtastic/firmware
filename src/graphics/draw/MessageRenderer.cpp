@@ -725,7 +725,7 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         bool isChannelMuted = false;
         if (sm.type == MessageType::BROADCAST) {
             const meshtastic_Channel channel = channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
-            if (channel.settings.mute)
+            if (channel.settings.has_module_settings && channel.settings.module_settings.is_muted)
                 isChannelMuted = true;
         }
 
