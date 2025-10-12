@@ -51,12 +51,12 @@ static unsigned long wifiReconnectStartMillis = 0;
 static bool wifiReconnectPending = false;
 static unsigned char wifiConnectAttempts = 0;
 
-#ifndef MaxWifiConnectionAttempts
-#define  MaxWifiConnectionAttempts 6
+#ifndef MAXWIFICONNECTIONATTEMPTS
+#define  MAXWIFICONNECTIONATTEMPTS 6
 #endif
 
-#ifndef wifiReconnectGap
-#define  wifiReconnectGap 10000
+#ifndef WIFIRECONNECTGAP
+#define  WIFIRECONNECTGAP 10000
 #endif
 
 bool APStartupComplete = 0;
@@ -185,12 +185,12 @@ static int32_t reconnectWiFi()
         wifiReconnectStartMillis = millis();
         wifiReconnectPending = true;
         // Do not attempt to connect yet, wait for the next invocation
-        return wifiReconnectGap; // Schedule next check soon
+        return WIFIRECONNECTGAP; // Schedule next check soon
     }
 
     // Check if we are ready to proceed with the WiFi connection after the 5s wait
     if (wifiReconnectPending) {
-        if (millis() - wifiReconnectStartMillis >= wifiReconnectGap) {
+        if (millis() - wifiReconnectStartMillis >= WIFIRECONNECTGAP) {
             if (!WiFi.isConnected()) {
                 wifiConnectAttempts++;
                 LOG_INFO("Reconnecting to WiFi access point %s, attempt %d", wifiName, wifiConnectAttempts);
@@ -201,7 +201,7 @@ static int32_t reconnectWiFi()
 #endif
                 WiFi.begin(wifiName, wifiPsw);
                 wifiReconnectStartMillis = millis();
-                if(wifiConnectAttempts < MaxWifiConnectionAttempts){
+                if(wifiConnectAttempts < MAXWIFICONNECTIONATTEMPTS){
                     needReconnect = true;
                 }
                 else{
