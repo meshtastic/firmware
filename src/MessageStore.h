@@ -18,7 +18,9 @@
 #include <string>
 
 // Max number of messages we’ll keep in history
-constexpr size_t MAX_MESSAGES_SAVED = 20;
+#ifndef MAX_MESSAGES_SAVED
+#define MAX_MESSAGES_SAVED 20
+#endif
 constexpr size_t MAX_MESSAGE_SIZE = 220; // safe bound for text payload
 
 // Explicit message classification
@@ -37,7 +39,7 @@ struct StoredMessage {
     uint32_t timestamp;   // When message was created (secs since boot/RTC)
     uint32_t sender;      // NodeNum of sender
     uint8_t channelIndex; // Channel index used
-    std::string text;     // UTF-8 text payload
+    char text[MAX_MESSAGE_SIZE];    // UTF-8 text payload
 
     // Destination node.
     // 0xffffffff (NODENUM_BROADCAST) means broadcast,
@@ -68,11 +70,11 @@ class MessageStore
     explicit MessageStore(const std::string &label);
 
     // Live RAM methods (always current, used by UI and runtime)
-    void addLiveMessage(const StoredMessage &msg);
+    void addLiveMessage(StoredMessage &&msg);
     const std::deque<StoredMessage> &getLiveMessages() const { return liveMessages; }
 
     // Persistence methods (used only on boot/shutdown)
-    void addMessage(const StoredMessage &msg);
+    void addMessage(StoredMessage &&msg);
     const StoredMessage &addFromPacket(const meshtastic_MeshPacket &mp); // Incoming/outgoing → RAM only
     void addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text);
     void saveToFlash();

@@ -35,6 +35,14 @@ namespace MessageRenderer
 static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 
+// UTF-8 skip helper
+inline size_t utf8CharLen(uint8_t c) {
+    if ((c & 0xE0) == 0xC0) return 2;
+    if ((c & 0xF0) == 0xE0) return 3;
+    if ((c & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
     int cursorX = x;
@@ -43,28 +51,16 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     // Step 1: Find tallest emote in the line
     int maxIconHeight = fontHeight;
     for (size_t i = 0; i < line.length();) {
-        bool matched = false;
         for (int e = 0; e < emoteCount; ++e) {
             size_t emojiLen = strlen(emotes[e].label);
             if (line.compare(i, emojiLen, emotes[e].label) == 0) {
                 if (emotes[e].height > maxIconHeight)
                     maxIconHeight = emotes[e].height;
                 i += emojiLen;
-                matched = true;
                 break;
             }
         }
-        if (!matched) {
-            uint8_t c = static_cast<uint8_t>(line[i]);
-            if ((c & 0xE0) == 0xC0)
-                i += 2;
-            else if ((c & 0xF0) == 0xE0)
-                i += 3;
-            else if ((c & 0xF8) == 0xF0)
-                i += 4;
-            else
-                i += 1;
-        }
+        i += utf8CharLen(static_cast<uint8_t>(line[i]));
     }
 
     // Step 2: Baseline alignment
@@ -233,60 +229,41 @@ const std::vector<uint32_t> &getSeenPeers()
     return seenPeers;
 }
 
+inline int centerYForRow(int y, int size) {
+    int midY = y + (FONT_HEIGHT_SMALL / 2);
+    return midY - (size / 2);
+}
+
 // Helpers for drawing status marks (thickened strokes)
 void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
 {
-    int h = size;
-    int w = size;
-
-    // Center mark vertically with the text row
-    int midY = y + (FONT_HEIGHT_SMALL / 2);
-    int topY = midY - (h / 2);
-
-    display->setColor(WHITE); // ensure we use current fg
-
-    // Draw thicker checkmark by overdrawing lines with 1px offset
-    // arm 1
-    display->drawLine(x, topY + h / 2, x + w / 3, topY + h);
-    display->drawLine(x, topY + h / 2 + 1, x + w / 3, topY + h + 1);
-    // arm 2
-    display->drawLine(x + w / 3, topY + h, x + w, topY);
-    display->drawLine(x + w / 3, topY + h + 1, x + w, topY + 1);
+    int topY = centerYForRow(y, size);
+    display->setColor(WHITE);
+    display->drawLine(x, topY + size / 2, x + size / 3, topY + size);
+    display->drawLine(x, topY + size / 2 + 1, x + size / 3, topY + size + 1);
+    display->drawLine(x + size / 3, topY + size, x + size, topY);
+    display->drawLine(x + size / 3, topY + size + 1, x + size, topY + 1);
 }
 
 void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
 {
-    int h = size;
-    int w = size;
-
-    // Center mark vertically with the text row
-    int midY = y + (FONT_HEIGHT_SMALL / 2);
-    int topY = midY - (h / 2);
-
+    int topY = centerYForRow(y, size);
     display->setColor(WHITE);
-
-    // Draw thicker X with 1px offset
-    display->drawLine(x, topY, x + w, topY + h);
-    display->drawLine(x, topY + 1, x + w, topY + h + 1);
-    display->drawLine(x + w, topY, x, topY + h);
-    display->drawLine(x + w, topY + 1, x, topY + h + 1);
+    display->drawLine(x, topY, x + size, topY + size);
+    display->drawLine(x, topY + 1, x + size, topY + size + 1);
+    display->drawLine(x + size, topY, x, topY + size);
+    display->drawLine(x + size, topY + 1, x, topY + size + 1);
 }
 
 void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
 {
     int r = size / 2;
-    int midY = y + (FONT_HEIGHT_SMALL / 2);
-    int centerY = midY;
+    int centerY = centerYForRow(y, size) + r;
     int centerX = x + r;
-
     display->setColor(WHITE);
-
-    // Draw circle outline (relay = uncertain status)
     display->drawCircle(centerX, centerY, r);
-
-    // Draw "?" inside (approx, 3px wide)
-    display->drawLine(centerX, centerY - 2, centerX, centerY); // stem
-    display->setPixel(centerX, centerY + 2);                   // dot
+    display->drawLine(centerX, centerY - 2, centerX, centerY);
+    display->setPixel(centerX, centerY + 2);
     display->drawLine(centerX - 1, centerY - 4, centerX + 1, centerY - 4);
 }
 
@@ -478,7 +455,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         ackForLine.push_back(m.ackStatus);
 
         // Split message text into wrapped lines
-        std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
+        std::vector<std::string> wrapped = generateLines(display, "", m.text, textWidth);
         for (auto &ln : wrapped) {
             allLines.push_back(ln);
             isMine.push_back(mine);

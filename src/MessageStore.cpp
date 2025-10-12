@@ -11,10 +11,23 @@
 using graphics::MessageRenderer::setThreadMode;
 using graphics::MessageRenderer::ThreadMode;
 
-static size_t getMessageSize(const StoredMessage &m)
+// Calculate serialized size for a StoredMessage
+static inline size_t getMessageSize(const StoredMessage &m)
 {
     // serialized size = fixed 16 bytes + text length (capped at MAX_MESSAGE_SIZE)
-    return 16 + std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
+    return 16 + std::min<size_t>(MAX_MESSAGE_SIZE, strnlen(m.text, MAX_MESSAGE_SIZE));
+}
+
+static inline void assignTimestamp(StoredMessage &sm)
+{
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (nowSecs) {
+        sm.timestamp = nowSecs;
+        sm.isBootRelative = false;
+    } else {
+        sm.timestamp = millis() / 1000;
+        sm.isBootRelative = true;
+    }
 }
 
 void MessageStore::logMemoryUsage(const char *context) const
@@ -34,38 +47,34 @@ MessageStore::MessageStore(const std::string &label)
 }
 
 // Live message handling (RAM only)
-void MessageStore::addLiveMessage(const StoredMessage &msg)
+void MessageStore::addLiveMessage(StoredMessage &&msg)
 {
     if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
         liveMessages.pop_front(); // keep only most recent N
     }
-    liveMessages.push_back(msg);
+    // Use emplace_back with std::move to avoid extra copy
+    liveMessages.emplace_back(std::move(msg));
 }
 
 // Persistence queue (used only on shutdown/reboot)
-void MessageStore::addMessage(const StoredMessage &msg)
+void MessageStore::addMessage(StoredMessage &&msg)
 {
     if (messages.size() >= MAX_MESSAGES_SAVED) {
         messages.pop_front();
     }
-    messages.push_back(msg);
+    // Use emplace_back with std::move to avoid extra copy
+    messages.emplace_back(std::move(msg));
 }
+
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
     StoredMessage sm;
-
-    // Always use our local time, ignore packet.rx_time
-    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-    if (nowSecs > 0) {
-        sm.timestamp = nowSecs;
-        sm.isBootRelative = false;
-    } else {
-        sm.timestamp = millis() / 1000;
-        sm.isBootRelative = true; // mark for later upgrade
-    }
+    // Always use our local time (helper handles RTC vs boot time)
+    assignTimestamp(sm);
 
     sm.channelIndex = packet.channel;
-    sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
+    strncpy(sm.text, reinterpret_cast<const char *>(packet.decoded.payload.bytes), MAX_MESSAGE_SIZE - 1);
+    sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
     if (packet.from == 0) {
         // Phone-originated (outgoing)
@@ -98,7 +107,7 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
         sm.ackStatus = AckStatus::ACKED;
     }
 
-    addLiveMessage(sm);
+    addLiveMessage(std::move(sm));
 
     // Return reference to the most recently stored message
     return liveMessages.back();
@@ -109,19 +118,13 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
 {
     StoredMessage sm;
 
-    // Always use our local time
-    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-    if (nowSecs > 0) {
-        sm.timestamp = nowSecs;
-        sm.isBootRelative = false;
-    } else {
-        sm.timestamp = millis() / 1000;
-        sm.isBootRelative = true; // mark for later upgrade
-    }
+    // Always use our local time (helper handles RTC vs boot time)
+    assignTimestamp(sm);
 
     sm.sender = sender;
     sm.channelIndex = channelIndex;
-    sm.text = text;
+    strncpy(sm.text, text.c_str(), MAX_MESSAGE_SIZE - 1);
+    sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
     // Default manual adds to broadcast
     sm.dest = NODENUM_BROADCAST;
@@ -130,7 +133,7 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     // Outgoing messages start as NONE until ACK/NACK arrives
     sm.ackStatus = AckStatus::NONE;
 
-    addLiveMessage(sm);
+    addLiveMessage(std::move(sm));
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -157,7 +160,7 @@ void MessageStore::saveToFlash()
         f.write((uint8_t *)&m.sender, sizeof(m.sender));
         f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
         f.write((uint8_t *)&m.dest, sizeof(m.dest));
-        f.write((uint8_t *)m.text.c_str(), std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size()));
+        f.write((uint8_t *)m.text, strnlen(m.text, MAX_MESSAGE_SIZE));
         f.write('\0'); // null terminator
 
         uint8_t bootFlag = m.isBootRelative ? 1 : 0;
@@ -200,15 +203,8 @@ void MessageStore::loadFromFlash()
         f.readBytes((char *)&m.sender, sizeof(m.sender));
         f.readBytes((char *)&m.channelIndex, sizeof(m.channelIndex));
         f.readBytes((char *)&m.dest, sizeof(m.dest));
-
-        char c;
-        while (m.text.size() < MAX_MESSAGE_SIZE) {
-            if (f.readBytes(&c, 1) <= 0)
-                break;
-            if (c == '\0')
-                break;
-            m.text.push_back(c);
-        }
+        f.readBytes(m.text, MAX_MESSAGE_SIZE - 1);
+        m.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
         // Try to read boot-relative flag (new format)
         uint8_t bootFlag = 0;
@@ -272,75 +268,65 @@ void MessageStore::clearAllMessages()
 #endif
 }
 
+// Internal helper: erase first or last message matching a predicate
+template <typename Predicate>
+static void eraseIf(std::deque<StoredMessage> &deque, Predicate pred, bool fromBack = false)
+{
+    if (fromBack) {
+        // Iterate from the back and erase the first match from the end
+        for (auto it = deque.rbegin(); it != deque.rend(); ++it) {
+            if (pred(*it)) {
+                deque.erase(std::next(it).base());
+                break;
+            }
+        }
+    } else {
+        // Erase the first matching message from the front
+        auto it = std::find_if(deque.begin(), deque.end(), pred);
+        if (it != deque.end())
+            deque.erase(it);
+    }
+}
+
 // Dismiss oldest message (RAM + persisted queue)
 void MessageStore::dismissOldestMessage()
 {
-    if (!liveMessages.empty()) {
-        liveMessages.pop_front();
-    }
-    if (!messages.empty()) {
-        messages.pop_front();
-    }
+    eraseIf(liveMessages, [](StoredMessage &) { return true; });
+    eraseIf(messages, [](StoredMessage &) { return true; });
     saveToFlash();
 }
 
 // Dismiss oldest message in a specific channel
 void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
 {
-    auto it = std::find_if(liveMessages.begin(), liveMessages.end(), [channel](const StoredMessage &m) {
+    auto pred = [channel](const StoredMessage &m) {
         return m.type == MessageType::BROADCAST && m.channelIndex == channel;
-    });
-    if (it != liveMessages.end()) {
-        liveMessages.erase(it);
-    }
-
-    auto it2 = std::find_if(messages.begin(), messages.end(), [channel](const StoredMessage &m) {
-        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
-    });
-    if (it2 != messages.end()) {
-        messages.erase(it2);
-    }
-
+    };
+    eraseIf(liveMessages, pred);
+    eraseIf(messages, pred);
     saveToFlash();
 }
 
 // Dismiss oldest message in a direct conversation with a peer
 void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
 {
-    auto it = std::find_if(liveMessages.begin(), liveMessages.end(), [peer](const StoredMessage &m) {
+    auto pred = [peer](const StoredMessage &m) {
         if (m.type == MessageType::DM_TO_US) {
             uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
             return other == peer;
         }
         return false;
-    });
-    if (it != liveMessages.end()) {
-        liveMessages.erase(it);
-    }
-
-    auto it2 = std::find_if(messages.begin(), messages.end(), [peer](const StoredMessage &m) {
-        if (m.type == MessageType::DM_TO_US) {
-            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
-            return other == peer;
-        }
-        return false;
-    });
-    if (it2 != messages.end()) {
-        messages.erase(it2);
-    }
-
+    };
+    eraseIf(liveMessages, pred);
+    eraseIf(messages, pred);
     saveToFlash();
 }
 
 // Dismiss newest message (RAM + persisted queue)
 void MessageStore::dismissNewestMessage()
 {
-    if (!liveMessages.empty()) {
-        liveMessages.pop_back();
-    }
-    if (!messages.empty()) {
-        messages.pop_back();
-    }
+    eraseIf(liveMessages, [](StoredMessage &) { return true; }, true);
+    eraseIf(messages, [](StoredMessage &) { return true; }, true);
     saveToFlash();
 }
 
