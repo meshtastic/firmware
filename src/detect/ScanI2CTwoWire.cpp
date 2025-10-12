@@ -197,6 +197,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef PCF8563_RTC
                 SCAN_SIMPLE_CASE(PCF8563_RTC, RTC_PCF8563, "PCF8563", (uint8_t)addr.address)
 #endif
+#ifdef RX8130CE_RTC
+                SCAN_SIMPLE_CASE(RX8130CE_RTC, RTC_RX8130CE, "RX8130CE", (uint8_t)addr.address)
+#endif
 
             case CARDKB_ADDR:
                 // Do we have the RAK14006 instead?
@@ -375,7 +378,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c || registerValue == 0xc8d) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0x11f3 || registerValue == 0xe9c || registerValue == 0xc8d) {
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {

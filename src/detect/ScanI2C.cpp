@@ -25,8 +25,8 @@ ScanI2C::FoundDevice ScanI2C::firstScreen() const
 
 ScanI2C::FoundDevice ScanI2C::firstRTC() const
 {
-    ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563};
-    return firstOfOrNONE(2, types);
+    ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563, RTC_RX8130CE};
+    return firstOfOrNONE(3, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const

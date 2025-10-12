@@ -201,6 +201,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4
 #elif defined(M5STACK_UNITC6L)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
+#elif defined(HELTEC_WIRELESS_TRACKER_V2)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
 #endif
 
 // -----------------------------------------------------------------------------

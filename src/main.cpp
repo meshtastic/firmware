@@ -298,6 +298,12 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+#if defined(R1_NEO)
+    pinMode(DCDC_EN_HOLD, OUTPUT);
+    digitalWrite(DCDC_EN_HOLD, HIGH);
+    pinMode(NRF_ON, OUTPUT);
+    digitalWrite(NRF_ON, HIGH);
+#endif
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
@@ -376,7 +382,7 @@ void setup()
     io.pinMode(EXPANDS_DRV_EN, OUTPUT);
     io.digitalWrite(EXPANDS_DRV_EN, HIGH);
     io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.digitalWrite(EXPANDS_AMP_EN, LOW);
     io.pinMode(EXPANDS_LORA_EN, OUTPUT);
     io.digitalWrite(EXPANDS_LORA_EN, HIGH);
     io.pinMode(EXPANDS_GPS_EN, OUTPUT);
@@ -769,14 +775,7 @@ void setup()
     }
 #endif
 
-    // If we're taking on the repeater role, use NextHopRouter and turn off 3V3_S rail because peripherals are not needed
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        router = new NextHopRouter();
-#ifdef PIN_3V3_EN
-        digitalWrite(PIN_3V3_EN, LOW);
-#endif
-    } else
-        router = new ReliableRouter();
+    router = new ReliableRouter();
 
     // only play start melody when role is not tracker or sensor
     if (config.power.is_power_saving == true &&
@@ -902,8 +901,7 @@ void setup()
     if (sensor_detected == false) {
 #endif
         if (HAS_GPS) {
-            if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-                config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
                 gps = GPS::createGps();
                 if (gps) {
                     gpsStatus->observe(&gps->newStatus);
@@ -1584,8 +1582,13 @@ void loop()
 #endif
 
     service->loop();
-#if defined(LGFX_SDL)
-    if (screen) {
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS)
+    if (inputBroker)
+        inputBroker->processInputEventQueue();
+#endif
+#if ARCH_PORTDUINO && HAS_TFT
+    if (screen && portduino_config.displayPanel == x11 &&
+        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();

@@ -26,7 +26,6 @@ int32_t DeviceTelemetryModule::runOnce()
           Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
                                                   default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendTelemetry();
         lastSentToMesh = uptimeLastMs;
@@ -44,10 +43,6 @@ int32_t DeviceTelemetryModule::runOnce()
 
 bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
-    // Don't worry about storing telemetry in NodeDB if we're a repeater
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-        return false;
-
     if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
@@ -126,6 +121,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instance->txRelay;
+        telemetry.variant.local_stats.num_tx_dropped = RadioLibInterface::instance->txDrop;
     }
 #ifdef ARCH_PORTDUINO
     if (SimRadio::instance) {
@@ -133,6 +129,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx = SimRadio::instance->rxGood + SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = SimRadio::instance->txRelay;
+        telemetry.variant.local_stats.num_tx_dropped = SimRadio::instance->txDrop;
     }
 #else
     telemetry.variant.local_stats.heap_total_bytes = memGet.getHeapSize();
