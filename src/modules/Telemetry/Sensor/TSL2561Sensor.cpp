@@ -13,7 +13,7 @@ bool TSL2561Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
 
-    status = tsl.begin(nodeTelemetrySensorsMap[sensorType].second);
+    status = tsl.begin(bus);
     if (!status) {
         return status;
     }
