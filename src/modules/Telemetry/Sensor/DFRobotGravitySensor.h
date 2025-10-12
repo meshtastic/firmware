@@ -14,7 +14,7 @@
 class DFRobotGravitySensor : public TelemetrySensor
 {
   private:
-    DFRobot_RainfallSensor_I2C gravity = DFRobot_RainfallSensor_I2C(nodeTelemetrySensorsMap[sensorType].second);
+    DFRobot_RainfallSensor_I2C gravity;
 
   public:
     DFRobotGravitySensor();
