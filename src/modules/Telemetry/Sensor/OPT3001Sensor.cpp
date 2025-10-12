@@ -29,7 +29,7 @@ bool OPT3001Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (errorConfig != NO_ERROR) {
         LOG_ERROR("OPT3001 configuration error #%d", errorConfig);
     }
-    status = errorCode == NO_ERROR;
+    status = errorConfig == NO_ERROR;
 
     initI2CSensor();
     return status;
