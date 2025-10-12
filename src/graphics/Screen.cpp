@@ -1469,6 +1469,9 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         }
         nodeDB->updateGUI = false;
         break;
+    case STATUS_TYPE_POWER:
+        forceDisplay(true);
+        break;
     }
 
     return 0;
@@ -1544,7 +1547,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 screen->showSimpleBanner(banner, 1500);
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
-                    (!isBroadcast(packet->to) && isToUs(p))) {
+                    (!isBroadcast(packet->to) && isToUs(packet))) {
                     // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
                     // - packet contains an alert and alert bell buzzer is enabled
                     // - packet is a non-broadcast that is addressed to this node
