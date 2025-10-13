@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "ClockRenderer.h"
+#include "Default.h"
 #include "GPS.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
