@@ -30,10 +30,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     switch (event->kbchar) {
     // Fn key symbols
     case INPUT_BROKER_MSG_FN_SYMBOL_ON:
-        IF_SCREEN(screen->setFunctionSymbol("Fn"));
-        return 0;
     case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
-        IF_SCREEN(screen->removeFunctionSymbol("Fn"));
         return 0;
     // Brightness
     case INPUT_BROKER_MSG_BRIGHTNESS_UP:

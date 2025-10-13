@@ -54,8 +54,6 @@ class Screen
     void startFirmwareUpdateScreen() {}
     void increaseBrightness() {}
     void decreaseBrightness() {}
-    void setFunctionSymbol(std::string) {}
-    void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
@@ -340,9 +338,6 @@ class Screen : public concurrency::OSThread
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
-
-    void setFunctionSymbol(std::string sym);
-    void removeFunctionSymbol(std::string sym);
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }

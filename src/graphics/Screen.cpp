@@ -113,10 +113,6 @@ uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 // we'll need to hold onto pointers for the modules that can draw a frame.
 std::vector<MeshModule *> moduleFrames;
 
-// Global variables for screen function overlay symbols
-std::vector<std::string> functionSymbol;
-std::string functionSymbolString;
-
 #if HAS_GPS
 // GeoCoord object for the screen
 GeoCoord geoCoord;
@@ -1298,28 +1294,6 @@ void Screen::decreaseBrightness()
 #endif
 
     /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
-}
-
-void Screen::setFunctionSymbol(std::string sym)
-{
-    if (std::find(functionSymbol.begin(), functionSymbol.end(), sym) == functionSymbol.end()) {
-        functionSymbol.push_back(sym);
-        functionSymbolString = "";
-        for (auto symbol : functionSymbol) {
-            functionSymbolString = symbol + " " + functionSymbolString;
-        }
-        setFastFramerate();
-    }
-}
-
-void Screen::removeFunctionSymbol(std::string sym)
-{
-    functionSymbol.erase(std::remove(functionSymbol.begin(), functionSymbol.end(), sym), functionSymbol.end());
-    functionSymbolString = "";
-    for (auto symbol : functionSymbol) {
-        functionSymbolString = symbol + " " + functionSymbolString;
-    }
-    setFastFramerate();
 }
 
 void Screen::handleOnPress()
