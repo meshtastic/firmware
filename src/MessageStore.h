@@ -108,7 +108,6 @@ class MessageStore
     // Helper filters for future use
     std::deque<StoredMessage> getChannelMessages(uint8_t channel) const;
     std::deque<StoredMessage> getDirectMessages() const;
-    std::deque<StoredMessage> getConversationWith(uint32_t peer) const;
 
     // Upgrade boot-relative timestamps once RTC is valid
     void upgradeBootRelativeTimestamps();

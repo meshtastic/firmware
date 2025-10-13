@@ -383,19 +383,6 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
     return result;
 }
 
-std::deque<StoredMessage> MessageStore::getConversationWith(uint32_t peer) const
-{
-    std::deque<StoredMessage> result;
-    for (const auto &m : liveMessages) {
-        if (m.type == MessageType::DM_TO_US) {
-            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
-            if (other == peer)
-                result.push_back(m);
-        }
-    }
-    return result;
-}
-
 // Upgrade boot-relative timestamps once RTC is valid
 // Only same-boot boot-relative messages are healed.
 // Persisted boot-relative messages from old boots stay ??? forever.
