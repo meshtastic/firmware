@@ -14,8 +14,14 @@
 
 WaypointModule *waypointModule;
 
-static inline float degToRad(float deg) { return deg * PI / 180.0f; }
-static inline float radToDeg(float rad) { return rad * 180.0f / PI; }
+static inline float degToRad(float deg)
+{
+    return deg * PI / 180.0f;
+}
+static inline float radToDeg(float rad)
+{
+    return rad * 180.0f / PI;
+}
 
 ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
@@ -55,15 +61,15 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 bool WaypointModule::shouldDraw()
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
-    if (!screen || !devicestate.has_rx_waypoint) return false;
+    if (!screen || !devicestate.has_rx_waypoint)
+        return false;
 
-    meshtastic_Waypoint wp{};  // <- replaces memset
-    if (pb_decode_from_bytes(devicestate.rx_waypoint.decoded.payload.bytes,
-                             devicestate.rx_waypoint.decoded.payload.size,
+    meshtastic_Waypoint wp{}; // <- replaces memset
+    if (pb_decode_from_bytes(devicestate.rx_waypoint.decoded.payload.bytes, devicestate.rx_waypoint.decoded.payload.size,
                              &meshtastic_Waypoint_msg, &wp)) {
         return wp.expire > getTime();
     }
-    return false;  // no LOG_ERROR, no flag writes
+    return false; // no LOG_ERROR, no flag writes
 #else
     return false;
 #endif
@@ -72,7 +78,8 @@ bool WaypointModule::shouldDraw()
 /// Draw the last waypoint we received
 void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    if (!screen) return;
+    if (!screen)
+        return;
     // Prepare to draw
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -109,9 +116,8 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(w, h);
     const int16_t compassX = x + w - (compassDiam / 2) - 5;
     const int16_t compassY = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-                            ? y + h / 2
-                            : y + FONT_HEIGHT_SMALL + (h - FONT_HEIGHT_SMALL) / 2;
-
+                                 ? y + h / 2
+                                 : y + FONT_HEIGHT_SMALL + (h - FONT_HEIGHT_SMALL) / 2;
 
     // If our node has a position:
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
@@ -143,13 +149,11 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             float feet = d * METERS_TO_FEET;
-            snprintf(distStr, sizeof(distStr),
-                    feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
-                    feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingToOtherDegrees);
+            snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
+                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingToOtherDegrees);
         } else {
-            snprintf(distStr, sizeof(distStr),
-                    d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°",
-                    d < 2000 ? d : d / 1000, bearingToOtherDegrees);
+            snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°", d < 2000 ? d : d / 1000,
+                     bearingToOtherDegrees);
         }
     }
 
@@ -158,7 +162,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
         // ? in the distance field
         snprintf(distStr, sizeof(distStr), "? %s ?°",
-         (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "mi" : "km");
+                 (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "mi" : "km");
     }
 
     // Draw compass circle
