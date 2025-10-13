@@ -8,6 +8,8 @@
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 
+#include <algorithm> // std::min, std::find_if
+
 using graphics::MessageRenderer::setThreadMode;
 using graphics::MessageRenderer::ThreadMode;
 
@@ -15,7 +17,8 @@ using graphics::MessageRenderer::ThreadMode;
 static inline size_t getMessageSize(const StoredMessage &m)
 {
     // serialized size = fixed 16 bytes + text length (capped at MAX_MESSAGE_SIZE)
-    return 16 + std::min<size_t>(MAX_MESSAGE_SIZE, strnlen(m.text, MAX_MESSAGE_SIZE));
+    // NOTE: Using std::string length here (fast path we had originally)
+    return 16 + std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
 }
 
 static inline void assignTimestamp(StoredMessage &sm)
@@ -52,8 +55,15 @@ void MessageStore::addLiveMessage(StoredMessage &&msg)
     if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
         liveMessages.pop_front(); // keep only most recent N
     }
-    // Use emplace_back with std::move to avoid extra copy
     liveMessages.emplace_back(std::move(msg));
+}
+
+void MessageStore::addLiveMessage(const StoredMessage &msg)
+{
+    if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
+        liveMessages.pop_front(); // keep only most recent N
+    }
+    liveMessages.push_back(msg);
 }
 
 // Persistence queue (used only on shutdown/reboot)
@@ -62,8 +72,15 @@ void MessageStore::addMessage(StoredMessage &&msg)
     if (messages.size() >= MAX_MESSAGES_SAVED) {
         messages.pop_front();
     }
-    // Use emplace_back with std::move to avoid extra copy
     messages.emplace_back(std::move(msg));
+}
+
+void MessageStore::addMessage(const StoredMessage &msg)
+{
+    if (messages.size() >= MAX_MESSAGES_SAVED) {
+        messages.pop_front();
+    }
+    messages.push_back(msg);
 }
 
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
@@ -73,8 +90,9 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     assignTimestamp(sm);
 
     sm.channelIndex = packet.channel;
-    strncpy(sm.text, reinterpret_cast<const char *>(packet.decoded.payload.bytes), MAX_MESSAGE_SIZE - 1);
-    sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
+
+    // Text from packet → std::string (fast, no extra copies)
+    sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
 
     if (packet.from == 0) {
         // Phone-originated (outgoing)
@@ -107,7 +125,7 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
         sm.ackStatus = AckStatus::ACKED;
     }
 
-    addLiveMessage(std::move(sm));
+    addLiveMessage(sm);
 
     // Return reference to the most recently stored message
     return liveMessages.back();
@@ -123,8 +141,7 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
 
     sm.sender = sender;
     sm.channelIndex = channelIndex;
-    strncpy(sm.text, text.c_str(), MAX_MESSAGE_SIZE - 1);
-    sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
+    sm.text = text;
 
     // Default manual adds to broadcast
     sm.dest = NODENUM_BROADCAST;
@@ -133,7 +150,7 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     // Outgoing messages start as NONE until ACK/NACK arrives
     sm.ackStatus = AckStatus::NONE;
 
-    addLiveMessage(std::move(sm));
+    addLiveMessage(sm);
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -160,7 +177,10 @@ void MessageStore::saveToFlash()
         f.write((uint8_t *)&m.sender, sizeof(m.sender));
         f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
         f.write((uint8_t *)&m.dest, sizeof(m.dest));
-        f.write((uint8_t *)m.text, strnlen(m.text, MAX_MESSAGE_SIZE));
+
+        const size_t toWrite = std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
+        if (toWrite)
+            f.write((const uint8_t *)m.text.data(), toWrite);
         f.write('\0'); // null terminator
 
         uint8_t bootFlag = m.isBootRelative ? 1 : 0;
@@ -203,8 +223,20 @@ void MessageStore::loadFromFlash()
         f.readBytes((char *)&m.sender, sizeof(m.sender));
         f.readBytes((char *)&m.channelIndex, sizeof(m.channelIndex));
         f.readBytes((char *)&m.dest, sizeof(m.dest));
-        f.readBytes(m.text, MAX_MESSAGE_SIZE - 1);
-        m.text[MAX_MESSAGE_SIZE - 1] = '\0';
+
+        // Fast text read: read until NUL or cap
+        m.text.clear();
+        m.text.reserve(64); // small reserve to avoid initial reallocs
+        char c;
+        size_t readCount = 0;
+        while (readCount < MAX_MESSAGE_SIZE) {
+            if (f.readBytes(&c, 1) <= 0)
+                break;
+            if (c == '\0')
+                break;
+            m.text.push_back(c);
+            ++readCount;
+        }
 
         // Try to read boot-relative flag (new format)
         uint8_t bootFlag = 0;
@@ -295,6 +327,16 @@ void MessageStore::dismissOldestMessage()
     saveToFlash();
 }
 
+// Dismiss newest message (RAM + persisted queue)
+void MessageStore::dismissNewestMessage()
+{
+    eraseIf(
+        liveMessages, [](StoredMessage &) { return true; }, true);
+    eraseIf(
+        messages, [](StoredMessage &) { return true; }, true);
+    saveToFlash();
+}
+
 // Dismiss oldest message in a specific channel
 void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
 {
@@ -319,16 +361,6 @@ void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
     saveToFlash();
 }
 
-// Dismiss newest message (RAM + persisted queue)
-void MessageStore::dismissNewestMessage()
-{
-    eraseIf(
-        liveMessages, [](StoredMessage &) { return true; }, true);
-    eraseIf(
-        messages, [](StoredMessage &) { return true; }, true);
-    saveToFlash();
-}
-
 // Helper filters for future use
 std::deque<StoredMessage> MessageStore::getChannelMessages(uint8_t channel) const
 {
@@ -347,6 +379,19 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
     for (const auto &m : liveMessages) {
         if (m.type == MessageType::DM_TO_US) {
             result.push_back(m);
+        }
+    }
+    return result;
+}
+
+std::deque<StoredMessage> MessageStore::getConversationWith(uint32_t peer) const
+{
+    std::deque<StoredMessage> result;
+    for (const auto &m : liveMessages) {
+        if (m.type == MessageType::DM_TO_US) {
+            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+            if (other == peer)
+                result.push_back(m);
         }
     }
     return result;

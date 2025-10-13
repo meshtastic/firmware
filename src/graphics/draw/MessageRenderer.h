@@ -44,7 +44,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth);
 
 // Function to calculate heights for each line
-std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes);
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
+                                      const std::vector<bool> &isHeaderVec);
 
 // Function to render the message content
 void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,

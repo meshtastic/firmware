@@ -47,24 +47,55 @@ inline size_t utf8CharLen(uint8_t c)
     return 1;
 }
 
+// Remove variation selectors (FE0F) and skin tone modifiers from emoji so they match your labels
+std::string normalizeEmoji(const std::string &s)
+{
+    std::string out;
+    for (size_t i = 0; i < s.size();) {
+        uint8_t c = static_cast<uint8_t>(s[i]);
+        size_t len = utf8CharLen(c);
+
+        if (c == 0xEF && i + 2 < s.size() && (uint8_t)s[i + 1] == 0xB8 && (uint8_t)s[i + 2] == 0x8F) {
+            i += 3;
+            continue;
+        }
+
+        // Skip skin tone modifiers
+        if (c == 0xF0 && i + 3 < s.size() && (uint8_t)s[i + 1] == 0x9F && (uint8_t)s[i + 2] == 0x8F &&
+            ((uint8_t)s[i + 3] >= 0xBB && (uint8_t)s[i + 3] <= 0xBF)) {
+            i += 4;
+            continue;
+        }
+
+        out.append(s, i, len);
+        i += len;
+    }
+    return out;
+}
+
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
+    std::string renderLine = normalizeEmoji(line);
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
 
     // Step 1: Find tallest emote in the line
     int maxIconHeight = fontHeight;
     for (size_t i = 0; i < line.length();) {
+        bool matched = false;
         for (int e = 0; e < emoteCount; ++e) {
             size_t emojiLen = strlen(emotes[e].label);
             if (line.compare(i, emojiLen, emotes[e].label) == 0) {
                 if (emotes[e].height > maxIconHeight)
                     maxIconHeight = emotes[e].height;
                 i += emojiLen;
+                matched = true;
                 break;
             }
         }
-        i += utf8CharLen(static_cast<uint8_t>(line[i]));
+        if (!matched) {
+            i += utf8CharLen(static_cast<uint8_t>(line[i]));
+        }
     }
 
     // Step 2: Baseline alignment
@@ -122,11 +153,12 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
 
         // Render the emote (if found)
         if (matchedEmote && i == nextEmotePos) {
-            // Center vertically — padding handled in calculateLineHeights
-            int iconY = fontMidline - matchedEmote->height / 2;
+            // Vertically center emote relative to font baseline (not just midline)
+            int iconY = fontY + (fontHeight - matchedEmote->height) / 2;
             display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
             cursorX += matchedEmote->width + 1;
             i += emojiLen;
+            continue;
         } else {
             // No more emotes — render the rest of the line
             std::string remaining = line.substr(i);
@@ -139,7 +171,6 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
 #else
             cursorX += display->getStringWidth(remaining.c_str());
 #endif
-
             break;
         }
     }
@@ -177,7 +208,6 @@ static std::vector<uint32_t> seenPeers;
 // Public helper so menus / store can clear stale registries
 void clearThreadRegistries()
 {
-    LOG_DEBUG("[MessageRenderer] Clearing thread registries (seenChannels/seenPeers)");
     seenChannels.clear();
     seenPeers.clear();
 }
@@ -185,7 +215,6 @@ void clearThreadRegistries()
 // Setter so other code can switch threads
 void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0 */)
 {
-    LOG_DEBUG("[MessageRenderer] setThreadMode(mode=%d, ch=%d, peer=0x%08x)", (int)mode, channel, (unsigned int)peer);
     currentMode = mode;
     currentChannel = channel;
     currentPeer = peer;
@@ -194,7 +223,6 @@ void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0
     // Track channels we’ve seen
     if (mode == ThreadMode::CHANNEL && channel >= 0) {
         if (std::find(seenChannels.begin(), seenChannels.end(), channel) == seenChannels.end()) {
-            LOG_DEBUG("[MessageRenderer] Track seen channel: %d", channel);
             seenChannels.push_back(channel);
         }
     }
@@ -202,7 +230,6 @@ void setThreadMode(ThreadMode mode, int channel /* = -1 */, uint32_t peer /* = 0
     // Track DMs we’ve seen
     if (mode == ThreadMode::DIRECT && peer != 0) {
         if (std::find(seenPeers.begin(), seenPeers.end(), peer) == seenPeers.end()) {
-            LOG_DEBUG("[MessageRenderer] Track seen peer: 0x%08x", (unsigned int)peer);
             seenPeers.push_back(peer);
         }
     }
@@ -272,6 +299,36 @@ void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
     display->drawLine(centerX - 1, centerY - 4, centerX + 1, centerY - 4);
 }
 
+int getRenderedLineWidth(OLEDDisplay *display, const std::string &line, const Emote *emotes, int emoteCount)
+{
+    std::string normalized = normalizeEmoji(line);
+    int totalWidth = 0;
+
+    size_t i = 0;
+    while (i < normalized.length()) {
+        bool matched = false;
+        for (int e = 0; e < emoteCount; ++e) {
+            size_t emojiLen = strlen(emotes[e].label);
+            if (normalized.compare(i, emojiLen, emotes[e].label) == 0) {
+                totalWidth += emotes[e].width + 1; // +1 spacing
+                i += emojiLen;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            size_t charLen = utf8CharLen(static_cast<uint8_t>(normalized[i]));
+#if defined(OLED_UA) || defined(OLED_RU)
+            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str(), charLen, true);
+#else
+            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
+#endif
+            i += charLen;
+        }
+    }
+    return totalWidth;
+}
+
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Ensure any boot-relative timestamps are upgraded if RTC is valid
@@ -287,7 +344,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Filter messages based on thread mode
     std::deque<StoredMessage> filtered;
-    for (const auto &m : messageStore.getMessages()) {
+    for (const auto &m : messageStore.getLiveMessages()) {
         bool include = false;
         switch (currentMode) {
         case ThreadMode::ALL:
@@ -460,7 +517,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         ackForLine.push_back(m.ackStatus);
 
         // Split message text into wrapped lines
-        std::vector<std::string> wrapped = generateLines(display, "", m.text, textWidth);
+        std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
         for (auto &ln : wrapped) {
             allLines.push_back(ln);
             isMine.push_back(mine);
@@ -471,7 +528,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Cache lines and heights
     cachedLines = allLines;
-    cachedHeights = calculateLineHeights(cachedLines, emotes);
+    cachedHeights = calculateLineHeights(cachedLines, emotes, isHeader);
 
     // Scrolling logic (unchanged)
     int totalHeight = 0;
@@ -559,9 +616,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             } else {
                 // Render message line
                 if (isMine[i]) {
-                    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-                    drawStringWithEmotes(display, SCREEN_WIDTH, lineY, cachedLines[i], emotes, numEmotes);
-                    display->setTextAlignment(TEXT_ALIGN_LEFT);
+                    // Calculate actual rendered width including emotes
+                    int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
+                    int rightX = SCREEN_WIDTH - renderedWidth - 2; // -2 for slight padding from the edge
+                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
                     drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
                 }
@@ -623,54 +681,71 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 
     return lines;
 }
-
-std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes)
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
+                                      const std::vector<bool> &isHeaderVec)
 {
+    // Tunables for layout control
+    constexpr int HEADER_UNDERLINE_GAP = 0; // space between underline and first body line
+    constexpr int HEADER_UNDERLINE_PIX = 1; // underline thickness (1px row drawn)
+    constexpr int BODY_LINE_LEADING = -4;   // default vertical leading for normal body lines
+    constexpr int MESSAGE_BLOCK_GAP = 4;    // gap after a message block before a new header
+    constexpr int EMOTE_PADDING_ABOVE = 4;  // space above emote line (added to line above)
+    constexpr int EMOTE_PADDING_BELOW = 3;  // space below emote line (added to emote line)
+
     std::vector<int> rowHeights;
+    rowHeights.reserve(lines.size());
 
     for (size_t idx = 0; idx < lines.size(); ++idx) {
-        const auto &_line = lines[idx];
-        int lineHeight = FONT_HEIGHT_SMALL;
+        const auto &line = lines[idx];
+        const int baseHeight = FONT_HEIGHT_SMALL;
+
+        // Detect if THIS line or NEXT line contains an emote
         bool hasEmote = false;
-        bool isHeader = false;
-
-        // Detect emotes in this line
+        int tallestEmote = baseHeight;
         for (int i = 0; i < numEmotes; ++i) {
-            const Emote &e = emotes[i];
-            if (_line.find(e.label) != std::string::npos) {
-                lineHeight = std::max(lineHeight, e.height);
+            if (line.find(emotes[i].label) != std::string::npos) {
                 hasEmote = true;
+                tallestEmote = std::max(tallestEmote, emotes[i].height);
             }
         }
 
-        // Detect header lines (start of a message, or time stamps like "5m ago")
-        if (idx == 0 || _line.find("ago") != std::string::npos || _line.rfind("me ", 0) == 0) {
-            isHeader = true;
+        bool nextHasEmote = false;
+        if (idx + 1 < lines.size()) {
+            for (int i = 0; i < numEmotes; ++i) {
+                if (lines[idx + 1].find(emotes[i].label) != std::string::npos) {
+                    nextHasEmote = true;
+                    break;
+                }
+            }
         }
 
-        // Look ahead to see if next line is a header → this is the last line of a message
-        bool beforeHeader =
-            (idx + 1 < lines.size() && (lines[idx + 1].find("ago") != std::string::npos || lines[idx + 1].rfind("me ", 0) == 0));
+        int lineHeight = baseHeight;
 
-        if (isHeader) {
-            // Headers always keep full line height
-            lineHeight = FONT_HEIGHT_SMALL;
-        } else if (beforeHeader) {
-            if (hasEmote) {
-                // Last line has emote → preserve its height + padding
-                lineHeight = std::max(lineHeight, FONT_HEIGHT_SMALL) + 4;
-            } else {
-                // Plain last line → full spacing only
-                lineHeight = FONT_HEIGHT_SMALL;
-            }
-        } else if (!hasEmote) {
-            // Plain body line, tighter spacing
-            lineHeight -= 4;
-            if (lineHeight < 8)
-                lineHeight = 8; // safe minimum
+        if (isHeaderVec[idx]) {
+            // Header line spacing
+            lineHeight = baseHeight + HEADER_UNDERLINE_PIX + HEADER_UNDERLINE_GAP;
         } else {
-            // Line has emotes, don’t compress
-            lineHeight += 4; // add breathing room
+            // Base spacing for normal lines
+            int desiredBody = baseHeight + BODY_LINE_LEADING;
+
+            if (hasEmote) {
+                // Emote line: add overshoot + bottom padding
+                int overshoot = std::max(0, tallestEmote - baseHeight);
+                lineHeight = desiredBody + overshoot + EMOTE_PADDING_BELOW;
+            } else {
+                // Regular line: no emote → standard spacing
+                lineHeight = desiredBody;
+
+                // If next line has an emote → add top padding *here*
+                if (nextHasEmote) {
+                    lineHeight += EMOTE_PADDING_ABOVE;
+                }
+            }
+
+            // Add block gap if next is a header
+            if (idx + 1 < lines.size() && isHeaderVec[idx + 1]) {
+                lineHeight += MESSAGE_BLOCK_GAP;
+            }
         }
 
         rowHeights.push_back(lineHeight);
@@ -793,10 +868,10 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
     }
 
-    // No setFrames() here anymore
-    if (packet.from == 0) {
-        setThreadFor(sm, packet);
-    }
+    // Always focus into the correct conversation thread when a message arrives
+    setThreadFor(sm, packet);
+
+    // Reset scroll for a clean start
     resetScrollState();
 }
 

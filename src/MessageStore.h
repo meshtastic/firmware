@@ -21,7 +21,11 @@
 #ifndef MAX_MESSAGES_SAVED
 #define MAX_MESSAGES_SAVED 20
 #endif
-constexpr size_t MAX_MESSAGE_SIZE = 220; // safe bound for text payload
+
+// Keep a cap for serialized payloads
+#ifndef MAX_MESSAGE_SIZE
+#define MAX_MESSAGE_SIZE 220
+#endif
 
 // Explicit message classification
 enum class MessageType : uint8_t { BROADCAST = 0, DM_TO_US = 1 };
@@ -36,10 +40,10 @@ enum class AckStatus : uint8_t {
 };
 
 struct StoredMessage {
-    uint32_t timestamp;          // When message was created (secs since boot/RTC)
-    uint32_t sender;             // NodeNum of sender
-    uint8_t channelIndex;        // Channel index used
-    char text[MAX_MESSAGE_SIZE]; // UTF-8 text payload
+    uint32_t timestamp;   // When message was created (secs since boot/RTC)
+    uint32_t sender;      // NodeNum of sender
+    uint8_t channelIndex; // Channel index used
+    std::string text;     // UTF-8 text payload (dynamic now, no fixed size)
 
     // Destination node.
     // 0xffffffff (NODENUM_BROADCAST) means broadcast,
@@ -71,10 +75,12 @@ class MessageStore
 
     // Live RAM methods (always current, used by UI and runtime)
     void addLiveMessage(StoredMessage &&msg);
+    void addLiveMessage(const StoredMessage &msg); // convenience overload
     const std::deque<StoredMessage> &getLiveMessages() const { return liveMessages; }
 
     // Persistence methods (used only on boot/shutdown)
     void addMessage(StoredMessage &&msg);
+    void addMessage(const StoredMessage &msg);                           // convenience overload
     const StoredMessage &addFromPacket(const meshtastic_MeshPacket &mp); // Incoming/outgoing → RAM only
     void addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text);
     void saveToFlash();

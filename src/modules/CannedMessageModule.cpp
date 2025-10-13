@@ -44,6 +44,71 @@ extern MessageStore messageStore;
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+// Tokenize a message string into emote/text segments
+static std::vector<std::pair<bool, String>> tokenizeMessageWithEmotes(const char *msg)
+{
+    std::vector<std::pair<bool, String>> tokens;
+    int msgLen = strlen(msg);
+    int pos = 0;
+    while (pos < msgLen) {
+        const graphics::Emote *foundEmote = nullptr;
+        int foundLen = 0;
+        for (int j = 0; j < graphics::numEmotes; j++) {
+            const char *label = graphics::emotes[j].label;
+            int labelLen = strlen(label);
+            if (labelLen == 0)
+                continue;
+            if (strncmp(msg + pos, label, labelLen) == 0) {
+                if (!foundEmote || labelLen > foundLen) {
+                    foundEmote = &graphics::emotes[j];
+                    foundLen = labelLen;
+                }
+            }
+        }
+        if (foundEmote) {
+            tokens.emplace_back(true, String(foundEmote->label));
+            pos += foundLen;
+        } else {
+            // Find next emote
+            int nextEmote = msgLen;
+            for (int j = 0; j < graphics::numEmotes; j++) {
+                const char *label = graphics::emotes[j].label;
+                if (!label || !*label)
+                    continue;
+                const char *found = strstr(msg + pos, label);
+                if (found && (found - msg) < nextEmote) {
+                    nextEmote = found - msg;
+                }
+            }
+            int textLen = (nextEmote > pos) ? (nextEmote - pos) : (msgLen - pos);
+            if (textLen > 0) {
+                tokens.emplace_back(false, String(msg + pos).substring(0, textLen));
+                pos += textLen;
+            } else {
+                break;
+            }
+        }
+    }
+    return tokens;
+}
+
+// Render a single emote token centered vertically on a row
+static void renderEmote(OLEDDisplay *display, int &nextX, int lineY, int rowHeight, const String &label)
+{
+    const graphics::Emote *emote = nullptr;
+    for (int j = 0; j < graphics::numEmotes; j++) {
+        if (label == graphics::emotes[j].label) {
+            emote = &graphics::emotes[j];
+            break;
+        }
+    }
+    if (emote) {
+        int emoteYOffset = (rowHeight - emote->height) / 2; // vertically center the emote
+        display->drawXbm(nextX, lineY + emoteYOffset, emote->width, emote->height, emote->bitmap);
+        nextX += emote->width + 2; // spacing between tokens
+    }
+}
+
 namespace graphics
 {
 extern int bannerSignalBars;
@@ -997,7 +1062,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
-    strncpy(sm.text, message, MAX_MESSAGE_SIZE - 1);
+    sm.text = std::string(message).substr(0, MAX_MESSAGE_SIZE - 1);
     sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
     // Classify broadcast vs DM
@@ -1841,51 +1906,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
 
             // Tokenize input into (isEmote, token) pairs
-            std::vector<std::pair<bool, String>> tokens;
             const char *msg = msgWithCursor.c_str();
-            int msgLen = strlen(msg);
-            int pos = 0;
-            while (pos < msgLen) {
-                const graphics::Emote *foundEmote = nullptr;
-                int foundLen = 0;
-                for (int j = 0; j < graphics::numEmotes; j++) {
-                    const char *label = graphics::emotes[j].label;
-                    int labelLen = strlen(label);
-                    if (labelLen == 0)
-                        continue;
-                    if (strncmp(msg + pos, label, labelLen) == 0) {
-                        if (!foundEmote || labelLen > foundLen) {
-                            foundEmote = &graphics::emotes[j];
-                            foundLen = labelLen;
-                        }
-                    }
-                }
-                if (foundEmote) {
-                    tokens.emplace_back(true, String(foundEmote->label));
-                    pos += foundLen;
-                } else {
-                    // Find next emote
-                    int nextEmote = msgLen;
-                    for (int j = 0; j < graphics::numEmotes; j++) {
-                        const char *label = graphics::emotes[j].label;
-                        if (!label || !*label)
-                            continue;
-                        const char *found = strstr(msg + pos, label);
-                        if (found && (found - msg) < nextEmote) {
-                            nextEmote = found - msg;
-                        }
-                    }
-                    int textLen = (nextEmote > pos) ? (nextEmote - pos) : (msgLen - pos);
-                    if (textLen > 0) {
-                        tokens.emplace_back(false, String(msg + pos).substring(0, textLen));
-                        pos += textLen;
-                    } else {
-                        break;
-                    }
-                }
-            }
+            std::vector<std::pair<bool, String>> tokens = tokenizeMessageWithEmotes(msg);
 
-            // Advanced word-wrapping (emotes + text, split by word, wrap by char if needed)
+            // Advanced word-wrapping (emotes + text, split by word, wrap inside word if needed)
             std::vector<std::vector<std::pair<bool, String>>> lines;
             std::vector<std::pair<bool, String>> currentLine;
             int lineWidth = 0;
@@ -1910,7 +1934,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 } else {
                     // Text: split by words and wrap inside word if needed
                     String text = token.second;
-                    pos = 0;
+                    int pos = 0;
                     while (pos < static_cast<int>(text.length())) {
                         // Find next space (or end)
                         int spacePos = text.indexOf(' ', pos);
@@ -1956,18 +1980,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 int nextX = x;
                 for (const auto &token : line) {
                     if (token.first) {
-                        const graphics::Emote *emote = nullptr;
-                        for (int j = 0; j < graphics::numEmotes; j++) {
-                            if (token.second == graphics::emotes[j].label) {
-                                emote = &graphics::emotes[j];
-                                break;
-                            }
-                        }
-                        if (emote) {
-                            int emoteYOffset = (rowHeight - emote->height) / 2;
-                            display->drawXbm(nextX, yLine + emoteYOffset, emote->width, emote->height, emote->bitmap);
-                            nextX += emote->width + 2;
-                        }
+                        // Emote rendering centralized in helper
+                        renderEmote(display, nextX, yLine, rowHeight, token.second);
                     } else {
                         display->drawString(nextX, yLine, token.second);
                         nextX += display->getStringWidth(token.second);
@@ -2033,51 +2047,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             bool _highlight = (msgIdx == currentMessageIndex);
 
             // Multi-emote tokenization
-            std::vector<std::pair<bool, String>> tokens; // (isEmote, token)
-            int pos = 0;
-            int msgLen = strlen(msg);
-            while (pos < msgLen) {
-                const graphics::Emote *foundEmote = nullptr;
-                int foundLen = 0;
-
-                // Look for any emote label at this pos (prefer longest match)
-                for (int j = 0; j < graphics::numEmotes; j++) {
-                    const char *label = graphics::emotes[j].label;
-                    int labelLen = strlen(label);
-                    if (labelLen == 0)
-                        continue;
-                    if (strncmp(msg + pos, label, labelLen) == 0) {
-                        if (!foundEmote || labelLen > foundLen) {
-                            foundEmote = &graphics::emotes[j];
-                            foundLen = labelLen;
-                        }
-                    }
-                }
-                if (foundEmote) {
-                    tokens.emplace_back(true, String(foundEmote->label));
-                    pos += foundLen;
-                } else {
-                    // Find next emote
-                    int nextEmote = msgLen;
-                    for (int j = 0; j < graphics::numEmotes; j++) {
-                        const char *label = graphics::emotes[j].label;
-                        if (label[0] == 0)
-                            continue;
-                        const char *found = strstr(msg + pos, label);
-                        if (found && (found - msg) < nextEmote) {
-                            nextEmote = found - msg;
-                        }
-                    }
-                    int textLen = (nextEmote > pos) ? (nextEmote - pos) : (msgLen - pos);
-                    if (textLen > 0) {
-                        tokens.emplace_back(false, String(msg + pos).substring(0, textLen));
-                        pos += textLen;
-                    } else {
-                        break;
-                    }
-                }
-            }
-            // End multi-emote tokenization
+            std::vector<std::pair<bool, String>> tokens = tokenizeMessageWithEmotes(msg);
 
             // Vertically center based on rowHeight
             int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
@@ -2098,19 +2068,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             // Draw all tokens left to right
             for (const auto &token : tokens) {
                 if (token.first) {
-                    // Emote
-                    const graphics::Emote *emote = nullptr;
-                    for (int j = 0; j < graphics::numEmotes; j++) {
-                        if (token.second == graphics::emotes[j].label) {
-                            emote = &graphics::emotes[j];
-                            break;
-                        }
-                    }
-                    if (emote) {
-                        int emoteYOffset = (rowHeight - emote->height) / 2;
-                        display->drawXbm(nextX, lineY + emoteYOffset, emote->width, emote->height, emote->bitmap);
-                        nextX += emote->width + 2;
-                    }
+                    // Emote rendering centralized in helper
+                    renderEmote(display, nextX, lineY, rowHeight, token.second);
                 } else {
                     // Text
                     display->drawString(nextX, lineY + textYOffset, token.second);
