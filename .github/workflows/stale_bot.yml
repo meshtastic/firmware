@@ -20,6 +20,6 @@ jobs:
         uses: actions/stale@v10.1.0
         with:
           days-before-stale: 60
-          stale-issue-message: 'This issue hasn not had any comment or update in the last 2 months. If it is still relevant, please post update comments. If no comments are made, this issue will be closed automagically in 7 days.'
+          stale-issue-message: This issue hasn not had any comment or update in the last 2 months. If it is still relevant, please post update comments. If no comments are made, this issue will be closed automagically in 7 days.
           exempt-issue-labels: pinned,3.0
           exempt-pr-labels: pinned,3.0
