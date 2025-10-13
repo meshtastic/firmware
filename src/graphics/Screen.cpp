@@ -67,10 +67,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 extern MessageStore messageStore;
 
-using graphics::Emote;
-using graphics::emotes;
-using graphics::numEmotes;
-
 extern uint16_t TFT_MESH;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
