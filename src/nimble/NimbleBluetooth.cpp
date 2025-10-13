@@ -63,6 +63,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             queue_size = 0;
         }
         if (!hasChecked && phoneWants) {
+            // Pull fresh data while we're outside of the NimBLE callback context.
             numBytes = getFromRadio(fromRadioBytes);
             hasChecked = true;
         }
@@ -141,6 +142,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
         std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
 
         if (!bluetoothPhoneAPI->hasChecked) {
+            // Fetch payload on demand; prefetch keeps this fast for the first read.
             bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
             bluetoothPhoneAPI->hasChecked = true;
         }
@@ -149,6 +151,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
         if (bluetoothPhoneAPI->numBytes != 0) {
 #ifdef NIMBLE_TWO
+            // Notify immediately so subscribed clients see the packet without an extra read.
             pCharacteristic->notify(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes, BLE_HS_CONN_HANDLE_NONE);
 #else
             pCharacteristic->notify();
@@ -432,6 +435,7 @@ void NimbleBluetooth::setupService()
     // Define the characteristics that the app is looking for
     if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
+        // Allow notifications so phones can stream FromRadio without polling.
         FromRadioCharacteristic =
             bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);

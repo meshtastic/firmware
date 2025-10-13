@@ -435,6 +435,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_OTHER_NODEINFOS: {
         LOG_DEBUG("Send known nodes");
         if (nodeInfoForPhone.num == 0 && !nodeInfoQueue.empty()) {
+            // Serve the next cached node without re-reading from the DB iterator.
             nodeInfoForPhone = nodeInfoQueue.front();
             nodeInfoQueue.pop_front();
         }
@@ -557,6 +558,7 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
 void PhoneAPI::prefetchNodeInfos()
 {
     bool added = false;
+    // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
     while (nodeInfoQueue.size() < kNodePrefetchDepth) {
         auto nextNode = nodeDB->readNextMeshNode(readIndex);
         if (!nextNode)
