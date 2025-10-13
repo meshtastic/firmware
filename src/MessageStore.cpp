@@ -16,11 +16,10 @@ using graphics::MessageRenderer::ThreadMode;
 // Calculate serialized size for a StoredMessage
 static inline size_t getMessageSize(const StoredMessage &m)
 {
-    // serialized size = fixed 16 bytes + text length (capped at MAX_MESSAGE_SIZE)
-    // NOTE: Using std::string length here (fast path we had originally)
     return 16 + std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
 }
 
+// Helper: assign a timestamp (RTC if available, else boot-relative)
 static inline void assignTimestamp(StoredMessage &sm)
 {
     uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
@@ -31,6 +30,21 @@ static inline void assignTimestamp(StoredMessage &sm)
         sm.timestamp = millis() / 1000;
         sm.isBootRelative = true;
     }
+}
+
+// Generic push with cap (used by live + persisted queues)
+template <typename T> static inline void pushWithLimit(std::deque<T> &queue, const T &msg)
+{
+    if (queue.size() >= MAX_MESSAGES_SAVED)
+        queue.pop_front();
+    queue.push_back(msg);
+}
+
+template <typename T> static inline void pushWithLimit(std::deque<T> &queue, T &&msg)
+{
+    if (queue.size() >= MAX_MESSAGES_SAVED)
+        queue.pop_front();
+    queue.emplace_back(std::move(msg));
 }
 
 void MessageStore::logMemoryUsage(const char *context) const
@@ -52,37 +66,24 @@ MessageStore::MessageStore(const std::string &label)
 // Live message handling (RAM only)
 void MessageStore::addLiveMessage(StoredMessage &&msg)
 {
-    if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
-        liveMessages.pop_front(); // keep only most recent N
-    }
-    liveMessages.emplace_back(std::move(msg));
+    pushWithLimit(liveMessages, std::move(msg));
 }
-
 void MessageStore::addLiveMessage(const StoredMessage &msg)
 {
-    if (liveMessages.size() >= MAX_MESSAGES_SAVED) {
-        liveMessages.pop_front(); // keep only most recent N
-    }
-    liveMessages.push_back(msg);
+    pushWithLimit(liveMessages, msg);
 }
 
 // Persistence queue (used only on shutdown/reboot)
 void MessageStore::addMessage(StoredMessage &&msg)
 {
-    if (messages.size() >= MAX_MESSAGES_SAVED) {
-        messages.pop_front();
-    }
-    messages.emplace_back(std::move(msg));
+    pushWithLimit(messages, std::move(msg));
 }
-
 void MessageStore::addMessage(const StoredMessage &msg)
 {
-    if (messages.size() >= MAX_MESSAGES_SAVED) {
-        messages.pop_front();
-    }
-    messages.push_back(msg);
+    pushWithLimit(messages, msg);
 }
 
+// Add from incoming/outgoing packet
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
     StoredMessage sm;
@@ -171,17 +172,18 @@ void MessageStore::saveToFlash()
     uint8_t count = messages.size();
     f.write(&count, 1);
 
-    for (uint8_t i = 0; i < messages.size() && i < MAX_MESSAGES_SAVED; i++) {
+    for (uint8_t i = 0; i < count && i < MAX_MESSAGES_SAVED; i++) {
         const StoredMessage &m = messages.at(i);
         f.write((uint8_t *)&m.timestamp, sizeof(m.timestamp));
         f.write((uint8_t *)&m.sender, sizeof(m.sender));
         f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
         f.write((uint8_t *)&m.dest, sizeof(m.dest));
 
+        // Write text payload (capped at MAX_MESSAGE_SIZE)
         const size_t toWrite = std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
         if (toWrite)
             f.write((const uint8_t *)m.text.data(), toWrite);
-        f.write('\0'); // null terminator
+        f.write('\0');
 
         uint8_t bootFlag = m.isBootRelative ? 1 : 0;
         f.write(&bootFlag, 1); // persist boot-relative flag
@@ -224,9 +226,8 @@ void MessageStore::loadFromFlash()
         f.readBytes((char *)&m.channelIndex, sizeof(m.channelIndex));
         f.readBytes((char *)&m.dest, sizeof(m.dest));
 
-        // Fast text read: read until NUL or cap
         m.text.clear();
-        m.text.reserve(64); // small reserve to avoid initial reallocs
+        m.text.reserve(64);
         char c;
         size_t readCount = 0;
         while (readCount < MAX_MESSAGE_SIZE) {
@@ -238,21 +239,19 @@ void MessageStore::loadFromFlash()
             ++readCount;
         }
 
-        // Try to read boot-relative flag (new format)
+        // Try to read boot-relative flag
         uint8_t bootFlag = 0;
         if (f.available() > 0) {
             if (f.readBytes((char *)&bootFlag, 1) == 1) {
                 m.isBootRelative = (bootFlag != 0);
             } else {
-                // Old format, fallback heuristic
                 m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
             }
         } else {
-            // Old format, fallback heuristic
             m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
         }
 
-        // Try to read ackStatus (newer format)
+        // Try to read ackStatus
         if (f.available() > 0) {
             uint8_t statusByte = 0;
             if (f.readBytes((char *)&statusByte, 1) == 1) {
@@ -408,23 +407,18 @@ void MessageStore::upgradeBootRelativeTimestamps()
 
     uint32_t bootNow = millis() / 1000;
 
-    for (auto &m : liveMessages) {
-        if (m.isBootRelative && m.timestamp <= bootNow) {
-            uint32_t bootOffset = nowSecs - bootNow;
-            m.timestamp += bootOffset;
-            m.isBootRelative = false;
+    auto fix = [&](std::deque<StoredMessage> &dq) {
+        for (auto &m : dq) {
+            if (m.isBootRelative && m.timestamp <= bootNow) {
+                uint32_t bootOffset = nowSecs - bootNow;
+                m.timestamp += bootOffset;
+                m.isBootRelative = false;
+            }
+            // else: persisted from old boot → stays ??? forever
         }
-        // else: persisted from old boot → stays ??? forever
-    }
-
-    for (auto &m : messages) {
-        if (m.isBootRelative && m.timestamp <= bootNow) {
-            uint32_t bootOffset = nowSecs - bootNow;
-            m.timestamp += bootOffset;
-            m.isBootRelative = false;
-        }
-        // else: persisted from old boot → stays ??? forever
-    }
+    };
+    fix(liveMessages);
+    fix(messages);
 }
 
 // Global definition

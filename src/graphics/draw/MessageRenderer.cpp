@@ -36,7 +36,7 @@ static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 
 // UTF-8 skip helper
-inline size_t utf8CharLen(uint8_t c)
+static inline size_t utf8CharLen(uint8_t c)
 {
     if ((c & 0xE0) == 0xC0)
         return 2;
@@ -75,7 +75,22 @@ std::string normalizeEmoji(const std::string &s)
 
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
-    std::string renderLine = normalizeEmoji(line);
+    std::string renderLine;
+    for (size_t i = 0; i < line.size();) {
+        uint8_t c = (uint8_t)line[i];
+        size_t len = utf8CharLen(c);
+        if (c == 0xEF && i + 2 < line.size() && (uint8_t)line[i + 1] == 0xB8 && (uint8_t)line[i + 2] == 0x8F) {
+            i += 3;
+            continue;
+        }
+        if (c == 0xF0 && i + 3 < line.size() && (uint8_t)line[i + 1] == 0x9F && (uint8_t)line[i + 2] == 0x8F &&
+            ((uint8_t)line[i + 3] >= 0xBB && (uint8_t)line[i + 3] <= 0xBF)) {
+            i += 4;
+            continue;
+        }
+        renderLine.append(line, i, len);
+        i += len;
+    }
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
 
@@ -260,14 +275,14 @@ const std::vector<uint32_t> &getSeenPeers()
     return seenPeers;
 }
 
-inline int centerYForRow(int y, int size)
+static int centerYForRow(int y, int size)
 {
     int midY = y + (FONT_HEIGHT_SMALL / 2);
     return midY - (size / 2);
 }
 
 // Helpers for drawing status marks (thickened strokes)
-void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
+static void drawCheckMark(OLEDDisplay *display, int x, int y, int size)
 {
     int topY = centerYForRow(y, size);
     display->setColor(WHITE);
@@ -277,7 +292,7 @@ void drawCheckMark(OLEDDisplay *display, int x, int y, int size = 8)
     display->drawLine(x + size / 3, topY + size + 1, x + size, topY + 1);
 }
 
-void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
+static void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
 {
     int topY = centerYForRow(y, size);
     display->setColor(WHITE);
@@ -287,7 +302,7 @@ void drawXMark(OLEDDisplay *display, int x, int y, int size = 8)
     display->drawLine(x + size, topY + 1, x, topY + size + 1);
 }
 
-void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
+static void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
 {
     int r = size / 2;
     int centerY = centerYForRow(y, size) + r;
@@ -299,7 +314,7 @@ void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
     display->drawLine(centerX - 1, centerY - 4, centerX + 1, centerY - 4);
 }
 
-int getRenderedLineWidth(OLEDDisplay *display, const std::string &line, const Emote *emotes, int emoteCount)
+static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &line, const Emote *emotes, int emoteCount)
 {
     std::string normalized = normalizeEmoji(line);
     int totalWidth = 0;
@@ -471,35 +486,32 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Build header line for this message
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
 
-        std::string senderStr_o = "???";
+        char senderBuf[48] = "???";
         if (node && node->has_user) {
-            senderStr_o = node->user.long_name;
+            strncpy(senderBuf, node->user.long_name, sizeof(senderBuf) - 1);
+            senderBuf[sizeof(senderBuf) - 1] = '\0';
         }
 
         // If this is *our own* message, override sender to "Me"
         bool mine = (m.sender == nodeDB->getNodeNum());
         if (mine) {
-            senderStr_o = "Me";
+            strcpy(senderBuf, "Me");
         }
 
-        const char *sender = senderStr_o.c_str();
+        const char *sender = senderBuf;
 
-        if (display->getStringWidth(sender) + display->getStringWidth(timeBuf) + display->getStringWidth(chanType) +
-                display->getStringWidth(" @") + display->getStringWidth("... ") - 10 >
-            SCREEN_WIDTH) {
-            // truncate sender name if too long
-            int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
-                             display->getStringWidth(" @") - display->getStringWidth("... ") - 10;
+        // If sender width too wide → truncate manually
+        int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
+                         display->getStringWidth(" @") - display->getStringWidth("... ") - 10;
 
-            int len = static_cast<int>(senderStr_o.size());
-            while (len > 0 && display->getStringWidth(sender, len) > availWidth) {
-                --len;
-            }
+        while (strlen(senderBuf) > 0 && display->getStringWidth(senderBuf) > availWidth) {
+            senderBuf[strlen(senderBuf) - 1] = '\0';
+        }
 
-            if (len < static_cast<int>(senderStr_o.size())) {
-                senderStr_o = senderStr_o.substr(0, len) + "...";
-                sender = senderStr_o.c_str();
-            }
+        // Add ellipsis if needed
+        if (display->getStringWidth(senderBuf) > availWidth && strlen(senderBuf) >= 3) {
+            size_t len = strlen(senderBuf);
+            strcpy(&senderBuf[len - 3], "...");
         }
 
         // Final header line

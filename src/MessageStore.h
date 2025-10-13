@@ -7,7 +7,8 @@
 #define LOG_DEBUG(...)
 #endif
 
-// Disable message persistence to flash if you’re short on space
+// Enable or disable message persistence (flash storage)
+// Define -DENABLE_MESSAGE_PERSISTENCE=0 in build_flags to disable it entirely
 #ifndef ENABLE_MESSAGE_PERSISTENCE
 #define ENABLE_MESSAGE_PERSISTENCE 1
 #endif
@@ -17,15 +18,17 @@
 #include <deque>
 #include <string>
 
-// Max number of messages we’ll keep in history
-#ifndef MAX_MESSAGES_SAVED
-#define MAX_MESSAGES_SAVED 20
+// how many messages are stored (RAM + flash).
+// Define -DMESSAGE_HISTORY_LIMIT=N in build_flags to control memory usage.
+#ifndef MESSAGE_HISTORY_LIMIT
+#define MESSAGE_HISTORY_LIMIT 20
 #endif
 
-// Keep a cap for serialized payloads
-#ifndef MAX_MESSAGE_SIZE
+// Internal alias used everywhere in code – do NOT redefine elsewhere.
+#define MAX_MESSAGES_SAVED MESSAGE_HISTORY_LIMIT
+
+// Maximum text payload size per message in bytes (fixed).
 #define MAX_MESSAGE_SIZE 220
-#endif
 
 // Explicit message classification
 enum class MessageType : uint8_t { BROADCAST = 0, DM_TO_US = 1 };
@@ -39,6 +42,7 @@ enum class AckStatus : uint8_t {
     RELAYED = 4  // got an ACK from relay, not destination
 };
 
+// A single stored message in RAM and/or flash
 struct StoredMessage {
     uint32_t timestamp;   // When message was created (secs since boot/RTC)
     uint32_t sender;      // NodeNum of sender
@@ -46,8 +50,6 @@ struct StoredMessage {
     std::string text;     // UTF-8 text payload (dynamic now, no fixed size)
 
     // Destination node.
-    // 0xffffffff (NODENUM_BROADCAST) means broadcast,
-    // otherwise this is the NodeNum of the DM recipient.
     uint32_t dest;
 
     // Explicit classification (derived from dest when loading old messages)
@@ -115,9 +117,9 @@ class MessageStore
     void logMemoryUsage(const char *context) const;
 
   private:
-    std::deque<StoredMessage> liveMessages;
-    std::deque<StoredMessage> messages; // persisted copy
-    std::string filename;
+    std::deque<StoredMessage> liveMessages; // current in-RAM messages
+    std::deque<StoredMessage> messages;     // persisted copy on flash
+    std::string filename;                   // flash filename for persistence
 };
 
 // Global instance (defined in MessageStore.cpp)

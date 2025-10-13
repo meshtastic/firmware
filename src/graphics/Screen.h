@@ -169,6 +169,8 @@ class Point
 namespace graphics
 {
 
+enum class FrameDirection { NEXT, PREVIOUS };
+
 // Forward declarations
 class Screen;
 
@@ -271,6 +273,7 @@ class Screen : public concurrency::OSThread
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
+    void showFrame(FrameDirection direction);
 
     // generic alert start
     void startAlert(FrameCallback _alertFrame)
@@ -631,8 +634,6 @@ class Screen : public concurrency::OSThread
     // Implementations of various commands, called from doTask().
     void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
-    void handleShowNextFrame();
-    void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
 
     // Info collected by setFrames method.
