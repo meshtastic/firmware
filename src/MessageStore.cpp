@@ -326,16 +326,6 @@ void MessageStore::dismissOldestMessage()
     saveToFlash();
 }
 
-// Dismiss newest message (RAM + persisted queue)
-void MessageStore::dismissNewestMessage()
-{
-    eraseIf(
-        liveMessages, [](StoredMessage &) { return true; }, true);
-    eraseIf(
-        messages, [](StoredMessage &) { return true; }, true);
-    saveToFlash();
-}
-
 // Dismiss oldest message in a specific channel
 void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
 {
