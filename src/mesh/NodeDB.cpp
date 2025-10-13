@@ -152,6 +152,7 @@ void NodeDB::syncHotFromCold(size_t index)
     hot.channel = node.channel;
     hot.next_hop = node.next_hop;
     hot.bitfield = node.bitfield;
+    hot.role = static_cast<uint8_t>(node.user.role);
     hot.hops_away = node.hops_away;
 
     uint8_t flags = 0;
