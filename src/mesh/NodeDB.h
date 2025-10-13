@@ -54,6 +54,7 @@ struct NodeHotEntry {
     uint32_t last_heard = 0;
     float snr = 0.0f;
     uint32_t bitfield = 0;
+    uint8_t role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     uint8_t channel = 0;
     uint8_t next_hop = 0;
     uint8_t hops_away = 0;
