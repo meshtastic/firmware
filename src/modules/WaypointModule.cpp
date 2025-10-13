@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
 
 #if HAS_SCREEN
@@ -80,15 +81,19 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     if (!screen)
         return;
-    // Prepare to draw
-    display->setFont(FONT_SMALL);
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
+
+    // === Set Title
+    const char *titleStr = "Waypoint";
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
+
     const int w = display->getWidth();
     const int h = display->getHeight();
-
-    // Handle inverted display
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->fillRect(x, y, w, FONT_HEIGHT_SMALL);
 
     // Decode the waypoint
     const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
@@ -107,10 +112,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Get our node, to use our own position
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-
-    // Text fields to draw (left of compass)
-    // Last element must be NULL. This signals the end of the char*[] to drawColumns
-    const char *fields[] = {"Waypoint", lastStr, wp.name, wp.description, distStr, nullptr};
 
     // Dimensions / co-ordinates for the compass/circle
     const uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(w, h);
@@ -168,11 +169,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     // Draw compass circle
     display->drawCircle(compassX, compassY, compassDiam / 2);
 
-    // Undo color-inversion, if set prior to drawing header
-    // Unsure of expected behavior? For now: copy drawNodeInfo
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-    graphics::NodeListRenderer::drawColumns(display, x, y, fields);
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
+    display->drawString(0, graphics::getTextPositions(display)[line++], lastStr);
+    display->drawString(0, graphics::getTextPositions(display)[line++], wp.name);
+    display->drawString(0, graphics::getTextPositions(display)[line++], wp.description);
+    display->drawString(0, graphics::getTextPositions(display)[line++], distStr);
 }
 #endif
