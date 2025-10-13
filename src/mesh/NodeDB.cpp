@@ -151,7 +151,6 @@ void NodeDB::syncHotFromCold(size_t index)
     hot.snr = node.snr;
     hot.channel = node.channel;
     hot.next_hop = node.next_hop;
-    hot.bitfield = node.bitfield;
     hot.role = static_cast<uint8_t>(node.user.role);
     hot.hops_away = node.hops_away;
 
@@ -164,6 +163,8 @@ void NodeDB::syncHotFromCold(size_t index)
         flags |= HOT_FLAG_IS_IGNORED;
     if (node.has_hops_away)
         flags |= HOT_FLAG_HAS_HOPS;
+    if (node.bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK)
+        flags |= HOT_FLAG_IS_KEY_VERIFIED;
     hot.flags = flags;
 
     hotDirty[index] = false;
@@ -2408,7 +2409,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             for (int i = 1; i < numMeshNodes; i++) {
                 const NodeHotEntry &hot = hotNodes[i];
                 if (!(hot.flags & HOT_FLAG_IS_FAVORITE) && !(hot.flags & HOT_FLAG_IS_IGNORED) &&
-                    !(hot.bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && hot.last_heard < oldest) {
+                    !(hot.flags & HOT_FLAG_IS_KEY_VERIFIED) && hot.last_heard < oldest) {
                     oldest = hot.last_heard;
                     oldestIndex = i;
                 }

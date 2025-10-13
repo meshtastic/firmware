@@ -53,7 +53,6 @@ struct NodeHotEntry {
     uint32_t num = 0;
     uint32_t last_heard = 0;
     float snr = 0.0f;
-    uint32_t bitfield = 0;
     uint8_t role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     uint8_t channel = 0;
     uint8_t next_hop = 0;
@@ -404,7 +403,8 @@ class NodeDB
         HOT_FLAG_VIA_MQTT = 1 << 0,
         HOT_FLAG_IS_FAVORITE = 1 << 1,
         HOT_FLAG_IS_IGNORED = 1 << 2,
-        HOT_FLAG_HAS_HOPS = 1 << 3
+        HOT_FLAG_HAS_HOPS = 1 << 3,
+        HOT_FLAG_IS_KEY_VERIFIED = 1 << 4
     };
 
     void initHotCache();
