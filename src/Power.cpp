@@ -562,6 +562,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
                    config.power.device_battery_ina_address) {
             if (!ina226Sensor.isInitialized())
                 return ina226Sensor.runOnce() > 0;
+            return ina226Sensor.isRunning();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             if (!ina260Sensor.isInitialized())
