@@ -678,10 +678,22 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
     int textX_offset = 10;
     if (isHighResolution) {
-        iconX = SCREEN_WIDTH - chirpy_width_hirez - (chirpy_width_hirez / 3);
-        iconY = (SCREEN_HEIGHT - chirpy_height_hirez) / 2;
         textX_offset = textX_offset * 4;
-        display->drawXbm(iconX, iconY, chirpy_width_hirez, chirpy_height_hirez, chirpy_hirez);
+        const int scale = 2;
+        const int bytesPerRow = (chirpy_width + 7) / 8;
+
+        for (int yy = 0; yy < chirpy_height; ++yy) {
+            iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
+            iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
+            const uint8_t *rowPtr = chirpy + yy * bytesPerRow;
+            for (int xx = 0; xx < chirpy_width; ++xx) {
+                const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
+                const uint8_t bitMask = 1U << (xx & 7); // XBM is LSB-first
+                if (byteVal & bitMask) {
+                    display->fillRect(iconX + xx * scale, iconY + yy * scale, scale, scale);
+                }
+            }
+        }
     } else {
         display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
     }
