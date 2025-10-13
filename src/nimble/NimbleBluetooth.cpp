@@ -48,6 +48,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     uint8_t queue_size = 0;
     uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
     size_t numBytes = 0;
+    bool hasChecked = false;
+    bool phoneWants = false;
 
   protected:
     virtual int32_t runOnce() override
@@ -60,7 +62,10 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             LOG_DEBUG("Queue_size %u", queue_size);
             queue_size = 0;
         }
-        // Note: phoneWants/hasChecked logic removed since onRead() handles getFromRadio() directly
+        if (!hasChecked && phoneWants) {
+            numBytes = getFromRadio(fromRadioBytes);
+            hasChecked = true;
+        }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
         return INT32_MAX;
@@ -117,6 +122,8 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
                 bluetoothPhoneAPI->queue_size++;
                 bluetoothPhoneAPI->setIntervalFromNow(0);
             }
+        } else {
+            LOG_DEBUG("Drop duplicate ToRadio packet (%u bytes)", val.length());
         }
     }
 };
@@ -129,17 +136,30 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
 #endif
     {
+        bluetoothPhoneAPI->phoneWants = true;
+        bluetoothPhoneAPI->setIntervalFromNow(0);
         std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
 
-        // Get fresh data immediately when client reads
-        bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
+        if (!bluetoothPhoneAPI->hasChecked) {
+            bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
+            bluetoothPhoneAPI->hasChecked = true;
+        }
 
-        // Set the characteristic value with whatever data we have
         pCharacteristic->setValue(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes);
+
+        if (bluetoothPhoneAPI->numBytes != 0) {
+#ifdef NIMBLE_TWO
+            pCharacteristic->notify(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes, BLE_HS_CONN_HANDLE_NONE);
+#else
+            pCharacteristic->notify();
+#endif
+        }
 
         if (bluetoothPhoneAPI->numBytes != 0) // if we did send something, queue it up right away to reload
             bluetoothPhoneAPI->setIntervalFromNow(0);
         bluetoothPhoneAPI->numBytes = 0;
+        bluetoothPhoneAPI->hasChecked = false;
+        bluetoothPhoneAPI->phoneWants = false;
     }
 };
 
@@ -271,6 +291,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             bluetoothPhoneAPI->close();
             bluetoothPhoneAPI->numBytes = 0;
             bluetoothPhoneAPI->queue_size = 0;
+            bluetoothPhoneAPI->hasChecked = false;
+            bluetoothPhoneAPI->phoneWants = false;
         }
 
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
@@ -278,6 +300,15 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();
+#else
+        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+        if (!pAdvertising->start(0)) {
+            if (pAdvertising->isAdvertising()) {
+                LOG_DEBUG("BLE advertising already running");
+            } else {
+                LOG_ERROR("BLE failed to restart advertising");
+            }
+        }
 #endif
     }
 };
@@ -401,15 +432,17 @@ void NimbleBluetooth::setupService()
     // Define the characteristics that the app is looking for
     if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
-        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
+        FromRadioCharacteristic =
+            bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
         ToRadioCharacteristic = bleService->createCharacteristic(
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-        FromRadioCharacteristic = bleService->createCharacteristic(
-            FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        FromRadioCharacteristic =
+            bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN |
+                                                                 NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::NOTIFY);
         fromNumCharacteristic =
             bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
                                                                NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
