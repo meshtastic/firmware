@@ -14,10 +14,11 @@
 class DFRobotGravitySensor : public TelemetrySensor
 {
   private:
-    DFRobot_RainfallSensor_I2C gravity;
+    DFRobot_RainfallSensor_I2C *gravity = nullptr;
 
   public:
     DFRobotGravitySensor();
+    ~DFRobotGravitySensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
