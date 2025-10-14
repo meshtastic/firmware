@@ -72,6 +72,7 @@ void PhoneAPI::handleStartConfig()
 
     LOG_INFO("Start API client config");
     nodeInfoForPhone.num = 0; // Don't keep returning old nodeinfos
+    nodeInfoQueue.clear();
     resetReadIndex();
 }
 
@@ -94,6 +95,7 @@ void PhoneAPI::close()
         fromRadioScratch = {};
         toRadioScratch = {};
         nodeInfoForPhone = {};
+        nodeInfoQueue.clear();
         packetForPhone = NULL;
         filesManifest.clear();
         fromRadioNum = 0;
@@ -432,15 +434,24 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_OTHER_NODEINFOS: {
         LOG_DEBUG("Send known nodes");
+        if (nodeInfoForPhone.num == 0 && !nodeInfoQueue.empty()) {
+            // Serve the next cached node without re-reading from the DB iterator.
+            nodeInfoForPhone = nodeInfoQueue.front();
+            nodeInfoQueue.pop_front();
+        }
+
         if (nodeInfoForPhone.num != 0) {
-            LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
-                     nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
+            // Just in case we stored a different user.id in the past, but should never happen going forward
+            sprintf(nodeInfoForPhone.user.id, "!%08x", nodeInfoForPhone.num);
+            LOG_DEBUG("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
+                      nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = nodeInfoForPhone;
-            // Stay in current state until done sending nodeinfos
-            nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
+            nodeInfoForPhone = {};
+            prefetchNodeInfos();
         } else {
             LOG_DEBUG("Done sending nodeinfo");
+            nodeInfoQueue.clear();
             state = STATE_SEND_FILEMANIFEST;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
@@ -544,6 +555,30 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
     }
 }
 
+void PhoneAPI::prefetchNodeInfos()
+{
+    bool added = false;
+    // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
+    while (nodeInfoQueue.size() < kNodePrefetchDepth) {
+        auto nextNode = nodeDB->readNextMeshNode(readIndex);
+        if (!nextNode)
+            break;
+
+        auto info = TypeConversions::ConvertToNodeInfo(nextNode);
+        bool isUs = info.num == nodeDB->getNodeNum();
+        info.hops_away = isUs ? 0 : info.hops_away;
+        info.last_heard = isUs ? getValidTime(RTCQualityFromNet) : info.last_heard;
+        info.snr = isUs ? 0 : info.snr;
+        info.via_mqtt = isUs ? false : info.via_mqtt;
+        info.is_favorite = info.is_favorite || isUs;
+        nodeInfoQueue.push_back(info);
+        added = true;
+    }
+
+    if (added)
+        onNowHasData(0);
+}
+
 void PhoneAPI::releaseMqttClientProxyPhonePacket()
 {
     if (mqttClientProxyMessageForPhone) {
@@ -580,19 +615,8 @@ bool PhoneAPI::available()
         return true;
 
     case STATE_SEND_OTHER_NODEINFOS:
-        if (nodeInfoForPhone.num == 0) {
-            auto nextNode = nodeDB->readNextMeshNode(readIndex);
-            if (nextNode) {
-                nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
-                bool isUs = nodeInfoForPhone.num == nodeDB->getNodeNum();
-                nodeInfoForPhone.hops_away = isUs ? 0 : nodeInfoForPhone.hops_away;
-                nodeInfoForPhone.last_heard = isUs ? getValidTime(RTCQualityFromNet) : nodeInfoForPhone.last_heard;
-                nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
-                nodeInfoForPhone.via_mqtt = isUs ? false : nodeInfoForPhone.via_mqtt;
-                nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || isUs; // Our node is always a favorite
-                onNowHasData(0);
-            }
-        }
+        if (nodeInfoQueue.empty())
+            prefetchNodeInfos();
         return true; // Always say we have something, because we might need to advance our state machine
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
@@ -710,6 +734,13 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
         return false;
     }
+
+    // Upgrade traceroute requests from phone to use reliable delivery, matching TraceRouteModule
+    if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && !isBroadcast(p.to)) {
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p.want_ack = true;
+    }
+
     lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;
@@ -725,7 +756,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
         LOG_INFO("Tell client we have new packets %u", newValue);
         onNowHasData(newValue);
     } else {
-        LOG_DEBUG("(Client not yet interested in packets)");
+        LOG_DEBUG("Client not yet interested in packets (state=%d)", state);
     }
 
     return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one
