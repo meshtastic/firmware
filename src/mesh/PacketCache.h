@@ -31,8 +31,8 @@ typedef struct PacketCacheMetadata {
             uint16_t want_response : 1; // meshtastic_MeshPacket::decoded::want_response
             uint16_t emoji : 1;         // meshtastic_MeshPacket::decoded::emoji
             uint16_t bitfield : 5;      // meshtastic_MeshPacket::decoded::bitfield (truncated)
-            uint8_t rx_rssi : 8;        // meshtastic_MeshPacket::rx_rssi (actual RSSI + 200)
-            uint8_t rx_snr : 8;         // meshtastic_MeshPacket::rx_snr ((p->rx_snr + 30.0f) / 0.25f)
+            uint8_t rx_rssi : 8;        // meshtastic_MeshPacket::rx_rssi (map via actual RSSI + 200)
+            uint8_t rx_snr : 8;         // meshtastic_MeshPacket::rx_snr (map via (p->rx_snr + 30.0f) / 0.25f)
         };
     };
     union {
