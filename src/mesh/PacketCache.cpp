@@ -192,6 +192,7 @@ void PacketCache::rehydrate(const PacketCacheEntry *e, meshtastic_MeshPacket *p)
         p->encrypted.size = e->payload_len;
     } else {
         memcpy(p->decoded.payload.bytes, payload, e->payload_len);
+        p->decoded.payload.size = e->payload_len;
         if (e->has_metadata) {
             // Decrypted-only metadata
             p->decoded.portnum = (meshtastic_PortNum)m.portnum;
