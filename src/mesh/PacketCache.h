@@ -10,7 +10,7 @@ typedef uint16_t PacketHash;
 typedef struct PacketCacheEntry {
     PacketCacheEntry *next;
     PacketHeader header;
-    uint16_t payload_len = sizeof(PacketCacheEntry);
+    uint16_t payload_len = 0;
     union {
         uint16_t bitfield;
         struct {
