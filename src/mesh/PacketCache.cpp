@@ -52,8 +52,8 @@ PacketCacheEntry *PacketCache::cache(const meshtastic_MeshPacket *p, bool preser
                 m.reply_id = p->decoded.reply_id;
             else if (p->decoded.request_id)
                 m.request_id = p->decoded.request_id;
-            e->payload_len = p->decoded.payload.size;
         }
+        e->payload_len = p->decoded.payload.size;
         memcpy(((unsigned char *)e) + sizeof(PacketCacheEntry), p->decoded.payload.bytes, p->decoded.payload.size);
     } else {
         LOG_ERROR("Unable to cache packet with unknown payload type %d", p->which_payload_variant);
