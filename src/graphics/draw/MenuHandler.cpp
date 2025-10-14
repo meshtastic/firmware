@@ -20,6 +20,7 @@
 #include "modules/KeyVerificationModule.h"
 
 #include "modules/TraceRouteModule.h"
+#include "mesh/Default.h"
 #include <functional>
 
 extern uint16_t TFT_MESH;
