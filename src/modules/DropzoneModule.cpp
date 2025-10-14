@@ -55,13 +55,14 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         29.25 inHg 72°C
     */
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    int hour, min, sec;
-
+    int hour = 0, min = 0, sec = 0;
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
-        graphics::decomposeTime(rtc_sec, hour, min, sec);
+        hour = hms / SEC_PER_HOUR;
+        min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN;
     }
 
     // Check if the dropzone is open or closed by reading the analog pin
