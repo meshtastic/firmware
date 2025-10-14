@@ -17,6 +17,21 @@
 #include "PowerStatus.h"
 #endif
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#if defined(CONFIG_NIMBLE_CPP_IDF)
+#include "host/ble_gap.h"
+#else
+#include "nimble/nimble/host/include/host/ble_gap.h"
+#endif
+
+namespace
+{
+constexpr uint16_t kPreferredBleMtu = 517;
+constexpr uint16_t kPreferredBleTxOctets = 251;
+constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
+} // namespace
+#endif
+
 NimBLECharacteristic *fromNumCharacteristic;
 NimBLECharacteristic *BatteryCharacteristic;
 NimBLECharacteristic *logRadioCharacteristic;
@@ -33,6 +48,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     uint8_t queue_size = 0;
     uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
     size_t numBytes = 0;
+    bool hasChecked = false;
+    bool phoneWants = false;
 
   protected:
     virtual int32_t runOnce() override
@@ -45,7 +62,11 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             LOG_DEBUG("Queue_size %u", queue_size);
             queue_size = 0;
         }
-        // Note: phoneWants/hasChecked logic removed since onRead() handles getFromRadio() directly
+        if (!hasChecked && phoneWants) {
+            // Pull fresh data while we're outside of the NimBLE callback context.
+            numBytes = getFromRadio(fromRadioBytes);
+            hasChecked = true;
+        }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
         return INT32_MAX;
@@ -102,6 +123,8 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
                 bluetoothPhoneAPI->queue_size++;
                 bluetoothPhoneAPI->setIntervalFromNow(0);
             }
+        } else {
+            LOG_DEBUG("Drop duplicate ToRadio packet (%u bytes)", val.length());
         }
     }
 };
@@ -114,17 +137,32 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
 #endif
     {
+        bluetoothPhoneAPI->phoneWants = true;
+        bluetoothPhoneAPI->setIntervalFromNow(0);
         std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
 
-        // Get fresh data immediately when client reads
-        bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
+        if (!bluetoothPhoneAPI->hasChecked) {
+            // Fetch payload on demand; prefetch keeps this fast for the first read.
+            bluetoothPhoneAPI->numBytes = bluetoothPhoneAPI->getFromRadio(bluetoothPhoneAPI->fromRadioBytes);
+            bluetoothPhoneAPI->hasChecked = true;
+        }
 
-        // Set the characteristic value with whatever data we have
         pCharacteristic->setValue(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes);
+
+        if (bluetoothPhoneAPI->numBytes != 0) {
+#ifdef NIMBLE_TWO
+            // Notify immediately so subscribed clients see the packet without an extra read.
+            pCharacteristic->notify(bluetoothPhoneAPI->fromRadioBytes, bluetoothPhoneAPI->numBytes, BLE_HS_CONN_HANDLE_NONE);
+#else
+            pCharacteristic->notify();
+#endif
+        }
 
         if (bluetoothPhoneAPI->numBytes != 0) // if we did send something, queue it up right away to reload
             bluetoothPhoneAPI->setIntervalFromNow(0);
         bluetoothPhoneAPI->numBytes = 0;
+        bluetoothPhoneAPI->hasChecked = false;
+        bluetoothPhoneAPI->phoneWants = false;
     }
 };
 
@@ -212,6 +250,27 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
     {
         LOG_INFO("BLE incoming connection %s", connInfo.getAddress().toString().c_str());
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+        const uint16_t connHandle = connInfo.getConnHandle();
+        int phyResult =
+            ble_gap_set_prefered_le_phy(connHandle, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_CODED_ANY);
+        if (phyResult == 0) {
+            LOG_INFO("BLE conn %u requested 2M PHY", connHandle);
+        } else {
+            LOG_WARN("Failed to prefer 2M PHY for conn %u, rc=%d", connHandle, phyResult);
+        }
+
+        int dataLenResult = ble_gap_set_data_len(connHandle, kPreferredBleTxOctets, kPreferredBleTxTimeUs);
+        if (dataLenResult == 0) {
+            LOG_INFO("BLE conn %u requested data length %u bytes", connHandle, kPreferredBleTxOctets);
+        } else {
+            LOG_WARN("Failed to raise data length for conn %u, rc=%d", connHandle, dataLenResult);
+        }
+
+        LOG_INFO("BLE conn %u initial MTU %u (target %u)", connHandle, connInfo.getMTU(), kPreferredBleMtu);
+        pServer->updateConnParams(connHandle, 6, 12, 0, 200);
+#endif
     }
 
     virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
@@ -235,6 +294,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             bluetoothPhoneAPI->close();
             bluetoothPhoneAPI->numBytes = 0;
             bluetoothPhoneAPI->queue_size = 0;
+            bluetoothPhoneAPI->hasChecked = false;
+            bluetoothPhoneAPI->phoneWants = false;
         }
 
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
@@ -242,6 +303,15 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();
+#else
+        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+        if (!pAdvertising->start(0)) {
+            if (pAdvertising->isAdvertising()) {
+                LOG_DEBUG("BLE advertising already running");
+            } else {
+                LOG_ERROR("BLE failed to restart advertising");
+            }
+        }
 #endif
     }
 };
@@ -316,6 +386,30 @@ void NimbleBluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    int mtuResult = NimBLEDevice::setMTU(kPreferredBleMtu);
+    if (mtuResult == 0) {
+        LOG_INFO("BLE MTU request set to %u", kPreferredBleMtu);
+    } else {
+        LOG_WARN("Unable to request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
+    }
+
+    int phyResult = ble_gap_set_prefered_default_le_phy(BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK);
+    if (phyResult == 0) {
+        LOG_INFO("BLE default PHY preference set to 2M");
+    } else {
+        LOG_WARN("Failed to prefer 2M PHY by default, rc=%d", phyResult);
+    }
+
+    int dataLenResult = ble_gap_write_sugg_def_data_len(kPreferredBleTxOctets, kPreferredBleTxTimeUs);
+    if (dataLenResult == 0) {
+        LOG_INFO("BLE suggested data length set to %u bytes", kPreferredBleTxOctets);
+    } else {
+        LOG_WARN("Failed to raise suggested data length (%u/%u), rc=%d", kPreferredBleTxOctets, kPreferredBleTxTimeUs,
+                 dataLenResult);
+    }
+#endif
+
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM | BLE_SM_PAIR_AUTHREQ_SC);
         NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
@@ -341,15 +435,18 @@ void NimbleBluetooth::setupService()
     // Define the characteristics that the app is looking for
     if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
-        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
+        // Allow notifications so phones can stream FromRadio without polling.
+        FromRadioCharacteristic =
+            bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
         ToRadioCharacteristic = bleService->createCharacteristic(
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-        FromRadioCharacteristic = bleService->createCharacteristic(
-            FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        FromRadioCharacteristic =
+            bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN |
+                                                                 NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::NOTIFY);
         fromNumCharacteristic =
             bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
                                                                NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
