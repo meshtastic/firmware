@@ -7,17 +7,7 @@
 #include "SafeFile.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
-
-#include <algorithm> // std::min, std::find_if
-
-using graphics::MessageRenderer::setThreadMode;
-using graphics::MessageRenderer::ThreadMode;
-
-// Calculate serialized size for a StoredMessage
-static inline size_t getMessageSize(const StoredMessage &m)
-{
-    return 16 + std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
-}
+#include <cstring> // memcpy
 
 // Helper: assign a timestamp (RTC if available, else boot-relative)
 static inline void assignTimestamp(StoredMessage &sm)
@@ -78,7 +68,8 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     StoredMessage sm;
     assignTimestamp(sm); // set timestamp (RTC or boot-relative)
     sm.channelIndex = packet.channel;
-    sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
+    strncpy(sm.text, reinterpret_cast<const char *>(packet.decoded.payload.bytes), MAX_MESSAGE_SIZE - 1);
+    sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
     if (packet.from == 0) {
         // Outgoing (phone-originated)
@@ -110,7 +101,8 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
 
     sm.sender = sender;
     sm.channelIndex = channelIndex;
-    sm.text = text;
+    strncpy(sm.text, text.c_str(), MAX_MESSAGE_SIZE - 1);
+    sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
     // Default manual adds to broadcast
     sm.dest = NODENUM_BROADCAST;
@@ -123,52 +115,84 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
-// Save RAM queue to flash (called on shutdown)
+
+// Use a compile-time constant so the array bound can be used in the struct
+static constexpr size_t TEXT_LEN = MAX_MESSAGE_SIZE;
+
+// Compact, fixed-size on-flash representation
+struct __attribute__((packed)) StoredMessageRecord {
+    uint32_t timestamp;
+    uint32_t sender;
+    uint8_t channelIndex;
+    uint32_t dest;
+    uint8_t isBootRelative;
+    uint8_t ackStatus;   // static_cast<uint8_t>(AckStatus)
+    char text[TEXT_LEN]; // null-terminated
+};
+
+// Serialize one StoredMessage to flash
+static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
+{
+    StoredMessageRecord rec = {};
+    rec.timestamp = m.timestamp;
+    rec.sender = m.sender;
+    rec.channelIndex = m.channelIndex;
+    rec.dest = m.dest;
+    rec.isBootRelative = m.isBootRelative;
+    rec.ackStatus = static_cast<uint8_t>(m.ackStatus);
+
+    strncpy(rec.text, m.text, TEXT_LEN - 1);
+    rec.text[TEXT_LEN - 1] = '\0';
+    f.write(reinterpret_cast<const uint8_t *>(&rec), sizeof(rec));
+}
+
+// Deserialize one StoredMessage from flash; returns false on short read
+static inline bool readMessageRecord(File &f, StoredMessage &m)
+{
+    StoredMessageRecord rec = {};
+    if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
+        return false;
+
+    m.timestamp = rec.timestamp;
+    m.sender = rec.sender;
+    m.channelIndex = rec.channelIndex;
+    m.dest = rec.dest;
+    m.isBootRelative = rec.isBootRelative;
+    m.ackStatus = static_cast<AckStatus>(rec.ackStatus);
+    strncpy(m.text, rec.text, MAX_MESSAGE_SIZE - 1);
+    m.text[MAX_MESSAGE_SIZE - 1] = '\0';
+    m.type = (m.dest == NODENUM_BROADCAST) ? MessageType::BROADCAST : MessageType::DM_TO_US;
+    return true;
+}
+
 void MessageStore::saveToFlash()
 {
 #ifdef FSCom
     // Copy live RAM buffer into persistence queue
     messages = liveMessages;
 
+    // Ensure root exists
     spiLock->lock();
-    FSCom.mkdir("/"); // ensure root exists
+    FSCom.mkdir("/");
     spiLock->unlock();
 
     SafeFile f(filename.c_str(), false);
 
     spiLock->lock();
-    uint8_t count = messages.size();
+    uint8_t count = static_cast<uint8_t>(messages.size());
+    if (count > MAX_MESSAGES_SAVED)
+        count = MAX_MESSAGES_SAVED;
     f.write(&count, 1);
 
-    for (uint8_t i = 0; i < count && i < MAX_MESSAGES_SAVED; i++) {
-        const StoredMessage &m = messages.at(i);
-        f.write((uint8_t *)&m.timestamp, sizeof(m.timestamp));
-        f.write((uint8_t *)&m.sender, sizeof(m.sender));
-        f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
-        f.write((uint8_t *)&m.dest, sizeof(m.dest));
-
-        // Write text payload (capped at MAX_MESSAGE_SIZE)
-        const size_t toWrite = std::min(static_cast<size_t>(MAX_MESSAGE_SIZE), m.text.size());
-        if (toWrite)
-            f.write((const uint8_t *)m.text.data(), toWrite);
-        f.write('\0');
-
-        uint8_t bootFlag = m.isBootRelative ? 1 : 0;
-        f.write(&bootFlag, 1); // persist boot-relative flag
-
-        uint8_t statusByte = static_cast<uint8_t>(m.ackStatus);
-        f.write(&statusByte, 1); // persist ackStatus
+    for (uint8_t i = 0; i < count; ++i) {
+        writeMessageRecord(f, messages[i]);
     }
     spiLock->unlock();
 
     f.close();
-
-#else
-    // Filesystem not available, skip persistence
 #endif
 }
 
-// Load persisted messages into RAM (called at boot)
 void MessageStore::loadFromFlash()
 {
     messages.clear();
@@ -178,73 +202,30 @@ void MessageStore::loadFromFlash()
 
     if (!FSCom.exists(filename.c_str()))
         return;
+
     auto f = FSCom.open(filename.c_str(), FILE_O_READ);
     if (!f)
         return;
 
     uint8_t count = 0;
-    f.readBytes((char *)&count, 1);
+    f.readBytes(reinterpret_cast<char *>(&count), 1);
+    if (count > MAX_MESSAGES_SAVED)
+        count = MAX_MESSAGES_SAVED;
 
-    for (uint8_t i = 0; i < count && i < MAX_MESSAGES_SAVED; i++) {
+    for (uint8_t i = 0; i < count; ++i) {
         StoredMessage m;
-        f.readBytes((char *)&m.timestamp, sizeof(m.timestamp));
-        f.readBytes((char *)&m.sender, sizeof(m.sender));
-        f.readBytes((char *)&m.channelIndex, sizeof(m.channelIndex));
-        f.readBytes((char *)&m.dest, sizeof(m.dest));
-
-        m.text.clear();
-        m.text.reserve(64);
-        char c;
-        size_t readCount = 0;
-        while (readCount < MAX_MESSAGE_SIZE) {
-            if (f.readBytes(&c, 1) <= 0)
-                break;
-            if (c == '\0')
-                break;
-            m.text.push_back(c);
-            ++readCount;
-        }
-
-        // Try to read boot-relative flag
-        uint8_t bootFlag = 0;
-        if (f.available() > 0) {
-            if (f.readBytes((char *)&bootFlag, 1) == 1) {
-                m.isBootRelative = (bootFlag != 0);
-            } else {
-                m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
-            }
-        } else {
-            m.isBootRelative = (m.timestamp < 60u * 60u * 24u * 7u);
-        }
-
-        // Try to read ackStatus
-        if (f.available() > 0) {
-            uint8_t statusByte = 0;
-            if (f.readBytes((char *)&statusByte, 1) == 1) {
-                m.ackStatus = static_cast<AckStatus>(statusByte);
-            } else {
-                m.ackStatus = AckStatus::NONE;
-            }
-        } else {
-            m.ackStatus = AckStatus::NONE;
-        }
-
-        // Recompute type from dest
-        if (m.dest == NODENUM_BROADCAST) {
-            m.type = MessageType::BROADCAST;
-        } else {
-            m.type = MessageType::DM_TO_US;
-        }
-
+        if (!readMessageRecord(f, m))
+            break;
         messages.push_back(m);
         liveMessages.push_back(m); // restore into RAM buffer
     }
-    f.close();
 
+    f.close();
 #endif
 }
+
 #else
-// Persistence disabled (saves flash space)
+// If persistence is disabled, these functions become no-ops
 void MessageStore::saveToFlash() {}
 void MessageStore::loadFromFlash() {}
 #endif
@@ -275,8 +256,12 @@ template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deq
             }
         }
     } else {
-        // Erase the first matching message from the front
-        auto it = std::find_if(deque.begin(), deque.end(), pred);
+        // Manual forward search to avoid std::find_if
+        auto it = deque.begin();
+        for (; it != deque.end(); ++it) {
+            if (pred(*it))
+                break;
+        }
         if (it != deque.end())
             deque.erase(it);
     }

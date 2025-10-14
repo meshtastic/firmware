@@ -44,10 +44,10 @@ enum class AckStatus : uint8_t {
 
 // A single stored message in RAM and/or flash
 struct StoredMessage {
-    uint32_t timestamp;   // When message was created (secs since boot/RTC)
-    uint32_t sender;      // NodeNum of sender
-    uint8_t channelIndex; // Channel index used
-    std::string text;     // UTF-8 text payload (dynamic now, no fixed size)
+    uint32_t timestamp;          // When message was created (secs since boot/RTC)
+    uint32_t sender;             // NodeNum of sender
+    uint8_t channelIndex;        // Channel index used
+    char text[MAX_MESSAGE_SIZE]; // fixed buffer for message text
 
     // Destination node.
     uint32_t dest;

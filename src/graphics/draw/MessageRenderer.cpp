@@ -529,7 +529,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         ackForLine.push_back(m.ackStatus);
 
         // Split message text into wrapped lines
-        std::vector<std::string> wrapped = generateLines(display, "", m.text.c_str(), textWidth);
+        std::vector<std::string> wrapped = generateLines(display, "", m.text, textWidth);
         for (auto &ln : wrapped) {
             allLines.push_back(ln);
             isMine.push_back(mine);

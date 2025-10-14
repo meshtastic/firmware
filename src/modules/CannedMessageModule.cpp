@@ -1062,7 +1062,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
-    sm.text = std::string(message).substr(0, MAX_MESSAGE_SIZE - 1);
+    strncpy(sm.text, message, MAX_MESSAGE_SIZE - 1);
     sm.text[MAX_MESSAGE_SIZE - 1] = '\0';
 
     // Classify broadcast vs DM
