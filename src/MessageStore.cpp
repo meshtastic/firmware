@@ -52,16 +52,6 @@ void MessageStore::addLiveMessage(const StoredMessage &msg)
     pushWithLimit(liveMessages, msg);
 }
 
-// Persistence queue (used only on shutdown/reboot)
-void MessageStore::addMessage(StoredMessage &&msg)
-{
-    pushWithLimit(messages, std::move(msg));
-}
-void MessageStore::addMessage(const StoredMessage &msg)
-{
-    pushWithLimit(messages, msg);
-}
-
 // Add from incoming/outgoing packet
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
@@ -168,9 +158,6 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
 void MessageStore::saveToFlash()
 {
 #ifdef FSCom
-    // Copy live RAM buffer into persistence queue
-    messages = liveMessages;
-
     // Ensure root exists
     spiLock->lock();
     FSCom.mkdir("/");
@@ -179,13 +166,13 @@ void MessageStore::saveToFlash()
     SafeFile f(filename.c_str(), false);
 
     spiLock->lock();
-    uint8_t count = static_cast<uint8_t>(messages.size());
+    uint8_t count = static_cast<uint8_t>(liveMessages.size());
     if (count > MAX_MESSAGES_SAVED)
         count = MAX_MESSAGES_SAVED;
     f.write(&count, 1);
 
     for (uint8_t i = 0; i < count; ++i) {
-        writeMessageRecord(f, messages[i]);
+        writeMessageRecord(f, liveMessages[i]);
     }
     spiLock->unlock();
 
@@ -195,7 +182,6 @@ void MessageStore::saveToFlash()
 
 void MessageStore::loadFromFlash()
 {
-    messages.clear();
     liveMessages.clear();
 #ifdef FSCom
     concurrency::LockGuard guard(spiLock);
@@ -216,8 +202,7 @@ void MessageStore::loadFromFlash()
         StoredMessage m;
         if (!readMessageRecord(f, m))
             break;
-        messages.push_back(m);
-        liveMessages.push_back(m); // restore into RAM buffer
+        liveMessages.push_back(m);
     }
 
     f.close();
@@ -234,7 +219,6 @@ void MessageStore::loadFromFlash() {}
 void MessageStore::clearAllMessages()
 {
     liveMessages.clear();
-    messages.clear();
 
 #ifdef FSCom
     SafeFile f(filename.c_str(), false);
@@ -271,7 +255,6 @@ template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deq
 void MessageStore::dismissOldestMessage()
 {
     eraseIf(liveMessages, [](StoredMessage &) { return true; });
-    eraseIf(messages, [](StoredMessage &) { return true; });
     saveToFlash();
 }
 
@@ -280,7 +263,6 @@ void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
     eraseIf(liveMessages, pred);
-    eraseIf(messages, pred);
     saveToFlash();
 }
 
@@ -288,14 +270,12 @@ void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
 void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
 {
     auto pred = [peer](const StoredMessage &m) {
-        if (m.type == MessageType::DM_TO_US) {
-            uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
-            return other == peer;
-        }
-        return false;
+        if (m.type != MessageType::DM_TO_US)
+            return false;
+        uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+        return other == peer;
     };
     eraseIf(liveMessages, pred);
-    eraseIf(messages, pred);
     saveToFlash();
 }
 
@@ -344,7 +324,6 @@ void MessageStore::upgradeBootRelativeTimestamps()
         }
     };
     fix(liveMessages);
-    fix(messages);
 }
 
 // Global definition
