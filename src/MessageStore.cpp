@@ -47,17 +47,6 @@ template <typename T> static inline void pushWithLimit(std::deque<T> &queue, T &
     queue.emplace_back(std::move(msg));
 }
 
-void MessageStore::logMemoryUsage(const char *context) const
-{
-    size_t total = 0;
-    for (const auto &m : messages) {
-        total += getMessageSize(m);
-    }
-
-    LOG_DEBUG("MessageStore[%s]: %u messages, est %u bytes (~%u KB)", context, (unsigned)messages.size(), (unsigned)total,
-              (unsigned)(total / 1024));
-}
-
 MessageStore::MessageStore(const std::string &label)
 {
     filename = "/Messages_" + label + ".msgs";
@@ -87,48 +76,27 @@ void MessageStore::addMessage(const StoredMessage &msg)
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
     StoredMessage sm;
-    // Always use our local time (helper handles RTC vs boot time)
-    assignTimestamp(sm);
-
+    assignTimestamp(sm); // set timestamp (RTC or boot-relative)
     sm.channelIndex = packet.channel;
-
-    // Text from packet → std::string (fast, no extra copies)
     sm.text = std::string(reinterpret_cast<const char *>(packet.decoded.payload.bytes));
 
     if (packet.from == 0) {
-        // Phone-originated (outgoing)
-        sm.sender = nodeDB->getNodeNum(); // our node ID
-        if (packet.decoded.dest == 0 || packet.decoded.dest == NODENUM_BROADCAST) {
-            sm.dest = NODENUM_BROADCAST;
-            sm.type = MessageType::BROADCAST;
-        } else {
-            sm.dest = packet.decoded.dest;
-            sm.type = MessageType::DM_TO_US;
-        }
-
-        // Outgoing messages start as NONE until ACK/NACK arrives
+        // Outgoing (phone-originated)
+        sm.sender = nodeDB->getNodeNum();
+        sm.dest = (packet.decoded.dest == 0) ? NODENUM_BROADCAST : packet.decoded.dest;
+        sm.type = (sm.dest == NODENUM_BROADCAST) ? MessageType::BROADCAST : MessageType::DM_TO_US;
         sm.ackStatus = AckStatus::NONE;
     } else {
-        // Normal incoming
+        // Incoming
         sm.sender = packet.from;
-        if (packet.to == NODENUM_BROADCAST || packet.decoded.dest == NODENUM_BROADCAST) {
-            sm.dest = NODENUM_BROADCAST;
-            sm.type = MessageType::BROADCAST;
-        } else if (packet.to == nodeDB->getNodeNum()) {
-            sm.dest = nodeDB->getNodeNum(); // DM to us
-            sm.type = MessageType::DM_TO_US;
-        } else {
-            sm.dest = NODENUM_BROADCAST; // fallback
-            sm.type = MessageType::BROADCAST;
-        }
-
-        // Received messages don’t wait for ACK mark as ACKED
+        sm.dest = packet.decoded.dest;
+        sm.type = (sm.dest == NODENUM_BROADCAST)      ? MessageType::BROADCAST
+                  : (sm.dest == nodeDB->getNodeNum()) ? MessageType::DM_TO_US
+                                                      : MessageType::BROADCAST;
         sm.ackStatus = AckStatus::ACKED;
     }
 
     addLiveMessage(sm);
-
-    // Return reference to the most recently stored message
     return liveMessages.back();
 }
 
@@ -195,8 +163,6 @@ void MessageStore::saveToFlash()
 
     f.close();
 
-    // Debug after saving
-    logMemoryUsage("saveToFlash");
 #else
     // Filesystem not available, skip persistence
 #endif
@@ -275,8 +241,6 @@ void MessageStore::loadFromFlash()
     }
     f.close();
 
-    // Debug after loading
-    logMemoryUsage("loadFromFlash");
 #endif
 }
 #else
