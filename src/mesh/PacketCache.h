@@ -1,11 +1,11 @@
 #pragma once
 #include "RadioInterface.h"
 
-#define PACKET_HASH(a, b) ((((a ^ b) >> 16) ^ (a ^ b)) & 0xFFFF)
+#define PACKET_HASH(a, b) ((((a ^ b) >> 16) ^ (a ^ b)) & 0xFFFF) // 16 bit fold of packet (from, id) tuple
 typedef uint16_t PacketHash;
 
-#define PACKET_CACHE_BUCKETS 64 // Number of hash table buckets
-#define PACKET_CACHE_BUCKET(h) (((h >> 12) ^ (h >> 6) ^ h) & 0x3F)
+#define PACKET_CACHE_BUCKETS 64                                    // Number of hash table buckets
+#define PACKET_CACHE_BUCKET(h) (((h >> 12) ^ (h >> 6) ^ h) & 0x3F) // Fold hash down to 6-bit bucket index
 
 typedef struct PacketCacheEntry {
     PacketCacheEntry *next;
