@@ -786,12 +786,8 @@ const int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 // Fills the buffer with a formatted date/time string and returns pixel width
 int UIRenderer::formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay *display, bool includeTime)
 {
-    int sec = rtc_sec % 60;
-    rtc_sec /= 60;
-    int min = rtc_sec % 60;
-    rtc_sec /= 60;
-    int hour = rtc_sec % 24;
-    rtc_sec /= 24;
+    int hour, min, sec;
+    graphics::decomposeTime(rtc_sec, hour, min, sec);
 
     int year = 1970;
     while (true) {

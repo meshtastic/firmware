@@ -58,4 +58,6 @@ bool isAllowedPunctuation(char c);
 
 std::string sanitizeString(const std::string &input);
 
+void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second);
+
 } // namespace graphics
