@@ -3,6 +3,7 @@
 #include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
@@ -128,9 +129,9 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
         // Tear apart hms into h:m:s
-        int hour = hms / SEC_PER_HOUR;
-        int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-        int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+        int hour, min, sec;
+        graphics::decomposeTime(rtc_sec, hour, min, sec);
+
 #ifdef ARCH_PORTDUINO
         ::printf("%s ", logLevel);
         if (color) {

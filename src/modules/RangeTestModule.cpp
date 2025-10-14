@@ -258,9 +258,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
         // Tear apart hms into h:m:s
-        int hour = hms / SEC_PER_HOUR;
-        int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-        int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+        int hour, min, sec;
+        graphics::decomposeTime(rtc_sec, hour, min, sec);
 
         fileToAppend.printf("%02d:%02d:%02d,", hour, min, sec); // Time
     } else {
