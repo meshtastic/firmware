@@ -14,14 +14,21 @@
 #endif
 
 // Global message text pool and state
-static char g_messagePool[MESSAGE_TEXT_POOL_SIZE];
+static char *g_messagePool = nullptr;
 static size_t g_poolWritePos = 0;
 
 // Reset pool (called on boot or clear)
 static inline void resetMessagePool()
 {
+    if (!g_messagePool) {
+        g_messagePool = static_cast<char *>(malloc(MESSAGE_TEXT_POOL_SIZE));
+        if (!g_messagePool) {
+            LOG_ERROR("MessageStore: Failed to allocate %d bytes for message pool", MESSAGE_TEXT_POOL_SIZE);
+            return;
+        }
+    }
     g_poolWritePos = 0;
-    memset(g_messagePool, 0, sizeof(g_messagePool));
+    memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);
 }
 
 // Allocate text in pool and return offset
@@ -46,7 +53,7 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
 // Retrieve a const pointer to message text by offset
 static inline const char *getTextFromPool(uint16_t offset)
 {
-    if (offset >= MESSAGE_TEXT_POOL_SIZE)
+    if (!g_messagePool || offset >= MESSAGE_TEXT_POOL_SIZE)
         return "";
     return &g_messagePool[offset];
 }
