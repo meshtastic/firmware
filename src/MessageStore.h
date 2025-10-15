@@ -27,9 +27,15 @@
 // Internal alias used everywhere in code – do NOT redefine elsewhere.
 #define MAX_MESSAGES_SAVED MESSAGE_HISTORY_LIMIT
 
-// Maximum text payload size per message in bytes (fixed).
-// All messages use the same size to simplify memory handling and avoid dynamic allocations.
+// Maximum text payload size per message in bytes.
+// This still defines the max message length, but we no longer reserve this space per message.
 #define MAX_MESSAGE_SIZE 220
+
+// Total shared text pool size for all messages combined.
+// The text pool is RAM-only. Text is re-stored from flash into the pool on boot.
+#ifndef MESSAGE_TEXT_POOL_SIZE
+#define MESSAGE_TEXT_POOL_SIZE (MAX_MESSAGES_SAVED * MAX_MESSAGE_SIZE)
+#endif
 
 // Explicit message classification
 enum class MessageType : uint8_t {
@@ -46,25 +52,23 @@ enum class AckStatus : uint8_t {
     RELAYED = 4  // got an ACK from relay, not destination
 };
 
-// A single stored message in RAM and/or flash
 struct StoredMessage {
-    uint32_t timestamp;          // When message was created (secs since boot or RTC)
-    uint32_t sender;             // NodeNum of sender
-    uint8_t channelIndex;        // Channel index used
-    char text[MAX_MESSAGE_SIZE]; // Fixed-size buffer for message text (null-terminated)
+    uint32_t timestamp;   // When message was created (secs since boot or RTC)
+    uint32_t sender;      // NodeNum of sender
+    uint8_t channelIndex; // Channel index used
+    uint32_t dest;        // Destination node (broadcast or direct)
+    MessageType type;     // Derived from dest (explicit classification)
+    bool isBootRelative;  // true = millis()/1000 fallback; false = epoch/RTC absolute
+    AckStatus ackStatus;  // Delivery status (only meaningful for our own sent messages)
 
-    uint32_t dest; // Destination node (broadcast or direct)
-
-    MessageType type; // Derived from dest (explicit classification)
-
-    bool isBootRelative; // true = millis()/1000 fallback; false = epoch/RTC absolute
-
-    AckStatus ackStatus; // Delivery status (only meaningful for our own sent messages)
+    // Text storage metadata — rebuilt from flash at boot
+    uint16_t textOffset; // Offset into global text pool (valid only after loadFromFlash())
+    uint16_t textLength; // Length of text in bytes
 
     // Default constructor initializes all fields safely
     StoredMessage()
-        : timestamp(0), sender(0), channelIndex(0), text(""), dest(0xffffffff), type(MessageType::BROADCAST),
-          isBootRelative(false), ackStatus(AckStatus::NONE) // start as NONE (waiting, no symbol)
+        : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), type(MessageType::BROADCAST), isBootRelative(false),
+          ackStatus(AckStatus::NONE), textOffset(0), textLength(0)
     {
     }
 };
@@ -87,7 +91,7 @@ class MessageStore
     void saveToFlash();   // Save messages to flash
     void loadFromFlash(); // Load messages from flash
 
-    // Clear all messages (RAM + persisted queue)
+    // Clear all messages (RAM + persisted queue + text pool)
     void clearAllMessages();
 
     // Dismiss helpers
@@ -106,6 +110,15 @@ class MessageStore
 
     // Upgrade boot-relative timestamps once RTC is valid
     void upgradeBootRelativeTimestamps();
+
+    // Retrieve the C-string text for a stored message
+    static const char *getText(const StoredMessage &msg);
+
+    // Allocate text into pool (used by sender-side code)
+    static uint16_t storeText(const char *src, size_t len);
+
+    // Used when loading from flash to rebuild the text pool
+    static uint16_t rebuildTextFromFlash(const char *src, size_t len);
 
   private:
     std::deque<StoredMessage> liveMessages; // Single in-RAM message buffer (also used for persistence)

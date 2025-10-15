@@ -416,6 +416,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     if (filtered.empty()) {
+        // If current conversation is empty go back to ALL view
+        if (currentMode != ThreadMode::ALL) {
+            setThreadMode(ThreadMode::ALL);
+            resetScrollState();
+            return; // Next draw will rerun in ALL mode
+        }
+
+        // Still in ALL mode and no messages at all → show placeholder
         graphics::drawCommonHeader(display, x, y, titleStr);
         didReset = false;
         const char *messageString = "No messages";
@@ -528,8 +536,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         isHeader.push_back(true);
         ackForLine.push_back(m.ackStatus);
 
-        // Split message text into wrapped lines
-        std::vector<std::string> wrapped = generateLines(display, "", m.text, textWidth);
+        const char *msgText = MessageStore::getText(m);
+
+        std::vector<std::string> wrapped = generateLines(display, "", msgText, textWidth);
         for (auto &ln : wrapped) {
             allLines.push_back(ln);
             isMine.push_back(mine);
@@ -880,8 +889,11 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
         screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
     }
 
-    // Always focus into the correct conversation thread when a message arrives
-    setThreadFor(sm, packet);
+    // Always focus into the correct conversation thread when a message with real text arrives
+    const char *msgText = MessageStore::getText(sm);
+    if (msgText && msgText[0] != '\0') {
+        setThreadFor(sm, packet);
+    }
 
     // Reset scroll for a clean start
     resetScrollState();
@@ -889,10 +901,12 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
 
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
-    if (sm.type == MessageType::BROADCAST) {
+    if (sm.dest == NODENUM_BROADCAST || sm.type == MessageType::BROADCAST) {
+        // Broadcast
         setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
-    } else if (sm.type == MessageType::DM_TO_US) {
-        uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
+    } else {
+        // Direct message
+        uint32_t peer = (packet.from != 0) ? sm.sender : sm.dest;
         setThreadMode(ThreadMode::DIRECT, -1, peer);
     }
 }

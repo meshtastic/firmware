@@ -28,7 +28,7 @@ int getThreadChannel();
 // Getter for current peer (valid if mode == DIRECT)
 uint32_t getThreadPeer();
 
-// --- Registry accessors for menuHandler ---
+// Registry accessors for menuHandler
 const std::vector<int> &getSeenChannels();
 const std::vector<uint32_t> &getSeenPeers();
 

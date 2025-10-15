@@ -481,9 +481,6 @@ void menuHandler::messageResponseMenu()
         } else if (selected == DismissAll) {
             messageStore.clearAllMessages();
             graphics::MessageRenderer::clearThreadRegistries();
-
-            // Reset back to "View All"
-            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::ALL);
         } else if (selected == DismissOldest) {
             auto mode = graphics::MessageRenderer::getThreadMode();
             int ch = graphics::MessageRenderer::getThreadChannel();
