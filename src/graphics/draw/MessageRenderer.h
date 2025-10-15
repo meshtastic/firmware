@@ -60,6 +60,9 @@ void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet);
 // Handles a new incoming/outgoing message: banner, wake, thread select, scroll reset
 void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet);
 
+// Clear Message Line Cache from Message Renderer
+void clearMessageCache();
+
 } // namespace MessageRenderer
 } // namespace graphics
 #endif

@@ -209,8 +209,19 @@ void resetScrollState()
     scrollStartDelay = millis();
     lastTime = millis();
 
-    didReset = false; // <-- now valid
+    didReset = false;
 }
+
+// Fully free cached message data from heap
+void clearMessageCache()
+{
+    std::vector<std::string>().swap(cachedLines);
+    std::vector<int>().swap(cachedHeights);
+
+    // Reset scroll so we rebuild cleanly next time we enter the screen
+    resetScrollState();
+}
+
 // Current thread state
 static ThreadMode currentMode = ThreadMode::ALL;
 static int currentChannel = -1;

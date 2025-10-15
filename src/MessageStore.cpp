@@ -251,7 +251,7 @@ void MessageStore::saveToFlash()
 
 void MessageStore::loadFromFlash()
 {
-    liveMessages.clear();
+    std::deque<StoredMessage>().swap(liveMessages);
     resetMessagePool(); // reset pool when loading
 
 #ifdef FSCom
@@ -289,7 +289,7 @@ void MessageStore::loadFromFlash() {}
 // Clear all messages (RAM + persisted queue)
 void MessageStore::clearAllMessages()
 {
-    liveMessages.clear();
+    std::deque<StoredMessage>().swap(liveMessages);
     resetMessagePool();
 
 #ifdef FSCom

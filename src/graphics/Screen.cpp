@@ -715,6 +715,23 @@ int32_t Screen::runOnce()
     if (displayHeight == 0) {
         displayHeight = dispdev->getHeight();
     }
+
+    // Detect frame transitions and clear message cache when leaving text message screen
+    {
+        static int8_t lastFrameIndex = -1;
+        int8_t currentFrameIndex = ui->getUiState()->currentFrame;
+        int8_t textMsgIndex = framesetInfo.positions.textMessage;
+
+        if (lastFrameIndex != -1 && currentFrameIndex != lastFrameIndex) {
+
+            if (lastFrameIndex == textMsgIndex && currentFrameIndex != textMsgIndex) {
+                graphics::MessageRenderer::clearMessageCache();
+            }
+        }
+
+        lastFrameIndex = currentFrameIndex;
+    }
+
     menuHandler::handleMenuSwitch(dispdev);
 
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
@@ -1320,9 +1337,6 @@ void Screen::showFrame(FrameDirection direction)
 
         lastScreenTransition = millis();
         setFastFramerate();
-
-        // Reset scroll state when switching away from text message screen
-        graphics::MessageRenderer::resetScrollState();
     }
 }
 
