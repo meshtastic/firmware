@@ -33,7 +33,6 @@
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
-
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -74,6 +73,9 @@ void PhoneAPI::handleStartConfig()
     nodeInfoForPhone.num = 0; // Don't keep returning old nodeinfos
     nodeInfoQueue.clear();
     resetReadIndex();
+    configStartMsec = millis();
+    configHandshakeRestarted = false;
+    onConfigHandshakeStarted();
 }
 
 void PhoneAPI::close()
@@ -101,8 +103,12 @@ void PhoneAPI::close()
         fromRadioNum = 0;
         config_nonce = 0;
         config_state = 0;
+        // Reset duplicate filter so each new connection starts clean
+        std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
         pauseBluetoothLogging = false;
         heartbeatReceived = false;
+        configStartMsec = 0;
+        configHandshakeRestarted = false;
     }
 }
 
@@ -757,7 +763,35 @@ int PhoneAPI::onNotify(uint32_t newValue)
         onNowHasData(newValue);
     } else {
         LOG_DEBUG("Client not yet interested in packets (state=%d)", state);
+        checkConfigHandshakeTimeout();
     }
 
     return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one
+}
+
+bool PhoneAPI::isConfigHandshakeActive() const
+{
+    return !configHandshakeRestarted && state == STATE_SEND_MY_INFO && configStartMsec != 0;
+}
+
+uint32_t PhoneAPI::getConfigHandshakeElapsedMs() const
+{
+    if (configStartMsec == 0)
+        return 0;
+    return millis() - configStartMsec;
+}
+
+bool PhoneAPI::checkConfigHandshakeTimeout()
+{
+    if (!isConfigHandshakeActive())
+        return false;
+
+    uint32_t elapsedMs = getConfigHandshakeElapsedMs();
+    if (elapsedMs > kConfigHandshakeTimeoutMs) {
+        LOG_WARN("Config handshake stuck in state=%d for %u ms, forcing transport restart", state, elapsedMs);
+        configHandshakeRestarted = true;
+        onConfigHandshakeTimeout();
+        return true;
+    }
+    return false;
 }

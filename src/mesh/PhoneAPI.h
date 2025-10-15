@@ -91,6 +91,8 @@ class PhoneAPI
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
     uint32_t readIndex = 0;
+    uint32_t configStartMsec = 0;
+    bool configHandshakeRestarted = false;
 
     std::vector<meshtastic_FileInfo> filesManifest = {};
 
@@ -135,6 +137,7 @@ class PhoneAPI
     bool isConnected() { return state != STATE_SEND_NOTHING; }
 
   protected:
+    static constexpr uint32_t kConfigHandshakeTimeoutMs = 3000;
     /// Our fromradio packet while it is being assembled
     meshtastic_FromRadio fromRadioScratch = {};
 
@@ -144,11 +147,19 @@ class PhoneAPI
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
+    /// Invoked if the config handshake stalls long enough that we want to drop the BLE link.
+    virtual void onConfigHandshakeTimeout() {}
+    virtual void onConfigHandshakeStarted() {}
+
     /// If we haven't heard from the other side in a while then say not connected. Returns true if timeout occurred
     bool checkConnectionTimeout();
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() = 0;
+
+    bool checkConfigHandshakeTimeout();
+    bool isConfigHandshakeActive() const;
+    uint32_t getConfigHandshakeElapsedMs() const;
 
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
