@@ -517,20 +517,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             strcpy(senderBuf, "Me");
         }
 
-        const char *sender = senderBuf;
-
-        // If sender width too wide → truncate manually
         int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
-                         display->getStringWidth(" @") - display->getStringWidth("... ") - 10;
+                         display->getStringWidth(" @...") - 10;
+        if (availWidth < 0)
+            availWidth = 0;
 
-        while (strlen(senderBuf) > 0 && display->getStringWidth(senderBuf) > availWidth) {
+        size_t origLen = strlen(senderBuf);
+        while (senderBuf[0] && display->getStringWidth(senderBuf) > availWidth) {
             senderBuf[strlen(senderBuf) - 1] = '\0';
         }
 
-        // Add ellipsis if needed
-        if (display->getStringWidth(senderBuf) > availWidth && strlen(senderBuf) >= 3) {
-            size_t len = strlen(senderBuf);
-            strcpy(&senderBuf[len - 3], "...");
+        // If we actually truncated, append "..."
+        if (strlen(senderBuf) < origLen) {
+            strcat(senderBuf, "...");
         }
 
         // Final header line
@@ -538,7 +537,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (mine) {
             snprintf(headerStr, sizeof(headerStr), "%s %s", timeBuf, chanType);
         } else {
-            snprintf(headerStr, sizeof(headerStr), "%s @%s %s", timeBuf, sender, chanType);
+            snprintf(headerStr, sizeof(headerStr), "%s @%s %s", timeBuf, senderBuf, chanType);
         }
 
         // Push header line
