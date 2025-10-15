@@ -159,6 +159,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #if !MESHTASTIC_EXCLUDE_MQTT
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_DEBUG("Got MqttClientProxy message");
+            if (state != STATE_SEND_PACKETS) {
+                LOG_WARN("Ignore MqttClientProxy message while completing config handshake");
+                break;
+            }
             if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
                 (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
