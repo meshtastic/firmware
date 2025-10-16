@@ -139,7 +139,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     {
         bluetoothPhoneAPI->phoneWants = true;
         bluetoothPhoneAPI->setIntervalFromNow(0);
-        std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
+        std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex); // BLE callbacks run in NimBLE task
 
         if (!bluetoothPhoneAPI->hasChecked) {
             // Fetch payload on demand; prefetch keeps this fast for the first read.
