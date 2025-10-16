@@ -1007,9 +1007,9 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     saveNodeDatabaseToDisk();
 }
 
-void NodeDB::clearLocalPosition()
+void NodeDB::_clearLocalPosition()
 {
-    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeInfoLite *node = _getMeshNode(nodeDB->getNodeNum());
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
     node->position.altitude = 0;
@@ -1090,7 +1090,7 @@ void NodeDB::pickNewNodeNum()
     }
 
     meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+    while (((found = _getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
@@ -1519,7 +1519,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     }
     info->has_position = true;
     updateGUIforNode = info;
-    notifyObservers(true); // Force an update whether or not our node counts have changed
+    _notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
 /** Update telemetry info for this node based on received metrics
@@ -1542,7 +1542,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     info->device_metrics = t.variant.device_metrics;
     info->has_device_metrics = true;
     updateGUIforNode = info;
-    notifyObservers(true); // Force an update whether or not our node counts have changed
+    _notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
 /**
@@ -1584,7 +1584,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
         sortMeshDB();
-        notifyObservers(true); // Force an update whether or not our node counts have changed
+        _notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
 }
@@ -1650,7 +1650,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     if (changed) {
         updateGUIforNode = info;
-        notifyObservers(true); // Force an update whether or not our node counts have changed
+        _notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
@@ -1701,7 +1701,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeInfoLite *lite = _getMeshNode(nodeId);
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
         sortMeshDB();
@@ -1717,7 +1717,7 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeInfoLite *lite = _getMeshNode(nodeId);
 
     if (lite) {
         return lite->is_favorite;
@@ -1805,7 +1805,7 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    const meshtastic_NodeInfoLite *info = _getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
@@ -1821,7 +1821,7 @@ std::string NodeDB::getNodeId() const
 
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
-meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
+meshtastic_NodeInfoLite *NodeDB::_getMeshNode(NodeNum n)
 {
     for (int i = 0; i < numMeshNodes; i++)
         if (meshNodes->at(i).num == n)
@@ -1831,7 +1831,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 }
 
 // returns true if the maximum number of nodes is reached or we are running low on memory
-bool NodeDB::isFull()
+bool NodeDB::_isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
@@ -1839,7 +1839,7 @@ bool NodeDB::isFull()
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(n);
+    meshtastic_NodeInfoLite *lite = _getMeshNode(n);
 
     if (!lite) {
         if (isFull()) {
@@ -1901,7 +1901,7 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
+    meshtastic_NodeInfoLite *info = _getMeshNode(nodeNum);
     if (!info || !info->has_user) {
         return UserLicenseStatus::NotKnown;
     }

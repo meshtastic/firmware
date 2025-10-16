@@ -230,55 +230,35 @@ class NodeDB
         return &meshNodes->at(x);
     }
 
-    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) { return getMeshNode(n); }
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
 
-    size_t getMaxNodesAllocatedSize()
-    {
-        meshtastic_NodeDatabase emptyNodeDatabase;
-        emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
-        size_t nodeDatabaseSize;
-        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
-    }
-
     // returns true if the maximum number of nodes is reached or we are running low on memory
-    bool isFull();
+    bool isFull() { return _isFull(); }
 
-    void clearLocalPosition();
+    void clearLocalPosition() { _clearLocalPosition(); }
 
-    void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
-    {
-        if (timeOnly) {
-            LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
-            localPosition.time = position.time;
-            localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
-            return;
-        }
-        LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
-                  position.time, position.timestamp);
-        localPosition = position;
-    }
+    void setLocalPosition(meshtastic_Position position, bool timeOnly = false) { _setLocalPosition(position, timeOnly); }
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
-
-    bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
+    void notifyObservers(bool forceUpdate = false) { _notifyObservers(forceUpdate); }
+
+  private:
     /// Notify observers of changes to the DB
-    void notifyObservers(bool forceUpdate = false)
+    void _notifyObservers(bool forceUpdate = false)
     {
         // Notify observers of the current node state
         const meshtastic::NodeStatus status = meshtastic::NodeStatus(_getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
 
-  private:
     std::vector<meshtastic_NodeInfoLite> *meshNodes;
 
     bool duplicateWarned = false;
@@ -317,6 +297,17 @@ class NodeDB
 
     void initConfigIntervals(), initModuleConfigIntervals();
 
+    size_t getMaxNodesAllocatedSize()
+    {
+        meshtastic_NodeDatabase emptyNodeDatabase;
+        emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
+        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+    }
+
+    bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+
     // wrapped private functions:
 
     bool _saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
@@ -329,6 +320,25 @@ class NodeDB
     size_t _getNumOnlineMeshNodes(bool localOnly = false);
 
     void _installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
+
+    meshtastic_NodeInfoLite *_getMeshNode(NodeNum n);
+
+    bool _isFull();
+
+    void _clearLocalPosition();
+
+    void _setLocalPosition(meshtastic_Position position, bool timeOnly = false)
+    {
+        if (timeOnly) {
+            LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
+            localPosition.time = position.time;
+            localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
+            return;
+        }
+        LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
+                  position.time, position.timestamp);
+        localPosition = position;
+    }
 };
 
 extern NodeDB *nodeDB;
