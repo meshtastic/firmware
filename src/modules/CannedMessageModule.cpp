@@ -255,7 +255,7 @@ void CannedMessageModule::updateDestinationSelectionList()
 
     for (size_t i = 0; i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == myNodeNum)
+        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
             continue;
 
         const String &nodeName = node->user.long_name;
@@ -976,6 +976,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         LOG_INFO("Proactively adding %x as favorite node", p->to);
         nodeDB->set_favorite(true, p->to);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+        p->pki_encrypted = true;
+        p->channel = 0;
     }
 
     // Send to mesh and phone (even if no phone connected, to track ACKs)
