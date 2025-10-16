@@ -485,8 +485,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(CST328_ADDR, CST328, "CST328", (uint8_t)addr.address);
-            case LTR553ALS_ADDR: // 0x23 - condiviso con BH1750
-                // Test first LTR553ALS (has identifiable registers)
+            case LTR553ALS_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x86), 1); // Part ID register
                 if (registerValue == 0x92) {                                                       // LTR553ALS Part ID
                     type = LTR553ALS;
