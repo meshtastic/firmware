@@ -62,21 +62,11 @@ void InkHUD::HeardApplet::populateFromNodeDB()
 {
     // Fill a collection with pointers to each node in db
     std::vector<meshtastic_NodeInfoLite *> ordered;
-    for (auto mn = nodeDB->meshNodes->begin(); mn != nodeDB->meshNodes->end(); ++mn) {
-        // Only copy if valid, and not our own node
+    for (int i = 1; i < maxCards(); i++) {
+        auto mn = nodeDB->getMeshNodeByIndex(i);
         if (mn->num != 0 && mn->num != nodeDB->getNodeNum())
             ordered.push_back(&*mn);
     }
-
-    // Sort the collection by age
-    std::sort(ordered.begin(), ordered.end(), [](meshtastic_NodeInfoLite *top, meshtastic_NodeInfoLite *bottom) -> bool {
-        return (top->last_heard > bottom->last_heard);
-    });
-
-    // Keep the most recent entries only
-    // Just enough to fill the screen
-    if (ordered.size() > maxCards())
-        ordered.resize(maxCards());
 
     // Create card info for these (stale) node observations
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
