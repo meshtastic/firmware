@@ -110,19 +110,6 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
-enum LoadFileResult {
-    // Successfully opened the file
-    LOAD_SUCCESS = 1,
-    // File does not exist
-    NOT_FOUND = 2,
-    // Device does not have a filesystem
-    NO_FILESYSTEM = 3,
-    // File exists, but could not decode protobufs
-    DECODE_FAILED = 4,
-    // File exists, but open failed for some reason
-    OTHER_FAILURE = 5
-};
-
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
 
 class NodeDB
@@ -232,11 +219,6 @@ class NodeDB
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
-
-    LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
-                             void *dest_struct);
-    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
-                   bool fullAtomic = true);
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 

@@ -2185,9 +2185,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                          sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                          &cannedMessageModuleConfig) != LoadFileResult::LOAD_SUCCESS) {
+    if (loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                  sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                  &cannedMessageModuleConfig) != LoadFileResult::LOAD_SUCCESS) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -2207,8 +2207,8 @@ bool CannedMessageModule::saveProtoForModule()
     spiLock->unlock();
 #endif
 
-    okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                              &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
+    okay &= saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                      &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
 }

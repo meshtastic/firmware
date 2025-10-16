@@ -3,6 +3,19 @@
 #include "configuration.h"
 #include <vector>
 
+enum LoadFileResult {
+    // Successfully opened the file
+    LOAD_SUCCESS = 1,
+    // File does not exist
+    NOT_FOUND = 2,
+    // Device does not have a filesystem
+    NO_FILESYSTEM = 3,
+    // File exists, but could not decode protobufs
+    DECODE_FAILED = 4,
+    // File exists, but open failed for some reason
+    OTHER_FAILURE = 5
+};
+
 // Cross platform filesystem API
 
 #if defined(ARCH_PORTDUINO)
@@ -56,3 +69,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
+
+bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
+               bool fullAtomic = true);
