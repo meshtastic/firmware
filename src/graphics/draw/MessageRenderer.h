@@ -47,10 +47,6 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
                                       const std::vector<bool> &isHeaderVec);
 
-// Function to render the message content
-void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,
-                          int yOffset, int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold);
-
 // Reset scroll state when new messages arrive
 void resetScrollState();
 

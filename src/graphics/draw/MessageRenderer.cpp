@@ -785,25 +785,6 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
     return rowHeights;
 }
 
-void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,
-                          int yOffset, int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold)
-{
-    for (size_t i = 0; i < lines.size(); ++i) {
-        int lineY = yOffset;
-        for (size_t j = 0; j < i; ++j)
-            lineY += rowHeights[j];
-        if (lineY > -rowHeights[i] && lineY < scrollBottom) {
-            if (i == 0 && isInverted) {
-                display->drawString(x, lineY, lines[i].c_str());
-                if (isBold)
-                    display->drawString(x, lineY, lines[i].c_str());
-            } else {
-                drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
-            }
-        }
-    }
-}
-
 void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
     if (packet.from != 0) {
