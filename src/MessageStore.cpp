@@ -114,34 +114,19 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     sm.textOffset = storeTextInPool(payload, len);
     sm.textLength = len;
 
+    // Determine sender
     uint32_t localNode = nodeDB->getNodeNum();
     sm.sender = (packet.from == 0) ? localNode : packet.from;
-    sm.dest = packet.decoded.dest;
 
-    // DM detection: use decoded.dest if valid, otherwise fallback to header 'to'
-    bool isDM = false;
-    uint32_t actualDest = sm.dest;
+    sm.dest = packet.to;
 
-    if (actualDest == 0 || actualDest == 0xffffffff) {
-        actualDest = packet.to;
-    }
+    bool isDM = (sm.dest != 0 && sm.dest != NODENUM_BROADCAST);
 
-    if (actualDest != 0 && actualDest != NODENUM_BROADCAST && actualDest == localNode) {
-        isDM = true;
-    }
-
-    // Incoming vs outgoing classification
     if (packet.from == 0) {
-        // Sent by us
         sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
         sm.ackStatus = AckStatus::NONE;
     } else {
-        // Received from another node
-        if (isDM) {
-            sm.type = MessageType::DM_TO_US;
-        } else {
-            sm.type = MessageType::BROADCAST;
-        }
+        sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
         sm.ackStatus = AckStatus::ACKED;
     }
 
@@ -162,11 +147,11 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     sm.textOffset = storeTextInPool(text.c_str(), text.size());
     sm.textLength = text.size();
 
-    // Default manual adds to broadcast
-    sm.dest = NODENUM_BROADCAST;
-    sm.type = MessageType::BROADCAST;
+    // Use the provided destination
+    sm.dest = sender;
+    sm.type = MessageType::DM_TO_US;
 
-    // Outgoing messages start as NONE until ACK/NACK arrives
+    // Outgoing messages always start with unknown ack status
     sm.ackStatus = AckStatus::NONE;
 
     addLiveMessage(sm);

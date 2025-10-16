@@ -381,7 +381,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 include = true;
             break;
         case ThreadMode::DIRECT:
-            if (m.type == MessageType::DM_TO_US && (m.sender == currentPeer || m.dest == currentPeer))
+            if (m.dest != NODENUM_BROADCAST && (m.sender == currentPeer || m.dest == currentPeer))
                 include = true;
             break;
         }
@@ -846,15 +846,6 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
                     snprintf(contextBuf, sizeof(contextBuf), "in #%s", cname);
                 else
                     snprintf(contextBuf, sizeof(contextBuf), "in Ch%d", sm.channelIndex);
-            } else if (sm.type == MessageType::DM_TO_US) {
-                /* Commenting out to better understand if we need this info in the banner
-                uint32_t peer = (packet.from == 0) ? sm.dest : sm.sender;
-                const meshtastic_NodeInfoLite *peerNode = nodeDB->getMeshNode(peer);
-                if (peerNode && peerNode->has_user && peerNode->user.short_name)
-                    snprintf(contextBuf, sizeof(contextBuf), "Direct: @%s", peerNode->user.short_name);
-                else
-                    snprintf(contextBuf, sizeof(contextBuf), "Direct Message");
-                */
             }
 
             if (contextBuf[0]) {
@@ -892,12 +883,11 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
 
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
-    if (sm.dest == NODENUM_BROADCAST || sm.type == MessageType::BROADCAST) {
-        // Broadcast
+    if (packet.to == 0 || packet.to == NODENUM_BROADCAST) {
         setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
     } else {
-        // Direct message
-        uint32_t peer = (packet.from != 0) ? sm.sender : sm.dest;
+        uint32_t localNode = nodeDB->getNodeNum();
+        uint32_t peer = (sm.sender == localNode) ? packet.to : sm.sender;
         setThreadMode(ThreadMode::DIRECT, -1, peer);
     }
 }
