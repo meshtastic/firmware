@@ -891,6 +891,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
+#if defined(HAS_SERIAL) && HAS_SERIAL
+    moduleConfig.serial.enabled = true;
+    moduleConfig.serial.baud = meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400;
+    moduleConfig.serial.rxd = SERIAL_RX_PIN;
+    moduleConfig.serial.txd = SERIAL_TX_PIN;
+    moduleConfig.serial.timeout = SERIAL_TIMEOUT;
+    moduleConfig.serial.mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO;
+#endif
+
     initModuleConfigIntervals();
 }
 
