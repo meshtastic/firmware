@@ -32,3 +32,8 @@ extern float tcxoVoltage; // make this available everywhere
 #undef GPS_TX_PIN
 
 #define HAS_SCREEN 0
+
+#define HAS_SERIAL 1
+#define SERIAL_RX_PIN 18
+#define SERIAL_TX_PIN 20
+#define SERIAL_TIMEOUT 1000
