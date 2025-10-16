@@ -122,7 +122,6 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
@@ -138,17 +137,18 @@ class NodeDB
     /// write to flash
     /// @return true if the save was successful
     bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
-                                   SEGMENT_NODEDATABASE);
+                                   SEGMENT_NODEDATABASE)
+    {
+        return _saveToDisk(saveWhat);
+    }
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
      * b) the client set factory_reset
      *
-     * @param factory_reset if true, reset all settings to factory defaults
      * @param is_fresh_install set to true after a fresh install, to trigger NodeInfo/Position requests
-     * @return true if the config was completely reset, in that case, we should send it back to the client
      */
-    void resetRadioConfig(bool is_fresh_install = false);
+    void resetRadioConfig(bool is_fresh_install = false) { _resetRadioConfig(is_fresh_install); }
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -214,13 +214,13 @@ class NodeDB
     /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
      * @param localOnly if true, ignore nodes heard via MQTT
      */
-    size_t getNumOnlineMeshNodes(bool localOnly = false);
+    size_t getNumOnlineMeshNodes(bool localOnly = false) { return _getNumOnlineMeshNodes(localOnly); }
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
+    void resetNodes(), removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
-    void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
+    void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role) { _installRoleDefaults(role); }
 
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
 
@@ -274,11 +274,13 @@ class NodeDB
     void notifyObservers(bool forceUpdate = false)
     {
         // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(_getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
 
   private:
+    std::vector<meshtastic_NodeInfoLite> *meshNodes;
+
     bool duplicateWarned = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
@@ -312,6 +314,21 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+
+    void initConfigIntervals(), initModuleConfigIntervals();
+
+    // wrapped private functions:
+
+    bool _saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                    SEGMENT_NODEDATABASE);
+    void _resetRadioConfig(bool is_fresh_install = false);
+
+    /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
+     * @param localOnly if true, ignore nodes heard via MQTT
+     */
+    size_t _getNumOnlineMeshNodes(bool localOnly = false);
+
+    void _installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 };
 
 extern NodeDB *nodeDB;

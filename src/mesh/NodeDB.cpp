@@ -313,7 +313,7 @@ NodeDB::NodeDB()
     LOG_DEBUG("Number of Device Reboots: %d", myNodeInfo.reboot_count);
 #endif
 
-    resetRadioConfig(); // If bogus settings got saved, then fix them
+    _resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
     // Uncomment below to always enable UDP broadcasts
@@ -430,7 +430,7 @@ NodeDB::NodeDB()
     }
 #endif
     sortMeshDB();
-    saveToDisk(saveWhat);
+    _saveToDisk(saveWhat);
 }
 
 /**
@@ -459,7 +459,7 @@ bool isBroadcast(uint32_t dest)
     return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
 
-void NodeDB::resetRadioConfig(bool is_fresh_install)
+void NodeDB::_resetRadioConfig(bool is_fresh_install)
 {
     if (is_fresh_install) {
         radioGeneration++;
@@ -497,7 +497,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     installDefaultModuleConfig();
     installDefaultChannels();
     // third, write everything to disk
-    saveToDisk();
+    _saveToDisk();
     if (eraseBleBonds) {
         LOG_INFO("Erase BLE bonds");
 #ifdef ARCH_ESP32
@@ -648,7 +648,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
-    resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
+    _resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
@@ -735,7 +735,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Apply role-specific defaults when role is set via user preferences
-    installRoleDefaults(config.device.role);
+    _installRoleDefaults(config.device.role);
 #endif
 
     initConfigIntervals();
@@ -893,7 +893,7 @@ void NodeDB::installDefaultModuleConfig()
     initModuleConfigIntervals();
 }
 
-void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
+void NodeDB::_installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
 {
     if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         initConfigIntervals();
@@ -1203,7 +1203,7 @@ void NodeDB::loadFromDisk()
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
-        saveToDisk(SEGMENT_CONFIG);
+        _saveToDisk(SEGMENT_CONFIG);
     }
 
     // Make sure we load hard coded admin keys even when the configuration file has none.
@@ -1254,7 +1254,7 @@ void NodeDB::loadFromDisk()
     if (numAdminKeys > 0) {
         LOG_INFO("Saving %d hard coded admin keys.", numAdminKeys);
         config.security.admin_key_count = numAdminKeys;
-        saveToDisk(SEGMENT_CONFIG);
+        _saveToDisk(SEGMENT_CONFIG);
     }
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
@@ -1306,7 +1306,7 @@ void NodeDB::loadFromDisk()
         if (moduleConfig.paxcounter.paxcounter_update_interval == 900)
             moduleConfig.paxcounter.paxcounter_update_interval = 0;
 
-        saveToDisk(SEGMENT_MODULECONFIG);
+        _saveToDisk(SEGMENT_MODULECONFIG);
     }
 #if ARCH_PORTDUINO
     // set any config overrides
@@ -1405,7 +1405,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     return success;
 }
 
-bool NodeDB::saveToDisk(int saveWhat)
+bool NodeDB::_saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
     bool success = saveToDiskNoRetry(saveWhat);
@@ -1460,7 +1460,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
-size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
+size_t NodeDB::_getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
@@ -1599,7 +1599,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
+    if (p.public_key.size == 32 && nodeId != getNodeNum()) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
@@ -1656,7 +1656,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // store our DB unless we just did so less than a minute ago
 
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
-            saveToDisk(SEGMENT_NODEDATABASE);
+            _saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
         } else {
             LOG_DEBUG("Defer NodeDB saveToDisk for now");
@@ -1733,25 +1733,25 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
     //   1. doing only one pass through the database, instead of two
     //   2. exiting early when a favorite is found, or if both from and to have been seen
 
-    if (p.to == NODENUM_BROADCAST)
-        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
-
     meshtastic_NodeInfoLite *lite = NULL;
 
     bool seenFrom = false;
     bool seenTo = false;
 
+    if (p.to == NODENUM_BROADCAST)
+        seenTo = true;
+
     for (int i = 0; i < numMeshNodes; i++) {
         lite = &meshNodes->at(i);
 
-        if (lite->num == p.from) {
+        if (!seenFrom && lite->num == p.from) {
             if (lite->is_favorite)
                 return true;
 
             seenFrom = true;
         }
 
-        if (lite->num == p.to) {
+        if (!seenTo && lite->num == p.to) {
             if (lite->is_favorite)
                 return true;
 
@@ -1995,7 +1995,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                 LOG_DEBUG("Restored channels");
             }
 
-            success = saveToDisk(restoreWhat);
+            success = _saveToDisk(restoreWhat);
             if (success) {
                 LOG_INFO("Restored preferences from backup");
             } else {
