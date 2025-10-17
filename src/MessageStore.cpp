@@ -169,7 +169,7 @@ struct __attribute__((packed)) StoredMessageRecord {
     uint8_t ackStatus;           // static_cast<uint8_t>(AckStatus)
     uint8_t type;                // static_cast<uint8_t>(MessageType)
     uint16_t textLength;         // message length
-    char text[MAX_MESSAGE_SIZE]; // <-- store actual text here
+    char text[MAX_MESSAGE_SIZE]; // store actual text here
 };
 
 // Serialize one StoredMessage to flash
