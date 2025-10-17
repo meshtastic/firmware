@@ -94,7 +94,7 @@ int32_t ExternalNotificationModule::runOnce()
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
+        if ((nagCycleCutoff <= millis())) {
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
@@ -103,7 +103,6 @@ int32_t ExternalNotificationModule::runOnce()
                 externalTurnedOn[i] = 0;
                 LOG_INFO("%d ", i);
             }
-            LOG_INFO("");
 #ifdef HAS_I2S
             // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
             // T-Deck uses GPIO0 as trackball button, so restore the mode
