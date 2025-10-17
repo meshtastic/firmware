@@ -266,7 +266,7 @@ class NodeDB
         return retValue;
     }
 
-    meshtastic_NodeInfoLite *getMeshNode(NodeNum n)
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n)
     {
         FUNCTION_START("getMeshNode");
         auto retVal = _getMeshNode(n);
