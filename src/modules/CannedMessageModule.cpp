@@ -1015,6 +1015,23 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     this->lastSentNode = dest;
     this->incoming = dest;
 
+    // Manually find the node by number to check PKI capability
+    meshtastic_NodeInfoLite *node = nullptr;
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num == dest) {
+            node = n;
+            break;
+        }
+    }
+
+    NodeNum myNodeNum = nodeDB->getNodeNum();
+    if (node && node->num != myNodeNum && node->has_user && node->user.public_key.size == 32) {
+        p->pki_encrypted = true;
+        p->channel = 0; // force PKI
+    }
+
     // Track this packet’s request ID for matching ACKs
     this->lastRequestId = p->id;
 
@@ -1029,7 +1046,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     this->waitingForAck = true;
 
-    // Send to mesh
+    // Send to mesh (PKI-encrypted if conditions above matched)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 
     // Show banner immediately
@@ -1045,13 +1062,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     // Always use our local time, consistent with other paths
     uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-    if (nowSecs > 0) {
-        sm.timestamp = nowSecs;
-        sm.isBootRelative = false;
-    } else {
-        sm.timestamp = millis() / 1000;
-        sm.isBootRelative = true; // mark for later upgrade
-    }
+    sm.timestamp = (nowSecs > 0) ? nowSecs : millis() / 1000;
+    sm.isBootRelative = (nowSecs == 0);
 
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
@@ -1080,8 +1092,6 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     playComboTune();
 
-    // Important
-    // Instead of INACTIVE here, use SENDING_ACTIVE so runOnce() does the cleanup.
     this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
     this->payload = wantReplies ? 1 : 0;
     requestFocus();
@@ -1090,11 +1100,6 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
     notifyObservers(&e);
-
-    // Now mark ourselves as sending
-    this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
-    this->payload = wantReplies ? 1 : 0;
-    requestFocus(); // focus only after event is dispatched
 }
 
 int32_t CannedMessageModule::runOnce()
