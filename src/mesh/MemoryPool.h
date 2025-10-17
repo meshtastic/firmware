@@ -8,6 +8,10 @@
 #include "PointerQueue.h"
 #include "configuration.h" // For LOG_WARN, LOG_DEBUG, LOG_HEAP
 
+#if defined(ARCH_ESP32)
+#include <esp_heap_caps.h>
+#endif
+
 template <class T> class Allocator
 {
 
@@ -159,3 +163,92 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         return nullptr;
     }
 };
+
+#if defined(ARCH_ESP32)
+// Simple fixed-size allocator that uses PSRAM. Used on ESP32-S3 builds so the
+// large MeshPacket pool can live off-chip and free internal RAM.
+template <class T, int MaxSize> class PsramMemoryPool : public Allocator<T>
+{
+  private:
+    T *pool;
+    bool used[MaxSize];
+
+  public:
+    PsramMemoryPool() : pool(nullptr), used{}
+    {
+        pool = static_cast<T *>(heap_caps_malloc(sizeof(T) * MaxSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (pool) {
+            memset(pool, 0, sizeof(T) * MaxSize);
+        } else {
+            LOG_WARN("Failed to allocate PSRAM pool of %d elements", MaxSize);
+        }
+    }
+
+    ~PsramMemoryPool() override
+    {
+        if (pool) {
+            heap_caps_free(pool);
+        }
+    }
+
+    bool isValid() const { return pool != nullptr; }
+
+    void release(T *p) override
+    {
+        if (!pool || !p) {
+            LOG_DEBUG("Failed to release PSRAM memory, pointer is null or pool unavailable");
+            return;
+        }
+
+        int index = static_cast<int>(p - pool);
+        if (index >= 0 && index < MaxSize) {
+            assert(used[index]);
+            used[index] = false;
+            LOG_HEAP("Released PSRAM pool item %d at 0x%x", index, p);
+        } else {
+            LOG_WARN("Pointer 0x%x not from PSRAM pool!", p);
+        }
+    }
+
+  protected:
+    T *alloc(TickType_t maxWait) override
+    {
+        if (!pool)
+            return nullptr;
+
+        for (int i = 0; i < MaxSize; i++) {
+            if (!used[i]) {
+                used[i] = true;
+                LOG_HEAP("Allocated PSRAM pool item %d at 0x%x", i, &pool[i]);
+                return &pool[i];
+            }
+        }
+
+        LOG_WARN("No free slots available in PSRAM memory pool!");
+        return nullptr;
+    }
+};
+
+// Utility helpers for PSRAM-backed array allocations on ESP32 targets.
+template <typename T> inline T *psramAllocArray(size_t count)
+{
+    return static_cast<T *>(heap_caps_malloc(sizeof(T) * count, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
+
+template <typename T> inline void psramFreeArray(T *ptr)
+{
+    if (ptr)
+        heap_caps_free(ptr);
+}
+#else
+template <typename T> inline T *psramAllocArray(size_t count)
+{
+    (void)count;
+    return nullptr;
+}
+
+template <typename T> inline void psramFreeArray(T *ptr)
+{
+    (void)ptr;
+}
+#endif
