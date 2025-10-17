@@ -85,6 +85,9 @@
 #define TX_GAIN_LORA    0
 
 // #define USE_LLCC68      // Original Chatter2 with LLCC68 module
+// FAKE LLCC68 E220-900M22S 
+// @see https://github.com/jgromes/RadioLib/issues/1329
+#define SX126X_XTAL_FORCE   1 
 #define USE_SX1262
 
 #define SX126X_CS       LORA_CS
