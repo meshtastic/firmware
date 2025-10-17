@@ -10,7 +10,10 @@
  */
 #include "FSCommon.h"
 #include "SPILock.h"
+#include "SafeFile.h"
 #include "configuration.h"
+#include <pb_decode.h>
+#include <pb_encode.h>
 
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
@@ -335,4 +338,63 @@ void setupSDCard()
     LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
     LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
 #endif
+}
+
+/** Load a protobuf from a file, return LoadFileResult */
+LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
+{
+    LoadFileResult state = LoadFileResult::OTHER_FAILURE;
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+
+    auto f = FSCom.open(filename, FILE_O_READ);
+
+    if (f) {
+        LOG_INFO("Load %s", filename);
+        pb_istream_t stream = {&readcb, &f, protoSize};
+        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
+            memset(dest_struct, 0, objSize);
+        if (!pb_decode(&stream, fields, dest_struct)) {
+            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            state = LoadFileResult::DECODE_FAILED;
+        } else {
+            LOG_INFO("Loaded %s successfully", filename);
+            state = LoadFileResult::LOAD_SUCCESS;
+        }
+        f.close();
+    } else {
+        LOG_ERROR("Could not open / read %s", filename);
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+    state = LoadFileResult::NO_FILESYSTEM;
+#endif
+    return state;
+}
+
+/** Save a protobuf from a file, return true for success */
+bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct, bool fullAtomic)
+{
+    bool okay = false;
+#ifdef FSCom
+    auto f = SafeFile(filename, fullAtomic);
+
+    LOG_INFO("Save %s", filename);
+    pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
+
+    if (!pb_encode(&stream, fields, dest_struct)) {
+        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+    } else {
+        okay = true;
+    }
+
+    bool writeSucceeded = f.close();
+
+    if (!okay || !writeSucceeded) {
+        LOG_ERROR("Can't write prefs!");
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+#endif
+    return okay;
 }
