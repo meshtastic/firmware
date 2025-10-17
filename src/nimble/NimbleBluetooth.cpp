@@ -54,22 +54,39 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
   protected:
     virtual int32_t runOnce() override
     {
-        std::lock_guard<std::mutex> guard(nimble_mutex);
-        if (queue_size > 0) {
-            for (uint8_t i = 0; i < queue_size; i++) {
-                handleToRadio(nimble_queue.at(i).data(), nimble_queue.at(i).length());
+        bool scheduledImmediate = false;
+        {
+            std::lock_guard<std::mutex> guard(nimble_mutex);
+            if (queue_size > 0) {
+                for (uint8_t i = 0; i < queue_size; i++) {
+                    handleToRadio(nimble_queue.at(i).data(), nimble_queue.at(i).length());
+                }
+                LOG_DEBUG("Queue_size %u", queue_size);
+                queue_size = 0;
+                // Reset our timer so any newly queued work is handled right away.
+                setIntervalFromNow(0);
+                scheduledImmediate = true;
             }
-            LOG_DEBUG("Queue_size %u", queue_size);
-            queue_size = 0;
+            if (!hasChecked && phoneWants) {
+                // Pull fresh data while we're outside of the NimBLE callback context.
+                numBytes = getFromRadio(fromRadioBytes);
+                hasChecked = true;
+                // Make sure we wake immediately to publish the prefetched data.
+                setIntervalFromNow(0);
+                scheduledImmediate = true;
+            }
         }
-        if (!hasChecked && phoneWants) {
-            // Pull fresh data while we're outside of the NimBLE callback context.
-            numBytes = getFromRadio(fromRadioBytes);
-            hasChecked = true;
+
+        bool timedOut = checkConfigHandshakeTimeout();
+        if (!timedOut && !scheduledImmediate && isConfigHandshakeActive()) {
+            uint32_t elapsed = getConfigHandshakeElapsedMs();
+            uint32_t remaining = elapsed >= kConfigHandshakeTimeoutMs ? 1 : (kConfigHandshakeTimeoutMs - elapsed);
+            // Keep nudging the thread while the config handshake is in flight.
+            setIntervalFromNow(remaining);
         }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
-        return INT32_MAX;
+        return RUN_SAME;
     }
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
@@ -90,6 +107,27 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 #else
         fromNumCharacteristic->notify();
 #endif
+    }
+
+    virtual void onConfigHandshakeStarted() override { setIntervalFromNow(kConfigHandshakeTimeoutMs); }
+
+    virtual void onConfigHandshakeTimeout() override
+    {
+        LOG_WARN("Config handshake stalled; restarting BLE connection");
+        if (!bleServer) {
+            return;
+        }
+        auto peers = bleServer->getPeerDevices();
+        if (peers.empty()) {
+            LOG_WARN("No BLE peers to disconnect during restart");
+            return;
+        }
+        for (auto connHandle : peers) {
+            int rc = bleServer->disconnect(connHandle);
+            if (rc != 0) {
+                LOG_WARN("Failed to disconnect BLE handle %u (rc=%d)", connHandle, rc);
+            }
+        }
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
