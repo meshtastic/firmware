@@ -136,6 +136,7 @@ class PhoneAPI
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
+    bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
   protected:
     /// Our fromradio packet while it is being assembled

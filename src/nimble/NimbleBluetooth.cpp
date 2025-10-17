@@ -27,7 +27,9 @@
 #include "nimble/nimble/host/include/host/ble_gap.h"
 #endif
 
+// Debugging options: careful, they slow things down quite a bit!
 #define DEBUG_NIMBLE_ON_READ_TIMING // uncomment to time onRead duration
+#define DEBUG_NIMBLE_NOTIFY         // uncomment to enable notify logging
 
 #define NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE 3
 #define NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE 3
@@ -73,29 +75,62 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     std::atomic<int32_t> notifyCount{0};
 
   protected:
-    bool runOnceHasWorkToDo()
+    virtual int32_t runOnce() override
     {
-        // return true if the onRead callback is waiting for us, or if we have packets from the phone to handle.
-        return onReadCallbackIsWaitingForData || fromPhoneQueueSize > 0;
+        while (runOnceHasWorkToDo()) {
+            // Important that we service onRead first, because the onRead callback blocks NimBLE until we clear
+            // onReadCallbackIsWaitingForData.
+            runOnceHandleToPhoneQueue();   // push data to onRead
+            runOnceHandleFromPhoneQueue(); // pull data from onWrite
+        }
+
+        // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
+        return INT32_MAX;
     }
 
-    virtual int32_t runOnce() override
+    bool runOnceHasWorkToDo() { return runOnceHasWorkToPhone() || runOnceHasWorkFromPhone(); }
+
+    bool runOnceHasWorkToPhone() { return onReadCallbackIsWaitingForData || runOnceToPhoneCanPreloadNextPacket(); }
+
+    bool runOnceToPhoneCanPreloadNextPacket()
+    {
+        /*
+         * PRELOADING getFromRadio RESPONSES:
+         *
+         * It's not safe to preload packets if we're in STATE_SEND_PACKETS, because there may be a while between the time we call
+         * getFromRadio and when the client actually reads it. If the connection drops in that time, we might lose that packet
+         * forever. In STATE_SEND_PACKETS, if we wait for onRead before we call getFromRadio, we minimize the time window where
+         * the client might disconnect before completing the read.
+         *
+         * However, if we're in the setup states (sending config, nodeinfo, etc), it's safe and beneficial to preload packets into
+         * toPhoneQueue because the client will just reconnect after a disconnect, losing nothing.
+         */
+
+        if (!isConnected()) {
+            return false;
+        } else if (isSendingPackets()) {
+            // If we're in STATE_SEND_PACKETS, we must wait for onRead before calling getFromRadio.
+            return false;
+        } else {
+            // In other states, we can preload as long as there's space in the toPhoneQueue.
+            return toPhoneQueueSize < NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE;
+        }
+    }
+
+    void runOnceHandleToPhoneQueue()
     {
         // Stack buffer for getFromRadio packet
         uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
         size_t numBytes = 0;
 
-        while (runOnceHasWorkToDo()) {
-            // Service onRead first, because the onRead callback blocks NimBLE until we clear onReadCallbackIsWaitingForData.
-            if (onReadCallbackIsWaitingForData) {
-                numBytes = getFromRadio(fromRadioBytes);
+        if (onReadCallbackIsWaitingForData || runOnceToPhoneCanPreloadNextPacket()) {
+            numBytes = getFromRadio(fromRadioBytes);
 
-                if (numBytes == 0) {
-                    // Client expected a read, but we have nothing to send.
-                    // This is 100% OK, as we expect clients to do this regularly to make sure they have nothing else to read.
-                    // LOG_INFO("BLE getFromRadio returned numBytes=0");
-                }
-
+            if (numBytes == 0) {
+                // Client expected a read, but we have nothing to send.
+                // This is 100% OK, as we expect clients to do this regularly to make sure they have nothing else to read.
+                // LOG_INFO("BLE getFromRadio returned numBytes=0");
+            } else {
                 // Push to toPhoneQueue, protected by toPhoneMutex. Hold the mutex as briefly as possible.
                 if (toPhoneQueueSize < NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE) {
                     // Note: the comparison above is safe without a mutex because we are the only method that *increases*
@@ -108,50 +143,47 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                         toPhoneQueueByteSizes[storeAtIndex] = numBytes;
                         toPhoneQueueSize++;
                     }
+                    // LOG_DEBUG("BLE pushed toPhoneQueueSize=%u", toPhoneQueueSize.load());
                 } else {
                     // Shouldn't happen because the onRead callback shouldn't be waiting if the queue is full!
                     LOG_ERROR("Shouldn't happen! Drop FromRadio packet, toPhoneQueue full (%u bytes)", numBytes);
                 }
-
-                onReadCallbackIsWaitingForData = false; // only clear this flag AFTER the push
-
-                // Return immediately after clearing onReadCallbackIsWaitingForData so that our onRead callback can proceed.
-                if (runOnceHasWorkToDo()) {
-                    // Allow a minimal delay so the NimBLE task's onRead callback can pick up this packet, and then come back here
-                    // ASAP to handle whatever work is next!
-                    return 0;
-                } else {
-                    // Nothing queued. We can wait for the next callback.
-                    return INT32_MAX;
-                }
             }
 
-            // Handle packets we received from onWrite from the phone.
-            if (fromPhoneQueueSize > 0) {
-                // Note: the comparison above is safe without a mutex because we are the only method that *decreases*
-                // fromPhoneQueueSize. (It's okay if fromPhoneQueueSize *increases* in the NimBLE task meanwhile.)
-
-                LOG_DEBUG("NimbleBluetooth: handling ToRadio packet, fromPhoneQueueSize=%u", fromPhoneQueueSize.load());
-
-                // Pop the front of fromPhoneQueue, holding the mutex only briefly while we pop.
-                NimBLEAttValue val;
-                { // scope for fromPhoneMutex mutex
-                    std::lock_guard<std::mutex> guard(fromPhoneMutex);
-                    val = fromPhoneQueue[0];
-
-                    // Shift the rest of the queue down
-                    for (uint8_t i = 1; i < fromPhoneQueueSize; i++) {
-                        fromPhoneQueue[i - 1] = fromPhoneQueue[i];
-                    }
-                    fromPhoneQueueSize--;
-                }
-
-                handleToRadio(val.data(), val.length());
-            }
+            // Clear the onReadCallbackIsWaitingForData flag so onRead knows it can proceed.
+            onReadCallbackIsWaitingForData = false; // only clear this flag AFTER the push
         }
+    }
 
-        // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
-        return INT32_MAX;
+    bool runOnceHasWorkFromPhone() { return fromPhoneQueueSize > 0; }
+
+    void runOnceHandleFromPhoneQueue()
+    {
+        // Handle packets we received from onWrite from the phone.
+        if (fromPhoneQueueSize > 0) {
+            // Note: the comparison above is safe without a mutex because we are the only method that *decreases*
+            // fromPhoneQueueSize. (It's okay if fromPhoneQueueSize *increases* in the NimBLE task meanwhile.)
+
+            LOG_DEBUG("NimbleBluetooth: handling ToRadio packet, fromPhoneQueueSize=%u", fromPhoneQueueSize.load());
+
+            // Pop the front of fromPhoneQueue, holding the mutex only briefly while we pop.
+            NimBLEAttValue val;
+            { // scope for fromPhoneMutex mutex
+                std::lock_guard<std::mutex> guard(fromPhoneMutex);
+                val = fromPhoneQueue[0];
+
+                // Shift the rest of the queue down
+                for (uint8_t i = 1; i < fromPhoneQueueSize; i++) {
+                    fromPhoneQueue[i - 1] = fromPhoneQueue[i];
+                }
+
+                // Safe decrement due to onDisconnect
+                if (fromPhoneQueueSize > 0)
+                    fromPhoneQueueSize--;
+            }
+
+            handleToRadio(val.data(), val.length());
+        }
     }
 
     /**
@@ -165,8 +197,10 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         uint8_t cc = bleServer->getConnectedCount();
 
+#ifdef DEBUG_NIMBLE_NOTIFY
         // This logging slows things down when there are lots of packets going to the phone, like initial connection:
-        // LOG_DEBUG("BLE notify(%d) fromNum: %d connections: %d", currentNotifyCount, fromRadioNum, cc);
+        LOG_DEBUG("BLE notify(%d) fromNum: %d connections: %d", currentNotifyCount, fromRadioNum, cc);
+#endif
 
         uint8_t val[4];
         put_le32(val, fromRadioNum);
@@ -248,25 +282,37 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
         // LOG_DEBUG("BLE onRead(%d): start millis=%d", currentReadCount, startMillis);
 #endif
 
-        // Tell the main task that we'd like a packet.
-        bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
+        // Is there a packet ready to go, or do we have to ask the main task to get one for us?
+        if (bluetoothPhoneAPI->toPhoneQueueSize > 0) {
+            // Note: the comparison above is safe without a mutex because we are the only method that *decreases*
+            // toPhoneQueueSize. (It's okay if toPhoneQueueSize *increases* in the main task meanwhile.)
 
-        while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 400) {
-            // Schedule the main task runOnce to run ASAP.
-            bluetoothPhoneAPI->setIntervalFromNow(0);
-            concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
-
-            if (!bluetoothPhoneAPI->onReadCallbackIsWaitingForData) {
-                // we may be able to break even before a delay, if the call to interrupt woke up the main loop and it ran already
+            // There's already a packet queued. Great! We don't need to wait for onReadCallbackIsWaitingForData.
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
-                LOG_DEBUG("BLE onRead(%d): broke before delay after %u ms, %d tries", currentReadCount, millis() - startMillis,
-                          tries);
+            LOG_DEBUG("BLE onRead(%d): packet already waiting, no need to set onReadCallbackIsWaitingForData", currentReadCount);
 #endif
-                break;
-            }
+        } else {
+            // Tell the main task that we'd like a packet.
+            bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
 
-            delay(tries < 10 ? 2 : 5);
-            tries++;
+            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 400) {
+                // Schedule the main task runOnce to run ASAP.
+                bluetoothPhoneAPI->setIntervalFromNow(0);
+                concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
+
+                if (!bluetoothPhoneAPI->onReadCallbackIsWaitingForData) {
+                    // we may be able to break even before a delay, if the call to interrupt woke up the main loop and it ran
+                    // already
+#ifdef DEBUG_NIMBLE_ON_READ_TIMING
+                    LOG_DEBUG("BLE onRead(%d): broke before delay after %u ms, %d tries", currentReadCount,
+                              millis() - startMillis, tries);
+#endif
+                    break;
+                }
+
+                delay(tries < 10 ? 2 : 5);
+                tries++;
+            }
         }
 
         // Pop from toPhoneQueue, protected by toPhoneMutex. Hold the mutex as briefly as possible.
@@ -294,7 +340,10 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
                     bluetoothPhoneAPI->toPhoneQueueByteSizes[i - 1] = bluetoothPhoneAPI->toPhoneQueueByteSizes[i];
                 }
-                bluetoothPhoneAPI->toPhoneQueueSize--;
+
+                // Safe decrement due to onDisconnect
+                if (bluetoothPhoneAPI->toPhoneQueueSize > 0)
+                    bluetoothPhoneAPI->toPhoneQueueSize--;
             } else {
                 // nothing in the toPhoneQueue; that's fine, and we'll just have numBytes=0.
             }
@@ -453,10 +502,16 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         if (bluetoothPhoneAPI) {
             bluetoothPhoneAPI->close();
 
-            bluetoothPhoneAPI->fromPhoneQueueSize = 0;
+            { // scope for fromPhoneMutex mutex
+                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
+                bluetoothPhoneAPI->fromPhoneQueueSize = 0;
+            }
 
-            bluetoothPhoneAPI->toPhoneQueueSize = 0;
             bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false;
+            { // scope for toPhoneMutex mutex
+                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
+                bluetoothPhoneAPI->toPhoneQueueSize = 0;
+            }
 
             bluetoothPhoneAPI->readCount = 0;
             bluetoothPhoneAPI->notifyCount = 0;
