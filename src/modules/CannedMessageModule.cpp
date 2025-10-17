@@ -2199,11 +2199,27 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
             // Show overlay banner
             if (screen) {
+                auto *display = screen->getDisplayDevice();
                 graphics::BannerOverlayOptions opts;
                 static char buf[128];
 
                 const char *channelName = channels.getName(this->channel);
-                const char *nodeName = getNodeName(this->incoming);
+                const char *src = getNodeName(this->incoming);
+                char nodeName[48];
+                strncpy(nodeName, src, sizeof(nodeName) - 1);
+                nodeName[sizeof(nodeName) - 1] = '\0';
+
+                int availWidth = display->getWidth() - (graphics::isHighResolution ? 60 : 30);
+                if (availWidth < 0)
+                    availWidth = 0;
+
+                size_t origLen = strlen(nodeName);
+                while (nodeName[0] && display->getStringWidth(nodeName) > availWidth) {
+                    nodeName[strlen(nodeName) - 1] = '\0';
+                }
+                if (strlen(nodeName) < origLen) {
+                    strcat(nodeName, "...");
+                }
 
                 // Calculate signal quality and bars based on preset, SNR, and RSSI
                 float snrLimit = getSnrLimit(config.lora.modem_preset);

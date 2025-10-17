@@ -785,7 +785,7 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
     return rowHeights;
 }
 
-void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
+void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
     if (packet.from != 0) {
         hasUnreadMessage = true;
@@ -800,7 +800,22 @@ void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &pack
 
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
-        const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+        char longName[48] = "???";
+        if (node && node->user.long_name) {
+            strncpy(longName, node->user.long_name, sizeof(longName) - 1);
+            longName[sizeof(longName) - 1] = '\0';
+        }
+        int availWidth = display->getWidth() - (isHighResolution ? 40 : 20);
+        if (availWidth < 0)
+            availWidth = 0;
+
+        size_t origLen = strlen(longName);
+        while (longName[0] && display->getStringWidth(longName) > availWidth) {
+            longName[strlen(longName) - 1] = '\0';
+        }
+        if (strlen(longName) < origLen) {
+            strcat(longName, "...");
+        }
         const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
 
         char banner[256];

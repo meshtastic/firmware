@@ -54,7 +54,7 @@ void resetScrollState();
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet);
 
 // Handles a new incoming/outgoing message: banner, wake, thread select, scroll reset
-void handleNewMessage(const StoredMessage &sm, const meshtastic_MeshPacket &packet);
+void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const meshtastic_MeshPacket &packet);
 
 // Clear Message Line Cache from Message Renderer
 void clearMessageCache();

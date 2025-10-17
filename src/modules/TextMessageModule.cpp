@@ -6,7 +6,9 @@
 #include "buzz.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "main.h"
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -24,7 +26,9 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     const StoredMessage &sm = messageStore.addFromPacket(mp);
 
     // Pass message to renderer (banner + thread switching + scroll reset)
-    graphics::MessageRenderer::handleNewMessage(sm, mp);
+    // Use the global Screen singleton to retrieve the current OLED display
+    auto *display = screen ? screen->getDisplayDevice() : nullptr;
+    graphics::MessageRenderer::handleNewMessage(display, sm, mp);
 #endif
     // Only trigger screen wake if configuration allows it
     if (shouldWakeOnReceivedMessage()) {
