@@ -284,8 +284,6 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
 
 void CannedMessageModule::resetSearch()
 {
-    LOG_INFO("Resetting search, restoring full destination list");
-
     int previousDestIndex = destIndex;
 
     searchQuery = "";
@@ -329,7 +327,7 @@ void CannedMessageModule::updateDestinationSelectionList()
 
     for (size_t i = 0; i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == myNodeNum)
+        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
             continue;
 
         const String &nodeName = node->user.long_name;
@@ -347,6 +345,10 @@ void CannedMessageModule::updateDestinationSelectionList()
         }
     }
 
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->pki_encrypted = true;
+    p->channel = 0;
+
     // Populate active channels
     std::vector<String> seenChannels;
     seenChannels.reserve(channels.getNumChannels());
@@ -357,15 +359,6 @@ void CannedMessageModule::updateDestinationSelectionList()
             seenChannels.push_back(name);
         }
     }
-
-    /* As the nodeDB is sorted, can skip this step
-    // Sort by favorite, then last heard
-    std::sort(this->filteredNodes.begin(), this->filteredNodes.end(), [](const NodeEntry &a, const NodeEntry &b) {
-        if (a.node->is_favorite != b.node->is_favorite)
-            return a.node->is_favorite > b.node->is_favorite;
-        return a.lastHeard < b.lastHeard;
-    });
-    */
 
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
@@ -1289,7 +1282,6 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = "";
             this->cursor = 0;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
@@ -1297,7 +1289,6 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = "";
             this->cursor = 0;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
