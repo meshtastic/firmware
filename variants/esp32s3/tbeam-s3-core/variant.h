@@ -15,6 +15,7 @@
 // not found then probe for SX1262
 #define USE_SX1262
 #define USE_SX1268
+#define USE_LR1121
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 5
@@ -32,6 +33,19 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
+#endif
+
+// LR1121
+#ifdef USE_LR1121
+#define LR1121_IRQ_PIN 1
+#define LR1121_NRESET_PIN LORA_RESET
+#define LR1121_BUSY_PIN 4
+#define LR1121_SPI_NSS_PIN 10
+#define LR1121_SPI_SCK_PIN 12
+#define LR1121_SPI_MOSI_PIN 11
+#define LR1121_SPI_MISO_PIN 13
+#define LR11X0_DIO3_TCXO_VOLTAGE 3.0
+#define LR11X0_DIO_AS_RF_SWITCH
 #endif
 
 // Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
