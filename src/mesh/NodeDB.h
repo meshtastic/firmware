@@ -18,6 +18,13 @@
 #include "PortduinoGlue.h"
 #endif
 
+#define FUNCTION_START(FUNCTION_NAME)                                                                                            \
+    if (fakeMutex)                                                                                                               \
+        LOG_ERROR("Concurrency violation in " FUNCTION_NAME);                                                                    \
+    fakeMutex = true;
+
+#define FUNCTION_END fakeMutex = false;
+
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
 // E3B0C442 is the blank hash
 static const uint8_t LOW_ENTROPY_HASHES[][32] = {
@@ -139,7 +146,10 @@ class NodeDB
     bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
                                    SEGMENT_NODEDATABASE)
     {
-        return _saveToDisk(saveWhat);
+        FUNCTION_START("saveToDisk");
+        auto retVal = _saveToDisk(saveWhat);
+        FUNCTION_END;
+        return retVal;
     }
 
     /** Reinit radio config if needed, because either:
@@ -148,7 +158,12 @@ class NodeDB
      *
      * @param is_fresh_install set to true after a fresh install, to trigger NodeInfo/Position requests
      */
-    void resetRadioConfig(bool is_fresh_install = false) { _resetRadioConfig(is_fresh_install); }
+    void resetRadioConfig(bool is_fresh_install = false)
+    {
+        FUNCTION_START("resetRadioConfig");
+        _resetRadioConfig(is_fresh_install);
+        FUNCTION_END;
+    }
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -195,7 +210,13 @@ class NodeDB
     std::string getNodeId() const;
 
     // @return last byte of a NodeNum, 0xFF if it ended at 0x00
-    uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }
+    uint8_t getLastByteOfNodeNum(NodeNum num)
+    {
+        FUNCTION_START("getLastByteOfNodeNum");
+        auto retVal = (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF);
+        FUNCTION_END;
+        return retVal;
+    }
 
     /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
     // bool handleWantNodeNum(NodeNum n);
@@ -214,33 +235,77 @@ class NodeDB
     /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
      * @param localOnly if true, ignore nodes heard via MQTT
      */
-    size_t getNumOnlineMeshNodes(bool localOnly = false) { return _getNumOnlineMeshNodes(localOnly); }
+    size_t getNumOnlineMeshNodes(bool localOnly = false)
+    {
+        FUNCTION_START("getNumOnlineMeshNodes");
+        auto retVal = _getNumOnlineMeshNodes(localOnly);
+        FUNCTION_END;
+        return retVal;
+    }
 
     void resetNodes(), removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
-    void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role) { _installRoleDefaults(role); }
+    void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
+    {
+        FUNCTION_START("installRoleDefaults");
+        _installRoleDefaults(role);
+        FUNCTION_END;
+    }
 
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
 
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
-        assert(x < numMeshNodes);
-        return &meshNodes->at(x);
+        FUNCTION_START("getMeshNodeByIndex");
+        meshtastic_NodeInfoLite *retValue = nullptr;
+        if (x < numMeshNodes)
+            retValue = &meshNodes->at(x);
+        FUNCTION_END;
+        return retValue;
     }
 
-    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) { return getMeshNode(n); }
-    size_t getNumMeshNodes() { return numMeshNodes; }
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n)
+    {
+        FUNCTION_START("getMeshNode");
+        auto retVal = _getMeshNode(n);
+        FUNCTION_END;
+        return retVal;
+    }
+
+    size_t getNumMeshNodes()
+    {
+        FUNCTION_START("getNumMeshNodes");
+        auto retVal = numMeshNodes;
+        FUNCTION_END;
+        return retVal;
+    }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
 
     // returns true if the maximum number of nodes is reached or we are running low on memory
-    bool isFull() { return _isFull(); }
+    bool isFull()
+    {
+        FUNCTION_START("isFull");
+        auto retVal = _isFull();
+        FUNCTION_END;
+        return retVal;
+    }
 
-    void clearLocalPosition() { _clearLocalPosition(); }
+    void clearLocalPosition()
+    {
+        FUNCTION_START("clearLocalPosition");
+        _clearLocalPosition();
+        FUNCTION_END;
+    }
 
-    void setLocalPosition(meshtastic_Position position, bool timeOnly = false) { _setLocalPosition(position, timeOnly); }
+    void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
+    {
+        FUNCTION_START("setLocalPosition");
+        _setLocalPosition(position, timeOnly);
+        FUNCTION_END;
+    }
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
@@ -248,14 +313,21 @@ class NodeDB
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
-    void notifyObservers(bool forceUpdate = false) { _notifyObservers(forceUpdate); }
+    void notifyObservers(bool forceUpdate = false)
+    {
+        FUNCTION_START("notifyObservers");
+        _notifyObservers(forceUpdate);
+        FUNCTION_END;
+    }
 
   private:
+    bool fakeMutex = false;
+
     /// Notify observers of changes to the DB
     void _notifyObservers(bool forceUpdate = false)
     {
         // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(_getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(_getNumOnlineMeshNodes(), numMeshNodes, forceUpdate);
         newStatus.notifyObservers(&status);
     }
 
