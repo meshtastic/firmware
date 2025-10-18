@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <deque>
 #include <iterator>
 #include <string>
 #include <unordered_map>
@@ -79,6 +81,12 @@ class PhoneAPI
 
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
+    // Prefetched node info entries ready for immediate transmission to the phone.
+    std::deque<meshtastic_NodeInfo> nodeInfoQueue;
+    // Tunable size of the node info cache so we can keep BLE reads non-blocking.
+    static constexpr size_t kNodePrefetchDepth = 4;
+    // Protect nodeInfoForPhone + nodeInfoQueue because NimBLE callbacks run in a separate FreeRTOS task.
+    concurrency::Lock nodeInfoMutex;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -157,6 +165,8 @@ class PhoneAPI
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
+
+    void prefetchNodeInfos();
 
     void releaseMqttClientProxyPhonePacket();
 

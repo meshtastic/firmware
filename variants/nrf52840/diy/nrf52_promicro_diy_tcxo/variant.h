@@ -94,7 +94,6 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define PIN_GPS_RX (0 + 20) // P0.20
 
 #define PIN_GPS_EN (0 + 24) // P0.24
-#define GPS_POWER_TOGGLE
 #define GPS_UBLOX
 // define GPS_DEBUG
 
