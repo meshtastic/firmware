@@ -159,6 +159,11 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
+    /// Subclasses can use these lifecycle hooks for transport-specific behavior around config/steady-state
+    /// (i.e. BLE connection params)
+    virtual void onConfigStart() {}
+    virtual void onConfigComplete() {}
+
     /// begin a new connection
     void handleStartConfig();
 

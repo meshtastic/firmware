@@ -57,6 +57,9 @@ void PhoneAPI::handleStartConfig()
 #endif
     }
 
+    // Allow subclasses to prepare for high-throughput config traffic
+    onConfigStart();
+
     // even if we were already connected - restart our state machine
     if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
         // If client only wants node info, jump directly to sending nodes
@@ -575,6 +578,10 @@ void PhoneAPI::sendConfigComplete()
     fromRadioScratch.config_complete_id = config_nonce;
     config_nonce = 0;
     state = STATE_SEND_PACKETS;
+
+    // Allow subclasses to know we've entered steady-state so they can lower power consumption
+    onConfigComplete();
+
     pauseBluetoothLogging = false;
 }
 
