@@ -49,6 +49,15 @@ char ourHost[16];
 // To replace blocking wifi connect delay with a non-blocking sleep
 static unsigned long wifiReconnectStartMillis = 0;
 static bool wifiReconnectPending = false;
+static unsigned char wifiConnectAttempts = 0;
+
+#ifndef MAXWIFICONNECTIONATTEMPTS
+#define  MAXWIFICONNECTIONATTEMPTS 6
+#endif
+
+#ifndef WIFIRECONNECTGAP
+#define  WIFIRECONNECTGAP 10000
+#endif
 
 bool APStartupComplete = 0;
 
@@ -170,28 +179,44 @@ static int32_t reconnectWiFi()
 #elif defined(ARCH_RP2040)
         WiFi.disconnect(false);
 #endif
-        LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
+        LOG_INFO("Connecting to WiFi access point %s", wifiName);
 
         // Start the non-blocking wait for 5 seconds
         wifiReconnectStartMillis = millis();
         wifiReconnectPending = true;
         // Do not attempt to connect yet, wait for the next invocation
-        return 5000; // Schedule next check soon
+        return WIFIRECONNECTGAP; // Schedule next check soon
     }
 
     // Check if we are ready to proceed with the WiFi connection after the 5s wait
     if (wifiReconnectPending) {
-        if (millis() - wifiReconnectStartMillis >= 5000) {
+        if (millis() - wifiReconnectStartMillis >= WIFIRECONNECTGAP) {
             if (!WiFi.isConnected()) {
+                wifiConnectAttempts++;
+                LOG_INFO("Reconnecting to WiFi access point %s, attempt %d", wifiName, wifiConnectAttempts);
 #ifdef CONFIG_IDF_TARGET_ESP32C3
                 WiFi.mode(WIFI_MODE_NULL);
                 WiFi.useStaticBuffers(true);
                 WiFi.mode(WIFI_STA);
 #endif
                 WiFi.begin(wifiName, wifiPsw);
+                wifiReconnectStartMillis = millis();
+                if(wifiConnectAttempts < MAXWIFICONNECTIONATTEMPTS){
+                    needReconnect = true;
+                }
+                else{
+                    needReconnect = false;
+                    wifiReconnectPending = false;
+                    LOG_INFO("Maximum connection attempts reached %d", wifiConnectAttempts);
+                    LOG_INFO("Unable to connect access point %s", wifiName);
+                }
+                
             }
-            isReconnecting = false;
-            wifiReconnectPending = false;
+            else{
+                LOG_INFO("WiFi successfully connected to access point %s", wifiName);
+                LOG_INFO("Connection attempts %d", wifiConnectAttempts);
+                wifiReconnectPending = false;
+            }
         } else {
             // Still waiting for 5s to elapse
             return 100; // Check again soon
