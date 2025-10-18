@@ -124,14 +124,14 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     std::mutex fromPhoneMutex;
     std::atomic<size_t> fromPhoneQueueSize{0};
     // We use array here (and pay the cost of memcpy) to avoid dynamic memory allocations and frees across FreeRTOS tasks.
-    std::array<NimBLEAttValue, NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE> fromPhoneQueue;
+    std::array<NimBLEAttValue, NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE> fromPhoneQueue{};
 
     /* Packets to phone (BLE onRead callback) */
     std::mutex toPhoneMutex;
     std::atomic<size_t> toPhoneQueueSize{0};
     // We use array here (and pay the cost of memcpy) to avoid dynamic memory allocations and frees across FreeRTOS tasks.
-    std::array<std::array<uint8_t, meshtastic_FromRadio_size>, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueue;
-    std::array<size_t, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueueByteSizes;
+    std::array<std::array<uint8_t, meshtastic_FromRadio_size>, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueue{};
+    std::array<size_t, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueueByteSizes{};
     // The onReadCallbackIsWaitingForData flag provides synchronization between the NimBLE task's onRead callback and our main
     // task's runOnce. It's only set by onRead, and only cleared by runOnce.
     std::atomic<bool> onReadCallbackIsWaitingForData{false};
