@@ -95,6 +95,9 @@ class BluetoothStatus : public Status
                 digitalWrite(BLE_LED, HIGH);
 #endif
 #endif
+#if defined(ELECROW_ThinkNode_M3)
+                digitalWrite(LED_POWER, LED_STATE_OFF);
+#endif
                 break;
 
             case ConnectionState::DISCONNECTED:
@@ -105,6 +108,10 @@ class BluetoothStatus : public Status
 #else
                 digitalWrite(BLE_LED, LOW);
 #endif
+#endif
+#if defined(ELECROW_ThinkNode_M3)
+                digitalWrite(LED_POWER, LED_STATE_ON);
+
 #endif
                 break;
             }
