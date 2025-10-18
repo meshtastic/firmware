@@ -464,12 +464,12 @@ void NimbleBluetooth::setupService()
     } else {
         ToRadioCharacteristic = bleService->createCharacteristic(
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-        FromRadioCharacteristic = bleService->createCharacteristic(
-            FROMRADIO_UUID,
-            NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::NOTIFY, 4);
-        fromNumCharacteristic =
-            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
-                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        FromRadioCharacteristic =
+            bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN |
+                                                                 NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::NOTIFY);
+        fromNumCharacteristic = bleService->createCharacteristic(
+            FROMNUM_UUID,
+            NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 4);
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
             NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
@@ -534,7 +534,15 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
-    pAdvertising->start(0);
+#if defined(NIMBLE_TWO)
+    NimBLEAdvertisementData scan;
+    scan.setName(getDeviceName());
+    pAdvertising->setScanResponseData(scan);
+    pAdvertising->enableScanResponse(true);
+#endif
+    if (!pAdvertising->start(0)) {
+        LOG_ERROR("BLE failed to start advertising");
+    };
 #endif
     LOG_DEBUG("BLE Advertising started");
 }
