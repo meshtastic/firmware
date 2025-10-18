@@ -15,6 +15,7 @@
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "sleep.h"
+#include "motion/QMC6310Sensor.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -30,6 +31,8 @@
 #include <DisplayFormatters.h>
 #include <RadioLibInterface.h>
 #include <target_specific.h>
+#include <math.h>
+#include "motion/SensorLiveData.h"
 
 using namespace meshtastic;
 
@@ -692,6 +695,57 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->drawString(textX, getTextPositions(display)[line++], "World!");
 }
 
+// ---------------- Additional IMU/Magnetometer debug screens ----------------
+void drawQMC6310Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    static uint32_t last = 0;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "QMC6310");
+    int line = 1;
+    if (g_qmc6310Live.initialized) {
+        if (!Throttle::isWithinTimespanMs(last, 1000)) {
+            last = millis();
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Head %3.0f  offX %.0f offY %.0f", g_qmc6310Live.heading, g_qmc6310Live.offX,
+                     g_qmc6310Live.offY);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+            snprintf(buf, sizeof(buf), "uT X %.1f  Y %.1f", g_qmc6310Live.uT_X, g_qmc6310Live.uT_Y);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+            snprintf(buf, sizeof(buf), "scale X %.2f Y %.2f", g_qmc6310Live.scaleX, g_qmc6310Live.scaleY);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+            // total field vs expected
+            float mag = sqrtf(g_qmc6310Live.uT_X * g_qmc6310Live.uT_X + g_qmc6310Live.uT_Y * g_qmc6310Live.uT_Y +
+                              g_qmc6310Live.uT_Z * g_qmc6310Live.uT_Z);
+            snprintf(buf, sizeof(buf), "|B| %.1f uT vs %.1f", mag, (float)QMC6310_EXPECTED_FIELD_uT);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+        }
+    } else {
+        display->drawString(x, getTextPositions(display)[line++], "No data");
+    }
+}
+
+void drawQMI8658Screen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    (void)state; (void)x; (void)y;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "QMI8658");
+    int line = 1;
+    if (g_qmi8658Live.initialized) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "ACC %.2f %.2f %.2f", g_qmi8658Live.acc.x, g_qmi8658Live.acc.y, g_qmi8658Live.acc.z);
+        display->drawString(x, getTextPositions(display)[line++], buf);
+        snprintf(buf, sizeof(buf), "GYR %.2f %.2f %.2f", g_qmi8658Live.gyr.x, g_qmi8658Live.gyr.y, g_qmi8658Live.gyr.z);
+        display->drawString(x, getTextPositions(display)[line++], buf);
+        snprintf(buf, sizeof(buf), "RPY %.1f %.1f %.1f", g_qmi8658Live.roll, g_qmi8658Live.pitch, g_qmi8658Live.yaw);
+        display->drawString(x, getTextPositions(display)[line++], buf);
+    } else {
+        display->drawString(x, getTextPositions(display)[line++], "No data");
+    }
+}
 } // namespace DebugRenderer
 } // namespace graphics
 #endif
