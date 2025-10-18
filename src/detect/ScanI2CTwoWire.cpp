@@ -581,7 +581,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
     scanPort(port, nullptr, 0);
 }
 
-TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
+TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
 {
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
