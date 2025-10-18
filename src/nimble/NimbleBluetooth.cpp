@@ -53,6 +53,70 @@ static std::atomic<int32_t> nimbleBluetoothConnHandle{-1}; // actual handles are
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
+    /*
+      CAUTION: There's a lot going on here and lots of room to break things.
+
+      This NimbleBluetooth.cpp file does some tricky synchronization between the NimBLE FreeRTOS task (which runs the onRead and
+      onWrite callbacks) and the main task (which runs runOnce and the rest of PhoneAPI).
+
+      The main idea is to add a little bit of synchronization here to make it so that the rest of the codebase doesn't have to
+      know about concurrency and mutexes, and can just run happily ever after as a cooperative multitasking OSThread system, where
+      locking isn't something that anyone has to worry about too much! :)
+
+      We achieve this by having some queues and mutexes in this file only, and ensuring that all calls to getFromRadio and
+      handleToRadio are only made from the main FreeRTOS task. This way, the rest of the codebase doesn't have to worry about
+      being run concurrently, which would make everything else much much much more complicated.
+
+      PHONE -> RADIO:
+        - [NimBLE FreeRTOS task:] onWrite callback holds fromPhoneMutex and pushes received packets into fromPhoneQueue.
+        - [Main task:] runOnceHandleFromPhoneQueue in main task holds fromPhoneMutex, pulls packets from fromPhoneQueue, and calls
+      handleToRadio **in main task**.
+
+      RADIO -> PHONE:
+        - [NimBLE FreeRTOS task:] onRead callback sets onReadCallbackIsWaitingForData flag and polls in a busy loop. (unless
+      there's already a packet waiting in toPhoneQueue)
+        - [Main task:] runOnceHandleToPhoneQueue sees onReadCallbackIsWaitingForData flag, calls getFromRadio **in main task** to
+      get packets from radio, holds toPhoneMutex, pushes the packet into toPhoneQueue, and clears the
+      onReadCallbackIsWaitingForData flag.
+        - [NimBLE FreeRTOS task:] onRead callback sees that the onReadCallbackIsWaitingForData flag cleared, holds toPhoneMutex,
+      pops the packet from toPhoneQueue, and returns it to NimBLE.
+
+      MUTEXES:
+        - fromPhoneMutex protects fromPhoneQueue and fromPhoneQueueSize
+        - toPhoneMutex protects toPhoneQueue, toPhoneQueueByteSizes, and toPhoneQueueSize
+
+      ATOMICS:
+        - fromPhoneQueueSize is only increased by onWrite, and only decreased by runOnceHandleFromPhoneQueue (or onDisconnect).
+        - toPhoneQueueSize is only increased by runOnceHandleToPhoneQueue, and only decreased by onRead (or onDisconnect).
+        - onReadCallbackIsWaitingForData is a flag. It's only set by onRead, and only cleared by runOnceHandleToPhoneQueue (or
+      onDisconnect).
+
+      PRELOADING: see comments in runOnceToPhoneCanPreloadNextPacket about when it's safe to preload packets from getFromRadio.
+
+      BLE CONNECTION PARAMS:
+        - During config, we request a high-throughput, low-latency BLE connection for speed.
+        - After config, we switch to a lower-power BLE connection for steady-state use to extend battery life.
+
+      MEMORY MANAGEMENT:
+        - We keep packets on the stack and do not allocate heap.
+        - We use std::array for fromPhoneQueue and toPhoneQueue to avoid mallocs and frees across FreeRTOS tasks.
+        - Yes, we have to do some copy operations on pop because of this, but it's worth it to avoid cross-task memory management.
+
+      NOTIFY IS BROKEN:
+        - Adding NIMBLE_PROPERTY::NOTIFY to FromRadioCharacteristic appears to break things. It is NOT backwards compatible.
+
+      ZERO-SIZE READS:
+        - Returning a zero-size read from onRead breaks some clients during the config phase. So we have to block onRead until we
+      have data.
+        - During the STATE_SEND_PACKETS phase, it's totally OK to return zero-size reads, as clients are expected to do reads
+      until they get a 0-byte response.
+
+      CROSS-TASK WAKEUP:
+        - If you call: bluetoothPhoneAPI->setIntervalFromNow(0); to schedule immediate processing of new data,
+        - Then you should also call: concurrency::mainDelay.interrupt(); to wake up the main loop if it's sleeping.
+        - Otherwise, you're going to wait ~100ms or so until the main loop wakes up from some other cause.
+    */
+
   public:
     BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") {}
 
@@ -255,6 +319,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         fromNumCharacteristic->setValue(val, sizeof(val));
 #ifdef NIMBLE_TWO
+        // NOTE: I don't have any NIMBLE_TWO devices, but this line makes me suspicious, and I suspect it needs to just be
+        // notify().
         fromNumCharacteristic->notify(val, sizeof(val), BLE_HS_CONN_HANDLE_NONE);
 #else
         fromNumCharacteristic->notify();
