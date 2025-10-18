@@ -309,7 +309,36 @@ void setup()
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
 #endif
+#if defined(ELECROW_ThinkNode_M3)
 
+    pinMode(KEY_POWER, OUTPUT);
+    digitalWrite(KEY_POWER, HIGH);
+    pinMode(RGB_POWER, OUTPUT);
+    digitalWrite(RGB_POWER, HIGH);
+    pinMode(GPS_STD_POWER, OUTPUT);
+    digitalWrite(GPS_STD_POWER, HIGH);
+    pinMode(green_LED_PIN, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
+    pinMode(PIN_POWER_USB, INPUT);
+    pinMode(PIN_POWER_DONE, INPUT);
+    pinMode(PIN_POWER_CHRG, INPUT);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(EEPROM_POWER, OUTPUT);
+    digitalWrite(EEPROM_POWER, HIGH);
+    pinMode(PIN_EN1, OUTPUT);
+    digitalWrite(PIN_EN1, HIGH);
+    pinMode(PIN_EN2, OUTPUT);
+    digitalWrite(PIN_EN2, HIGH);
+    pinMode(ACC_POWER, OUTPUT);
+    digitalWrite(ACC_POWER, LOW);
+    pinMode(DHT_POWER, OUTPUT);
+    digitalWrite(DHT_POWER, HIGH);
+    pinMode(Battery_POWER, OUTPUT);
+    digitalWrite(Battery_POWER, HIGH);
+    pinMode(GPS_POWER, OUTPUT);
+    digitalWrite(GPS_POWER, HIGH);
+
+#endif
 #if defined(ELECROW_ThinkNode_M5)
     Wire.begin(48, 47);
     io.pinMode(PCA_PIN_EINK_EN, OUTPUT);

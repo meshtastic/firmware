@@ -352,7 +352,67 @@ void cpuDeepSleep(uint32_t msecToWake)
         NRF_GPIO->DIRCLR = (1 << pin);
     }
 #endif
+#ifdef ELECROW_ThinkNode_M3
+    digitalWrite(red_LED_PIN, HIGH);
+    digitalWrite(green_LED_PIN, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+    digitalWrite(PIN_EN1, LOW);
+    digitalWrite(PIN_EN2, LOW);
+    digitalWrite(EEPROM_POWER, LOW);
+    digitalWrite(KEY_POWER, LOW);
+    digitalWrite(GPS_STD_POWER, LOW);
+    digitalWrite(DHT_POWER, LOW);
+    digitalWrite(ACC_POWER, LOW);
+    digitalWrite(Battery_POWER, LOW);
+    digitalWrite(GPS_POWER, LOW);
 
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == GPS_STD_POWER ||
+            pin == DHT_POWER || pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
+            pin == LR1110_SPI_MOSI_PIN || pin == LR1110_SPI_SCK_PIN || pin == LR1110_SPI_NSS_PIN || pin == LR1110_BUSY_PIN ||
+            pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == green_LED_PIN ||
+            pin == red_LED_PIN || pin == LED_BLUE) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == GPS_STD_POWER ||
+            pin == DHT_POWER || pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
+            pin == LR1110_SPI_MOSI_PIN || pin == LR1110_SPI_SCK_PIN || pin == LR1110_SPI_NSS_PIN || pin == LR1110_BUSY_PIN ||
+            pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == green_LED_PIN ||
+            pin == red_LED_PIN || pin == LED_BLUE) {
+            continue;
+        }
+        digitalWrite(pin, LOW);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == GPS_STD_POWER ||
+            pin == DHT_POWER || pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
+            pin == LR1110_SPI_MOSI_PIN || pin == LR1110_SPI_SCK_PIN || pin == LR1110_SPI_NSS_PIN || pin == LR1110_BUSY_PIN ||
+            pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == green_LED_PIN ||
+            pin == red_LED_PIN || pin == LED_BLUE) {
+            continue;
+        }
+        NRF_GPIO->DIRCLR = (1 << pin);
+    }
+
+    if (digitalRead(PIN_POWER_USB)) {
+        delay(25);
+        if (digitalRead(PIN_POWER_USB)) {
+            NVIC_SystemReset();
+        }
+    }
+
+    nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+    nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
+    nrf_gpio_cfg_sense_set(BUTTON_PIN, sense1);
+
+    nrf_gpio_cfg_input(PIN_POWER_USB, NRF_GPIO_PIN_PULLDOWN); // Configure the pin to be woken up as an input
+    nrf_gpio_pin_sense_t sense2 = NRF_GPIO_PIN_SENSE_HIGH;
+    nrf_gpio_cfg_sense_set(PIN_POWER_USB, sense2);
+
+#endif
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
     if (msecToWake != portMAX_DELAY &&
