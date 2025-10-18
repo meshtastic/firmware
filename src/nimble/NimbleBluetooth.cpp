@@ -466,6 +466,10 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
 #endif
     {
+        // In some cases, it seems a new connection starts with a read.
+        // The API has no bytes to send, leading to a timeout. This short-circuits this problem.
+        if (!bluetoothPhoneAPI->isConnected())
+            return;
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
 
         int currentReadCount = bluetoothPhoneAPI->readCount.fetch_add(1);
