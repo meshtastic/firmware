@@ -27,14 +27,6 @@
 #include "nimble/nimble/host/include/host/ble_gap.h"
 #endif
 
-// Debugging options: careful, they slow things down quite a bit!
-// #define DEBUG_NIMBLE_ON_READ_TIMING  // uncomment to time onRead duration
-// #define DEBUG_NIMBLE_ON_WRITE_TIMING // uncomment to time onWrite duration
-// #define DEBUG_NIMBLE_NOTIFY          // uncomment to enable notify logging
-
-#define NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE 3
-#define NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE 3
-
 namespace
 {
 constexpr uint16_t kPreferredBleMtu = 517;
@@ -43,12 +35,21 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 } // namespace
 #endif
 
+// Debugging options: careful, they slow things down quite a bit!
+// #define DEBUG_NIMBLE_ON_READ_TIMING  // uncomment to time onRead duration
+// #define DEBUG_NIMBLE_ON_WRITE_TIMING // uncomment to time onWrite duration
+// #define DEBUG_NIMBLE_NOTIFY          // uncomment to enable notify logging
+
+#define NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE 3
+#define NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE 3
+
 NimBLECharacteristic *fromNumCharacteristic;
 NimBLECharacteristic *BatteryCharacteristic;
 NimBLECharacteristic *logRadioCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
+static std::atomic<int32_t> nimbleBluetoothConnHandle{-1}; // actual handles are uint16_t, so -1 means "no connection"
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
@@ -88,6 +89,32 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
         return INT32_MAX;
+    }
+
+    virtual void onConfigStart() override
+    {
+        LOG_INFO("BLE onConfigStart");
+
+        // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
+        if (bleServer && isConnected()) {
+            int32_t conn_handle = nimbleBluetoothConnHandle.load();
+            if (conn_handle != -1) {
+                requestHighThroughputConnection(static_cast<uint16_t>(conn_handle));
+            }
+        }
+    }
+
+    virtual void onConfigComplete() override
+    {
+        LOG_INFO("BLE onConfigComplete");
+
+        // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
+        if (bleServer && isConnected()) {
+            int32_t conn_handle = nimbleBluetoothConnHandle.load();
+            if (conn_handle != -1) {
+                requestLowerPowerConnection(static_cast<uint16_t>(conn_handle));
+            }
+        }
     }
 
     bool runOnceHasWorkToDo() { return runOnceHasWorkToPhone() || runOnceHasWorkFromPhone(); }
@@ -236,6 +263,54 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+
+    void requestHighThroughputConnection(uint16_t conn_handle)
+    {
+        /* Request a lower-latency, higher-throughput BLE connection.
+
+        This comes at the cost of higher power consumption, so we may want to only use this for initial setup, and then switch to
+        a slower mode.
+
+        See https://developer.apple.com/library/archive/qa/qa1931/_index.html for formulas to calculate values, iOS/macOS
+        constraints, and recommendations. (Android doesn't have specific constraints, but seems to be compatible with the Apple
+        recommendations.)
+
+        Selected settings:
+            minInterval (units of 1.25ms): 7.5ms = 6 (lower than the Apple recommended minimum, but allows faster when the client
+        supports it.)
+            maxInterval (units of 1.25ms): 15ms = 12
+            latency: 0 (don't allow peripheral to skip any connection events)
+            timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
+
+        These are intentionally aggressive to prioritize speed over power consumption, but are only used for a few seconds at
+        setup. Not worth adjusting much.
+        */
+        LOG_INFO("BLE requestHighThroughputConnection");
+        bleServer->updateConnParams(conn_handle, 6, 12, 0, 600);
+    }
+
+    void requestLowerPowerConnection(uint16_t conn_handle)
+    {
+        /* Request a lower power consumption (but higher latency, lower throughput) BLE connection.
+
+        This is suitable for steady-state operation after initial setup is complete.
+
+        See https://developer.apple.com/library/archive/qa/qa1931/_index.html for formulas to calculate values, iOS/macOS
+        constraints, and recommendations. (Android doesn't have specific constraints, but seems to be compatible with the Apple
+        recommendations.)
+
+        Selected settings:
+            minInterval (units of 1.25ms): 30ms = 24
+            maxInterval (units of 1.25ms): 50ms = 40
+            latency: 2 (allow peripheral to skip up to 2 consecutive connection events to save power)
+            timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
+
+        There's an opportunity for tuning here if anyone wants to do some power measurements, but these should allow 10-20 packets
+        per second.
+        */
+        LOG_INFO("BLE requestLowerPowerConnection");
+        bleServer->updateConnParams(conn_handle, 24, 40, 2, 600);
+    }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -489,11 +564,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
                 screen->endAlert();
         }
 
-        // Request high-throughput connection parameters for faster setup
+        // Store the connection handle for future use
 #ifdef NIMBLE_TWO
-        requestHighThroughputConnection(connInfo);
+        nimbleBluetoothConnHandle = connInfo.getConnHandle();
 #else
-        requestHighThroughputConnection(desc);
+        nimbleBluetoothConnHandle = desc->conn_handle;
 #endif
     }
 
@@ -561,6 +636,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
         memset(lastToRadio, 0, sizeof(lastToRadio));
+
+        nimbleBluetoothConnHandle = -1; // -1 means "no connection"
+
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();
@@ -573,70 +651,6 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
                 LOG_ERROR("BLE failed to restart advertising");
             }
         }
-#endif
-    }
-
-#ifdef NIMBLE_TWO
-    void requestHighThroughputConnection(NimBLEConnInfo &connInfo)
-#else
-    void requestHighThroughputConnection(ble_gap_conn_desc *desc)
-#endif
-    {
-        /* Request a lower-latency, higher-throughput BLE connection.
-
-        This comes at the cost of higher power consumption, so we may want to only use this for initial setup, and then switch to
-        a slower mode.
-
-        See https://developer.apple.com/library/archive/qa/qa1931/_index.html for formulas to calculate values, iOS/macOS
-        constraints, and recommendations. (Android doesn't have specific constraints, but seems to be compatible with the Apple
-        recommendations.)
-
-        Selected settings:
-            minInterval (units of 1.25ms): 7.5ms = 6 (lower than the Apple recommended minimum, but allows faster when the client
-        supports it.)
-            maxInterval (units of 1.25ms): 15ms = 12
-            latency: 0 (don't allow peripheral to skip any connection events)
-            timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
-
-        These are intentionally aggressive to prioritize speed over power consumption, but are only used for a few seconds at
-        setup. Not worth adjusting much.
-        */
-        LOG_INFO("BLE requestHighThroughputConnection");
-#ifdef NIMBLE_TWO
-        bleServer->updateConnParams(connInfo.getConnHandle(), 6, 12, 0, 600);
-#else
-        bleServer->updateConnParams(desc->conn_handle, 6, 12, 0, 600);
-#endif
-    }
-
-#ifdef NIMBLE_TWO
-    void requestLowerPowerConnection(NimBLEConnInfo &connInfo)
-#else
-    void requestLowerPowerConnection(ble_gap_conn_desc *desc)
-#endif
-    {
-        /* Request a lower power consumption (but higher latency, lower throughput) BLE connection.
-
-        This is suitable for steady-state operation after initial setup is complete.
-
-        See https://developer.apple.com/library/archive/qa/qa1931/_index.html for formulas to calculate values, iOS/macOS
-        constraints, and recommendations. (Android doesn't have specific constraints, but seems to be compatible with the Apple
-        recommendations.)
-
-        Selected settings:
-            minInterval (units of 1.25ms): 30ms = 24
-            maxInterval (units of 1.25ms): 50ms = 40
-            latency: 2 (allow peripheral to skip up to 2 consecutive connection events to save power)
-            timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
-
-        There's an opportunity for tuning here if anyone wants to do some power measurements, but these should allow 10-20 packets
-        per second.
-        */
-        LOG_INFO("BLE requestLowerPowerConnection");
-#ifdef NIMBLE_TWO
-        bleServer->updateConnParams(connInfo.getConnHandle(), 24, 40, 2, 600);
-#else
-        bleServer->updateConnParams(desc->conn_handle, 24, 40, 2, 600);
 #endif
     }
 };
