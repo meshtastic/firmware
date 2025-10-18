@@ -16,12 +16,9 @@ static const uint8_t MOSI = 17;
 static const uint8_t MISO = 8;
 static const uint8_t SCK = 18;
 
-// Default SPI1 will be mapped to SD Card
 #define SPI_MOSI (13)
 #define SPI_SCK (14)
 #define SPI_MISO (21)
-#define SPI_CS (16)
-
-#define SDCARD_CS SPI_CS
+#define SPI_CS (12)
 
 #endif /* Pins_Arduino_h */
