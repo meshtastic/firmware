@@ -144,11 +144,19 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
   protected:
     virtual int32_t runOnce() override
     {
+        bool shouldBreakAndRetryLater = false;
+
         while (runOnceHasWorkToDo()) {
             // Important that we service onRead first, because the onRead callback blocks NimBLE until we clear
             // onReadCallbackIsWaitingForData.
-            runOnceHandleToPhoneQueue();   // push data from getFromRadio to onRead
-            runOnceHandleFromPhoneQueue(); // pull data from onWrite to handleToRadio
+            shouldBreakAndRetryLater = runOnceHandleToPhoneQueue(); // push data from getFromRadio to onRead
+            runOnceHandleFromPhoneQueue();                          // pull data from onWrite to handleToRadio
+
+            if (shouldBreakAndRetryLater) {
+                // onRead still wants data, but it's not available yet. Return so we can try again when a packet may be ready.
+                LOG_INFO("BLE runOnce breaking to retry later (leaving onRead waiting)");
+                return 100; // try again in 100ms
+            }
         }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
@@ -210,8 +218,12 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         }
     }
 
-    void runOnceHandleToPhoneQueue()
+    bool runOnceHandleToPhoneQueue()
     {
+        // Returns false normally.
+        // Returns true if we should break out of runOnce and retry later, such as setup states where getFromRadio returns 0
+        // bytes.
+
         // Stack buffer for getFromRadio packet
         uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
         size_t numBytes = 0;
@@ -234,10 +246,11 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                     // In other states, this breaks clients.
                     // Return early, leaving onReadCallbackIsWaitingForData==true so onRead knows to try again.
                     // This gives runOnce a chance to handleToRadio and produce a response.
-#ifdef DEBUG_NIMBLE_ON_READ_TIMING
                     LOG_DEBUG("BLE getFromRadio returned numBytes=0. Blocking onRead until we have data");
-#endif
-                    return;
+
+                    // Return true to tell runOnce to shouldBreakAndRetryLater, so we don't busy-loop in runOnce even though
+                    // onRead is still waiting!
+                    return true;
                 }
             } else {
                 // Push to toPhoneQueue, protected by toPhoneMutex. Hold the mutex as briefly as possible.
@@ -265,6 +278,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             // Clear the onReadCallbackIsWaitingForData flag so onRead knows it can proceed.
             onReadCallbackIsWaitingForData = false; // only clear this flag AFTER the push
         }
+
+        return false;
     }
 
     bool runOnceHasWorkFromPhone() { return fromPhoneQueueSize > 0; }
