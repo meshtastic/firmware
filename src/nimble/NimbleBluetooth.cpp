@@ -591,15 +591,52 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         constraints, and recommendations. (Android doesn't have specific constraints, but seems to be compatible with the Apple
         recommendations.)
 
-        minInterval (units of 1.25ms): 7.5ms = 6 (lower than the Apple recommended minimum, but allows faster when the client
-        supports it.) maxInterval (units of 1.25ms): 15ms = 12 latency: 0 (don't allow peripheral to skip any connection events)
-        timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
+        Selected settings:
+            minInterval (units of 1.25ms): 7.5ms = 6 (lower than the Apple recommended minimum, but allows faster when the client
+        supports it.)
+            maxInterval (units of 1.25ms): 15ms = 12
+            latency: 0 (don't allow peripheral to skip any connection events)
+            timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
+
+        These are intentionally aggressive to prioritize speed over power consumption, but are only used for a few seconds at
+        setup. Not worth adjusting much.
         */
         LOG_INFO("BLE requestHighThroughputConnection");
 #ifdef NIMBLE_TWO
         bleServer->updateConnParams(connInfo.getConnHandle(), 6, 12, 0, 600);
 #else
         bleServer->updateConnParams(desc->conn_handle, 6, 12, 0, 600);
+#endif
+    }
+
+#ifdef NIMBLE_TWO
+    void requestLowerPowerConnection(NimBLEConnInfo &connInfo)
+#else
+    void requestLowerPowerConnection(ble_gap_conn_desc *desc)
+#endif
+    {
+        /* Request a lower power consumption (but higher latency, lower throughput) BLE connection.
+
+        This is suitable for steady-state operation after initial setup is complete.
+
+        See https://developer.apple.com/library/archive/qa/qa1931/_index.html for formulas to calculate values, iOS/macOS
+        constraints, and recommendations. (Android doesn't have specific constraints, but seems to be compatible with the Apple
+        recommendations.)
+
+        Selected settings:
+            minInterval (units of 1.25ms): 30ms = 24
+            maxInterval (units of 1.25ms): 50ms = 40
+            latency: 2 (allow peripheral to skip up to 2 consecutive connection events to save power)
+            timeout (units of 10ms): 6 seconds = 600 (supervision timeout)
+
+        There's an opportunity for tuning here if anyone wants to do some power measurements, but these should allow 10-20 packets
+        per second.
+        */
+        LOG_INFO("BLE requestLowerPowerConnection");
+#ifdef NIMBLE_TWO
+        bleServer->updateConnParams(connInfo.getConnHandle(), 24, 40, 2, 600);
+#else
+        bleServer->updateConnParams(desc->conn_handle, 24, 40, 2, 600);
 #endif
     }
 };
