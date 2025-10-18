@@ -159,6 +159,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("---- Received Packet:");
             LOG_DEBUG("mp.from          %d", mp.from);
             LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
+            LOG_DEBUG("mp.rx_rssi       %f", mp.rx_rssi);
             LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
             LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
             LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
@@ -234,8 +235,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         }
 
         // Print the CSV header
-        if (fileToWrite.println(
-                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,hop limit,payload")) {
+        if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx rssi,rx "
+                                "snr,distance,hop limit,payload")) {
             LOG_INFO("File was written");
         } else {
             LOG_ERROR("File write failed");
@@ -283,7 +284,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
     }
 
-    fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
+    fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
+    fileToAppend.printf("%f,", mp.rx_snr);  // RX SNR
 
     if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
         float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
