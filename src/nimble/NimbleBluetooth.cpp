@@ -154,7 +154,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
             if (shouldBreakAndRetryLater) {
                 // onRead still wants data, but it's not available yet. Return so we can try again when a packet may be ready.
+#ifdef DEBUG_NIMBLE_ON_READ_TIMING
                 LOG_INFO("BLE runOnce breaking to retry later (leaving onRead waiting)");
+#endif
                 return 100; // try again in 100ms
             }
         }
@@ -246,7 +248,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                     // In other states, this breaks clients.
                     // Return early, leaving onReadCallbackIsWaitingForData==true so onRead knows to try again.
                     // This gives runOnce a chance to handleToRadio and produce a response.
+#ifdef DEBUG_NIMBLE_ON_READ_TIMING
                     LOG_DEBUG("BLE getFromRadio returned numBytes=0. Blocking onRead until we have data");
+#endif
 
                     // Return true to tell runOnce to shouldBreakAndRetryLater, so we don't busy-loop in runOnce even though
                     // onRead is still waiting!
@@ -485,10 +489,10 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
             // Tell the main task that we'd like a packet.
             bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
 
-            // Wait for the main task to produce a packet for us, up to about 10 seconds.
+            // Wait for the main task to produce a packet for us, up to about 20 seconds.
             // It normally takes just a few milliseconds, but at initial startup, etc, the main task can get blocked for longer
             // doing various setup tasks.
-            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 2000) {
+            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 4000) {
                 // Schedule the main task runOnce to run ASAP.
                 bluetoothPhoneAPI->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
@@ -508,7 +512,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
                 delay(tries < 20 ? 1 : 5);
                 tries++;
 
-                if (tries == 2000) {
+                if (tries == 4000) {
                     LOG_WARN(
                         "BLE onRead(%d): timeout waiting for data after %u ms, %d tries, giving up and returning 0-size response",
                         currentReadCount, millis() - startMillis, tries);
