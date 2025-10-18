@@ -1,3 +1,5 @@
+#include "configuration.h"
+#if HAS_SCREEN
 #include "emotes.h"
 
 namespace graphics
@@ -275,3 +277,4 @@ const unsigned char bell_icon[] PROGMEM = {
 #endif
 
 } // namespace graphics
+#endif

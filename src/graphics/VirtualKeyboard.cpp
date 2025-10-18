@@ -1,5 +1,6 @@
-#include "VirtualKeyboard.h"
 #include "configuration.h"
+#if HAS_SCREEN
+#include "VirtualKeyboard.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -734,3 +735,4 @@ bool VirtualKeyboard::isTimedOut() const
 }
 
 } // namespace graphics
+#endif
