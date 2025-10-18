@@ -28,8 +28,9 @@
 #endif
 
 // Debugging options: careful, they slow things down quite a bit!
-#define DEBUG_NIMBLE_ON_READ_TIMING // uncomment to time onRead duration
-#define DEBUG_NIMBLE_NOTIFY         // uncomment to enable notify logging
+// #define DEBUG_NIMBLE_ON_READ_TIMING  // uncomment to time onRead duration
+// #define DEBUG_NIMBLE_ON_WRITE_TIMING // uncomment to time onWrite duration
+// #define DEBUG_NIMBLE_NOTIFY          // uncomment to enable notify logging
 
 #define NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE 3
 #define NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE 3
@@ -73,6 +74,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     /* Statistics/logging helpers */
     std::atomic<int32_t> readCount{0};
     std::atomic<int32_t> notifyCount{0};
+    std::atomic<int32_t> writeCount{0};
 
   protected:
     virtual int32_t runOnce() override
@@ -80,8 +82,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         while (runOnceHasWorkToDo()) {
             // Important that we service onRead first, because the onRead callback blocks NimBLE until we clear
             // onReadCallbackIsWaitingForData.
-            runOnceHandleToPhoneQueue();   // push data to onRead
-            runOnceHandleFromPhoneQueue(); // pull data from onWrite
+            runOnceHandleToPhoneQueue();   // push data from getFromRadio to onRead
+            runOnceHandleFromPhoneQueue(); // pull data from onWrite to handleToRadio
         }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
@@ -128,8 +130,24 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
             if (numBytes == 0) {
                 // Client expected a read, but we have nothing to send.
-                // This is 100% OK, as we expect clients to do this regularly to make sure they have nothing else to read.
-                // LOG_INFO("BLE getFromRadio returned numBytes=0");
+                // Returning a 0-byte packet breaks clients during the config phase, so we have to block onRead until there's a
+                // packet ready.
+                if (isSendingPackets()) {
+                    // In STATE_SEND_PACKETS, it is 100% OK to return a 0-byte response, as we expect clients to do read beyond
+                    // notifies regularly, to make sure they have nothing else to read.
+#ifdef DEBUG_NIMBLE_ON_READ_TIMING
+                    LOG_DEBUG("BLE getFromRadio returned numBytes=0, but in STATE_SEND_PACKETS, so clearing "
+                              "onReadCallbackIsWaitingForData flag");
+#endif
+                } else {
+                    // In other states, this breaks clients.
+                    // Return early, leaving onReadCallbackIsWaitingForData==true so onRead knows to try again.
+                    // This gives runOnce a chance to handleToRadio and produce a response.
+#ifdef DEBUG_NIMBLE_ON_READ_TIMING
+                    LOG_DEBUG("BLE getFromRadio returned numBytes=0. Blocking onRead until we have data");
+#endif
+                    return;
+                }
             } else {
                 // Push to toPhoneQueue, protected by toPhoneMutex. Hold the mutex as briefly as possible.
                 if (toPhoneQueueSize < NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE) {
@@ -143,7 +161,10 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                         toPhoneQueueByteSizes[storeAtIndex] = numBytes;
                         toPhoneQueueSize++;
                     }
-                    // LOG_DEBUG("BLE pushed toPhoneQueueSize=%u", toPhoneQueueSize.load());
+#ifdef DEBUG_NIMBLE_ON_READ_TIMING
+                    LOG_DEBUG("BLE getFromRadio returned numBytes=%u, pushed toPhoneQueueSize=%u", numBytes,
+                              toPhoneQueueSize.load());
+#endif
                 } else {
                     // Shouldn't happen because the onRead callback shouldn't be waiting if the queue is full!
                     LOG_ERROR("Shouldn't happen! Drop FromRadio packet, toPhoneQueue full (%u bytes)", numBytes);
@@ -237,6 +258,13 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
         // Assumption: onWrite is serialized by NimBLE, so we don't need to lock here against multiple concurrent onWrite calls.
 
+        int currentWriteCount = bluetoothPhoneAPI->writeCount.fetch_add(1);
+
+#ifdef DEBUG_NIMBLE_ON_WRITE_TIMING
+        int startMillis = millis();
+        LOG_DEBUG("BLE onWrite(%d): start millis=%d", currentWriteCount, startMillis);
+#endif
+
         auto val = pCharacteristic->getValue();
 
         if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
@@ -255,11 +283,17 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
                 // After releasing the mutex, schedule immediate processing of the new packet.
                 bluetoothPhoneAPI->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
+
+#ifdef DEBUG_NIMBLE_ON_WRITE_TIMING
+                int finishMillis = millis();
+                LOG_DEBUG("BLE onWrite(%d): append to fromPhoneQueue took %u ms. numBytes=%d", currentWriteCount,
+                          finishMillis - startMillis, val.length());
+#endif
             } else {
-                LOG_WARN("Drop ToRadio packet, fromPhoneQueue full (%u bytes)", val.length());
+                LOG_WARN("BLE onWrite(%d): Drop ToRadio packet, fromPhoneQueue full (%u bytes)", currentWriteCount, val.length());
             }
         } else {
-            LOG_DEBUG("Drop duplicate ToRadio packet (%u bytes)", val.length());
+            LOG_DEBUG("BLE onWrite(%d): Drop duplicate ToRadio packet (%u bytes)", currentWriteCount, val.length());
         }
     }
 };
@@ -276,10 +310,10 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
         int currentReadCount = bluetoothPhoneAPI->readCount.fetch_add(1);
         int tries = 0;
+        int startMillis = millis();
 
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
-        int startMillis = millis();
-        // LOG_DEBUG("BLE onRead(%d): start millis=%d", currentReadCount, startMillis);
+        LOG_DEBUG("BLE onRead(%d): start millis=%d", currentReadCount, startMillis);
 #endif
 
         // Is there a packet ready to go, or do we have to ask the main task to get one for us?
@@ -295,7 +329,10 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
             // Tell the main task that we'd like a packet.
             bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
 
-            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 400) {
+            // Wait for the main task to produce a packet for us, up to about 10 seconds.
+            // It normally takes just a few milliseconds, but at initial startup, etc, the main task can get blocked for longer
+            // doing various setup tasks.
+            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 2000) {
                 // Schedule the main task runOnce to run ASAP.
                 bluetoothPhoneAPI->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
@@ -310,8 +347,16 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
                     break;
                 }
 
-                delay(tries < 10 ? 2 : 5);
+                // This delay happens in the NimBLE FreeRTOS task, which really can't do anything until we get a value back.
+                // No harm in polling pretty frequently.
+                delay(tries < 20 ? 1 : 5);
                 tries++;
+
+                if (tries == 2000) {
+                    LOG_WARN(
+                        "BLE onRead(%d): timeout waiting for data after %u ms, %d tries, giving up and returning 0-size response",
+                        currentReadCount, millis() - startMillis, tries);
+                }
             }
         }
 
@@ -351,18 +396,14 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
         int finishMillis = millis();
-        LOG_DEBUG("BLE onRead(%d): onReadCallbackIsWaitingForData took %u ms. numBytes=%d", currentReadCount,
-                  finishMillis - startMillis, numBytes);
+        LOG_DEBUG("BLE onRead(%d): onReadCallbackIsWaitingForData took %u ms, %d tries. numBytes=%d", currentReadCount,
+                  finishMillis - startMillis, tries, numBytes);
 #endif
 
         pCharacteristic->setValue(fromRadioBytes, numBytes);
 
-        bool sentSomething = false;
-        if (numBytes != 0)
-            sentSomething = true;
-
-        // If we did send something, wake up the main loop if it's sleeping in case there are more packets ready to send.
-        if (sentSomething) {
+        // If we sent something, wake up the main loop if it's sleeping in case there are more packets ready to enqueue.
+        if (numBytes != 0) {
             bluetoothPhoneAPI->setIntervalFromNow(0);
             concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
         }
@@ -515,6 +556,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
             bluetoothPhoneAPI->readCount = 0;
             bluetoothPhoneAPI->notifyCount = 0;
+            bluetoothPhoneAPI->writeCount = 0;
         }
 
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
