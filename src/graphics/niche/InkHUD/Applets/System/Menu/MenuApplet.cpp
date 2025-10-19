@@ -709,7 +709,7 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     // Voltage
     float voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
     char voltageStr[6]; // "XX.XV"
-    sprintf(voltageStr, "%.1fV", voltage);
+    sprintf(voltageStr, "%.2fV", voltage);
     printAt(colC[0], labelT, "Bat", CENTER, TOP);
     printAt(colC[0], valT, voltageStr, CENTER, TOP);
 
