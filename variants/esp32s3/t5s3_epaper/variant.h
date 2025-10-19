@@ -55,8 +55,9 @@
 #define GPS_TX_PIN 43
 #endif
 
-#define BUTTON_PIN 48
-#define BUTTON_PIN_SECONDARY 0
+#define BUTTON_PIN 0
+#define PIN_BUTTON2 48
+#define ALT_BUTTON_PIN PIN_BUTTON2
 
 // SD card
 #define HAS_SDCARD
