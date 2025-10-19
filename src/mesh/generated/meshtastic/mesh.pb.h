@@ -282,6 +282,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2 = 113,
     /* LilyGo T-Watch Ultra */
     meshtastic_HardwareModel_T_WATCH_ULTRA = 114,
+    /* Elecrow ThinkNode M3 */
+    meshtastic_HardwareModel_THINKNODE_M3 = 115,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

@@ -57,6 +57,9 @@ void PhoneAPI::handleStartConfig()
 #endif
     }
 
+    // Allow subclasses to prepare for high-throughput config traffic
+    onConfigStart();
+
     // even if we were already connected - restart our state machine
     if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
         // If client only wants node info, jump directly to sending nodes
@@ -71,7 +74,7 @@ void PhoneAPI::handleStartConfig()
     spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
-    LOG_INFO("Start API client config");
+    LOG_INFO("Start API client config millis=%u", millis());
     // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
@@ -453,7 +456,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_OTHER_NODEINFOS: {
-        LOG_DEBUG("Send known nodes");
+        if (readIndex == 2) { //  readIndex==2 will be true for the first non-us node
+            LOG_INFO("Start sending nodeinfos millis=%u", millis());
+        }
+
         meshtastic_NodeInfo infoToSend = {};
         {
             concurrency::LockGuard guard(&nodeInfoMutex);
@@ -470,13 +476,22 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (infoToSend.num != 0) {
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
-            LOG_DEBUG("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", infoToSend.num, infoToSend.last_heard,
-                      infoToSend.user.id, infoToSend.user.long_name);
+
+            // Logging this really slows down sending nodes on initial connection because the serial console is so slow, so only
+            // uncomment if you really need to:
+            // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
+            // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
+
+            // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
+            if (readIndex == 2 || readIndex % 20 == 0) {
+                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
+            }
+
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = infoToSend;
             prefetchNodeInfos();
         } else {
-            LOG_DEBUG("Done sending nodeinfo");
+            LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
             concurrency::LockGuard guard(&nodeInfoMutex);
             nodeInfoQueue.clear();
             state = STATE_SEND_FILEMANIFEST;
@@ -558,11 +573,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
 void PhoneAPI::sendConfigComplete()
 {
-    LOG_INFO("Config Send Complete");
+    LOG_INFO("Config Send Complete millis=%u", millis());
     fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
     fromRadioScratch.config_complete_id = config_nonce;
     config_nonce = 0;
     state = STATE_SEND_PACKETS;
+
+    // Allow subclasses to know we've entered steady-state so they can lower power consumption
+    onConfigComplete();
+
     pauseBluetoothLogging = false;
 }
 
