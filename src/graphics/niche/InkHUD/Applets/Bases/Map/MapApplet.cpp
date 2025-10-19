@@ -111,7 +111,7 @@ void InkHUD::MapApplet::onRender()
     printAt(vertBarX + (topLabelW / 2) + 1, topLabelY + (topLabelH / 2), vertTopLabel, CENTER, MIDDLE);
 
     char vertBottomLabel[32];
-    formatDistance(horizMeters, vertBottomLabel, sizeof(vertBottomLabel));
+    formatDistance(vertMeters, vertBottomLabel, sizeof(vertBottomLabel));
     int16_t bottomLabelY = vertBarBottom + 4;
     int16_t bottomLabelW = getTextWidth(vertBottomLabel);
     int16_t bottomLabelH = getFont().lineHeight();
