@@ -12,9 +12,9 @@ static const uint8_t SCL = 40;
 
 // Default SPI will be mapped to Radio
 static const uint8_t SS = 46;
-static const uint8_t MOSI = 17;
-static const uint8_t MISO = 8;
-static const uint8_t SCK = 18;
+static const uint8_t MOSI = 13;
+static const uint8_t MISO = 21;
+static const uint8_t SCK = 14;
 
 #define SPI_MOSI (13)
 #define SPI_SCK (14)

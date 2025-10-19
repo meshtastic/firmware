@@ -394,6 +394,17 @@ void setup()
     io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
     io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+#elif defined(T5_S3_EPAPER_PRO)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(BOARD_BL_EN, OUTPUT);
+    io.begin(Wire, PCA9535_ADDR, SDA, SCL);
+    io.configPort(ExtensionIOXL9555::PORT0, 0x00);
+    io.configPort(ExtensionIOXL9555::PORT1, 0xFF);
+    io.digitalWrite(PCA9535_IO00_LORA_EN, HIGH);
+    delay(100);
 #endif
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
