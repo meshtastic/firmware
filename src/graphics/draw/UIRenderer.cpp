@@ -1008,9 +1008,12 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     bool usePhoneGPS = (ourNode && nodeDB->hasValidPosition(ourNode) &&
                         config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED);
 
-    if (usePhoneGPS) {
-        // Phone-provided GPS is active
-        displayLine = "Phone GPS";
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        if (config.position.fixed_position) {
+            displayLine = "Fixed GPS";
+        } else {
+            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        }
         int yOffset = (isHighResolution) ? 3 : 1;
         if (isHighResolution) {
             NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
@@ -1021,13 +1024,9 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
         int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
-    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // GPS disabled / not present
-        if (config.position.fixed_position) {
-            displayLine = "Fixed GPS";
-        } else {
-            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        }
+    } else if (usePhoneGPS) {
+        // Phone-provided GPS is active
+        displayLine = "Phone GPS";
         int yOffset = (isHighResolution) ? 3 : 1;
         if (isHighResolution) {
             NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
