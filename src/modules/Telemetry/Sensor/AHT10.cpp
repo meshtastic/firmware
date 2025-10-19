@@ -15,19 +15,15 @@
 
 AHT10Sensor::AHT10Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_AHT10, "AHT10") {}
 
-int32_t AHT10Sensor::runOnce()
+bool AHT10Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
     aht10 = Adafruit_AHTX0();
-    status = aht10.begin(nodeTelemetrySensorsMap[sensorType].second, 0, nodeTelemetrySensorsMap[sensorType].first);
+    status = aht10.begin(bus, 0, dev->address.address);
 
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void AHT10Sensor::setup() {}
 
 bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
@@ -36,11 +32,16 @@ bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
     sensors_event_t humidity, temp;
     aht10.getEvent(&humidity, &temp);
 
-    measurement->variant.environment_metrics.has_temperature = true;
-    measurement->variant.environment_metrics.has_relative_humidity = true;
+    // prefer other sensors like bmp280, bmp3xx
+    if (!measurement->variant.environment_metrics.has_temperature) {
+        measurement->variant.environment_metrics.has_temperature = true;
+        measurement->variant.environment_metrics.temperature = temp.temperature;
+    }
 
-    measurement->variant.environment_metrics.temperature = temp.temperature;
-    measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;
+    if (!measurement->variant.environment_metrics.has_relative_humidity) {
+        measurement->variant.environment_metrics.has_relative_humidity = true;
+        measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;
+    }
 
     return true;
 }

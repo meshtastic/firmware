@@ -11,22 +11,21 @@
 
 VEML7700Sensor::VEML7700Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_VEML7700, "VEML7700") {}
 
-int32_t VEML7700Sensor::runOnce()
+bool VEML7700Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    status = veml7700.begin(bus);
+    if (!status) {
+        return status;
     }
-    status = veml7700.begin(nodeTelemetrySensorsMap[sensorType].second);
 
     veml7700.setLowThreshold(10000);
     veml7700.setHighThreshold(20000);
     veml7700.interruptEnable(true);
 
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void VEML7700Sensor::setup() {}
 
 /*!
  *    @brief Copmute lux from ALS reading.

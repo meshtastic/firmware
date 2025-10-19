@@ -109,6 +109,35 @@ RTCSetResult readFromRTC()
         }
         return RTCSetResultSuccess;
     }
+#elif defined(RX8130CE_RTC)
+    if (rtc_found.address == RX8130CE_RTC) {
+        uint32_t now = millis();
+        ArtronShop_RX8130CE rtc(&Wire);
+        tm t;
+        if (rtc.getTime(&t)) {
+            tv.tv_sec = gm_mktime(&t);
+            tv.tv_usec = 0;
+
+            uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+            LOG_DEBUG("Read RTC time from RX8130CE getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900,
+                      t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+#ifdef BUILD_EPOCH
+            if (tv.tv_sec < BUILD_EPOCH) {
+                if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                    lastTimeValidationWarning = millis();
+                }
+                return RTCSetResultInvalidTime;
+            }
+#endif
+            if (currentQuality == RTCQualityNone) {
+                timeStartMsec = now;
+                zeroOffsetSecs = tv.tv_sec;
+                currentQuality = RTCQualityDevice;
+            }
+            return RTCSetResultSuccess;
+        }
+    }
 #else
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
@@ -213,6 +242,17 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+        }
+#elif defined(RX8130CE_RTC)
+        if (rtc_found.address == RX8130CE_RTC) {
+            ArtronShop_RX8130CE rtc(&Wire);
+            tm *t = gmtime(&tv->tv_sec);
+            if (rtc.setTime(*t)) {
+                LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
+                          t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            } else {
+                LOG_WARN("Failed to set time for RX8130CE");
+            }
         }
 #elif defined(ARCH_ESP32)
         settimeofday(tv, NULL);

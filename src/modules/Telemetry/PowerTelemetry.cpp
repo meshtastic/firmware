@@ -108,6 +108,7 @@ bool PowerTelemetryModule::wantUIFrame()
     return moduleConfig.telemetry.power_screen_enabled;
 }
 
+#if HAS_SCREEN
 void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
@@ -165,6 +166,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
         drawLine("Ch3", m.ch3_voltage, m.ch3_current);
     }
 }
+#endif
 
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
