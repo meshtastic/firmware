@@ -16,16 +16,18 @@
 
 #ifdef NIMBLE_TWO
 #include "NimBLEAdvertising.h"
+#ifdef CONFIG_BT_NIMBLE_EXT_ADV
 #include "NimBLEExtAdvertising.h"
+#endif // CONFIG_BT_NIMBLE_EXT_ADV
 #include "PowerStatus.h"
-#endif
+#endif // NIMBLE_TWO
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 #if defined(CONFIG_NIMBLE_CPP_IDF)
 #include "host/ble_gap.h"
 #else
 #include "nimble/nimble/host/include/host/ble_gap.h"
-#endif
+#endif // defined(CONFIG_NIMBLE_CPP_IDF)
 
 namespace
 {
@@ -33,7 +35,7 @@ constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 } // namespace
-#endif
+#endif // defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 
 // Debugging options: careful, they slow things down quite a bit!
 // #define DEBUG_NIMBLE_ON_READ_TIMING  // uncomment to time onRead duration
@@ -669,7 +671,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         LOG_INFO("BLE conn %u initial MTU %u (target %u)", connHandle, connInfo.getMTU(), kPreferredBleMtu);
         pServer->updateConnParams(connHandle, 6, 12, 0, 200);
-#endif
+#endif // defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     }
 
     virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
@@ -679,7 +681,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
     {
         LOG_INFO("BLE disconnect");
-#endif
+#endif // NIMBLE_TWO
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
             return;
@@ -779,11 +781,25 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
+#ifdef CONFIG_BT_NIMBLE_ROLE_CENTRAL_DISABLED
+        if (handle == BLE_HS_CONN_HANDLE_NONE) {
+            return 0;
+        }
+
+        int8_t rssi = 0;
+        int rc = ble_gap_conn_rssi(handle, &rssi);
+        if (rc != 0) {
+            return 0;
+        }
+
+        return rssi;
+#else
 #ifdef NIMBLE_TWO
         return NimBLEDevice::getClientByHandle(handle)->getRssi();
 #else
         return NimBLEDevice::getClientByID(handle)->getRssi();
-#endif
+#endif // NIMBLE_TWO
+#endif // CONFIG_BT_NIMBLE_ROLE_CENTRAL_DISABLED
     }
     return 0; // FIXME figure out where to source this
 }
@@ -796,7 +812,11 @@ void NimbleBluetooth::setup()
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
+#ifdef NIMBLE_TWO
+    NimBLEDevice::setPower(9);
+#else
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+#endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     int mtuResult = NimBLEDevice::setMTU(kPreferredBleMtu);
@@ -849,7 +869,8 @@ void NimbleBluetooth::setupService()
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         // Allow notifications so phones can stream FromRadio without polling.
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
-        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+        fromNumCharacteristic =
+            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 4);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
@@ -857,9 +878,9 @@ void NimbleBluetooth::setupService()
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
         FromRadioCharacteristic = bleService->createCharacteristic(
             FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        fromNumCharacteristic =
-            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
-                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromNumCharacteristic = bleService->createCharacteristic(
+            FROMNUM_UUID,
+            NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 4);
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
             NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
@@ -892,7 +913,7 @@ void NimbleBluetooth::setupService()
 
 void NimbleBluetooth::startAdvertising()
 {
-#ifdef NIMBLE_TWO
+#if defined(NIMBLE_TWO) && defined(CONFIG_BT_NIMBLE_EXT_ADV)
     NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     NimBLEExtAdvertisement legacyAdvertising;
 
@@ -924,8 +945,17 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
-    pAdvertising->start(0);
-#endif
+#if defined(NIMBLE_TWO)
+    NimBLEAdvertisementData scan;
+    scan.setName(getDeviceName());
+    pAdvertising->setScanResponseData(scan);
+    pAdvertising->enableScanResponse(true);
+#endif // NIMBLE_TWO
+    if (!pAdvertising->start(0)) {
+        LOG_ERROR("BLE failed to start advertising");
+    };
+#endif // defined(NIMBLE_TWO) && defined(CONFIG_BT_NIMBLE_EXT_ADV)
+    LOG_DEBUG("BLE Advertising started");
 }
 
 /// Given a level between 0-100, update the BLE attribute
@@ -966,4 +996,4 @@ void clearNVS()
     ESP.restart();
 #endif
 }
-#endif
+#endif // !MESHTASTIC_EXCLUDE_BLUETOOTH
