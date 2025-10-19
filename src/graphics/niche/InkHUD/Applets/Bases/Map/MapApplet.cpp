@@ -24,13 +24,13 @@ void InkHUD::MapApplet::onRender()
         int16_t x = X(0.5) + (m.eastMeters * metersToPx);
         int16_t y = Y(0.5) - (m.northMeters * metersToPx);
 
-        // --- Add white halo outline first ---
-        constexpr int outlinePad = 2; // size of white outline padding
+        // Add white halo outline first
+        constexpr int outlinePad = 1; // size of white outline padding
         int boxSize = (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) || !m.hasHopsAway ? 12 : 10;
         fillRect(x - (boxSize / 2) - outlinePad, y - (boxSize / 2) - outlinePad,
                 boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), WHITE);
 
-        // --- Draw actual marker on top ---
+        // Draw actual marker on top
         if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) {
             fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
             setFont(fontSmall); setTextColor(WHITE);
@@ -72,7 +72,7 @@ void InkHUD::MapApplet::onRender()
         }
     };
 
-    // === Horizontal scale bar ===
+    // Horizontal scale bar
     int16_t horizBarY = height() - 2;
     int16_t horizBarX = 1;
     drawLine(horizBarX, horizBarY, horizBarX + horizPx, horizBarY, BLACK);
@@ -88,7 +88,7 @@ void InkHUD::MapApplet::onRender()
     fillRect(horizLabelX - 2, horizLabelY - 1, horizLabelW + 4, horizLabelH + 2, WHITE);
     printAt(horizLabelX, horizBarY, horizLabel, LEFT, BOTTOM);
 
-    // === Vertical scale bar ===
+    // Vertical scale bar
     int16_t vertBarX = 1;
     int16_t vertBarBottom = horizBarY;
     int16_t vertBarTop = vertBarBottom - vertPx;
@@ -112,7 +112,7 @@ void InkHUD::MapApplet::onRender()
     fillRect(vertBarX - 2, bottomLabelY - 1, bottomLabelW + 6, bottomLabelH + 2, WHITE);
     printAt(vertBarX + (bottomLabelW / 2) + 1, bottomLabelY + (bottomLabelH / 2), vertBottomLabel, CENTER, MIDDLE);
 
-    // --- Draw our node LAST with full white fill + outline ---
+    // Draw our node LAST with full white fill + outline
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && nodeDB->hasValidPosition(ourNode)) {
         Marker self = calculateMarker(
@@ -125,15 +125,15 @@ void InkHUD::MapApplet::onRender()
         int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
         int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
 
-        // --- White fill background + halo ---
+        // White fill background + halo
         fillCircle(centerX, centerY, 8, WHITE); // big white base
         drawCircle(centerX, centerY, 8, WHITE); // crisp edge
 
-        // --- Black bullseye on top ---
+        // Black bullseye on top
         drawCircle(centerX, centerY, 6, BLACK);
         fillCircle(centerX, centerY, 2, BLACK);
 
-        // --- Crosshairs ---
+        // Crosshairs
         drawLine(centerX - 8, centerY, centerX + 8, centerY, BLACK);
         drawLine(centerX, centerY - 8, centerX, centerY + 8, BLACK);
     }
