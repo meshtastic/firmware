@@ -27,48 +27,54 @@ void InkHUD::MapApplet::onRender()
         // Add white halo outline first
         constexpr int outlinePad = 1; // size of white outline padding
         int boxSize = (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) || !m.hasHopsAway ? 12 : 10;
-        fillRect(x - (boxSize / 2) - outlinePad, y - (boxSize / 2) - outlinePad,
-                boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), WHITE);
+        fillRect(x - (boxSize / 2) - outlinePad, y - (boxSize / 2) - outlinePad, boxSize + (outlinePad * 2),
+                 boxSize + (outlinePad * 2), WHITE);
 
         // Draw actual marker on top
         if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) {
             fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
-            setFont(fontSmall); setTextColor(WHITE);
+            setFont(fontSmall);
+            setTextColor(WHITE);
             printAt(x, y, "X", CENTER, MIDDLE);
-        }
-        else if (!m.hasHopsAway) {
+        } else if (!m.hasHopsAway) {
             fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
-            setFont(fontSmall); setTextColor(WHITE);
+            setFont(fontSmall);
+            setTextColor(WHITE);
             printAt(x, y, "?", CENTER, MIDDLE);
-        }
-        else {
+        } else {
             fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
-            char hopStr[4]; snprintf(hopStr, sizeof(hopStr), "%d", m.hopsAway);
-            setFont(fontSmall); setTextColor(WHITE);
+            char hopStr[4];
+            snprintf(hopStr, sizeof(hopStr), "%d", m.hopsAway);
+            setFont(fontSmall);
+            setTextColor(WHITE);
             printAt(x, y, hopStr, CENTER, MIDDLE);
         }
 
         // Restore default font and color (safety for rest of UI)
-        setFont(fontSmall); setTextColor(BLACK);
+        setFont(fontSmall);
+        setTextColor(BLACK);
     }
 
     // Dual map scale bars
     int16_t horizPx = width() * 0.25f;
-    int16_t vertPx  = height() * 0.25f;
+    int16_t vertPx = height() * 0.25f;
     float horizMeters = horizPx / metersToPx;
-    float vertMeters  = vertPx / metersToPx;
+    float vertMeters = vertPx / metersToPx;
 
     auto formatDistance = [&](float meters, char *out, size_t len) {
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             float feet = meters * 3.28084f;
-            if (feet < 528) snprintf(out, len, "%.0f ft", feet);
+            if (feet < 528)
+                snprintf(out, len, "%.0f ft", feet);
             else {
                 float miles = feet / 5280.0f;
                 snprintf(out, len, miles < 10 ? "%.1f mi" : "%.0f mi", miles);
             }
         } else {
-            if (meters >= 1000) snprintf(out, len, "%.1f km", meters / 1000.0f);
-            else snprintf(out, len, "%.0f m", meters);
+            if (meters >= 1000)
+                snprintf(out, len, "%.1f km", meters / 1000.0f);
+            else
+                snprintf(out, len, "%.0f m", meters);
         }
     };
 
@@ -115,12 +121,7 @@ void InkHUD::MapApplet::onRender()
     // Draw our node LAST with full white fill + outline
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && nodeDB->hasValidPosition(ourNode)) {
-        Marker self = calculateMarker(
-            ourNode->position.latitude_i * 1e-7,
-            ourNode->position.longitude_i * 1e-7,
-            false,
-            0
-        );
+        Marker self = calculateMarker(ourNode->position.latitude_i * 1e-7, ourNode->position.longitude_i * 1e-7, false, 0);
 
         int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
         int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
@@ -160,7 +161,8 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         // - uses tan to find angles for lat / long degrees
         //   - longitude: triangle formed by x and y (on plane of the equator)
         //   - latitude: triangle formed by z (north south),
-        //     and the line along plane of equator which stretches from earth's axis to where point xyz intersects planet's surface
+        //     and the line along plane of equator which stretches from earth's axis to where point xyz intersects planet's
+        //     surface
 
         // Working totals, averaged after nodeDB processed
         uint32_t positionCount = 0;
@@ -422,13 +424,13 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     // Prevent overlap with scale bars and their labels
     // Define a "safe zone" in the bottom-left where the scale bars and text are drawn
     constexpr int16_t safeZoneHeight = 28; // adjust based on your label font height
-    constexpr int16_t safeZoneWidth  = 60; // adjust based on horizontal label width zone
+    constexpr int16_t safeZoneWidth = 60;  // adjust based on horizontal label width zone
     bool overlapsScale = (labelY + labelH > height() - safeZoneHeight) && (labelX < safeZoneWidth);
 
     // If it overlaps, shift label upward slightly above the safe zone
     if (overlapsScale) {
         labelY = height() - safeZoneHeight - labelH - 2;
-        textY  = labelY + (labelH / 2);
+        textY = labelY + (labelH / 2);
     }
 
     // Backing box
