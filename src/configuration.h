@@ -126,6 +126,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
 #endif
 
+#ifdef RAK13302
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef TX_GAIN_LORA
 #define TX_GAIN_LORA 0
