@@ -26,7 +26,12 @@ void InkHUD::MapApplet::onRender()
 
         // Add white halo outline first
         constexpr int outlinePad = 1; // size of white outline padding
-        int boxSize = (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) || !m.hasHopsAway ? 12 : 10;
+        int boxSize;
+        if ((m.hasHopsAway && m.hopsAway > config.lora.hop_limit) || !m.hasHopsAway) {
+            boxSize = 12;
+        } else {
+            boxSize = 10;
+        }
         fillRect(x - (boxSize / 2) - outlinePad, y - (boxSize / 2) - outlinePad, boxSize + (outlinePad * 2),
                  boxSize + (outlinePad * 2), WHITE);
 
