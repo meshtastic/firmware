@@ -563,6 +563,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
 #if defined(M5STACK_UNITC6L)
@@ -609,10 +610,15 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     config.display.heading_bold = false;
 
 #if HAS_GPS
+    bool usePhoneGPS = (ourNode && nodeDB->hasValidPosition(ourNode) &&
+                        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED);
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         const char *displayLine;
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
+        } else if (usePhoneGPS) {
+            // Phone-provided GPS is active
+            displayLine = "Phone GPS";
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
@@ -740,7 +746,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int yOffset = (isHighResolution) ? 0 : 5;
     std::string longNameStr;
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         longNameStr = sanitizeString(ourNode->user.long_name);
     }
