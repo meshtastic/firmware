@@ -1,7 +1,6 @@
 
 // Display (E-Ink) ED047TC1
 #define USE_EPD
-#define BOARD_BL_EN 11
 #define EP_I2C_PORT I2C_NUM_0
 #define EP_SCL (40)
 #define EP_SDA (39)
@@ -23,14 +22,25 @@
 #define EPD_WIDTH 960
 #define EPD_HEIGHT 540
 
+#if defined(T5_S3_EPAPER_PRO_V1)
+#define BOARD_BL_EN 40
+#else
+#define BOARD_BL_EN 11
+#endif
+
 #define I2C_SDA SDA
 #define I2C_SCL SCL
 
 #define HAS_TOUCHSCREEN 1
-#define GT911_PIN_SDA 39
-#define GT911_PIN_SCL 40
+#define GT911_PIN_SDA SDA
+#define GT911_PIN_SCL SCL
+#if defined(T5_S3_EPAPER_PRO_V1)
+#define GT911_PIN_INT 15
+#define GT911_PIN_RST 41
+#else
 #define GT911_PIN_INT 3
 #define GT911_PIN_RST 9
+#endif
 
 #define PCF85063_RTC 0x51
 #define HAS_RTC 1
@@ -40,15 +50,16 @@
 #define SLEEP_TIME 120
 
 // GPS
+#if !defined(T5_S3_EPAPER_PRO_V1)
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
+#endif
 
 #define BUTTON_PIN 48
 #define BUTTON_PIN_SECONDARY 0
 
 // SD card
 #define HAS_SDCARD
-#define SDCARD_USE_SPI1
 #define SDCARD_CS SPI_CS
 #define SD_SPI_FREQUENCY 75000000U
 
@@ -62,6 +73,7 @@
 #define BQ27220_I2C_SCL SCL
 #define BQ27220_DESIGN_CAPACITY 1500
 
+#if !defined(T5_S3_EPAPER_PRO_V1)
 // TPS651851
 
 // PCA9535 IO extender
@@ -77,21 +89,29 @@
 #define PCA9535_IO15_TPS_WAKEUP 15
 #define PCA9535_IO16_TPS_PWR_GOOD 16
 #define PCA9535_IO17_TPS_INT 17
+#endif
 
 // LoRa
 #define USE_SX1262
 #define USE_SX1268
 
-#define LORA_SCK 14  // 18
-#define LORA_MISO 21 // 8
-#define LORA_MOSI 13 // 17
+#define LORA_SCK SCK
+#define LORA_MISO MISO
+#define LORA_MOSI MOSI
 #define LORA_CS 46
 
 #define LORA_DIO0 -1
+#if defined(T5_S3_EPAPER_PRO_V1)
+#define LORA_RESET 43
+#define LORA_DIO1 3  // SX1262 IRQ
+#define LORA_DIO2 44 // SX1262 BUSY
+#define LORA_DIO3
+#else
 #define LORA_RESET 1
 #define LORA_DIO1 10 // SX1262 IRQ
 #define LORA_DIO2 47 // SX1262 BUSY
 #define LORA_DIO3
+#endif
 
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
@@ -99,41 +119,3 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 2.4
-
-/* V1
-
-#define BOARD_SCL         (5)
-#define BOARD_SDA         (6)
-
-#define BOARD_SPI_MISO    (8)
-#define BOARD_SPI_MOSI    (17)
-#define BOARD_SPI_SCLK    (18)
-
-#define BOARD_SD_MISO    (BOARD_SPI_MISO)
-#define BOARD_SD_MOSI    (BOARD_SPI_MOSI)
-#define BOARD_SD_SCLK    (BOARD_SPI_SCLK)
-#define BOARD_SD_CS      (16)
-
-#define BOARD_LORA_MISO   (BOARD_SPI_MISO)
-#define BOARD_LORA_MOSI   (BOARD_SPI_MOSI)
-#define BOARD_LORA_SCLK   (BOARD_SPI_SCLK)
-#define BOARD_LORA_CS     (46)
-#define BOARD_LORA_IRQ    (3)
-#define BOARD_LORA_RST    (43)
-#define BOARD_LORA_BUSY   (44)
-
-#define BOARD_TOUCH_SCL   (BOARD_SCL)
-#define BOARD_TOUCH_SDA   (BOARD_SDA)
-#define BOARD_TOUCH_INT   (15)
-#define BOARD_TOUCH_RST   (41)
-
-#define BOARD_RTC_INT     7
-#define BOARD_RT_SCL      (BOARD_SCL)
-#define BOARD_RT_SDA      (BOARD_SDA)
-
-#define BOARD_BL_EN       (40)
-#define BOARD_BATT_PIN    (4)
-#define BOARD_BOOT_BTN    (0)
-#define BOARD_KEY_BTN     (48)
-
-*/

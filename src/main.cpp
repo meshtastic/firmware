@@ -400,11 +400,13 @@ void setup()
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(BOARD_BL_EN, OUTPUT);
+#if !defined(T5_S3_EPAPER_PRO_V1)
     io.begin(Wire, PCA9535_ADDR, SDA, SCL);
     io.configPort(ExtensionIOXL9555::PORT0, 0x00);
     io.configPort(ExtensionIOXL9555::PORT1, 0xFF);
     io.digitalWrite(PCA9535_IO00_LORA_EN, HIGH);
     delay(100);
+#endif
 #endif
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
