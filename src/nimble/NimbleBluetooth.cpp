@@ -49,7 +49,7 @@ NimBLECharacteristic *logRadioCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
-static std::atomic<int32_t> nimbleBluetoothConnHandle{-1}; // actual handles are uint16_t, so -1 means "no connection"
+static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
@@ -178,9 +178,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
         if (bleServer && isConnected()) {
-            int32_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != -1) {
-                requestHighThroughputConnection(static_cast<uint16_t>(conn_handle));
+            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+                requestHighThroughputConnection(conn_handle);
             }
         }
     }
@@ -191,9 +191,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
         if (bleServer && isConnected()) {
-            int32_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != -1) {
-                requestLowerPowerConnection(static_cast<uint16_t>(conn_handle));
+            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+                requestLowerPowerConnection(conn_handle);
             }
         }
     }
@@ -710,7 +710,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
         memset(lastToRadio, 0, sizeof(lastToRadio));
 
-        nimbleBluetoothConnHandle = -1; // -1 means "no connection"
+        nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 #ifdef NIMBLE_TWO
         // Restart Advertising
