@@ -13,6 +13,23 @@ void InkHUD::MapApplet::onRender()
         return;
     }
 
+    // Helper: draw rounded rectangle centered at x,y
+    auto fillRoundedRect = [&](int16_t cx, int16_t cy, int16_t w, int16_t h, int16_t r, uint16_t color) {
+        int16_t x = cx - (w / 2);
+        int16_t y = cy - (h / 2);
+
+        // center rects
+        fillRect(x + r, y, w - 2 * r, h, color);
+        fillRect(x, y + r, r, h - 2 * r, color);
+        fillRect(x + w - r, y + r, r, h - 2 * r, color);
+
+        // corners
+        fillCircle(x + r, y + r, r, color);
+        fillCircle(x + w - r - 1, y + r, r, color);
+        fillCircle(x + r, y + h - r - 1, r, color);
+        fillCircle(x + w - r - 1, y + h - r - 1, r, color);
+    };
+
     // Find center of map
     getMapCenter(&latCenter, &lngCenter);
     calculateAllMarkers();
@@ -25,37 +42,32 @@ void InkHUD::MapApplet::onRender()
         int16_t y = Y(0.5) - (m.northMeters * metersToPx);
 
         // Add white halo outline first
-        constexpr int outlinePad = 1; // size of white outline padding
-        int boxSize;
-        if ((m.hasHopsAway && m.hopsAway > config.lora.hop_limit) || !m.hasHopsAway) {
-            boxSize = 12;
-        } else {
-            boxSize = 10;
-        }
-        fillRect(x - (boxSize / 2) - outlinePad, y - (boxSize / 2) - outlinePad, boxSize + (outlinePad * 2),
-                 boxSize + (outlinePad * 2), WHITE);
+        constexpr int outlinePad = 1;
+        int boxSize = 11;
+        int radius = 2; // rounded corner radius
+
+        // White halo background
+        fillRoundedRect(x, y, boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), radius + 1, WHITE);
+
+        // Draw inner box
+        fillRoundedRect(x, y, boxSize, boxSize, radius, BLACK);
+
+        // Text inside
+        setFont(fontSmall);
+        setTextColor(WHITE);
 
         // Draw actual marker on top
         if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) {
-            fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
-            setFont(fontSmall);
-            setTextColor(WHITE);
-            printAt(x, y, "X", CENTER, MIDDLE);
+            printAt(x + 1, y + 1, "X", CENTER, MIDDLE);
         } else if (!m.hasHopsAway) {
-            fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
-            setFont(fontSmall);
-            setTextColor(WHITE);
-            printAt(x, y, "?", CENTER, MIDDLE);
+            printAt(x + 1, y + 1, "?", CENTER, MIDDLE);
         } else {
-            fillRect(x - boxSize / 2, y - boxSize / 2, boxSize, boxSize, BLACK);
             char hopStr[4];
             snprintf(hopStr, sizeof(hopStr), "%d", m.hopsAway);
-            setFont(fontSmall);
-            setTextColor(WHITE);
-            printAt(x, y, hopStr, CENTER, MIDDLE);
+            printAt(x, y + 1, hopStr, CENTER, MIDDLE);
         }
 
-        // Restore default font and color (safety for rest of UI)
+        // Restore default font and color
         setFont(fontSmall);
         setTextColor(BLACK);
     }
