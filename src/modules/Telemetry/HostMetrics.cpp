@@ -9,11 +9,11 @@
 int32_t HostMetricsModule::runOnce()
 {
 #if ARCH_PORTDUINO
-    if (settingsMap[hostMetrics_interval] == 0) {
+    if (portduino_config.hostMetrics_interval == 0) {
         return disable();
     } else {
         sendMetrics();
-        return 60 * 1000 * settingsMap[hostMetrics_interval];
+        return 60 * 1000 * portduino_config.hostMetrics_interval;
     }
 #else
     return disable();
@@ -22,10 +22,6 @@ int32_t HostMetricsModule::runOnce()
 
 bool HostMetricsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
-    // Don't worry about storing telemetry in NodeDB if we're a repeater
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-        return false;
-
     if (t->which_variant == meshtastic_Telemetry_host_metrics_tag) {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
@@ -110,8 +106,8 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
             proc_loadavg.close();
         }
     }
-    if (settingsStrings[hostMetrics_user_command] != "") {
-        std::string userCommandResult = exec(settingsStrings[hostMetrics_user_command].c_str());
+    if (portduino_config.hostMetrics_user_command != "") {
+        std::string userCommandResult = exec(portduino_config.hostMetrics_user_command.c_str());
         if (userCommandResult.length() > 1) {
             strncpy(t.variant.host_metrics.user_string, userCommandResult.c_str(), sizeof(t.variant.host_metrics.user_string));
             t.variant.host_metrics.user_string[sizeof(t.variant.host_metrics.user_string) - 1] = '\0';
@@ -135,7 +131,7 @@ bool HostMetricsModule::sendMetrics()
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    p->channel = settingsMap[hostMetrics_channel];
+    p->channel = portduino_config.hostMetrics_channel;
     LOG_INFO("Send packet to mesh");
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     return true;

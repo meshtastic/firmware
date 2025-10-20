@@ -55,12 +55,12 @@ HTTPClient httpClient;
 
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
-char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"},
-                              {".js", "text/javascript"}, {".png", "image/png"},
-                              {".jpg", "image/jpg"},      {".gz", "application/gzip"},
-                              {".gif", "image/gif"},      {".json", "application/json"},
-                              {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
-                              {".svg", "image/svg+xml"},  {"", ""}};
+char const *contentTypes[][2] = {{".txt", "text/plain"},     {".html", "text/html"},
+                                 {".js", "text/javascript"}, {".png", "image/png"},
+                                 {".jpg", "image/jpg"},      {".gz", "application/gzip"},
+                                 {".gif", "image/gif"},      {".json", "application/json"},
+                                 {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
+                                 {".svg", "image/svg+xml"},  {"", ""}};
 
 // const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
@@ -292,11 +292,14 @@ JSONArray htmlListDir(const char *dirname, uint8_t levels)
             JSONObject thisFileMap;
             thisFileMap["size"] = new JSONValue((int)file.size());
 #ifdef ARCH_ESP32
-            thisFileMap["name"] = new JSONValue(String(file.path()).substring(1).c_str());
+            String fileName = String(file.path()).substring(1);
+            thisFileMap["name"] = new JSONValue(fileName.c_str());
 #else
-            thisFileMap["name"] = new JSONValue(String(file.name()).substring(1).c_str());
+            String fileName = String(file.name()).substring(1);
+            thisFileMap["name"] = new JSONValue(fileName.c_str());
 #endif
-            if (String(file.name()).substring(1).endsWith(".gz")) {
+            String tempName = String(file.name()).substring(1);
+            if (tempName.endsWith(".gz")) {
 #ifdef ARCH_ESP32
                 String modifiedFile = String(file.path()).substring(1);
 #else
@@ -339,9 +342,15 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 
     JSONValue *value = new JSONValue(jsonObjOuter);
 
-    res->print(value->Stringify().c_str());
+    std::string jsonString = value->Stringify();
+    res->print(jsonString.c_str());
 
     delete value;
+
+    // Clean up the fileList to prevent memory leak
+    for (auto *val : fileList) {
+        delete val;
+    }
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -362,7 +371,8 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
             JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("ok");
             JSONValue *value = new JSONValue(jsonObjOuter);
-            res->print(value->Stringify().c_str());
+            std::string jsonString = value->Stringify();
+            res->print(jsonString.c_str());
             delete value;
             return;
         } else {
@@ -371,7 +381,8 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
             JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("Error");
             JSONValue *value = new JSONValue(jsonObjOuter);
-            res->print(value->Stringify().c_str());
+            std::string jsonString = value->Stringify();
+            res->print(jsonString.c_str());
             delete value;
             return;
         }
@@ -610,33 +621,35 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
+    // Helper lambda to create JSON array and clean up memory properly
+    auto createJSONArrayFromLog = [](uint32_t *logArray, int count) -> JSONValue * {
+        JSONArray tempArray;
+        for (int i = 0; i < count; i++) {
+            tempArray.push_back(new JSONValue((int)logArray[i]));
+        }
+        JSONValue *result = new JSONValue(tempArray);
+        // Note: Don't delete tempArray elements here - JSONValue now owns them
+        return result;
+    };
+
     // data->airtime->tx_log
-    JSONArray txLogValues;
     uint32_t *logArray;
     logArray = airTime->airtimeReport(TX_LOG);
-    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
-        txLogValues.push_back(new JSONValue((int)logArray[i]));
-    }
+    JSONValue *txLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
 
     // data->airtime->rx_log
-    JSONArray rxLogValues;
     logArray = airTime->airtimeReport(RX_LOG);
-    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
-        rxLogValues.push_back(new JSONValue((int)logArray[i]));
-    }
+    JSONValue *rxLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
 
     // data->airtime->rx_all_log
-    JSONArray rxAllLogValues;
     logArray = airTime->airtimeReport(RX_ALL_LOG);
-    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
-        rxAllLogValues.push_back(new JSONValue((int)logArray[i]));
-    }
+    JSONValue *rxAllLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
 
     // data->airtime
     JSONObject jsonObjAirtime;
-    jsonObjAirtime["tx_log"] = new JSONValue(txLogValues);
-    jsonObjAirtime["rx_log"] = new JSONValue(rxLogValues);
-    jsonObjAirtime["rx_all_log"] = new JSONValue(rxAllLogValues);
+    jsonObjAirtime["tx_log"] = txLogJsonValue;
+    jsonObjAirtime["rx_log"] = rxLogJsonValue;
+    jsonObjAirtime["rx_all_log"] = rxAllLogJsonValue;
     jsonObjAirtime["channel_utilization"] = new JSONValue(airTime->channelUtilizationPercent());
     jsonObjAirtime["utilization_tx"] = new JSONValue(airTime->utilizationTXPercent());
     jsonObjAirtime["seconds_since_boot"] = new JSONValue(int(airTime->getSecondsSinceBoot()));
@@ -646,7 +659,9 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     // data->wifi
     JSONObject jsonObjWifi;
     jsonObjWifi["rssi"] = new JSONValue(WiFi.RSSI());
-    jsonObjWifi["ip"] = new JSONValue(WiFi.localIP().toString().c_str());
+    String wifiIPString = WiFi.localIP().toString();
+    std::string wifiIP = wifiIPString.c_str();
+    jsonObjWifi["ip"] = new JSONValue(wifiIP.c_str());
 
     // data->memory
     JSONObject jsonObjMemory;
@@ -692,7 +707,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     jsonObjOuter["status"] = new JSONValue("ok");
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObjOuter);
-    res->print(value->Stringify().c_str());
+    std::string jsonString = value->Stringify();
+    res->print(jsonString.c_str());
     delete value;
 }
 
@@ -763,8 +779,14 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     jsonObjOuter["status"] = new JSONValue("ok");
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObjOuter);
-    res->print(value->Stringify().c_str());
+    std::string jsonString = value->Stringify();
+    res->print(jsonString.c_str());
     delete value;
+
+    // Clean up the nodesArray to prevent memory leak
+    for (auto *val : nodesArray) {
+        delete val;
+    }
 }
 
 /*
@@ -911,7 +933,8 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     JSONObject jsonObjOuter;
     jsonObjOuter["status"] = new JSONValue("ok");
     JSONValue *value = new JSONValue(jsonObjOuter);
-    res->print(value->Stringify().c_str());
+    std::string jsonString = value->Stringify();
+    res->print(jsonString.c_str());
     delete value;
 }
 
@@ -953,7 +976,13 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObjOuter);
-    res->print(value->Stringify().c_str());
+    std::string jsonString = value->Stringify();
+    res->print(jsonString.c_str());
     delete value;
+
+    // Clean up the networkObjs to prevent memory leak
+    for (auto *val : networkObjs) {
+        delete val;
+    }
 }
 #endif

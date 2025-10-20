@@ -197,6 +197,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef PCF8563_RTC
                 SCAN_SIMPLE_CASE(PCF8563_RTC, RTC_PCF8563, "PCF8563", (uint8_t)addr.address)
 #endif
+#ifdef RX8130CE_RTC
+                SCAN_SIMPLE_CASE(RX8130CE_RTC, RTC_RX8130CE, "RX8130CE", (uint8_t)addr.address)
+#endif
 
             case CARDKB_ADDR:
                 // Do we have the RAK14006 instead?
@@ -294,6 +297,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = AHT10;
                 break;
 #endif
+#if !defined(M5STACK_UNITC6L)
             case INA_ADDR:
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
@@ -340,6 +344,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
+#endif
             case MCP9808_ADDR:
                 // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
                 // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
@@ -373,7 +378,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c || registerValue == 0xc8d) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0x11f3 || registerValue == 0xe9c ||
+                    registerValue == 0xc8d) {
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
@@ -461,7 +467,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591", (uint8_t)addr.address);
+            case TSL25911_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x12), 1);
+                if (registerValue == 0x50) {
+                    type = TSL2591;
+                    logFoundDevice("TSL25911", (uint8_t)addr.address);
+                } else {
+                    type = TSL2561;
+                    logFoundDevice("TSL2561", (uint8_t)addr.address);
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
@@ -483,8 +499,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
                 } else {
-                    type = MPR121KB;
-                    logFoundDevice("MPR121KB", (uint8_t)addr.address);
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // DRV2605_REG_STATUS
+                    if (registerValue == 0xe0) {
+                        type = DRV2605;
+                        logFoundDevice("DRV2605", (uint8_t)addr.address);
+                    } else {
+                        type = MPR121KB;
+                        logFoundDevice("MPR121KB", (uint8_t)addr.address);
+                    }
                 }
                 break;
 
@@ -559,7 +581,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
     scanPort(port, nullptr, 0);
 }
 
-TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
+TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
 {
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;

@@ -18,7 +18,7 @@ TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTo
 void TouchScreenImpl1::init()
 {
 #if ARCH_PORTDUINO
-    if (settingsMap[touchscreenModule]) {
+    if (portduino_config.touchscreenModule) {
         TouchScreenBase::init(true);
         inputBroker->registerSource(this);
     } else {
@@ -47,7 +47,7 @@ bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
  */
 void TouchScreenImpl1::onEvent(const TouchEvent &event)
 {
-    InputEvent e;
+    InputEvent e = {};
     e.source = event.source;
     e.kbchar = 0;
     e.touchX = event.x;

@@ -21,6 +21,10 @@ extern bool haveGlyphs(const char *str);
 // Global screen instance
 extern graphics::Screen *screen;
 
+#if defined(M5STACK_UNITC6L)
+static uint32_t lastSwitchTime = 0;
+#else
+#endif
 namespace graphics
 {
 namespace NodeListRenderer
@@ -51,26 +55,32 @@ static int scrollIndex = 0;
 
 const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
 {
+    const char *name = NULL;
     static char nodeName[16] = "?";
-    if (node->has_user && strlen(node->user.short_name) > 0) {
-        bool valid = true;
-        const char *name = node->user.short_name;
-        for (size_t i = 0; i < strlen(name); i++) {
-            uint8_t c = (uint8_t)name[i];
-            if (c < 32 || c > 126) {
-                valid = false;
-                break;
-            }
-        }
-        if (valid) {
-            strncpy(nodeName, name, sizeof(nodeName) - 1);
-            nodeName[sizeof(nodeName) - 1] = '\0';
+    if (config.display.use_long_node_name == true) {
+        if (node->has_user && strlen(node->user.long_name) > 0) {
+            name = node->user.long_name;
         } else {
             snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
         }
     } else {
+        if (node->has_user && strlen(node->user.short_name) > 0) {
+            name = node->user.short_name;
+        } else {
+            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
+        }
+    }
+
+    // Use sanitizeString() function and copy directly into nodeName
+    std::string sanitized_name = sanitizeString(name ? name : "");
+
+    if (!sanitized_name.empty()) {
+        strncpy(nodeName, sanitized_name.c_str(), sizeof(nodeName) - 1);
+        nodeName[sizeof(nodeName) - 1] = '\0';
+    } else {
         snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
     }
+
     return nodeName;
 }
 
@@ -393,9 +403,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
-
+#if defined(M5STACK_UNITC6L)
+    int columnWidth = display->getWidth();
+#else
     int columnWidth = display->getWidth() / 2;
-
+#endif
     display->clear();
 
     // Draw the battery/time header
@@ -408,8 +420,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
 
     int visibleNodeRows = totalRowsAvailable;
+#if defined(M5STACK_UNITC6L)
+    int totalColumns = 1;
+#else
     int totalColumns = 2;
-
+#endif
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
     if (nodeDB->getMeshNodeByIndex(startIndex)->num == nodeDB->getNodeNum()) {
         startIndex++; // skip own node
@@ -445,12 +460,14 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         }
     }
 
+#if !defined(M5STACK_UNITC6L)
     // Draw column separator
     if (shownCount > 0) {
         const int firstNodeY = y + 3;
         drawColumnSeparator(display, x, firstNodeY, lastNodeY);
     }
 
+#endif
     const int scrollStartY = y + 3;
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
 }
@@ -468,6 +485,13 @@ void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     unsigned long now = millis();
 
+#if defined(M5STACK_UNITC6L)
+    display->clear();
+    if (now - lastSwitchTime >= 3000) {
+        display->display();
+        lastSwitchTime = now;
+    }
+#endif
     // On very first call (on boot or state enter)
     if (lastRenderedMode == MODE_COUNT) {
         currentMode = MODE_LAST_HEARD;
@@ -522,6 +546,14 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
+#if defined(M5STACK_UNITC6L)
+    display->clear();
+    uint32_t now = millis();
+    if (now - lastSwitchTime >= 2000) {
+        display->display();
+        lastSwitchTime = now;
+    }
+#endif
     if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
 #if HAS_GPS
         if (screen->hasHeading()) {

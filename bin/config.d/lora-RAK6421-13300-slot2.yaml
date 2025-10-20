@@ -1,0 +1,8 @@
+Lora:
+  ### RAK13300in Slot 2 pins
+  IRQ: 18 #IO6
+  Reset: 24 # IO4
+  Busy: 19 # IO5
+  # Ant_sw: 23 # IO3 
+  spidev: spidev0.1
+  # CS: 7

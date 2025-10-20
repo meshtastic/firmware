@@ -13,45 +13,147 @@ void InkHUD::MapApplet::onRender()
         return;
     }
 
+    // Helper: draw rounded rectangle centered at x,y
+    auto fillRoundedRect = [&](int16_t cx, int16_t cy, int16_t w, int16_t h, int16_t r, uint16_t color) {
+        int16_t x = cx - (w / 2);
+        int16_t y = cy - (h / 2);
+
+        // center rects
+        fillRect(x + r, y, w - 2 * r, h, color);
+        fillRect(x, y + r, r, h - 2 * r, color);
+        fillRect(x + w - r, y + r, r, h - 2 * r, color);
+
+        // corners
+        fillCircle(x + r, y + r, r, color);
+        fillCircle(x + w - r - 1, y + r, r, color);
+        fillCircle(x + r, y + h - r - 1, r, color);
+        fillCircle(x + w - r - 1, y + h - r - 1, r, color);
+    };
+
     // Find center of map
-    // - latitude and longitude
-    // - will be placed at X(0.5), Y(0.5)
     getMapCenter(&latCenter, &lngCenter);
-
-    // Calculate North+East distance of each node to map center
-    // - which nodes to use controlled by virtual shouldDrawNode method
     calculateAllMarkers();
-
-    // Set the region shown on the map
-    // - default: fit all nodes, plus padding
-    // - maybe overriden by derived applet
-    // - getMapSize *sets* passed parameters (C-style)
     getMapSize(&widthMeters, &heightMeters);
-
-    // Set the metersToPx conversion value
     calculateMapScale();
 
-    // Special marker for own node
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (ourNode && nodeDB->hasValidPosition(ourNode))
-        drawLabeledMarker(ourNode);
-
-    // Draw all markers
+    // Draw all markers first
     for (Marker m : markers) {
         int16_t x = X(0.5) + (m.eastMeters * metersToPx);
         int16_t y = Y(0.5) - (m.northMeters * metersToPx);
 
-        // Cross Size
-        constexpr uint16_t csMin = 5;
-        constexpr uint16_t csMax = 12;
+        // Add white halo outline first
+        constexpr int outlinePad = 1;
+        int boxSize = 11;
+        int radius = 2; // rounded corner radius
 
-        // Too many hops away
-        if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) // Too many mops
-            printAt(x, y, "!", CENTER, MIDDLE);
-        else if (!m.hasHopsAway) // Unknown hops
-            drawCross(x, y, csMin);
-        else // The fewer hops, the larger the cross
-            drawCross(x, y, map(m.hopsAway, 0, config.lora.hop_limit, csMax, csMin));
+        // White halo background
+        fillRoundedRect(x, y, boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), radius + 1, WHITE);
+
+        // Draw inner box
+        fillRoundedRect(x, y, boxSize, boxSize, radius, BLACK);
+
+        // Text inside
+        setFont(fontSmall);
+        setTextColor(WHITE);
+
+        // Draw actual marker on top
+        if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) {
+            printAt(x + 1, y + 1, "X", CENTER, MIDDLE);
+        } else if (!m.hasHopsAway) {
+            printAt(x + 1, y + 1, "?", CENTER, MIDDLE);
+        } else {
+            char hopStr[4];
+            snprintf(hopStr, sizeof(hopStr), "%d", m.hopsAway);
+            printAt(x, y + 1, hopStr, CENTER, MIDDLE);
+        }
+
+        // Restore default font and color
+        setFont(fontSmall);
+        setTextColor(BLACK);
+    }
+
+    // Dual map scale bars
+    int16_t horizPx = width() * 0.25f;
+    int16_t vertPx = height() * 0.25f;
+    float horizMeters = horizPx / metersToPx;
+    float vertMeters = vertPx / metersToPx;
+
+    auto formatDistance = [&](float meters, char *out, size_t len) {
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            float feet = meters * 3.28084f;
+            if (feet < 528)
+                snprintf(out, len, "%.0f ft", feet);
+            else {
+                float miles = feet / 5280.0f;
+                snprintf(out, len, miles < 10 ? "%.1f mi" : "%.0f mi", miles);
+            }
+        } else {
+            if (meters >= 1000)
+                snprintf(out, len, "%.1f km", meters / 1000.0f);
+            else
+                snprintf(out, len, "%.0f m", meters);
+        }
+    };
+
+    // Horizontal scale bar
+    int16_t horizBarY = height() - 2;
+    int16_t horizBarX = 1;
+    drawLine(horizBarX, horizBarY, horizBarX + horizPx, horizBarY, BLACK);
+    drawLine(horizBarX, horizBarY - 3, horizBarX, horizBarY + 3, BLACK);
+    drawLine(horizBarX + horizPx, horizBarY - 3, horizBarX + horizPx, horizBarY + 3, BLACK);
+
+    char horizLabel[32];
+    formatDistance(horizMeters, horizLabel, sizeof(horizLabel));
+    int16_t horizLabelW = getTextWidth(horizLabel);
+    int16_t horizLabelH = getFont().lineHeight();
+    int16_t horizLabelX = horizBarX + horizPx + 4;
+    int16_t horizLabelY = horizBarY - horizLabelH + 1;
+    fillRect(horizLabelX - 2, horizLabelY - 1, horizLabelW + 4, horizLabelH + 2, WHITE);
+    printAt(horizLabelX, horizBarY, horizLabel, LEFT, BOTTOM);
+
+    // Vertical scale bar
+    int16_t vertBarX = 1;
+    int16_t vertBarBottom = horizBarY;
+    int16_t vertBarTop = vertBarBottom - vertPx;
+    drawLine(vertBarX, vertBarBottom, vertBarX, vertBarTop, BLACK);
+    drawLine(vertBarX - 3, vertBarBottom, vertBarX + 3, vertBarBottom, BLACK);
+    drawLine(vertBarX - 3, vertBarTop, vertBarX + 3, vertBarTop, BLACK);
+
+    char vertTopLabel[32];
+    formatDistance(vertMeters, vertTopLabel, sizeof(vertTopLabel));
+    int16_t topLabelY = vertBarTop - getFont().lineHeight() - 2;
+    int16_t topLabelW = getTextWidth(vertTopLabel);
+    int16_t topLabelH = getFont().lineHeight();
+    fillRect(vertBarX - 2, topLabelY - 1, topLabelW + 6, topLabelH + 2, WHITE);
+    printAt(vertBarX + (topLabelW / 2) + 1, topLabelY + (topLabelH / 2), vertTopLabel, CENTER, MIDDLE);
+
+    char vertBottomLabel[32];
+    formatDistance(vertMeters, vertBottomLabel, sizeof(vertBottomLabel));
+    int16_t bottomLabelY = vertBarBottom + 4;
+    int16_t bottomLabelW = getTextWidth(vertBottomLabel);
+    int16_t bottomLabelH = getFont().lineHeight();
+    fillRect(vertBarX - 2, bottomLabelY - 1, bottomLabelW + 6, bottomLabelH + 2, WHITE);
+    printAt(vertBarX + (bottomLabelW / 2) + 1, bottomLabelY + (bottomLabelH / 2), vertBottomLabel, CENTER, MIDDLE);
+
+    // Draw our node LAST with full white fill + outline
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && nodeDB->hasValidPosition(ourNode)) {
+        Marker self = calculateMarker(ourNode->position.latitude_i * 1e-7, ourNode->position.longitude_i * 1e-7, false, 0);
+
+        int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
+        int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
+
+        // White fill background + halo
+        fillCircle(centerX, centerY, 8, WHITE); // big white base
+        drawCircle(centerX, centerY, 8, WHITE); // crisp edge
+
+        // Black bullseye on top
+        drawCircle(centerX, centerY, 6, BLACK);
+        fillCircle(centerX, centerY, 2, BLACK);
+
+        // Crosshairs
+        drawLine(centerX - 8, centerY, centerX + 8, centerY, BLACK);
+        drawLine(centerX, centerY - 8, centerX, centerY + 8, BLACK);
     }
 }
 
@@ -63,110 +165,123 @@ void InkHUD::MapApplet::onRender()
 
 void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 {
-    // Find mean lat long coords
-    // ============================
-    // - assigning X, Y and Z values to position on Earth's surface in 3D space, relative to center of planet
-    // - averages the x, y and z coords
-    // - uses tan to find angles for lat / long degrees
-    //   - longitude: triangle formed by x and y (on plane of the equator)
-    //   - latitude: triangle formed by z (north south),
-    //     and the line along plane of equator which stretches from earth's axis to where point xyz intersects planet's surface
+    // If we have a valid position for our own node, use that as the anchor
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && nodeDB->hasValidPosition(ourNode)) {
+        *lat = ourNode->position.latitude_i * 1e-7;
+        *lng = ourNode->position.longitude_i * 1e-7;
+    } else {
+        // Find mean lat long coords
+        // ============================
+        // - assigning X, Y and Z values to position on Earth's surface in 3D space, relative to center of planet
+        // - averages the x, y and z coords
+        // - uses tan to find angles for lat / long degrees
+        //   - longitude: triangle formed by x and y (on plane of the equator)
+        //   - latitude: triangle formed by z (north south),
+        //     and the line along plane of equator which stretches from earth's axis to where point xyz intersects planet's
+        //     surface
 
-    // Working totals, averaged after nodeDB processed
-    uint32_t positionCount = 0;
-    float xAvg = 0;
-    float yAvg = 0;
-    float zAvg = 0;
+        // Working totals, averaged after nodeDB processed
+        uint32_t positionCount = 0;
+        float xAvg = 0;
+        float yAvg = 0;
+        float zAvg = 0;
 
-    // For each node in db
-    for (uint32_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        // For each node in db
+        for (uint32_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
-        // Skip if no position
-        if (!nodeDB->hasValidPosition(node))
-            continue;
+            // Skip if no position
+            if (!nodeDB->hasValidPosition(node))
+                continue;
 
-        // Skip if derived applet doesn't want to show this node on the map
-        if (!shouldDrawNode(node))
-            continue;
+            // Skip if derived applet doesn't want to show this node on the map
+            if (!shouldDrawNode(node))
+                continue;
 
-        // Latitude and Longitude of node, in radians
-        float latRad = node->position.latitude_i * (1e-7) * DEG_TO_RAD;
-        float lngRad = node->position.longitude_i * (1e-7) * DEG_TO_RAD;
+            // Latitude and Longitude of node, in radians
+            float latRad = node->position.latitude_i * (1e-7) * DEG_TO_RAD;
+            float lngRad = node->position.longitude_i * (1e-7) * DEG_TO_RAD;
 
-        // Convert to cartesian points, with center of earth at 0, 0, 0
-        // Exact distance from center is irrelevant, as we're only interested in the vector
-        float x = cos(latRad) * cos(lngRad);
-        float y = cos(latRad) * sin(lngRad);
-        float z = sin(latRad);
+            // Convert to cartesian points, with center of earth at 0, 0, 0
+            // Exact distance from center is irrelevant, as we're only interested in the vector
+            float x = cos(latRad) * cos(lngRad);
+            float y = cos(latRad) * sin(lngRad);
+            float z = sin(latRad);
 
-        // To find mean values shortly
-        xAvg += x;
-        yAvg += y;
-        zAvg += z;
-        positionCount++;
+            // To find mean values shortly
+            xAvg += x;
+            yAvg += y;
+            zAvg += z;
+            positionCount++;
+        }
+
+        // All NodeDB processed, find mean values
+        xAvg /= positionCount;
+        yAvg /= positionCount;
+        zAvg /= positionCount;
+
+        // Longitude from cartesian coords
+        // (Angle from 3D coords describing a point of globe's surface)
+        /*
+                          UK
+                       /-------\
+        (Top View)   /-         -\
+                   /-      (You)  -\
+                 /-           .     -\
+               /-             . X     -\
+         Asia -             ...         - USA
+               \-           Y         -/
+                 \-                 -/
+                   \-             -/
+                     \-         -/
+                       \- -----/
+                       Pacific
+
+        */
+
+        *lng = atan2(yAvg, xAvg) * RAD_TO_DEG;
+
+        // Latitude from cartesian coords
+        // (Angle from 3D coords describing a point on the globe's surface)
+        // As latitude increases, distance from the Earth's north-south axis out to our surface point decreases.
+        // Means we need to first find the hypotenuse which becomes base of our triangle in the second step
+        /*
+                           UK                                         North
+                        /-------\                 (Front View)      /-------\
+         (Top View)   /-         -\                               /-         -\
+                    /-       (You) -\                           /-(You)        -\
+                  /-         /.      -\                       /-   .             -\
+                /-    √X²+Y²/ . X      -\                   /-   Z .               -\
+        Asia   -           /...          - USA             -       .....             -
+                \-           Y         -/                   \-     √X²+Y²          -/
+                  \-                 -/                       \-                 -/
+                    \-             -/                           \-             -/
+                      \-         -/                               \-         -/
+                        \- -----/                                   \- -----/
+                         Pacific                                      South
+        */
+
+        float hypotenuse = sqrt((xAvg * xAvg) + (yAvg * yAvg)); // Distance from globe's north-south axis to surface intersect
+        *lat = atan2(zAvg, hypotenuse) * RAD_TO_DEG;
     }
 
-    // All NodeDB processed, find mean values
-    xAvg /= positionCount;
-    yAvg /= positionCount;
-    zAvg /= positionCount;
-
-    // Longitude from cartesian coords
-    // (Angle from 3D coords describing a point of globe's surface)
-    /*
-                      UK
-                   /-------\
-    (Top View)   /-         -\
-               /-      (You)  -\
-             /-           .     -\
-           /-             . X     -\
-     Asia -             ...         - USA
-           \-           Y         -/
-             \-                 -/
-               \-             -/
-                 \-         -/
-                   \- -----/
-                   Pacific
-
-    */
-
-    *lng = atan2(yAvg, xAvg) * RAD_TO_DEG;
-
-    // Latitude from cartesian coords
-    // (Angle from 3D coords describing a point on the globe's surface)
-    // As latitude increases, distance from the Earth's north-south axis out to our surface point decreases.
-    // Means we need to first find the hypotenuse which becomes base of our triangle in the second step
-    /*
-                       UK                                         North
-                    /-------\                 (Front View)      /-------\
-     (Top View)   /-         -\                               /-         -\
-                /-       (You) -\                           /-(You)        -\
-              /-         /.      -\                       /-   .             -\
-            /-    √X²+Y²/ . X      -\                   /-   Z .               -\
-    Asia   -           /...          - USA             -       .....             -
-            \-           Y         -/                   \-     √X²+Y²          -/
-              \-                 -/                       \-                 -/
-                \-             -/                           \-             -/
-                  \-         -/                               \-         -/
-                    \- -----/                                   \- -----/
-                     Pacific                                      South
-    */
-
-    float hypotenuse = sqrt((xAvg * xAvg) + (yAvg * yAvg)); // Distance from globe's north-south axis to surface intersect
-    *lat = atan2(zAvg, hypotenuse) * RAD_TO_DEG;
+    // Use either our node position, or the mean fallback as the center
+    latCenter = *lat;
+    lngCenter = *lng;
 
     // ----------------------------------------------
-    // This has given us the "mean position"
-    // This will be a position *somewhere* near the center of our nodes.
-    // What we actually want is to place our center so that our outermost nodes end up on the border of our map.
-    // The only real use of our "mean position" is to give us a reference frame:
-    // which direction is east, and which is west.
+    // This has given us either:
+    // - our actual position (preferred), or
+    // - a mean position (fallback if we had no fix)
+    //
+    // What we actually want is to place our center so that our outermost nodes
+    // end up on the border of our map. The only real use of our "center" is to give
+    // us a reference frame: which direction is east, and which is west.
     //------------------------------------------------
 
-    // Find furthest nodes from "mean lat long"
+    // Find furthest nodes from our center
     // ========================================
-
     float northernmost = latCenter;
     float southernmost = latCenter;
     float easternmost = lngCenter;
@@ -184,14 +299,14 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             continue;
 
         // Check for a new top or bottom latitude
-        float lat = node->position.latitude_i * 1e-7;
-        northernmost = max(northernmost, lat);
-        southernmost = min(southernmost, lat);
+        float latNode = node->position.latitude_i * 1e-7;
+        northernmost = max(northernmost, latNode);
+        southernmost = min(southernmost, latNode);
 
         // Longitude is trickier
-        float lng = node->position.longitude_i * 1e-7;
-        float degEastward = fmod(((lng - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
-        float degWestward = abs(fmod(((lng - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
+        float lngNode = node->position.longitude_i * 1e-7;
+        float degEastward = fmod(((lngNode - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
+        float degWestward = abs(fmod(((lngNode - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
         if (degEastward < degWestward)
             easternmost = max(easternmost, lngCenter + degEastward);
         else
@@ -250,7 +365,6 @@ InkHUD::MapApplet::Marker InkHUD::MapApplet::calculateMarker(float lat, float ln
     m.hopsAway = hopsAway;
     return m;
 }
-
 // Draw a marker on the map for a node, with a shortname label, and backing box
 void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
 {
@@ -322,6 +436,18 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     else {
         labelX = markerX - (markerSize / 2) - paddingInnerW - textW - paddingW;
         textX = labelX + paddingW;
+    }
+
+    // Prevent overlap with scale bars and their labels
+    // Define a "safe zone" in the bottom-left where the scale bars and text are drawn
+    constexpr int16_t safeZoneHeight = 28; // adjust based on your label font height
+    constexpr int16_t safeZoneWidth = 60;  // adjust based on horizontal label width zone
+    bool overlapsScale = (labelY + labelH > height() - safeZoneHeight) && (labelX < safeZoneWidth);
+
+    // If it overlaps, shift label upward slightly above the safe zone
+    if (overlapsScale) {
+        labelY = height() - safeZoneHeight - labelH - 2;
+        textY = labelY + (labelH / 2);
     }
 
     // Backing box

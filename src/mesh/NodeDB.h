@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <pb_encode.h>
+#include <string>
 #include <vector>
 
 #include "MeshTypes.h"
@@ -185,6 +186,16 @@ class NodeDB
      */
     void set_favorite(bool is_favorite, uint32_t nodeId);
 
+    /*
+     * Returns true if the node is in the NodeDB and marked as favorite
+     */
+    bool isFavorite(uint32_t nodeId);
+
+    /*
+     * Returns true if p->from or p->to is a favorited node
+     */
+    bool isFromOrToFavoritedNode(const meshtastic_MeshPacket &p);
+
     /**
      * Other functions like the node picker can request a pause in the node sorting
      */
@@ -192,6 +203,9 @@ class NodeDB
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
+
+    /// @return our node ID as a string in the format "!xxxxxxxx"
+    std::string getNodeId() const;
 
     // @return last byte of a NodeNum, 0xFF if it ended at 0x00
     uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }

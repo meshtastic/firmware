@@ -94,6 +94,8 @@ class Channels
 
     bool ensureLicensedOperation();
 
+    bool setDefaultPresetCryptoForHash(ChannelHash channelHash);
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
