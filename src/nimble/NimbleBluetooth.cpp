@@ -49,7 +49,7 @@ NimBLECharacteristic *logRadioCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
-static std::atomic<int32_t> nimbleBluetoothConnHandle{-1}; // actual handles are uint16_t, so -1 means "no connection"
+static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
@@ -144,21 +144,28 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
   protected:
     virtual int32_t runOnce() override
     {
-        bool shouldBreakAndRetryLater = false;
-
         while (runOnceHasWorkToDo()) {
-            // Important that we service onRead first, because the onRead callback blocks NimBLE until we clear
-            // onReadCallbackIsWaitingForData.
-            shouldBreakAndRetryLater = runOnceHandleToPhoneQueue(); // push data from getFromRadio to onRead
-            runOnceHandleFromPhoneQueue();                          // pull data from onWrite to handleToRadio
+            /*
+              PROCESS fromPhoneQueue BEFORE toPhoneQueue:
 
-            if (shouldBreakAndRetryLater) {
-                // onRead still wants data, but it's not available yet. Return so we can try again when a packet may be ready.
-#ifdef DEBUG_NIMBLE_ON_READ_TIMING
-                LOG_INFO("BLE runOnce breaking to retry later (leaving onRead waiting)");
-#endif
-                return 100; // try again in 100ms
-            }
+              In normal STATE_SEND_PACKETS operation, it's unlikely that we'll have both writes and reads to process at the same
+              time, because either onWrite or onRead will trigger this runOnce. And in STATE_SEND_PACKETS, it's generally ok to
+              service either the reads or writes first.
+
+              However, during the initial setup wantConfig packet, the clients send a write and immediately send a read, and they
+              expect the read will respond to the write. (This also happens when a client goes from STATE_SEND_PACKETS back to
+              another wantConfig, like the iOS client does when requesting the nodedb after requesting the main config only.)
+
+              So it's safest to always service writes (fromPhoneQueue) before reads (toPhoneQueue), so that any "synchronous"
+              write-then-read sequences from the client work as expected, even if this means we block onRead for a while: this is
+              what the client wants!
+            */
+
+            // PHONE -> RADIO:
+            runOnceHandleFromPhoneQueue(); // pull data from onWrite to handleToRadio
+
+            // RADIO -> PHONE:
+            runOnceHandleToPhoneQueue(); // push data from getFromRadio to onRead
         }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
@@ -171,9 +178,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
         if (bleServer && isConnected()) {
-            int32_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != -1) {
-                requestHighThroughputConnection(static_cast<uint16_t>(conn_handle));
+            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+                requestHighThroughputConnection(conn_handle);
             }
         }
     }
@@ -184,9 +191,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
         if (bleServer && isConnected()) {
-            int32_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != -1) {
-                requestLowerPowerConnection(static_cast<uint16_t>(conn_handle));
+            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+                requestLowerPowerConnection(conn_handle);
             }
         }
     }
@@ -220,12 +227,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         }
     }
 
-    bool runOnceHandleToPhoneQueue()
+    void runOnceHandleToPhoneQueue()
     {
-        // Returns false normally.
-        // Returns true if we should break out of runOnce and retry later, such as setup states where getFromRadio returns 0
-        // bytes.
-
         // Stack buffer for getFromRadio packet
         uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
         size_t numBytes = 0;
@@ -234,28 +237,15 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             numBytes = getFromRadio(fromRadioBytes);
 
             if (numBytes == 0) {
-                // Client expected a read, but we have nothing to send.
-                // Returning a 0-byte packet breaks clients during the config phase, so we have to block onRead until there's a
-                // packet ready.
-                if (isSendingPackets()) {
-                    // In STATE_SEND_PACKETS, it is 100% OK to return a 0-byte response, as we expect clients to do read beyond
-                    // notifies regularly, to make sure they have nothing else to read.
-#ifdef DEBUG_NIMBLE_ON_READ_TIMING
-                    LOG_DEBUG("BLE getFromRadio returned numBytes=0, but in STATE_SEND_PACKETS, so clearing "
-                              "onReadCallbackIsWaitingForData flag");
-#endif
-                } else {
-                    // In other states, this breaks clients.
-                    // Return early, leaving onReadCallbackIsWaitingForData==true so onRead knows to try again.
-                    // This gives runOnce a chance to handleToRadio and produce a response.
-#ifdef DEBUG_NIMBLE_ON_READ_TIMING
-                    LOG_DEBUG("BLE getFromRadio returned numBytes=0. Blocking onRead until we have data");
-#endif
+                /*
+                  Client expected a read, but we have nothing to send.
 
-                    // Return true to tell runOnce to shouldBreakAndRetryLater, so we don't busy-loop in runOnce even though
-                    // onRead is still waiting!
-                    return true;
-                }
+                  In STATE_SEND_PACKETS, it is 100% OK to return a 0-byte response, as we expect clients to do read beyond
+                  notifies regularly, to make sure they have nothing else to read.
+
+                  In other states, this is fine **so long as we've already processed pending onWrites first**, because the client
+                  may requesting wantConfig and immediately doing a read.
+                */
             } else {
                 // Push to toPhoneQueue, protected by toPhoneMutex. Hold the mutex as briefly as possible.
                 if (toPhoneQueueSize < NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE) {
@@ -282,8 +272,6 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             // Clear the onReadCallbackIsWaitingForData flag so onRead knows it can proceed.
             onReadCallbackIsWaitingForData = false; // only clear this flag AFTER the push
         }
-
-        return false;
     }
 
     bool runOnceHasWorkFromPhone() { return fromPhoneQueueSize > 0; }
@@ -466,10 +454,6 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
 #endif
     {
-        // In some cases, it seems a new connection starts with a read.
-        // The API has no bytes to send, leading to a timeout. This short-circuits this problem.
-        if (!bluetoothPhoneAPI->isConnected())
-            return;
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
 
         int currentReadCount = bluetoothPhoneAPI->readCount.fetch_add(1);
@@ -726,7 +710,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
         memset(lastToRadio, 0, sizeof(lastToRadio));
 
-        nimbleBluetoothConnHandle = -1; // -1 means "no connection"
+        nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 #ifdef NIMBLE_TWO
         // Restart Advertising
