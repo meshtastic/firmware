@@ -984,6 +984,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         clearLocalPosition();
     numMeshNodes = 1;
     if (keepFavorites) {
+        LOG_INFO("Clearing node database - preserving favorites");
         for (size_t i = 0; i < meshNodes->size(); i++) {
             meshtastic_NodeInfoLite &node = meshNodes->at(i);
             if (i > 0 && !node.is_favorite) {
@@ -993,6 +994,7 @@ void NodeDB::resetNodes(bool keepFavorites)
             }
         };
     } else {
+        LOG_INFO("Clearing node database - removing favorites");
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
     devicestate.has_rx_text_message = false;
