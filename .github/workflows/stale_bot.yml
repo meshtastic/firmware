@@ -20,5 +20,7 @@ jobs:
         uses: actions/stale@v10.1.0
         with:
           days-before-stale: 45
-          exempt-issue-labels: pinned,3.0
-          exempt-pr-labels: pinned,3.0
+          stale-issue-message: This issue has not had any comment or update in the last month. If it is still relevant, please post update comments. If no comments are made, this issue will be closed automagically in 7 days.
+          close-issue-message: This issue has not had any comment since the last notice. It has been closed automatically. If this is incorrect, or the issue becomes relevant again, please request that it is reopened.
+          exempt-issue-labels: pinned,3.0,triaged,backlog
+          exempt-pr-labels: pinned,3.0,triaged,backlog
