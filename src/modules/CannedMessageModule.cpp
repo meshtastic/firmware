@@ -1720,7 +1720,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 }
                 if (node) {
                     if (display->getWidth() <= 64) {
-                        snprintf(node->user.short_name, sizeof(node->user.short_name), "%s", node->user.short_name);
+                        snprintf(entryText, sizeof(entryText), "%s", node->user.short_name);
                     } else {
                         snprintf(entryText, sizeof(entryText), "%s", entryText);
                     }
