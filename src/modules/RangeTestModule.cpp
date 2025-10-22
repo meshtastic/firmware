@@ -235,8 +235,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         }
 
         // Print the CSV header
-        if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx rssi,rx "
-                                "snr,distance,hop limit,payload")) {
+        if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx "
+                                "snr,distance,hop limit,payload,rx rssi")) {
             LOG_INFO("File was written");
         } else {
             LOG_ERROR("File write failed");
@@ -284,8 +284,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
     }
 
-    fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
-    fileToAppend.printf("%f,", mp.rx_snr);  // RX SNR
+    fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
     if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
         float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
@@ -299,6 +298,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
+    fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
+
     fileToAppend.flush();
     fileToAppend.close();
 
