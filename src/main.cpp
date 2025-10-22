@@ -436,6 +436,12 @@ void setup()
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
+#if defined(DEBUG_MUTE) && defined(DEBUG_PORT)
+    DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
+    DEBUG_PORT.printf("Version %s for %s from %s\r\n", optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
+    DEBUG_PORT.printf("Debug mute is enabled, there will be no serial output.\r\n");
+#endif
+
     initDeepSleep();
 
 #if defined(MODEM_POWER_EN)
@@ -841,7 +847,14 @@ void setup()
         SPI.begin();
     }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
+#if defined(RAK3401) || defined(RAK13302)
+    pinMode(WB_IO2, OUTPUT);
+    digitalWrite(WB_IO2, HIGH);
+    SPI1.setPins(LORA_MISO, LORA_SCK, LORA_MOSI);
+    SPI1.begin();
+#else
     SPI.begin();
+#endif
 #else
         // ESP32
 #if defined(HW_SPI1_DEVICE)
