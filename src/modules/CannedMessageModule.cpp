@@ -1697,7 +1697,8 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     strncpy(entryText, node->user.long_name, sizeof(entryText) - 1);
                     entryText[sizeof(entryText) - 1] = '\0';
                 }
-                int availWidth = display->getWidth() - (graphics::isHighResolution ? 40 : 20) - ((node->is_favorite) ? 10 : 0);
+                int availWidth =
+                    display->getWidth() - (graphics::isHighResolution ? 40 : 20) - ((node && node->is_favorite) ? 10 : 0);
                 if (availWidth < 0)
                     availWidth = 0;
 
