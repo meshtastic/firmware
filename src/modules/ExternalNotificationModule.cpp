@@ -95,7 +95,7 @@ int32_t ExternalNotificationModule::runOnce()
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
         if ((nagCycleCutoff <= millis())) {
-            // let the song finish if we reach timeout
+            // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
             for (int i = 0; i < 3; i++) {
