@@ -1,24 +1,6 @@
 
-// Display (E-Ink) ED047TC1
+// Display (E-Ink) ED047TC1 - 8bit parallel
 #define USE_EPD
-#define EP_I2C_PORT I2C_NUM_0
-#define EP_SCL (40)
-#define EP_SDA (39)
-#define EP_INTR (38)
-#define EP_D7 (8)
-#define EP_D6 (18)
-#define EP_D5 (17)
-#define EP_D4 (16)
-#define EP_D3 (15)
-#define EP_D2 (7)
-#define EP_D1 (6)
-#define EP_D0 (5)
-#define EP_CKV (48)
-#define EP_STH (41)
-#define EP_LEH (42)
-#define EP_STV (45)
-#define EP_CKH (4)
-
 #define EPD_WIDTH 960
 #define EPD_HEIGHT 540
 
