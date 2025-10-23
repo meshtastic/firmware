@@ -27,7 +27,7 @@
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
 #else
-#define default_ringtone_nag_secs 60
+#define default_ringtone_nag_secs 15
 #endif
 
 #define default_mqtt_address "mqtt.meshtastic.org"
