@@ -459,7 +459,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
@@ -510,7 +512,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message &&
+            if (moduleConfig.external_notification.alert_message && !sender->is_muted &&
                 (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
@@ -522,7 +524,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra &&
+            if (moduleConfig.external_notification.alert_message_vibra && !sender->is_muted &&
                 (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
@@ -534,7 +536,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer &&
+            if (moduleConfig.external_notification.alert_message_buzzer && !sender->is_muted &&
                 (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
