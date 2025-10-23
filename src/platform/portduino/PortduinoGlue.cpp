@@ -705,7 +705,7 @@ bool loadConfig(const char *configPath)
                 portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
                 if (portduino_config.api_port != -1 &&
                 portduino_config.api_port > 1023 &&
-                portduino_config._api_port < 65536) {
+                portduino_config.api_port < 65536) {
                 TCPPort = (portduino_config.api_port);
                 }
             }
