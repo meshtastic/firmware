@@ -129,10 +129,7 @@ void InkHUD::NodeListApplet::onRender()
 
     // Clean up deleted nodes before drawing
     cards.erase(
-        std::remove_if(cards.begin(), cards.end(),
-                       [](const CardInfo &c) { 
-                           return nodeDB->getMeshNode(c.nodeNum) == nullptr; 
-                       }),
+        std::remove_if(cards.begin(), cards.end(), [](const CardInfo &c) { return nodeDB->getMeshNode(c.nodeNum) == nullptr; }),
         cards.end());
 
     // -- Each node in list --
@@ -201,7 +198,7 @@ void InkHUD::NodeListApplet::onRender()
             drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
         }
         // Otherwise, print "hops away" info, if available
-        else if (hopsAway != CardInfo::HOPS_UNKNOWN && node) { 
+        else if (hopsAway != CardInfo::HOPS_UNKNOWN && node) {
             std::string hopString = to_string(node->hops_away);
             hopString += " Hop";
             if (node->hops_away != 1)
