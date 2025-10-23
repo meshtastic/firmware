@@ -51,6 +51,7 @@ void cpuDeepSleep(uint32_t msecs)
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
 int TCPPort = SERVER_API_DEFAULT_PORT;
+bool checkConfigPort = true;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
@@ -59,6 +60,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         if (sscanf(arg, "%d", &TCPPort) < 1)
             return ARGP_ERR_UNKNOWN;
         else
+            checkConfigPort = false;
             printf("Using config file %d\n", TCPPort);
         break;
     case 'c':
@@ -698,6 +700,14 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
                 exit(EXIT_FAILURE);
+            }
+            if (checkConfigPort) {
+                portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
+                if (portduino_config.api_port != -1 &&
+                portduino_config.api_port > 1023 &&
+                portduino_config._api_port < 65536) {
+                TCPPort = (portduino_config.api_port);
+                }
             }
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
             if (portduino_config.mac_address != "") {
