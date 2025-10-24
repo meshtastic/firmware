@@ -13,7 +13,12 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 {
     printPacket("enqueuing for send", p);
 
-    ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
+    bool dropped = false;
+    ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+    if (dropped) {
+        txDrop++;
+    }
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
         packetPool.release(p);
@@ -182,7 +187,7 @@ void SimRadio::onNotify(uint32_t notification)
                     assert(txp);
                     startSend(txp);
                     // Packet has been sent, count it toward our TX airtime utilization.
-                    uint32_t xmitMsec = getPacketTime(txp);
+                    uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
                     airTime->logAirtime(TX_LOG, xmitMsec);
 
                     notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
@@ -252,7 +257,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
     if (isActivelyReceiving()) {
         LOG_WARN("Collision detected, dropping current and previous packet!");
         rxBad++;
-        airTime->logAirtime(RX_ALL_LOG, getPacketTime(receivingPacket));
+        airTime->logAirtime(RX_ALL_LOG, getPacketTime(receivingPacket, true));
         packetPool.release(receivingPacket);
         receivingPacket = nullptr;
         return;
@@ -270,7 +275,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
     }
     isReceiving = true;
     receivingPacket = packetPool.allocCopy(*p);
-    uint32_t airtimeMsec = getPacketTime(p);
+    uint32_t airtimeMsec = getPacketTime(p, true);
     notifyLater(airtimeMsec, ISR_RX, false); // Model the time it is busy receiving
 #else
     isReceiving = true;
@@ -311,7 +316,7 @@ void SimRadio::handleReceiveInterrupt()
 
     printPacket("Lora RX", mp);
 
-    airTime->logAirtime(RX_LOG, getPacketTime(mp));
+    airTime->logAirtime(RX_LOG, RadioInterface::getPacketTime(mp, true));
 
     deliverToReceiver(mp);
 }
@@ -332,4 +337,29 @@ int16_t SimRadio::readData(uint8_t *data, size_t len)
     }
 
     return state;
+}
+
+/**
+ * Calculate airtime per
+ * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+ * section 4
+ *
+ * @return num msecs for the packet
+ */
+uint32_t SimRadio::getPacketTime(uint32_t pl, bool received)
+{
+    float bandwidthHz = bw * 1000.0f;
+    bool headDisable = false; // we currently always use the header
+    float tSym = (1 << sf) / bandwidthHz;
+
+    bool lowDataOptEn = tSym > 16e-3 ? true : false; // Needed if symbol time is >16ms
+
+    float tPreamble = (preambleLength + 4.25f) * tSym;
+    float numPayloadSym =
+        8 + max(ceilf(((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr), 0.0f);
+    float tPayload = numPayloadSym * tSym;
+    float tPacket = tPreamble + tPayload;
+
+    uint32_t msecs = tPacket * 1000;
+    return msecs;
 }

@@ -419,6 +419,9 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
         p->decoded.want_response = true;
 
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p->want_ack = true;
+
         // Manually encode the RouteDiscovery payload
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
@@ -531,6 +534,9 @@ void TraceRouteModule::launch(NodeNum node)
         p->to = node;
         p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
         p->decoded.want_response = true;
+
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p->want_ack = true;
 
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);

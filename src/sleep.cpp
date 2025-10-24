@@ -244,6 +244,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
+#ifdef RAK_WISMESH_TAP_V2
+    digitalWrite(SDCARD_CS, LOW);
+#endif
+
 #ifdef TRACKER_T1000_E
 #ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
@@ -532,8 +536,7 @@ void enableModemSleep()
 
 bool shouldLoraWake(uint32_t msecToWake)
 {
-    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-                                          config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER);
+    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER);
 }
 
 void enableLoraInterrupt()
@@ -554,7 +557,7 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#ifdef HELTEC_V4
+#if defined(USE_GC1109_PA)
     gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
     gpio_pullup_en((gpio_num_t)LORA_PA_EN);
     gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
