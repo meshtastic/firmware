@@ -127,6 +127,11 @@ void InkHUD::NodeListApplet::onRender()
     // Y value (top) of the current card. Increases as we draw.
     uint16_t cardTopY = headerDivY + padDivH;
 
+    // Clean up deleted nodes before drawing
+    cards.erase(
+        std::remove_if(cards.begin(), cards.end(), [](const CardInfo &c) { return nodeDB->getMeshNode(c.nodeNum) == nullptr; }),
+        cards.end());
+
     // -- Each node in list --
     for (auto card = cards.begin(); card != cards.end(); ++card) {
 
@@ -140,6 +145,11 @@ void InkHUD::NodeListApplet::onRender()
         uint8_t &hopsAway = card->hopsAway;
 
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+
+        // Skip deleted nodes
+        if (!node) {
+            continue;
+        }
 
         // -- Shortname --
         // Parse special chars in the short name
@@ -188,7 +198,7 @@ void InkHUD::NodeListApplet::onRender()
             drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
         }
         // Otherwise, print "hops away" info, if available
-        else if (hopsAway != CardInfo::HOPS_UNKNOWN) {
+        else if (hopsAway != CardInfo::HOPS_UNKNOWN && node) {
             std::string hopString = to_string(node->hops_away);
             hopString += " Hop";
             if (node->hops_away != 1)
