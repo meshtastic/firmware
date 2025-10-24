@@ -37,6 +37,15 @@
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
+#elif defined(ARCH_STM32WL)
+// On STM32 there isn't enough heap left over for the rest of the firmware if we allocate this statically.
+// For now, make it dynamic again.
+#define MAX_PACKETS                                                                                                              \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+     2) // max number of packets which can be in flight (either queued from reception or queued for sending)
+
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
 #define MAX_PACKETS_STATIC                                                                                                       \
@@ -67,6 +76,58 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     // init Lockguard for crypt operations
     assert(!cryptLock);
     cryptLock = new concurrency::Lock();
+}
+
+bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
+{
+    // First hop MUST always decrement to prevent retry issues
+    bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
+    if (isFirstHop) {
+        return true; // Always decrement on first hop
+    }
+
+    // Check if both local device and previous relay are routers (including CLIENT_BASE)
+    bool localIsRouter =
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+
+    // If local device isn't a router, always decrement
+    if (!localIsRouter) {
+        return true;
+    }
+
+    // For subsequent hops, check if previous relay is a favorite router
+    // Optimized search for favorite routers with matching last byte
+    // Check ordering optimized for IoT devices (cheapest checks first)
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node)
+            continue;
+
+        // Check 1: is_favorite (cheapest - single bool)
+        if (!node->is_favorite)
+            continue;
+
+        // Check 2: has_user (cheap - single bool)
+        if (!node->has_user)
+            continue;
+
+        // Check 3: role check (moderate cost - multiple comparisons)
+        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+            continue;
+        }
+
+        // Check 4: last byte extraction and comparison (most expensive)
+        if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
+            // Found a favorite router match
+            LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", node->num, p->relay_node);
+            return false; // Don't decrement hop_limit
+        }
+    }
+
+    // No favorite router match found, decrement hop_limit
+    return true;
 }
 
 /**
@@ -146,9 +207,10 @@ meshtastic_MeshPacket *Router::allocForSending()
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
-void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit)
+void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
+                        bool ackWantsAck)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
@@ -347,10 +409,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
-        return DecodeState::DECODE_FAILURE;
-
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
@@ -431,35 +489,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         }
     }
 
-#if HAS_UDP_MULTICAST
-    // Fallback: for UDP multicast, try default preset names with default PSK if normal channel match failed
-    if (!decrypted && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP) {
-        if (channels.setDefaultPresetCryptoForHash(p->channel)) {
-            memcpy(bytes, p->encrypted.bytes, rawSize);
-            crypto->decrypt(p->from, p->id, rawSize, bytes);
-
-            meshtastic_Data decodedtmp;
-            memset(&decodedtmp, 0, sizeof(decodedtmp));
-            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
-                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
-                p->decoded = decodedtmp;
-                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-                // Map to our local default channel index (name+PSK default), not necessarily primary
-                ChannelIndex defaultIndex = channels.getPrimaryIndex();
-                for (ChannelIndex i = 0; i < channels.getNumChannels(); ++i) {
-                    if (channels.isDefaultChannel(i)) {
-                        defaultIndex = i;
-                        break;
-                    }
-                }
-                chIndex = defaultIndex;
-                decrypted = true;
-            } else {
-                LOG_WARN("UDP fallback decode attempted but failed for hash 0x%x", p->channel);
-            }
-        }
-    }
-#endif
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash

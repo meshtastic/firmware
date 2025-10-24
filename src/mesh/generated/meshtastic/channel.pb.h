@@ -34,9 +34,9 @@ typedef enum _meshtastic_Channel_Role {
 typedef struct _meshtastic_ModuleSettings {
     /* Bits of precision for the location sent in position packets. */
     uint32_t position_precision;
-    /* Controls whether or not the phone / clients should mute the current channel
+    /* Controls whether or not the client / device should mute the current channel
  Useful for noisy public channels you don't necessarily want to disable */
-    bool is_client_muted;
+    bool is_muted;
 } meshtastic_ModuleSettings;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_ChannelSettings_psk_t;
@@ -137,7 +137,7 @@ extern "C" {
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_ModuleSettings_position_precision_tag 1
-#define meshtastic_ModuleSettings_is_client_muted_tag 2
+#define meshtastic_ModuleSettings_is_muted_tag   2
 #define meshtastic_ChannelSettings_channel_num_tag 1
 #define meshtastic_ChannelSettings_psk_tag       2
 #define meshtastic_ChannelSettings_name_tag      3
@@ -164,7 +164,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  module_settings,   7)
 
 #define meshtastic_ModuleSettings_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   position_precision,   1) \
-X(a, STATIC,   SINGULAR, BOOL,     is_client_muted,   2)
+X(a, STATIC,   SINGULAR, BOOL,     is_muted,          2)
 #define meshtastic_ModuleSettings_CALLBACK NULL
 #define meshtastic_ModuleSettings_DEFAULT NULL
 

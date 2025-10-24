@@ -1,49 +1,19 @@
-meshtasticd (2.7.10.0) UNRELEASED; urgency=medium
+meshtasticd (2.7.13.0) unstable; urgency=medium
 
+  * Version 2.7.13
+
+ -- GitHub Actions <github-actions[bot]@users.noreply.github.com>  Sat, 11 Oct 2025 15:27:28 +0000
+
+meshtasticd (2.7.12.0) unstable; urgency=medium
+
+  [ Austin Lane ]
   * Initial packaging
   * Version 2.5.19
 
   [  ]
   * GitHub Actions Automatic version bump
 
-  [  ]
-  * GitHub Actions Automatic version bump
+  [ GitHub Actions ]
+  * Version 2.7.12
 
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [ Ubuntu ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
-  [  ]
-  * GitHub Actions Automatic version bump
-
- --  <github-actions[bot]@users.noreply.github.com>  Thu, 18 Sep 2025 22:11:37 +0000
+ -- GitHub Actions <github-actions[bot]@users.noreply.github.com>  Wed, 01 Oct 2025 19:51:41 +0000

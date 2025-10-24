@@ -10,13 +10,13 @@
 
 BME280Sensor::BME280Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME280, "BME280") {}
 
-int32_t BME280Sensor::runOnce()
+bool BME280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    status = bme280.begin(dev->address.address, bus);
+    if (!status) {
+        return status;
     }
-    status = bme280.begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
 
     bme280.setSampling(Adafruit_BME280::MODE_FORCED,
                        Adafruit_BME280::SAMPLING_X1, // Temp. oversampling
@@ -24,10 +24,9 @@ int32_t BME280Sensor::runOnce()
                        Adafruit_BME280::SAMPLING_X1, // Humidity oversampling
                        Adafruit_BME280::FILTER_OFF, Adafruit_BME280::STANDBY_MS_1000);
 
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void BME280Sensor::setup() {}
 
 bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
