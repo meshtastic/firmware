@@ -464,6 +464,10 @@ void setup()
     digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
 #endif
 
+#if defined(VEXT_ENABLE_DELAY)
+    delay(VEXT_ENABLE_DELAY); // give the LDO some time to stabilize the power
+#endif
+
 #if defined(BIAS_T_ENABLE)
     pinMode(BIAS_T_ENABLE, OUTPUT);
     digitalWrite(BIAS_T_ENABLE, BIAS_T_VALUE); // turn on 5V for GPS Antenna

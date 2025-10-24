@@ -276,7 +276,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
 #if defined(VEXT_ENABLE)
-    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE); // turn on the display power
+    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE); // turn off the display power
 #endif
 
 #ifdef ARCH_ESP32
