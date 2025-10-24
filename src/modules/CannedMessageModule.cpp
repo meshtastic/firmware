@@ -360,16 +360,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         return handleEmotePickerInput(event);
 
     case CANNED_MESSAGE_RUN_STATE_INACTIVE:
-        if (isSelect) {
-            return 0; // Main button press no longer runs through powerFSM
-        }
-        // Let LEFT/RIGHT pass through so frame navigation works
-        if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_RIGHT) {
-            break;
-        }
-        // Handle UP/DOWN: activate canned message list!
-        if (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_DOWN ||
-            event->inputEvent == INPUT_BROKER_ALT_LONG) {
+        if (event->inputEvent == INPUT_BROKER_ALT_LONG) {
             LaunchWithDestination(NODENUM_BROADCAST);
             return 1;
         }
@@ -383,6 +374,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             // Immediately process the input in the new state (freetext)
             return handleFreeTextInput(event);
         }
+        return 0;
         break;
 
     // (Other states can be added here as needed)
