@@ -61,6 +61,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
+    ModemType_t modemType = RADIOLIB_MODEM_LORA;
+    DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
+    PacketConfig_t getPacketConfig() const
+    {
+        return {.lora = {.preambleLength = preambleLength,
+                         .implicitHeader = false,
+                         .crcEnabled = true,
+                         // We use auto LDRO, meaning it is enabled if the symbol time is >= 16msec
+                         .ldrOptimize = (1 << sf) / bw >= 16}};
+    }
+
     /**
      * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
      * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
@@ -105,6 +116,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+    uint16_t txDrop = 0;
 
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -208,6 +220,36 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Subclasses must override, implement and then call into this base class implementation
      */
     virtual void setStandby();
+
+    /**
+     * Derive packet time either for a received (using header info) or a transmitted packet
+     */
+    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
+    {
+        if (received) {
+            // First get the actual coding rate and CRC status from the received packet
+            uint8_t rxCR;
+            bool hasCRC;
+            lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC);
+            // Go from raw header value to denominator
+            if (rxCR < 5) {
+                rxCR += 4;
+            } else if (rxCR == 7) {
+                rxCR = 8;
+            }
+
+            // Received packet configuration must be the same as configured, except for coding rate and CRC
+            DataRate_t dr = getDataRate();
+            dr.lora.codingRate = rxCR;
+
+            PacketConfig_t pc = getPacketConfig();
+            pc.lora.crcEnabled = hasCRC;
+
+            return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
+        }
+
+        return lora.getTimeOnAir(pl) / 1000;
+    }
 
     const char *radioLibErr = "RadioLib err=";
 

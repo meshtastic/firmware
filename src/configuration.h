@@ -33,6 +33,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "pcf8563.h"
 #endif
 
+/* Offer chance for variant-specific defines */
+#include "variant.h"
+
 // -----------------------------------------------------------------------------
 // Version
 // -----------------------------------------------------------------------------
@@ -117,10 +120,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SX126X_MAX_POWER 22
 #endif
 
-#ifdef HELTEC_V4
+#ifdef USE_GC1109_PA
 // Power Amps are often non-linear, so we can use an array of values for the power curve
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
+#endif
+
+#ifdef RAK13302
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
 // Default system gain to 0 if not defined
@@ -259,9 +267,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
-
-/* Step #1: offer chance for variant-specific defines */
-#include "variant.h"
 
 #if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
 // Older variant.h files might not be defining this value, so stay with the old default

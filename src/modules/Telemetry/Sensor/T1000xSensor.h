@@ -7,13 +7,10 @@
 
 class T1000xSensor : public TelemetrySensor
 {
-  protected:
-    virtual void setup() override;
-
   public:
     T1000xSensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     virtual float getLux();
     virtual float getTemp();
 };
