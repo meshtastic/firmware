@@ -11,11 +11,13 @@ class TCA8418Keyboard : public TCA8418KeyboardBase
     void setBacklight(bool on) override;
 
   protected:
-    void pressed(uint8_t key) override;
-    void released(void) override;
+    enum KeyState { Init, Idle, Held, Busy };
 
+    void pressed(uint8_t key) override;
+    void released(uint8_t key) override;
+
+    KeyState state;
     int8_t last_key;
-    int8_t next_key;
     uint32_t last_tap;
     uint8_t char_idx;
     int32_t tap_interval;
