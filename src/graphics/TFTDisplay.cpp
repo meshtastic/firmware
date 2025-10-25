@@ -21,6 +21,109 @@ uint16_t TFT_MESH = TFT_MESH_OVERRIDE;
 uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #endif
 
+#if defined(CO5300_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for AMOLED driver chip
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_CO5300 _panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+
+  public:
+    LGFX(void)
+    {
+        {
+            auto cfg = _bus_instance.config();
+
+            // configure SPI
+            cfg.spi_host = CO5300_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+            cfg.spi_mode = SPI_MODE0;
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
+            cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
+            cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
+            cfg.use_lock = true;                // Set to true to use transaction locking
+            cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+                                                // SPI_DMA_CH_AUTO=auto setting)
+            cfg.pin_sclk = CO5300_SCK;          // Set SPI SCLK pin number
+            cfg.pin_io0 = CO5300_IO0;
+            cfg.pin_io1 = CO5300_IO1;
+            cfg.pin_io2 = CO5300_IO2;
+            cfg.pin_io3 = CO5300_IO3;
+
+            _bus_instance.config(cfg);              // applies the set value to the bus.
+            _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
+        }
+
+        {                                        // Set the display panel control.
+            auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
+
+            cfg.pin_cs = CO5300_CS;                    // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = CO5300_RESET;                // Pin number where RST is connected  (-1 = disable)
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is upside down)
+            cfg.offset_x = TFT_OFFSET_X;
+            cfg.offset_y = TFT_OFFSET_Y;
+            cfg.dummy_read_pixel = 8; // Number of bits for dummy read before pixel readout
+            cfg.dummy_read_bits = 1;  // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;      // Set to true if data can be read
+            cfg.invert = false;       // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;    // Set to true if the panel's red and blue are swapped
+            cfg.dlen_16bit = false;   // Set to true for panels that transmit data length in 16-bit units
+            cfg.bus_shared = true;    // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+
+            // Set the following only when the display is shifted with a driver with a variable number of pixels
+            cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
+            cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
+            _panel_instance.config(cfg);
+        }
+
+        setPanel(&_panel_instance);
+    }
+
+    bool enableFrameBuffer(bool auto_display = false)
+    {
+        if (_panel_instance.initPanelFb()) {
+            auto fbPanel = _panel_instance.getPanelFb();
+            if (fbPanel) {
+                fbPanel->setBus(&_bus_instance);
+                fbPanel->setAutoDisplay(auto_display);
+                setPanel(fbPanel);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void disableFrameBuffer()
+    {
+        auto fbPanel = _panel_instance.getPanelFb();
+        if (fbPanel) {
+            _panel_instance.deinitPanelFb();
+            setPanel(&_panel_instance);
+        }
+    }
+
+    bool init()
+    {
+#ifdef CO5300_RESET
+        LOG_DEBUG("LGFX_Panel_CO5300::init()");
+        lgfx::pinMode(CO5300_RESET, lgfx::pin_mode_t::output);
+        lgfx::gpio_hi(CO5300_RESET);
+        delay(200);
+        lgfx::gpio_lo(CO5300_RESET);
+        delay(300);
+        lgfx::gpio_hi(CO5300_RESET);
+        delay(200);
+#endif
+        return lgfx::LGFX_Device::init() && enableFrameBuffer(false);
+    }
+};
+
+static LGFX *tft = nullptr;
+
+#endif
+
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
@@ -1083,7 +1186,7 @@ static LGFX *tft = nullptr;
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ST7796_CS) || defined(ILI9341_DRIVER) ||           \
     defined(ILI9342_DRIVER) || defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) ||           \
-    (ARCH_PORTDUINO && HAS_SCREEN != 0)
+    defined(CO5300_CS) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -1222,8 +1325,8 @@ void TFTDisplay::display(bool fromBlank)
 
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
-            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
-                          &linePixelBuffer[x_FirstPixelUpdate]);
+            tft->pushImage(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+                           &linePixelBuffer[x_FirstPixelUpdate]);
 
             somethingChanged = true;
         }
@@ -1282,7 +1385,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-        // LOG_DEBUG("Display on");
+        LOG_DEBUG("Display on");
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
@@ -1301,12 +1404,13 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK) && !defined(ST7789_CS) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+        LOG_DEBUG("tft->setBrightness(172)");
         tft->setBrightness(172);
 #endif
         break;
     }
     case DISPLAYOFF: {
-        // LOG_DEBUG("Display off");
+        LOG_DEBUG("Display off");
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
@@ -1325,6 +1429,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
+        LOG_DEBUG("tft->setBrightness(0)");
         tft->setBrightness(0);
 #endif
         break;
@@ -1400,8 +1505,8 @@ bool TFTDisplay::connect()
     tft = new LGFX;
 #endif
 
-    backlightEnable->set(true);
     LOG_INFO("Power to TFT Backlight");
+    backlightEnable->set(true);
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
@@ -1422,7 +1527,7 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER)
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER) || defined(T_WATCH_ULTRA)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
