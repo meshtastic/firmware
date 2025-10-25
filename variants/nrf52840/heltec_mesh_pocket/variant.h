@@ -124,7 +124,6 @@ No longer populated on PCB
 
 #undef HAS_GPS
 #define HAS_GPS 0
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif
