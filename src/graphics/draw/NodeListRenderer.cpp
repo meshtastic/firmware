@@ -91,8 +91,14 @@ const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
             nodeName[strlen(nodeName) - 1] = '\0';
         }
 
-        // If we actually truncated, append "..."
+        // If we actually truncated, append "..." (ensure space remains in buffer)
         if (strlen(nodeName) < origLen) {
+            size_t len = strlen(nodeName);
+            size_t maxLen = sizeof(nodeName) - 4; // 3 for "..." and 1 for '\0'
+            if (len > maxLen) {
+                nodeName[maxLen] = '\0';
+                len = maxLen;
+            }
             strcat(nodeName, "...");
         }
     }
