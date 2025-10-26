@@ -1,7 +1,7 @@
 #include "ButtonThread.h"
 #include "meshUtils.h"
-
 #include "configuration.h"
+
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -17,6 +17,107 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
+
+
+#include "MeshRadio.h"
+#include "graphics/Screen.h"
+
+
+
+// Send message on a specific (private) channel. Will NOT send on channel 0.
+static void sendMessageForPinWithChannel(int pin, uint8_t channel)
+{
+    // Don't send on public/default channel 0
+    if (channel == 0) {
+        LOG_INFO("ButtonThread: configured channel is 0, skipping send to avoid public channel");
+        return;
+    }
+
+    // Build a dynamic message that reflects the actual GPIO pin number so it
+    // always matches the wiring (user rewired to GPIO5/6/7, etc.). This avoids
+    // keeping multiple conditional branches in sync and keeps the payload
+    // predictable.
+    char msgbuf[48];
+    snprintf(msgbuf, sizeof(msgbuf), "Button GPIO%d pressed", pin);
+    const char *msg = msgbuf;
+
+
+    // Log for debugging: which pin/channel/message we're about to send
+    const char *chname = channels.getName(channel);
+    LOG_INFO("ButtonThread: pin=%d sending '%s' on channel=%u (%s)", pin, msg, channel, chname ? chname : "<unknown>");
+
+    // Sanity check: make sure the configured channel index is valid
+    if (channel >= channels.getNumChannels()) {
+        LOG_ERROR("ButtonThread: configured channel %u is out of range (numChannels=%u). Skipping send.", (unsigned)channel,
+                  (unsigned)channels.getNumChannels());
+        return;
+    }
+
+    // Construct a mesh packet and send through MeshService so the message goes
+    // through the standard routing/phone-cc pipeline. This mirrors what
+    // CannedMessageModule::sendText does but is accessible from here.
+    meshtastic_MeshPacket *p = nullptr;
+    if (router) {
+        p = router->allocForSending();
+    }
+    if (!p) {
+        LOG_WARN("ButtonThread: failed to allocate packet for sending '%s'", msg);
+        return;
+    }
+
+    // Prepare packet fields
+    p->to = NODENUM_BROADCAST;
+    p->channel = channel;
+    // Button-originated UI messages are best-effort — don't request ACKs to reduce airtime and queue pressure
+    p->want_ack = false;
+
+    // Ensure this is treated as a TEXT message by receivers
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p->decoded.want_response = false;
+
+    // Copy payload but guard against overflow
+    size_t msglen = strlen(msg);
+    if (msglen > meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        LOG_WARN("ButtonThread: message too long (%u), truncating to %d", (unsigned)msglen, meshtastic_Constants_DATA_PAYLOAD_LEN);
+        msglen = meshtastic_Constants_DATA_PAYLOAD_LEN;
+    }
+    p->decoded.payload.size = msglen;
+    memcpy(p->decoded.payload.bytes, msg, p->decoded.payload.size);
+
+    // Debug: show exact payload bytes/size and a hex dump of the payload (do this before calling sendToMesh)
+    LOG_DEBUG("ButtonThread: payload size=%u payload='%.*s'", (unsigned)p->decoded.payload.size, (int)p->decoded.payload.size, p->decoded.payload.bytes);
+    // Hex dump for tools that prefer hex visibility
+    {
+        const uint8_t *bytes = (const uint8_t *)p->decoded.payload.bytes;
+        size_t len = p->decoded.payload.size;
+        char hexbuf[3 * 64] = {0};
+        size_t pos = 0;
+        for (size_t i = 0; i < len && pos + 3 < sizeof(hexbuf); ++i) {
+            pos += snprintf(&hexbuf[pos], sizeof(hexbuf) - pos, "%02x ", bytes[i]);
+        }
+        LOG_DEBUG("ButtonThread: payload hex=%s", hexbuf);
+    }
+
+    // Info log for quick verification in serial monitors -- log BEFORE sendToMesh because service may free the packet
+    LOG_INFO("ButtonThread: queuing packet to=%u channel=%u want_ack=%u size=%u", (unsigned)p->to, (unsigned)p->channel, (unsigned)p->want_ack, (unsigned)p->decoded.payload.size);
+
+    // Send to mesh and phone (ccToPhone = true) so UI/ACKs behave like normal messages
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+    // Don't access 'p' after this point: ownership may have been transferred and packet freed by sendToMesh
+
+    if (screen) {
+        screen->showSimpleBanner(msg, 3000);
+    }
+}
+
+
+
+
+
+
+
+
 
 using namespace concurrency;
 
@@ -38,6 +139,8 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     _touchQuirk = config.touchQuirk;
     _intRoutine = config.intRoutine;
     _longLongPress = config.longLongPress;
+    // store configured private channel (0 means public/broadcast)
+    _channelIndex = config.privateChannel;
 
     userButton = OneButton(config.pinNumber, config.activeLow, config.activePullup);
 
@@ -183,6 +286,20 @@ int32_t ButtonThread::runOnce()
             // Start tracking for potential combination
             waitingForLongPress = true;
             shortPressTime = millis();
+
+            // Custom behavior: send a short text message for specific GPIO pins
+            // on the configured private channel. This will NOT send on public
+            // channel 0 (the helper ignores channel 0).
+                // Throttle rapid button-triggered sends to avoid radio queue overload
+                const uint32_t cooldownMs = 300; // 300ms cooldown between sends from this button
+                uint32_t now = millis();
+                if ((now - _lastSendMs) < cooldownMs) {
+                    LOG_DEBUG("ButtonThread: skipping send for pin %d, cooldown active (%u ms left)", _pinNum,
+                              (unsigned)(cooldownMs - (now - _lastSendMs)));
+                } else {
+                    _lastSendMs = now;
+                    sendMessageForPinWithChannel(_pinNum, _channelIndex);
+                }
 
             break;
         }
