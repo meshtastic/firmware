@@ -23,6 +23,8 @@
 #include "serialization/MeshPacketSerializer.h"
 #endif
 
+#define UNENCRYPTED_MAGIC 0x55 // Magic number to verify that an unencrypted protobuf decode is actually supposed to be such
+
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
@@ -425,6 +427,16 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     }
     bool decrypted = false;
     ChannelIndex chIndex = 0;
+
+    // Attempt unencrypted decode
+    meshtastic_Data decodedtmp{};
+    if (pb_decode_from_bytes(p->encrypted.bytes, rawSize, meshtastic_Data_fields, &decodedtmp, true) &&
+        decodedtmp.tx_unencrypted == UNENCRYPTED_MAGIC) {
+        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        memcpy(&p->decoded, &decodedtmp, sizeof(decodedtmp));
+        return DecodeState::DECODE_SUCCESS;
+    }
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
@@ -546,6 +558,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
         }
 
+        if (p->decoded.tx_unencrypted)
+            p->decoded.tx_unencrypted = UNENCRYPTED_MAGIC;
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         /* Not actually used, so save the cycles
@@ -590,42 +604,61 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-#if !(MESHTASTIC_EXCLUDE_PKI)
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-        // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
-        // is not in the local nodedb
-        // First, only PKC encrypt packets we are originating
-        if (isFromUs(p) &&
-#if ARCH_PORTDUINO
-            // Sim radio via the cli flag skips PKC
-            !portduino_config.force_simradio &&
-#endif
-            // Don't use PKC with Ham mode
-            !owner.is_licensed &&
-            // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
-            !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
-                                           strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
-            // Check for valid keys and single node destination
-            config.security.private_key.size == 32 && !isBroadcast(p->to) && node != nullptr &&
-            // Check for a known public key for the destination
-            (node->user.public_key.size == 32) &&
-            // Some portnums either make no sense to send with PKC
-            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
-            LOG_DEBUG("Use PKI!");
-            if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
-                return meshtastic_Routing_Error_TOO_LARGE;
-            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
-                LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
-                         *node->user.public_key.bytes);
-                return meshtastic_Routing_Error_PKI_FAILED;
-            }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
-            numbytes += MESHTASTIC_PKC_OVERHEAD;
-            p->channel = 0;
-            p->pki_encrypted = true;
+        if (p->decoded.tx_unencrypted) {
+            memcpy(p->encrypted.bytes, bytes, numbytes); // Just copy across with no further action
         } else {
+#if !(MESHTASTIC_EXCLUDE_PKI)
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+            // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the
+            // node is not in the local nodedb First, only PKC encrypt packets we are originating
+            if (isFromUs(p) &&
+#if ARCH_PORTDUINO
+                // Sim radio via the cli flag skips PKC
+                !portduino_config.force_simradio &&
+#endif
+                // Don't use PKC with Ham mode
+                !owner.is_licensed &&
+                // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
+                !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
+                                               strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
+                // Check for valid keys and single node destination
+                config.security.private_key.size == 32 && !isBroadcast(p->to) && node != nullptr &&
+                // Check for a known public key for the destination
+                (node->user.public_key.size == 32) &&
+                // Some portnums either make no sense to send with PKC
+                p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP &&
+                p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
+                p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
+                LOG_DEBUG("Use PKI!");
+                if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
+                    return meshtastic_Routing_Error_TOO_LARGE;
+                if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
+                    memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                    LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
+                             *node->user.public_key.bytes);
+                    return meshtastic_Routing_Error_PKI_FAILED;
+                }
+                crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+                numbytes += MESHTASTIC_PKC_OVERHEAD;
+                p->channel = 0;
+                p->pki_encrypted = true;
+            } else {
+                if (p->pki_encrypted == true) {
+                    // Client specifically requested PKI encryption
+                    return meshtastic_Routing_Error_PKI_FAILED;
+                }
+                hash = channels.setActiveByIndex(chIndex);
+
+                // Now that we are encrypting the packet channel should be the hash (no longer the index)
+                p->channel = hash;
+                if (hash < 0) {
+                    // No suitable channel could be found for
+                    return meshtastic_Routing_Error_NO_CHANNEL;
+                }
+                crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+                memcpy(p->encrypted.bytes, bytes, numbytes);
+            }
+#else
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
                 return meshtastic_Routing_Error_PKI_FAILED;
@@ -640,23 +673,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             }
             crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
             memcpy(p->encrypted.bytes, bytes, numbytes);
-        }
-#else
-        if (p->pki_encrypted == true) {
-            // Client specifically requested PKI encryption
-            return meshtastic_Routing_Error_PKI_FAILED;
-        }
-        hash = channels.setActiveByIndex(chIndex);
-
-        // Now that we are encrypting the packet channel should be the hash (no longer the index)
-        p->channel = hash;
-        if (hash < 0) {
-            // No suitable channel could be found for
-            return meshtastic_Routing_Error_NO_CHANNEL;
-        }
-        crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-        memcpy(p->encrypted.bytes, bytes, numbytes);
 #endif
+        }
 
         // Copy back into the packet and set the variant type
         p->encrypted.size = numbytes;
