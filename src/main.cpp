@@ -121,6 +121,11 @@ ButtonThread *BackButtonThread = nullptr;
 ButtonThread *CancelButtonThread = nullptr;
 #endif
 
+// Optional GPIO buttons (if variant exposes GPIO1/2/3)
+ButtonThread *Gpio1ButtonThread = nullptr;
+ButtonThread *Gpio2ButtonThread = nullptr;
+ButtonThread *Gpio3ButtonThread = nullptr;
+
 #endif
 
 #include "AmbientLightingThread.h"
@@ -165,6 +170,10 @@ SPIClass SPI1(HSPI);
 
 using namespace concurrency;
 
+// USERPREFS_TZ_STRING is normally injected via build_flags (userPrefs.jsonc)
+#ifndef USERPREFS_TZ_STRING
+#define USERPREFS_TZ_STRING ""
+#endif
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -1125,6 +1134,88 @@ void setup()
     }
 #endif
 
+#endif
+
+    // Optional GPIO buttons: GPIO1, GPIO2, GPIO3
+#if HAS_BUTTON
+    // GPIO1
+#if defined(GPIO1)
+    int gpio1_pin = GPIO1;
+#else
+    // Default to GPIO5 (safer than 1/3 which are UART pins on many boards)
+    int gpio1_pin = 5;
+#endif
+    Gpio1ButtonThread = new ButtonThread("Gpio1Button");
+    {
+    ButtonConfig cfg;
+    cfg.pinNumber = (uint8_t)gpio1_pin;
+    cfg.activeLow = true;
+    cfg.activePullup = true;
+    // Ensure input pull-up is enabled for these GPIOs when supported
+    cfg.pullupSense = (pullup_sense != 0) ? pullup_sense : INPUT_PULLUP;
+        cfg.intRoutine = []() {
+            Gpio1ButtonThread->userButton.tick();
+            Gpio1ButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        cfg.singlePress = INPUT_BROKER_NONE; // we handle sending via channel
+    cfg.privateChannel = 1; // private channel for GPIO1
+        Gpio1ButtonThread->initButton(cfg);
+    }
+
+    // GPIO2
+#if defined(GPIO2)
+    int gpio2_pin = GPIO2;
+#else
+    // Default to GPIO6 (safer than 2 which may be used by other peripherals)
+    int gpio2_pin = 6;
+#endif
+    Gpio2ButtonThread = new ButtonThread("Gpio2Button");
+    {
+    ButtonConfig cfg;
+    cfg.pinNumber = (uint8_t)gpio2_pin;
+    cfg.activeLow = true;
+    cfg.activePullup = true;
+    cfg.pullupSense = (pullup_sense != 0) ? pullup_sense : INPUT_PULLUP;
+        cfg.intRoutine = []() {
+            Gpio2ButtonThread->userButton.tick();
+            Gpio2ButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        cfg.singlePress = INPUT_BROKER_NONE;
+    cfg.privateChannel = 2; // private channel for GPIO2
+        Gpio2ButtonThread->initButton(cfg);
+    }
+
+    // GPIO3
+#if defined(GPIO3)
+    int gpio3_pin = GPIO3;
+#else
+    // Default to GPIO7 (safer than 3 which is often UART RX)
+    int gpio3_pin = 7;
+#endif
+    Gpio3ButtonThread = new ButtonThread("Gpio3Button");
+    {
+    ButtonConfig cfg;
+    cfg.pinNumber = (uint8_t)gpio3_pin;
+    cfg.activeLow = true;
+    cfg.activePullup = true;
+    cfg.pullupSense = (pullup_sense != 0) ? pullup_sense : INPUT_PULLUP;
+        cfg.intRoutine = []() {
+            Gpio3ButtonThread->userButton.tick();
+            Gpio3ButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        cfg.singlePress = INPUT_BROKER_NONE;
+    cfg.privateChannel = 3; // private channel for GPIO3
+        Gpio3ButtonThread->initButton(cfg);
+    }
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
