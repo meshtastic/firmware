@@ -22,6 +22,10 @@ struct ButtonConfig {
     input_broker_event triplePress = INPUT_BROKER_NONE;
     input_broker_event shortLong = INPUT_BROKER_NONE;
     bool touchQuirk = false;
+    // Private (non-primary) channel index to send button-triggered messages on.
+    // 0 is the public/broadcast channel; to avoid sending on primary channel,
+    // set this to 1..7 as appropriate for your device config.
+    uint8_t privateChannel = 0;
 
     // Constructor to set required parameter
     explicit ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
@@ -103,6 +107,9 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     uint32_t buttonPressStartTime = 0;
     bool buttonWasPressed = false;
 
+    // Timestamp of last sent button-originated packet (millis)
+    uint32_t _lastSendMs = 0;
+
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends
     CallbackObserver<ButtonThread, void *> lsObserver =
@@ -126,6 +133,8 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     bool leadUpSequenceActive = false;
 
     static void wakeOnIrq(int irq, int mode);
+    // Channel index used for button-originated text messages (0 = public/broadcast)
+    uint8_t _channelIndex = 0;
 };
 
 extern ButtonThread *buttonThread;
