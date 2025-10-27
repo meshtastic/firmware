@@ -52,6 +52,7 @@ PacketCacheEntry *PacketCache::cache(const meshtastic_MeshPacket *p, bool preser
                 m.reply_id = p->decoded.reply_id;
             else if (p->decoded.request_id)
                 m.request_id = p->decoded.request_id;
+            m.tx_unencrypted = !!p->decoded.tx_unencrypted;
         }
         e->payload_len = p->decoded.payload.size;
         memcpy(((unsigned char *)e) + sizeof(PacketCacheEntry), p->decoded.payload.bytes, p->decoded.payload.size);
@@ -203,6 +204,7 @@ void PacketCache::rehydrate(const PacketCacheEntry *e, meshtastic_MeshPacket *p)
                 p->decoded.reply_id = m.reply_id;
             else if (m.request_id)
                 p->decoded.request_id = m.request_id;
+            p->decoded.tx_unencrypted = m.tx_unencrypted;
         }
     }
 }

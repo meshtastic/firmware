@@ -44,8 +44,8 @@ typedef struct PacketCacheMetadata {
     struct {
         uint8_t _bitfield2;
         union {
-            uint8_t priority : 7; // meshtastic_MeshPacket::priority
-            uint8_t reserved : 1; // Reserved for future use
+            uint8_t priority : 7;       // meshtastic_MeshPacket::priority
+            uint8_t tx_unencrypted : 1; // meshtastic_MeshPacket::tx_unencrypted
         };
     };
 } PacketCacheMetadata;
