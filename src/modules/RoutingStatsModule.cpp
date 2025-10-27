@@ -6,6 +6,7 @@
 RoutingStatsModule *routingStats;
 
 #define PRINT_STATS_INTERVAL_MS (60 * 1000) // Print our own stats every 60 seconds
+#define PRINT_STATS_WINDOW_SECS 900         // If not transmitting stats, reset the window every 15 minutes
 
 /**
  * Log a routing event
@@ -102,6 +103,11 @@ int32_t RoutingStatsModule::runOnce()
         printStats(&stats, nodeDB->getNodeNum());
         last_print_millis = now;
         next_print_millis = last_print_millis + PRINT_STATS_INTERVAL_MS;
+        if (!config.device.routing_stats_broadcast_secs && (last_tx_millis + PRINT_STATS_WINDOW_SECS * 1000) < now) {
+            // Reset stats window if we're not configured to broadcast stats
+            stats = {};
+            last_tx_millis = now;
+        }
     }
 
     if (next_tx_millis > now)
