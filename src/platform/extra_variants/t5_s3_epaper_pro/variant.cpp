@@ -25,7 +25,7 @@ bool readTouch(int16_t *x, int16_t *y)
 void lateInitVariant()
 {
     bbct.init(GT911_PIN_SDA, GT911_PIN_SCL, GT911_PIN_RST, GT911_PIN_INT);
-    bbct.setOrientation(0, EPD_WIDTH, EPD_HEIGHT);
+    bbct.setOrientation(180, EPD_WIDTH, EPD_HEIGHT);
     touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
     touchScreenImpl1->init();
 }
