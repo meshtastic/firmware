@@ -784,6 +784,7 @@ void menuHandler::nodeNameLengthMenu()
             screen->runNow();
         }
     };
+    bannerOptions.InitialSelected = config.display.use_long_node_name == true ? 1 : 2;
     screen->showOverlayBanner(bannerOptions);
 }
 
