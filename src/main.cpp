@@ -1573,7 +1573,7 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 }
 #endif
 
-#if !defined(PIO_UNIT_TESTING) || !(PIO_UNIT_TESTING)
+#ifndef PIO_UNIT_TESTING
 void loop()
 {
     runASAP = false;
