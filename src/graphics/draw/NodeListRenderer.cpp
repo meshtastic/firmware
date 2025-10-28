@@ -513,7 +513,7 @@ void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 }
 #endif
 
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     const char *title = "Last Heard";
@@ -522,7 +522,7 @@ void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     const char *title = "Hops/Sig";
 #else
 

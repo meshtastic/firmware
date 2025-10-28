@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
+#include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
@@ -154,7 +155,7 @@ void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 // Called to trigger a banner with custom message and duration
 void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 {
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     // Store the message and set the expiration timestamp
@@ -178,7 +179,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 // Called to trigger a banner with custom message and duration
 void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback)
 {
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     nodeDB->pause_sort(true);
@@ -201,7 +202,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
                               std::function<void(uint32_t)> bannerCallback)
 {
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     // Store the message and set the expiration timestamp
@@ -378,6 +379,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
     dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EPD)
+    dispdev = new EInkParallelDisplay(EPD_WIDTH, EPD_HEIGHT, EInkParallelDisplay::EPD_ROT_PORTRAIT);
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -414,7 +417,7 @@ Screen::~Screen()
  */
 void Screen::doDeepSleep()
 {
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     setOn(false, graphics::UIRenderer::drawDeepSleepFrame);
 #else
     // Without E-Ink display:
@@ -472,7 +475,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             runASAP = true;
         } else {
             powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
 #endif
@@ -624,7 +627,7 @@ void Screen::setup()
     handleSetOn(true);
     determineResolution(dispdev->height(), dispdev->width());
     ui->update();
-#ifndef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     ui->update(); // Some SSD1306 clones drop the first draw, so run twice
 #endif
     serialSinceMsec = millis();
@@ -676,7 +679,7 @@ void Screen::setOn(bool on, FrameCallback einkScreensaver)
 void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     // If requested, make sure queued commands are run, and UI has rendered a new frame
     if (forceUiUpdate) {
         // Force a display refresh, in addition to the UI update
@@ -705,7 +708,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
+#if defined(USE_EINK)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EPD)
+    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
+#endif
 #else
     // No delay between UI frame rendering
     if (forceUiUpdate) {
@@ -800,7 +807,7 @@ int32_t Screen::runOnce()
             showingNormalScreen = false;
             NotificationRenderer::pauseBanner = true;
             alertFrames[0] = alertFrame;
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
             EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
             EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
             handleSetOn(true); // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
@@ -887,7 +894,7 @@ void Screen::setSSLFrames()
     }
 }
 
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
 /// Determine which screensaver frame to use, then set the FrameCallback
 void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 {
@@ -924,7 +931,11 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 
     // Old EInkDisplay class
 #if !defined(USE_EINK_DYNAMICDISPLAY)
+#if defined(USE_EINK)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
+#elif defined(USE_EPD)
+    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
+#endif
 #endif
 
     // Prepare now for next frame, shown when display wakes
@@ -1005,7 +1016,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
 // Show detailed node views only on E-Ink builds
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     if (!hiddenFrames.nodelist_lastheard) {
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
@@ -1197,7 +1208,7 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
         hiddenFrames.nodelist = !hiddenFrames.nodelist;
     }
 #endif
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     if (frameName == "nodelist_lastheard") {
         hiddenFrames.nodelist_lastheard = !hiddenFrames.nodelist_lastheard;
     }
