@@ -295,7 +295,7 @@ void printInfo()
 {
     LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
 }
-#if !defined(PIO_UNIT_TESTING) || !(PIO_UNIT_TESTING)
+#ifndef PIO_UNIT_TESTING
 void setup()
 {
 #if defined(R1_NEO)
