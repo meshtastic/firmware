@@ -7,6 +7,14 @@
 #if defined(USE_EPD)
 #include "FastEPD.h"
 
+// Thresholds for choosing partial vs full update
+#ifndef EPD_PARTIAL_THRESHOLD_ROWS
+#define EPD_PARTIAL_THRESHOLD_ROWS 64 // if changed region <= this many rows, prefer partial
+#endif
+#ifndef EPD_FULLSLOW_PERIOD
+#define EPD_FULLSLOW_PERIOD 50 // every N full updates do a slow (CLEAR_SLOW) full refresh
+#endif
+
 EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rotation) : epaper(nullptr)
 {
     LOG_INFO("ctor EInkParallelDisplay");
@@ -90,45 +98,62 @@ void EInkParallelDisplay::display(void)
     // Convert: OLED buffer layout -> FASTEPD 1bpp horizontal-bytes layout into cur,
     // comparing against prev when available to detect changes.
     for (uint32_t y = 0; y < h; ++y) {
-        uint32_t rowBase = y * rowBytes;
-        for (uint32_t xb = 0; xb < rowBytes; ++xb) {
-            uint8_t out = 0;
-            for (uint8_t bit = 0; bit < 8; ++bit) {
-                uint32_t x = xb * 8 + bit;
-                uint8_t pix = 0;
-                if (x < w) {
-                    uint32_t idx = x + (y / 8) * w;
-                    pix = (buffer[idx] >> (y & 7)) & 1;
-                }
-                // FASTEPD expects MSB = leftmost pixel
-                out |= (pix & 1) << (7 - bit);
-            }
+        const uint32_t base = (y >> 3) * w;               // (y/8) * width
+        const uint8_t bitMask = (uint8_t)(1u << (y & 7)); // mask for this row in vertical-byte layout
 
-            // If this is a partial byte at the row end, build a mask for valid bits
+        const uint32_t rowBase = y * rowBytes;
+        uint32_t xb = 0;
+
+        // process full 8-pixel bytes
+        for (; xb + 1 <= rowBytes; ++xb) {
+            uint32_t x0 = xb * 8;
+            // read up to 8 source bytes (vertical-byte per column)
+            // Be careful at the row end: we may read beyond width; handle mask later.
+            uint8_t b0 = (x0 + 0 < w) ? buffer[base + x0 + 0] : 0;
+            uint8_t b1 = (x0 + 1 < w) ? buffer[base + x0 + 1] : 0;
+            uint8_t b2 = (x0 + 2 < w) ? buffer[base + x0 + 2] : 0;
+            uint8_t b3 = (x0 + 3 < w) ? buffer[base + x0 + 3] : 0;
+            uint8_t b4 = (x0 + 4 < w) ? buffer[base + x0 + 4] : 0;
+            uint8_t b5 = (x0 + 5 < w) ? buffer[base + x0 + 5] : 0;
+            uint8_t b6 = (x0 + 6 < w) ? buffer[base + x0 + 6] : 0;
+            uint8_t b7 = (x0 + 7 < w) ? buffer[base + x0 + 7] : 0;
+
+            // build output byte: MSB = leftmost pixel
+            uint8_t out = 0;
+            out |= (uint8_t)((b0 & bitMask) ? 0x80 : 0x00);
+            out |= (uint8_t)((b1 & bitMask) ? 0x40 : 0x00);
+            out |= (uint8_t)((b2 & bitMask) ? 0x20 : 0x00);
+            out |= (uint8_t)((b3 & bitMask) ? 0x10 : 0x00);
+            out |= (uint8_t)((b4 & bitMask) ? 0x08 : 0x00);
+            out |= (uint8_t)((b5 & bitMask) ? 0x04 : 0x00);
+            out |= (uint8_t)((b6 & bitMask) ? 0x02 : 0x00);
+            out |= (uint8_t)((b7 & bitMask) ? 0x01 : 0x00);
+
+            // handle partial byte at end of row by masking off invalid bits
             uint8_t mask = 0xFF;
-            uint32_t bitsRemain = w - xb * 8;
+            uint32_t bitsRemain = w - (xb * 8);
             if (bitsRemain < 8) {
                 mask = (uint8_t)(0xFF << (8 - bitsRemain));
                 out &= mask;
             }
 
-            // Invert bits to match FASTEPD color convention (panel uses opposite polarity)
+            // invert to FASTEPD polarity
             out = (~out) & mask;
 
             uint32_t pos = rowBase + xb;
-            uint8_t prevVal = prev ? (prev[pos] & mask) : 0x00; // if no prev, force change
+            uint8_t prevVal = prev ? (prev[pos] & mask) : 0x00;
             if (prev && prevVal == out) {
-                // no change for these bits; keep cur as-is (do not overwrite)
+                // unchanged
                 continue;
             }
 
-            // mark row y as changed
+            // mark row changed
             if (y < (uint32_t)newTop)
                 newTop = y;
             if ((int)y > newBottom)
                 newBottom = y;
 
-            // write new value into current buffer preserving any masked bits
+            // write to current buffer preserving masked bits
             cur[pos] = (cur[pos] & ~mask) | out;
         }
     }
@@ -143,7 +168,7 @@ void EInkParallelDisplay::display(void)
     if (epaper->getMode() == BB_MODE_1BPP && iUpdates < 50) {
         epaper->partialUpdate(true, newTop, newBottom);
     } else {
-        epaper->fullUpdate(CLEAR_NONE, false);
+        epaper->fullUpdate(CLEAR_SLOW, false);
         iUpdates = 0;
     }
     iUpdates++;
@@ -166,6 +191,7 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 
 void EInkParallelDisplay::endUpdate()
 {
+    epaper->fullUpdate(CLEAR_FAST, false);
     epaper->backupPlane();
 }
 
