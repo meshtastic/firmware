@@ -1,5 +1,6 @@
 
-#define MY_NODE_ID      0xc0ffee01 
+//#define MY_NODE_ID      0xc0ffee01 
+#define MY_NODE_ID      0xdeadc0de 
 
 #define BUTTON_PIN      9   // BOOT BTN
 #define LED_PIN         12  // LED D4
@@ -27,13 +28,8 @@
 #define LORA_RXEN       13  // LED D5
 #define LORA_DIO0       RADIOLIB_NC
 
-#define SX126X_MAX_POWER 22
-#define TX_GAIN_LORA    0
 
-// #define USE_LLCC68      // Original Chatter2 with LLCC68 module
-// FAKE LLCC68 E220-900M22S 
-// @see https://github.com/jgromes/RadioLib/issues/1329
-#define SX126X_XTAL_FORCE   1 
+
 #define USE_SX1262
 
 #define SX126X_CS       LORA_CS
@@ -41,7 +37,14 @@
 #define SX126X_BUSY     LORA_BUSY
 #define SX126X_RESET    LORA_RESET
 #define SX126X_RXEN     LORA_RXEN 
-#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO2_AS_RF_SWITCH // DIO2 and TXEN connected
+#define SX126X_MAX_POWER    22
+#define TX_GAIN_LORA        0
+// #define USE_LLCC68      // Original Chatter2 with LLCC68 module
+// FAKE LLCC68 E220-900M22S 
+// @see https://github.com/jgromes/RadioLib/issues/1329
+//#define SX126X_XTAL_FORCE   1 
+
 
 // EBYTE_E22
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
