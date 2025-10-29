@@ -563,6 +563,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
 #if defined(M5STACK_UNITC6L)
@@ -740,7 +741,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int yOffset = (isHighResolution) ? 0 : 5;
     std::string longNameStr;
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         longNameStr = sanitizeString(ourNode->user.long_name);
     }
@@ -1000,24 +1000,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     const char *displayLine = ""; // Initialize to empty string by default
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
-    bool usePhoneGPS = (ourNode && nodeDB->hasValidPosition(ourNode) &&
-                        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED);
-
-    if (usePhoneGPS) {
-        // Phone-provided GPS is active
-        displayLine = "Phone GPS";
-        int yOffset = (isHighResolution) ? 3 : 1;
-        if (isHighResolution) {
-            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
-                                                     imgSatellite_height, imgSatellite, display);
-        } else {
-            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
-                             imgSatellite);
-        }
-        int xOffset = (isHighResolution) ? 6 : 0;
-        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
-    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // GPS disabled / not present
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
         } else {
@@ -1108,9 +1091,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
         // === Final Row: Altitude ===
         char altitudeLine[32] = {0};
-        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
-                          ? ourNode->position.altitude
-                          : geoCoord.getAltitude();
+        int32_t alt = geoCoord.getAltitude();
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0fft", alt * METERS_TO_FEET);
         } else {
