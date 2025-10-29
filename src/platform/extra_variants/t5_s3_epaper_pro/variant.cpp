@@ -24,7 +24,8 @@ bool readTouch(int16_t *x, int16_t *y)
 // T5-S3-ePaper Pro specific (late-) init
 void lateInitVariant()
 {
-    bbct.init(GT911_PIN_SDA, GT911_PIN_SCL, GT911_PIN_RST, GT911_PIN_INT);
+    static TwoWire wire(0);
+    bbct.init(GT911_PIN_SDA, GT911_PIN_SCL, GT911_PIN_RST, GT911_PIN_INT, 400000, &wire);
     bbct.setOrientation(180, EPD_WIDTH, EPD_HEIGHT);
     touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
     touchScreenImpl1->init();
