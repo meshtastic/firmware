@@ -383,7 +383,7 @@ void portduinoSetup()
     randomSeed(time(NULL));
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
-    for (auto i : portduino_config.all_pins) {
+    for (const auto i : portduino_config.all_pins) {
         if (i->enabled && i->pin > max_GPIO)
             max_GPIO = i->pin;
     }
@@ -392,7 +392,7 @@ void portduinoSetup()
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    for (auto i : portduino_config.all_pins) {
+    for (const auto i : portduino_config.all_pins) {
         if (i->enabled)
             if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
                 printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
@@ -419,7 +419,7 @@ void portduinoSetup()
     return;
 }
 
-int initGPIOPin(int pinNum, const std::string gpioChipName, int line)
+int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 {
 #ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
@@ -579,7 +579,7 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["Display"]) {
 
-            for (auto &screen_name : portduino_config.screen_names) {
+            for (const auto &screen_name : portduino_config.screen_names) {
                 if (yamlConfig["Display"]["Panel"].as<std::string>("") == screen_name.second)
                     portduino_config.displayPanel = screen_name.first;
             }

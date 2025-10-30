@@ -97,6 +97,3 @@ meshtastic_DeviceMetadata getDeviceMetadata();
 void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,
                          meshtastic_TelemetrySensorType sensorType);
 #endif
-
-// We default to 4MHz SPI, SPI mode 0
-extern SPISettings spiSettings;

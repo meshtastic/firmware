@@ -192,7 +192,6 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     const char *titleStr = "";
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr, true, true);
-    int line = 0;
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
@@ -317,7 +316,6 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const char *titleStr = "";
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr, true, true);
-    int line = 0;
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
@@ -413,16 +411,11 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         double minuteAngleOffset = ((double)second / 60) * degreesPerMinuteOrSecond;
         double minuteAngle = radians(minuteBaseAngle + minuteAngleOffset);
 
-        double secondAngle = radians(second * degreesPerMinuteOrSecond);
-
         double hourX = sin(-hourAngle) * (hourHandNoonY - centerY) + noonX;
         double hourY = cos(-hourAngle) * (hourHandNoonY - centerY) + centerY;
 
         double minuteX = sin(-minuteAngle) * (minuteHandNoonY - centerY) + noonX;
         double minuteY = cos(-minuteAngle) * (minuteHandNoonY - centerY) + centerY;
-
-        double secondX = sin(-secondAngle) * (secondHandNoonY - centerY) + noonX;
-        double secondY = cos(-secondAngle) * (secondHandNoonY - centerY) + centerY;
 
         display->setFont(FONT_MEDIUM);
 
@@ -512,6 +505,11 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // draw minute hand
         display->drawLine(centerX, centerY, minuteX, minuteY);
 #ifndef USE_EINK
+        double secondAngle = radians(second * degreesPerMinuteOrSecond);
+
+        double secondX = sin(-secondAngle) * (secondHandNoonY - centerY) + noonX;
+        double secondY = cos(-secondAngle) * (secondHandNoonY - centerY) + centerY;
+    
         // draw second hand
         display->drawLine(centerX, centerY, secondX, secondY);
 #endif

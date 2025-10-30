@@ -395,7 +395,7 @@ time_t gm_mktime(struct tm *tm)
     days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
 
     // Now, within this tm->year, compute the days *before* this tm->month starts.
-    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+    const int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
     int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
 
     // If this is a leap year, and we're past February, add a day:

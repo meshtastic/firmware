@@ -89,11 +89,7 @@ int32_t ExternalNotificationModule::runOnce()
         return INT32_MAX; // we don't need this thread here...
     } else {
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
-        bool isRtttlPlaying = rtttl::isPlaying();
-#ifdef HAS_I2S
-        // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
-        isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
-#endif
+
         if ((nagCycleCutoff <= millis())) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
