@@ -15,10 +15,10 @@
 using namespace Adafruit_LittleFS_Namespace;
 #define FS_IMPL InternalFS
 #ifndef FILE_O_WRITE
-#define FILE_O_WRITE "w"
+#define FILE_O_WRITE 1 // uint8_t mode, not string
 #endif
 #ifndef FILE_O_READ
-#define FILE_O_READ "r"
+#define FILE_O_READ 0 // uint8_t mode, not string
 #endif
 #elif defined(ARCH_RP2040)
 #include <FS.h>
@@ -52,10 +52,23 @@ struct FileWrapper {
 #if defined(ARCH_ESP32)
     fs::File file;
 #elif defined(ARCH_NRF52)
-    Adafruit_LittleFS_Namespace::File file;
+    // nRF52 File requires filesystem reference, so we use a pointer
+    // and allocate with placement new
+    Adafruit_LittleFS_Namespace::File *file;
+    char file_storage[sizeof(Adafruit_LittleFS_Namespace::File)];
 #elif defined(ARCH_RP2040)
     fs::File file;
 #endif
+
+    ~FileWrapper()
+    {
+#if defined(ARCH_NRF52)
+        if (file) {
+            file->~File();
+            file = nullptr;
+        }
+#endif
+    }
 };
 #endif
 
@@ -120,7 +133,49 @@ bool FileHandle::open(const char *path, const char *mode)
         return false;
     }
 
+#if defined(ARCH_NRF52)
+    // Initialize file pointer
+    wrapper->file = nullptr;
+#endif
+
     // Convert stdio mode strings to Arduino File modes
+#if defined(ARCH_NRF52)
+    // nRF52 uses uint8_t modes
+    uint8_t arduino_mode;
+    if (strcmp(mode, "wb") == 0 || strcmp(mode, "w") == 0) {
+        arduino_mode = FILE_O_WRITE;
+    } else if (strcmp(mode, "rb") == 0 || strcmp(mode, "r") == 0) {
+        arduino_mode = FILE_O_READ;
+    } else if (strcmp(mode, "ab") == 0 || strcmp(mode, "a") == 0) {
+        arduino_mode = FILE_O_WRITE; // Append = write mode
+    } else {
+        delete wrapper;
+        LOG_WARN("FileHandle: Unknown mode '%s'", mode);
+        return false;
+    }
+
+    // For nRF52, use placement new to construct File from open() result
+    Adafruit_LittleFS_Namespace::File opened_file = FS_IMPL.open(path, arduino_mode);
+    if (opened_file) {
+        wrapper->file = new (wrapper->file_storage) Adafruit_LittleFS_Namespace::File(opened_file);
+        file_obj = wrapper;
+        is_open = true;
+        LOG_DEBUG("FileHandle: Opened %s in mode '%s' (size=%u)", path, mode, wrapper->file->size());
+
+        // For append mode, seek to end
+        if (strcmp(mode, "ab") == 0 || strcmp(mode, "a") == 0) {
+            // nRF52 seek() only takes position, so get size and seek to it
+            long file_size = wrapper->file->size();
+            wrapper->file->seek(file_size >= 0 ? static_cast<uint32_t>(file_size) : 0);
+        }
+        return true;
+    } else {
+        delete wrapper;
+        LOG_WARN("FileHandle: Failed to open %s in mode '%s' (filesystem mounted?)", path, mode);
+        return false;
+    }
+#else
+    // ESP32/RP2040 use string modes
     const char *arduino_mode = mode;
     if (strcmp(mode, "wb") == 0 || strcmp(mode, "w") == 0) {
         arduino_mode = FILE_O_WRITE;
@@ -147,6 +202,7 @@ bool FileHandle::open(const char *path, const char *mode)
         return false;
     }
 #endif
+#endif
 }
 
 bool FileHandle::close()
@@ -161,7 +217,13 @@ bool FileHandle::close()
 #else
     if (is_open && file_obj) {
         FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
+#if defined(ARCH_NRF52)
+        if (wrapper->file) {
+            wrapper->file->close();
+        }
+#else
         wrapper->file.close();
+#endif
         delete wrapper;
         file_obj = nullptr;
         is_open = false;
@@ -181,7 +243,11 @@ size_t FileHandle::read(void *buffer, size_t size)
     if (!is_open || !file_obj)
         return 0;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
+#if defined(ARCH_NRF52)
+    return wrapper->file ? wrapper->file->read(static_cast<uint8_t *>(buffer), size) : 0;
+#else
     return wrapper->file.read(static_cast<uint8_t *>(buffer), size);
+#endif
 #endif
 }
 
@@ -195,7 +261,11 @@ size_t FileHandle::write(const void *buffer, size_t size)
     if (!is_open || !file_obj)
         return 0;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
+#if defined(ARCH_NRF52)
+    return wrapper->file ? wrapper->file->write(static_cast<const uint8_t *>(buffer), size) : 0;
+#else
     return wrapper->file.write(static_cast<const uint8_t *>(buffer), size);
+#endif
 #endif
 }
 
@@ -212,16 +282,25 @@ bool FileHandle::seek(long offset, int whence)
 
     // Arduino File uses SeekMode enum
 #if defined(ARCH_NRF52)
-    // nRF52 uses different SeekMode enum
-    SeekMode mode;
-    if (whence == SEEK_SET)
-        mode = SeekSet;
-    else if (whence == SEEK_CUR)
-        mode = SeekCur;
-    else if (whence == SEEK_END)
-        mode = SeekEnd;
-    else
+    // nRF52 File API: seek() only takes position, not offset+whence
+    // Calculate absolute position based on whence
+    uint32_t abs_pos;
+    if (whence == SEEK_SET) {
+        abs_pos = (offset >= 0) ? static_cast<uint32_t>(offset) : 0;
+    } else if (whence == SEEK_CUR) {
+        long current = wrapper->file ? wrapper->file->position() : 0;
+        abs_pos = (offset >= 0)                                 ? static_cast<uint32_t>(current + offset)
+                  : (current >= static_cast<uint32_t>(-offset)) ? static_cast<uint32_t>(current + offset)
+                                                                : 0;
+    } else if (whence == SEEK_END) {
+        long file_size = wrapper->file ? wrapper->file->size() : 0;
+        abs_pos = (offset >= 0)                                   ? static_cast<uint32_t>(file_size + offset)
+                  : (file_size >= static_cast<uint32_t>(-offset)) ? static_cast<uint32_t>(file_size + offset)
+                                                                  : 0;
+    } else {
         return false;
+    }
+    return wrapper->file ? wrapper->file->seek(abs_pos) : false;
 #else
     fs::SeekMode mode;
     if (whence == SEEK_SET)
@@ -232,9 +311,8 @@ bool FileHandle::seek(long offset, int whence)
         mode = fs::SeekEnd;
     else
         return false;
-#endif
-
     return wrapper->file.seek(offset, mode);
+#endif
 #endif
 }
 
@@ -248,7 +326,11 @@ long FileHandle::tell()
     if (!is_open || !file_obj)
         return -1;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
+#if defined(ARCH_NRF52)
+    return wrapper->file ? wrapper->file->position() : -1;
+#else
     return wrapper->file.position();
+#endif
 #endif
 }
 
@@ -278,7 +360,11 @@ long FileHandle::size()
     if (!is_open || !file_obj)
         return -1;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
+#if defined(ARCH_NRF52)
+    return wrapper->file ? wrapper->file->size() : -1;
+#else
     return wrapper->file.size();
+#endif
 #endif
 }
 
@@ -294,7 +380,13 @@ bool FileHandle::sync()
     if (!is_open || !file_obj)
         return false;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
+#if defined(ARCH_NRF52)
+    if (wrapper->file) {
+        wrapper->file->flush();
+    }
+#else
     wrapper->file.flush();
+#endif
     return true;
 #endif
 }
