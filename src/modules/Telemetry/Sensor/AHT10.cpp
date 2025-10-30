@@ -35,7 +35,7 @@ bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
     // prefer other sensors like bmp280, bmp3xx
     if (!measurement->variant.environment_metrics.has_temperature) {
         measurement->variant.environment_metrics.has_temperature = true;
-        measurement->variant.environment_metrics.temperature = temp.temperature;
+        measurement->variant.environment_metrics.temperature = temp.temperature + AHT10_TEMP_OFFSET;
     }
 
     if (!measurement->variant.environment_metrics.has_relative_humidity) {

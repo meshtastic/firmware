@@ -68,6 +68,8 @@ extern "C" {
 #define WIRE_INTERFACES_COUNT 1
 #define PIN_WIRE_SDA 26
 #define PIN_WIRE_SCL 27
+// Temperature correction for sensor
+#define AHT10_TEMP_OFFSET -5.0
 /*GPS pins*/
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
