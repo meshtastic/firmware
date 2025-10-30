@@ -486,6 +486,20 @@ bool loadConfig(const char *configPath)
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
+            if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
+                YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
+                if (tx_gain_node.IsSequence() && tx_gain_node.size() != 0) {
+                    portduino_config.num_pa_points =
+                        min(tx_gain_node.size(), sizeof(portduino_config.tx_gain_lora) / sizeof(uint16_t));
+                    for (int i = 0; i < portduino_config.num_pa_points; i++) {
+                        portduino_config.tx_gain_lora[i] = tx_gain_node[i].as<int>();
+                    }
+                } else {
+                    portduino_config.num_pa_points = 1;
+                    portduino_config.tx_gain_lora[0] = tx_gain_node.as<int>(0);
+                }
+            }
+
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
                 !portduino_config.force_simradio) {
                 portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);

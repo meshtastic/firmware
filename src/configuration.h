@@ -132,6 +132,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // Default system gain to 0 if not defined
+#ifndef NUM_PA_POINTS
+#define NUM_PA_POINTS 1
+#endif
+
 #ifndef TX_GAIN_LORA
 #define TX_GAIN_LORA 0
 #endif
