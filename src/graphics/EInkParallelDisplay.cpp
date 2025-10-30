@@ -100,15 +100,12 @@ void EInkParallelDisplay::display(void)
     for (uint32_t y = 0; y < h; ++y) {
         const uint32_t base = (y >> 3) * w;               // (y/8) * width
         const uint8_t bitMask = (uint8_t)(1u << (y & 7)); // mask for this row in vertical-byte layout
-
         const uint32_t rowBase = y * rowBytes;
-        uint32_t xb = 0;
 
         // process full 8-pixel bytes
-        for (; xb + 1 <= rowBytes; ++xb) {
+        for (uint32_t xb = 0; xb < rowBytes; ++xb) {
             uint32_t x0 = xb * 8;
             // read up to 8 source bytes (vertical-byte per column)
-            // Be careful at the row end: we may read beyond width; handle mask later.
             uint8_t b0 = (x0 + 0 < w) ? buffer[base + x0 + 0] : 0;
             uint8_t b1 = (x0 + 1 < w) ? buffer[base + x0 + 1] : 0;
             uint8_t b2 = (x0 + 2 < w) ? buffer[base + x0 + 2] : 0;
@@ -131,8 +128,8 @@ void EInkParallelDisplay::display(void)
 
             // handle partial byte at end of row by masking off invalid bits
             uint8_t mask = 0xFF;
-            uint32_t bitsRemain = w - (xb * 8);
-            if (bitsRemain < 8) {
+            uint32_t bitsRemain = (w > x0) ? (w - x0) : 0;
+            if (bitsRemain > 0 && bitsRemain < 8) {
                 mask = (uint8_t)(0xFF << (8 - bitsRemain));
                 out &= mask;
             }
