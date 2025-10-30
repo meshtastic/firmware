@@ -97,19 +97,7 @@ int32_t ExternalNotificationModule::runOnce()
         if ((nagCycleCutoff <= millis())) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
-            LOG_INFO("Turning off external notification: ");
-            for (int i = 0; i < 3; i++) {
-                setExternalState(i, false);
-                externalTurnedOn[i] = 0;
-                LOG_INFO("%d ", i);
-            }
-#ifdef HAS_I2S
-            // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
-            // T-Deck uses GPIO0 as trackball button, so restore the mode
-#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
-            pinMode(0, INPUT);
-#endif
-#endif
+            ExternalNotificationModule::stopNow();
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
         }
@@ -317,8 +305,11 @@ bool ExternalNotificationModule::nagging()
 
 void ExternalNotificationModule::stopNow()
 {
+    LOG_INFO("Turning off external notification: ");
+    LOG_INFO("Stop RTTTL playback");
     rtttl::stop();
 #ifdef HAS_I2S
+    LOG_INFO("Stop audioThread playback");
     if (audioThread->isPlaying())
         audioThread->stop();
 #endif
@@ -328,10 +319,19 @@ void ExternalNotificationModule::stopNow()
     for (int i = 0; i < 3; i++) {
         setExternalState(i, false);
         externalTurnedOn[i] = 0;
+        LOG_INFO("%d ", i);
     }
     setIntervalFromNow(0);
 #ifdef T_WATCH_S3
     drv.stop();
+#endif
+
+#ifdef HAS_I2S
+    // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
+    // T-Deck uses GPIO0 as trackball button, so restore the mode
+#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
+    pinMode(0, INPUT);
+#endif
 #endif
 }
 
