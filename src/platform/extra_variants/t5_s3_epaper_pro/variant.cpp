@@ -3,18 +3,19 @@
 #ifdef T5_S3_EPAPER_PRO
 
 #include "input/TouchScreenImpl1.h"
+#include <TAMC_GT911.h>
 #include <Wire.h>
-#include <bb_captouch.h>
 
-BBCapTouch bbct;
+TAMC_GT911 tp = TAMC_GT911(GT911_PIN_SDA, GT911_PIN_SCL, GT911_PIN_INT, GT911_PIN_RST, EPD_WIDTH, EPD_HEIGHT);
 
 bool readTouch(int16_t *x, int16_t *y)
 {
-    TOUCHINFO ti;
     if (!digitalRead(GT911_PIN_INT)) {
-        if (bbct.getSamples(&ti)) {
-            *x = ti.x[0];
-            *y = ti.y[0];
+        tp.read();
+        if (tp.isTouched) {
+            *x = tp.points[0].x;
+            *y = tp.points[0].y;
+            LOG_DEBUG("touched(%d/%d)", *x, *y);
             return true;
         }
     }
@@ -24,9 +25,8 @@ bool readTouch(int16_t *x, int16_t *y)
 // T5-S3-ePaper Pro specific (late-) init
 void lateInitVariant()
 {
-    static TwoWire wire(0);
-    bbct.init(GT911_PIN_SDA, GT911_PIN_SCL, GT911_PIN_RST, GT911_PIN_INT, 400000, &wire);
-    bbct.setOrientation(180, EPD_WIDTH, EPD_HEIGHT);
+    tp.setRotation(ROTATION_INVERTED); // portrait
+    tp.begin();
     touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
     touchScreenImpl1->init();
 }
