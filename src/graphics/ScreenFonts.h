@@ -83,6 +83,10 @@
 #define FONT_SMALL FONT_SMALL_LOCAL  // Height: 13
 #define FONT_MEDIUM FONT_SMALL_LOCAL // Height: 13
 #define FONT_LARGE FONT_SMALL_LOCAL  // Height: 13
+#elif defined(USE_EPD)
+#define FONT_SMALL FONT_LARGE_LOCAL  // Height: 28
+#define FONT_MEDIUM FONT_LARGE_LOCAL // Height: 28
+#define FONT_LARGE FONT_LARGE_LOCAL  // Height: 28
 #else
 #define FONT_SMALL FONT_SMALL_LOCAL   // Height: 13
 #define FONT_MEDIUM FONT_MEDIUM_LOCAL // Height: 19
