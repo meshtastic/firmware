@@ -94,7 +94,7 @@ int32_t ExternalNotificationModule::runOnce()
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff <= millis())) {
+        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
@@ -313,8 +313,6 @@ void ExternalNotificationModule::stopNow()
     if (audioThread->isPlaying())
         audioThread->stop();
 #endif
-    nagCycleCutoff = 1; // small value
-    isNagging = false;
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates: ");
     for (int i = 0; i < 3; i++) {
