@@ -90,32 +90,24 @@ inline int get_rx_tophone_limit()
 static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
 
 /// max number of nodes allowed in the nodeDB
+/// Note: With LSM storage, this is just the RAM cache size.
+/// Total capacity is much larger (stored on flash via LSM).
 #ifndef MAX_NUM_NODES
 #if defined(ARCH_STM32WL)
-#define MAX_NUM_NODES 10
+#define MAX_NUM_NODES 50 // Increased from 10 (LSM provides flash storage)
 #elif defined(ARCH_NRF52)
-#define MAX_NUM_NODES 80
+#define MAX_NUM_NODES 200 // Increased from 80 (LSM can handle 3000+ on flash)
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #if defined(BOARD_MAX_NUM_NODES)
 #define MAX_NUM_NODES BOARD_MAX_NUM_NODES
 #elif defined(BOARD_HAS_PSRAM)
-#define MAX_NUM_NODES 3000
+#define MAX_NUM_NODES 3000 // Unchanged (PSRAM allows large cache)
 #else
-#include "Esp.h"
-static inline int get_max_num_nodes()
-{
-    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Fallback based on flash size
-    if (flash_size >= 15) {
-        return 250;
-    } else if (flash_size >= 7) {
-        return 200;
-    }
-    return 100;
-}
-#define MAX_NUM_NODES get_max_num_nodes()
+#define MAX_NUM_NODES 500 // Increased from 100-250 (LSM provides flash storage)
 #endif
 #else
-#define MAX_NUM_NODES 100
+// Other ESP32 platforms (ESP32, ESP32-C3, etc.)
+#define MAX_NUM_NODES 500 // Increased from 100 (LSM provides flash storage)
 #endif
 #endif
 
