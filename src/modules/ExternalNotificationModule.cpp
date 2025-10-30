@@ -316,6 +316,7 @@ void ExternalNotificationModule::stopNow()
     nagCycleCutoff = 1; // small value
     isNagging = false;
     // Turn off all outputs
+    LOG_INFO("Turning off setExternalStates: ");
     for (int i = 0; i < 3; i++) {
         setExternalState(i, false);
         externalTurnedOn[i] = 0;
