@@ -27,6 +27,17 @@ using namespace Adafruit_LittleFS_Namespace;
 #ifndef FILE_O_WRITE
 #define FILE_O_WRITE FILE_O_WRITE
 #endif
+#elif defined(ARCH_STM32WL)
+#include "LittleFS.h"
+#include "STM32_LittleFS.h"
+using namespace STM32_LittleFS_Namespace;
+#define FS_IMPL InternalFS
+#ifndef FILE_O_WRITE
+#define FILE_O_WRITE 1 // uint8_t mode, same as nRF52
+#endif
+#ifndef FILE_O_READ
+#define FILE_O_READ 0 // uint8_t mode, same as nRF52
+#endif
 #elif defined(ARCH_PORTDUINO)
 #include <dirent.h>
 #include <errno.h>
@@ -58,11 +69,20 @@ struct FileWrapper {
     char file_storage[sizeof(Adafruit_LittleFS_Namespace::File)];
 #elif defined(ARCH_RP2040)
     fs::File file;
+#elif defined(ARCH_STM32WL)
+    // STM32WL File similar to nRF52 - requires filesystem reference
+    STM32_LittleFS_Namespace::File *file;
+    char file_storage[sizeof(STM32_LittleFS_Namespace::File)];
 #endif
 
     ~FileWrapper()
     {
 #if defined(ARCH_NRF52)
+        if (file) {
+            file->~File();
+            file = nullptr;
+        }
+#elif defined(ARCH_STM32WL)
         if (file) {
             file->~File();
             file = nullptr;
@@ -133,14 +153,14 @@ bool FileHandle::open(const char *path, const char *mode)
         return false;
     }
 
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     // Initialize file pointer
     wrapper->file = nullptr;
 #endif
 
     // Convert stdio mode strings to Arduino File modes
-#if defined(ARCH_NRF52)
-    // nRF52 uses uint8_t modes
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
+    // nRF52 and STM32WL use uint8_t modes
     uint8_t arduino_mode;
     if (strcmp(mode, "wb") == 0 || strcmp(mode, "w") == 0) {
         arduino_mode = FILE_O_WRITE;
@@ -154,7 +174,8 @@ bool FileHandle::open(const char *path, const char *mode)
         return false;
     }
 
-    // For nRF52, use placement new to construct File from open() result
+    // For nRF52/STM32WL, use placement new to construct File from open() result
+#if defined(ARCH_NRF52)
     Adafruit_LittleFS_Namespace::File opened_file = FS_IMPL.open(path, arduino_mode);
     if (opened_file) {
         wrapper->file = new (wrapper->file_storage) Adafruit_LittleFS_Namespace::File(opened_file);
@@ -174,6 +195,26 @@ bool FileHandle::open(const char *path, const char *mode)
         LOG_WARN("FileHandle: Failed to open %s in mode '%s' (filesystem mounted?)", path, mode);
         return false;
     }
+#elif defined(ARCH_STM32WL)
+    STM32_LittleFS_Namespace::File opened_file = FS_IMPL.open(path, arduino_mode);
+    if (opened_file) {
+        wrapper->file = new (wrapper->file_storage) STM32_LittleFS_Namespace::File(opened_file);
+        file_obj = wrapper;
+        is_open = true;
+        LOG_DEBUG("FileHandle: Opened %s in mode '%s' (size=%u)", path, mode, wrapper->file->size());
+
+        // For append mode, seek to end (STM32WL seek() takes position only)
+        if (strcmp(mode, "ab") == 0 || strcmp(mode, "a") == 0) {
+            long file_size = wrapper->file->size();
+            wrapper->file->seek(file_size >= 0 ? static_cast<uint32_t>(file_size) : 0);
+        }
+        return true;
+    } else {
+        delete wrapper;
+        LOG_WARN("FileHandle: Failed to open %s in mode '%s' (filesystem mounted?)", path, mode);
+        return false;
+    }
+#endif
 #else
     // ESP32/RP2040 use string modes
     const char *arduino_mode = mode;
@@ -217,7 +258,7 @@ bool FileHandle::close()
 #else
     if (is_open && file_obj) {
         FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
         if (wrapper->file) {
             wrapper->file->close();
         }
@@ -243,7 +284,7 @@ size_t FileHandle::read(void *buffer, size_t size)
     if (!is_open || !file_obj)
         return 0;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     return wrapper->file ? wrapper->file->read(static_cast<uint8_t *>(buffer), size) : 0;
 #else
     return wrapper->file.read(static_cast<uint8_t *>(buffer), size);
@@ -261,7 +302,7 @@ size_t FileHandle::write(const void *buffer, size_t size)
     if (!is_open || !file_obj)
         return 0;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     return wrapper->file ? wrapper->file->write(static_cast<const uint8_t *>(buffer), size) : 0;
 #else
     return wrapper->file.write(static_cast<const uint8_t *>(buffer), size);
@@ -281,8 +322,8 @@ bool FileHandle::seek(long offset, int whence)
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
 
     // Arduino File uses SeekMode enum
-#if defined(ARCH_NRF52)
-    // nRF52 File API: seek() only takes position, not offset+whence
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
+    // nRF52/STM32WL File API: seek() only takes position, not offset+whence
     // Calculate absolute position based on whence
     uint32_t abs_pos;
     if (whence == SEEK_SET) {
@@ -326,7 +367,7 @@ long FileHandle::tell()
     if (!is_open || !file_obj)
         return -1;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     return wrapper->file ? wrapper->file->position() : -1;
 #else
     return wrapper->file.position();
@@ -360,7 +401,7 @@ long FileHandle::size()
     if (!is_open || !file_obj)
         return -1;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     return wrapper->file ? wrapper->file->size() : -1;
 #else
     return wrapper->file.size();
@@ -380,7 +421,7 @@ bool FileHandle::sync()
     if (!is_open || !file_obj)
         return false;
     FileWrapper *wrapper = static_cast<FileWrapper *>(file_obj);
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     if (wrapper->file) {
         wrapper->file->flush();
     }
@@ -417,6 +458,8 @@ bool FileSystem::init(const char *base_path)
     mounted = InternalFS.begin();
 #elif defined(ARCH_RP2040)
     mounted = LittleFS.begin();
+#elif defined(ARCH_STM32WL)
+    mounted = InternalFS.begin();
 #else
     mounted = FSBegin();
 #endif
@@ -476,7 +519,12 @@ bool FileSystem::is_directory(const char *path)
 #else
     // Arduino LittleFS doesn't have direct is_dir check
     // Try to open as directory
+#if defined(ARCH_RP2040)
+    // RP2040 requires mode parameter
+    auto dir = FS_IMPL.open(path, FILE_O_READ);
+#else
     auto dir = FS_IMPL.open(path);
+#endif
     if (!dir) {
         return false;
     }
@@ -626,7 +674,12 @@ bool FileSystem::list_files(const char *dir_path, file_callback_t callback, void
     closedir(dir);
     return true;
 #else
+#if defined(ARCH_RP2040)
+    // RP2040 requires mode parameter
+    auto dir = FS_IMPL.open(dir_path, FILE_O_READ);
+#else
     auto dir = FS_IMPL.open(dir_path);
+#endif
     if (!dir) {
         return false;
     }
