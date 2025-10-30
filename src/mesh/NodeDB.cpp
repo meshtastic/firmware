@@ -1632,13 +1632,32 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // If should_ignore is set,
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
         info->is_ignored = true;
+        info->is_favorite = false;
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
         info->user.public_key.bytes[0] = 0;
     } else {
-        info->last_heard = getValidTime(RTCQualityNTP);
-        info->is_favorite = true;
+        /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
+         * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
+         */
+
+        /* "Boring old nodes" are the first to be evicted out of the node database when full. This includes a newly-zeroed
+         * nodeinfo because it has: !is_favorite && last_heard==0. To keep this from happening when we addFromContact, we set the
+         * new node as a favorite, and we leave last_heard alone (even if it's zero).
+         */
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+            // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
+            // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
+            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
+            info->last_heard = getTime();
+        } else {
+            // Normal case: set is_favorite to prevent expiration.
+            // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
+            info->is_favorite = true;
+        }
+
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
             info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
