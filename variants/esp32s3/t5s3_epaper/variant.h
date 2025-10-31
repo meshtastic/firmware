@@ -38,8 +38,10 @@
 #endif
 
 #define BUTTON_PIN 0
+#if defined(T5_S3_EPAPER_PRO_V1)
 #define PIN_BUTTON2 48
 #define ALT_BUTTON_PIN PIN_BUTTON2
+#endif
 
 // SD card
 #define HAS_SDCARD
@@ -55,24 +57,6 @@
 #define BQ27220_I2C_SDA SDA
 #define BQ27220_I2C_SCL SCL
 #define BQ27220_DESIGN_CAPACITY 1500
-
-#if !defined(T5_S3_EPAPER_PRO_V1)
-// TPS651851
-
-// PCA9535 IO extender
-#define USE_XL9555
-#define PCA9535_ADDR 0x20
-#define PCA9535_INT 38
-#define PCA9535_IO00_LORA_EN 00
-#define PCA9535_IO10_EP_OE 10   // EP Output enable source driver
-#define PCA9535_IO11_EP_MODE 11 // EP Output mode selection gate driver
-#define PCA9535_IO12_BUTTON 12
-#define PCA9535_IO13_TPS_PWRUP 13
-#define PCA9535_IO14_VCOM_CTRL 14
-#define PCA9535_IO15_TPS_WAKEUP 15
-#define PCA9535_IO16_TPS_PWR_GOOD 16
-#define PCA9535_IO17_TPS_INT 17
-#endif
 
 // LoRa
 #define USE_SX1262
