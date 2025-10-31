@@ -163,6 +163,10 @@ void setupNicheGraphics();
 SPIClass SPI1(HSPI);
 #endif
 
+#ifdef T5_S3_EPAPER_PRO
+extern void lateInitVariant_T5S3Pro(void);
+#endif
+
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
@@ -400,13 +404,6 @@ void setup()
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(BOARD_BL_EN, OUTPUT);
-#if !defined(T5_S3_EPAPER_PRO_V1)
-    io.begin(Wire, PCA9535_ADDR, SDA, SCL);
-    io.configPort(ExtensionIOXL9555::PORT0, 0x00);
-    io.configPort(ExtensionIOXL9555::PORT1, 0xFF);
-    io.digitalWrite(PCA9535_IO00_LORA_EN, HIGH);
-    delay(100);
-#endif
 #endif
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
@@ -1138,6 +1135,12 @@ void setup()
     }
 #endif
 
+#endif
+
+#if defined(T5_S3_EPAPER_PRO)
+    // this must be defined here before LoRa is setup, but after the epaper display is initialised,
+    // as the FastEPD driver also messes around with the IO expander and uses non-arduino I2C calls
+    lateInitVariant_T5S3Pro();
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
