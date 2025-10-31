@@ -18,7 +18,9 @@
 #include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
 #include "libtinylsm/tinylsm_adapter.h"
+#endif
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -240,9 +242,13 @@ NodeDB::NodeDB()
     last_cache_stats_log = 0;
 
     // Initialize tiny-LSM storage backend (SINGLE SOURCE OF TRUTH)
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
     if (!meshtastic::tinylsm::initNodeDBLSM()) {
         LOG_ERROR("Failed to initialize NodeDB LSM storage");
     }
+#else
+    LOG_INFO("LSM storage disabled (MESHTASTIC_EXCLUDE_LSM_STORAGE)");
+#endif
 
     loadFromDisk();
     cleanupMeshDB();
@@ -1454,11 +1460,16 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
     // Write-through to LSM storage backend
     auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
     if (!adapter) {
         LOG_WARN("LSM adapter not initialized, falling back to protobuf");
         // Fall back to protobuf save for compatibility
+#else
+    // LSM storage disabled, use protobuf
+    {
+#endif
 #ifdef FSCom
         spiLock->lock();
         FSCom.mkdir("/prefs");
@@ -1469,6 +1480,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
         return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
     }
 
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
     LOG_DEBUG("Saving %u nodes to LSM storage", numMeshNodes);
     size_t saved = 0;
     for (size_t i = 0; i < numMeshNodes; i++) {
@@ -1484,6 +1496,10 @@ bool NodeDB::saveNodeDatabaseToDisk()
     LOG_INFO("Saved %u/%u nodes to LSM", saved, numMeshNodes);
     adapter->flush(); // Force persistence of ephemeral data
     return true;
+#else
+    // Should not reach here - already returned above
+    return false;
+#endif
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
@@ -1578,6 +1594,7 @@ const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
     }
 
     // Load from LSM (single source of truth)
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
     auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
     if (!adapter) {
         return NULL; // LSM not available
@@ -1590,6 +1607,7 @@ const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
         nodeCache[cache_slot].last_access_time = millis();
         return &nodeCache[cache_slot].node;
     }
+#endif
 
     return NULL;
 }
@@ -1811,10 +1829,12 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // Write-through to LSM storage
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
         auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
         if (adapter) {
             adapter->saveNode(info);
         }
+#endif
 
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
@@ -1861,10 +1881,12 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         }
 
         // Write-through to LSM storage
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
         auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
         if (adapter) {
             adapter->saveNode(info);
         }
+#endif
 
         sortMeshDB();
     }
@@ -2112,6 +2134,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     }
 
     // NEW: Load from LSM (single source of truth)
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
     auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
     if (adapter) {
         // Find a cache slot to use
@@ -2135,6 +2158,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
             return &nodeCache[cache_slot].node;
         }
     }
+#endif
 
     // Fallback: Check old meshNodes[] array if LSM not available
     for (int i = 0; i < numMeshNodes; i++)

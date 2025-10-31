@@ -10,7 +10,9 @@
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
 #include "libtinylsm/tinylsm_adapter.h"
+#endif
 
 #include "FSCommon.h"
 #include "Led.h"
@@ -1598,9 +1600,11 @@ void loop()
     service->loop();
 
     // Background maintenance for LSM storage
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
     if (meshtastic::tinylsm::g_nodedb_adapter) {
         meshtastic::tinylsm::g_nodedb_adapter->tick();
     }
+#endif
 
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS)
     if (inputBroker)
