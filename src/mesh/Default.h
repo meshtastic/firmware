@@ -46,12 +46,15 @@ class Default
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
+    // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
+    // even though internal node counts use uint16_t (max 65535 nodes)
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 
   private:
-    static float congestionScalingCoefficient(int numOnlineNodes)
+    // Note: Kept as uint32_t to match the public API parameter type
+    static float congestionScalingCoefficient(uint32_t numOnlineNodes)
     {
         // Increase frequency of broadcasts for small networks regardless of preset
         if (numOnlineNodes <= 10) {
