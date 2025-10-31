@@ -13,8 +13,8 @@
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"
-#include "power.h"
 #include "meshUtils.h"
+#include "power.h"
 
 #include <hal/nrf_lpcomp.h>
 
@@ -405,7 +405,8 @@ void cpuDeepSleep(uint32_t msecToWake)
         battery_adcEnable();
 
         nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
-        while(!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY));
+        while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
+            ;
 #endif
 
         auto ok = sd_power_system_off();
