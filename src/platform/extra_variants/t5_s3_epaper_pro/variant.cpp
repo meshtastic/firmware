@@ -2,19 +2,16 @@
 
 #ifdef T5_S3_EPAPER_PRO
 
+#include "TouchDrvGT911.hpp"
+#include "Wire.h"
 #include "input/TouchScreenImpl1.h"
-#include <TAMC_GT911.h>
-#include <Wire.h>
 
-TAMC_GT911 tp = TAMC_GT911(GT911_PIN_SDA, GT911_PIN_SCL, GT911_PIN_INT, GT911_PIN_RST, EPD_WIDTH, EPD_HEIGHT);
+TouchDrvGT911 touch;
 
 bool readTouch(int16_t *x, int16_t *y)
 {
     if (!digitalRead(GT911_PIN_INT)) {
-        tp.read();
-        if (tp.isTouched) {
-            *x = tp.points[0].x;
-            *y = tp.points[0].y;
+        if (touch.getPoint(x, y) && (*x >= 0) && (*y >= 0) && (*x < EPD_WIDTH) && (*y < EPD_HEIGHT)) {
             LOG_DEBUG("touched(%d/%d)", *x, *y);
             return true;
         }
@@ -23,11 +20,14 @@ bool readTouch(int16_t *x, int16_t *y)
 }
 
 // T5-S3-ePaper Pro specific (late-) init
-void lateInitVariant()
+void lateInitVariant_T5S3Pro(void)
 {
-    tp.setRotation(ROTATION_INVERTED); // portrait
-    tp.begin();
-    touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
-    touchScreenImpl1->init();
+    touch.setPins(GT911_PIN_RST, GT911_PIN_INT);
+    if (touch.begin(Wire, GT911_SLAVE_ADDRESS_L, GT911_PIN_SDA, GT911_PIN_SCL)) {
+        touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
+        touchScreenImpl1->init();
+    } else {
+        LOG_ERROR("Failed to find touch controller!");
+    }
 }
 #endif
