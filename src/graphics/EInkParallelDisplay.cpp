@@ -1,10 +1,15 @@
 #include "EInkParallelDisplay.h"
+
+#ifdef USE_EPD
+
+#include "SPILock.h"
 #include "Wire.h"
 #include "variant.h"
 #include <Arduino.h>
+#include <atomic>
 #include <stdlib.h>
+#include <string.h>
 
-#if defined(USE_EPD)
 #include "FastEPD.h"
 
 // Thresholds for choosing partial vs full update
@@ -30,10 +35,37 @@ EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRot
         shortSide = (shortSide | 7) + 1;
 
     this->displayBufferSize = longSide * (shortSide / 8);
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // allocate dirty pixel buffer same size as epaper buffers (rowBytes * height)
+    size_t rowBytes = (this->displayWidth + 7) / 8;
+    dirtyPixelsSize = rowBytes * this->displayHeight;
+    dirtyPixels = (uint8_t *)calloc(dirtyPixelsSize, 1);
+    ghostPixelCount = 0;
+#endif
 }
 
 EInkParallelDisplay::~EInkParallelDisplay()
 {
+#ifdef EINK_LIMIT_GHOSTING_PX
+    if (dirtyPixels) {
+        free(dirtyPixels);
+        dirtyPixels = nullptr;
+    }
+#endif
+    // If an async full update is running, wait for it to finish
+    if (asyncFullRunning.load()) {
+        // wait a short while for task to finish
+        for (int i = 0; i < 50 && asyncFullRunning.load(); ++i) {
+            delay(50);
+        }
+        if (asyncTaskHandle) {
+            // Let it finish or delete it
+            vTaskDelete(asyncTaskHandle);
+            asyncTaskHandle = nullptr;
+        }
+    }
+
     delete epaper;
 }
 
@@ -60,6 +92,11 @@ bool EInkParallelDisplay::connect()
     epaper->clearWhite();
     epaper->fullUpdate(true);
 
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // After a full/clear the dirty tracking should be reset
+    resetGhostPixelTracking();
+#endif
+
     return true;
 }
 
@@ -69,6 +106,78 @@ bool EInkParallelDisplay::connect()
 void EInkParallelDisplay::sendCommand(uint8_t com)
 {
     LOG_DEBUG("EInkParallelDisplay::sendCommand %d", (int)com);
+}
+
+/*
+ * Start a background task that will perform a blocking fullUpdate(). This lets
+ * display() return quickly while the heavy refresh runs in the background.
+ */
+void EInkParallelDisplay::startAsyncFullUpdate(int clearMode)
+{
+    if (asyncFullRunning.load())
+        return; // already running
+
+    asyncFullRunning.store(true);
+    // pass 'this' as parameter
+    BaseType_t rc = xTaskCreatePinnedToCore(EInkParallelDisplay::asyncFullUpdateTask, "epd_full", 4096 / sizeof(StackType_t),
+                                            this, 2, &asyncTaskHandle,
+#if CONFIG_FREERTOS_UNICORE
+                                            0
+#else
+                                            1
+#endif
+    );
+    if (rc != pdPASS) {
+        LOG_WARN("Failed to create async full-update task, falling back to blocking update");
+        // fallback: blocking call
+        {
+            concurrency::LockGuard g(spiLock);
+            epaper->fullUpdate(clearMode, false);
+            epaper->backupPlane();
+        }
+        asyncFullRunning.store(false);
+        asyncTaskHandle = nullptr;
+    }
+}
+
+/*
+ * FreeRTOS task entry: runs the full update and then backs up plane.
+ */
+void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
+{
+    EInkParallelDisplay *self = static_cast<EInkParallelDisplay *>(pvParameters);
+    if (!self) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    // Acquire SPI lock and run the full update inside the critical section
+    {
+        concurrency::LockGuard g(spiLock);
+        // choose CLEAR_SLOW occasionally
+        int clearMode = CLEAR_FAST;
+        if (self->fastRefreshCount >= EPD_FULLSLOW_PERIOD) {
+            clearMode = CLEAR_SLOW;
+            self->fastRefreshCount = 0;
+        } else {
+            // when running async full, treat it as a full so reset fast count
+            self->fastRefreshCount = 0;
+        }
+
+        self->epaper->fullUpdate(clearMode, false);
+        self->epaper->backupPlane();
+    }
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // A full refresh clears ghosting state
+    self->resetGhostPixelTracking();
+#endif
+
+    self->asyncFullRunning.store(false);
+    self->asyncTaskHandle = nullptr;
+
+    // delete this task
+    vTaskDelete(nullptr);
 }
 
 /*
@@ -86,6 +195,13 @@ void EInkParallelDisplay::display(void)
     const uint16_t h = this->displayHeight;
     static int iUpdates = 0; // count eink updates to know when to do a fullUpdate()
 
+    // Simple rate limiting: avoid very-frequent responsive updates
+    uint32_t nowMs = millis();
+    if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < RESPONSIVE_MIN_MS) {
+        LOG_DEBUG("rate-limited, skipping update");
+        return;
+    }
+
     // bytes per row in epd format (one byte = 8 horizontal pixels)
     const uint32_t rowBytes = (w + 7) / 8;
 
@@ -96,6 +212,22 @@ void EInkParallelDisplay::display(void)
     // Track changed row range while converting
     int newTop = h;     // min changed row (initialized to out-of-range)
     int newBottom = -1; // max changed row
+
+    // Compute a quick hash of the incoming OLED buffer (so we can skip identical frames)
+    uint32_t imageHash = 0;
+    uint32_t bufBytes = (w / 8) * h; // vertical-byte layout size
+    for (uint32_t bi = 0; bi < bufBytes; ++bi) {
+        imageHash ^= ((uint32_t)buffer[bi]) << (bi & 31);
+    }
+    if (imageHash == previousImageHash) {
+        LOG_DEBUG("image identical to previous, skipping update");
+        return;
+    }
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // reset ghost count for this conversion pass; we'll mark bits that change
+    ghostPixelCount = 0;
+#endif
 
     // Convert: OLED buffer layout -> FASTEPD 1bpp horizontal-bytes layout into cur,
     // comparing against prev when available to detect changes.
@@ -146,6 +278,11 @@ void EInkParallelDisplay::display(void)
                 continue;
             }
 
+            // If ghost-pixel tracking is enabled, mark bits that will change
+#ifdef EINK_LIMIT_GHOSTING_PX
+            markDirtyBits(prev, pos, mask, out);
+#endif
+
             // mark row changed
             if (y < (uint32_t)newTop)
                 newTop = y;
@@ -159,21 +296,81 @@ void EInkParallelDisplay::display(void)
 
     // If nothing changed, avoid any panel update
     if (newBottom < 0) {
-        LOG_DEBUG("no pixel changes detected, skipping update");
+        LOG_DEBUG("no pixel changes detected, skipping update (conv)");
+        previousImageHash = imageHash; // still remember that frame
         return;
     }
 
     // Choose partial vs full update using heuristic
-    if (epaper->getMode() == BB_MODE_1BPP && iUpdates < 50) {
+    concurrency::LockGuard g(spiLock);
+
+    // Decide if we should force a full update after many fast updates
+    bool forceFull = (fastRefreshCount >= EPD_FULLSLOW_PERIOD);
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // If ghost pixels exceed limit, force a full update to clear ghosting
+    if (ghostPixelCount > ghostPixelLimit) {
+        LOG_WARN("ghost pixels %u > limit %u, forcing full refresh", ghostPixelCount, ghostPixelLimit);
+        forceFull = true;
+    }
+#endif
+
+    if (epaper->getMode() == BB_MODE_1BPP && !forceFull && (newBottom - newTop) <= EPD_PARTIAL_THRESHOLD_ROWS) {
         epaper->partialUpdate(true, newTop, newBottom);
+        fastRefreshCount++;
     } else {
-        epaper->fullUpdate(CLEAR_SLOW, false);
-        iUpdates = 0;
+        // Full update: prefer to run asynchronously so UI thread isn't blocked.
+        // If async running isn't available/fails, startAsyncFullUpdate() falls back to blocking call.
+        startAsyncFullUpdate(forceFull ? CLEAR_SLOW : CLEAR_FAST);
     }
     iUpdates++;
 
+    lastUpdateMs = millis();
+    previousImageHash = imageHash;
+
+    // Keep same behavior as before
     lastDrawMsec = millis();
 }
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+// markDirtyBits: mark per-bit dirty flags and update ghostPixelCount
+void EInkParallelDisplay::markDirtyBits(const uint8_t *prevBuf, uint32_t pos, uint8_t mask, uint8_t out)
+{
+    // prevVal is previous displayed bits for this byte (masked)
+    uint8_t prevVal = prevBuf[pos] & mask;
+
+    // before = dirty bits previously recorded for this byte
+    uint8_t before = dirtyPixels[pos];
+
+    // In this code 'out' uses FASTEPD polarity (1 = black pixel, 0 = white)
+    uint8_t blackBits = out & mask;    // bits that will be black in the new image
+    uint8_t whiteBits = (~out) & mask; // bits that will be white in the new image
+
+    // Ghost bits: locations that were marked dirty previously and now will be white
+    uint8_t ghostBits = before & whiteBits;
+    if (ghostBits) {
+        ghostPixelCount += __builtin_popcount((unsigned)ghostBits);
+    }
+
+    // Update dirty bitmap: mark locations that will be black now
+    uint8_t newlySet = blackBits & (~before);
+    if (newlySet) {
+        dirtyPixels[pos] |= newlySet;
+    }
+
+    // Note: we do NOT clear dirty bits here when a pixel goes white; they remain
+    // cleared only on a full refresh (resetGhostPixelTracking()).
+}
+
+// reset ghost tracking (call after a full refresh)
+void EInkParallelDisplay::resetGhostPixelTracking()
+{
+    if (!dirtyPixels)
+        return;
+    memset(dirtyPixels, 0, dirtyPixelsSize);
+    ghostPixelCount = 0;
+}
+#endif
 
 /*
  * forceDisplay: use lastDrawMsec
@@ -190,7 +387,19 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 
 void EInkParallelDisplay::endUpdate()
 {
-    epaper->fullUpdate(CLEAR_FAST, false);
+    {
+        concurrency::LockGuard g(spiLock);
+        // ensure any async full update is started/completed
+        if (asyncFullRunning.load()) {
+            // nothing to do; background task will run and call backupPlane when done
+        } else {
+            epaper->fullUpdate(CLEAR_FAST, false);
+            epaper->backupPlane();
+#ifdef EINK_LIMIT_GHOSTING_PX
+            resetGhostPixelTracking();
+#endif
+        }
+    }
     epaper->backupPlane();
 }
 
