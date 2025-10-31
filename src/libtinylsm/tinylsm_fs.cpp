@@ -446,7 +446,7 @@ bool FileSystem::init(const char *base_path)
 
 #if defined(ARCH_PORTDUINO)
     // POSIX filesystem, create directory if needed
-    mkdir(base_path, 0755);
+    FileSystem::mkdir(base_path);
     mounted = true;
     return true;
 #else
