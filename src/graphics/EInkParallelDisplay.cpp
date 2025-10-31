@@ -49,6 +49,8 @@ bool EInkParallelDisplay::connect()
         epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
 #elif defined(T5_S3_EPAPER_PRO_V2)
         epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
+        epaper->ioPinMode(0, OUTPUT);
+        epaper->ioWrite(0, HIGH);
 #else
 #error "unsupported EPD device!"
 #endif
