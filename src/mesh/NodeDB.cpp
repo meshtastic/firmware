@@ -27,6 +27,27 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
+#include "SdFat_Adafruit_Fork.h"
+#include <SPI.h>
+#include <Adafruit_SPIFlash.h>
+#include "ff.h"
+#include "diskio.h"
+
+// up to 11 characters
+#define DISK_LABEL "EXT FLASH"
+
+
+
+
+#define EXTERNAL_FLASH_USE_QSPI
+#if defined(EXTERNAL_FLASH_USE_QSPI)
+Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
+#endif
+Adafruit_SPIFlash flash(&flashTransport);
+
+
+FatVolume fatfs;
+#define FILE_NAME "test2.txt"
 
 #ifdef ARCH_ESP32
 #if HAS_WIFI
@@ -67,6 +88,65 @@ meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 3
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
+
+
+void format_fat12(void) {
+// Working buffer for f_mkfs.
+#ifdef __AVR__
+  uint8_t workbuf[512];
+#else
+  uint8_t workbuf[4096];
+#endif
+
+  // Elm Cham's fatfs objects
+  FATFS elmchamFatfs;
+
+  // Make filesystem.
+  FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
+  if (r != FR_OK) {
+    LOG_ERROR("Error, f_mkfs failed");
+    while (1)
+      delay(1);
+  }
+
+  // mount to set disk label
+  r = f_mount(&elmchamFatfs, "0:", 1);
+  if (r != FR_OK) {
+    LOG_ERROR("Error, f_mount failed");
+    while (1)
+      delay(1);
+  }
+
+  // Setting label
+  LOG_INFO("Setting disk label to: " DISK_LABEL);
+  r = f_setlabel(DISK_LABEL);
+  if (r != FR_OK) {
+    LOG_ERROR("Error, f_setlabel failed");
+    while (1)
+      delay(1);
+  }
+
+  // unmount
+  f_unmount("0:");
+
+  // sync to make sure all data is written to flash
+  flash.syncBlocks();
+
+  LOG_INFO("Formatted flash!");
+}
+
+void check_fat12(void) {
+  // Check new filesystem
+  if (!fatfs.begin(&flash)) {
+    LOG_ERROR("Error, failed to mount newly formatted filesystem!");
+    while (1)
+      delay(1);
+  }
+}
+
+
+
+
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
 #endif
@@ -78,6 +158,7 @@ static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 #endif
 
 #ifdef HELTEC_MESH_NODE_T114
+
 
 uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
@@ -1464,6 +1545,56 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         success &= saveNodeDatabaseToDisk();
     }
 
+
+
+
+
+LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
+if (!flash.begin()) {
+    LOG_ERROR("Error, failed to initialize flash chip!");
+    while (1) {
+      delay(1);
+    }
+  }
+
+  LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+  //format_fat12();
+  check_fat12();
+  LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
+  if (!fatfs.begin(&flash)) {
+    LOG_ERROR("Error, failed to mount filesystem!");
+    while (1) {
+      delay(1);
+    }
+    }
+    LOG_INFO("Filesystem mounted!");
+    fatfs.remove(FILE_NAME);
+    
+    File32 writeFile = fatfs.open(FILE_NAME, FILE_WRITE);
+  if (!writeFile) {
+    LOG_ERROR("Error, failed to create file!");
+    
+  }
+  LOG_INFO("File created!");
+   writeFile.println(config.has_display);
+   writeFile.close();
+   LOG_INFO("File closed!");
+
+   File32 dataFile = fatfs.open(FILE_NAME, FILE_READ);
+  if (dataFile) {
+    LOG_INFO("OPENED FILE");
+    while (dataFile.available()) {
+      // Use the read function to read the next character.
+      // You can alternatively use other functions like readUntil, readString,
+      // etc. See the fatfs_full_usage example for more details.
+      char c = dataFile.read();
+      LOG_INFO("%c", c);
+    }
+}
+    else {
+      LOG_ERROR("Error reading file");
+    }
+
     return success;
 }
 
@@ -2091,4 +2222,66 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     LOG_ERROR("A critical failure occurred, portduino is exiting");
     exit(2);
 #endif
+}
+
+
+
+
+extern "C" {
+
+DSTATUS disk_status(BYTE pdrv) {
+  (void)pdrv;
+  return 0;
+}
+
+DSTATUS disk_initialize(BYTE pdrv) {
+  (void)pdrv;
+  return 0;
+}
+
+DRESULT disk_read(BYTE pdrv,  /* Physical drive nmuber to identify the drive */
+                  BYTE *buff, /* Data buffer to store read data */
+                  DWORD sector, /* Start sector in LBA */
+                  UINT count    /* Number of sectors to read */
+) {
+  (void)pdrv;
+  return flash.readBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
+}
+
+DRESULT disk_write(BYTE pdrv, /* Physical drive nmuber to identify the drive */
+                   const BYTE *buff, /* Data to be written */
+                   DWORD sector,     /* Start sector in LBA */
+                   UINT count        /* Number of sectors to write */
+) {
+  (void)pdrv;
+  return flash.writeBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
+}
+
+DRESULT disk_ioctl(BYTE pdrv, /* Physical drive nmuber (0..) */
+                   BYTE cmd,  /* Control code */
+                   void *buff /* Buffer to send/receive control data */
+) {
+  (void)pdrv;
+
+  switch (cmd) {
+  case CTRL_SYNC:
+    flash.syncBlocks();
+    return RES_OK;
+
+  case GET_SECTOR_COUNT:
+    *((DWORD *)buff) = flash.size() / 512;
+    return RES_OK;
+
+  case GET_SECTOR_SIZE:
+    *((WORD *)buff) = 512;
+    return RES_OK;
+
+  case GET_BLOCK_SIZE:
+    *((DWORD *)buff) = 8; // erase block size in units of sector size
+    return RES_OK;
+
+  default:
+    return RES_PARERR;
+  }
+}
 }
