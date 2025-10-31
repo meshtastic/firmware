@@ -437,14 +437,13 @@ void menuHandler::messageResponseMenu()
     optionsEnumArray[options++] = ViewMode;
 
     // Only show Dismiss All in View All mode
-    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
 #if defined(M5STACK_UNITC6L)
-        optionsArray[options] = "Delete All";
+    optionsArray[options] = "Delete All";
 #else
-        optionsArray[options] = "Delete All Chats";
+    optionsArray[options] = "Delete All Chats";
 #endif
-        optionsEnumArray[options++] = DismissAll;
-    }
+    optionsEnumArray[options++] = DismissAll;
+
     if (isHighResolution) {
         optionsArray[options] = "Delete Oldest Message";
     } else {
