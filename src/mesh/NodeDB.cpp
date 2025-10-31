@@ -1576,24 +1576,59 @@ if (!flash.begin()) {
     
   }
   LOG_INFO("File created!");
-   writeFile.println(config.has_display);
+   writeFile.write(reinterpret_cast<const uint8_t*>(&config), sizeof(config));
    writeFile.close();
    LOG_INFO("File closed!");
 
    File32 dataFile = fatfs.open(FILE_NAME, FILE_READ);
-  if (dataFile) {
-    LOG_INFO("OPENED FILE");
-    while (dataFile.available()) {
-      // Use the read function to read the next character.
-      // You can alternatively use other functions like readUntil, readString,
-      // etc. See the fatfs_full_usage example for more details.
-      char c = dataFile.read();
-      LOG_INFO("%c", c);
-    }
-}
-    else {
-      LOG_ERROR("Error reading file");
-    }
+   if (dataFile) {
+     LOG_INFO("OPENED FILE");
+     // Read raw binary into the protobuf struct (non-protobuf/raw dump)
+     size_t want = sizeof(meshtastic_LocalConfig);
+     config.version = 0;  // uint32 - ok to clear directly
+     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;  // using proper enum
+     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+     strncpy(config.network.ntp_server, "", sizeof(config.network.ntp_server)-1);
+     config.display.screen_on_secs = 0;
+     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;;
+     config.security.private_key.size = 0;
+       LOG_INFO("config.version=%d", config.version);
+       LOG_INFO("device.role=%d", config.device.role);
+       LOG_INFO("lora.region=%d", config.lora.region);
+       LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
+       LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
+       LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
+       LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
+       LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
+
+     int got = dataFile.read(reinterpret_cast<uint8_t*>(&config), want);
+     dataFile.close();
+     if (got == (int)want) {
+       LOG_INFO("Read %u bytes into config", got);
+       // Print useful fields to serial / log
+       LOG_INFO("config.version=%d", config.version);
+       LOG_INFO("device.role=%d", config.device.role);
+       LOG_INFO("lora.region=%d", config.lora.region);
+       LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
+       LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
+       LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
+       LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
+       LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
+       if (config.security.private_key.size > 0) {
+         char hexbuf[65] = {0};
+         size_t n = config.security.private_key.size;
+         if (n > 32) n = 32;
+         for (size_t i = 0; i < n; ++i)
+           sprintf(hexbuf + strlen(hexbuf), "%02x", config.security.private_key.bytes[i]);
+         LOG_INFO("security.private_key=%s", hexbuf);
+       }
+     } else {
+       LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)want);
+     }
+   } else {
+     LOG_ERROR("Error opening file for read");
+   }
 
     return success;
 }
@@ -2223,7 +2258,6 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     exit(2);
 #endif
 }
-
 
 
 
