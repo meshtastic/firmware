@@ -1437,7 +1437,35 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
                        bool fullAtomic)
 {
     bool okay = false;
-#ifdef FSCom
+#ifdef EXTERNAL_FLASH_DEVICES
+LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
+if (!flash.begin()) {
+    LOG_ERROR("Error, failed to initialize flash chip!");
+    while (1) {
+      delay(1);
+    }
+  }
+LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+check_fat12();
+  LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
+  if (!fatfs.begin(&flash)) {
+    LOG_ERROR("Error, failed to mount filesystem!");
+    while (1) {
+      delay(1);
+    }
+    }
+    LOG_INFO("Filesystem mounted!");
+File32 writeFile = fatfs.open(filename, FILE_WRITE);
+  if (!writeFile) {
+    LOG_ERROR("Error, failed to create file!");
+    
+  }
+ LOG_INFO("File created!");
+ writeFile.write(reinterpret_cast<const uint8_t*>(&dest_struct), sizeof(dest_struct));
+ writeFile.close();
+ LOG_INFO("File closed!");
+
+#elif FSCom
     auto f = SafeFile(filename, fullAtomic);
 
     LOG_INFO("Save %s", filename);
@@ -1457,6 +1485,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
 #endif
+
     return okay;
 }
 
