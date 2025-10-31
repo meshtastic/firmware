@@ -281,12 +281,6 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     pi.drawFrame(display, state, x, y);
 }
 
-// Ignore messages originating from phone (from the current node 0x0) unless range test or store and forward module are enabled
-static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
-{
-    return packet->from != 0 && !moduleConfig.store_forward.enabled;
-}
-
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
@@ -341,9 +335,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         uint8_t TFT_MESH_b = rawRGB & 0xFF;
         LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
-            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
-        }
+        TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
     }
 
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
@@ -813,6 +805,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::STOP_ALERT_FRAME:
             NotificationRenderer::pauseBanner = false;
+            break;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             if (NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
@@ -822,7 +815,7 @@ int32_t Screen::runOnce()
         case Cmd::NOOP:
             break;
         default:
-            LOG_ERROR("Invalid screen cmd");
+            LOG_ERROR("Invalid screen cmd %d", static_cast<int>(cmd.cmd));
         }
     }
 
@@ -982,9 +975,6 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(digital_icon_clock);
     }
 #endif
-
-    // Declare this early so it’s available in FOCUS_PRESERVE block
-    bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
     if (!hiddenFrames.home) {
         fsi.positions.home = numframes;

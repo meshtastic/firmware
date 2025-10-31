@@ -376,7 +376,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // ADC2 wifi bug workaround not required, breaks compile
         // On ESP32S3, ADC2 can take turns with Wifi (?)
 
-        int32_t adc_buf;
+        int adc_buf;
         esp_err_t read_result;
 
         // Multiple samples
@@ -394,7 +394,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 
 #else  // Other ESP32
-        int32_t adc_buf = 0;
+        int adc_buf = 0;
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             // ADC2 wifi bug workaround, see
             // https://github.com/espressif/arduino-esp32/issues/102

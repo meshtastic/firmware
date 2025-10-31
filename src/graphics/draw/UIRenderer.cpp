@@ -998,7 +998,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     config.display.heading_bold = false;
 
     const char *displayLine = ""; // Initialize to empty string by default
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
@@ -1050,7 +1049,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             uint32_t days = delta / 86400;
             uint32_t hours = (delta % 86400) / 3600;
             uint32_t mins = (delta % 3600) / 60;
-            uint32_t secs = delta % 60;
 
             char buf[32];
 #if defined(USE_EINK)
@@ -1063,6 +1061,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                 snprintf(buf, sizeof(buf), "Last: %um", mins);
             }
 #else
+            uint32_t secs = delta % 60;
             // Non E-Ink: include seconds where useful
             if (days > 0) {
                 snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
@@ -1140,13 +1139,13 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
             int yBelowContent = getTextPositions(display)[5] + FONT_HEIGHT_SMALL + 2;
-            const int margin = 4;
-            int availableHeight =
+
 #if defined(USE_EINK)
-                SCREEN_HEIGHT - yBelowContent - 24; // Leave extra space for nav bar on E-Ink
+            const int margin = 24; // Leave extra space for nav bar on E-Ink
 #else
-                SCREEN_HEIGHT - yBelowContent - margin;
+            const int margin = 4;
 #endif
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - margin;
 
             if (availableHeight < FONT_HEIGHT_SMALL * 2)
                 return;

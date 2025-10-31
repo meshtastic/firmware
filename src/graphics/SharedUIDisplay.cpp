@@ -117,9 +117,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                            // plugged in
     }
 
-    uint32_t now = millis();
-
 #ifndef USE_EINK
+    uint32_t now = millis();
     if (isCharging && now - lastBlinkShared > 500) {
         isBoltVisibleShared = !isBoltVisibleShared;
         lastBlinkShared = now;
