@@ -134,6 +134,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/TSL2561Sensor.h"
 #endif
 
+#if __has_include(<BH1750_WE.h>)
+#include "Sensor/BH1750Sensor.h"
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -262,6 +266,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
     addSensor<NAU7802Sensor>(i2cScanner, ScanI2C::DeviceType::NAU7802);
 #endif
+#if __has_include(<BH1750_WE.h>)
+    addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
+#endif
 
 #endif
 }
@@ -361,6 +368,7 @@ bool EnvironmentTelemetryModule::wantUIFrame()
     return moduleConfig.telemetry.environment_screen_enabled;
 }
 
+#if HAS_SCREEN
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // === Setup display ===
@@ -510,6 +518,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         currentY += rowHeight;
     }
 }
+#endif
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
