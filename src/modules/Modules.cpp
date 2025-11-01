@@ -50,6 +50,7 @@
 #endif
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
+#include "ButtonsLEDsAndMsgs.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
@@ -301,4 +302,40 @@ void setupModules()
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();
+    // Instantiate three ButtonsLEDsAndMsgs modules for RED, GREEN, BLUE buttons
+    // RED button: GPIO5 -> flashes RedLED (GPIO2) and sends to channel 1
+    ButtonsLEDsAndMsgs *RedButton = new ButtonsLEDsAndMsgs("RedButton");
+    {
+        ButtonConfigModules cfg(RED_BUTTON_PIN);
+        cfg.ledPin = RedLED;
+        cfg.ledActiveLow = true;
+        cfg.activeLow = true;
+        cfg.activePullup = true;
+        cfg.channelIndex = 1;
+        RedButton->initButton(cfg);
+    }
+
+    // GREEN button: GPIO6 -> flashes GreenLED (GPIO3) and sends to channel 2
+    ButtonsLEDsAndMsgs *GreenButton = new ButtonsLEDsAndMsgs("GreenButton");
+    {
+        ButtonConfigModules cfg(GREEN_BUTTON_PIN);
+        cfg.ledPin = GreenLED;
+        cfg.ledActiveLow = true;
+        cfg.activeLow = true;
+        cfg.activePullup = true;
+        cfg.channelIndex = 2;
+        GreenButton->initButton(cfg);
+    }
+
+    // BLUE button: GPIO7 -> flashes BlueLED (GPIO45) and sends to channel 3
+    ButtonsLEDsAndMsgs *BlueButton = new ButtonsLEDsAndMsgs("BlueButton");
+    {
+        ButtonConfigModules cfg(BLUE_BUTTON_PIN);
+        cfg.ledPin = BlueLED;
+        cfg.ledActiveLow = true;
+        cfg.activeLow = true;
+        cfg.activePullup = true;
+        cfg.channelIndex = 3;
+        BlueButton->initButton(cfg);
+    }
 }

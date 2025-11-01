@@ -1,5 +1,17 @@
 #define LED_PIN LED
 
+// Module button & LED wiring for this board variant
+// Buttons are active-low and need internal pull-ups
+// Button map: RED at GPIO5, GREEN at GPIO6, BLUE at GPIO7
+#define RED_BUTTON_PIN 5
+#define GREEN_BUTTON_PIN 6
+#define BLUE_BUTTON_PIN 7
+
+// LEDs (active-low) mapping per request
+#define GreenLED 3
+#define RedLED 2
+#define BlueLED 45
+
 #define USE_SSD1306 // Heltec_v3 has a SSD1306 display
 
 #define RESET_OLED RST_OLED

@@ -13,6 +13,9 @@ struct ButtonConfigModules {
     bool activePullup = true;
     uint32_t pullupSense = 0;
     voidFuncPtr intRoutine = nullptr;
+    // LED config for module-local LED control
+    int ledPin = -1; // -1 = none
+    bool ledActiveLow = true;
     input_broker_event singlePress = INPUT_BROKER_NONE;
     input_broker_event longPress = INPUT_BROKER_NONE;
     uint16_t longPressTime = 500;
@@ -22,6 +25,8 @@ struct ButtonConfigModules {
     input_broker_event triplePress = INPUT_BROKER_NONE;
     input_broker_event shortLong = INPUT_BROKER_NONE;
     bool touchQuirk = false;
+    // Channel index used for button-originated text messages (0 = public/broadcast)
+    uint8_t channelIndex = 0xFF; // 0xFF = no channel configured
 
     // Constructor to set required parameter
     explicit ButtonConfigModules(uint8_t pin = 0) : pinNumber(pin) {}
@@ -65,10 +70,18 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
 
     explicit ButtonsLEDsAndMsgs(const char *name);
     int32_t runOnce() override;
-    OneButton userButton;
+    // Old OneButton removed in favor of simple debounced edge detection
+    // for maximal reliability of quick taps.
+    // Observe input events from InputBroker (maps button-originated input to channel sends)
+    int handleInputEvent(const InputEvent *event);
+    void sendTextToChannel(const char *text, uint8_t channel);
+    // Control the module-local LED (if configured)
+    void setLed(bool on);
     void attachButtonInterrupts();
     void detachButtonInterrupts();
     void storeClickCount();
+    // Treat any press type (short/long/double/multi) as the same action
+    void triggerPressAction();
     bool isButtonPressed(int buttonPin)
     {
         if (_activeLow)
@@ -120,6 +133,12 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
     // Store click count during callback, for later use
     volatile int multipressClickCount = 0;
 
+    // Simple debounce state (polling-based)
+    uint32_t _lastDebounceTime = 0;
+    uint32_t _debounceMs = 30; // default debounce window
+    bool _lastRawState = false;
+    bool _stableState = false;
+
     // Combination tracking state
     bool waitingForLongPress = false;
     uint32_t shortPressTime = 0;
@@ -132,6 +151,13 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
     static void wakeOnIrq(int irq, int mode);
     // Channel index used for button-originated text messages (0 = public/broadcast)
     uint8_t _channelIndex = 0;
+    // LED control (module-local)
+    int _ledPin = -1;
+    bool _ledActiveLow = true;
+    // Non-blocking LED off timestamp (millis), 0 when not scheduled
+    uint32_t _ledOnUntil = 0;
+    // Note: We intentionally do not register with InputBroker; this module
+    // handles button events locally and sends text messages itself.
     
 };
 
