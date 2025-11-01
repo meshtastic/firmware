@@ -5,11 +5,11 @@
 #include <SPI.h>
 #include <Wire.h>
 
-#define NRFX_WDT_ENABLED       1
-#define NRFX_WDT0_ENABLED      1
+#define NRFX_WDT_ENABLED 1
+#define NRFX_WDT0_ENABLED 1
 #define NRFX_WDT_CONFIG_NO_IRQ 1
-#include <nrfx_wdt.h>
 #include <nrfx_wdt.c>
+#include <nrfx_wdt.h>
 
 #include <assert.h>
 #include <ble_gap.h>
@@ -293,15 +293,12 @@ void nrf52Setup()
     // the first time through the main loop), so that other threads can
     // allocate their own wdt channel to protect themselves from hangs.
     nrfx_wdt_config_t wdt0_config = {
-      .behaviour          = NRF_WDT_BEHAVIOUR_RUN_SLEEP,
-      .reload_value       = 2000,
-      // Note: Not using wdt interrupts.
-      // .interrupt_priority = NRFX_WDT_DEFAULT_CONFIG_IRQ_PRIORITY
+        .behaviour = NRF_WDT_BEHAVIOUR_RUN_SLEEP, .reload_value = 2000,
+        // Note: Not using wdt interrupts.
+        // .interrupt_priority = NRFX_WDT_DEFAULT_CONFIG_IRQ_PRIORITY
     };
-    nrfx_err_t r = nrfx_wdt_init(
-      &nrfx_wdt,
-      &wdt0_config,
-      nullptr // Watchdog event handler, not used, we just reset.
+    nrfx_err_t r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config,
+                                 nullptr // Watchdog event handler, not used, we just reset.
     );
 
     r = nrfx_wdt_channel_alloc(&nrfx_wdt, &nrfx_wdt_channel_id_nrf52_main);
