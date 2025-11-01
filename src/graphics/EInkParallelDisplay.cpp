@@ -189,8 +189,6 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
  */
 void EInkParallelDisplay::display(void)
 {
-    LOG_DEBUG("EInkParallelDisplay::display");
-
     const uint16_t w = this->displayWidth;
     const uint16_t h = this->displayHeight;
 
@@ -225,7 +223,7 @@ void EInkParallelDisplay::display(void)
         imageHash ^= ((uint32_t)buffer[bi]) << (bi & 31);
     }
     if (imageHash == previousImageHash) {
-        LOG_DEBUG("image identical to previous, skipping update");
+        // LOG_DEBUG("image identical to previous, skipping update");
         return;
     }
 
@@ -320,37 +318,25 @@ void EInkParallelDisplay::display(void)
 #ifdef EINK_LIMIT_GHOSTING_PX
     // If ghost pixels exceed limit, force a full update to clear ghosting
     if (ghostPixelCount > ghostPixelLimit) {
-        LOG_WARN("ghost pixels %u > limit %u, forcing full refresh", ghostPixelCount, ghostPixelLimit);
+        LOG_DEBUG("ghost pixels %u > limit %u, forcing full refresh", ghostPixelCount, ghostPixelLimit);
         forceFull = true;
     }
 #endif
 
-    // page-based partial update (pages = rows / 8)
-    int topPage = newTop / 8;
-    int bottomPage = newBottom / 8;
-    if (topPage < 0)
-        topPage = 0;
-    // clamp bottomPage to valid range
-    int maxPage = ((int)h + 7) / 8 - 1;
-    if (bottomPage < topPage)
-        bottomPage = topPage;
-    if (bottomPage > maxPage)
-        bottomPage = maxPage;
+    // Compute page-aligned pixel bounds from newTop/newBottom (pages are 8 pixel rows)
+    int startRow = (newTop / 8) * 8;
+    int endRow = (newBottom / 8) * 8 + 7;
+    if (startRow < 0)
+        startRow = 0;
+    if (endRow > (int)h - 1)
+        endRow = (int)h - 1;
 
-    LOG_DEBUG("EPD update rows=%d..%d pages=%d..%d rowBytes=%u", newTop, newBottom, topPage, bottomPage, rowBytes);
+    LOG_DEBUG("EPD update rows=%d..%d alignedRows=%d..%d rowBytes=%u", newTop, newBottom, startRow, endRow, rowBytes);
+
     if (epaper->getMode() == BB_MODE_1BPP && !forceFull && (newBottom - newTop) <= EPD_PARTIAL_THRESHOLD_ROWS) {
-
-        // If we couldn't detect column changes, fall back to page-based pixel bounds
-        int startRow = topPage * 8;
-        int endRow = bottomPage * 8 + 7;
-        if (endRow > (int)h - 1)
-            endRow = (int)h - 1;
-
+        // Prefer partial update path if driver is reliable; otherwise use clipped fullUpdate fallback.
 #ifdef FAST_EPD_PARTIAL_UPDATE_BUG
-        // Workaround for FastEPD partial update bug: use clipped fullUpdate instead
-        // Build a pixel rectangle for a clipped fullUpdate using the changed columns
-        LOG_DEBUG("Using clipped fullUpdate workaround for partial update bug");
-
+        // LOG_DEBUG("Using clipped fullUpdate workaround for partial update bug");
         int startCol = (newLeftByte <= newRightByte) ? (newLeftByte * 8) : 0;
         int endCol = (newLeftByte <= newRightByte) ? ((newRightByte + 1) * 8 - 1) : (w - 1);
         if (startCol < 0)
@@ -358,21 +344,15 @@ void EInkParallelDisplay::display(void)
         if (endCol >= (int)w)
             endCol = (int)w - 1;
 
-        BB_RECT rect;
-        rect.x = startCol;
-        rect.y = startRow;
-        rect.w = endCol - startCol + 1;
-        rect.h = endRow - startRow + 1;
-        LOG_DEBUG("Using clipped fullUpdate rect x=%d y=%d w=%d h=%d", rect.x, rect.y, rect.w, rect.h);
-
-        // Use fullUpdate with rect (reliable path) instead of FASTEPD partialUpdate(), then synchronize
+        BB_RECT rect{startCol, startRow, endCol - startCol + 1, endRow - startRow + 1};
+        // LOG_DEBUG("Using clipped fullUpdate rect x=%d y=%d w=%d h=%d", rect.x, rect.y, rect.w, rect.h);
         {
             concurrency::LockGuard g(spiLock);
+            // alternate CLEAR_FAST / CLEAR_SLOW handled elsewhere by fastRefreshCount logic
             epaper->fullUpdate(CLEAR_FAST, false, &rect);
         }
 #else
-        // Use rows for partial update
-        LOG_DEBUG("calling partialUpdate startRow=%d endRow=%d", startRow, endRow);
+        // LOG_DEBUG("calling partialUpdate startRow=%d endRow=%d", startRow, endRow);
         {
             concurrency::LockGuard g(spiLock);
             epaper->partialUpdate(true, startRow, endRow);
