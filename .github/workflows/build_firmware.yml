@@ -45,6 +45,13 @@ jobs:
             echo "tgt=release/bleota.bin" >> $GITHUB_OUTPUT
           fi
 
+      - name: Import GPG key
+        if: github.repository == 'meshtastic/firmware'
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+        id: gpg
+
       - name: Build ${{ inputs.platform }}
         id: build
         uses: meshtastic/gh-action-firmware@main
@@ -54,6 +61,18 @@ jobs:
           pio_target: build
           ota_firmware_source: ${{ steps.ota_dir.outputs.src || '' }}
           ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
+
+      - name: Sign firmware
+        working-directory: release
+        if: github.repository == 'meshtastic/firmware'
+        env:
+          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
+        run: |
+          for f in *.bin *.elf *.uf2 *.hex *.zip; do
+            if [ -f "$f" ]; then
+              gpg --batch --default-key "$GPG_KEY_ID" --output "$f.sig" --detach-sign "$f"
+            fi
+          done
 
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
@@ -67,3 +86,4 @@ jobs:
             release/*.uf2
             release/*.hex
             release/*-ota.zip
+            release/*.sig
