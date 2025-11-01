@@ -7,7 +7,7 @@ InputBroker *inputBroker = nullptr;
 
 InputBroker::InputBroker()
 {
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     inputEventQueue = xQueueCreate(5, sizeof(InputEvent));
     pollSoonQueue = xQueueCreate(5, sizeof(InputPollable *));
     xTaskCreate(pollSoonWorker, "input-pollSoon", 2 * 1024, this, 10, &pollSoonTask);
@@ -19,7 +19,7 @@ void InputBroker::registerSource(Observable<const InputEvent *> *source)
     this->inputEventObserver.observe(source);
 }
 
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
 void InputBroker::requestPollSoon(InputPollable *pollable)
 {
     if (xPortInIsrContext() == pdTRUE) {
@@ -60,7 +60,7 @@ int InputBroker::handleInputEvent(const InputEvent *event)
     return 0;
 }
 
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
 void InputBroker::pollSoonWorker(void *p)
 {
     InputBroker *instance = (InputBroker *)p;
