@@ -19,6 +19,9 @@
 #ifndef EPD_FULLSLOW_PERIOD
 #define EPD_FULLSLOW_PERIOD 50 // every N full updates do a slow (CLEAR_SLOW) full refresh
 #endif
+#ifndef EPD_RESPONSIVE_MIN_MS
+#define EPD_RESPONSIVE_MIN_MS 1000 // simple rate-limit (ms) for responsive updates
+#endif
 
 EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rotation) : epaper(nullptr)
 {
@@ -194,7 +197,7 @@ void EInkParallelDisplay::display(void)
 
     // Simple rate limiting: avoid very-frequent responsive updates
     uint32_t nowMs = millis();
-    if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < RESPONSIVE_MIN_MS) {
+    if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < EPD_RESPONSIVE_MIN_MS) {
         LOG_DEBUG("rate-limited, skipping update");
         return;
     }
@@ -323,7 +326,7 @@ void EInkParallelDisplay::display(void)
     }
 #endif
 
-    // Compute page-aligned pixel bounds from newTop/newBottom (pages are 8 pixel rows)
+    // Compute pixel bounds from newTop/newBottom
     int startRow = (newTop / 8) * 8;
     int endRow = (newBottom / 8) * 8 + 7;
     if (startRow < 0)

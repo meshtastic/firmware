@@ -47,28 +47,22 @@ class EInkParallelDisplay : public OLEDDisplay
     void startAsyncFullUpdate(int clearMode);
     static void asyncFullUpdateTask(void *pvParameters);
 
-    // helpers
 #ifdef EINK_LIMIT_GHOSTING_PX
+    // helpers
     void resetGhostPixelTracking();
     void markDirtyBits(const uint8_t *prevBuf, uint32_t pos, uint8_t mask, uint8_t out);
     void countGhostPixelsAndMaybePromote(int &newTop, int &newBottom, bool &forceFull);
-#endif
 
-    uint32_t previousImageHash = 0;
-    uint32_t lastUpdateMs = 0;
-    int fastRefreshCount = 0;
-    // simple rate-limit (ms) for responsive updates
-    static constexpr uint32_t RESPONSIVE_MIN_MS = 1000;
-    // force a slow full update every N full updates
-    static constexpr int FULL_SLOW_PERIOD = 50;
-
-#ifdef EINK_LIMIT_GHOSTING_PX
     // per-bit dirty buffer (same format as epaper buffers): one bit == one pixel
     uint8_t *dirtyPixels = nullptr;
     size_t dirtyPixelsSize = 0;
     uint32_t ghostPixelCount = 0;
     uint32_t ghostPixelLimit = EINK_LIMIT_GHOSTING_PX;
 #endif
+
+    uint32_t previousImageHash = 0;
+    uint32_t lastUpdateMs = 0;
+    int fastRefreshCount = 0;
 };
 
 #endif
