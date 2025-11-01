@@ -351,6 +351,8 @@ void setup()
 #endif
 #endif
 
+    // System LEDs (LED_POWER, USER_LED, WIFI_LED, BLE_LED) are initialized above.
+
 #if defined(T_DECK)
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.

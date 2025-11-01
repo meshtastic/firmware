@@ -5,6 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 
+
 typedef void (*voidFuncPtr)(void);
 
 struct ButtonConfigModules {
@@ -98,6 +99,10 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
     int beforeLightSleep(void *unused);
     int afterLightSleep(esp_sleep_wakeup_cause_t cause);
 #endif
+    // Receive incoming text messages so we can handle LED commands like "LED:1:ON"
+    int handleTextMessage(const meshtastic_MeshPacket *mp);
+    CallbackObserver<ButtonsLEDsAndMsgs, const meshtastic_MeshPacket *> textObserver =
+        CallbackObserver<ButtonsLEDsAndMsgs, const meshtastic_MeshPacket *>(this, &ButtonsLEDsAndMsgs::handleTextMessage);
   private:
     input_broker_event _singlePress = INPUT_BROKER_NONE;
     input_broker_event _longPress = INPUT_BROKER_NONE;
