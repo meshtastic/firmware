@@ -47,6 +47,7 @@ BIGDB_16MB=(
 S3_VARIANTS=(
     "s3"
     "-v3"
+    "-v4"
     "t-deck"
     "wireless-paper"
     "wireless-tracker"
