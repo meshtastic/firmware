@@ -38,14 +38,16 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
     return N;
 }
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
-#if defined(GPS_SERIAL_PORT)
-HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
-#else
-HardwareSerial *GPS::_serial_gps = &Serial1;
+#ifndef GPS_SERIAL_PORT
+#define GPS_SERIAL_PORT Serial1
 #endif
+
+#if defined(ARCH_NRF52)
+Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
+#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_RP2040)
-SerialUART *GPS::_serial_gps = &Serial1;
+SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #else
 HardwareSerial *GPS::_serial_gps = nullptr;
 #endif
@@ -1504,10 +1506,7 @@ GPS *GPS::createGps()
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;
-#if HAS_GPS && !defined(ARCH_ESP32)
-    _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
-    _tx_gpio = 1;
-#endif
+
 #if defined(GPS_RX_PIN)
     if (!_rx_gpio)
         _rx_gpio = GPS_RX_PIN;
@@ -1583,16 +1582,28 @@ GPS *GPS::createGps()
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
-//  ESP32 has a special set of parameters vs other arduino ports
-#if defined(ARCH_ESP32)
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
+
+//  ESP32 has a special set of parameters vs other arduino ports
+#if defined(ARCH_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
 #elif defined(ARCH_RP2040)
+        _serial_gps->setPinout(new_gps->tx_gpio, new_gps->rx_gpio);
         _serial_gps->setFIFOSize(256);
         _serial_gps->begin(GPS_BAUDRATE);
-#else
+#elif defined(ARCH_NRF52)
+        _serial_gps->setPins(new_gps->rx_gpio, new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
+#elif defined(ARCH_STM32WL)
+        _serial_gps->setTx(new_gps->tx_gpio);
+        _serial_gps->setRx(new_gps->rx_gpio);
+        _serial_gps->begin(GPS_BAUDRATE);
+#elif defined(ARCH_PORTDUINO)
+        // Portduino can't set the GPS pins directly.
+        _serial_gps->begin(GPS_BAUDRATE);
+#else
+#error Unsupported architecture!
 #endif
     }
     return new_gps;
