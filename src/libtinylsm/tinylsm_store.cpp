@@ -31,7 +31,7 @@ bool LSMFamily::init()
     }
 
     uint32_t start_time = millis();
-    LOG_INFO("═══ LSM INIT START: %s ═══", is_ephemeral ? "EPHEMERAL" : "DURABLE");
+    LOG_INFO("LSM INIT START: %s", is_ephemeral ? "EPHEMERAL" : "DURABLE");
     LOG_INFO("  Path: %s", base_path);
     LOG_INFO("  Memtable: %u KB", is_ephemeral ? config.memtable_ephemeral_kb : config.memtable_durable_kb);
     LOG_INFO("  Shards: %u, Bloom: %s", config.shards, config.enable_bloom ? "enabled" : "disabled");
@@ -108,10 +108,9 @@ bool LSMFamily::init()
 
     initialized = true;
     uint32_t elapsed = millis() - start_time;
-    LOG_INFO("═══ LSM INIT COMPLETE: %s ═══", is_ephemeral ? "EPHEMERAL" : "DURABLE");
+    LOG_INFO("LSM INIT COMPLETE: %s", is_ephemeral ? "EPHEMERAL" : "DURABLE");
     LOG_INFO("  %u SortedTables loaded", manifest->get_entries().size());
     LOG_INFO("  Initialized in %u ms", elapsed);
-    LOG_INFO("══════════════════════════════");
     return true;
 }
 

@@ -35,9 +35,7 @@ bool NodeDBAdapter::init()
     }
 
     uint32_t start_time = millis();
-    LOG_INFO("╔════════════════════════════════════════╗");
-    LOG_INFO("║  NodeDB LSM Storage Initializing...   ║");
-    LOG_INFO("╚════════════════════════════════════════╝");
+    LOG_INFO("NodeDB LSM Storage Initializing...");
 
     StoreConfig config = detectPlatformConfig();
 
@@ -46,13 +44,13 @@ bool NodeDBAdapter::init()
 
     store.reset(new NodeDBStore());
     if (!store->init(config)) {
-        LOG_ERROR("❌ NodeDB LSM initialization FAILED");
+        LOG_ERROR("NodeDB LSM initialization FAILED");
         return false;
     }
 
     initialized = true;
     uint32_t elapsed = millis() - start_time;
-    LOG_INFO("✓ NodeDB LSM adapter initialized in %u ms", elapsed);
+    LOG_INFO("NodeDB LSM adapter initialized in %u ms", elapsed);
     LOG_INFO("  Ready for node storage operations");
 
     // Log initial stats
