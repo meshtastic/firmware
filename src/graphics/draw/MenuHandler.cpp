@@ -19,8 +19,8 @@
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
 
-#include "modules/TraceRouteModule.h"
 #include "mesh/Default.h"
+#include "modules/TraceRouteModule.h"
 #include <functional>
 
 extern uint16_t TFT_MESH;

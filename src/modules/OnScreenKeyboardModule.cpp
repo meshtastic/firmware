@@ -70,8 +70,6 @@ void OnScreenKeyboardModule::stop(bool callEmptyCallback)
         cb("");
 }
 
-
-
 void OnScreenKeyboardModule::handleInput(const InputEvent &event)
 {
     if (!keyboard)

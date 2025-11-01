@@ -16,20 +16,17 @@ class OnScreenKeyboardModule
   public:
     static OnScreenKeyboardModule &instance();
 
-    void start(const char *header, const char *initialText,
-               uint32_t,
-               std::function<void(const std::string &)> callback);
+    void start(const char *header, const char *initialText, uint32_t, std::function<void(const std::string &)> callback);
 
     void stop(bool callEmptyCallback);
-
 
     void handleInput(const InputEvent &event);
     bool draw(OLEDDisplay *display);
 
     void showPopup(const char *title, const char *content, uint32_t durationMs);
     void clearPopup();
-  // Draw only the popup overlay (used when legacy virtualKeyboard draws the keyboard)
-  void drawPopupOverlay(OLEDDisplay *display);
+    // Draw only the popup overlay (used when legacy virtualKeyboard draws the keyboard)
+    void drawPopupOverlay(OLEDDisplay *display);
 
   private:
     OnScreenKeyboardModule() = default;

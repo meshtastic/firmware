@@ -1504,14 +1504,14 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
                 NotificationRenderer::showKeyboardMessagePopupWithTitle(titleBuf, content, 3000);
 
-                // Maintain existing buzzer behavior on M5 if applicable
-                #if defined(M5STACK_UNITC6L)
+// Maintain existing buzzer behavior on M5 if applicable
+#if defined(M5STACK_UNITC6L)
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
                     (!isBroadcast(packet->to) && isToUs(packet))) {
                     playLongBeep();
                 }
-                #endif
+#endif
             } else {
                 // No keyboard active: use regular banner flow, respecting mute settings
                 if (isAlert) {
@@ -1523,15 +1523,15 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     screen->showSimpleBanner(banner, 3000);
                 } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
                     if (longName && longName[0]) {
-        #if defined(M5STACK_UNITC6L)
+#if defined(M5STACK_UNITC6L)
                         strcpy(banner, "New Message");
-        #else
+#else
                         snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-        #endif
+#endif
                     } else {
                         strcpy(banner, "New Message");
                     }
-        #if defined(M5STACK_UNITC6L)
+#if defined(M5STACK_UNITC6L)
                     screen->setOn(true);
                     screen->showSimpleBanner(banner, 1500);
                     if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
@@ -1542,9 +1542,9 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                         // - packet is a non-broadcast that is addressed to this node
                         playLongBeep();
                     }
-        #else
+#else
                     screen->showSimpleBanner(banner, 3000);
-        #endif
+#endif
                 }
             }
         }
