@@ -13,11 +13,13 @@
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "main.h"
+#include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
 
+#include "mesh/Default.h"
 #include "modules/TraceRouteModule.h"
 #include <functional>
 
