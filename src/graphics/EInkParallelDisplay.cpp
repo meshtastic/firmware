@@ -22,7 +22,7 @@
 
 EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rotation) : epaper(nullptr)
 {
-    LOG_INFO("ctor EInkParallelDisplay");
+    LOG_INFO("init EInkParallelDisplay");
     // Set dimensions in OLEDDisplay base class
     this->geometry = GEOMETRY_RAWMODE;
     this->displayWidth = EPD_WIDTH;
@@ -153,7 +153,6 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
 
     // Acquire SPI lock and run the full update inside the critical section
     {
-        concurrency::LockGuard g(spiLock);
         // choose CLEAR_SLOW occasionally
         int clearMode = CLEAR_FAST;
         if (self->fastRefreshCount >= EPD_FULLSLOW_PERIOD) {
@@ -164,6 +163,7 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
             self->fastRefreshCount = 0;
         }
 
+        concurrency::LockGuard g(spiLock);
         self->epaper->fullUpdate(clearMode, false);
         self->epaper->backupPlane();
     }
@@ -193,7 +193,6 @@ void EInkParallelDisplay::display(void)
 
     const uint16_t w = this->displayWidth;
     const uint16_t h = this->displayHeight;
-    static int iUpdates = 0; // count eink updates to know when to do a fullUpdate()
 
     // Simple rate limiting: avoid very-frequent responsive updates
     uint32_t nowMs = millis();
@@ -212,6 +211,12 @@ void EInkParallelDisplay::display(void)
     // Track changed row range while converting
     int newTop = h;     // min changed row (initialized to out-of-range)
     int newBottom = -1; // max changed row
+
+#ifdef FAST_EPD_PARTIAL_UPDATE_BUG
+    // Track changed byte column range (for clipped fullUpdate fallback)
+    int newLeftByte = (int)rowBytes;
+    int newRightByte = -1;
+#endif
 
     // Compute a quick hash of the incoming OLED buffer (so we can skip identical frames)
     uint32_t imageHash = 0;
@@ -273,23 +278,30 @@ void EInkParallelDisplay::display(void)
 
             uint32_t pos = rowBase + xb;
             uint8_t prevVal = prev ? (prev[pos] & mask) : 0x00;
-            if (prev && prevVal == out) {
-                // unchanged
-                continue;
-            }
+            // Consider this byte changed if previous buffer differs (or prev is null)
+            bool changed = (prev == nullptr) || (prevVal != out);
 
-            // If ghost-pixel tracking is enabled, mark bits that will change
 #ifdef EINK_LIMIT_GHOSTING_PX
-            markDirtyBits(prev, pos, mask, out);
+            if (changed && prev)
+                markDirtyBits(prev, pos, mask, out);
 #endif
 
-            // mark row changed
-            if (y < (uint32_t)newTop)
-                newTop = y;
-            if ((int)y > newBottom)
-                newBottom = y;
+            // mark row changed only if the previous buffer differs
+            if (changed) {
+                if (y < (uint32_t)newTop)
+                    newTop = y;
+                if ((int)y > newBottom)
+                    newBottom = y;
+#ifdef FAST_EPD_PARTIAL_UPDATE_BUG
+                // record changed column bytes
+                if ((int)xb < newLeftByte)
+                    newLeftByte = (int)xb;
+                if ((int)xb > newRightByte)
+                    newRightByte = (int)xb;
+#endif
+            }
 
-            // write to current buffer preserving masked bits
+            // Always write the computed value into the current buffer (avoid leaving stale bytes)
             cur[pos] = (cur[pos] & ~mask) | out;
         }
     }
@@ -302,8 +314,6 @@ void EInkParallelDisplay::display(void)
     }
 
     // Choose partial vs full update using heuristic
-    concurrency::LockGuard g(spiLock);
-
     // Decide if we should force a full update after many fast updates
     bool forceFull = (fastRefreshCount >= EPD_FULLSLOW_PERIOD);
 
@@ -315,15 +325,65 @@ void EInkParallelDisplay::display(void)
     }
 #endif
 
+    // page-based partial update (pages = rows / 8)
+    int topPage = newTop / 8;
+    int bottomPage = newBottom / 8;
+    if (topPage < 0)
+        topPage = 0;
+    // clamp bottomPage to valid range
+    int maxPage = ((int)h + 7) / 8 - 1;
+    if (bottomPage < topPage)
+        bottomPage = topPage;
+    if (bottomPage > maxPage)
+        bottomPage = maxPage;
+
+    LOG_DEBUG("EPD update rows=%d..%d pages=%d..%d rowBytes=%u", newTop, newBottom, topPage, bottomPage, rowBytes);
     if (epaper->getMode() == BB_MODE_1BPP && !forceFull && (newBottom - newTop) <= EPD_PARTIAL_THRESHOLD_ROWS) {
-        epaper->partialUpdate(true, newTop, newBottom);
+
+        // If we couldn't detect column changes, fall back to page-based pixel bounds
+        int startRow = topPage * 8;
+        int endRow = bottomPage * 8 + 7;
+        if (endRow > (int)h - 1)
+            endRow = (int)h - 1;
+
+#ifdef FAST_EPD_PARTIAL_UPDATE_BUG
+        // Workaround for FastEPD partial update bug: use clipped fullUpdate instead
+        // Build a pixel rectangle for a clipped fullUpdate using the changed columns
+        LOG_DEBUG("Using clipped fullUpdate workaround for partial update bug");
+
+        int startCol = (newLeftByte <= newRightByte) ? (newLeftByte * 8) : 0;
+        int endCol = (newLeftByte <= newRightByte) ? ((newRightByte + 1) * 8 - 1) : (w - 1);
+        if (startCol < 0)
+            startCol = 0;
+        if (endCol >= (int)w)
+            endCol = (int)w - 1;
+
+        BB_RECT rect;
+        rect.x = startCol;
+        rect.y = startRow;
+        rect.w = endCol - startCol + 1;
+        rect.h = endRow - startRow + 1;
+        LOG_DEBUG("Using clipped fullUpdate rect x=%d y=%d w=%d h=%d", rect.x, rect.y, rect.w, rect.h);
+
+        // Use fullUpdate with rect (reliable path) instead of FASTEPD partialUpdate(), then synchronize
+        {
+            concurrency::LockGuard g(spiLock);
+            epaper->fullUpdate(CLEAR_FAST, false, &rect);
+        }
+#else
+        // Use rows for partial update
+        LOG_DEBUG("calling partialUpdate startRow=%d endRow=%d", startRow, endRow);
+        {
+            concurrency::LockGuard g(spiLock);
+            epaper->partialUpdate(true, startRow, endRow);
+        }
+#endif
+        epaper->backupPlane();
         fastRefreshCount++;
     } else {
-        // Full update: prefer to run asynchronously so UI thread isn't blocked.
-        // If async running isn't available/fails, startAsyncFullUpdate() falls back to blocking call.
+        // Full update: run async if possible (startAsyncFullUpdate will fall back to blocking)
         startAsyncFullUpdate(forceFull ? CLEAR_SLOW : CLEAR_FAST);
     }
-    iUpdates++;
 
     lastUpdateMs = millis();
     previousImageHash = imageHash;
@@ -336,30 +396,29 @@ void EInkParallelDisplay::display(void)
 // markDirtyBits: mark per-bit dirty flags and update ghostPixelCount
 void EInkParallelDisplay::markDirtyBits(const uint8_t *prevBuf, uint32_t pos, uint8_t mask, uint8_t out)
 {
-    // prevVal is previous displayed bits for this byte (masked)
-    uint8_t prevVal = prevBuf[pos] & mask;
+    // defensive: need dirtyPixels allocated and prevBuf valid
+    if (!dirtyPixels || !prevBuf)
+        return;
 
-    // before = dirty bits previously recorded for this byte
+    // bits that differ from previous buffer
+    // 'out' is in FASTEPD polarity (1 = black, 0 = white)
+    uint8_t newBlack = out & mask;    // bits that will be black now
+    uint8_t newWhite = (~out) & mask; // bits that will be white now
+
+    // previously recorded dirty bits for this byte
     uint8_t before = dirtyPixels[pos];
 
-    // In this code 'out' uses FASTEPD polarity (1 = black pixel, 0 = white)
-    uint8_t blackBits = out & mask;    // bits that will be black in the new image
-    uint8_t whiteBits = (~out) & mask; // bits that will be white in the new image
-
-    // Ghost bits: locations that were marked dirty previously and now will be white
-    uint8_t ghostBits = before & whiteBits;
+    // Ghost bits: bits that were previously marked dirty and are now being driven white
+    uint8_t ghostBits = before & newWhite;
     if (ghostBits) {
         ghostPixelCount += __builtin_popcount((unsigned)ghostBits);
     }
 
-    // Update dirty bitmap: mark locations that will be black now
-    uint8_t newlySet = blackBits & (~before);
-    if (newlySet) {
-        dirtyPixels[pos] |= newlySet;
+    // Only mark bits dirty when they turn black now (accumulate until a full refresh)
+    uint8_t newlyDirty = newBlack & (~before);
+    if (newlyDirty) {
+        dirtyPixels[pos] |= newlyDirty;
     }
-
-    // Note: we do NOT clear dirty bits here when a pixel goes white; they remain
-    // cleared only on a full refresh (resetGhostPixelTracking()).
 }
 
 // reset ghost tracking (call after a full refresh)
@@ -400,7 +459,6 @@ void EInkParallelDisplay::endUpdate()
 #endif
         }
     }
-    epaper->backupPlane();
 }
 
 #endif
