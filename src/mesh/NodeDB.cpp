@@ -18,12 +18,16 @@
 #include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+#include "libtinylsm/tinylsm_adapter.h"
+#endif
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <limits>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
@@ -37,6 +41,12 @@
 #include <Preferences.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#if __has_include(<esp_ptr.h>)
+#include <esp_ptr.h>
+#define NODEDB_HAS_ESP_PTR 1
+#else
+#define NODEDB_HAS_ESP_PTR 0
+#endif
 #include <nvs_flash.h>
 #include <soc/efuse_reg.h>
 #include <soc/soc.h>
@@ -66,6 +76,31 @@ meshtastic_LocalConfig config;
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
+
+//------------------------------------------------------------------------------
+// Runtime instrumentation helpers
+//------------------------------------------------------------------------------
+
+namespace
+{
+
+// Log the pool headroom every 100 inserts (and when we hit MAX) so field logs
+// capture how close we are to exhausting heap/PSRAM on real hardware.
+
+void logNodeInsertStats(size_t count, const char *poolLabel)
+{
+    if (count == 0)
+        return;
+    if ((count % 100) != 0 && count != MAX_NUM_NODES)
+        return;
+
+    LOG_INFO("NodeDB %s pool usage %u/%u nodes, heap free %u, psram free %u", poolLabel, static_cast<unsigned>(count),
+             static_cast<unsigned>(MAX_NUM_NODES), memGet.getFreeHeap(), memGet.getFreePsram());
+}
+
+} // namespace
+
+// Hot cache optimization removed - using LSM storage backend instead
 
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
@@ -194,6 +229,27 @@ static uint8_t ourMacAddr[6];
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
+
+    // Initialize LRU cache
+    for (size_t i = 0; i < LRU_CACHE_SIZE; i++) {
+        nodeCache[i].valid = false;
+        nodeCache[i].last_access_time = 0;
+    }
+
+    // Initialize cache statistics
+    cache_hits = 0;
+    cache_misses = 0;
+    last_cache_stats_log = 0;
+
+    // Initialize tiny-LSM storage backend (SINGLE SOURCE OF TRUTH)
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+    if (!meshtastic::tinylsm::initNodeDBLSM()) {
+        LOG_ERROR("Failed to initialize NodeDB LSM storage");
+    }
+#else
+    LOG_INFO("LSM storage disabled (MESHTASTIC_EXCLUDE_LSM_STORAGE)");
+#endif
+
     loadFromDisk();
     cleanupMeshDB();
 
@@ -521,8 +577,8 @@ void NodeDB::installDefaultNodeDatabase()
     LOG_DEBUG("Install default NodeDatabase");
     nodeDatabase.version = DEVICESTATE_CUR_VER;
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
-    numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+    numMeshNodes = 0;
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -994,7 +1050,8 @@ void NodeDB::resetNodes()
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
-    int newPos = 0, removed = 0;
+    int newPos = 0;
+    int removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).num != nodeNum)
             meshNodes->at(newPos++) = meshNodes->at(i);
@@ -1403,14 +1460,46 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+    // Write-through to LSM storage backend
+    auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
+    if (!adapter) {
+        LOG_WARN("LSM adapter not initialized, falling back to protobuf");
+        // Fall back to protobuf save for compatibility
+#else
+    // LSM storage disabled, use protobuf
+    {
 #endif
-    size_t nodeDatabaseSize;
-    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+#ifdef FSCom
+        spiLock->lock();
+        FSCom.mkdir("/prefs");
+        spiLock->unlock();
+#endif
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
+        return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    }
+
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+    LOG_DEBUG("Saving %u nodes to LSM storage", numMeshNodes);
+    size_t saved = 0;
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        if (meshNodes->at(i).num != 0 && meshNodes->at(i).has_user) {
+            if (adapter->saveNode(&meshNodes->at(i))) {
+                saved++;
+            } else {
+                LOG_WARN("Failed to save node 0x%08X to LSM", meshNodes->at(i).num);
+            }
+        }
+    }
+
+    LOG_INFO("Saved %u/%u nodes to LSM", saved, numMeshNodes);
+    adapter->flush(); // Force persistence of ephemeral data
+    return true;
+#else
+    // Should not reach here - already returned above
+    return false;
+#endif
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
@@ -1491,10 +1580,36 @@ bool NodeDB::saveToDisk(int saveWhat)
 
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
-    if (readIndex < numMeshNodes)
-        return &meshNodes->at(readIndex++);
-    else
+    // NEW: Load from LSM using shadow index
+    if (readIndex >= nodeShadowIndex.size()) {
         return NULL;
+    }
+
+    uint32_t node_id = nodeShadowIndex[readIndex++].node_id;
+
+    // Try cache first
+    meshtastic_NodeInfoLite *cached = findInCache(node_id);
+    if (cached) {
+        return cached;
+    }
+
+    // Load from LSM (single source of truth)
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+    auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
+    if (!adapter) {
+        return NULL; // LSM not available
+    }
+
+    // Use cache slot for this node
+    size_t cache_slot = readIndex % LRU_CACHE_SIZE;
+    if (adapter->loadNode(node_id, &nodeCache[cache_slot].node)) {
+        nodeCache[cache_slot].valid = true;
+        nodeCache[cache_slot].last_access_time = millis();
+        return &nodeCache[cache_slot].node;
+    }
+#endif
+
+    return NULL;
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -1526,7 +1641,6 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
-    // FIXME this implementation is kinda expensive
     for (int i = 0; i < numMeshNodes; i++) {
         if (localOnly && meshNodes->at(i).via_mqtt)
             continue;
@@ -1714,6 +1828,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         updateGUIforNode = info;
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
+        // Write-through to LSM storage
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+        auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
+        if (adapter) {
+            adapter->saveNode(info);
+        }
+#endif
+
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
 
@@ -1757,6 +1879,15 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
         }
+
+        // Write-through to LSM storage
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+        auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
+        if (adapter) {
+            adapter->saveNode(info);
+        }
+#endif
+
         sortMeshDB();
     }
 }
@@ -1798,11 +1929,10 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
     if (p.to == NODENUM_BROADCAST)
         return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
 
-    meshtastic_NodeInfoLite *lite = NULL;
-
     bool seenFrom = false;
     bool seenTo = false;
 
+    meshtastic_NodeInfoLite *lite = NULL;
     for (int i = 0; i < numMeshNodes; i++) {
         lite = &meshNodes->at(i);
 
@@ -1839,29 +1969,49 @@ void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
         lastSort = millis();
-        bool changed = true;
-        while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
-            changed = false;
-            for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
-                if (meshNodes->at(i - 1).num == getNodeNum()) {
-                    // noop
-                } else if (meshNodes->at(i).num ==
-                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
-                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
-                    // noop
-                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                }
-            }
+
+        // NEW: Sort lightweight shadow index (16 bytes/entry instead of 200!)
+        // Update sort keys first
+        for (auto &shadow : nodeShadowIndex) {
+            shadow.update_sort_key(getNodeNum());
         }
-        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
+
+        // Use std::sort (O(n log n) instead of O(n²) bubble sort)
+        std::sort(nodeShadowIndex.begin(), nodeShadowIndex.end());
+
+        // Update numMeshNodes to reflect shadow size
+        numMeshNodes = nodeShadowIndex.size();
+
+        LOG_INFO("Shadow index sorted: %u nodes in %u ms", numMeshNodes, millis() - lastSort);
+
+        // Log cache stats periodically (every 5 minutes)
+        logCacheStats();
+    }
+}
+
+void NodeDB::logCacheStats()
+{
+    // Log every 5 minutes
+    if (last_cache_stats_log == 0 || millis() - last_cache_stats_log > 300000) {
+        last_cache_stats_log = millis();
+
+        if (cache_hits + cache_misses > 0) {
+            float hit_rate = 100.0f * cache_hits / (cache_hits + cache_misses);
+
+            // Count valid cache entries
+            size_t cache_occupied = 0;
+            for (size_t i = 0; i < LRU_CACHE_SIZE; i++) {
+                if (nodeCache[i].valid)
+                    cache_occupied++;
+            }
+
+            LOG_INFO("NodeDB LRU Cache: %u/%u slots used, %u hits, %u misses, %.1f%% hit rate", cache_occupied, LRU_CACHE_SIZE,
+                     cache_hits, cache_misses, hit_rate);
+
+            // Reset counters for next interval
+            cache_hits = 0;
+            cache_misses = 0;
+        }
     }
 }
 
@@ -1881,10 +2031,136 @@ std::string NodeDB::getNodeId() const
     return std::string(nodeId);
 }
 
+// NEW: LRU cache helpers
+meshtastic_NodeInfoLite *NodeDB::findInCache(NodeNum n)
+{
+    for (size_t i = 0; i < LRU_CACHE_SIZE; i++) {
+        if (nodeCache[i].valid && nodeCache[i].node.num == n) {
+            nodeCache[i].last_access_time = millis();
+            cache_hits++; // Track hit
+            return &nodeCache[i].node;
+        }
+    }
+    cache_misses++; // Track miss
+    return NULL;
+}
+
+void NodeDB::addToCache(const meshtastic_NodeInfoLite *node)
+{
+    if (!node)
+        return;
+
+    // Find oldest cache entry to replace
+    size_t oldest_idx = 0;
+    uint32_t oldest_time = nodeCache[0].last_access_time;
+
+    for (size_t i = 1; i < LRU_CACHE_SIZE; i++) {
+        if (!nodeCache[i].valid) {
+            oldest_idx = i;
+            break;
+        }
+        if (nodeCache[i].last_access_time < oldest_time) {
+            oldest_time = nodeCache[i].last_access_time;
+            oldest_idx = i;
+        }
+    }
+
+    nodeCache[oldest_idx].node = *node;
+    nodeCache[oldest_idx].valid = true;
+    nodeCache[oldest_idx].last_access_time = millis();
+}
+
+void NodeDB::invalidateCache(NodeNum n)
+{
+    for (size_t i = 0; i < LRU_CACHE_SIZE; i++) {
+        if (nodeCache[i].valid && nodeCache[i].node.num == n) {
+            nodeCache[i].valid = false;
+        }
+    }
+}
+
+// NEW: Shadow index helpers
+NodeShadow *NodeDB::getShadow(NodeNum n)
+{
+    for (size_t i = 0; i < nodeShadowIndex.size(); i++) {
+        if (nodeShadowIndex[i].node_id == n) {
+            return &nodeShadowIndex[i];
+        }
+    }
+    return NULL;
+}
+
+NodeShadow *NodeDB::getOrCreateShadow(NodeNum n)
+{
+    NodeShadow *shadow = getShadow(n);
+    if (shadow) {
+        return shadow;
+    }
+
+    // Create new shadow entry
+    nodeShadowIndex.push_back(NodeShadow(n, 0));
+    return &nodeShadowIndex.back();
+}
+
+void NodeDB::updateShadowFromNode(const meshtastic_NodeInfoLite *node)
+{
+    if (!node)
+        return;
+
+    NodeShadow *shadow = getOrCreateShadow(node->num);
+    if (!shadow)
+        return;
+
+    shadow->last_heard = node->last_heard;
+    shadow->is_favorite = node->is_favorite;
+    shadow->is_ignored = node->is_ignored;
+    shadow->has_user = node->has_user;
+    shadow->has_position = node->has_position;
+    shadow->via_mqtt = node->via_mqtt;
+    shadow->has_hops_away = node->has_hops_away;
+    shadow->hops_away = node->hops_away;
+    shadow->channel = node->channel;
+    shadow->update_sort_key(getNodeNum());
+}
+
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
+    // NEW: Check LRU cache first
+    meshtastic_NodeInfoLite *cached = findInCache(n);
+    if (cached) {
+        return cached;
+    }
+
+    // NEW: Load from LSM (single source of truth)
+#ifndef MESHTASTIC_EXCLUDE_LSM_STORAGE
+    auto *adapter = meshtastic::tinylsm::g_nodedb_adapter;
+    if (adapter) {
+        // Find a cache slot to use
+        size_t cache_slot = 0;
+        uint32_t oldest_time = UINT32_MAX;
+
+        for (size_t i = 0; i < LRU_CACHE_SIZE; i++) {
+            if (!nodeCache[i].valid) {
+                cache_slot = i;
+                break;
+            }
+            if (nodeCache[i].last_access_time < oldest_time) {
+                oldest_time = nodeCache[i].last_access_time;
+                cache_slot = i;
+            }
+        }
+
+        if (adapter->loadNode(n, &nodeCache[cache_slot].node)) {
+            nodeCache[cache_slot].valid = true;
+            nodeCache[cache_slot].last_access_time = millis();
+            return &nodeCache[cache_slot].node;
+        }
+    }
+#endif
+
+    // Fallback: Check old meshNodes[] array if LSM not available
     for (int i = 0; i < numMeshNodes; i++)
         if (meshNodes->at(i).num == n)
             return &meshNodes->at(i);
@@ -1896,6 +2172,16 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 bool NodeDB::isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
+meshtastic_NodeInfoLite *NodeDB::getMeshNodeByIndex(size_t x)
+{
+    if (x >= nodeShadowIndex.size()) {
+        return NULL;
+    }
+
+    // Load from LSM using shadow index
+    return getMeshNode(nodeShadowIndex[x].node_id);
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
@@ -1947,6 +2233,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        logNodeInsertStats(numMeshNodes, "Heap");
     }
 
     return lite;

@@ -27,6 +27,7 @@ class PacketHistory
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
     PacketRecord *recentPackets = NULL; // Simple and fixed in size. Debloat.
+    bool recentPacketsInPsram = false;  // Remember backing store so we free via the matching allocator.
 
     /** Find a packet record in history.
      * @param sender NodeNum
