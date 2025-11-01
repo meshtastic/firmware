@@ -221,6 +221,20 @@ uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_siz
     return (payload_size + 10);
 }
 
+// Create our custom CAS packet, with specified Dynamic Mode from GPS profile
+uint8_t GPS::makeCASNAVXPacket(uint8_t dynamicMode)
+{
+    // Base configuration (mutable copy of _message_CAS_CFG_NAVX_CONF)
+    static uint8_t config[sizeof(_message_CAS_CFG_NAVX_CONF)];
+    memcpy(config, _message_CAS_CFG_NAVX_CONF, sizeof(_message_CAS_CFG_NAVX_CONF));
+
+    // Update Dynamic Mode (index 4)
+    config[4] = dynamicMode;
+
+    // Create CAS packet with updated configuration
+    return makeCASPacket(0x06, 0x07, sizeof(config), config);
+}
+
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
@@ -535,8 +549,21 @@ bool GPS::setup()
             // only ask for RMC and GGA
             _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
             delay(250);
-            // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
-            _serial_gps->write("$PCAS11,3*1E\r\n");
+
+            // Set Dynamic Mode based on GPS Profile
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                _serial_gps->write("$PCAS11,1*1C\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_PEDESTRIAN) {
+                _serial_gps->write("$PCAS11,2*1F\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_VEHICLE) {
+                _serial_gps->write("$PCAS11,3*1E\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_AIRBORNE) {
+                _serial_gps->write("$PCAS11,6*1B\r\n");
+            } else {
+                // Default to pedestrian mode
+                _serial_gps->write("$PCAS11,2*1F\r\n");
+            }
+
             delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_L76B) {
             // Waveshare Pico-GPS hat uses the L76B with 9600 baud
@@ -555,8 +582,19 @@ bool GPS::setup()
             // Enable PPS for 2D/3D fix only
             _serial_gps->write("$PMTK285,3,100*3F\r\n");
             delay(250);
-            // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
-            _serial_gps->write("$PMTK886,1*29\r\n");
+            // Set Dynamic Mode based on GPS Profile
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                _serial_gps->write("$PMTK886,1*29\r\n"); // No fixed mode, so limit to pedestrian.
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_PEDESTRIAN) {
+                _serial_gps->write("$PMTK886,1*29\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_VEHICLE) {
+                _serial_gps->write("$PMTK886,0*28\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_AIRBORNE) {
+                _serial_gps->write("$PMTK886,3*2B\r\n"); // technically balloon mode, since Aviation mode has 10 ft cieling
+            } else {
+                // Default to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
+                _serial_gps->write("$PMTK886,1*29\r\n");
+            }
             delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_PA1010D) {
             // PA1010D is used in the Pimoroni GPS board.
@@ -571,6 +609,13 @@ bool GPS::setup()
             // Enable SBAS / WAAS
             _serial_gps->write("$PMTK301,2*2E\r\n");
             delay(250);
+            // PA1010D doesn't support dynamic modes,
+            // we set FIXED_POSITION so it doesn't change anything if speed < 2 m/s (maximum value supported)
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                _serial_gps->write("$PMTK386,2.0*3F\r\n");
+            } else {
+                _serial_gps->write("$PMTK386,0.0*3C\r\n"); // turn off if we're not in fixed position mode
+            }
         } else if (gnssModel == GNSS_MODEL_MTK_PA1616S) {
             // PA1616S is used in some GPS breakout boards from Adafruit
             // PA1616S does not have GLONASS capability. PA1616D does, but is not implemented here.
@@ -583,9 +628,28 @@ bool GPS::setup()
             // Enable SBAS / WAAS
             _serial_gps->write("$PMTK301,2*2E\r\n");
             delay(250);
+            // PA1616S doesn't support dynamic modes,
+            // we set FIXED_POSITION so it doesn't change anything if speed < 2 m/s (maximum value supported)
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                _serial_gps->write("$PMTK386,2.0*3F\r\n");
+            } else {
+                _serial_gps->write("$PMTK386,0.0*3C\r\n"); // turn off if we're not in fixed position mode
+            }
+
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
             // Set the intial configuration of the device - these _should_ work for most AT6558 devices
-            msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                msglen = makeCASNAVXPacket(0x01);
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_PEDESTRIAN) {
+                msglen = makeCASNAVXPacket(0x02);
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_VEHICLE) {
+                msglen = makeCASNAVXPacket(0x03);
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_AIRBORNE) {
+                msglen = makeCASNAVXPacket(0x06); // Airborne <2g acceleration. OK for jets, need 0x07 for rockets.
+            } else {
+                // Default to pedestrian mode
+                msglen = makeCASNAVXPacket(0x02);
+            }
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
@@ -629,6 +693,13 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
+            // UC6580 doesn't support dynamic modes (UM620 does - but we've never seen it in the wild),
+            // we set FIXED_POSITION so it doesn't change anything if speed < 31500 cm/s (maximum value supported)
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                _serial_gps->write("$CFGDYN,h11,0,51500\r\n");
+            } else {
+                _serial_gps->write("$CFGDYN,h11,0,0\r\n"); // turn off if we're not in fixed position mode
+            }
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352)) {
 
             if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_IN ||
@@ -652,6 +723,21 @@ bool GPS::setup()
 
             delay(250);
             _serial_gps->write("$PAIR513*3D\r\n"); // save configuration
+
+            // Set Dynamic Mode based on GPS Profile
+            if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION) {
+                _serial_gps->write("$PAIR080,4*2A\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_PEDESTRIAN) {
+                _serial_gps->write("$PAIR080,1*2F\r\n");
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_VEHICLE) {
+                _serial_gps->write("$PAIR080,0*2E\r\n"); // technically 'normal' mode
+            } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_AIRBORNE) {
+                _serial_gps->write("$PAIR080,3*2D\r\n"); // technically balloon mode
+            } else {
+                // Default to pedestrian mode
+                _serial_gps->write("$PAIR080,1*2F\r\n");
+            }
+
         } else if (gnssModel == GNSS_MODEL_UBLOX6) {
             clearBuffer();
             SEND_UBX_PACKET(0x06, 0x02, _message_DISABLE_TXT_INFO, "disable text info messages", 500);
