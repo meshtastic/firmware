@@ -260,6 +260,7 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
 void RF95Interface::setStandby()
