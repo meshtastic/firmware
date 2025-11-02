@@ -454,7 +454,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             if (uiconfig.screen_brightness == 1)
                 digitalWrite(PIN_EINK_EN, HIGH);
 #elif defined(PCA_PIN_EINK_EN)
-            if (uiconfig.screen_brightness == 1)
+            if (uiconfig.screen_brightness > 0)
                 io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
@@ -1531,7 +1531,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     strcpy(banner, "Alert Received");
                 }
                 screen->showSimpleBanner(banner, 3000);
-            } else if (!channel.settings.mute) {
+            } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
                 if (longName && longName[0]) {
 #if defined(M5STACK_UNITC6L)
                     strcpy(banner, "New Message");

@@ -106,62 +106,6 @@ jobs:
     if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'workflow_dispatch' ||  !contains(github.ref_name, 'event/') && inputs.arch == 'native' && inputs.target != '' }}
     uses: ./.github/workflows/test_native.yml
 
-  docker-deb-amd64:
-    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: debian
-      platform: linux/amd64
-      runs-on: ubuntu-24.04
-      push: false
-
-  docker-deb-amd64-tft:
-    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: debian
-      platform: linux/amd64
-      runs-on: ubuntu-24.04
-      push: false
-      pio_env: native-tft
-
-  docker-alp-amd64:
-    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: alpine
-      platform: linux/amd64
-      runs-on: ubuntu-24.04
-      push: false
-
-  docker-alp-amd64-tft:
-    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: alpine
-      platform: linux/amd64
-      runs-on: ubuntu-24.04
-      push: false
-      pio_env: native-tft
-
-  docker-deb-arm64:
-    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: debian
-      platform: linux/arm64
-      runs-on: ubuntu-24.04-arm
-      push: false
-
-  docker-deb-armv7:
-    if: ${{ inputs.target != '' && inputs.arch ==  'native' }}
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: debian
-      platform: linux/arm/v7
-      runs-on: ubuntu-24.04-arm
-      push: false
-
   gather-artifacts:
     permissions:
       contents: write
@@ -175,7 +119,7 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           path: ./
           pattern: firmware-*-*
@@ -188,7 +132,7 @@ jobs:
         run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: firmware-${{inputs.target}}-${{ needs.version.outputs.long }}
           overwrite: true
@@ -204,7 +148,7 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           pattern: firmware-*-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -223,7 +167,7 @@ jobs:
         run: zip -j -9 -r ./firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: debug-elfs-${{inputs.target}}-${{ needs.version.outputs.long }}.zip
           overwrite: true

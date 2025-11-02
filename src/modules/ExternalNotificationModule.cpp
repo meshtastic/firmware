@@ -95,22 +95,9 @@ int32_t ExternalNotificationModule::runOnce()
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
         if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
-            // let the song finish if we reach timeout
+            // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
-            LOG_INFO("Turning off external notification: ");
-            for (int i = 0; i < 3; i++) {
-                setExternalState(i, false);
-                externalTurnedOn[i] = 0;
-                LOG_INFO("%d ", i);
-            }
-            LOG_INFO("");
-#ifdef HAS_I2S
-            // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
-            // T-Deck uses GPIO0 as trackball button, so restore the mode
-#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
-            pinMode(0, INPUT);
-#endif
-#endif
+            ExternalNotificationModule::stopNow();
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
         }
@@ -318,21 +305,36 @@ bool ExternalNotificationModule::nagging()
 
 void ExternalNotificationModule::stopNow()
 {
+    LOG_INFO("Turning off external notification: ");
+    LOG_INFO("Stop RTTTL playback");
     rtttl::stop();
 #ifdef HAS_I2S
+    LOG_INFO("Stop audioThread playback");
     if (audioThread->isPlaying())
         audioThread->stop();
 #endif
-    nagCycleCutoff = 1; // small value
-    isNagging = false;
     // Turn off all outputs
+    LOG_INFO("Turning off setExternalStates: ");
     for (int i = 0; i < 3; i++) {
         setExternalState(i, false);
         externalTurnedOn[i] = 0;
+        LOG_INFO("%d ", i);
     }
     setIntervalFromNow(0);
 #ifdef T_WATCH_S3
     drv.stop();
+#endif
+
+    // Prevent the state machine from immediately re-triggering outputs after a manual stop.
+    isNagging = false;
+    nagCycleCutoff = UINT32_MAX;
+
+#ifdef HAS_I2S
+    // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
+    // T-Deck uses GPIO0 as trackball button, so restore the mode
+#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
+    pinMode(0, INPUT);
+#endif
 #endif
 }
 
@@ -510,7 +512,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_message &&
+                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
                 setExternalState(0, true);
@@ -521,7 +524,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_message_vibra &&
+                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
                 setExternalState(1, true);
@@ -532,7 +536,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer && !ch.settings.mute) {
+            if (moduleConfig.external_notification.alert_message_buzzer &&
+                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (!isBroadcast(mp.to) && isToUs(&mp))) {

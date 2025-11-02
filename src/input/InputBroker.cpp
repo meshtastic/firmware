@@ -1,11 +1,13 @@
 #include "InputBroker.h"
 #include "PowerFSM.h" // needed for event trigger
+#include "configuration.h"
+#include "modules/ExternalNotificationModule.h"
 
 InputBroker *inputBroker = nullptr;
 
 InputBroker::InputBroker()
 {
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     inputEventQueue = xQueueCreate(5, sizeof(InputEvent));
     pollSoonQueue = xQueueCreate(5, sizeof(InputPollable *));
     xTaskCreate(pollSoonWorker, "input-pollSoon", 2 * 1024, this, 10, &pollSoonTask);
@@ -17,7 +19,7 @@ void InputBroker::registerSource(Observable<const InputEvent *> *source)
     this->inputEventObserver.observe(source);
 }
 
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
 void InputBroker::requestPollSoon(InputPollable *pollable)
 {
     if (xPortInIsrContext() == pdTRUE) {
@@ -48,11 +50,17 @@ void InputBroker::processInputEventQueue()
 int InputBroker::handleInputEvent(const InputEvent *event)
 {
     powerFSM.trigger(EVENT_INPUT); // todo: not every input should wake, like long hold release
+
+    if (event && event->inputEvent != INPUT_BROKER_NONE && externalNotificationModule &&
+        moduleConfig.external_notification.enabled) {
+        externalNotificationModule->stopNow();
+    }
+
     this->notifyObservers(event);
     return 0;
 }
 
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
 void InputBroker::pollSoonWorker(void *p)
 {
     InputBroker *instance = (InputBroker *)p;
