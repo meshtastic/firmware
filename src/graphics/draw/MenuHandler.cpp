@@ -1594,6 +1594,10 @@ void menuHandler::DisplayUnits_menu()
     bannerOptions.message = " Select display units";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+        bannerOptions.InitialSelected = 2;
+    else
+        bannerOptions.InitialSelected = 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == MetricUnits) {
             config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_METRIC;
