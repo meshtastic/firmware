@@ -163,6 +163,10 @@ void setupNicheGraphics();
 SPIClass SPI1(HSPI);
 #endif
 
+#ifdef T5_S3_EPAPER_PRO
+extern void lateInitVariant_T5S3Pro(void);
+#endif
+
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
@@ -394,6 +398,12 @@ void setup()
     io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
     io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+#elif defined(T5_S3_EPAPER_PRO)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(BOARD_BL_EN, OUTPUT);
 #endif
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
@@ -874,7 +884,7 @@ void setup()
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306)
+    defined(USE_SPISSD1306) || defined(USE_EPD)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
@@ -1127,6 +1137,12 @@ void setup()
 
 #endif
 
+#if defined(T5_S3_EPAPER_PRO)
+    // this must be defined here before LoRa is setup, but after the epaper display is initialised,
+    // as the FastEPD driver also messes around with the IO expander and uses non-arduino I2C calls
+    lateInitVariant_T5S3Pro();
+#endif
+
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
     // After modules are setup, so we can observe modules
     setupNicheGraphics();
@@ -1149,7 +1165,7 @@ void setup()
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306)
+    defined(USE_SPISSD1306) || defined(USE_EPD)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
