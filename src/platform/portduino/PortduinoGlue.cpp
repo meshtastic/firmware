@@ -400,11 +400,17 @@ void portduinoSetup()
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
     for (auto i : portduino_config.all_pins) {
-        if (i->enabled)
+        // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
+        // Those GPIO are handled in our usermode driver instead.
+        if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+            continue;
+        }
+        if (i->enabled) {
             if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
                 printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
                 exit(EXIT_FAILURE);
             }
+        }
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
@@ -430,8 +436,7 @@ int initGPIOPin(int pinNum, const std::string gpioChipName, int line)
 {
 #ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
-    std::cout << gpio_name;
-    printf("\n");
+    std::cout << "Initializing " << gpio_name << " on chip " << gpioChipName << std::endl;
     try {
         GPIOPin *csPin;
         csPin = new LinuxGPIOPin(pinNum, gpioChipName.c_str(), line, gpio_name.c_str());
