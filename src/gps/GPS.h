@@ -201,6 +201,7 @@ class GPS : private concurrency::OSThread
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
     uint8_t makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+    uint8_t makeCASNAVXPacket(uint8_t dynamicMode);
 
     // scratch space for creating ublox packets
     uint8_t UBXscratch[250] = {0};
