@@ -11,10 +11,12 @@
 #include "BMA423Sensor.h"
 #endif
 #include "BMM150Sensor.h"
+#include "QMC6310Sensor.h"
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
+#include "QMI8658Sensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
 #ifdef HAS_QMA6100P
@@ -22,6 +24,10 @@
 #endif
 #ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
+#endif
+
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "Fusion/GPSIMUFusion.h"
 #endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;
@@ -62,8 +68,18 @@ class AccelerometerThread : public concurrency::OSThread
         // Assume we should not keep the board awake
         canSleep = true;
 
-        if (isInitialised)
-            return sensor->runOnce();
+        if (isInitialised) {
+            int32_t result = sensor->runOnce();
+            
+#if !MESHTASTIC_EXCLUDE_GPS
+            // Update GPS+IMU fusion after sensor data is updated
+            if (g_gps_imu_fusion.update()) {
+                // Fusion data was updated
+            }
+#endif
+            
+            return result;
+        }
 
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
@@ -76,7 +92,13 @@ class AccelerometerThread : public concurrency::OSThread
         if (isInitialised)
             return;
 
-        if (device.address.port == ScanI2C::I2CPort::NO_I2C || device.address.address == 0 || device.type == ScanI2C::NONE) {
+        LOG_DEBUG("AccelerometerThread init: type=%d, port=%d, addr=0x%x", device.type, device.address.port,
+                  device.address.address);
+
+        // For SPI-only IMUs (like QMI8658 on T-Beam S3 Supreme), we allow running without a valid I2C address
+        bool isSPIOnlyIMU = (device.type == ScanI2C::DeviceType::QMI8658);
+        if (!isSPIOnlyIMU && (device.address.port == ScanI2C::I2CPort::NO_I2C || device.address.address == 0 ||
+                               device.type == ScanI2C::NONE)) {
             LOG_DEBUG("AccelerometerThread Disable due to no sensors found");
             disable();
             return;
@@ -100,6 +122,11 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::LSM6DS3:
             sensor = new LSM6DS3Sensor(device);
             break;
+#if __has_include(<SensorQMI8658.hpp>) && defined(IMU_CS)
+        case ScanI2C::DeviceType::QMI8658:
+            sensor = new QMI8658Sensor(device);
+            break;
+#endif
 #ifdef HAS_STK8XXX
         case ScanI2C::DeviceType::STK8BAXX:
             sensor = new STK8XXXSensor(device);
@@ -111,6 +138,11 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::BMM150:
             sensor = new BMM150Sensor(device);
             break;
+#if __has_include(<SensorQMC6310.hpp>)
+        case ScanI2C::DeviceType::QMC6310:
+            sensor = new QMC6310Sensor(device);
+            break;
+#endif
 #ifdef HAS_QMA6100P
         case ScanI2C::DeviceType::QMA6100P:
             sensor = new QMA6100PSensor(device);
@@ -126,6 +158,17 @@ class AccelerometerThread : public concurrency::OSThread
             clean();
         }
         LOG_DEBUG("AccelerometerThread::init %s", isInitialised ? "ok" : "failed");
+
+        if (isInitialised) {
+#if !MESHTASTIC_EXCLUDE_GPS
+            // Initialize GPS+IMU fusion system
+            if (g_gps_imu_fusion.initialize()) {
+                LOG_DEBUG("GPS+IMU Fusion initialized successfully");
+            }
+#endif
+            // Kick the scheduler so we start running immediately
+            setIntervalFromNow(0);
+        }
     }
 
     // Copy constructor (not implemented / included to avoid cppcheck warnings)
