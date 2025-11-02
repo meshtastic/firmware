@@ -1,4 +1,5 @@
 #pragma once
+#include <Arduino.h>
 
 // CASIC binary message definitions
 // Reference: https://www.icofchina.com/d/file/xiazai/2020-09-22/20f1b42b3a11ac52089caf3603b43fb5.pdf
@@ -61,3 +62,9 @@ static const uint8_t _message_CAS_CFG_NAVX_CONF[] = {
     0x00, 0x00, 0x00, 0x00, // Time Accuracy Max
     0x00, 0x00, 0x00, 0x00  // Static Hold Threshold
 };
+
+// CASIC checksum calculation
+void CASChecksum(uint8_t *message, size_t length);
+
+// Create a CAS packet for editing in memory
+uint8_t makeCASPacket(uint8_t *out, uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
