@@ -1611,7 +1611,7 @@ void loop()
 #endif
 
     service->loop();
-#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS)
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     if (inputBroker)
         inputBroker->processInputEventQueue();
 #endif
