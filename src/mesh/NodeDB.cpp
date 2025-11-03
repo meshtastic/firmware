@@ -952,6 +952,11 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.environment_update_interval = MAX_INTERVAL;
         moduleConfig.telemetry.air_quality_interval = MAX_INTERVAL;
         moduleConfig.telemetry.health_update_interval = MAX_INTERVAL;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+        // is_favorite has special meaning for CLIENT_BASE, and we don't want to automatically have it set without the user doing
+        // so deliberately. So we clear is_favorite from all nodes when we switch the device to CLIENT_BASE.
+        LOG_INFO("installRoleDefaults: clearing all favorites for switch to CLIENT_BASE role");
+        clearAllFavorites();
     }
 }
 
@@ -1769,6 +1774,22 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
+}
+
+void NodeDB::clearAllFavorites()
+{
+    int num_changed = 0;
+    meshtastic_NodeInfoLite *lite = NULL;
+    for (int i = 0; i < numMeshNodes; i++) {
+        lite = &meshNodes->at(i);
+        if (lite->is_favorite && lite->num != getNodeNum()) {
+            lite->is_favorite = false;
+            num_changed++;
+        }
+    }
+    sortMeshDB();
+    saveNodeDatabaseToDisk();
+    LOG_INFO("clearAllFavorites: removed %d favorites", num_changed);
 }
 
 bool NodeDB::isFavorite(uint32_t nodeId)

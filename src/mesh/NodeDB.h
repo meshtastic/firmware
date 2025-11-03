@@ -187,6 +187,11 @@ class NodeDB
     void set_favorite(bool is_favorite, uint32_t nodeId);
 
     /*
+     * Sets is_favorite=false for all nodes in the NodeDB
+     */
+    void clearAllFavorites();
+
+    /*
      * Returns true if the node is in the NodeDB and marked as favorite
      */
     bool isFavorite(uint32_t nodeId);
