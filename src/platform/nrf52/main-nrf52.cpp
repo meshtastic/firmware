@@ -291,6 +291,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
 #endif
+
+#ifdef TTGO_T_ECHO
+    // To power off the T-Echo, the display must be set 
+    // as an input pin; otherwise, there will be leakage current.
+    pinMode(PIN_EINK_CS, INPUT);
+    pinMode(PIN_EINK_DC, INPUT);
+    pinMode(PIN_EINK_RES, INPUT);
+    pinMode(PIN_EINK_BUSY, INPUT);
+#endif
+
     setBluetoothEnable(false);
 
 #ifdef RAK4630
