@@ -43,10 +43,11 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
-        FrameToggles,
         message_response_menu,
         message_viewmode_menu,
-        node_name_length_menu
+        node_name_length_menu,
+        FrameToggles,
+        DisplayUnits
     };
     static screenMenus menuQueue;
 
@@ -91,6 +92,7 @@ class menuHandler
     static void powerMenu();
     static void nodeNameLengthMenu();
     static void FrameToggles_menu();
+    static void DisplayUnits_menu();
     static void textMessageMenu();
 
   private:
