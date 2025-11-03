@@ -180,6 +180,15 @@ void EspruinoModule::cleanupEspruino()
     initialized = false;
 }
 
+bool EspruinoModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return false; // No-op: don't process any packets yet
+}
+
+ProcessMessage EspruinoModule::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    return ProcessMessage::CONTINUE; // No-op: continue processing
+}
 
 int32_t EspruinoModule::runOnce()
 {
