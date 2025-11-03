@@ -33,7 +33,7 @@ jobs:
 
       # step 3
       - name: save report as pipeline artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: report.sarif
           overwrite: true
