@@ -4,3 +4,6 @@
 [submodule "meshtestic"]
 	path = meshtestic
 	url = https://github.com/meshtastic/meshTestic
+[submodule "Espruino"]
+	path = Espruino
+	url = git@github.com:espruino/Espruino.git
