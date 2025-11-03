@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "mesh/generated/meshtastic/admin.pb.h"
 #include <Throttle.h>
 
 NeighborInfoModule *neighborInfoModule;
@@ -103,6 +104,7 @@ void NeighborInfoModule::cleanUpNeighbors()
 /* Send neighbor info to the mesh */
 void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
+    LOG_INFO("sendNeighborInfo");
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
     // only send neighbours if we have some to send
@@ -114,6 +116,39 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
         printNeighborInfo("SENDING", &neighborInfo);
         service->sendToMesh(p, RX_SRC_LOCAL, true);
     }
+}
+
+/* get neighbor info to either send, or respond to a request from the mesh */
+meshtastic_NeighborInfo NeighborInfoModule::getNeighborInfo()
+{
+    meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
+    collectNeighborInfo(&neighborInfo);
+    return neighborInfo;
+}
+
+/* Handle admin message requests for neighbor info */
+void NeighborInfoModule::handleGetNeighbors(const meshtastic_MeshPacket &req)
+{
+    sendNeighborInfo(NODENUM_BROADCAST, false);
+    // meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    // r.get_neighbor_response = getNeighborInfo();
+    // r.which_payload_variant = meshtastic_AdminMessage_get_neighbor_response_tag;
+    // // Note: We don't set passkey here as this should be handled by the admin module
+    // myReply = allocDataProtobuf(r);
+}
+
+/* Handle admin messages for this module */
+AdminMessageHandleResult NeighborInfoModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                         meshtastic_AdminMessage *request,
+                                                                         meshtastic_AdminMessage *response)
+{
+    if (request->which_payload_variant == meshtastic_AdminMessage_get_neighbor_request_tag) {
+        LOG_INFO("NeighborInfoModule handling get_neighbor_request");
+        response->get_neighbor_response = getNeighborInfo();
+        response->which_payload_variant = meshtastic_AdminMessage_get_neighbor_response_tag;
+        return AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+    }
+    return AdminMessageHandleResult::NOT_HANDLED;
 }
 
 /*
@@ -138,12 +173,19 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
+    LOG_INFO("NeighborInfo handleRxProto");
     if (np) {
         printNeighborInfo("RECEIVED", np);
         updateNeighbors(mp, np);
     } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
+    }
+
+    if (mp.decoded.want_response) {
+        LOG_INFO("NeighborInfo wants response.");
+        sendNeighborInfo(mp.from, false); // do we want this to be dm, or broadcast?
+        // sendNeighborInfo(NODENUM_BROADCAST, false); // do we want this to be dm, or broadcast?
     }
     // Allow others to handle this packet
     return false;
@@ -168,6 +210,7 @@ void NeighborInfoModule::resetNeighbors()
 
 void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
 {
+    LOG_DEBUG("updateNeighbors.xxx ");
     // The last sent ID will be 0 if the packet is from the phone, which we don't count as
     // an edge. So we assume that if it's zero, then this packet is from our node.
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {

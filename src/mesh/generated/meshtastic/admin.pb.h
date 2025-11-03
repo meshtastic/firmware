@@ -180,6 +180,10 @@ typedef struct _meshtastic_AdminMessage {
         bool get_device_metadata_request;
         /* Device metadata response */
         meshtastic_DeviceMetadata get_device_metadata_response;
+        /* Request the node to send device neighbors */
+        bool get_neighbor_request;
+        /* Device neighbors response */
+        meshtastic_NeighborInfo get_neighbor_response;
         /* Get the Ringtone in the response to this message. */
         bool get_ringtone_request;
         /* Get the Ringtone in the response to this message. */
@@ -403,6 +407,9 @@ extern "C" {
 #define meshtastic_AdminMessage_factory_reset_config_tag 99
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
 #define meshtastic_AdminMessage_session_passkey_tag 101
+#define meshtastic_AdminMessage_get_neighbor_request_tag 102
+#define meshtastic_AdminMessage_get_neighbor_response_tag 103
+
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_AdminMessage_FIELDLIST(X, a) \
@@ -460,7 +467,10 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_second
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100) \
-X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
+X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_neighbor_request,get_neighbor_request),  102) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_neighbor_response,get_neighbor_response),  103) \
+
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
@@ -481,6 +491,7 @@ X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
 #define meshtastic_AdminMessage_payload_variant_store_ui_config_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_AdminMessage_payload_variant_add_contact_MSGTYPE meshtastic_SharedContact
 #define meshtastic_AdminMessage_payload_variant_key_verification_MSGTYPE meshtastic_KeyVerificationAdmin
+#define meshtastic_AdminMessage_payload_variant_get_neighbor_response_MSGTYPE meshtastic_NeighborInfo
 
 #define meshtastic_AdminMessage_InputEvent_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   event_code,        1) \
