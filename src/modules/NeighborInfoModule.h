@@ -48,13 +48,7 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /*
      * Send info on our node's neighbors into the mesh
      */
-    void sendNeighborInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
-    /* get neighbor info to either send, or respond to a request from the mesh */
-    meshtastic_NeighborInfo getNeighborInfo();
-
-    /* Handle admin message requests for neighbor info */
-    void handleGetNeighbors(const meshtastic_MeshPacket &req);
+    void sendNeighborInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, bool sendEmpty = false);
 
     /* update neighbors with subpacket sniffed from network */
     void updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np);
@@ -68,11 +62,6 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /* Override wantPacket to say we want to see all packets when enabled, not just those for our port number.
       Exception is when the packet came via MQTT */
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return enabled && !p->via_mqtt; }
-
-    /* Handle admin messages for this module */
-    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
-                                                                 meshtastic_AdminMessage *request,
-                                                                 meshtastic_AdminMessage *response) override;
 
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);

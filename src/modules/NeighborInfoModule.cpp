@@ -3,7 +3,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "mesh/generated/meshtastic/admin.pb.h"
 #include <Throttle.h>
 
 NeighborInfoModule *neighborInfoModule;
@@ -102,12 +101,12 @@ void NeighborInfoModule::cleanUpNeighbors()
 }
 
 /* Send neighbor info to the mesh */
-void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
+void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies, bool sendEmpty)
 {
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
     // only send neighbours if we have some to send
-    if (neighborInfo.neighbors_count > 0) {
+    if (neighborInfo.neighbors_count > 0 or sendEmpty) {
         meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
         p->to = dest;
         p->decoded.want_response = wantReplies;
@@ -115,34 +114,6 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
         printNeighborInfo("SENDING", &neighborInfo);
         service->sendToMesh(p, RX_SRC_LOCAL, true);
     }
-}
-
-/* get neighbor info to either send, or respond to a request from the mesh */
-meshtastic_NeighborInfo NeighborInfoModule::getNeighborInfo()
-{
-    meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
-    collectNeighborInfo(&neighborInfo);
-    return neighborInfo;
-}
-
-/* Handle admin message requests for neighbor info */
-void NeighborInfoModule::handleGetNeighbors(const meshtastic_MeshPacket &req)
-{
-    sendNeighborInfo(NODENUM_BROADCAST, false);
-}
-
-/* Handle admin messages for this module */
-AdminMessageHandleResult NeighborInfoModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
-                                                                         meshtastic_AdminMessage *request,
-                                                                         meshtastic_AdminMessage *response)
-{
-    if (request->which_payload_variant == meshtastic_AdminMessage_get_neighbor_request_tag) {
-        LOG_INFO("NeighborInfoModule handling get_neighbor_request");
-        response->get_neighbor_response = getNeighborInfo();
-        response->which_payload_variant = meshtastic_AdminMessage_get_neighbor_response_tag;
-        return AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
-    }
-    return AdminMessageHandleResult::NOT_HANDLED;
 }
 
 /*
@@ -167,7 +138,7 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    LOG_INFO("NeighborInfo handleRxProto");
+    LOG_DEBUG("NeighborInfo: handleRecievedProtobuf");
     if (np) {
         printNeighborInfo("RECEIVED", np);
         updateNeighbors(mp, np);
@@ -175,10 +146,9 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
     }
-
-    if (mp.decoded.want_response) {
-        LOG_INFO("NeighborInfo wants response.");
-        sendNeighborInfo(mp.from, false); // do we want this to be dm, or broadcast?
+    if (mp.decoded.want_response && np->neighbors_count == 0) { // want response, and is otherwise empty.
+        LOG_INFO("NeighborInfoRequested.");
+        sendNeighborInfo(mp.from, false, true); // do we want this to be dm, or broadcast?
         // sendNeighborInfo(NODENUM_BROADCAST, false); // do we want this to be dm, or broadcast?
     }
     // Allow others to handle this packet
@@ -204,7 +174,7 @@ void NeighborInfoModule::resetNeighbors()
 
 void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("updateNeighbors.xxx ");
+    LOG_DEBUG("updateNeighbors");
     // The last sent ID will be 0 if the packet is from the phone, which we don't count as
     // an edge. So we assume that if it's zero, then this packet is from our node.
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
