@@ -44,7 +44,8 @@ class menuHandler
         trace_route_menu,
         throttle_message,
         node_name_length_menu,
-        FrameToggles
+        FrameToggles,
+        DisplayUnits
     };
     static screenMenus menuQueue;
 
@@ -88,6 +89,7 @@ class menuHandler
     static void powerMenu();
     static void nodeNameLengthMenu();
     static void FrameToggles_menu();
+    static void DisplayUnits_menu();
     static void textMessageMenu();
 
   private:

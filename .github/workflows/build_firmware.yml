@@ -56,7 +56,7 @@ jobs:
           ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         id: upload
         with:
           name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}.zip
