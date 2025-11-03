@@ -59,6 +59,12 @@ interface EspruinoE {
 
   // Stop event propagation during event handling
   stopEventPropagation(): void;
+
+  // Convert arguments to a String (8-bit characters)
+  toString(...args: any[]): string;
+
+  // Convert arguments to a Uint8Array
+  toUint8Array(...args: any[]): Uint8Array;
 }
 
 // Declare the global E object
@@ -176,7 +182,7 @@ type NodeId = number;
 type AnyMessageRxCallback = (
   type: PortNumValue,
   from: NodeId,
-  msg: string
+  msg: Uint8Array
 ) => void;
 
 type MessageRxCallback = (from: NodeId, msg: string) => void;
@@ -194,90 +200,92 @@ const Meshtastic = {
     };
   },
   onTextMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.TEXT_MESSAGE_APP, callback);
+    return Meshtastic.onMessage(PortNum.TEXT_MESSAGE_APP, (from, msg) =>
+      callback(from, E.toString(msg))
+    );
   },
-  onAudioMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.AUDIO_APP, callback);
+  onAudioMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.AUDIO_APP, callback);
   },
-  onPositionMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.POSITION_APP, callback);
+  onPositionMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.POSITION_APP, callback);
   },
-  onNodeInfoMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.NODEINFO_APP, callback);
+  onNodeInfoMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.NODEINFO_APP, callback);
   },
-  onRoutingMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.ROUTING_APP, callback);
+  onRoutingMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.ROUTING_APP, callback);
   },
-  onAdminMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.ADMIN_APP, callback);
+  onAdminMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.ADMIN_APP, callback);
   },
-  onTextMessageCompressedMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.TEXT_MESSAGE_COMPRESSED_APP, callback);
+  onTextMessageCompressedMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.TEXT_MESSAGE_COMPRESSED_APP, callback);
   },
-  onWaypointMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.WAYPOINT_APP, callback);
+  onWaypointMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.WAYPOINT_APP, callback);
   },
-  onDetectionSensorMessage(callback: MessageRxCallback) {
-    return this.onMessage(PortNum.DETECTION_SENSOR_APP, callback);
+  onDetectionSensorMessage(callback: AnyMessageRxCallback) {
+    return Meshtastic.onMessage(PortNum.DETECTION_SENSOR_APP, callback);
   },
-  onAlertMessage(callback: MessageRxCallback) {
+  onAlertMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.ALERT_APP, callback);
   },
-  onKeyVerificationMessage(callback: MessageRxCallback) {
+  onKeyVerificationMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.KEY_VERIFICATION_APP, callback);
   },
-  onReplyMessage(callback: MessageRxCallback) {
+  onReplyMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.REPLY_APP, callback);
   },
-  onIPTunnelMessage(callback: MessageRxCallback) {
+  onIPTunnelMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.IP_TUNNEL_APP, callback);
   },
-  onPaxcounterMessage(callback: MessageRxCallback) {
+  onPaxcounterMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.PAXCOUNTER_APP, callback);
   },
-  onSerialMessage(callback: MessageRxCallback) {
+  onSerialMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.SERIAL_APP, callback);
   },
-  onStoreForwardMessage(callback: MessageRxCallback) {
+  onStoreForwardMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.STORE_FORWARD_APP, callback);
   },
-  onRangeTestMessage(callback: MessageRxCallback) {
+  onRangeTestMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.RANGE_TEST_APP, callback);
   },
-  onTelemetryMessage(callback: MessageRxCallback) {
+  onTelemetryMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.TELEMETRY_APP, callback);
   },
-  onZPSMessage(callback: MessageRxCallback) {
+  onZPSMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.ZPS_APP, callback);
   },
-  onSimulatorMessage(callback: MessageRxCallback) {
+  onSimulatorMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.SIMULATOR_APP, callback);
   },
-  onTracerouteMessage(callback: MessageRxCallback) {
+  onTracerouteMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.TRACEROUTE_APP, callback);
   },
-  onNeighborInfoMessage(callback: MessageRxCallback) {
+  onNeighborInfoMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.NEIGHBORINFO_APP, callback);
   },
-  onATAKPluginMessage(callback: MessageRxCallback) {
+  onATAKPluginMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.ATAK_PLUGIN, callback);
   },
-  onMapReportMessage(callback: MessageRxCallback) {
+  onMapReportMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.MAP_REPORT_APP, callback);
   },
-  onPowerStressMessage(callback: MessageRxCallback) {
+  onPowerStressMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.POWERSTRESS_APP, callback);
   },
-  onReticulumTunnelMessage(callback: MessageRxCallback) {
+  onReticulumTunnelMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.RETICULUM_TUNNEL_APP, callback);
   },
-  onCayenneMessage(callback: MessageRxCallback) {
+  onCayenneMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.CAYENNE_APP, callback);
   },
-  onPrivateMessage(callback: MessageRxCallback) {
+  onPrivateMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.PRIVATE_APP, callback);
   },
-  onATAKForwarderMessage(callback: MessageRxCallback) {
+  onATAKForwarderMessage(callback: AnyMessageRxCallback) {
     return this.onMessage(PortNum.ATAK_FORWARDER, callback);
   },
 };
