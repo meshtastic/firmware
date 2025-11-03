@@ -104,7 +104,6 @@ void NeighborInfoModule::cleanUpNeighbors()
 /* Send neighbor info to the mesh */
 void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
-    LOG_INFO("sendNeighborInfo");
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
     // only send neighbours if we have some to send
@@ -130,11 +129,6 @@ meshtastic_NeighborInfo NeighborInfoModule::getNeighborInfo()
 void NeighborInfoModule::handleGetNeighbors(const meshtastic_MeshPacket &req)
 {
     sendNeighborInfo(NODENUM_BROADCAST, false);
-    // meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-    // r.get_neighbor_response = getNeighborInfo();
-    // r.which_payload_variant = meshtastic_AdminMessage_get_neighbor_response_tag;
-    // // Note: We don't set passkey here as this should be handled by the admin module
-    // myReply = allocDataProtobuf(r);
 }
 
 /* Handle admin messages for this module */
