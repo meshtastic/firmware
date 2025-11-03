@@ -107,6 +107,10 @@
 #include "modules/DropzoneModule.h"
 #endif
 
+#ifdef MESHTASTIC_INCLUDE_ESPRUINO
+#include "modules/EspruinoModule/EspruinoModule.h"
+#endif
+
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -161,6 +165,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
     new GenericThreadModule();
+#endif
+#ifdef MESHTASTIC_INCLUDE_ESPRUINO
+    espruinoModule = new EspruinoModule();
 #endif
     // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
     // to a global variable.
