@@ -1191,7 +1191,32 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
-#ifdef FSCom
+#ifdef EXTERNAL_FLASH_DEVICES
+    if (!flash.begin()) {
+    LOG_ERROR("Error, failed to initialize flash chip!");
+    while (1) {
+      delay(1);
+    }
+  }
+    File32 f = fatfs.open(filename, FILE_READ);
+    if (f) {
+        LOG_INFO("Load %s", filename);
+        // Read raw binary into the protobuf struct (non-protobuf/raw dump)
+        int got = f.read(reinterpret_cast<uint8_t*>(&dest_struct), protoSize);
+        f.close();
+        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
+            memset(dest_struct, 0, objSize);
+        if (got != int(protoSize)) {
+            LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)protoSize);
+            state = LoadFileResult::DECODE_FAILED;
+        } else {
+            LOG_INFO("Loaded %s successfully", filename);
+            state = LoadFileResult::LOAD_SUCCESS;
+        }
+    } else {
+        LOG_ERROR("Could not open / read %s", filename);
+    }
+#elif FSCom
     concurrency::LockGuard g(spiLock);
 
     auto f = FSCom.open(filename, FILE_O_READ);
@@ -1446,24 +1471,45 @@ if (!flash.begin()) {
     }
   }
 LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+//format_fat12();
 check_fat12();
-  LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
+//LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
   if (!fatfs.begin(&flash)) {
     LOG_ERROR("Error, failed to mount filesystem!");
     while (1) {
       delay(1);
     }
+  }
+LOG_INFO("Filesystem mounted!");
+if (!fatfs.exists("/prefs")) {
+    LOG_INFO("/prefs directory not found, creating...");
+
+    // Use mkdir to create directory (note you should _not_ have a trailing
+    // slash).
+    fatfs.mkdir("/prefs");
+    File32 f2 = fatfs.open("/prefs/" xstr(BUILD_EPOCH), FILE_WRITE);
+        if (f2) {
+            f2.flush();
+            f2.close();
+        }
+    if (!fatfs.exists("/prefs")) {
+      LOG_INFO("Error, failed to create directory!");
+    } else {
+      LOG_INFO("Created directory!");
     }
-    LOG_INFO("Filesystem mounted!");
+  }
+LOG_INFO("Save %s", filename);
 File32 writeFile = fatfs.open(filename, FILE_WRITE);
   if (!writeFile) {
-    LOG_ERROR("Error, failed to create file!");
+    LOG_ERROR("Error, failed to save file!");
     
   }
- LOG_INFO("File created!");
- writeFile.write(reinterpret_cast<const uint8_t*>(&dest_struct), sizeof(dest_struct));
- writeFile.close();
- LOG_INFO("File closed!");
+  else{LOG_INFO("File saved!");
+    writeFile.write(reinterpret_cast<const uint8_t*>(&dest_struct), sizeof(dest_struct));
+    writeFile.close();
+    LOG_INFO("File closed!");
+    okay = true;
+  }
 
 #elif FSCom
     auto f = SafeFile(filename, fullAtomic);
@@ -1576,7 +1622,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 
 
 
-
+/*
 
 LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
 if (!flash.begin()) {
@@ -1587,7 +1633,7 @@ if (!flash.begin()) {
   }
 
   LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-  //format_fat12();
+  format_fat12();
   check_fat12();
   LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
   if (!fatfs.begin(&flash)) {
@@ -1658,6 +1704,7 @@ if (!flash.begin()) {
    } else {
      LOG_ERROR("Error opening file for read");
    }
+   */
 
     return success;
 }
