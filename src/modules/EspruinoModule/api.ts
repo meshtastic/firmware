@@ -195,6 +195,9 @@ type EventEmitterLike = {
 };
 
 type MeshtasticApi = EventEmitterLike & {
+  hello(): void;
+  echo(message: string): void;
+  ping(message: string): string;
   PortNum: typeof PortNum;
   onMessage(type: PortNumValue, callback: AnyMessageRxCallback): () => void;
   onTextMessage(callback: MessageRxCallback): () => void;
@@ -232,6 +235,15 @@ const __handlers: Record<string, ((...args: any[]) => void)[]> = {};
 
 // Meshtastic API
 const Meshtastic: MeshtasticApi = {
+  hello() {
+    console.log("Hello from JS");
+  },
+  echo(message: string) {
+    console.log(`Echoing message from JS: ${message}`);
+  },
+  ping(message: string) {
+    return message;
+  },
   /** Port number constants for Meshtastic applications */
   PortNum,
   on(event: string, listener: EspruinoEventListener) {
