@@ -106,6 +106,7 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         if (i2cBus->available())
             i2cBus->read();
     }
+    LOG_DEBUG("Register value: 0x%x", value);
     return value;
 }
 
@@ -377,14 +378,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0x11f3 || registerValue == 0xe9c ||
-                    registerValue == 0xc8d) {
-                    type = SHT4X;
-                    logFoundDevice("SHT4X", (uint8_t)addr.address);
-                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2);
+                if (registerValue == 0x5449) {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2) != 0) { // unique SHT4x serial number
+                    type = SHT4X;
+                    logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else {
                     type = SHT31;
                     logFoundDevice("SHT31", (uint8_t)addr.address);
