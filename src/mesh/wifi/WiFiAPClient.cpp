@@ -334,6 +334,23 @@ bool initWifi()
 }
 
 #ifdef ARCH_ESP32
+#if ESP_ARDUINO_VERSION <= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+// Most of the next 12 lines of code are adapted from espressif/arduino-esp32
+// Licensed under the GNU Lesser General Public License v2.1
+// https://github.com/espressif/arduino-esp32/blob/1f038677eb2eaf5e9ca6b6074486803c15468bed/libraries/WiFi/src/WiFiSTA.cpp#L755
+esp_netif_t *get_esp_interface_netif(esp_interface_t interface);
+IPv6Address GlobalIPv6()
+{
+    esp_ip6_addr_t addr;
+    if (WiFiGenericClass::getMode() == WIFI_MODE_NULL) {
+        return IPv6Address();
+    }
+    if (esp_netif_get_ip6_global(get_esp_interface_netif(ESP_IF_WIFI_STA), &addr)) {
+        return IPv6Address();
+    }
+    return IPv6Address(addr.addr);
+}
+#endif
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
@@ -355,6 +372,17 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point");
+        if (config.network.ipv6_enabled) {
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+            if (!WiFi.enableIPv6()) {
+                LOG_WARN("Failed to enable IPv6");
+            }
+#else
+            if (!WiFi.enableIpV6()) {
+                LOG_WARN("Failed to enable IPv6");
+            }
+#endif
+        }
 #ifdef WIFI_LED
         digitalWrite(WIFI_LED, HIGH);
 #endif
@@ -383,7 +411,8 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Obtained Local IP6 address: %s", WiFi.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", WiFi.globalIPv6().toString().c_str());
 #else
-        LOG_INFO("Obtained IP6 address: %s", WiFi.localIPv6().toString().c_str());
+        LOG_INFO("Obtained Local IP6 address: %s", WiFi.localIPv6().toString().c_str());
+        LOG_INFO("Obtained GlobalIP6 address: %s", GlobalIPv6().toString().c_str());
 #endif
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
