@@ -1,0 +1,6 @@
+# Ignore Espruino generated files (built at compile time)
+espruino_embedded.c
+espruino_embedded.h
+jstypes.h
+js_api.debug.h
+js_api.min.h
