@@ -187,16 +187,84 @@ type AnyMessageRxCallback = (
 
 type MessageRxCallback = (from: NodeId, msg: string) => void;
 
+// Espruino makes every Object an EventEmitterLike, so we can use the same methods here.
+type EventEmitterLike = {
+  on(event: string, listener: (...args: any[]) => void): void;
+  emit(event: string, ...args: any[]): void;
+  removeListener(event: string, listener: (...args: any[]) => void): void;
+};
+
+type MeshtasticApi = EventEmitterLike & {
+  PortNum: typeof PortNum;
+  onMessage(type: PortNumValue, callback: AnyMessageRxCallback): () => void;
+  onTextMessage(callback: MessageRxCallback): () => void;
+  onAudioMessage(callback: AnyMessageRxCallback): () => void;
+  onPositionMessage(callback: AnyMessageRxCallback): () => void;
+  onNodeInfoMessage(callback: AnyMessageRxCallback): () => void;
+  onRoutingMessage(callback: AnyMessageRxCallback): () => void;
+  onAdminMessage(callback: AnyMessageRxCallback): () => void;
+  onTextMessageCompressedMessage(callback: AnyMessageRxCallback): () => void;
+  onWaypointMessage(callback: AnyMessageRxCallback): () => void;
+  onDetectionSensorMessage(callback: AnyMessageRxCallback): () => void;
+  onAlertMessage(callback: AnyMessageRxCallback): () => void;
+  onKeyVerificationMessage(callback: AnyMessageRxCallback): () => void;
+  onReplyMessage(callback: AnyMessageRxCallback): () => void;
+  onIPTunnelMessage(callback: AnyMessageRxCallback): () => void;
+  onPaxcounterMessage(callback: AnyMessageRxCallback): () => void;
+  onSerialMessage(callback: AnyMessageRxCallback): () => void;
+  onStoreForwardMessage(callback: AnyMessageRxCallback): () => void;
+  onRangeTestMessage(callback: AnyMessageRxCallback): () => void;
+  onTelemetryMessage(callback: AnyMessageRxCallback): () => void;
+  onZPSMessage(callback: AnyMessageRxCallback): () => void;
+  onSimulatorMessage(callback: AnyMessageRxCallback): () => void;
+  onTracerouteMessage(callback: AnyMessageRxCallback): () => void;
+  onNeighborInfoMessage(callback: AnyMessageRxCallback): () => void;
+  onATAKPluginMessage(callback: AnyMessageRxCallback): () => void;
+  onMapReportMessage(callback: AnyMessageRxCallback): () => void;
+  onPowerStressMessage(callback: AnyMessageRxCallback): () => void;
+  onReticulumTunnelMessage(callback: AnyMessageRxCallback): () => void;
+  onCayenneMessage(callback: AnyMessageRxCallback): () => void;
+  onPrivateMessage(callback: AnyMessageRxCallback): () => void;
+  onATAKForwarderMessage(callback: AnyMessageRxCallback): () => void;
+};
+
+const __handlers: Record<string, ((...args: any[]) => void)[]> = {};
+
 // Meshtastic API
-const Meshtastic = {
+const Meshtastic: MeshtasticApi = {
   /** Port number constants for Meshtastic applications */
   PortNum,
-
+  on(event: string, listener: EspruinoEventListener) {
+    console.log(`Registering listener for event: ${event}`);
+    if (!(event in __handlers)) {
+      __handlers[event] = [];
+    }
+    __handlers[event].push(listener);
+    return () => {
+      Meshtastic.removeListener(event, listener);
+    };
+  },
+  emit(event: string, data: any[]) {
+    console.log(`Emitting event from JS: ${event} (${data.length} args)`);
+    if (!(event in __handlers)) {
+      return;
+    }
+    __handlers[event].forEach((handler) => {
+      handler.apply(null, data);
+    });
+  },
+  removeListener(event: string, listener: EspruinoEventListener) {
+    console.log(`Removing listener for event: ${event}`);
+    if (!(event in __handlers)) {
+      return;
+    }
+    __handlers[event] = __handlers[event].filter((l) => l !== listener);
+  },
   onMessage(type: PortNumValue, callback: AnyMessageRxCallback) {
     const eventName = `message:${type}`;
-    E.on(eventName, callback);
+    Meshtastic.on(eventName, callback);
     return () => {
-      E.removeListener(eventName, callback);
+      Meshtastic.removeListener(eventName, callback);
     };
   },
   onTextMessage(callback: MessageRxCallback) {

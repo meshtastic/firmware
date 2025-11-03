@@ -4,6 +4,7 @@
 #ifdef MESHTASTIC_INCLUDE_ESPRUINO
 
 #include ".build/espruino_embedded.h"
+#include "MeshService.h"
 #include <Arduino.h>
 
 // Include API bootstrap code (debug or minified version)
@@ -12,6 +13,13 @@
 #else
 #include ".build/js_api.min.h"
 #endif
+
+#define ESPRUINO_DEBUG(...) LOG_DEBUG("[EspruinoModule]: " __VA_ARGS__)
+#define ESPRUINO_INFO(...) LOG_INFO("[EspruinoModule]: " __VA_ARGS__)
+#define ESPRUINO_WARN(...) LOG_WARN("[EspruinoModule]: " __VA_ARGS__)
+#define ESPRUINO_ERROR(...) LOG_ERROR("[EspruinoModule]: " __VA_ARGS__)
+#define ESPRUINO_CRIT(...) LOG_CRIT("[EspruinoModule]: " __VA_ARGS__)
+#define ESPRUINO_TRACE(...) LOG_TRACE("[EspruinoModule]: " __VA_ARGS__)
 
 // Required by Espruino embed API
 extern "C" {
@@ -35,7 +43,7 @@ extern "C" {
             if (c == '\n' || printBufferPos >= sizeof(printBuffer) - 1) {
                 if (printBufferPos > 0) {
                     printBuffer[printBufferPos] = '\0';
-                    LOG_INFO("[Espruino] %s", printBuffer);
+                    ESPRUINO_INFO("%s", printBuffer);
                     printBufferPos = 0;
                 }
             } else {
@@ -44,13 +52,56 @@ extern "C" {
             }
         }
     }
+    
+    // Forward declarations for Espruino functions not in espruino_embedded.h
+    // ArrayBuffer view types
+    typedef enum {
+        ARRAYBUFFERVIEW_UINT8 = 1,
+        ARRAYBUFFERVIEW_INT8 = 1 | 16,
+        ARRAYBUFFERVIEW_UINT16 = 2,
+        ARRAYBUFFERVIEW_INT16 = 2 | 16,
+        ARRAYBUFFERVIEW_UINT32 = 4,
+        ARRAYBUFFERVIEW_INT32 = 4 | 16,
+        ARRAYBUFFERVIEW_FLOAT32 = 4 | 32,
+        ARRAYBUFFERVIEW_FLOAT64 = 8 | 32,
+    } __attribute__ ((__packed__)) JsVarDataArrayBufferViewType;
+    
+    // String iterator
+    typedef struct JsvStringIterator {
+        size_t charIdx;
+        size_t charsInVar;
+        size_t varIndex;
+        JsVar *var;
+        char *ptr;
+    } JsvStringIterator;
+    
+    // ArrayBuffer iterator
+    typedef struct JsvArrayBufferIterator {
+        JsvStringIterator it;
+        JsVarDataArrayBufferViewType type;
+        size_t byteLength;
+        size_t byteOffset;
+        size_t index;
+        bool hasAccessedElement;
+    } JsvArrayBufferIterator;
+    
+    // Function declarations
+    JsVar *jsvNewTypedArray(JsVarDataArrayBufferViewType type, JsVarInt length);
+    void jsvArrayBufferIteratorNew(JsvArrayBufferIterator *it, JsVar *arrayBuffer, size_t index);
+    void jsvArrayBufferIteratorSetByteValue(JsvArrayBufferIterator *it, char c);
+    void jsvArrayBufferIteratorNext(JsvArrayBufferIterator *it);
+    void jsvArrayBufferIteratorFree(JsvArrayBufferIterator *it);
+    void jsvUnLock2(JsVar *var1, JsVar *var2);
+    void jsvUnLock3(JsVar *var1, JsVar *var2, JsVar *var3);
+    JsVar *jsvNewArray(JsVar **elements, int elementCount);
+    JsVar *jspeFunctionCall(JsVar *function, JsVar *functionName, JsVar *thisArg, bool isParsing, int argCount, JsVar **argPtr);
 }
 
 EspruinoModule *espruinoModule;
 
-EspruinoModule::EspruinoModule() : concurrency::OSThread("EspruinoModule")
+EspruinoModule::EspruinoModule() : MeshModule("espruino"), concurrency::OSThread("EspruinoModule")
 {
-    LOG_INFO("EspruinoModule constructor");
+    ESPRUINO_INFO("Constructor");
 }
 
 EspruinoModule::~EspruinoModule()
@@ -64,37 +115,37 @@ void EspruinoModule::initializeEspruino()
         return;
     }
     
-    LOG_INFO("Initializing Espruino JavaScript interpreter...");
+    ESPRUINO_DEBUG("Initializing Espruino JavaScript interpreter...");
     
     // Create the Espruino interpreter with 1000 variables
     // Adjust this number based on available memory
     if (!ejs_create(1000)) {
-        LOG_ERROR("Failed to create Espruino interpreter");
+        ESPRUINO_ERROR("Failed to create Espruino interpreter");
         return;
     }
     
     // Create a JavaScript instance (no arguments needed)
     jsInstance = ejs_create_instance();
     if (!jsInstance) {
-        LOG_ERROR("Failed to create Espruino instance");
+        ESPRUINO_ERROR("Failed to create Espruino instance");
         ejs_destroy();
         return;
     }
     
     // Execute bootstrap JavaScript to initialize Meshtastic API
-    LOG_INFO("Loading Meshtastic API bootstrap...");
+    ESPRUINO_DEBUG("Loading Meshtastic API bootstrap...");
     JsVar *bootstrapResult = ejs_exec(jsInstance, JS_API_BOOTSTRAP, true);
     
     // Check for exceptions during bootstrap
     if (jsInstance->exception) {
-        LOG_ERROR("Failed to execute API bootstrap!");
+        ESPRUINO_ERROR("Failed to execute API bootstrap!");
         
         // Try to extract and log the error message
         JsVar *exception = jsvLockAgainSafe(jsInstance->exception);
         if (exception) {
             char errorMsg[256];
             jsvGetString(exception, errorMsg, sizeof(errorMsg));
-            LOG_ERROR("Bootstrap error: %s", errorMsg);
+            ESPRUINO_ERROR("Bootstrap error: %s", errorMsg);
             jsvUnLock(exception);
         }
         
@@ -109,7 +160,7 @@ void EspruinoModule::initializeEspruino()
     jsvUnLock(bootstrapResult);
     
     initialized = true;
-    LOG_INFO("Espruino initialized successfully with Meshtastic API");
+    ESPRUINO_DEBUG("Espruino initialized successfully with Meshtastic API");
 }
 
 void EspruinoModule::cleanupEspruino()
@@ -118,7 +169,7 @@ void EspruinoModule::cleanupEspruino()
         return;
     }
     
-    LOG_INFO("Cleaning up Espruino...");
+    ESPRUINO_INFO("Cleaning up Espruino...");
     
     if (jsInstance) {
         ejs_destroy_instance(jsInstance);
@@ -129,24 +180,6 @@ void EspruinoModule::cleanupEspruino()
     initialized = false;
 }
 
-bool EspruinoModule::executeJS(const char *code)
-{
-    if (!initialized || !jsInstance) {
-        LOG_ERROR("Cannot execute JS: Espruino not initialized");
-        return false;
-    }
-    
-    LOG_DEBUG("Executing JavaScript: %s", code);
-    
-    // Execute the JavaScript code
-    // ejs_exec handles exceptions internally and prints them via ejs_print
-    JsVar *result = ejs_exec(jsInstance, code, false);
-    
-    // Just unlock the result - exceptions are handled inside ejs_exec
-    jsvUnLock(result);
-    
-    return true;
-}
 
 int32_t EspruinoModule::runOnce()
 {
@@ -156,19 +189,125 @@ int32_t EspruinoModule::runOnce()
         // Initialize Espruino on first run
         initializeEspruino();
         
-        // Run test scripts
-        if (initialized) {
-            executeJS("console.log('Espruino module initialized');");
-            executeJS("console.log('JavaScript test:', 42, true, {foo: 'bar'});");
-            executeJS("console.log('Math test: 2 + 2 =', 2 + 2);");
-            executeJS("throw new Error('Test error');");
-        }
-        
         // We only need to run once for initialization
         return disable();
     }
     
     return 100; // Run again in 100ms if needed
+}
+
+bool EspruinoModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    // Receive all packets destined for this node (broadcasts and direct messages)
+    return true;
+}
+
+ProcessMessage EspruinoModule::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    // Only handle decoded packets
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        return ProcessMessage::CONTINUE;
+    }
+    
+    if (!initialized || !jsInstance) {
+        return ProcessMessage::CONTINUE;
+    }
+    
+    // Extract message details
+    uint32_t portNum = mp.decoded.portnum;
+    uint32_t fromNodeId = mp.from;
+    const uint8_t *payload = mp.decoded.payload.bytes;
+    size_t payloadLength = mp.decoded.payload.size;
+    
+    ESPRUINO_DEBUG("Received message from node 0x%x on port %d (%d bytes)", 
+              fromNodeId, portNum, payloadLength);
+    
+    // Create Uint8Array from binary data
+    JsVar *uint8array = jsvNewTypedArray(ARRAYBUFFERVIEW_UINT8, payloadLength);
+    if (!uint8array) {
+        ESPRUINO_ERROR("Failed to create Uint8Array for message event");
+        return ProcessMessage::CONTINUE;
+    }
+    
+    JsvArrayBufferIterator it;
+    jsvArrayBufferIteratorNew(&it, uint8array, 0);
+    for (size_t i = 0; i < payloadLength; i++) {
+        jsvArrayBufferIteratorSetByteValue(&it, (char)payload[i]);
+        jsvArrayBufferIteratorNext(&it);
+    }
+    jsvArrayBufferIteratorFree(&it);
+    
+    // Create event data: [fromNode, uint8array]
+    JsVar *fromNode = jsvNewFromInteger(fromNodeId);
+    JsVar *elements[] = { fromNode, uint8array };
+    JsVar *dataArray = jsvNewArray(elements, 2);
+    
+    if (!dataArray) {
+        ESPRUINO_ERROR("Failed to create data array for message event");
+        jsvUnLock2(fromNode, uint8array);
+        return ProcessMessage::CONTINUE;
+    }
+    
+    // Create event name: "message:<portnum>"
+    char eventName[32];
+    snprintf(eventName, sizeof(eventName), "message:%d", portNum);
+    
+    ESPRUINO_DEBUG("Dispatching event: %s", eventName);
+
+    // Dispatch to JavaScript
+    emitEvent(eventName, dataArray);
+    
+    // Clean up
+    jsvUnLock3(dataArray, fromNode, uint8array);
+    
+    // Allow other modules to process this message
+    return ProcessMessage::CONTINUE;
+}
+
+void EspruinoModule::emitEvent(const char* eventName, JsVar* dataArray)
+{
+    ESPRUINO_DEBUG("Emitting event: %s", eventName);
+    if (!initialized || !jsInstance) {
+        ESPRUINO_ERROR("Espruino not initialized or JavaScript instance not created");
+        return;
+    }
+    
+    // Create event name variable
+    ESPRUINO_DEBUG("Creating event name variable: %s", eventName);
+    JsVar *eventNameVar = jsvNewFromString(eventName);
+    if (!eventNameVar) {
+        ESPRUINO_ERROR("Failed to create event name variable");
+        return;
+    }
+    
+    // Get Meshtastic object from global scope
+    ESPRUINO_DEBUG("Getting Meshtastic object from global scope");
+    JsVar *meshtasticObj = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
+    if (!meshtasticObj) {
+        ESPRUINO_ERROR("Failed to get Meshtastic object from global scope");
+        jsvUnLock(eventNameVar);
+        return;
+    }
+    
+    // Get emit function from Meshtastic object
+    ESPRUINO_DEBUG("Getting emit function from Meshtastic object");
+    JsVar *emitFunc = jsvObjectGetChild(meshtasticObj, "emit", 0);
+    if (!emitFunc) {
+        ESPRUINO_ERROR("Failed to get emit function from Meshtastic object");
+        jsvUnLock2(eventNameVar, meshtasticObj);
+        return;
+    }
+    
+    // Call Meshtastic.emit(eventName, dataArray)
+    ESPRUINO_DEBUG("Calling Meshtastic.emit(eventName, dataArray)");
+    JsVar *args[] = { eventNameVar,  };
+    JsVar *result = jspeFunctionCall(emitFunc, NULL, meshtasticObj, false, 2, args);
+    
+    // Clean up
+    jsvUnLock(result);
+    jsvUnLock(emitFunc);
+    jsvUnLock(meshtasticObj);
+    jsvUnLock(eventNameVar);
 }
 
 #endif // MESHTASTIC_INCLUDE_ESPRUINO
