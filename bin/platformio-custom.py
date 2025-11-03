@@ -14,6 +14,25 @@ from readprops import readProps
 Import("env")
 platform = env.PioPlatform()
 
+# Check if Espruino module exists and run build script immediately
+import os
+espruino_module = os.path.join(env["PROJECT_DIR"], "src", "modules", "EspruinoModule")
+if os.path.exists(espruino_module):
+    print("=" * 60)
+    print("Running Espruino build script...")
+    print("=" * 60)
+    
+    build_script = join(env["PROJECT_DIR"], "bin", "build-espruino.py")
+    result = env.Execute(f"\"{sys.executable}\" \"{build_script}\"")
+    
+    if result != 0:
+        print("Error: Espruino build script failed!")
+        env.Exit(1)
+    
+    print("=" * 60)
+    print("Espruino build completed successfully!")
+    print("=" * 60)
+
 
 def esp32_create_combined_bin(source, target, env):
     # this sub is borrowed from ESPEasy build toolchain. It's licensed under GPL V3

@@ -3,8 +3,15 @@
 
 #ifdef MESHTASTIC_INCLUDE_ESPRUINO
 
-#include "espruino_embedded.h"
+#include ".build/espruino_embedded.h"
 #include <Arduino.h>
+
+// Include API bootstrap code (debug or minified version)
+#ifdef DEBUG
+#include ".build/js_api.debug.h"
+#else
+#include ".build/js_api.min.h"
+#endif
 
 // Required by Espruino embed API
 extern "C" {
@@ -74,8 +81,35 @@ void EspruinoModule::initializeEspruino()
         return;
     }
     
+    // Execute bootstrap JavaScript to initialize Meshtastic API
+    LOG_INFO("Loading Meshtastic API bootstrap...");
+    JsVar *bootstrapResult = ejs_exec(jsInstance, JS_API_BOOTSTRAP, true);
+    
+    // Check for exceptions during bootstrap
+    if (jsInstance->exception) {
+        LOG_ERROR("Failed to execute API bootstrap!");
+        
+        // Try to extract and log the error message
+        JsVar *exception = jsvLockAgainSafe(jsInstance->exception);
+        if (exception) {
+            char errorMsg[256];
+            jsvGetString(exception, errorMsg, sizeof(errorMsg));
+            LOG_ERROR("Bootstrap error: %s", errorMsg);
+            jsvUnLock(exception);
+        }
+        
+        // Clean up and fail
+        jsvUnLock(bootstrapResult);
+        ejs_destroy_instance(jsInstance);
+        jsInstance = nullptr;
+        ejs_destroy();
+        return;
+    }
+    
+    jsvUnLock(bootstrapResult);
+    
     initialized = true;
-    LOG_INFO("Espruino initialized successfully");
+    LOG_INFO("Espruino initialized successfully with Meshtastic API");
 }
 
 void EspruinoModule::cleanupEspruino()
