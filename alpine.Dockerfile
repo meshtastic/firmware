@@ -8,7 +8,8 @@ ARG PIO_ENV=native
 ENV PIP_ROOT_USER_ACTION=ignore
 
 RUN apk --no-cache add \
-        bash g++ libstdc++-dev linux-headers zip git ca-certificates libgpiod-dev yaml-cpp-dev bluez-dev \
+        bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
+        libgpiod-dev yaml-cpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
         libx11-dev libinput-dev libxkbcommon-dev \
     && rm -rf /var/cache/apk/* \
@@ -40,8 +41,8 @@ LABEL org.opencontainers.image.title="Meshtastic" \
 USER root
 
 RUN apk --no-cache add \
-        shadow libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
-        libx11 libinput libxkbcommon \
+        shadow libstdc++ libbsd libgpiod yaml-cpp libusb \
+        i2c-tools libuv libx11 libinput libxkbcommon \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

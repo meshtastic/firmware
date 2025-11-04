@@ -33,6 +33,7 @@ BuildRequires: python3dist(grpcio[protobuf])
 BuildRequires: python3dist(grpcio-tools)
 BuildRequires: git-core
 BuildRequires: gcc-c++
+BuildRequires: (glibc-devel >= 2.38) or pkgconfig(libbsd-overlay)
 BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(libgpiod)
 BuildRequires: pkgconfig(bluez)

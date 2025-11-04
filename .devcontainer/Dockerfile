@@ -1,7 +1,7 @@
 # trunk-ignore-all(terrascan/AC_DOCKER_0002): Known terrascan issue
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
-FROM mcr.microsoft.com/devcontainers/cpp:2-debian-12
+FROM mcr.microsoft.com/devcontainers/cpp:2-debian-13
 
 USER root
 

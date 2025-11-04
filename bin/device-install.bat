@@ -15,7 +15,7 @@ SET "LOGCOUNTER=0"
 SET "BPS_RESET=0"
 
 @REM FIXME: Determine mcu from PlatformIO variant, this is unmaintainable.
-SET "S3=s3 v3 v4 t-deck wireless-paper wireless-tracker station-g2 unphone t-eth-elite tlora-pager mesh-tab dreamcatcher ESP32-S3-Pico seeed-sensecap-indicator heltec_capsule_sensor_v3 vision-master icarus tracksenger elecrow-adv"
+SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone t-eth-elite tlora-pager mesh-tab dreamcatcher ESP32-S3-Pico seeed-sensecap-indicator heltec_capsule_sensor_v3 vision-master icarus tracksenger elecrow-adv heltec-v4"
 SET "C3=esp32c3"
 @REM FIXME: Determine flash size from PlatformIO variant, this is unmaintainable.
 SET "BIGDB_8MB=crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
