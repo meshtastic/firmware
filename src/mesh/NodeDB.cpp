@@ -1793,8 +1793,10 @@ void NodeDB::clearAllFavorites()
             num_changed++;
         }
     }
-    sortMeshDB();
-    saveNodeDatabaseToDisk();
+    if (num_changed > 0) {
+        sortMeshDB();
+        saveNodeDatabaseToDisk();
+    }
     LOG_INFO("clearAllFavorites: removed %d favorites", num_changed);
 }
 
