@@ -27,6 +27,7 @@ void CompassModule::setup()
 void CompassModule::loop()
 {
     compass.read();
+    LOG_DEBUG("Compass heading: %d", compass.getAzimuth());
     updateLedRing();
 }
 
@@ -65,6 +66,8 @@ void CompassModule::updateLedRing()
 
             float bearing = calculateBearing(localLat, localLon, neighborLat, neighborLon);
             float relativeBearing = fmod((bearing - heading + 360), 360);
+
+            LOG_DEBUG("Node %d: bearing=%f, relativeBearing=%f", nodeNum, bearing, relativeBearing);
 
             int ledIndex = (int)(relativeBearing / (360.0 / ledCount));
             ledRing->setPixelColor(ledIndex, ledRing->Color(255, 0, 0)); // Red for now
