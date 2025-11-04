@@ -55,51 +55,54 @@ static int scrollIndex = 0;
 
 const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
 {
-    const char *name = NULL;
-    static char nodeName[16] = "?";
-    if (config.display.use_long_node_name == true) {
-        if (node->has_user && strlen(node->user.long_name) > 0) {
-            name = node->user.long_name;
-        } else {
-            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
-        }
-    } else {
-        if (node->has_user && strlen(node->user.short_name) > 0) {
-            name = node->user.short_name;
-        } else {
-            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
-        }
+    static char nodeName[16]; // single static buffer we return
+    nodeName[0] = '\0';
+
+    auto writeFallbackId = [&] {
+        std::snprintf(nodeName, sizeof(nodeName), "(%04X)", static_cast<uint16_t>(node ? (node->num & 0xFFFF) : 0));
+    };
+
+    // 1) Choose target candidate (long vs short) only if present
+    const char *raw = nullptr;
+    if (node && node->has_user) {
+        raw = config.display.use_long_node_name ? node->user.long_name : node->user.short_name;
     }
 
-    // Use sanitizeString() function and copy directly into nodeName
-    std::string sanitized_name = sanitizeString(name ? name : "");
+    // 2) Sanitize (empty if raw is null/empty)
+    std::string s = (raw && *raw) ? sanitizeString(raw) : std::string{};
 
-    if (!sanitized_name.empty()) {
-        strncpy(nodeName, sanitized_name.c_str(), sizeof(nodeName) - 1);
-        nodeName[sizeof(nodeName) - 1] = '\0';
+    // 3) Fallback if sanitize yields empty; otherwise copy safely (truncate if needed)
+    if (s.empty()) {
+        writeFallbackId();
     } else {
-        snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
+        // %.*s ensures null-termination and safe truncation to buffer size - 1
+        std::snprintf(nodeName, sizeof(nodeName), "%.*s", static_cast<int>(sizeof(nodeName) - 1), s.c_str());
     }
 
-    if (config.display.use_long_node_name == true) {
+    // 4) Width-based truncation + ellipsis (long-name mode only)
+    if (config.display.use_long_node_name && display) {
         int availWidth = (SCREEN_WIDTH / 2) - 65;
         if (availWidth < 0)
             availWidth = 0;
 
-        size_t origLen = strlen(nodeName);
-        while (nodeName[0] && display->getStringWidth(nodeName) > availWidth) {
-            nodeName[strlen(nodeName) - 1] = '\0';
+        const size_t beforeLen = std::strlen(nodeName);
+
+        // Trim from the end until it fits or is empty
+        size_t len = beforeLen;
+        while (len && display->getStringWidth(nodeName) > availWidth) {
+            nodeName[--len] = '\0';
         }
 
-        // If we actually truncated, append "..." (ensure space remains in buffer)
-        if (strlen(nodeName) < origLen) {
-            size_t len = strlen(nodeName);
-            size_t maxLen = sizeof(nodeName) - 4; // 3 for "..." and 1 for '\0'
-            if (len > maxLen) {
-                nodeName[maxLen] = '\0';
-                len = maxLen;
+        // If truncated, append "..." (respect buffer size)
+        if (len < beforeLen) {
+            // Make sure there's room for "..." and '\0'
+            const size_t capForText = sizeof(nodeName) - 1; // leaving space for '\0'
+            const size_t needed = 3;                        // "..."
+            if (len > capForText - needed) {
+                len = capForText - needed;
+                nodeName[len] = '\0';
             }
-            strcat(nodeName, "...");
+            std::strcat(nodeName, "...");
         }
     }
 
