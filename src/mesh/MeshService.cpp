@@ -86,12 +86,9 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
     bool isPreferredRebroadcaster = config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER;
-    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
-        //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
+    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
+        nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull() &&
+        mp->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
             auto hopStart = mp->hop_start;
