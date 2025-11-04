@@ -32,6 +32,13 @@ class EspruinoModule : public MeshModule, private concurrency::OSThread
     EspruinoModule();
     virtual ~EspruinoModule();
     
+    /**
+     * Execute JavaScript code
+     * @param code The JavaScript code to execute
+     * @return true if execution was successful
+     */
+    bool executeJS(const char *code);
+    
   protected:
     virtual int32_t runOnce() override;
     

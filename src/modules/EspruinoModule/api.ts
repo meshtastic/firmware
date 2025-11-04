@@ -1,75 +1,3 @@
-// Espruino E Object TypeScript Definitions
-// Based on Espruino's built-in EventEmitter system
-
-// Event-specific payload types
-interface TouchEvent {
-  x: number;
-  y: number;
-  b: number; // 0 for released, 1 for pressed
-}
-
-type ErrorFlag = string;
-
-// Generic event listener type for Espruino
-type EspruinoEventListener<T = any> = (...args: T[]) => void;
-
-// E Object Interface - Espruino's global event emitter
-interface EspruinoE {
-  // Event listener registration - overloaded for built-in events
-  on(event: "init", listener: () => void): void;
-  on(event: "kill", listener: () => void): void;
-  on(event: "errorFlag", listener: (errorFlags: ErrorFlag[]) => void): void;
-  on(event: "touch", listener: (event: TouchEvent) => void): void;
-  on(event: "comparator", listener: (direction: number) => void): void;
-  on(event: string, listener: EspruinoEventListener): void;
-
-  // addListener - alias for on()
-  addListener(event: "init", listener: () => void): void;
-  addListener(event: "kill", listener: () => void): void;
-  addListener(
-    event: "errorFlag",
-    listener: (errorFlags: ErrorFlag[]) => void
-  ): void;
-  addListener(event: "touch", listener: (event: TouchEvent) => void): void;
-  addListener(event: "comparator", listener: (direction: number) => void): void;
-  addListener(event: string, listener: EspruinoEventListener): void;
-
-  // prependListener - add listener at the beginning of the listener array
-  prependListener(event: "init", listener: () => void): void;
-  prependListener(event: "kill", listener: () => void): void;
-  prependListener(
-    event: "errorFlag",
-    listener: (errorFlags: ErrorFlag[]) => void
-  ): void;
-  prependListener(event: "touch", listener: (event: TouchEvent) => void): void;
-  prependListener(
-    event: "comparator",
-    listener: (direction: number) => void
-  ): void;
-  prependListener(event: string, listener: EspruinoEventListener): void;
-
-  // Emit an event with optional arguments
-  emit(event: string, ...args: any[]): void;
-
-  // Remove a specific listener
-  removeListener(event: string, listener: EspruinoEventListener): void;
-
-  // Remove all listeners for an event, or all listeners if event is undefined
-  removeAllListeners(event?: string): void;
-
-  // Stop event propagation during event handling
-  stopEventPropagation(): void;
-
-  // Convert arguments to a String (8-bit characters)
-  toString(...args: any[]): string;
-
-  // Convert arguments to a Uint8Array
-  toUint8Array(...args: any[]): Uint8Array;
-}
-
-// Declare the global E object
-declare const E: EspruinoE;
-
 // Meshtastic Protocol Port Numbers
 // For any new 'apps' that run on the device or via sister apps on phones/PCs
 // they should pick and use a unique 'portnum' for their application.
@@ -77,7 +5,7 @@ declare const E: EspruinoE;
 // 0-63     Core Meshtastic use
 // 64-127   Registered 3rd party apps
 // 256-511  Private applications
-const PortNum = {
+export const PortNum = {
   /** Deprecated: A message from outside the mesh (formerly OPAQUE) */
   UNKNOWN_APP: 0,
 
@@ -175,34 +103,37 @@ const PortNum = {
   MAX: 511,
 } as const;
 
-type PortNumValue = (typeof PortNum)[keyof typeof PortNum];
+export type PortNumValue = (typeof PortNum)[keyof typeof PortNum];
 
-type NodeId = number;
+export type NodeId = number;
 
-type AnyMessageRxCallback = (
-  type: PortNumValue,
+export type EventCallback = (data: any) => void;
+export type AnyMessageRxCallback<TData = any> = (
   from: NodeId,
-  msg: Uint8Array
+  data: TData
 ) => void;
-
-type MessageRxCallback = (from: NodeId, msg: string) => void;
+export type TextMessageRxCallback = AnyMessageRxCallback<string>;
+export type BinaryMessageRxCallback = AnyMessageRxCallback<Uint8Array>;
 
 // Espruino makes every Object an EventEmitterLike, so we can use the same methods here.
-type EventEmitterLike = {
-  on(event: string, listener: (...args: any[]) => void): void;
-  emit(event: string, ...args: any[]): void;
+export type EventEmitterLike = {
+  on(event: string, listener: EventCallback): void;
+  emit(event: string, data: any): void;
   removeListener(event: string, listener: (...args: any[]) => void): void;
 };
 
-type MeshtasticApi = EventEmitterLike & {
+export type MeshtasticApi = EventEmitterLike & {
   hello(): void;
   echo(message: string): void;
   ping(message: string): string;
   PortNum: typeof PortNum;
-  onMessage(type: PortNumValue, callback: AnyMessageRxCallback): () => void;
-  onTextMessage(callback: MessageRxCallback): () => void;
-  onAudioMessage(callback: AnyMessageRxCallback): () => void;
-  onPositionMessage(callback: AnyMessageRxCallback): () => void;
+  onPortMessage<TData>(
+    type: PortNumValue,
+    callback: AnyMessageRxCallback<TData>
+  ): () => void;
+  onTextMessage(callback: TextMessageRxCallback): () => void;
+  onAudioMessage(callback: BinaryMessageRxCallback): () => void;
+  onPositionMessage(callback: BinaryMessageRxCallback): () => void;
   onNodeInfoMessage(callback: AnyMessageRxCallback): () => void;
   onRoutingMessage(callback: AnyMessageRxCallback): () => void;
   onAdminMessage(callback: AnyMessageRxCallback): () => void;
@@ -231,8 +162,15 @@ type MeshtasticApi = EventEmitterLike & {
   onATAKForwarderMessage(callback: AnyMessageRxCallback): () => void;
 };
 
-const __handlers: Record<string, ((...args: any[]) => void)[]> = {};
+const __handlers: Record<string, EventCallback[]> = {};
 
+export type TextMessageParams = [NodeId, string];
+export type BinaryMessageParams = [NodeId, Uint8Array];
+export type AnyMessageParams = [PortNumValue, NodeId, any];
+
+function notImplemented(): never {
+  throw new Error("Not implemented");
+}
 // Meshtastic API
 const Meshtastic: MeshtasticApi = {
   hello() {
@@ -246,7 +184,7 @@ const Meshtastic: MeshtasticApi = {
   },
   /** Port number constants for Meshtastic applications */
   PortNum,
-  on(event: string, listener: EspruinoEventListener) {
+  on(event: string, listener: EventCallback) {
     console.log(`Registering listener for event: ${event}`);
     if (!(event in __handlers)) {
       __handlers[event] = [];
@@ -256,117 +194,127 @@ const Meshtastic: MeshtasticApi = {
       Meshtastic.removeListener(event, listener);
     };
   },
-  emit(event: string, data: any[]) {
-    console.log(`Emitting event from JS: ${event} (${data.length} args)`);
+  emit(event: string, data: any) {
+    console.log(`Emitting event from JS: ${event}`);
+    console.log(`Data type: ${typeof data}`);
     if (!(event in __handlers)) {
       return;
     }
     __handlers[event].forEach((handler) => {
-      handler.apply(null, data);
+      handler(data);
     });
   },
-  removeListener(event: string, listener: EspruinoEventListener) {
+  removeListener(event: string, listener: EventCallback) {
     console.log(`Removing listener for event: ${event}`);
     if (!(event in __handlers)) {
       return;
     }
     __handlers[event] = __handlers[event].filter((l) => l !== listener);
   },
-  onMessage(type: PortNumValue, callback: AnyMessageRxCallback) {
-    const eventName = `message:${type}`;
-    Meshtastic.on(eventName, callback);
+  onPortMessage<TData>(
+    portNum: PortNumValue,
+    callback: AnyMessageRxCallback<TData>
+  ) {
+    const eventName = `message:${portNum}`;
+
+    Meshtastic.on(eventName, (data) => {
+      console.log(`Inside callback for event: ${eventName}`);
+      console.log(`Data type: ${typeof data}`);
+      console.log(`Data length: ${data.length}`);
+      console.log(`Data[0] type: ${typeof data[0]}`);
+      console.log(`Data[1] type: ${typeof data[1]}`);
+      callback(data[0], data[1]);
+    });
     return () => {
       Meshtastic.removeListener(eventName, callback);
     };
   },
-  onTextMessage(callback: MessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.TEXT_MESSAGE_APP, (from, msg) =>
-      callback(from, E.toString(msg))
-    );
+  onTextMessage(callback: TextMessageRxCallback) {
+    return Meshtastic.onPortMessage<string>(PortNum.TEXT_MESSAGE_APP, callback);
   },
   onAudioMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.AUDIO_APP, callback);
+    notImplemented();
   },
   onPositionMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.POSITION_APP, callback);
+    notImplemented();
   },
   onNodeInfoMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.NODEINFO_APP, callback);
+    notImplemented();
   },
   onRoutingMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.ROUTING_APP, callback);
+    notImplemented();
   },
   onAdminMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.ADMIN_APP, callback);
+    notImplemented();
   },
   onTextMessageCompressedMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.TEXT_MESSAGE_COMPRESSED_APP, callback);
-  },
-  onWaypointMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.WAYPOINT_APP, callback);
+    notImplemented();
   },
   onDetectionSensorMessage(callback: AnyMessageRxCallback) {
-    return Meshtastic.onMessage(PortNum.DETECTION_SENSOR_APP, callback);
+    notImplemented();
   },
   onAlertMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.ALERT_APP, callback);
+    notImplemented();
   },
   onKeyVerificationMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.KEY_VERIFICATION_APP, callback);
+    notImplemented();
   },
   onReplyMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.REPLY_APP, callback);
+    notImplemented();
   },
   onIPTunnelMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.IP_TUNNEL_APP, callback);
+    notImplemented();
   },
   onPaxcounterMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.PAXCOUNTER_APP, callback);
+    notImplemented();
   },
   onSerialMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.SERIAL_APP, callback);
+    notImplemented();
   },
   onStoreForwardMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.STORE_FORWARD_APP, callback);
+    notImplemented();
   },
   onRangeTestMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.RANGE_TEST_APP, callback);
+    notImplemented();
   },
   onTelemetryMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.TELEMETRY_APP, callback);
+    notImplemented();
   },
   onZPSMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.ZPS_APP, callback);
+    notImplemented();
   },
   onSimulatorMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.SIMULATOR_APP, callback);
+    notImplemented();
   },
   onTracerouteMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.TRACEROUTE_APP, callback);
+    notImplemented();
   },
   onNeighborInfoMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.NEIGHBORINFO_APP, callback);
+    notImplemented();
   },
   onATAKPluginMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.ATAK_PLUGIN, callback);
+    notImplemented();
   },
   onMapReportMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.MAP_REPORT_APP, callback);
+    notImplemented();
   },
   onPowerStressMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.POWERSTRESS_APP, callback);
+    notImplemented();
   },
   onReticulumTunnelMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.RETICULUM_TUNNEL_APP, callback);
+    notImplemented();
   },
   onCayenneMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.CAYENNE_APP, callback);
+    notImplemented();
   },
   onPrivateMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.PRIVATE_APP, callback);
+    notImplemented();
   },
   onATAKForwarderMessage(callback: AnyMessageRxCallback) {
-    return this.onMessage(PortNum.ATAK_FORWARDER, callback);
+    notImplemented();
+  },
+  onWaypointMessage(callback: AnyMessageRxCallback) {
+    notImplemented();
   },
 };
 
@@ -374,3 +322,10 @@ const Meshtastic: MeshtasticApi = {
 declare var global: any;
 global.Meshtastic = Meshtastic;
 global.PortNum = PortNum;
+
+/**
+ * This is for test purposes only and should be removed before production.
+ */
+Meshtastic.onTextMessage((from, data) => {
+  console.log(`Received text message from ${from}: ${data}`);
+});
