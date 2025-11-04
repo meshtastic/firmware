@@ -49,7 +49,8 @@ class EspruinoModule : public MeshModule, private concurrency::OSThread
   private:
     void initializeEspruino();
     void cleanupEspruino();
-    void emitEvent(const char* eventName, JsVar* dataArray);
+    void mountMeshtasticAPI();
+    void runSmokeTests();
 };
 
 extern EspruinoModule *espruinoModule;

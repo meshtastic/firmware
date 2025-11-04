@@ -5,6 +5,7 @@
 
 #include ".build/espruino_embedded.h"
 #include "MeshService.h"
+#include "mesh/Router.h"
 #include <Arduino.h>
 
 // Include API bootstrap code (debug or minified version)
@@ -85,7 +86,15 @@ extern "C" {
         bool hasAccessedElement;
     } JsvArrayBufferIterator;
     
+    // Argument type constants for jsvNewNativeFunction
+    typedef enum {
+        JSWAT_VOID = 0,
+        JSWAT_JSVAR = 1,
+        JSWAT_INT32 = 4,
+    } JsnArgumentType;
+    
     // Function declarations
+    JsVar *jsvNewNativeFunction(void (*ptr)(void), unsigned short argTypes);
     JsVar *jsvNewTypedArray(JsVarDataArrayBufferViewType type, JsVarInt length);
     JsVar *jsvNewArrayBufferWithData(JsVarInt length, unsigned char *data);
     JsVar *jswrap_typedarray_constructor(JsVarDataArrayBufferViewType type, JsVar *arr, JsVarInt byteOffset, JsVarInt length);
@@ -98,6 +107,38 @@ extern "C" {
     JsVar *jsvNewArray(JsVar **elements, int elementCount);
     JsVar *jsvNewFromInteger(JsVarInt value);
     JsVar *jsvNewFromFloat(JsVarFloat value);
+    JsVarInt jsvGetInteger(const JsVar *v);
+    void jsvObjectSetChildAndUnLock(JsVar *parent, const char *name, JsVar *child);
+    
+    // Native function called from JavaScript: Meshtastic.sendTextMessage(to, msg)
+    static void native_sendTextMessage(JsVar *toVar, JsVar *msgVar) {
+        if (!service) {
+            ESPRUINO_ERROR("MeshService not available");
+            return;
+        }
+        
+        // Extract 'to' node ID from JsVar
+        int32_t to = (int32_t)jsvGetInteger(toVar);
+        
+        // Convert JsVar string to C string
+        char msgBuffer[meshtastic_Constants_DATA_PAYLOAD_LEN];
+        size_t len = jsvGetString(msgVar, msgBuffer, sizeof(msgBuffer) - 1);
+        msgBuffer[len] = '\0';
+        
+        // Allocate and configure packet
+        meshtastic_MeshPacket *p = router->allocForSending();
+        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        p->to = (to == 0) ? NODENUM_BROADCAST : (uint32_t)to;
+        p->decoded.payload.size = len;
+        memcpy(p->decoded.payload.bytes, msgBuffer, len);
+        
+        ESPRUINO_DEBUG("Sending text message to 0x%x: %s", p->to, msgBuffer);
+        
+        // Send to mesh
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+        ESPRUINO_DEBUG("Sent text message to 0x%x: %s", p->to, msgBuffer);
+    }
 }
 
 EspruinoModule *espruinoModule;
@@ -162,61 +203,11 @@ void EspruinoModule::initializeEspruino()
     
     jsvUnLock(bootstrapResult);
     
-    // Run smoke tests to verify Meshtastic API is working
-    ESPRUINO_DEBUG("Running Meshtastic API smoke tests...");
+    // Mount native functions on Meshtastic API
+    mountMeshtasticAPI();
     
-    // Get the Meshtastic object
-    JsVar *meshtastic = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
-    if (meshtastic) {
-        // Test 1: Call hello() with no arguments
-        JsVar *helloFunc = jsvObjectGetChild(meshtastic, "hello", 0);
-        if (helloFunc) {
-            ESPRUINO_DEBUG("Testing Meshtastic.hello()...");
-            JsVar *helloResult = ejs_execf(jsInstance, helloFunc, meshtastic, 0, NULL);
-            jsvUnLock2(helloFunc, helloResult);
-        }
-        
-        // Test 2: Call echo() with a string argument
-        JsVar *echoFunc = jsvObjectGetChild(meshtastic, "echo", 0);
-        if (echoFunc) {
-            ESPRUINO_DEBUG("Testing Meshtastic.echo()...");
-            JsVar *echoMsg = jsvNewFromString("Smoke test: echo working!");
-            if (echoMsg) {
-                JsVar *args[1] = { echoMsg };
-                JsVar *echoResult = ejs_execf(jsInstance, echoFunc, meshtastic, 1, args);
-                jsvUnLock3(echoFunc, echoMsg, echoResult);
-            } else {
-                jsvUnLock(echoFunc);
-            }
-        }
-        
-        // Test 3: Call ping() and get return value
-        JsVar *pingFunc = jsvObjectGetChild(meshtastic, "ping", 0);
-        if (pingFunc) {
-            ESPRUINO_DEBUG("Testing Meshtastic.ping()...");
-            JsVar *pingMsg = jsvNewFromString("test message");
-            if (pingMsg) {
-                JsVar *args[1] = { pingMsg };
-                JsVar *pingResult = ejs_execf(jsInstance, pingFunc, meshtastic, 1, args);
-                
-                // Extract and log the return value
-                if (pingResult) {
-                    char returnValue[128];
-                    jsvGetString(pingResult, returnValue, sizeof(returnValue));
-                    ESPRUINO_INFO("Meshtastic.ping() returned: %s", returnValue);
-                    jsvUnLock(pingResult);
-                }
-                
-                jsvUnLock2(pingFunc, pingMsg);
-            } else {
-                jsvUnLock(pingFunc);
-            }
-        }
-        
-        jsvUnLock(meshtastic);
-    } else {
-        ESPRUINO_WARN("Could not find Meshtastic object for smoke tests");
-    }
+    // Run smoke tests to verify everything is working
+    runSmokeTests();
     
     initialized = true;
     ESPRUINO_DEBUG("Espruino initialized successfully with Meshtastic API");
@@ -239,10 +230,102 @@ void EspruinoModule::cleanupEspruino()
     initialized = false;
 }
 
+void EspruinoModule::mountMeshtasticAPI()
+{
+    ESPRUINO_DEBUG("Mounting native Meshtastic API functions...");
+    
+    // Get the Meshtastic object
+    JsVar *meshtastic = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
+    if (!meshtastic) {
+        ESPRUINO_ERROR("Failed to get Meshtastic object for mounting native functions");
+        return;
+    }
+    
+    // Calculate argTypes: VOID return | JSVAR arg1 | JSVAR arg2
+    // Each arg uses 3 bits in espruino_embedded.c: 0 | (1<<3) | (1<<6) = 0 | 8 | 64 = 72
+    unsigned short argTypes = JSWAT_VOID | (JSWAT_JSVAR << 3) | (JSWAT_JSVAR << 6);
+    
+    // Register sendTextMessage(to: number, message: string)
+    JsVar *sendTextFunc = jsvNewNativeFunction((void (*)(void))native_sendTextMessage, argTypes);
+    if (sendTextFunc) {
+        jsvObjectSetChildAndUnLock(meshtastic, "sendTextMessage", sendTextFunc);
+        ESPRUINO_DEBUG("  Registered: Meshtastic.sendTextMessage(to, message)");
+    } else {
+        ESPRUINO_ERROR("Failed to create sendTextMessage native function");
+    }
+    
+    jsvUnLock(meshtastic);
+}
+
+void EspruinoModule::runSmokeTests()
+{
+    ESPRUINO_DEBUG("Running Meshtastic API smoke tests...");
+    
+    // Get the Meshtastic object
+    JsVar *meshtastic = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
+    if (!meshtastic) {
+        ESPRUINO_WARN("Could not find Meshtastic object for smoke tests");
+        return;
+    }
+    
+    // Test 1: Call hello() with no arguments
+    JsVar *helloFunc = jsvObjectGetChild(meshtastic, "hello", 0);
+    if (helloFunc) {
+        ESPRUINO_DEBUG("  Testing Meshtastic.hello()...");
+        JsVar *helloResult = ejs_execf(jsInstance, helloFunc, meshtastic, 0, NULL);
+        jsvUnLock2(helloFunc, helloResult);
+    }
+    
+    // Test 2: Call echo() with a string argument
+    JsVar *echoFunc = jsvObjectGetChild(meshtastic, "echo", 0);
+    if (echoFunc) {
+        ESPRUINO_DEBUG("  Testing Meshtastic.echo()...");
+        JsVar *echoMsg = jsvNewFromString("Smoke test: echo working!");
+        if (echoMsg) {
+            JsVar *args[1] = { echoMsg };
+            JsVar *echoResult = ejs_execf(jsInstance, echoFunc, meshtastic, 1, args);
+            jsvUnLock3(echoFunc, echoMsg, echoResult);
+        } else {
+            jsvUnLock(echoFunc);
+        }
+    }
+    
+    // Test 3: Call ping() and get return value
+    JsVar *pingFunc = jsvObjectGetChild(meshtastic, "ping", 0);
+    if (pingFunc) {
+        ESPRUINO_DEBUG("  Testing Meshtastic.ping()...");
+        JsVar *pingMsg = jsvNewFromString("test message");
+        if (pingMsg) {
+            JsVar *args[1] = { pingMsg };
+            JsVar *pingResult = ejs_execf(jsInstance, pingFunc, meshtastic, 1, args);
+            
+            // Extract and log the return value
+            if (pingResult) {
+                char returnValue[128];
+                jsvGetString(pingResult, returnValue, sizeof(returnValue));
+                ESPRUINO_INFO("  Meshtastic.ping() returned: %s", returnValue);
+                jsvUnLock(pingResult);
+            }
+            
+            jsvUnLock2(pingFunc, pingMsg);
+        } else {
+            jsvUnLock(pingFunc);
+        }
+    }
+    
+    // Test 4: Call sendTextMessage() native function via JavaScript
+    ESPRUINO_DEBUG("  Testing Meshtastic.sendTextMessage()...");
+    // executeJS("Meshtastic.sendTextMessage(0, 'Broadcast from EspruinoModule')");
+    executeJS("Meshtastic.sendTextMessage(0xEF6B3731, 'DM from EspruinoModule')");
+
+    jsvUnLock(meshtastic);
+    ESPRUINO_DEBUG("Smoke tests completed");
+}
+
 bool EspruinoModule::executeJS(const char *code)
 {
-    if (!initialized || !jsInstance) {
-        ESPRUINO_ERROR("Cannot execute JS: Espruino not initialized");
+    if (!jsInstance) {
+        ESPRUINO_ERROR("Cannot execute JS: Espruino instance not available");
         return false;
     }
     

@@ -126,6 +126,8 @@ export type MeshtasticApi = EventEmitterLike & {
   hello(): void;
   echo(message: string): void;
   ping(message: string): string;
+  sendMessage(portNum: PortNumValue, to: NodeId, message: any): void;
+  sendTextMessage(to: NodeId, message: string): void;
   PortNum: typeof PortNum;
   onPortMessage<TData>(
     type: PortNumValue,
@@ -181,6 +183,12 @@ const Meshtastic: MeshtasticApi = {
   },
   ping(message: string) {
     return message;
+  },
+  sendMessage(portNum: PortNumValue, to: NodeId, message: any) {
+    MeshtasticNative.addPendingMessage(portNum, to, message);
+  },
+  sendTextMessage(to: NodeId, message: string) {
+    Meshtastic.sendMessage(PortNum.TEXT_MESSAGE_APP, to, message);
   },
   /** Port number constants for Meshtastic applications */
   PortNum,
@@ -318,14 +326,33 @@ const Meshtastic: MeshtasticApi = {
   },
 };
 
+const MeshtasticNative = {
+  pendingMessages: [],
+  addPendingMessage(portNum: PortNumValue, to: NodeId, message: string) {
+    this.pendingMessages.push({ portNum, to, message });
+  },
+  flushPendingMessages() {
+    this.pendingMessages.forEach(({ portNum, to, message }) => {
+      MeshtasticNative.sendMessage(portNum, to, message);
+    });
+    this.pendingMessages = [];
+  },
+  sendMessage(portNum: PortNumValue, to: NodeId, message: string) {
+    throw new Error("sendTextMessage is a native function");
+  },
+};
+
 // Attach to global scope for Espruino
 declare var global: any;
 global.Meshtastic = Meshtastic;
 global.PortNum = PortNum;
+global.MeshtasticNative = MeshtasticNative;
 
 /**
  * This is for test purposes only and should be removed before production.
  */
 Meshtastic.onTextMessage((from, data) => {
-  console.log(`Received text message from ${from}: ${data}`);
+  // Meshtastic.sendTextMessage(from, `<EspruinoModule> You said: ${data}`);
+  // Meshtastic.hello();
+  Meshtastic.sendTextMessage(0xef6b3731, "DM from EspruinoModule");
 });
