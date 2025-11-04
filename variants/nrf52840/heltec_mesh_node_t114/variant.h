@@ -215,6 +215,16 @@ No longer populated on PCB
 }
 #endif
 
+/*
+ * Compass Module
+ */
+#define HAS_COMPASS
+#define COMPASS_SDA_PIN (0 + 30)
+#define COMPASS_SCL_PIN (0 + 28)
+#define COMPASS_LED_PIN (0 + 13)
+#define COMPASS_LED_COUNT 12
+
+
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
