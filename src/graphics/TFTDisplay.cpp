@@ -422,7 +422,54 @@ static LGFX *tft = nullptr;
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
+#ifdef HELTEC_V4_TFT
+#include "chsc6x.h"
+#include "lgfx/v1/Touch.hpp"
+namespace lgfx
+{
+ inline namespace v1
+ {
+class TOUCH_CHSC6X : public ITouch
+{
+public:
+    TOUCH_CHSC6X(void)
+    {
+      _cfg.i2c_addr = 0x2E;
+      _cfg.x_min = 0;
+      _cfg.x_max = 240;
+      _cfg.y_min = 0;
+      _cfg.y_max = 320;
+    };
 
+    bool init(void) override {
+        if(chsc6xTouch==nullptr) {
+            chsc6xTouch=new chsc6x(&Wire1,TOUCH_SDA_PIN,TOUCH_SCL_PIN,TOUCH_INT_PIN,TOUCH_RST_PIN);
+        }
+        chsc6xTouch->chsc6x_init();
+        return true;
+    };
+
+    uint_fast8_t getTouchRaw(touch_point_t* tp, uint_fast8_t count) override {
+        uint16_t raw_x,raw_y;
+        if (chsc6xTouch->chsc6x_read_touch_info(&raw_x, &raw_y)==0) {
+            tp[0].x = 320-1-raw_y;
+            tp[0].y = 240-1-raw_x ;
+            tp[0].size = 1;
+            tp[0].id = 1;
+            return 1;
+        }
+        tp[0].size = 0;
+        return 0;
+    };
+
+    void wakeup(void) override {};
+    void sleep(void) override {};
+  private:
+    chsc6x *chsc6xTouch=nullptr;
+  };
+}
+}
+#endif
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7789 _panel_instance;
@@ -431,6 +478,8 @@ class LGFX : public lgfx::LGFX_Device
 #if HAS_TOUCHSCREEN
 #if defined(T_WATCH_S3) || defined(ELECROW)
     lgfx::Touch_FT5x06 _touch_instance;
+#elif defined(HELTEC_V4_TFT)
+    lgfx::TOUCH_CHSC6X _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
 #endif
