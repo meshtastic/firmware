@@ -72,7 +72,7 @@ const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
     std::string s = (raw && *raw) ? sanitizeString(raw) : std::string{};
 
     // 3) Fallback if sanitize yields empty; otherwise copy safely (truncate if needed)
-    if (s.empty()) {
+    if (s.empty() || s == "¿" || s.find_first_not_of("¿") == std::string::npos) {
         writeFallbackId();
     } else {
         // %.*s ensures null-termination and safe truncation to buffer size - 1
