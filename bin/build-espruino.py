@@ -122,7 +122,7 @@ def build_api_headers():
     # Build debug version
     print("\nBuilding debug version...")
     debug_js = run_command(
-        ["npx", "esbuild", "api.ts", "--format=iife", "--target=es2015", "--loader:.ts=ts"],
+        ["npx", "esbuild", "api.ts", "--bundle", "--format=iife", "--target=es2015", "--loader:.ts=ts"],
         cwd=MODULE_DIR,
         capture_output=True
     )
@@ -140,7 +140,7 @@ def build_api_headers():
     # Build minified version
     print("\nBuilding minified version...")
     min_js = run_command(
-        ["npx", "esbuild", "api.ts", "--format=iife", "--target=es2015", "--minify", "--loader:.ts=ts"],
+        ["npx", "esbuild", "api.ts", "--bundle", "--format=iife", "--target=es2015", "--minify", "--loader:.ts=ts"],
         cwd=MODULE_DIR,
         capture_output=True
     )
