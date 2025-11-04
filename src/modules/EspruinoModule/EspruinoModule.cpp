@@ -109,35 +109,75 @@ extern "C" {
     JsVar *jsvNewFromFloat(JsVarFloat value);
     JsVarInt jsvGetInteger(const JsVar *v);
     void jsvObjectSetChildAndUnLock(JsVar *parent, const char *name, JsVar *child);
+    bool jsvIsString(const JsVar *v);
+    size_t jsvGetArrayBufferLength(const JsVar *v);
+    JsVarInt jsvArrayBufferIteratorGetIntegerValue(JsvArrayBufferIterator *it);
     
-    // Native function called from JavaScript: Meshtastic.sendTextMessage(to, msg)
-    static void native_sendTextMessage(JsVar *toVar, JsVar *msgVar) {
-        if (!service) {
-            ESPRUINO_ERROR("MeshService not available");
-            return;
+    // Native function: MeshtasticNative.sendMessage({portNum, to, message})
+    // Returns: boolean (true if message was sent successfully, false otherwise)
+    static JsVar* native_sendMessage(JsVar *paramsObj) {
+        ESPRUINO_DEBUG("Native: Sending message...");
+        if (!service || !router) {
+            ESPRUINO_ERROR("MeshService or Router not available");
+            return jsvNewFromBool(false);
         }
         
-        // Extract 'to' node ID from JsVar
-        int32_t to = (int32_t)jsvGetInteger(toVar);
+        // Extract portNum from the params object
+        JsVar *portNumVar = jsvObjectGetChild(paramsObj, "portNum", 0);
+        int32_t portNum = portNumVar ? (int32_t)jsvGetInteger(portNumVar) : 0;
+        jsvUnLock(portNumVar);
         
-        // Convert JsVar string to C string
-        char msgBuffer[meshtastic_Constants_DATA_PAYLOAD_LEN];
-        size_t len = jsvGetString(msgVar, msgBuffer, sizeof(msgBuffer) - 1);
-        msgBuffer[len] = '\0';
+        // Extract to from the params object
+        JsVar *toVar = jsvObjectGetChild(paramsObj, "to", 0);
+        int32_t to = toVar ? (int32_t)jsvGetInteger(toVar) : 0;
+        jsvUnLock(toVar);
         
-        // Allocate and configure packet
+        // Extract message from the params object
+        JsVar *dataVar = jsvObjectGetChild(paramsObj, "message", 0);
+        if (!dataVar) {
+            ESPRUINO_ERROR("No message field in params object");
+            return jsvNewFromBool(false);
+        }
+        
         meshtastic_MeshPacket *p = router->allocForSending();
-        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-        p->to = (to == 0) ? NODENUM_BROADCAST : (uint32_t)to;
-        p->decoded.payload.size = len;
-        memcpy(p->decoded.payload.bytes, msgBuffer, len);
+        if (!p) {
+            ESPRUINO_ERROR("Failed to allocate packet - router queue may be full");
+            jsvUnLock(dataVar);
+            return jsvNewFromBool(false);
+        }
         
-        ESPRUINO_DEBUG("Sending text message to 0x%x: %s", p->to, msgBuffer);
-        
-        // Send to mesh
-        service->sendToMesh(p, RX_SRC_LOCAL, true);
+        p->decoded.portnum = (meshtastic_PortNum)portNum;
+        p->to = (uint32_t)to;
+        // if (p->to != NODENUM_BROADCAST) {
+        //     p->pki_encrypted = true;
+        //     p->channel = 0;
+        // }
 
-        ESPRUINO_DEBUG("Sent text message to 0x%x: %s", p->to, msgBuffer);
+        if (jsvIsString(dataVar)) {
+            char buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
+            size_t len = jsvGetString(dataVar, buf, sizeof(buf));
+            p->decoded.payload.size = len;
+            memcpy(p->decoded.payload.bytes, buf, len);
+        } else {
+            size_t len = jsvGetArrayBufferLength(dataVar);
+            if (len > meshtastic_Constants_DATA_PAYLOAD_LEN)
+                len = meshtastic_Constants_DATA_PAYLOAD_LEN;
+            p->decoded.payload.size = len;
+            
+            JsvArrayBufferIterator it;
+            jsvArrayBufferIteratorNew(&it, dataVar, 0);
+            for (size_t i = 0; i < len; i++) {
+                p->decoded.payload.bytes[i] = (char)jsvArrayBufferIteratorGetIntegerValue(&it);
+                jsvArrayBufferIteratorNext(&it);
+            }
+            jsvArrayBufferIteratorFree(&it);
+        }
+        
+        jsvUnLock(dataVar);
+        
+        ESPRUINO_DEBUG("Native: Sending msg type=%d to=0x%x (%d bytes)", portNum, p->to, p->decoded.payload.size);
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
+        return jsvNewFromBool(true);
     }
 }
 
@@ -163,7 +203,7 @@ void EspruinoModule::initializeEspruino()
     
     // Create the Espruino interpreter with 1000 variables
     // Adjust this number based on available memory
-    if (!ejs_create(1000)) {
+    if (!ejs_create(5000)) {
         ESPRUINO_ERROR("Failed to create Espruino interpreter");
         return;
     }
@@ -204,7 +244,7 @@ void EspruinoModule::initializeEspruino()
     jsvUnLock(bootstrapResult);
     
     // Mount native functions on Meshtastic API
-    mountMeshtasticAPI();
+    mountMeshtasticNativeAPI();
     
     // Run smoke tests to verify everything is working
     runSmokeTests();
@@ -230,31 +270,28 @@ void EspruinoModule::cleanupEspruino()
     initialized = false;
 }
 
-void EspruinoModule::mountMeshtasticAPI()
+void EspruinoModule::mountMeshtasticNativeAPI()
 {
     ESPRUINO_DEBUG("Mounting native Meshtastic API functions...");
     
-    // Get the Meshtastic object
-    JsVar *meshtastic = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
-    if (!meshtastic) {
-        ESPRUINO_ERROR("Failed to get Meshtastic object for mounting native functions");
+    JsVar *native = jsvObjectGetChild(jsInstance->root, "MeshtasticNative", 0);
+    if (!native) {
+        ESPRUINO_ERROR("MeshtasticNative object not found");
         return;
     }
     
-    // Calculate argTypes: VOID return | JSVAR arg1 | JSVAR arg2
-    // Each arg uses 3 bits in espruino_embedded.c: 0 | (1<<3) | (1<<6) = 0 | 8 | 64 = 72
-    unsigned short argTypes = JSWAT_VOID | (JSWAT_JSVAR << 3) | (JSWAT_JSVAR << 6);
+    // JSVAR | JSVAR = 1|(1<<3) = 9
+    // Function takes a single object parameter: {portNum, to, message}
+    // Returns: boolean (true if sent successfully, false otherwise)
+    unsigned short argTypes = JSWAT_JSVAR | (JSWAT_JSVAR << 3);
     
-    // Register sendTextMessage(to: number, message: string)
-    JsVar *sendTextFunc = jsvNewNativeFunction((void (*)(void))native_sendTextMessage, argTypes);
-    if (sendTextFunc) {
-        jsvObjectSetChildAndUnLock(meshtastic, "sendTextMessage", sendTextFunc);
-        ESPRUINO_DEBUG("  Registered: Meshtastic.sendTextMessage(to, message)");
-    } else {
-        ESPRUINO_ERROR("Failed to create sendTextMessage native function");
+    JsVar *sendFunc = jsvNewNativeFunction((void (*)(void))native_sendMessage, argTypes);
+    if (sendFunc) {
+        jsvObjectSetChildAndUnLock(native, "sendMessage", sendFunc);
+        ESPRUINO_DEBUG("  Registered: MeshtasticNative.sendMessage({portNum, to, message}) -> boolean");
     }
     
-    jsvUnLock(meshtastic);
+    jsvUnLock(native);
 }
 
 void EspruinoModule::runSmokeTests()
@@ -313,13 +350,119 @@ void EspruinoModule::runSmokeTests()
         }
     }
     
-    // Test 4: Call sendTextMessage() native function via JavaScript
+    // Test 4: Call sendTextMessage() which queues via MeshtasticNative
     ESPRUINO_DEBUG("  Testing Meshtastic.sendTextMessage()...");
-    // executeJS("Meshtastic.sendTextMessage(0, 'Broadcast from EspruinoModule')");
-    executeJS("Meshtastic.sendTextMessage(0xEF6B3731, 'DM from EspruinoModule')");
+    executeJS("Meshtastic.sendTextMessage(0xEF6B3731, \"Smoke test message.\\nEspruino lives.\")");
+    executeJS("Meshtastic.sendTextMessage(0xEF6B3731, \"Multiple messages are supported.\")");
 
     jsvUnLock(meshtastic);
     ESPRUINO_DEBUG("Smoke tests completed");
+}
+
+void EspruinoModule::flushPendingMessages()
+{
+    if (!jsInstance) return;
+
+    ESPRUINO_DEBUG("Native: Flushing pending messages...");
+
+    // ESPRUINO_DEBUG("Flushing pending messages...");
+    JsVar *native = jsvObjectGetChild(jsInstance->root, "MeshtasticNative", 0);
+    if (!native) return;
+    
+    JsVar *flushFunc = jsvObjectGetChild(native, "flushPendingMessages", 0);
+    if (flushFunc) {
+        // ESPRUINO_DEBUG("  Calling MeshtasticNative.flushPendingMessages()...");
+        JsVar *result = ejs_execf(jsInstance, flushFunc, native, 0, NULL);
+        jsvUnLock2(flushFunc, result);
+        // ESPRUINO_DEBUG("  MeshtasticNative.flushPendingMessages() returned: %s", result);
+    } else {
+        ESPRUINO_ERROR("Failed to get MeshtasticNative.flushPendingMessages function");
+    }
+    
+    jsvUnLock(native);
+    ESPRUINO_DEBUG("Native: Flushed pending messages");
+}
+
+void EspruinoModule::processEventInJS(const PendingEvent& event)
+{
+    if (!jsInstance) return;
+    
+    // Get Meshtastic object and emit function
+    JsVar *meshtastic = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
+    if (!meshtastic) {
+        ESPRUINO_ERROR("Failed to get Meshtastic object");
+        return;
+    }
+    
+    JsVar *emitFunc = jsvObjectGetChild(meshtastic, "emit", 0);
+    if (!emitFunc) {
+        ESPRUINO_ERROR("Failed to get Meshtastic.emit function");
+        jsvUnLock(meshtastic);
+        return;
+    }
+    
+    // Create event name
+    char eventName[32];
+    snprintf(eventName, sizeof(eventName), "message:%d", event.portNum);
+    JsVar *eventNameVar = jsvNewFromString(eventName);
+    if (!eventNameVar) {
+        ESPRUINO_ERROR("Failed to create event name");
+        jsvUnLock2(meshtastic, emitFunc);
+        return;
+    }
+    
+    // Create message data
+    JsVar *messageData = NULL;
+    if (event.isString) {
+        messageData = jsvNewFromString(event.payload);
+    } else {
+        // For binary data, create ArrayBuffer and Uint8Array
+        JsVar *arrayBuffer = jsvNewArrayBufferWithData(event.payloadSize, (unsigned char*)event.payload);
+        if (arrayBuffer) {
+            messageData = jswrap_typedarray_constructor(ARRAYBUFFERVIEW_UINT8, arrayBuffer, 0, 0);
+            jsvUnLock(arrayBuffer);
+        }
+        if (!messageData) {
+            messageData = jsvNewTypedArray(ARRAYBUFFERVIEW_UINT8, 0);
+        }
+    }
+    
+    if (!messageData) {
+        ESPRUINO_ERROR("Failed to create message data");
+        jsvUnLock3(meshtastic, emitFunc, eventNameVar);
+        return;
+    }
+    
+    JsVar *fromVar = jsvNewFromFloat((double)event.fromNode);
+    if (!fromVar) {
+        ESPRUINO_ERROR("Failed to create from node variable");
+        jsvUnLock3(meshtastic, emitFunc, eventNameVar);
+        jsvUnLock(messageData);
+        return;
+    }
+    
+    // Call emit
+    JsVar *argsArray[2] = { fromVar, messageData };
+    JsVar *dataArray = jsvNewArray(argsArray, 2);
+    if (!dataArray) {
+        ESPRUINO_ERROR("Failed to create data array");
+        jsvUnLock3(meshtastic, emitFunc, eventNameVar);
+        jsvUnLock2(messageData, fromVar);
+        return;
+    }
+    
+    JsVar *args[2] = { eventNameVar, dataArray };
+    JsVar *result = ejs_execf(jsInstance, emitFunc, meshtastic, 2, args);
+    
+    // Check for exceptions
+    if (jsInstance->exception) {
+        ESPRUINO_ERROR("Exception calling Meshtastic.emit()");
+    }
+    
+    // Cleanup
+    jsvUnLock3(meshtastic, emitFunc, eventNameVar);
+    jsvUnLock3(messageData, fromVar, dataArray);
+    jsvUnLock(result);
 }
 
 bool EspruinoModule::executeJS(const char *code)
@@ -353,107 +496,24 @@ ProcessMessage EspruinoModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
     }
     
-    // Get the port number, payload, and sender from the decoded packet
-    uint32_t portNum = mp.decoded.portnum;
-    uint32_t payloadSize = mp.decoded.payload.size;
-    uint32_t fromNode = mp.from;
+    // Queue event for processing in runOnce() to avoid deep stack nesting
+    PendingEvent event;
+    event.portNum = mp.decoded.portnum;
+    event.fromNode = mp.from;
+    event.payloadSize = mp.decoded.payload.size;
     
-    ESPRUINO_DEBUG("Received message on port %d from node 0x%x, payload size %d", portNum, fromNode, payloadSize);
-    
-    // Get the Meshtastic object
-    JsVar *meshtastic = jsvObjectGetChild(jsInstance->root, "Meshtastic", 0);
-    if (!meshtastic) {
-        ESPRUINO_ERROR("Failed to get Meshtastic object");
-        return ProcessMessage::CONTINUE;
+    if (event.payloadSize > sizeof(event.payload)) {
+        event.payloadSize = sizeof(event.payload);
     }
     
-    // Get the emit function
-    JsVar *emitFunc = jsvObjectGetChild(meshtastic, "emit", 0);
-    if (!emitFunc) {
-        ESPRUINO_ERROR("Failed to get Meshtastic.emit function");
-        jsvUnLock(meshtastic);
-        return ProcessMessage::CONTINUE;
-    }
+    memcpy(event.payload, mp.decoded.payload.bytes, event.payloadSize);
+    event.payload[event.payloadSize] = '\0'; // Null-terminate for string messages
+    event.isString = (mp.decoded.portnum == 1); // TEXT_MESSAGE_APP
     
-    // Create the event name: "message:<portnum>"
-    char eventName[32];
-    snprintf(eventName, sizeof(eventName), "message:%d", portNum);
-    JsVar *eventNameVar = jsvNewFromString(eventName);
-    if (!eventNameVar) {
-        ESPRUINO_ERROR("Failed to create event name");
-        jsvUnLock2(meshtastic, emitFunc);
-        return ProcessMessage::CONTINUE;
-    }
+    pendingEvents.push_back(event);
     
-    // Create message data - convert to string for text messages, Uint8Array for others
-    JsVar *messageData = NULL;
-    
-    // TEXT_MESSAGE_APP = 1, should be passed as string
-    if (portNum == 1 && payloadSize > 0) {
-        // Create a null-terminated string from the payload
-        char *strBuffer = (char *)malloc(payloadSize + 1);
-        if (strBuffer) {
-            memcpy(strBuffer, mp.decoded.payload.bytes, payloadSize);
-            strBuffer[payloadSize] = '\0';
-            messageData = jsvNewFromString(strBuffer);
-            free(strBuffer);
-        }
-    } else {
-        // For all other message types, use Uint8Array
-        if (payloadSize > 0) {
-            // Create ArrayBuffer with the payload data
-            JsVar *arrayBuffer = jsvNewArrayBufferWithData(payloadSize, (unsigned char *)mp.decoded.payload.bytes);
-            if (arrayBuffer) {
-                // Create Uint8Array view of the ArrayBuffer using the typed array constructor
-                messageData = jswrap_typedarray_constructor(ARRAYBUFFERVIEW_UINT8, arrayBuffer, 0, 0);
-                jsvUnLock(arrayBuffer);
-            }
-        }
-        
-        // If we couldn't create the array, use an empty Uint8Array
-        if (!messageData) {
-            messageData = jsvNewTypedArray(ARRAYBUFFERVIEW_UINT8, 0);
-        }
-    }
-    
-    if (!messageData) {
-        ESPRUINO_ERROR("Failed to create message data");
-        jsvUnLock3(meshtastic, emitFunc, eventNameVar);
-        return ProcessMessage::CONTINUE;
-    }
-    
-    // Create from node ID as a JsVar (use float for unsigned 32-bit values)
-    JsVar *fromVar = jsvNewFromFloat((double)fromNode);
-    if (!fromVar) {
-        ESPRUINO_ERROR("Failed to create from node variable");
-        jsvUnLock3(meshtastic, emitFunc, eventNameVar);
-        jsvUnLock(messageData);
-        return ProcessMessage::CONTINUE;
-    }
-    
-    // Create array of arguments: [from, msg]
-    JsVar *argsArray[2] = { fromVar, messageData };
-    JsVar *dataArray = jsvNewArray(argsArray, 2);
-    if (!dataArray) {
-        ESPRUINO_ERROR("Failed to create data array");
-        jsvUnLock3(meshtastic, emitFunc, eventNameVar);
-        jsvUnLock2(messageData, fromVar);
-        return ProcessMessage::CONTINUE;
-    }
-    
-    // Call Meshtastic.emit(eventName, [from, msg])
-    JsVar *args[2] = { eventNameVar, dataArray };
-    JsVar *result = ejs_execf(jsInstance, emitFunc, meshtastic, 2, args);
-    
-    // Check for exceptions
-    if (jsInstance->exception) {
-        ESPRUINO_ERROR("Exception calling Meshtastic.emit()");
-    }
-    
-    // Clean up
-    jsvUnLock3(meshtastic, emitFunc, eventNameVar);
-    jsvUnLock3(messageData, fromVar, dataArray);
-    jsvUnLock(result);
+    ESPRUINO_DEBUG("Queued event for port %d from 0x%x (will process in runOnce)", 
+                   event.portNum, event.fromNode);
     
     return ProcessMessage::CONTINUE;
 }
@@ -462,15 +522,25 @@ int32_t EspruinoModule::runOnce()
 {
     if (firstTime) {
         firstTime = false;
-        
-        // Initialize Espruino on first run
         initializeEspruino();
-        
-        // We only need to run once for initialization
-        return disable();
+        return 100;
     }
     
-    return 100; // Run again in 100ms if needed
+    // Process any pending events
+    while (!pendingEvents.empty()) {
+        PendingEvent event = pendingEvents.front();
+        pendingEvents.erase(pendingEvents.begin());
+        
+        ESPRUINO_DEBUG("Processing queued event: port %d from 0x%x", 
+                       event.portNum, event.fromNode);
+        
+        // Now execute JS (same code that was in handleReceived)
+        processEventInJS(event);
+    }
+    
+    // Flush pending outgoing messages
+    flushPendingMessages();
+    return 100;
 }
 
 #endif // MESHTASTIC_INCLUDE_ESPRUINO

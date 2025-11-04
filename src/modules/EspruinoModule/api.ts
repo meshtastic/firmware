@@ -103,6 +103,8 @@ export const PortNum = {
   MAX: 511,
 } as const;
 
+const BROADCAST_NODE_ID = 0xffffffff;
+
 export type PortNumValue = (typeof PortNum)[keyof typeof PortNum];
 
 export type NodeId = number;
@@ -327,18 +329,37 @@ const Meshtastic: MeshtasticApi = {
 };
 
 const MeshtasticNative = {
-  pendingMessages: [],
-  addPendingMessage(portNum: PortNumValue, to: NodeId, message: string) {
-    this.pendingMessages.push({ portNum, to, message });
+  pendingMessages: [] as { portNum: PortNumValue; to: NodeId; message: any }[],
+  addPendingMessage(portNum: PortNumValue, to: NodeId, message: any) {
+    MeshtasticNative.pendingMessages.push({ portNum, to, message });
+    console.log(
+      `Added pending message to queue: ${portNum}, ${to}, ${message}`
+    );
   },
   flushPendingMessages() {
-    this.pendingMessages.forEach(({ portNum, to, message }) => {
-      MeshtasticNative.sendMessage(portNum, to, message);
-    });
-    this.pendingMessages = [];
+    console.log(
+      `Script: Flushing ${this.pendingMessages.length} pending messages`
+    );
+    const message = MeshtasticNative.pendingMessages.shift();
+
+    if (!message) {
+      // console.log("No pending messages to flush");
+      return;
+    }
+    const success = MeshtasticNative.sendMessage(message);
+    if (!success) {
+      console.log("Script: Failed to send message, queueing again");
+      MeshtasticNative.pendingMessages.unshift(message);
+    } else {
+      console.log("Script: Message sent successfully");
+    }
   },
-  sendMessage(portNum: PortNumValue, to: NodeId, message: string) {
-    throw new Error("sendTextMessage is a native function");
+  sendMessage(params: {
+    portNum: PortNumValue;
+    to: NodeId;
+    message: any;
+  }): boolean {
+    throw new Error("sendMessage is a native function");
   },
 };
 
@@ -349,10 +370,12 @@ global.PortNum = PortNum;
 global.MeshtasticNative = MeshtasticNative;
 
 /**
- * This is for test purposes only and should be removed before production.
+ * uBBS - Mini Bulletin Board System
  */
+import { bbsHandler } from "./ubbs";
+
 Meshtastic.onTextMessage((from, data) => {
-  // Meshtastic.sendTextMessage(from, `<EspruinoModule> You said: ${data}`);
-  // Meshtastic.hello();
-  Meshtastic.sendTextMessage(0xef6b3731, "DM from EspruinoModule");
+  const response = bbsHandler.handleCommand(from, data);
+  console.log(`uBBS response: ${response}`);
+  Meshtastic.sendTextMessage(from, response);
 });

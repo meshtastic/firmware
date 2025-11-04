@@ -287,6 +287,7 @@ ErrorCode Router::rawSend(meshtastic_MeshPacket *p)
  */
 ErrorCode Router::send(meshtastic_MeshPacket *p)
 {
+    LOG_DEBUG("[Router::send] Sending packet to %x", p->to);
     if (isToUs(p)) {
         LOG_ERROR("BUG! send() called with packet destined for local node!");
         packetPool.release(p);
@@ -317,6 +318,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             }
             return err;
         }
+    } else {
+        LOG_DEBUG("[Router::send] no duty cycle or no need to abort");
     }
 
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
@@ -325,28 +328,45 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // Never set the want_ack flag on broadcast packets sent over the air.
     if (isBroadcast(p->to))
+    {
+        LOG_DEBUG("[Router::send] is broadcast, setting want_ack to false");
         p->want_ack = false;
+    } else {
+        LOG_DEBUG("[Router::send] is not broadcast, want_ack is still %d", p->want_ack);
+    }
 
     // Up until this point we might have been using 0 for the from address (if it started with the phone), but when we send over
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
+    LOG_DEBUG("[Router::send] from is %x", p->from);
+
 
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
+    {
+        LOG_DEBUG("[Router::send] is from us, setting hop_start to hop_limit");
         p->hop_start = p->hop_limit;
+    } else {
+        LOG_DEBUG("[Router::send] is not from us, hop_limit is %d", p->hop_limit);
+    }
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
     if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        LOG_DEBUG("[Router::send] packet is not encrypted or decoded, returning BAD_REQUEST");
         return meshtastic_Routing_Error_BAD_REQUEST;
+    } else {
+        LOG_DEBUG("[Router::send] packet is encrypted or decoded, continuing");
     }
 
     fixPriority(p); // Before encryption, fix the priority if it's unset
+    LOG_DEBUG("[Router::send] priority is %d", p->priority);
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        LOG_DEBUG("[Router::send] packet is decoded, continuing");
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
         DEBUG_HEAP_BEFORE;
@@ -355,6 +375,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
+            LOG_DEBUG("[Router::send] encodeResult is %d, returning", encodeResult);
             packetPool.release(p_decoded);
             p->channel = 0; // Reset the channel to 0, so we don't use the failing hash again
             abortSendAndNak(encodeResult, p);
@@ -375,7 +396,9 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    LOG_DEBUG("[Router::send] iface is %p", iface);
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    LOG_DEBUG("[Router::send] sending packet to interface");
     return iface->send(p);
 }
 
@@ -535,11 +558,13 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
+    LOG_DEBUG("[Router::perhapsEncode] Encoding packet");
 
     int16_t hash;
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        LOG_DEBUG("[Router::perhapsEncode] packet is decoded, continuing");
         if (isFromUs(p)) {
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
@@ -547,6 +572,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         }
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
+
+        LOG_DEBUG("[Router::perhapsEncode] numbytes is %d", numbytes);
 
         /* Not actually used, so save the cycles
         //  TODO: Allow modules to opt into compression.
@@ -584,7 +611,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         } */
 
         if (numbytes + MESHTASTIC_HEADER_LENGTH > MAX_LORA_PAYLOAD_LEN)
+        {
+            LOG_DEBUG("[Router::perhapsEncode] numbytes + MESHTASTIC_HEADER_LENGTH is %d, returning TOO_LARGE", numbytes + MESHTASTIC_HEADER_LENGTH);
             return meshtastic_Routing_Error_TOO_LARGE;
+        } else {
+            LOG_DEBUG("[Router::perhapsEncode] numbytes + MESHTASTIC_HEADER_LENGTH is %d, continuing", numbytes + MESHTASTIC_HEADER_LENGTH);
+        }
 
         // printBytes("plaintext", bytes, numbytes);
 
@@ -595,6 +627,21 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
+        LOG_DEBUG("[Router::perhapsEncode] checking if packet is from us: %d", isFromUs(p));
+        LOG_DEBUG("[Router::perhapsEncode] checking if owner.is_licensed is %d", owner.is_licensed);
+        LOG_DEBUG("[Router::perhapsEncode] checking if p->pki_encrypted is %d", p->pki_encrypted);
+        LOG_DEBUG("[Router::perhapsEncode] checking if strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 is %d", strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0);
+        LOG_DEBUG("[Router::perhapsEncode] checking if strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0 is %d", strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0);
+        LOG_DEBUG("[Router::perhapsEncode] checking if config.security.private_key.size is %d", config.security.private_key.size);
+        LOG_DEBUG("[Router::perhapsEncode] checking if isBroadcast(p->to) is %d", isBroadcast(p->to));
+        LOG_DEBUG("[Router::perhapsEncode] checking if node is %p", node);
+        LOG_DEBUG("[Router::perhapsEncode] checking if node->user.public_key.size is %d", node->user.public_key.size);
+        LOG_DEBUG("[Router::perhapsEncode] checking if p->decoded.portnum is %d", p->decoded.portnum);
+        LOG_DEBUG("[Router::perhapsEncode] checking if p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP is %d", p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP);
+        LOG_DEBUG("[Router::perhapsEncode] checking if p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP is %d", p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP);
+        LOG_DEBUG("[Router::perhapsEncode] checking if p->decoded.portnum != meshtastic_PortNum_ROUTING_APP is %d", p->decoded.portnum != meshtastic_PortNum_ROUTING_APP);
+        LOG_DEBUG("[Router::perhapsEncode] checking if p->decoded.portnum != meshtastic_PortNum_POSITION_APP is %d", p->decoded.portnum != meshtastic_PortNum_POSITION_APP);
+        
         if (isFromUs(p) &&
 #if ARCH_PORTDUINO
             // Sim radio via the cli flag skips PKC
@@ -614,32 +661,59 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
+            {
+                LOG_DEBUG("[Router::perhapsEncode] numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD is %d, returning TOO_LARGE", numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD);
                 return meshtastic_Routing_Error_TOO_LARGE;
+            } else {
+                LOG_DEBUG("[Router::perhapsEncode] numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD is %d, continuing", numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD);
+            }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
+            } else {
+                LOG_DEBUG("[Router::perhapsEncode] p->pki_encrypted is %d, continuing", p->pki_encrypted);
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            LOG_DEBUG("[Router::perhapsEncode] calling crypto->encryptCurve25519");
+            LOG_DEBUG("[Router::perhapsEncode] crypto ptr is %p", crypto);
+            if (!crypto) {
+                LOG_ERROR("[Router::perhapsEncode] crypto is NULL!");
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
+            LOG_DEBUG("[Router::perhapsEncode] p->to is %d", p->to);
+            LOG_DEBUG("[Router::perhapsEncode] getFrom(p) is %d", getFrom(p));
+            LOG_DEBUG("[Router::perhapsEncode] node->user.public_key is %d", node->user.public_key);
+            LOG_DEBUG("[Router::perhapsEncode] p->id is %d", p->id);
+            LOG_DEBUG("[Router::perhapsEncode] numbytes is %d", numbytes);
+            LOG_DEBUG("[Router::perhapsEncode] bytes is %d", bytes);
+            LOG_DEBUG("[Router::perhapsEncode] p->encrypted.bytes is %d", p->encrypted.bytes);
+            int encryptResult = crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            LOG_DEBUG("[Router::perhapsEncode] crypto->encryptCurve25519 returned %d", encryptResult);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
         } else {
+            LOG_DEBUG("[Router::perhapsEncode] p->pki_encrypted is %d, continuing", p->pki_encrypted);
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
+                LOG_DEBUG("[Router::perhapsEncode] p->pki_encrypted is true, returning PKI_FAILED");
                 return meshtastic_Routing_Error_PKI_FAILED;
+            } else {
+                LOG_DEBUG("[Router::perhapsEncode] p->pki_encrypted is false, continuing");
             }
             hash = channels.setActiveByIndex(chIndex);
 
             // Now that we are encrypting the packet channel should be the hash (no longer the index)
             p->channel = hash;
+            LOG_DEBUG("[Router::perhapsEncode] hash is %d", hash);
             if (hash < 0) {
                 // No suitable channel could be found for
                 return meshtastic_Routing_Error_NO_CHANNEL;
             }
             crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
             memcpy(p->encrypted.bytes, bytes, numbytes);
+            LOG_DEBUG("[Router::perhapsEncode] encryption successful");
         }
 #else
         if (p->pki_encrypted == true) {
@@ -661,6 +735,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // Copy back into the packet and set the variant type
         p->encrypted.size = numbytes;
         p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+        LOG_DEBUG("[Router::perhapsEncode] p->which_payload_variant is %d", p->which_payload_variant);
     }
 
     return meshtastic_Routing_Error_NONE;

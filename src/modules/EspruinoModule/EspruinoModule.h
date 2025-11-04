@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh/MeshModule.h"
 #include ".build/espruino_embedded.h"
+#include <vector>
 
 #ifdef MESHTASTIC_INCLUDE_ESPRUINO
 
@@ -27,6 +28,16 @@ class EspruinoModule : public MeshModule, private concurrency::OSThread
     bool firstTime = true;
     bool initialized = false;
     struct ejs *jsInstance = nullptr;
+    
+    // Queue for deferred message processing to avoid stack issues
+    struct PendingEvent {
+        uint32_t portNum;
+        uint32_t fromNode;
+        char payload[256];
+        size_t payloadSize;
+        bool isString;
+    };
+    std::vector<PendingEvent> pendingEvents;
 
   public:
     EspruinoModule();
@@ -49,8 +60,10 @@ class EspruinoModule : public MeshModule, private concurrency::OSThread
   private:
     void initializeEspruino();
     void cleanupEspruino();
-    void mountMeshtasticAPI();
+    void mountMeshtasticNativeAPI();
     void runSmokeTests();
+    void flushPendingMessages();
+    void processEventInJS(const PendingEvent& event);
 };
 
 extern EspruinoModule *espruinoModule;
