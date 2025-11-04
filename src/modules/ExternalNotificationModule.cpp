@@ -325,6 +325,10 @@ void ExternalNotificationModule::stopNow()
     drv.stop();
 #endif
 
+    // Prevent the state machine from immediately re-triggering outputs after a manual stop.
+    isNagging = false;
+    nagCycleCutoff = UINT32_MAX;
+
 #ifdef HAS_I2S
     // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
     // T-Deck uses GPIO0 as trackball button, so restore the mode
