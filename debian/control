@@ -3,6 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: Austin Lane <vidplace7@gmail.com>
 Build-Depends: debhelper-compat (= 13),
+               libc6-dev (>= 2.38) | libbsd-dev,
                lsb-release,
                tar,
                gzip,

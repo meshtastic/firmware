@@ -94,22 +94,10 @@ int32_t ExternalNotificationModule::runOnce()
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff <= millis())) {
+        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
-            LOG_INFO("Turning off external notification: ");
-            for (int i = 0; i < 3; i++) {
-                setExternalState(i, false);
-                externalTurnedOn[i] = 0;
-                LOG_INFO("%d ", i);
-            }
-#ifdef HAS_I2S
-            // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
-            // T-Deck uses GPIO0 as trackball button, so restore the mode
-#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
-            pinMode(0, INPUT);
-#endif
-#endif
+            ExternalNotificationModule::stopNow();
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
         }
@@ -317,21 +305,36 @@ bool ExternalNotificationModule::nagging()
 
 void ExternalNotificationModule::stopNow()
 {
+    LOG_INFO("Turning off external notification: ");
+    LOG_INFO("Stop RTTTL playback");
     rtttl::stop();
 #ifdef HAS_I2S
+    LOG_INFO("Stop audioThread playback");
     if (audioThread->isPlaying())
         audioThread->stop();
 #endif
-    nagCycleCutoff = 1; // small value
-    isNagging = false;
     // Turn off all outputs
+    LOG_INFO("Turning off setExternalStates: ");
     for (int i = 0; i < 3; i++) {
         setExternalState(i, false);
         externalTurnedOn[i] = 0;
+        LOG_INFO("%d ", i);
     }
     setIntervalFromNow(0);
 #ifdef T_WATCH_S3
     drv.stop();
+#endif
+
+    // Prevent the state machine from immediately re-triggering outputs after a manual stop.
+    isNagging = false;
+    nagCycleCutoff = UINT32_MAX;
+
+#ifdef HAS_I2S
+    // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
+    // T-Deck uses GPIO0 as trackball button, so restore the mode
+#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
+    pinMode(0, INPUT);
+#endif
 #endif
 }
 
