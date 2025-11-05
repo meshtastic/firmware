@@ -1,4 +1,5 @@
 #include "PacketHistory.h"
+#include "MemoryPool.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
@@ -16,32 +17,61 @@
 #define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging
 #define PACKET_HISTORY_TRACE_AGING 1 // Set to 1 to enable logging of the age of re/used history slots
 
-PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
+PacketHistory::PacketHistory(uint32_t size)
+    : recentPacketsCapacity(0), recentPackets(NULL), recentPacketsInPsram(false) // Initialize members
 {
     if (size < 4 || size > PACKETHISTORY_MAX) { // Copilot suggested - makes sense
         LOG_WARN("Packet History - Invalid size %d, using default %d", size, PACKETHISTORY_MAX);
         size = PACKETHISTORY_MAX; // Use default size if invalid
     }
 
+    LOG_DEBUG("Packet History - pre-alloc heap %u psram %u", memGet.getFreeHeap(), memGet.getFreePsram());
+
     // Allocate memory for the recent packets array
     recentPacketsCapacity = size;
-    recentPackets = new PacketRecord[recentPacketsCapacity];
-    if (!recentPackets) { // No logging here, console/log probably uninitialized yet.
-        LOG_ERROR("Packet History - Memory allocation failed for size=%d entries / %d Bytes", size,
-                  sizeof(PacketRecord) * recentPacketsCapacity);
-        recentPacketsCapacity = 0; // mark allocation fail
-        return;                    // return early
+    if (has_psram()) {
+        // Prefer PSRAM so the large history pool stays out of internal RAM on ESP32-S3 builds.
+        recentPackets = psramAllocArray<PacketRecord>(recentPacketsCapacity);
+        if (recentPackets) {
+            memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+            recentPacketsInPsram = true;
+            LOG_DEBUG("Packet History - allocated %u entries in PSRAM, free heap %u psram %u", recentPacketsCapacity,
+                      memGet.getFreeHeap(), memGet.getFreePsram());
+        } else {
+            LOG_WARN("Packet History - PSRAM allocation failed, falling back to DRAM");
+        }
     }
 
-    // Initialize the recent packets array to zero
-    memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+    if (!recentPackets) {
+        // Fall back to DRAM if PSRAM is unavailable or exhausted.
+        recentPackets = new PacketRecord[recentPacketsCapacity];
+        if (!recentPackets) { // No logging here, console/log probably uninitialized yet.
+            LOG_ERROR("Packet History - Memory allocation failed for size=%d entries / %d Bytes", size,
+                      sizeof(PacketRecord) * recentPacketsCapacity);
+            recentPacketsCapacity = 0; // mark allocation fail
+            return;                    // return early
+        }
+
+        // Initialize the recent packets array to zero
+        memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+        LOG_DEBUG("Packet History - allocated %u entries in DRAM, free heap %u psram %u", recentPacketsCapacity,
+                  memGet.getFreeHeap(), memGet.getFreePsram());
+    }
 }
 
 PacketHistory::~PacketHistory()
 {
-    recentPacketsCapacity = 0;
-    delete[] recentPackets;
+    if (recentPackets) {
+        // Release via the allocator that produced the buffer.
+        if (recentPacketsInPsram)
+            psramFreeArray(recentPackets);
+        else
+            delete[] recentPackets;
+    }
+
     recentPackets = NULL;
+    recentPacketsCapacity = 0;
+    recentPacketsInPsram = false;
 }
 
 /** Update recentPackets and return true if we have already seen this packet */

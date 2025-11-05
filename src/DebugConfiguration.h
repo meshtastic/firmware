@@ -53,12 +53,42 @@ extern MemGet memGet;
 #define LOG_TRACE(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
-#define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
-#define LOG_INFO(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__)
-#define LOG_WARN(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__)
-#define LOG_ERROR(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_ERROR, __VA_ARGS__)
-#define LOG_CRIT(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_CRIT, __VA_ARGS__)
-#define LOG_TRACE(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_TRACE, __VA_ARGS__)
+#define LOG_DEBUG(...)                                                                                                           \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__);                                                               \
+        }                                                                                                                        \
+    } while (0)
+#define LOG_INFO(...)                                                                                                            \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__);                                                                \
+        }                                                                                                                        \
+    } while (0)
+#define LOG_WARN(...)                                                                                                            \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__);                                                                \
+        }                                                                                                                        \
+    } while (0)
+#define LOG_ERROR(...)                                                                                                           \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_ERROR, __VA_ARGS__);                                                               \
+        }                                                                                                                        \
+    } while (0)
+#define LOG_CRIT(...)                                                                                                            \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_CRIT, __VA_ARGS__);                                                                \
+        }                                                                                                                        \
+    } while (0)
+#define LOG_TRACE(...)                                                                                                           \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_TRACE, __VA_ARGS__);                                                               \
+        }                                                                                                                        \
+    } while (0)
 #else
 #define LOG_DEBUG(...)
 #define LOG_INFO(...)
@@ -70,7 +100,12 @@ extern MemGet memGet;
 #endif
 
 #if defined(DEBUG_HEAP)
-#define LOG_HEAP(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__)
+#define LOG_HEAP(...)                                                                                                            \
+    do {                                                                                                                         \
+        if (console) {                                                                                                           \
+            console->log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__);                                                                \
+        }                                                                                                                        \
+    } while (0)
 
 // Macro-based heap debugging
 #define DEBUG_HEAP_BEFORE auto heapBefore = memGet.getFreeHeap();
