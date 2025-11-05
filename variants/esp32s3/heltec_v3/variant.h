@@ -3,6 +3,8 @@
 // Module button & LED wiring for this board variant
 // Buttons are active-low and need internal pull-ups
 // Button map: RED at GPIO5, GREEN at GPIO6, BLUE at GPIO7
+//
+// DM:  NOTE that 
 #define RED_BUTTON_PIN 5
 #define GREEN_BUTTON_PIN 6
 #define BLUE_BUTTON_PIN 7

@@ -1,3 +1,38 @@
+/* ===========================================================================================
+    © Dale McBeath 2025  - Use and distribute freely, but give credit.
+		
+		
+    HELTEC V3 GPIO Pins:   (this is difficult to nail down, as meshtastic use isn't clear on schematic free pins )
+
+    x   0 -  User Button 
+    x   1 -  VBAT Read
+       2 - 
+        3 -
+    ?   4 -  not sure, had problems, but may have been code error
+        5 - 
+        6 -
+        7 -  
+    x   8 - 14 - LoRa chip SPI 
+    x  17 - 18 - OLED display I2C
+    x  19 - 21 - Secondary I2C bus (for sensors etc)
+    ?  22 - 25 - not available on pins 
+    x  26, 33, 34, 36, 37 - SPI
+    x  27 thru 32 - not available on pins
+    x  35 -  White LED on board - used for heart-beat and WRITE status 
+    ?  38, thru 42 - JTAG programming on some boards (use with caution, not tested)
+    x  43 - 44 - CP2102 chip UART (used for programming/serial console)
+       45 - 
+       46 - 
+       47 - (sometimes used for GPS)
+       48 - (sometimes used for GPS)
+
+
+    - This board has 3 buttons and 3 common Anode LEDs
+    - Buttons are active-low and need internal pull-ups
+    - Button map: RED at GPIO5, GREEN at GPIO6, BLUE at GPIO45
+
+   =========================================================================================== */
+
 #include "ButtonsLEDsAndMsgs.h"
 #include "meshUtils.h"
 #include "configuration.h"
@@ -17,6 +52,7 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
+#include <ctype.h>
 
 using namespace concurrency;
 
@@ -95,7 +131,7 @@ bool ButtonsLEDsAndMsgs::initButton(const ButtonConfigModules &config)
     }
 
 
-    // DM: if this LED pin is valid, set it to un-lit, off  state via it's _ledActiveLow state
+    // DM: if this LED pin is valid, set it to un-lit, off  state via it's _ledActiveLow (config.ledActiveLow) state
     if (_ledPin >= 0) {
         pinMode(_ledPin, OUTPUT);
         if (_ledActiveLow)
@@ -125,22 +161,17 @@ bool ButtonsLEDsAndMsgs::initButton(const ButtonConfigModules &config)
     // Check if any LED was defined above
     //
     bool anyLed = false;
-#ifdef RedLED
+#ifdef RedLED || defined(GreenLED) || defined(BlueLED)
     anyLed = true;
 #endif
-#ifdef GreenLED
-    anyLed = true;
-#endif
-#ifdef BlueLED
-    anyLed = true;
-#endif
+
 
     // 
     if (anyLed) {
         _startupBlinkPending = true;
-        _startupBlinkDone = false;
-        _startupBlinkPhase = 0;
-        _startupBlinkCount = 0;
+        _startupBlinkDone    = false;
+        _startupBlinkPhase   = 0;
+        _startupBlinkCount   = 0;
         if (Serial) {
             Serial.println("ButtonsLEDsAndMsgs: SCHEDULED STARTUP RGB BLINK");
         }
@@ -148,9 +179,9 @@ bool ButtonsLEDsAndMsgs::initButton(const ButtonConfigModules &config)
 
     // Configure button pin (leave pullup handling to caller if desired)
     pinMode(_pinNum, INPUT_PULLUP);
-    _debounceMs = 50;
+    _debounceMs   = 50;
     _lastRawState = isButtonPressed(_pinNum);
-    _stableState = _lastRawState;
+    _stableState  = _lastRawState;
 
     // Observe incoming text messages so we can parse LED control commands
     if (textMessageModule) {
@@ -163,16 +194,12 @@ bool ButtonsLEDsAndMsgs::initButton(const ButtonConfigModules &config)
 
 int32_t ButtonsLEDsAndMsgs::runOnce()
 {
-    // Non-blocking startup RGB blink state machine; run once router/service are ready
+    // Simple one-shot startup blink: when pending, turn the board LEDs on for ~200ms then restore.
     if (_startupBlinkPending && !_startupBlinkDone && router && service) {
-        const uint32_t onMs = 300;
-        const uint32_t offMs = 200;
-        const uint8_t totalCycles = 3;
-
+        const uint32_t onMs = 200;
         if (_startupBlinkPhase == 0) {
-            // start on-phase
+            // start single on-phase
             _startupBlinkPhase = 1;
-            _startupBlinkCount = 0;
 #ifdef RedLED
             digitalWrite(RedLED, LOW);
 #endif
@@ -183,42 +210,23 @@ int32_t ButtonsLEDsAndMsgs::runOnce()
             digitalWrite(BlueLED, LOW);
 #endif
             _startupBlinkUntil = millis() + onMs;
+            if (Serial) Serial.println("ButtonsLEDsAndMsgs: STARTUP single blink ON");
         } else {
             uint32_t now = millis();
             if (now >= _startupBlinkUntil) {
-                if (_startupBlinkPhase == 1) {
 #ifdef RedLED
-                    digitalWrite(RedLED, HIGH);
+                digitalWrite(RedLED, HIGH);
 #endif
 #ifdef GreenLED
-                    digitalWrite(GreenLED, HIGH);
+                digitalWrite(GreenLED, HIGH);
 #endif
 #ifdef BlueLED
-                    digitalWrite(BlueLED, HIGH);
+                digitalWrite(BlueLED, HIGH);
 #endif
-                    _startupBlinkPhase = 2;
-                    _startupBlinkUntil = now + offMs;
-                } else if (_startupBlinkPhase == 2) {
-                    _startupBlinkCount++;
-                    if (_startupBlinkCount >= totalCycles) {
-                        _startupBlinkDone = true;
-                        _startupBlinkPending = false;
-                        _startupBlinkPhase = 0;
-                        if (Serial) Serial.println("ButtonsLEDsAndMsgs: STARTUP RGB BLINK done");
-                    } else {
-#ifdef RedLED
-                        digitalWrite(RedLED, LOW);
-#endif
-#ifdef GreenLED
-                        digitalWrite(GreenLED, LOW);
-#endif
-#ifdef BlueLED
-                        digitalWrite(BlueLED, LOW);
-#endif
-                        _startupBlinkPhase = 1;
-                        _startupBlinkUntil = now + onMs;
-                    }
-                }
+                _startupBlinkDone = true;
+                _startupBlinkPending = false;
+                _startupBlinkPhase = 0;
+                if (Serial) Serial.println("ButtonsLEDsAndMsgs: STARTUP single blink DONE");
             }
         }
     }
@@ -250,6 +258,10 @@ int32_t ButtonsLEDsAndMsgs::runOnce()
         }
     }
 
+    // If startup blink is still pending, poll more frequently to make the blink timing smooth
+    if (_startupBlinkPending && !_startupBlinkDone) {
+        return 10; // check every 10ms during startup blink
+    }
     return 50;
 }
 
@@ -382,19 +394,69 @@ void ButtonsLEDsAndMsgs::sendTextToChannel(const char *text, uint8_t channel)
 int ButtonsLEDsAndMsgs::handleTextMessage(const meshtastic_MeshPacket *mp)
 {
     // Very small parser for LED commands: "LED:<pin>:ON" or "LED:<pin>:OFF"
+    // Accepts either a GPIO pin number or a small index 1=Red,2=Green,3=Blue for convenience.
     if (!mp) return 0;
     if (mp->decoded.portnum != meshtastic_PortNum_TEXT_MESSAGE_APP) return 0;
     const char *s = (const char *)mp->decoded.payload.bytes;
     if (!s) return 0;
     if (strncmp(s, "LED:", 4) == 0) {
-        int pin = -1;
+        char idtok[32] = {0};
         char cmd[16] = {0};
-        if (sscanf(s + 4, "%d:%15s", &pin, cmd) >= 1) {
+        if (sscanf(s + 4, "%31[^:]:%15s", idtok, cmd) >= 1) {
             bool on = false;
             if (strcasecmp(cmd, "ON") == 0) on = true;
-            if (pin >= 0) {
-                // If this module owns that pin, toggle it; otherwise ignore
-                if (pin == _ledPin) setLed(on);
+
+            int mappedPin = -1;
+
+            // If idtok is numeric, treat as index or GPIO pin
+            bool allDigits = true;
+            for (size_t i = 0; i < strlen(idtok); ++i) {
+                if (!isdigit((unsigned char)idtok[i])) { allDigits = false; break; }
+            }
+            if (allDigits && idtok[0] != '\0') {
+                int pin = atoi(idtok);
+                mappedPin = pin;
+                // Allow index mapping: 1=Red, 2=Green, 3=Blue
+                if (pin == 1) {
+#ifdef RedLED
+                    mappedPin = RedLED;
+#endif
+                } else if (pin == 2) {
+#ifdef GreenLED
+                    mappedPin = GreenLED;
+#endif
+                } else if (pin == 3) {
+#ifdef BlueLED
+                    mappedPin = BlueLED;
+#endif
+                }
+            } else {
+                // Accept color names: RedLED, RED, Red, R etc.
+                if (strcasecmp(idtok, "RedLED") == 0 || strcasecmp(idtok, "RED") == 0 || strcasecmp(idtok, "Red") == 0 || strcasecmp(idtok, "R") == 0) {
+#ifdef RedLED
+                    mappedPin = RedLED;
+#endif
+                } else if (strcasecmp(idtok, "GreenLED") == 0 || strcasecmp(idtok, "GREEN") == 0 || strcasecmp(idtok, "Green") == 0 || strcasecmp(idtok, "G") == 0) {
+#ifdef GreenLED
+                    mappedPin = GreenLED;
+#endif
+                } else if (strcasecmp(idtok, "BlueLED") == 0 || strcasecmp(idtok, "BLUE") == 0 || strcasecmp(idtok, "Blue") == 0 || strcasecmp(idtok, "B") == 0) {
+#ifdef BlueLED
+                    mappedPin = BlueLED;
+#endif
+                } else {
+                    LOG_WARN("ButtonsLEDsAndMsgs: unknown LED id '%s' in command", idtok);
+                }
+            }
+
+            LOG_INFO("ButtonsLEDsAndMsgs: parsed LED cmd '%s' -> mappedPin=%d action=%s", idtok, mappedPin, on ? "ON" : "OFF");
+
+            if (mappedPin >= 0) {
+                if (mappedPin == _ledPin) {
+                    setLed(on);
+                } else {
+                    LOG_DEBUG("ButtonsLEDsAndMsgs: LED cmd for mappedPin %d does not match module's LED pin %d", mappedPin, _ledPin);
+                }
             }
         }
     }

@@ -1,3 +1,43 @@
+// ====== Variant definition for my Heltec_v3_SeniorNode board ====== //
+//
+//  © Dale McBeath 2025  - Use and distribute freely, but give credit.
+//
+//
+//   HELTEC V3 GPIO Pins:   (this is difficult to nail down, as meshtastic use isn't clear on schematic free pins )
+//
+//   x   0 -  User Button 
+//   x   1 -  VBAT Read
+//       2 - 
+//       3 -
+//   ?   4 -  not sure, had problems, but may have been code error
+//       5 - 
+//       6 -
+//       7 -  
+//   x   8 - 14 - LoRa chip SPI 
+//   x  17 - 18 - OLED display I2C
+//   x  19 - 21 - Secondary I2C bus (for sensors etc)
+//   ?  22 - 25 - not available on pins 
+//   x  26, 33, 34, 36, 37 - SPI
+//   x  27 thru 32 - not available on pins
+//   x  35 -  White LED on board - used for heart-beat and WRITE status 
+//   ?  38, thru 42 - JTAG programming on some boards (use with caution, not tested)
+//   x  43 - 44 - CP2102 chip UART (used for programming/serial console)
+//      45 - 
+//      46 - 
+//      47 - (sometimes used for GPS)
+//      48 - (sometimes used for GPS)
+// 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+//
+//
+//
+//   - This board has 3 buttons and 3 common Anode LEDs
+//   - Buttons are active-low and need internal pull-ups
+//   - Button map: RED at GPIO5, GREEN at GPIO6, BLUE at GPIO45
+//
+//
+
+
 #define LED_PIN LED
 
 // Module button & LED wiring for this board variant
@@ -11,6 +51,11 @@
 #define GreenLED 3
 #define RedLED 2
 #define BlueLED 45
+
+// Explicit polarity macros: 1 = active-low, 0 = active-high
+#define RedLED_ACTIVE_LOW 1
+#define GreenLED_ACTIVE_LOW 1
+#define BlueLED_ACTIVE_LOW 1
 
 #define USE_SSD1306 // Heltec_v3 has a SSD1306 display
 

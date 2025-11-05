@@ -46,7 +46,7 @@ struct ButtonConfigModules {
 #endif
 
 #ifndef BUTTON_LEADUP_MS
-#define BUTTON_LEADUP_MS 2200 // Play lead-up sound after 2.5 seconds of holding
+#define BUTTON_LEADUP_MS 2200 // Play lead-up sound after 2.5 seconds of holding  ?? - - what's this? - - 
 #endif
 
 class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurrency::OSThread
@@ -165,11 +165,11 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
     // Non-blocking LED off timestamp (millis), 0 when not scheduled
     uint32_t _ledOnUntil = 0;
     // Startup RGB blink state (moved from blocking init to non-blocking runOnce())
-    bool _startupBlinkPending = false; // requested at init (if anyLed)
-    bool _startupBlinkDone = false;    // finished
-    uint8_t _startupBlinkPhase = 0;    // 0 = idle, 1 = on, 2 = off
-    uint8_t _startupBlinkCount = 0;    // completed on/off cycles
-    uint32_t _startupBlinkUntil = 0;   // next transition time
+    bool _startupBlinkPending   = false;   // requested at init (if anyLed)
+    bool _startupBlinkDone      = false;   // finished
+    uint8_t _startupBlinkPhase  = 0;       // 0 = idle, 1 = on, 2 = off
+    uint8_t _startupBlinkCount  = 0;       // completed on/off cycles
+    uint32_t _startupBlinkUntil = 0;       // next transition time
     // Note: We intentionally do not register with InputBroker; this module
     // handles button events locally and sends text messages itself.
     

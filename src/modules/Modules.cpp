@@ -1,3 +1,38 @@
+/* ===========================================================================================
+    © Dale McBeath 2025  - Use and distribute freely, but give credit.
+		
+		
+    HELTEC V3 GPIO Pins:   (this is difficult to nail down, as meshtastic use isn't clear on schematic free pins )
+
+    x   0 -  User Button 
+    x   1 -  VBAT Read
+       2 - 
+        3 -
+    ?   4 -  not sure, had problems, but may have been code error
+        5 - 
+        6 -
+        7 -  
+    x   8 - 14 - LoRa chip SPI 
+    x  17 - 18 - OLED display I2C
+    x  19 - 21 - Secondary I2C bus (for sensors etc)
+    ?  22 - 25 - not available on pins 
+    x  26, 33, 34, 36, 37 - SPI
+    x  27 thru 32 - not available on pins
+    x  35 -  White LED on board - used for heart-beat and WRITE status 
+    ?  38, thru 42 - JTAG programming on some boards (use with caution, not tested)
+    x  43 - 44 - CP2102 chip UART (used for programming/serial console)
+       45 - 
+       46 - 
+       47 - (sometimes used for GPS)
+       48 - (sometimes used for GPS)
+
+
+    - This board has 3 buttons and 3 common Anode LEDs
+    - Buttons are active-low and need internal pull-ups
+    - Button map: RED at GPIO5, GREEN at GPIO6, BLUE at GPIO45
+
+   =========================================================================================== */
+
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
@@ -299,7 +334,9 @@ void setupModules()
     if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)
         new RangeTestModule();
 #endif
-    // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
+    
+
+    // NOTE! This custom module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();
     // Instantiate three ButtonsLEDsAndMsgs modules for RED, GREEN, BLUE buttons
@@ -307,8 +344,12 @@ void setupModules()
     ButtonsLEDsAndMsgs *RedButton = new ButtonsLEDsAndMsgs("RedButton");
     {
         ButtonConfigModules cfg(RED_BUTTON_PIN);
-        cfg.ledPin = RedLED;
-        cfg.ledActiveLow = true;
+    cfg.ledPin = RedLED;
+#if defined(RedLED_ACTIVE_LOW)
+    cfg.ledActiveLow = (RedLED_ACTIVE_LOW != 0);
+#else
+    cfg.ledActiveLow = true;
+#endif
         cfg.activeLow = true;
         cfg.activePullup = true;
         cfg.channelIndex = 1;
@@ -319,8 +360,12 @@ void setupModules()
     ButtonsLEDsAndMsgs *GreenButton = new ButtonsLEDsAndMsgs("GreenButton");
     {
         ButtonConfigModules cfg(GREEN_BUTTON_PIN);
-        cfg.ledPin = GreenLED;
-        cfg.ledActiveLow = true;
+    cfg.ledPin = GreenLED;
+#if defined(GreenLED_ACTIVE_LOW)
+    cfg.ledActiveLow = (GreenLED_ACTIVE_LOW != 0);
+#else
+    cfg.ledActiveLow = true;
+#endif
         cfg.activeLow = true;
         cfg.activePullup = true;
         cfg.channelIndex = 2;
@@ -331,8 +376,12 @@ void setupModules()
     ButtonsLEDsAndMsgs *BlueButton = new ButtonsLEDsAndMsgs("BlueButton");
     {
         ButtonConfigModules cfg(BLUE_BUTTON_PIN);
-        cfg.ledPin = BlueLED;
-        cfg.ledActiveLow = true;
+    cfg.ledPin = BlueLED;
+#if defined(BlueLED_ACTIVE_LOW)
+    cfg.ledActiveLow = (BlueLED_ACTIVE_LOW != 0);
+#else
+    cfg.ledActiveLow = true;
+#endif
         cfg.activeLow = true;
         cfg.activePullup = true;
         cfg.channelIndex = 3;
