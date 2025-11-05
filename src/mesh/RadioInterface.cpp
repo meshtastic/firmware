@@ -295,12 +295,7 @@ bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         return true;
     }
-
-    // If we are a CLIENT_BASE and the packet is from or to a favorited node, we should rebroadcast early
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
-        return nodeDB->isFromOrToFavoritedNode(*p);
-    }
-
+    
     return false;
 }
 
