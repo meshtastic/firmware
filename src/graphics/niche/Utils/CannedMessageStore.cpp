@@ -53,9 +53,9 @@ void CannedMessageStore::load()
 
     // Attempt to load the bulk canned message data from flash
     meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
-    LoadFileResult result = nodeDB->loadProto("/prefs/cannedConf.proto", meshtastic_CannedMessageModuleConfig_size,
-                                              sizeof(meshtastic_CannedMessageModuleConfig),
-                                              &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
+    LoadFileResult result = loadProto("/prefs/cannedConf.proto", meshtastic_CannedMessageModuleConfig_size,
+                                      sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                                      &cannedMessageModuleConfig);
 
     // Abort if nothing to load
     if (result != LoadFileResult::LOAD_SUCCESS || strlen(cannedMessageModuleConfig.messages) == 0)
@@ -129,8 +129,8 @@ void CannedMessageStore::handleSet(const meshtastic_AdminMessage *request)
 #endif
 
     // Write to flash
-    nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                      &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
+    saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size, &meshtastic_CannedMessageModuleConfig_msg,
+              &cannedMessageModuleConfig);
 
     // Reload from flash, to update the canned messages in RAM
     // (This is a lazy way to handle it)
