@@ -93,6 +93,19 @@ meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 3
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
+// Nanopb input callback for FatFs
+bool nanopb_fatfs_read(pb_istream_t *stream, pb_byte_t *buf, size_t count) {
+    File32 *file = (File32 *)stream->state;
+    int got = file->read(buf, count);
+    return got == (int)count;
+}
+
+// Nanopb output callback for FatFs
+bool nanopb_fatfs_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count) {
+    File32 *file = (File32 *)stream->state;
+    int written = file->write(buf, count);
+    return written == (int)count;
+}
 
 
 void format_fat12(void) {
@@ -1227,14 +1240,37 @@ fatfsMounted = true;
         if (fields != &meshtastic_NodeDatabase_msg) { // special case for NodeDB which contains a vector
             memset(dest_struct, 0, objSize);
         }
+        /*
         // Read raw binary into the protobuf struct (non-protobuf/raw dump)
         int got = f.read(reinterpret_cast<uint8_t*>(dest_struct), objSize);
+        */
+       ///////////////////////////////////////////////////////////////
+       /*
+        // --- Streaming read implementation ---
+         const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
+         size_t totalRead = 0;
+         uint8_t* dest = reinterpret_cast<uint8_t*>(dest_struct);
+
+         while (totalRead < objSize) {
+            size_t toRead = CHUNK_SIZE;
+            if (totalRead + CHUNK_SIZE > objSize)
+             toRead = objSize - totalRead;
+
+        int got = f.read(dest + totalRead, toRead);
+        if (got <= 0) {
+            LOG_ERROR("Error reading file: read %d bytes at offset %u", got, (unsigned)totalRead);
+            break;
+        }
+        totalRead += got;
+    }
         // Ensure all data is written to storage
         f.flush();
         // Always close the file
         f.close();
-        if (got != int(objSize)) {
-            LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)objSize);
+        if (totalRead != objSize) {
+        //if (got != int(objSize)) {
+            LOG_ERROR("Error reading file: read %u of %u bytes", (unsigned)totalRead, (unsigned)objSize);
+            //LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)objSize);
             state = LoadFileResult::DECODE_FAILED;
         } else {
             LOG_INFO("Loaded %s successfully", filename);
@@ -1243,6 +1279,21 @@ fatfsMounted = true;
     } else {
         LOG_ERROR("Could not open / read %s", filename);
     }
+    */
+pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
+        if (!pb_decode(&stream, fields, dest_struct)) {
+            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            state = LoadFileResult::DECODE_FAILED;
+        } else {
+            LOG_INFO("Loaded %s successfully", filename);
+            state = LoadFileResult::LOAD_SUCCESS;
+        }
+        f.close();
+    } else {
+        LOG_ERROR("Could not open / read %s", filename);
+    }
+
+
 #elif FSCom
     concurrency::LockGuard g(spiLock);
 
@@ -1547,7 +1598,7 @@ File32 f = fatfs.open(filename, FILE_WRITE);
     return false;
   }
   else{
-    size_t written = f.write(reinterpret_cast<const uint8_t*>(dest_struct), protoSize);
+    /*size_t written = f.write(reinterpret_cast<const uint8_t*>(dest_struct), protoSize);
     // Make sure to flush and close properly
     f.flush();
     f.close();
@@ -1557,8 +1608,56 @@ File32 f = fatfs.open(filename, FILE_WRITE);
         okay = true;
     } else {
         LOG_ERROR("Error: wrote %u of %u bytes", written, protoSize);
+    }*/
+   ///////////////////////////////////////////////////////////////
+   /*
+    // --- Streaming write implementation ---
+     const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
+     size_t totalWritten = 0;
+     const uint8_t* src = reinterpret_cast<const uint8_t*>(dest_struct);
+
+     while (totalWritten < protoSize) {
+        size_t toWrite = CHUNK_SIZE;
+        if (totalWritten + CHUNK_SIZE > protoSize)
+         toWrite = protoSize - totalWritten;
+
+        int written = f.write(src + totalWritten, toWrite);
+         if (written <= 0) {
+            LOG_ERROR("Error writing file: wrote %d bytes at offset %u", written, (unsigned)totalWritten);
+            break;
+         }
+        totalWritten += written;
+    }
+    f.flush();
+    f.close();
+
+    if (totalWritten != protoSize) {
+        LOG_ERROR("Error: wrote %u of %u bytes", (unsigned)totalWritten, (unsigned)protoSize);
+        okay = false;
+    } else {
+        LOG_INFO("File saved!");
+        LOG_INFO("File closed!");
+        okay = true;
     }
   }
+    */
+   pb_ostream_t stream = {&nanopb_fatfs_write, &f, protoSize, 0};
+        if (!pb_encode(&stream, fields, dest_struct)) {
+            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+            okay = false;
+        } else {
+            okay = true;
+        }
+        f.flush();
+        f.close();
+
+        if (okay) {
+            LOG_INFO("File saved!");
+            LOG_INFO("File closed!");
+        } else {
+            LOG_ERROR("Error: failed to encode or write file");
+        }
+    }
 
 #elif FSCom
     auto f = SafeFile(filename, fullAtomic);
