@@ -623,28 +623,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.security.private_key.size = 0;
     }
     config.security.public_key.size = 0;
-#ifdef PIN_GPS_EN
-    config.position.gps_en_gpio = PIN_GPS_EN;
-#endif
-#if defined(USERPREFS_CONFIG_GPS_MODE)
-    config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
-#elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
-    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
-#elif !defined(GPS_RX_PIN)
-    if (config.position.rx_gpio == 0)
-        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
-    else
-        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-#else
-    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-#endif
-#ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
-    config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
-#else
-    config.position.position_broadcast_smart_enabled = true;
-#endif
-    config.position.broadcast_smart_minimum_distance = 100;
-    config.position.broadcast_smart_minimum_interval_secs = 30;
+
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
@@ -691,12 +670,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
 #endif
-    // for backward compat, default position flags are ALT+MSL
-    config.position.position_flags =
-        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
-         meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
-         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
-
 // Set default value for 'Mesh via UDP'
 #if HAS_UDP_MULTICAST
 #ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
@@ -746,21 +719,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
     initConfigIntervals();
+    initConfigGPS();
 }
 
 void NodeDB::initConfigIntervals()
 {
-#ifdef USERPREFS_CONFIG_GPS_UPDATE_INTERVAL
-    config.position.gps_update_interval = USERPREFS_CONFIG_GPS_UPDATE_INTERVAL;
-#else
-    config.position.gps_update_interval = default_gps_update_interval;
-#endif
-#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
-    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
-#else
-    config.position.position_broadcast_secs = default_broadcast_interval_secs;
-#endif
-
     config.power.ls_secs = default_ls_secs;
     config.power.min_wake_secs = default_min_wake_secs;
     config.power.sds_secs = default_sds_secs;
@@ -772,6 +735,77 @@ void NodeDB::initConfigIntervals()
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
+#endif
+}
+
+void NodeDB::initConfigGPS()
+{
+#ifdef PIN_GPS_EN
+    config.position.gps_en_gpio = PIN_GPS_EN;
+#endif
+#if defined(USERPREFS_CONFIG_GPS_MODE)
+    config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
+#elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+#elif !defined(GPS_RX_PIN)
+    if (config.position.rx_gpio == 0)
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+    else
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+#else
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+#endif
+#ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
+    config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
+#else
+    config.position.position_broadcast_smart_enabled = true;
+#endif
+
+    const uint32_t base_flags =
+        (meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW |
+         meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE);
+
+    if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION ||
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+        config.position.position_flags = base_flags;
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = ONE_DAY / 2;
+    } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_PEDESTRIAN) {
+        config.position.position_flags = (base_flags | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
+                                          meshtastic_Config_PositionConfig_PositionFlags_HEADING);
+        config.position.broadcast_smart_minimum_distance = 50;
+        config.position.broadcast_smart_minimum_interval_secs = 60;
+        config.position.position_broadcast_secs = 900;
+    } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_VEHICLE) {
+
+        config.position.position_flags = (base_flags | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
+                                          meshtastic_Config_PositionConfig_PositionFlags_HEADING);
+        config.position.broadcast_smart_minimum_distance = 500;
+        config.position.broadcast_smart_minimum_interval_secs = 120;
+        config.position.position_broadcast_secs = 900;
+    } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_AIRBORNE) {
+        config.position.position_flags =
+            (base_flags | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+             meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION |
+             meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING);
+        config.position.broadcast_smart_minimum_distance = 200;
+        config.position.broadcast_smart_minimum_interval_secs = 60;
+        config.position.position_broadcast_secs = 900;
+
+    } else { // original settings
+        config.position.position_flags =
+            (base_flags | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+             meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING);
+        config.position.broadcast_smart_minimum_distance = 100;
+        config.position.broadcast_smart_minimum_interval_secs = 30;
+        config.position.position_broadcast_secs = 900;
+    }
+#ifdef USERPREFS_CONFIG_GPS_UPDATE_INTERVAL
+    config.position.gps_update_interval = USERPREFS_CONFIG_GPS_UPDATE_INTERVAL;
+#endif
+#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
+    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
 #endif
 }
 
@@ -905,6 +939,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         initConfigIntervals();
         initModuleConfigIntervals();
+        initConfigGPS();
         moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
         owner.has_is_unmessagable = true;
@@ -1214,11 +1249,10 @@ void NodeDB::loadFromDisk()
                       &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
-    // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of our
-    // critical config may still be valid (in the other files - loaded next).
-    // Also, if we did fail on reading we probably failed on the enormous (and non critical) nodeDB.  So DO NOT install default
-    // device state.
-    // if (state != LoadFileResult::LOAD_SUCCESS) {
+    // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of
+    // our critical config may still be valid (in the other files - loaded next). Also, if we did fail on reading we probably
+    // failed on the enormous (and non critical) nodeDB.  So DO NOT install default device state. if (state !=
+    // LoadFileResult::LOAD_SUCCESS) {
     //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     //} else {
     if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
@@ -1829,8 +1863,8 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
         if (seenFrom && seenTo)
             return false; // we've seen both, and neither is a favorite, so we can stop searching early
 
-        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
-        // all favorited nodes first.
+        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after
+        // searching all favorited nodes first.
     }
 
     return false;
