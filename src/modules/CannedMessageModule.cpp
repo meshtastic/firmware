@@ -1078,19 +1078,12 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     } else {
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
-        // Only add as favorite if the destination's role is NOT CLIENT_BASE
-        meshtastic_NodeInfoLite *destInfo = nodeDB->getMeshNode(dest);
-        bool isClientBase = false;
-        if (destInfo) {
-            if (destInfo->user.role == 12 /* CLIENT_BASE */) {
-                isClientBase = true;
-            }
-        }
-        if (!isClientBase) {
+        // Only add as favorite if our role is NOT CLIENT_BASE
+        if (config.device.role != 12) {
             LOG_INFO("Proactively adding %x as favorite node", dest);
             nodeDB->set_favorite(true, dest);
         } else {
-            LOG_DEBUG("Not favoriting node %x (CLIENT_BASE role)", dest);
+            LOG_DEBUG("Not favoriting node %x as we are CLIENT_BASE role", dest);
         }
     }
     sm.ackStatus = AckStatus::NONE;
