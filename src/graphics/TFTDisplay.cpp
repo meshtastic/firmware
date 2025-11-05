@@ -434,7 +434,7 @@ class TOUCH_CHSC6X : public ITouch
 public:
     TOUCH_CHSC6X(void)
     {
-      _cfg.i2c_addr = 0x2E;
+      _cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
       _cfg.x_min = 0;
       _cfg.x_max = 240;
       _cfg.y_min = 0;
