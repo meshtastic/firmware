@@ -978,7 +978,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
             LOG_INFO("Proactively adding %x as favorite node", p->to);
             nodeDB->set_favorite(true, p->to);
         } else {
-            LOG_DEBUG("Not favoriting node %x as we are CLIENT_BASE role", dest);
+            LOG_DEBUG("Not favoriting node %x as we are CLIENT_BASE role", p->to);
         }
 
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
