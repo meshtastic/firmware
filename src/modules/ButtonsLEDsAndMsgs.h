@@ -94,6 +94,9 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
     // Returns true while this thread's button is physically held down
     bool isHeld() { return isButtonPressed(_pinNum); }
 
+    // Return the configured GPIO pin number for this module's button
+    int getPinNum() const { return _pinNum; }
+
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused);
@@ -161,6 +164,12 @@ class ButtonsLEDsAndMsgs : public Observable<const InputEvent *>, public concurr
     bool _ledActiveLow = true;
     // Non-blocking LED off timestamp (millis), 0 when not scheduled
     uint32_t _ledOnUntil = 0;
+    // Startup RGB blink state (moved from blocking init to non-blocking runOnce())
+    bool _startupBlinkPending = false; // requested at init (if anyLed)
+    bool _startupBlinkDone = false;    // finished
+    uint8_t _startupBlinkPhase = 0;    // 0 = idle, 1 = on, 2 = off
+    uint8_t _startupBlinkCount = 0;    // completed on/off cycles
+    uint32_t _startupBlinkUntil = 0;   // next transition time
     // Note: We intentionally do not register with InputBroker; this module
     // handles button events locally and sends text messages itself.
     

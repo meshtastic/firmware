@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# prepare-commit-msg hook to prepend an ISO8601 UTC timestamp to commit messages
+# Place this file in .githooks/ and run:
+#   git config core.hooksPath .githooks
+# to enable for this repository.
+# Do not run on merge commits and skip if timestamp already present.
+
+HOOK_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Don't touch merge commits or if message already looks timestamped
+if [ "$COMMIT_SOURCE" = "merge" ] || grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:' "$HOOK_MSG_FILE"; then
+  exit 0
+fi
+
+TS=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+# Prepend timestamp (with a space) to the first line of the commit message
+# Create a backup so sed works on macOS and Linux
+sed -i.bak "1s/^/$TS /" "$HOOK_MSG_FILE"
+
+exit 0

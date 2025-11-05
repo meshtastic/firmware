@@ -12,6 +12,7 @@
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/ButtonsLEDsAndMsgs.h"
 #include "power.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
@@ -38,7 +39,10 @@ static void sendMessageForPinWithChannel(int pin, uint8_t channel)
     // keeping multiple conditional branches in sync and keeps the payload
     // predictable.
     char msgbuf[48];
-    snprintf(msgbuf, sizeof(msgbuf), "Button GPIO%d pressed", pin);
+    // Use a neutral banner message that does not reference specific GPIO numbers.
+    // The friendly/button name is not available in this helper, so keep the
+    // message generic; module-local code will send more specific text messages.
+    snprintf(msgbuf, sizeof(msgbuf), "(button) pressed");
     const char *msg = msgbuf;
 
 
@@ -287,19 +291,9 @@ int32_t ButtonThread::runOnce()
             waitingForLongPress = true;
             shortPressTime = millis();
 
-            // Custom behavior: send a short text message for specific GPIO pins
-            // on the configured private channel. This will NOT send on public
-            // channel 0 (the helper ignores channel 0).
-                // Throttle rapid button-triggered sends to avoid radio queue overload
-                const uint32_t cooldownMs = 300; // 300ms cooldown between sends from this button
-                uint32_t now = millis();
-                if ((now - _lastSendMs) < cooldownMs) {
-                    LOG_DEBUG("ButtonThread: skipping send for pin %d, cooldown active (%u ms left)", _pinNum,
-                              (unsigned)(cooldownMs - (now - _lastSendMs)));
-                } else {
-                    _lastSendMs = now;
-                    sendMessageForPinWithChannel(_pinNum, _channelIndex);
-                }
+            // All button-originated text messages are handled by module-local
+            // ButtonsLEDsAndMsgs; do not send any global "Button GPIO# pressed"
+            // messages from ButtonThread.
 
             break;
         }
