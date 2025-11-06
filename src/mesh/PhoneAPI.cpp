@@ -88,15 +88,15 @@ void PhoneAPI::close()
 {
     LOG_DEBUG("PhoneAPI::close()");
     if (service->api_state == service->STATE_BLE && api_type == TYPE_BLE)
-        api_type == TYPE_NONE;
+        service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_WIFI && api_type == TYPE_WIFI)
-        api_type == TYPE_NONE;
+        service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_SERIAL && api_type == TYPE_SERIAL)
-        api_type == TYPE_NONE;
+        service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_PACKET && api_type == TYPE_PACKET)
-        api_type == TYPE_NONE;
+        service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_HTTP && api_type == TYPE_HTTP)
-        api_type == TYPE_NONE;
+        service->api_state = service->STATE_DISCONNECTED;
 
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;

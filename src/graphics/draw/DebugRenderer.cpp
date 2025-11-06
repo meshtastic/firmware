@@ -663,24 +663,28 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
-    // line++;
-    char api_state[50] = {0};
-    if (service->api_state == service->STATE_BLE)
-        snprintf(api_state, sizeof(api_state), "API State: BLE Connected");
-    else if (service->api_state == service->STATE_WIFI)
-        snprintf(api_state, sizeof(api_state), "API State: WiFi Connected");
-    else if (service->api_state == service->STATE_SERIAL)
-        snprintf(api_state, sizeof(api_state), "API State: Serial Connected");
-    else if (service->api_state == service->STATE_PACKET)
-        snprintf(api_state, sizeof(api_state), "API State: Internal Connected");
-    else if (service->api_state == service->STATE_HTTP)
-        snprintf(api_state, sizeof(api_state), "API State: HTTP Connected");
-    else
-        snprintf(api_state, sizeof(api_state), "API idle");
 
-    textWidth = display->getStringWidth(api_state);
-    nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], api_state);
+    if (service->api_state == service->STATE_BLE) {
+        textWidth = display->getStringWidth("BLE Connected");
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], "BLE Connected");
+    } else if (service->api_state == service->STATE_WIFI) {
+        textWidth = display->getStringWidth("WiFi Connected");
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], "WiFi Connected");
+    } else if (service->api_state == service->STATE_SERIAL) {
+        textWidth = display->getStringWidth("Serial Connected");
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], "Serial Connected");
+    } else if (service->api_state == service->STATE_PACKET) {
+        textWidth = display->getStringWidth("Internal Connected");
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], "Internal Connected");
+    } else if (service->api_state == service->STATE_HTTP) {
+        textWidth = display->getStringWidth("HTTP Connected");
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], "HTTP Connected");
+    }
 #endif
 }
 
