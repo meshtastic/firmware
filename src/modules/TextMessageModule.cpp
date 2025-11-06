@@ -22,13 +22,16 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     devicestate.rx_text_message = mp;
     devicestate.has_rx_text_message = true;
 #if HAS_SCREEN
-    // Store in the central message history
-    const StoredMessage &sm = messageStore.addFromPacket(mp);
+    // Guard against running in MeshtasticUI
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        // Store in the central message history
+        const StoredMessage &sm = messageStore.addFromPacket(mp);
 
-    // Pass message to renderer (banner + thread switching + scroll reset)
-    // Use the global Screen singleton to retrieve the current OLED display
-    auto *display = screen ? screen->getDisplayDevice() : nullptr;
-    graphics::MessageRenderer::handleNewMessage(display, sm, mp);
+        // Pass message to renderer (banner + thread switching + scroll reset)
+        // Use the global Screen singleton to retrieve the current OLED display
+        auto *display = screen ? screen->getDisplayDevice() : nullptr;
+        graphics::MessageRenderer::handleNewMessage(display, sm, mp);
+    }
 #endif
     // Only trigger screen wake if configuration allows it
     if (shouldWakeOnReceivedMessage()) {
