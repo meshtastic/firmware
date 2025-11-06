@@ -1638,6 +1638,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // If should_ignore is set,
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
         info->is_ignored = true;
+        info->is_muted = true;
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
