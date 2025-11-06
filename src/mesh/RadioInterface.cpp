@@ -272,10 +272,10 @@ uint32_t RadioInterface::getTxDelayMsec()
 uint8_t RadioInterface::getCWsize(float snr)
 {
     // The minimum value for a LoRa SNR
-    const uint32_t SNR_MIN = -20;
+    const int32_t SNR_MIN = -20;
 
     // The maximum value for a LoRa SNR
-    const uint32_t SNR_MAX = 10;
+    const int32_t SNR_MAX = 10;
 
     return map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
 }
