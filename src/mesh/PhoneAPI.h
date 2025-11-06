@@ -167,6 +167,17 @@ class PhoneAPI
     /// begin a new connection
     void handleStartConfig();
 
+    enum APIType {
+        TYPE_NONE, // Initial state, don't send anything until the client starts asking for config
+        TYPE_BLE,
+        TYPE_WIFI,
+        TYPE_SERIAL,
+        TYPE_PACKET,
+        TYPE_HTTP
+    };
+
+    APIType api_type = TYPE_NONE;
+
   private:
     void releasePhonePacket();
 

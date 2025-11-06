@@ -3,6 +3,7 @@
 #include "../Screen.h"
 #include "DebugRenderer.h"
 #include "FSCommon.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
@@ -660,8 +661,26 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
             snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line], uptimeStr);
+        display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
+    // line++;
+    char api_state[50] = {0};
+    if (service->api_state == service->STATE_BLE)
+        snprintf(api_state, sizeof(api_state), "API State: BLE Connected");
+    else if (service->api_state == service->STATE_WIFI)
+        snprintf(api_state, sizeof(api_state), "API State: WiFi Connected");
+    else if (service->api_state == service->STATE_SERIAL)
+        snprintf(api_state, sizeof(api_state), "API State: Serial Connected");
+    else if (service->api_state == service->STATE_PACKET)
+        snprintf(api_state, sizeof(api_state), "API State: Internal Connected");
+    else if (service->api_state == service->STATE_HTTP)
+        snprintf(api_state, sizeof(api_state), "API State: HTTP Connected");
+    else
+        snprintf(api_state, sizeof(api_state), "API idle");
+
+    textWidth = display->getStringWidth(api_state);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, getTextPositions(display)[line++], api_state);
 #endif
 }
 
