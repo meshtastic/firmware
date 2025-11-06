@@ -449,7 +449,7 @@ int ButtonsLEDsAndMsgs::handleTextMessage(const meshtastic_MeshPacket *mp)
                 }
             }
 
-            LOG_INFO("ButtonsLEDsAndMsgs: parsed LED cmd '%s' -> mappedPin=%d action=%s", idtok, mappedPin, on ? "ON" : "OFF");
+            LOG_DEBUG("ButtonsLEDsAndMsgs: parsed LED cmd '%s' -> mappedPin=%d action=%s", idtok, mappedPin, on ? "ON" : "OFF");
 
             if (mappedPin >= 0) {
                 if (mappedPin == _ledPin) {
