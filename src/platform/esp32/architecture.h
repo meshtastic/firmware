@@ -191,6 +191,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
 #elif defined(RAK3312)
 #define HW_VENDOR meshtastic_HardwareModel_RAK3312
+#elif defined(RAK_WISMESH_TAP_V2)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP_V2
 #elif defined(LINK_32)
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
