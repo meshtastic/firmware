@@ -224,6 +224,8 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
     display->drawString(x, getTextPositions(display)[line++], "URL: http://meshtastic.local");
 
+    graphics::drawCommonFooter(display, x, y);
+
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
@@ -504,6 +506,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
                         chUtilPercentage);
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************
@@ -693,6 +696,8 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
                             api_state);
     }
 #endif
+
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************

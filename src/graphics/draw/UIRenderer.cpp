@@ -552,6 +552,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         // else show nothing
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************
@@ -771,6 +772,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // Start Functions to write date/time to the screen
@@ -1183,6 +1185,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 #endif
 #endif // HAS_GPS
+    graphics::drawCommonFooter(display, x, y);
 }
 
 #ifdef USERPREFS_OEM_TEXT
