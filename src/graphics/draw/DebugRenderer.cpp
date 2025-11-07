@@ -664,19 +664,29 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
 
-    char api_state[32] = "No Clients Connected";
+    char api_state[32] = "";
+    const char *clientWord = nullptr;
+
+    // Determine if narrow or wide screen
+    if (isHighResolution) {
+        clientWord = "Client";
+    } else {
+        clientWord = "App";
+    }
+    snprintf(api_state, sizeof(api_state), "No %ss Connected", clientWord);
+
     if (service->api_state == service->STATE_BLE) {
-        snprintf(api_state, sizeof(api_state), "Client Connected (BLE)");
+        snprintf(api_state, sizeof(api_state), "%s Connected (BLE)", clientWord);
     } else if (service->api_state == service->STATE_WIFI) {
-        snprintf(api_state, sizeof(api_state), "Client Connected (WiFi)");
+        snprintf(api_state, sizeof(api_state), "%s Connected (WiFi)", clientWord);
     } else if (service->api_state == service->STATE_SERIAL) {
-        snprintf(api_state, sizeof(api_state), "Client Connected (Serial)");
+        snprintf(api_state, sizeof(api_state), "%s Connected (Serial)", clientWord);
     } else if (service->api_state == service->STATE_PACKET) {
-        snprintf(api_state, sizeof(api_state), "Client Connected (Internal)");
+        snprintf(api_state, sizeof(api_state), "%s Connected (Internal)", clientWord);
     } else if (service->api_state == service->STATE_HTTP) {
-        snprintf(api_state, sizeof(api_state), "Client Connected (HTTP)");
+        snprintf(api_state, sizeof(api_state), "%s Connected (HTTP)", clientWord);
     } else if (service->api_state == service->STATE_ETH) {
-        snprintf(api_state, sizeof(api_state), "Client Connected (Ethernet)");
+        snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
     }
     if (api_state[0] != '\0') {
         display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
