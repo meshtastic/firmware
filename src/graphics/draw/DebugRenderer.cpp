@@ -664,30 +664,23 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
 
+    char api_state[32] = "No Clients Connected";
     if (service->api_state == service->STATE_BLE) {
-        textWidth = display->getStringWidth("BLE Connected");
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], "BLE Connected");
+        snprintf(api_state, sizeof(api_state), "Client Connected (BLE)");
     } else if (service->api_state == service->STATE_WIFI) {
-        textWidth = display->getStringWidth("WiFi Connected");
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], "WiFi Connected");
+        snprintf(api_state, sizeof(api_state), "Client Connected (WiFi)");
     } else if (service->api_state == service->STATE_SERIAL) {
-        textWidth = display->getStringWidth("Serial Connected");
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], "Serial Connected");
+        snprintf(api_state, sizeof(api_state), "Client Connected (Serial)");
     } else if (service->api_state == service->STATE_PACKET) {
-        textWidth = display->getStringWidth("Internal Connected");
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], "Internal Connected");
+        snprintf(api_state, sizeof(api_state), "Client Connected (Internal)");
     } else if (service->api_state == service->STATE_HTTP) {
-        textWidth = display->getStringWidth("HTTP Connected");
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], "HTTP Connected");
+        snprintf(api_state, sizeof(api_state), "Client Connected (HTTP)");
     } else if (service->api_state == service->STATE_ETH) {
-        textWidth = display->getStringWidth("Ethernet Connected");
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], "Ethernet Connected");
+        snprintf(api_state, sizeof(api_state), "Client Connected (Ethernet)");
+    }
+    if (api_state[0] != '\0') {
+        display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
+                            api_state);
     }
 #endif
 }
