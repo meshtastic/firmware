@@ -440,7 +440,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         const char *messageString = "No messages";
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
         display->drawString(center_text, getTextPositions(display)[2], messageString);
-#endif
         graphics::drawCommonFooter(display, x, y);
         return;
     }
@@ -671,7 +670,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     graphics::drawCommonHeader(display, x, y, titleStr);
-#endif
     graphics::drawCommonFooter(display, x, y);
 }
 
