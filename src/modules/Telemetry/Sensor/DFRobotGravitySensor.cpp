@@ -10,31 +10,39 @@
 
 DFRobotGravitySensor::DFRobotGravitySensor() : TelemetrySensor(meshtastic_TelemetrySensorType_DFROBOT_RAIN, "DFROBOT_RAIN") {}
 
-int32_t DFRobotGravitySensor::runOnce()
+DFRobotGravitySensor::~DFRobotGravitySensor()
 {
-    LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    if (gravity) {
+        delete gravity;
+        gravity = nullptr;
     }
-
-    gravity = DFRobot_RainfallSensor_I2C(nodeTelemetrySensorsMap[sensorType].second);
-    status = gravity.begin();
-
-    return initI2CSensor();
 }
 
-void DFRobotGravitySensor::setup()
+bool DFRobotGravitySensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity.vid, gravity.pid, gravity.getFirmwareVersion().c_str());
+    LOG_INFO("Init sensor: %s", sensorName);
+
+    gravity = new DFRobot_RainfallSensor_I2C(bus);
+    status = gravity->begin();
+
+    LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity->vid, gravity->pid, gravity->getFirmwareVersion().c_str());
+
+    initI2CSensor();
+    return status;
 }
 
 bool DFRobotGravitySensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    if (!gravity) {
+        LOG_ERROR("DFRobotGravitySensor not initialized");
+        return false;
+    }
+
     measurement->variant.environment_metrics.has_rainfall_1h = true;
     measurement->variant.environment_metrics.has_rainfall_24h = true;
 
-    measurement->variant.environment_metrics.rainfall_1h = gravity.getRainfall(1);
-    measurement->variant.environment_metrics.rainfall_24h = gravity.getRainfall(24);
+    measurement->variant.environment_metrics.rainfall_1h = gravity->getRainfall(1);
+    measurement->variant.environment_metrics.rainfall_24h = gravity->getRainfall(24);
 
     LOG_INFO("Rain 1h: %f mm", measurement->variant.environment_metrics.rainfall_1h);
     LOG_INFO("Rain 24h: %f mm", measurement->variant.environment_metrics.rainfall_24h);

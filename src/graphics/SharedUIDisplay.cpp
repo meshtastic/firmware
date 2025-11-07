@@ -1,6 +1,8 @@
-#include "graphics/SharedUIDisplay.h"
+#include "configuration.h"
+#if HAS_SCREEN
 #include "RTC.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
@@ -423,3 +425,4 @@ std::string sanitizeString(const std::string &input)
 }
 
 } // namespace graphics
+#endif
