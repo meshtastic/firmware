@@ -603,9 +603,6 @@ void PhoneAPI::sendConfigComplete()
     } else if (api_type == TYPE_ETH) {
         service->api_state = service->STATE_ETH;
     }
-    std::string msg = "STATE_SEND_PACKETS ";
-    msg += api_type;
-    screen->showSimpleBanner(msg.c_str(), 5000);
 
     // Allow subclasses to know we've entered steady-state so they can lower power consumption
     onConfigComplete();
