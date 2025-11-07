@@ -119,7 +119,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     */
 
   public:
-    BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") {}
+    BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") { api_type = TYPE_BLE; }
 
     /* Packets from phone (BLE onWrite callback) */
     std::mutex fromPhoneMutex;

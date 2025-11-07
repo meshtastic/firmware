@@ -492,6 +492,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 #endif
     const int scrollStartY = y + 3;
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // =============================
