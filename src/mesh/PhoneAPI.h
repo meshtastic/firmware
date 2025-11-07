@@ -173,7 +173,8 @@ class PhoneAPI
         TYPE_WIFI,
         TYPE_SERIAL,
         TYPE_PACKET,
-        TYPE_HTTP
+        TYPE_HTTP,
+        TYPE_ETH
     };
 
     APIType api_type = TYPE_NONE;

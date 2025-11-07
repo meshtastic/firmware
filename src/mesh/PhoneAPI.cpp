@@ -97,6 +97,8 @@ void PhoneAPI::close()
         service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_HTTP && api_type == TYPE_HTTP)
         service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_ETH && api_type == TYPE_ETH)
+        service->api_state = service->STATE_DISCONNECTED;
 
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
@@ -598,7 +600,12 @@ void PhoneAPI::sendConfigComplete()
         service->api_state = service->STATE_PACKET;
     } else if (api_type == TYPE_HTTP) {
         service->api_state = service->STATE_HTTP;
+    } else if (api_type == TYPE_ETH) {
+        service->api_state = service->STATE_ETH;
     }
+    std::string msg = "STATE_SEND_PACKETS ";
+    msg += api_type;
+    screen->showSimpleBanner(msg.c_str(), 5000);
 
     // Allow subclasses to know we've entered steady-state so they can lower power consumption
     onConfigComplete();

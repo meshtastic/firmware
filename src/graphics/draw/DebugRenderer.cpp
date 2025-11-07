@@ -684,6 +684,10 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         textWidth = display->getStringWidth("HTTP Connected");
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], "HTTP Connected");
+    } else if (service->api_state == service->STATE_ETH) {
+        textWidth = display->getStringWidth("Ethernet Connected");
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], "Ethernet Connected");
     }
 #endif
 }

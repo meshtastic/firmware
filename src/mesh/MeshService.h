@@ -85,7 +85,8 @@ class MeshService
         STATE_WIFI,
         STATE_SERIAL,
         STATE_PACKET,
-        STATE_HTTP
+        STATE_HTTP,
+        STATE_ETH
     };
 
     APIState api_state = STATE_DISCONNECTED;
