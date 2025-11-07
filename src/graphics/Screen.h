@@ -83,6 +83,8 @@ class Screen
 #include <ST7789Spi.h>
 #elif defined(USE_SPISSD1306)
 #include <SSD1306Spi.h>
+#elif defined(USE_ST7796)
+#include <ST7796Spi.h>
 #else
 // the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
