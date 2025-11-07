@@ -100,7 +100,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     /** Our ISR code currently needs this to find our active instance
      */
-    static RadioLibInterface *instance;
+    static std::vector<RadioLibInterface*> instances;
 
     /**
      * Glue functions called from ISR land

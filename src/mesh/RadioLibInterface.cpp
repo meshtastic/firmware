@@ -39,7 +39,7 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
-    instance = this;
+    instances.push_back(this);
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
@@ -55,15 +55,21 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 
 void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
-    instance->disableInterrupt();
+    for(auto instance : instances)
+    {
+        if(digitalRead(instance->module.getIrq()))
+        {
+            instance->disableInterrupt();
 
-    BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, true);
+            BaseType_t xHigherPriorityTaskWoken;
+            instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, true);
 
-    /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
-    The macro used to do this is dependent on the port and may be called
-    portEND_SWITCHING_ISR. */
-    YIELD_FROM_ISR(xHigherPriorityTaskWoken);
+            /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
+            The macro used to do this is dependent on the port and may be called
+            portEND_SWITCHING_ISR. */
+            YIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        }
+    }
 }
 
 void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
@@ -78,7 +84,7 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 
 /** Our ISR code currently needs this to find our active instance
  */
-RadioLibInterface *RadioLibInterface::instance;
+std::vector<RadioLibInterface*> RadioLibInterface::instances;
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
