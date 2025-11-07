@@ -33,26 +33,7 @@
 #include "ff.h"
 #include "diskio.h"
 
-// up to 11 characters
-#define DISK_LABEL "EXT FLASH"
 
-extern Adafruit_FlashTransport_QSPI flashTransport;
-extern Adafruit_SPIFlash flash;
-extern FatVolume fatfs;
-extern bool flashInitialized;
-extern bool fatfsMounted;
-
-#define EXTERNAL_FLASH_USE_QSPI
-#if defined(EXTERNAL_FLASH_USE_QSPI)
-Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
-#endif
-Adafruit_SPIFlash flash(&flashTransport);
-
-
-FatVolume fatfs;
-bool flashInitialized = false;
-bool fatfsMounted = false;
-#define FILE_NAME "test2.txt"
 
 #ifdef ARCH_ESP32
 #if HAS_WIFI
@@ -93,6 +74,20 @@ meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 3
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
+extern Adafruit_FlashTransport_QSPI flashTransport;
+extern Adafruit_SPIFlash flash;
+extern FatVolume fatfs;
+extern bool flashInitialized;
+extern bool fatfsMounted;
+// up to 11 characters
+#define DISK_LABEL "EXT FLASH"
+#define EXTERNAL_FLASH_USE_QSPI
+#if defined(EXTERNAL_FLASH_USE_QSPI)
+Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
+#endif
+Adafruit_SPIFlash flash(&flashTransport);
+
+
 // Nanopb input callback for FatFs
 bool nanopb_fatfs_read(pb_istream_t *stream, pb_byte_t *buf, size_t count) {
     File32 *file = (File32 *)stream->state;
@@ -108,59 +103,7 @@ bool nanopb_fatfs_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count
 }
 
 
-void format_fat12(void) {
-// Working buffer for f_mkfs.
-#ifdef __AVR__
-  uint8_t workbuf[512];
-#else
-  uint8_t workbuf[4096];
-#endif
 
-  // Elm Cham's fatfs objects
-  FATFS elmchamFatfs;
-
-  // Make filesystem.
-  FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
-  if (r != FR_OK) {
-    LOG_ERROR("Error, f_mkfs failed");
-    while (1)
-      delay(1);
-  }
-
-  // mount to set disk label
-  r = f_mount(&elmchamFatfs, "0:", 1);
-  if (r != FR_OK) {
-    LOG_ERROR("Error, f_mount failed");
-    while (1)
-      delay(1);
-  }
-
-  // Setting label
-  LOG_INFO("Setting disk label to: " DISK_LABEL);
-  r = f_setlabel(DISK_LABEL);
-  if (r != FR_OK) {
-    LOG_ERROR("Error, f_setlabel failed");
-    while (1)
-      delay(1);
-  }
-
-  // unmount
-  f_unmount("0:");
-
-  // sync to make sure all data is written to flash
-  flash.syncBlocks();
-
-  LOG_INFO("Formatted flash!");
-}
-
-void check_fat12(void) {
-  // Check new filesystem
-  if (!fatfs.begin(&flash)) {
-    LOG_ERROR("Error, failed to mount newly formatted filesystem!");
-    while (1)
-      delay(1);
-  }
-}
 
 
 
@@ -584,7 +527,16 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     spiLock->lock();
     rmDir("/prefs"); // this uses spilock internally...
 
-#ifdef FSCom
+    #ifdef EXTERNAL_FLASH_DEVICES
+    // Also remove rangetest.csv if it exists
+    if (fatfsMounted && flashInitialized) {
+        if (fatfs.exists("/static/rangetest.csv")) {
+            if (!fatfs.remove("/static/rangetest.csv")) {
+                LOG_ERROR("Could not remove rangetest.csv file");
+            }
+        }
+    }
+#elif FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }

@@ -11,6 +11,31 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "configuration.h"
+#include "SdFat_Adafruit_Fork.h"
+#include <SPI.h>
+#include <Adafruit_SPIFlash.h>
+#include "ff.h"
+#include "diskio.h"
+// up to 11 characters
+#define DISK_LABEL "EXT FLASH"
+
+//extern Adafruit_FlashTransport_QSPI flashTransport;
+//extern Adafruit_SPIFlash flash;
+extern FatVolume fatfs;
+extern bool flashInitialized;
+extern bool fatfsMounted;
+#define EXTERNAL_FLASH_DEVICE
+#define EXTERNAL_FLASH_USE_QSPI
+#if defined(EXTERNAL_FLASH_USE_QSPI)
+extern Adafruit_FlashTransport_QSPI flashTransport;
+#endif
+extern Adafruit_SPIFlash flash;
+
+FatVolume fatfs;
+bool flashInitialized = false;
+bool fatfsMounted = false;
+#define FILE_NAME "test2.txt"
+
 
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
@@ -37,9 +62,91 @@ SPIClass SPI_HSPI(HSPI);
  * @param to The path of the destination file.
  * @return true if the file was successfully copied, false otherwise.
  */
+
+
+void format_fat12(void) {
+// Working buffer for f_mkfs.
+#ifdef __AVR__
+  uint8_t workbuf[512];
+#else
+  uint8_t workbuf[4096];
+#endif
+
+  // Elm Cham's fatfs objects
+  FATFS elmchamFatfs;
+
+  // Make filesystem.
+  FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
+  if (r != FR_OK) {
+    LOG_ERROR("Error, f_mkfs failed");
+    while (1)
+      delay(1);
+  }
+
+  // mount to set disk label
+  r = f_mount(&elmchamFatfs, "0:", 1);
+  if (r != FR_OK) {
+    LOG_ERROR("Error, f_mount failed");
+    while (1)
+      delay(1);
+  }
+
+  // Setting label
+  LOG_INFO("Setting disk label to: " DISK_LABEL);
+  r = f_setlabel(DISK_LABEL);
+  if (r != FR_OK) {
+    LOG_ERROR("Error, f_setlabel failed");
+    while (1)
+      delay(1);
+  }
+
+  // unmount
+  f_unmount("0:");
+
+  // sync to make sure all data is written to flash
+  flash.syncBlocks();
+
+  LOG_INFO("Formatted flash!");
+}
+
+void check_fat12(void) {
+  // Check new filesystem
+  if (!fatfs.begin(&flash)) {
+    LOG_ERROR("Error, failed to mount newly formatted filesystem!");
+    while (1)
+      delay(1);
+  }
+}
+
 bool copyFile(const char *from, const char *to)
 {
-#ifdef FSCom
+#ifdef EXTERNAL_FLASH_DEVICE
+    // take SPI Lock
+    concurrency::LockGuard g(spiLock);
+    unsigned char cbuffer[16];
+
+    FatFile f1;
+    if (!f1.open(from, O_READ)) { // Open from root
+        LOG_ERROR("Failed to open source file %s", from);
+        return false;
+    }
+
+    FatFile f2;
+    if (!f2.open(to, O_WRITE | O_CREAT | O_TRUNC)) { // Open from root
+        LOG_ERROR("Failed to open destination file %s", to);
+        return false;
+    }
+
+    while (f1.available() > 0) {
+        byte i = f1.read(cbuffer, 16);
+        f2.write(cbuffer, i);
+    }
+
+    f2.flush();
+    f2.close();
+    f1.close();
+    return true;
+#elif FSCom
     // take SPI Lock
     concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
@@ -101,6 +208,16 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 
 #include <vector>
 
+
+// Helper for building full path
+static void buildPath(char *dest, size_t destLen, const char *parent, const char *child) {
+    if (strcmp(parent, "/") == 0) {
+        snprintf(dest, destLen, "/%s", child);
+    } else {
+        snprintf(dest, destLen, "%s/%s", parent, child);
+    }
+}
+
 /**
  * @brief Get the list of files in a directory.
  *
@@ -114,7 +231,35 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
-#ifdef FSCom
+#ifdef EXTERNAL_FLASH_DEVICE
+    FatFile root;
+    if (!root.open(dirname, O_READ)) {
+        return filenames;
+    }
+    if (!root.isDir()) {
+        return filenames;
+    }
+
+    FatFile file;
+    char name[64];
+    char path[128];
+    while (file.openNext(&root, O_READ)) {
+        file.getName(name, sizeof(name));
+        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+            if (levels) {
+                buildPath(path, sizeof(path), dirname, name);
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(path, levels - 1);
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+            }
+        } else if (!file.isDir()) {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.fileSize())};
+            buildPath(fileInfo.file_name, sizeof(fileInfo.file_name), dirname, name);
+            filenames.push_back(fileInfo);
+        }
+        file.close();
+    }
+    root.close();
+#elif FSCom
     File root = FSCom.open(dirname, FILE_O_READ);
     if (!root)
         return filenames;
@@ -162,7 +307,46 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
  */
 void listDir(const char *dirname, uint8_t levels, bool del)
 {
-#ifdef FSCom
+#ifdef EXTERNAL_FLASH_DEVICE
+    FatFile root;
+    if (!root.open(dirname, O_READ)) {
+        return;
+    }
+    if (!root.isDir()) {
+        return;
+    }
+
+    FatFile file;
+    char name[64];
+    char path[128];
+    while (file.openNext(&root, O_READ)) {
+        file.getName(name, sizeof(name));
+        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+            if (levels) {
+                buildPath(path, sizeof(path), dirname, name);
+                listDir(path, levels - 1, del);
+                if (del) {
+                    LOG_DEBUG("Remove %s", path);
+                    file.close();
+                    fatfs.rmdir(path);
+                    continue;
+                }
+            }
+        } else if (!file.isDir()) {
+            buildPath(path, sizeof(path), dirname, name);
+            if (del) {
+                LOG_DEBUG("Delete %s", path);
+                file.close();
+                fatfs.remove(path);
+                continue;
+            } else {
+                LOG_DEBUG("   %s (%lu Bytes)", path, file.fileSize());
+            }
+        }
+        file.close();
+    }
+    root.close();
+#elif FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
 #endif
@@ -267,6 +451,17 @@ void listDir(const char *dirname, uint8_t levels, bool del)
  */
 void rmDir(const char *dirname)
 {
+#ifdef EXTERNAL_FLASH_DEVICES
+    // Adafruit SPI Flash FatFs implementation does not support recursive delete, so we do it manually here
+    std::vector<meshtastic_FileInfo> files = getFiles(dirname, 10);
+    for (auto const &fileInfo : files) {
+        LOG_DEBUG("Delete %s", fileInfo.file_name);
+        fatfs.remove(fileInfo.file_name);
+    }
+    // Finally remove the (now empty) directory itself
+    LOG_DEBUG("Remove directory %s", dirname);
+    fatfs.rmdir(dirname);
+#endif
 #ifdef FSCom
 
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
@@ -286,6 +481,32 @@ __attribute__((weak, noinline)) void preFSBegin() {}
 
 void fsInit()
 {
+#ifdef EXTERNAL_FLASH_DEVICES
+    if (!flashInitialized) {
+        LOG_INFO("Adafruit SPI Flash FatFs initialization!");
+        if (!flash.begin()) {
+            LOG_ERROR("Error, failed to initialize flash chip!");
+            while (1) {
+                delay(1);
+            }
+        }
+        flashInitialized = true;
+    }
+    LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+    //format_fat12();
+    check_fat12();
+    //LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
+    if (!fatfsMounted) {
+        if (!fatfs.begin(&flash)) {
+            LOG_ERROR("Error, failed to mount filesystem!");
+            while (1) {
+                delay(1);
+            }
+        }
+        fatfsMounted = true;
+        LOG_INFO("Filesystem mounted!");
+    }
+#endif
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
     preFSBegin();

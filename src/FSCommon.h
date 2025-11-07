@@ -5,6 +5,7 @@
 
 // Cross platform filesystem API
 
+
 #if defined(ARCH_PORTDUINO)
 // Portduino version
 #include "PortduinoFS.h"
@@ -56,3 +57,5 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+void check_fat12();
+void format_fat12();
