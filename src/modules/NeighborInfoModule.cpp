@@ -44,8 +44,7 @@ NeighborInfoModule::NeighborInfoModule()
 
     if (moduleConfig.neighbor_info.enabled) {
         isPromiscuous = true; // Update neighbors from all packets
-        setIntervalFromNow(Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval,
-                                                             default_telemetry_broadcast_interval_secs));
+        setIntervalFromNow(35 * 1000); // Send our initial broadcast roughly 35 seconds after boot
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled");
         disable();
@@ -88,9 +87,11 @@ void NeighborInfoModule::cleanUpNeighbors()
     uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
     for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
-        // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
+        // We will remove a neighbor if we haven't heard from them in four times the broadcast interval
         // cannot use isWithinTimespanMs() as it->last_rx_time is seconds since 1970
-        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
+        uint32_t interval = it->node_broadcast_interval_secs ? it->node_broadcast_interval_secs : min_node_info_broadcast_secs;
+        uint64_t maxAge = static_cast<uint64_t>(interval) * 4;
+        if ((static_cast<uint64_t>(now - it->last_rx_time) > maxAge) && (it->node_id != my_node_id)) {
             LOG_DEBUG("Remove neighbor with node ID 0x%x", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
@@ -105,15 +106,14 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
-    // only send neighbours if we have some to send
-    if (neighborInfo.neighbors_count > 0) {
-        meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
-        p->to = dest;
-        p->decoded.want_response = wantReplies;
-        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        printNeighborInfo("SENDING", &neighborInfo);
-        service->sendToMesh(p, RX_SRC_LOCAL, true);
-    }
+    // send regardless of whether or not we have neighbors in our DB,
+    // because we want to get neighbors for the next cycle
+    meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
+    p->to = dest;
+    p->decoded.want_response = wantReplies;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    printNeighborInfo("SENDING", &neighborInfo);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /*
@@ -189,8 +189,11 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
             neighbors[i].snr = snr;
             neighbors[i].last_rx_time = getTime();
             // Only if this is the original sender, the broadcast interval corresponds to it
-            if (originalSender == n && node_broadcast_interval_secs != 0)
-                neighbors[i].node_broadcast_interval_secs = node_broadcast_interval_secs;
+            if (originalSender == n) {
+                uint32_t effectiveInterval =
+                    node_broadcast_interval_secs ? node_broadcast_interval_secs : min_node_info_broadcast_secs;
+                neighbors[i].node_broadcast_interval_secs = effectiveInterval;
+            }
             return &neighbors[i];
         }
     }
@@ -203,8 +206,8 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
     // Only if this is the original sender, the broadcast interval corresponds to it
     if (originalSender == n && node_broadcast_interval_secs != 0)
         new_nbr.node_broadcast_interval_secs = node_broadcast_interval_secs;
-    else // Assume the same broadcast interval as us for the neighbor if we don't know it
-        new_nbr.node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
+    else // Assume a conservative interval so we don't evict neighbors too aggressively
+        new_nbr.node_broadcast_interval_secs = min_node_info_broadcast_secs;
 
     if (neighbors.size() < MAX_NUM_NEIGHBORS) {
         neighbors.push_back(new_nbr);
