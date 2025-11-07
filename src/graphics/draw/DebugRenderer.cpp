@@ -646,10 +646,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     int textWidth = display->getStringWidth(appversionstr);
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
 
-    display->drawString(nameX, getTextPositions(display)[line], appversionstr);
-#if !defined(M5STACK_UNITC6L)
-    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line < 4)) { // Only show uptime if the screen can show it
-        line += 1;
+    display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
+
+    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
         uint32_t uptime = millis() / 1000;
         uint32_t days = uptime / 86400;
@@ -667,35 +666,36 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
 
-    char api_state[32] = "";
-    const char *clientWord = nullptr;
+    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
+        char api_state[32] = "";
+        const char *clientWord = nullptr;
 
-    // Determine if narrow or wide screen
-    if (isHighResolution) {
-        clientWord = "Client";
-    } else {
-        clientWord = "App";
-    }
-    snprintf(api_state, sizeof(api_state), "No %ss Connected", clientWord);
+        // Determine if narrow or wide screen
+        if (isHighResolution) {
+            clientWord = "Client";
+        } else {
+            clientWord = "App";
+        }
+        snprintf(api_state, sizeof(api_state), "No %ss Connected", clientWord);
 
-    if (service->api_state == service->STATE_BLE) {
-        snprintf(api_state, sizeof(api_state), "%s Connected (BLE)", clientWord);
-    } else if (service->api_state == service->STATE_WIFI) {
-        snprintf(api_state, sizeof(api_state), "%s Connected (WiFi)", clientWord);
-    } else if (service->api_state == service->STATE_SERIAL) {
-        snprintf(api_state, sizeof(api_state), "%s Connected (Serial)", clientWord);
-    } else if (service->api_state == service->STATE_PACKET) {
-        snprintf(api_state, sizeof(api_state), "%s Connected (Internal)", clientWord);
-    } else if (service->api_state == service->STATE_HTTP) {
-        snprintf(api_state, sizeof(api_state), "%s Connected (HTTP)", clientWord);
-    } else if (service->api_state == service->STATE_ETH) {
-        snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
+        if (service->api_state == service->STATE_BLE) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (BLE)", clientWord);
+        } else if (service->api_state == service->STATE_WIFI) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (WiFi)", clientWord);
+        } else if (service->api_state == service->STATE_SERIAL) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (Serial)", clientWord);
+        } else if (service->api_state == service->STATE_PACKET) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (Internal)", clientWord);
+        } else if (service->api_state == service->STATE_HTTP) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (HTTP)", clientWord);
+        } else if (service->api_state == service->STATE_ETH) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
+        }
+        if (api_state[0] != '\0') {
+            display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
+                                api_state);
+        }
     }
-    if (api_state[0] != '\0') {
-        display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
-                            api_state);
-    }
-#endif
 
     graphics::drawCommonFooter(display, x, y);
 }
