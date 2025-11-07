@@ -82,12 +82,9 @@ void CryptoEngine::clearKeys()
 bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
                                      uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
-    LOG_DEBUG("[CryptoEngine::encryptCurve25519] called");
     uint8_t *auth;
     long extraNonceTmp = random();
-    LOG_DEBUG("[CryptoEngine::encryptCurve25519] extraNonceTmp is %d", extraNonceTmp);
     auth = bytesOut + numBytes;
-    LOG_DEBUG("[CryptoEngine::encryptCurve25519] auth is %p", auth);
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
