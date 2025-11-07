@@ -34,7 +34,7 @@ void NeighborInfoModule::printNodeDBNeighbors()
     }
 }
 
-/* Send our initial owner announcement 35 seconds after we start (to give network time to setup) */
+/* Neighbor info broadcasts start after the configured interval so we honor user pacing */
 NeighborInfoModule::NeighborInfoModule()
     : ProtobufModule("neighborinfo", meshtastic_PortNum_NEIGHBORINFO_APP, &meshtastic_NeighborInfo_msg),
       concurrency::OSThread("NeighborInfo")
@@ -44,7 +44,8 @@ NeighborInfoModule::NeighborInfoModule()
 
     if (moduleConfig.neighbor_info.enabled) {
         isPromiscuous = true; // Update neighbors from all packets
-        setIntervalFromNow(35 * 1000); // Send our initial broadcast roughly 35 seconds after boot
+        setIntervalFromNow(Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval,
+                                                             default_telemetry_broadcast_interval_secs));
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled");
         disable();
