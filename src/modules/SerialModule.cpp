@@ -531,6 +531,10 @@ ParsedLine parseLine(const char *line)
  * Process the received weather station serial data, extract wind, voltage, and temperature information,
  * calculate averages and send telemetry data over the mesh network.
  *
+ * This function implements a rolling rainfall accumulator that tracks minute-by-minute rainfall
+ * in a 24-hour ring buffer (1440 minutes). This allows accurate calculation of 1-hour and 24-hour
+ * rainfall totals from cumulative rain data provided by the WS85 weather station.
+ *
  * @return void
  */
 void SerialModule::processWXSerial()
@@ -556,15 +560,52 @@ void SerialModule::processWXSerial()
     static float capVoltageF = 0;
     static float temperatureF = 0;
 
+    // Rolling rainfall accumulator for 1h/24h calculations
+    static float rainBuckets[1440] = {0.0f}; // per-minute mm, 24h window (1440 minutes)
+    static uint32_t lastMinuteKey = 0;
+    static int bucketIdx = 0; // 0..1439
+    static bool bucketsInit = false;
+    static float lastCumMm = NAN;                         // last cumulative reading (mm)
+    static const float MAX_REASONABLE_MM_PER_MIN = 20.0f; // clamp glitch spikes
+
     static char rainStr[] = "5780860000";
     static int rainSum = 0;
     static float rain = 0;
     bool gotwind = false;
 
+    const uint32_t nowMs = millis();
+    const uint32_t nowMinuteKey = nowMs / 60000UL;
+
+    // Lambda function to advance the minute buckets to current time
+    auto advanceBucketsToNow = [&](uint32_t fromKey, uint32_t toKey) {
+        if (!bucketsInit) {
+            bucketsInit = true;
+            lastMinuteKey = toKey;
+            return;
+        }
+        if (toKey <= fromKey)
+            return;
+
+        uint32_t minutesToAdvance = (toKey - fromKey);
+        if (minutesToAdvance > 1440)
+            minutesToAdvance = 1440;
+
+        while (minutesToAdvance--) {
+            bucketIdx = (bucketIdx + 1) % 1440;
+            rainBuckets[bucketIdx] = 0.0f; // start a fresh minute bucket
+            lastMinuteKey++;
+        }
+    };
+
+    // Align minute wheel before consuming new cumulative data
+    advanceBucketsToNow(lastMinuteKey, nowMinuteKey);
+
+    bool gotRainCumulative = false;
+    float currentCumMm = NAN;
+
     while (Serial2.available()) {
         // clear serialBytes buffer
         memset(serialBytes, '\0', sizeof(serialBytes));
-        // memset(formattedString, '\0', sizeof(formattedString));
         serialPayloadSize = Serial2.readBytes(serialBytes, 512);
         // check for a strings we care about
         // example output of serial data fields from the WS85
@@ -631,8 +672,11 @@ void SerialModule::processWXSerial()
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
                                 rainSum = int(strtof(rainStr, nullptr));
                             } else if (strcmp(parsed.name, "Rain") == 0) {
+                                // WS85 cumulative rainfall (mm) - used for 1h/24h calculations
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
                                 rain = strtof(rainStr, nullptr);
+                                currentCumMm = rain;
+                                gotRainCumulative = true;
                             }
                         }
 
@@ -641,6 +685,31 @@ void SerialModule::processWXSerial()
                     }
                 }
             }
+
+            // Update ring buffer from cumulative rain data
+            if (gotRainCumulative) {
+                if (isnan(lastCumMm)) {
+                    lastCumMm = currentCumMm; // baseline
+                } else {
+                    float delta = currentCumMm - lastCumMm;
+
+                    if (delta < 0.0f) {
+                        // counter reset/wrap -> treat reading as "new since reset"
+                        delta = currentCumMm;
+                    }
+
+                    if (delta > MAX_REASONABLE_MM_PER_MIN) {
+                        LOG_WARN("WS85 rain delta spike clamped: %.2f mm -> %.2f mm", delta, MAX_REASONABLE_MM_PER_MIN);
+                        delta = MAX_REASONABLE_MM_PER_MIN;
+                    }
+
+                    if (delta > 0.0f) {
+                        rainBuckets[bucketIdx] += delta;
+                    }
+                    lastCumMm = currentCumMm;
+                }
+            }
+
             break;
             // clear the input buffer
             while (Serial2.available() > 0) {
@@ -649,7 +718,6 @@ void SerialModule::processWXSerial()
         }
     }
     if (gotwind) {
-
         LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
                  strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
@@ -667,6 +735,21 @@ void SerialModule::processWXSerial()
             dirAvg += 360.0;
         }
         lastAveraged = millis();
+
+        // Calculate 1h and 24h rainfall from rolling bucket system
+        float rain1h = 0.0f, rain24h = 0.0f;
+        for (int i = 0; i < 60; i++) {
+            int idx = bucketIdx - i;
+            if (idx < 0)
+                idx += 1440;
+            rain1h += rainBuckets[idx];
+        }
+        for (int i = 0; i < 1440; i++) {
+            int idx = bucketIdx - i;
+            if (idx < 0)
+                idx += 1440;
+            rain24h += rainBuckets[idx];
+        }
 
         // make a telemetry packet with the data
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
@@ -688,22 +771,23 @@ void SerialModule::processWXSerial()
         m.variant.environment_metrics.wind_gust = gust;
         m.variant.environment_metrics.has_wind_gust = true;
 
-        m.variant.environment_metrics.rainfall_24h = rainSum;
-        m.variant.environment_metrics.has_rainfall_24h = true;
-
-        // not sure if this value is actually the 1hr sum so needs to do some testing
-        m.variant.environment_metrics.rainfall_1h = rain;
+        // Use calculated rainfall values from rolling bucket system
+        m.variant.environment_metrics.rainfall_1h = rain1h;
         m.variant.environment_metrics.has_rainfall_1h = true;
+
+        m.variant.environment_metrics.rainfall_24h = rain24h;
+        m.variant.environment_metrics.has_rainfall_24h = true;
 
         if (lull == -1)
             lull = 0;
         m.variant.environment_metrics.wind_lull = lull;
         m.variant.environment_metrics.has_wind_lull = true;
 
-        LOG_INFO("WS8X Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
+        LOG_INFO("WS8X Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f, rainfall_1h=%.2f, "
+                 "rainfall_24h=%.2f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
-                 m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);
+                 m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature, rain1h, rain24h);
 
         sendTelemetry(m);
 
