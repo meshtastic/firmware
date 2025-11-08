@@ -483,6 +483,8 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Touch_FT5x06 _touch_instance;
 #elif defined(HELTEC_V4_TFT)
     lgfx::TOUCH_CHSC6X _touch_instance;
+#elif defined(HELTEC_V4_TFT)
+    lgfx::TOUCH_CHSC6X _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
 #endif
