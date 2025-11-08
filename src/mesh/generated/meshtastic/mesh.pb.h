@@ -288,6 +288,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_WISMESH_TAP_V2 = 116,
     /* RAK3401 */
     meshtastic_HardwareModel_RAK3401 = 117,
+    /* RAKwireless WisBlock Core RAK3112 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/ */
+    meshtastic_HardwareModel_RAK3112 = 118,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
