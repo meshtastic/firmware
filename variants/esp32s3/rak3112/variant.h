@@ -39,10 +39,7 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
-/*
-    When an SD card is present; definitions for SPI_SCK, SPI_MISO, SPI_MOSI and SDCARD_CS must
-    also be provided.
-*/
-// // Have SPI interface SD card slot
-// #define HAS_SDCARD
-// #define SDCARD_USE_SPI1
+// Have SPI interface SD card slot
+#define HAS_SDCARD
+#define SDCARD_USE_SPI1
+#define SDCARD_CS SPI_CS
