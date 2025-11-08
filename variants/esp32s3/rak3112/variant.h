@@ -6,8 +6,8 @@
 #define _VARIANT_RAK3112_
 #endif
 
-#define HAS_SDCARD
-#define SDCARD_USE_SPI1
+// #define HAS_SDCARD
+// #define SDCARD_USE_SPI1
 
 #define USE_SSD1306
 
@@ -50,5 +50,5 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
-#define HAS_SDCARD // Have SPI interface SD card slot
-#define SDCARD_USE_SPI1
+// #define HAS_SDCARD // Have SPI interface SD card slot
+// #define SDCARD_USE_SPI1
