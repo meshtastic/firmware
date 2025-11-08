@@ -7,12 +7,7 @@
 #include <RadioLib.h>
 #include <sys/types.h>
 
-// ESP32 has special rules about ISR code
-#ifdef ARDUINO_ARCH_ESP32
-#define INTERRUPT_ATTR IRAM_ATTR
-#else
 #define INTERRUPT_ATTR
-#endif
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
