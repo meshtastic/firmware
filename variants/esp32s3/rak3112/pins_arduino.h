@@ -56,26 +56,20 @@
  */
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (10)
-#define PIN_SPI_MOSI (11)
-#define PIN_SPI_SCK (13)
+#define SPI_MISO (10)
+#define SPI_MOSI (11)
+#define SPI_SCK (13)
 #define SPI_CS (12)
 
 static const uint8_t SS = SPI_CS;
-static const uint8_t MOSI = PIN_SPI_MOSI;
-static const uint8_t MISO = PIN_SPI_MISO;
-static const uint8_t SCK = PIN_SPI_SCK;
+static const uint8_t MOSI = SPI_MOSI;
+static const uint8_t MISO = SPI_MISO;
+static const uint8_t SCK = SPI_SCK;
 
 // Internal SPI to LoRa transceiver
 #define LORA_SX126X_SCK 5
 #define LORA_SX126X_MISO 3
 #define LORA_SX126X_MOSI 6
-#define LORA_SX126X_CS 7
-#define LORA_SX126X_RESET 8
-#define LORA_SX126X_DIO1 47
-#define LORA_SX126X_BUSY 48
-#define LORA_SX126X_DIO2_AS_RF_SWITCH 1
-#define LORA_SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 /*
  * Wire Interfaces

@@ -15,16 +15,6 @@
 #define I2C_SDA1 PIN_WIRE1_SDA
 #define I2C_SCL1 PIN_WIRE1_SCL
 
-/*
-    Mapping the default wire to PMU and RTC fails here at compile-time despite
-    being in the RAK examples:
-    https://github.com/RAKWireless/WisBlock/blob/master/examples/RAK3112/IDE-Patches/PlatformIO/rakwireless/variants/rak3112/variant.h
-
-    Using a preprocessor #define is no better and it works okay without it :)
-*/
-// static const uint8_t SDA = PIN_WIRE_SDA;
-// static const uint8_t SCL = PIN_WIRE_SCL;
-
 #define LED_PIN LED_GREEN // If defined we will blink this LED
 #define BUTTON_PIN WB_IO5 // If defined, this will be used for user button presses,
 #define ledOff(pin) pinMode(pin, INPUT)
@@ -53,6 +43,6 @@
     When an SD card is present; definitions for SPI_SCK, SPI_MISO, SPI_MOSI and SDCARD_CS must
     also be provided.
 */
-// Have SPI interface SD card slot
+// // Have SPI interface SD card slot
 // #define HAS_SDCARD
 // #define SDCARD_USE_SPI1
