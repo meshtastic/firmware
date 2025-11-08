@@ -1,13 +1,6 @@
-// ============================
-// For Meshtastic
-// ============================
-
 #ifndef _VARIANT_RAK3112_
 #define _VARIANT_RAK3112_
 #endif
-
-// #define HAS_SDCARD
-// #define SDCARD_USE_SPI1
 
 #define USE_SSD1306
 
@@ -22,7 +15,13 @@
 #define I2C_SDA1 PIN_WIRE1_SDA
 #define I2C_SCL1 PIN_WIRE1_SCL
 
-// // The default Wire will be mapped to PMU and RTC
+/*
+    Mapping the default wire to PMU and RTC fails here at compile-time despite
+    being in the RAK examples:
+    https://github.com/RAKWireless/WisBlock/blob/master/examples/RAK3112/IDE-Patches/PlatformIO/rakwireless/variants/rak3112/variant.h
+
+    Using a preprocessor #define is no better and it works okay without it :)
+*/
 // static const uint8_t SDA = PIN_WIRE_SDA;
 // static const uint8_t SCL = PIN_WIRE_SCL;
 
@@ -50,5 +49,10 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
-// #define HAS_SDCARD // Have SPI interface SD card slot
+/*
+    When an SD card is present; definitions for SPI_SCK, SPI_MISO, SPI_MOSI and SDCARD_CS must
+    also be provided.
+*/
+// Have SPI interface SD card slot
+// #define HAS_SDCARD
 // #define SDCARD_USE_SPI1
