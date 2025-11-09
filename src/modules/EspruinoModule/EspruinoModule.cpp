@@ -363,7 +363,7 @@ void EspruinoModule::flushPendingMessages()
 {
     if (!jsInstance) return;
 
-    ESPRUINO_DEBUG("Native: Flushing pending messages...");
+    // ESPRUINO_DEBUG("Native: Flushing pending messages...");
 
     // ESPRUINO_DEBUG("Flushing pending messages...");
     JsVar *native = jsvObjectGetChild(jsInstance->root, "MeshtasticNative", 0);
@@ -380,7 +380,7 @@ void EspruinoModule::flushPendingMessages()
     }
     
     jsvUnLock(native);
-    ESPRUINO_DEBUG("Native: Flushed pending messages");
+    // ESPRUINO_DEBUG("Native: Flushed pending messages");
 }
 
 void EspruinoModule::processEventInJS(const PendingEvent& event)

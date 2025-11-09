@@ -1,4 +1,4 @@
-import { NodeId } from "./api";
+import { MeshtasticApi, NodeId } from "./types";
 
 // Storage interfaces and types
 export interface MailMessage {
@@ -295,5 +295,15 @@ export class BBSCommandHandler {
 }
 
 // Initialize and export singleton
-export const bbsStorage = new InMemoryBBSStorage();
-export const bbsHandler = new BBSCommandHandler(bbsStorage);
+const bbsStorage = new InMemoryBBSStorage();
+const bbsHandler = new BBSCommandHandler(bbsStorage);
+
+declare global {
+  var Meshtastic: MeshtasticApi;
+}
+
+Meshtastic.onTextMessage((from, data) => {
+  const response = bbsHandler.handleCommand(from, data);
+  console.log(`uBBS response: ${response}`);
+  Meshtastic.sendTextMessage(from, response);
+});
