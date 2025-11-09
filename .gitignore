@@ -23,7 +23,7 @@ Thumbs.db
 .context
 .cproject
 .vagrant
-nanopb*
+/nanopb*
 flash.uf2
 cmake-build*
 __pycache__

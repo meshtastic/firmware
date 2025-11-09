@@ -2,10 +2,21 @@
 
 set -e
 
-echo "This script requires https://jpa.kapsi.fi/nanopb/download/ version 0.4.9 to be located in the"
-echo "firmware root directory if the following step fails, you should download the correct"
-echo "prebuilt binaries for your computer into nanopb-0.4.9"
+echo "Regenerating protobuf artifacts via protobufs/scripts/build.sh."
+echo "Ensure required commands are available: node, npx, git."
+echo "Artifacts will be produced under protobufs/build."
+echo
 
 # the nanopb tool seems to require that the .options file be in the current directory!
 cd protobufs
-../nanopb-0.4.9/generator-bin/protoc --experimental_allow_proto3_optional "--nanopb_out=-S.cpp -v:../src/mesh/generated/" -I=../protobufs meshtastic/*.proto
+./scripts/build.sh
+
+# clean target directory
+rm -rf ../src/mesh/generated/meshtastic/*
+rm -rf ../src/mesh/generated/validate/*
+
+# copy new artifacts to target directory
+cp -a build/c/. ../src/mesh/generated/
+
+# delete nanopb generated files because firmware uses a vendored version
+rm -rf ../src/mesh/generated/nanopb.pb.*
