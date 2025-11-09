@@ -80,7 +80,8 @@ The Semtech default, the values are (taken from [here](https://github.com/Lora-n
 <details>
 
 <summary> < Click to expand >
-<summary>
+	
+</summary>
 
 ```cpp
 	.rfswitch = {
