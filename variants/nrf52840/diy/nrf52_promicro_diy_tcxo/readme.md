@@ -77,7 +77,7 @@ However, looking at the sample code they provide on page 9, the values would be:
 
 The Semtech default, the values are (taken from [here](https://github.com/Lora-net/SWSD006/blob/v2.6.1/lib/app_subGHz_config_lr11xx.c#L145-L154)):
 
-<details>
+<details> < Click to expand >
 
 <summary> < Click to expand >
 	
