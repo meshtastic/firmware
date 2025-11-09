@@ -250,6 +250,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
 #define CST328_ADDR 0x1A
+#define CHSC6X_ADDR 0x2E
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
