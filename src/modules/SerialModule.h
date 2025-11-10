@@ -32,7 +32,7 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     uint32_t getBaudRate();
     void sendTelemetry(meshtastic_Telemetry m);
     void processWXSerial();
-    // static float updateRain1h(float cum_mm, uint32_t now_ms);
+    static float updateRain1h(float cum_mm, uint32_t now_ms);
 };
 
 extern SerialModule *serialModule;
