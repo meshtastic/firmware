@@ -458,17 +458,17 @@ void menuHandler::messageResponseMenu()
             menuHandler::menuQueue = menuHandler::message_viewmode_menu;
             screen->runNow();
 
-        // Reply submenu
+            // Reply submenu
         } else if (selected == ReplyMenu) {
             menuHandler::menuQueue = menuHandler::reply_menu;
             screen->runNow();
 
-        // Delete submenu
+            // Delete submenu
         } else if (selected == 900) {
             menuHandler::menuQueue = menuHandler::delete_messages_menu;
             screen->runNow();
 
-        // Delete oldest FIRST (only change)
+            // Delete oldest FIRST (only change)
         } else if (selected == DeleteOldest) {
             auto mode = graphics::MessageRenderer::getThreadMode();
             int ch = graphics::MessageRenderer::getThreadChannel();
@@ -485,7 +485,7 @@ void menuHandler::messageResponseMenu()
                 messageStore.deleteOldestMessageWithPeer(peer);
             }
 
-        // Delete all messages
+            // Delete all messages
         } else if (selected == DeleteAll) {
             messageStore.clearAllMessages();
             graphics::MessageRenderer::clearThreadRegistries();
@@ -534,11 +534,9 @@ void menuHandler::replyMenu()
     auto mode = graphics::MessageRenderer::getThreadMode();
     if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
         bannerOptions.message = "Reply to Channel";
-    } 
-    else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+    } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
         bannerOptions.message = "Reply to DM";
-    } 
-    else {
+    } else {
         // View All
         bannerOptions.message = "Reply to Last Msg";
     }
@@ -548,7 +546,6 @@ void menuHandler::replyMenu()
     bannerOptions.optionsCount = options;
 
     bannerOptions.bannerCallback = [](int selected) -> void {
-
         auto mode = graphics::MessageRenderer::getThreadMode();
         int ch = graphics::MessageRenderer::getThreadChannel();
         uint32_t peer = graphics::MessageRenderer::getThreadPeer();
@@ -571,14 +568,9 @@ void menuHandler::replyMenu()
             } else {
                 // Fallback for last received message
                 if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchWithDestination(
-                        NODENUM_BROADCAST,
-                        devicestate.rx_text_message.channel
-                    );
+                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
                 } else {
-                    cannedMessageModule->LaunchWithDestination(
-                        devicestate.rx_text_message.from
-                    );
+                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
                 }
             }
 
@@ -597,14 +589,9 @@ void menuHandler::replyMenu()
             } else {
                 // Fallback for last received message
                 if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchFreetextWithDestination(
-                        NODENUM_BROADCAST,
-                        devicestate.rx_text_message.channel
-                    );
+                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
                 } else {
-                    cannedMessageModule->LaunchFreetextWithDestination(
-                        devicestate.rx_text_message.from
-                    );
+                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
                 }
             }
 
@@ -620,29 +607,11 @@ void menuHandler::deleteMessagesMenu()
     auto mode = graphics::MessageRenderer::getThreadMode();
 
 #if defined(M5STACK_UNITC6L)
-    static const char *optionsArrayAll[] = {
-        "Back",
-        "Delete Oldest",
-        "Delete All"
-    };
-    static const char *optionsArrayNormal[] = {
-        "Back",
-        "Delete Oldest",
-        "Delete This Chat",
-        "Delete All"
-    };
+    static const char *optionsArrayAll[] = {"Back", "Delete Oldest", "Delete All"};
+    static const char *optionsArrayNormal[] = {"Back", "Delete Oldest", "Delete This Chat", "Delete All"};
 #else
-    static const char *optionsArrayAll[] = {
-        "Back",
-        "Delete Oldest",
-        "Delete All Chats"
-    };
-    static const char *optionsArrayNormal[] = {
-        "Back",
-        "Delete Oldest",
-        "Delete This Chat",
-        "Delete All Chats"
-    };
+    static const char *optionsArrayAll[] = {"Back", "Delete Oldest", "Delete All Chats"};
+    static const char *optionsArrayNormal[] = {"Back", "Delete Oldest", "Delete This Chat", "Delete All Chats"};
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -658,7 +627,6 @@ void menuHandler::deleteMessagesMenu()
     }
 
     bannerOptions.bannerCallback = [mode](int selected) -> void {
-
         int ch = graphics::MessageRenderer::getThreadChannel();
         uint32_t peer = graphics::MessageRenderer::getThreadPeer();
 
@@ -679,11 +647,9 @@ void menuHandler::deleteMessagesMenu()
 
             if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
                 messageStore.deleteOldestMessage();
-            }
-            else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+            } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 messageStore.deleteOldestMessageInChannel(ch);
-            }
-            else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteOldestMessageWithPeer(peer);
             }
 
@@ -695,8 +661,7 @@ void menuHandler::deleteMessagesMenu()
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 messageStore.deleteAllMessagesInChannel(ch);
-            }
-            else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteAllMessagesWithPeer(peer);
             }
 

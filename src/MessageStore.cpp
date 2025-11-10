@@ -332,9 +332,7 @@ void MessageStore::deleteOldestMessageInChannel(uint8_t channel)
 
 void MessageStore::deleteAllMessagesInChannel(uint8_t channel)
 {
-    auto pred = [channel](const StoredMessage &m) {
-        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
-    };
+    auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
     eraseIf(liveMessages, pred, false /* delete ALL, not just first */);
     saveToFlash();
 }
