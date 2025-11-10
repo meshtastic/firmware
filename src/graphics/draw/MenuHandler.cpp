@@ -601,28 +601,36 @@ void menuHandler::deleteMessagesMenu()
 {
     enum optionsNumbers { Back = 0, DeleteOldest, DeleteThis, DeleteAll, enumEnd };
 
+    static const char *optionsArray[enumEnd];
+    static int optionsEnumArray[enumEnd];
+    int options = 0;
+
     auto mode = graphics::MessageRenderer::getThreadMode();
 
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+
+    optionsArray[options] = "Delete Oldest";
+    optionsEnumArray[options++] = DeleteOldest;
+
+    // If viewing ALL chats → hide “Delete This Chat”
+    if (mode != graphics::MessageRenderer::ThreadMode::ALL) {
+        optionsArray[options] = "Delete This Chat";
+        optionsEnumArray[options++] = DeleteThis;
+    }
 #if defined(M5STACK_UNITC6L)
-    static const char *optionsArrayAll[] = {"Back", "Delete Oldest", "Delete All"};
-    static const char *optionsArrayNormal[] = {"Back", "Delete Oldest", "Delete This Chat", "Delete All"};
+    optionsArray[options] = "Delete All";
 #else
-    static const char *optionsArrayAll[] = {"Back", "Delete Oldest", "Delete All Chats"};
-    static const char *optionsArrayNormal[] = {"Back", "Delete Oldest", "Delete This Chat", "Delete All Chats"};
+    optionsArray[options] = "Delete All Chats";
 #endif
+    optionsEnumArray[options++] = DeleteAll;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Delete Messages";
 
-    // If viewing ALL chats → hide “Delete This Chat”
-    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
-        bannerOptions.optionsArrayPtr = optionsArrayAll;
-        bannerOptions.optionsCount = 3;
-    } else {
-        bannerOptions.optionsArrayPtr = optionsArrayNormal;
-        bannerOptions.optionsCount = 4;
-    }
-
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [mode](int selected) -> void {
         int ch = graphics::MessageRenderer::getThreadChannel();
         uint32_t peer = graphics::MessageRenderer::getThreadPeer();
@@ -634,6 +642,7 @@ void menuHandler::deleteMessagesMenu()
         }
 
         if (selected == DeleteAll) {
+            LOG_INFO("Deleting all messages");
             messageStore.clearAllMessages();
             graphics::MessageRenderer::clearThreadRegistries();
             graphics::MessageRenderer::clearMessageCache();
@@ -641,6 +650,7 @@ void menuHandler::deleteMessagesMenu()
         }
 
         if (selected == DeleteOldest) {
+            LOG_INFO("Deleting oldest message");
 
             if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
                 messageStore.deleteOldestMessage();
@@ -655,6 +665,7 @@ void menuHandler::deleteMessagesMenu()
 
         // This only appears in non-ALL modes
         if (selected == DeleteThis) {
+            LOG_INFO("Deleting all messages in this thread");
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 messageStore.deleteAllMessagesInChannel(ch);
