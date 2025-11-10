@@ -29,9 +29,9 @@ extern "C" {
 #define BUTTON_NEED_PULLUP
 
 // LEDs
-#define PIN_LED1 (24) // Built in white led for status
+#define PIN_LED1 (24) // Built in white led for status  // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_PIN
 #define LED_BLUE PIN_LED1
-#define LED_BUILTIN PIN_LED1
+#define LED_BUILTIN PIN_LED1 // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
 
 #define LED_STATE_ON 0 // State when LED is litted
 #define LED_INVERTED 1
