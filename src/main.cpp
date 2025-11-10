@@ -960,6 +960,7 @@ void setup()
 #endif
 
     // warn the user about a low entropy key
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -969,6 +970,7 @@ void setup()
         service->sendClientNotification(cn);
         nodeDB->hasWarned = true;
     }
+#endif
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON
