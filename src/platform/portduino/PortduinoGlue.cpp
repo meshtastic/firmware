@@ -37,6 +37,8 @@ bool yamlOnly = false;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
+char stdoutBuffer[512];
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
@@ -153,6 +155,9 @@ void portduinoSetup()
     int max_GPIO = 0;
     std::string gpioChipName = "gpiochip";
     portduino_config.displayPanel = no_screen;
+
+    // Force stdout to be line buffered
+    setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;

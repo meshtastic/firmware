@@ -574,7 +574,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, FrameToggles, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -583,12 +583,10 @@ void menuHandler::systemBaseMenu()
     optionsEnumArray[options++] = Notifications;
 #if defined(ST7789_CS) || defined(ST7796_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) ||              \
     defined(USE_SH1107) || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
-    optionsArray[options] = "Screen Options";
+    optionsArray[options] = "Display Options";
     optionsEnumArray[options++] = ScreenOptions;
 #endif
 
-    optionsArray[options] = "Frame Visiblity Toggle";
-    optionsEnumArray[options++] = FrameToggles;
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "Bluetooth";
 #else
@@ -625,9 +623,6 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
-            screen->runNow();
-        } else if (selected == FrameToggles) {
-            menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -1330,7 +1325,7 @@ void menuHandler::screenOptionsMenu()
     hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, NodeNameLength, Brightness, ScreenColor };
+    enum optionsNumbers { Back, NodeNameLength, Brightness, ScreenColor, FrameToggles, DisplayUnits };
     static const char *optionsArray[5] = {"Back"};
     static int optionsEnumArray[5] = {Back};
     int options = 1;
@@ -1352,8 +1347,14 @@ void menuHandler::screenOptionsMenu()
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
+    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsEnumArray[options++] = FrameToggles;
+
+    optionsArray[options] = "Display Units";
+    optionsEnumArray[options++] = DisplayUnits;
+
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Screen Options";
+    bannerOptions.message = "Display Options";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -1366,6 +1367,12 @@ void menuHandler::screenOptionsMenu()
             screen->runNow();
         } else if (selected == NodeNameLength) {
             menuHandler::menuQueue = menuHandler::node_name_length_menu;
+            screen->runNow();
+        } else if (selected == FrameToggles) {
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == DisplayUnits) {
+            menuHandler::menuQueue = menuHandler::DisplayUnits;
             screen->runNow();
         } else {
             menuQueue = system_base_menu;
@@ -1578,6 +1585,34 @@ void menuHandler::FrameToggles_menu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::DisplayUnits_menu()
+{
+    enum optionsNumbers { Back, MetricUnits, ImperialUnits };
+
+    static const char *optionsArray[] = {"Back", "Metric", "Imperial"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = " Select display units";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+        bannerOptions.InitialSelected = 2;
+    else
+        bannerOptions.InitialSelected = 1;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == MetricUnits) {
+            config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_METRIC;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == ImperialUnits) {
+            config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else {
+            menuHandler::menuQueue = menuHandler::screen_options_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1691,6 +1726,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case FrameToggles:
         FrameToggles_menu();
+        break;
+    case DisplayUnits:
+        DisplayUnits_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
