@@ -507,10 +507,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
         meshtastic_NodeInfoLite *node_recipient = nodeDB->getMeshNode(m.dest);
 
-        char senderBuf[48] = "???";
+        char senderBuf[48] = "";
         if (node && node->has_user) {
+            // Use long name if present
             strncpy(senderBuf, node->user.long_name, sizeof(senderBuf) - 1);
             senderBuf[sizeof(senderBuf) - 1] = '\0';
+        } else {
+            // No long/short name → show NodeID in parentheses
+            snprintf(senderBuf, sizeof(senderBuf), "(%08x)", m.sender);
         }
 
         // If this is *our own* message, override senderBuf to who the recipient was
