@@ -530,6 +530,8 @@ ParsedLine parseLine(const char *line)
  *  Function to calculate 1-hour rainfall from cumulative rain data using rolling bucket system
  *  Returns precipitation over the past hour for Windy.com compatibility
  */
+#if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
+    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL)
 float SerialModule::updateRain1h(float cum_mm, uint32_t now_ms)
 {
     static bool inited = false;
@@ -579,6 +581,7 @@ float SerialModule::updateRain1h(float cum_mm, uint32_t now_ms)
         sum1h += buckets[i];
     return sum1h;
 }
+#endif
 
 /**
  * Process the received weather station serial data, extract wind, voltage, and temperature information,
