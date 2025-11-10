@@ -94,12 +94,12 @@ class MessageStore
     // Clear all messages (RAM + persisted queue + text pool)
     void clearAllMessages();
 
-    // Dismiss helpers
-    void dismissOldestMessage(); // remove oldest from RAM (and flash on save)
-
-    // New targeted dismiss helpers
-    void dismissOldestMessageInChannel(uint8_t channel);
-    void dismissOldestMessageWithPeer(uint32_t peer);
+    // Delete helpers
+    void deleteOldestMessage(); // remove oldest from RAM (and flash on save)
+    void deleteOldestMessageInChannel(uint8_t channel);
+    void deleteOldestMessageWithPeer(uint32_t peer);
+    void deleteAllMessagesInChannel(uint8_t channel);
+    void deleteAllMessagesWithPeer(uint32_t peer);
 
     // Unified accessor (for UI code, defaults to RAM buffer)
     const std::deque<StoredMessage> &getMessages() const { return liveMessages; }

@@ -315,23 +315,45 @@ template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deq
     }
 }
 
-// Dismiss oldest message (RAM + persisted queue)
-void MessageStore::dismissOldestMessage()
+// Delete oldest message (RAM + persisted queue)
+void MessageStore::deleteOldestMessage()
 {
     eraseIf(liveMessages, [](StoredMessage &) { return true; });
     saveToFlash();
 }
 
-// Dismiss oldest message in a specific channel
-void MessageStore::dismissOldestMessageInChannel(uint8_t channel)
+// Delete oldest message in a specific channel
+void MessageStore::deleteOldestMessageInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
     eraseIf(liveMessages, pred);
     saveToFlash();
 }
 
-// Dismiss oldest message in a direct chat with a node
-void MessageStore::dismissOldestMessageWithPeer(uint32_t peer)
+void MessageStore::deleteAllMessagesInChannel(uint8_t channel)
+{
+    auto pred = [channel](const StoredMessage &m) {
+        return m.type == MessageType::BROADCAST && m.channelIndex == channel;
+    };
+    eraseIf(liveMessages, pred, false /* delete ALL, not just first */);
+    saveToFlash();
+}
+
+void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
+{
+    uint32_t local = nodeDB->getNodeNum();
+    auto pred = [&](const StoredMessage &m) {
+        if (m.type != MessageType::DM_TO_US)
+            return false;
+        uint32_t other = (m.sender == local) ? m.dest : m.sender;
+        return other == peer;
+    };
+    eraseIf(liveMessages, pred, false);
+    saveToFlash();
+}
+
+// Delete oldest message in a direct chat with a node
+void MessageStore::deleteOldestMessageWithPeer(uint32_t peer)
 {
     auto pred = [peer](const StoredMessage &m) {
         if (m.type != MessageType::DM_TO_US)
