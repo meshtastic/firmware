@@ -425,7 +425,8 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // === Fourth Row: Frequency / ChanNum ===
     char frequencyslot[35];
     char freqStr[16];
-    float freq = RadioLibInterface::instance->getFreq();
+    float freq = -1;
+    if(!RadioLibInterface::instances.empty()) freq = RadioLibInterface::instances.front()->getFreq();
     snprintf(freqStr, sizeof(freqStr), "%.3f", freq);
     if (config.lora.channel_num == 0) {
 #if defined(M5STACK_UNITC6L)

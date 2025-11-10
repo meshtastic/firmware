@@ -55,6 +55,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
+    char ifaceName[16];
+
   protected:
     ModemType_t modemType = RADIOLIB_MODEM_LORA;
     DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
@@ -95,7 +97,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     /** Our ISR code currently needs this to find our active instance
      */
-    static RadioLibInterface *instance;
+    static std::vector<RadioLibInterface*> instances;
 
     /**
      * Glue functions called from ISR land
@@ -116,6 +118,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
+    
+    ~RadioLibInterface();
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
