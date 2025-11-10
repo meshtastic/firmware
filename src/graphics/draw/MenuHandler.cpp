@@ -515,11 +515,7 @@ void menuHandler::replyMenu()
     optionsEnumArray[options++] = Back;
 
     // Preset reply
-#if defined(M5STACK_UNITC6L)
     optionsArray[options] = "With Preset";
-#else
-    optionsArray[options] = "With Preset";
-#endif
     optionsEnumArray[options++] = ReplyPreset;
 
     // Freetext reply (only when keyboard exists)
@@ -544,6 +540,7 @@ void menuHandler::replyMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
+    bannerOptions.InitialSelected = 1;
 
     bannerOptions.bannerCallback = [](int selected) -> void {
         auto mode = graphics::MessageRenderer::getThreadMode();
@@ -833,16 +830,6 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = "Send Node Info";
     }
     optionsEnumArray[options++] = Position;
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "New Preset";
-#else
-    optionsArray[options] = "New Preset Msg";
-#endif
-    optionsEnumArray[options++] = Preset;
-    if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
-        optionsEnumArray[options++] = Freetext;
-    }
 
     BannerOverlayOptions bannerOptions;
 #if defined(M5STACK_UNITC6L)
