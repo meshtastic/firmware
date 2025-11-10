@@ -362,7 +362,12 @@ void portduinoSetup()
                     product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
                 }
 
-                if (!access((portduino_config.available_directory + product_config).c_str(), R_OK)) {
+                // Don't try to automatically find config for a device with RAK eeprom.
+                if (found_rak_eeprom) {
+                    std::cerr << "autoconf: Found unknown RAK product " << autoconf_product << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (access((portduino_config.available_directory + product_config).c_str(), R_OK) != 0) {
                     std::cerr << "autoconf: Unable to find config for " << autoconf_product << "(tried " << product_config << ")"
                               << std::endl;
                     exit(EXIT_FAILURE);
