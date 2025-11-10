@@ -45,6 +45,7 @@ class menuHandler
         throttle_message,
         message_response_menu,
         message_viewmode_menu,
+        reply_menu,
         delete_messages_menu,
         node_name_length_menu,
         FrameToggles,
@@ -65,6 +66,7 @@ class menuHandler
     static void ClockFacePicker();
     static void messageResponseMenu();
     static void messageViewModeMenu();
+    static void replyMenu();
     static void deleteMessagesMenu();
     static void homeBaseMenu();
     static void textMessageBaseMenu();
