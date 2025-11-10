@@ -536,15 +536,27 @@ void menuHandler::deleteMessagesMenu()
 {
     enum optionsNumbers { Back = 0, DeleteOldest, DeleteThis, DeleteAll, enumEnd };
 
+    auto mode = graphics::MessageRenderer::getThreadMode();
+
 #if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[] = {
+    static const char *optionsArrayAll[] = {
+        "Back",
+        "Delete Oldest",
+        "Delete All"
+    };
+    static const char *optionsArrayNormal[] = {
         "Back",
         "Delete Oldest",
         "Delete This Chat",
         "Delete All"
     };
 #else
-    static const char *optionsArray[] = {
+    static const char *optionsArrayAll[] = {
+        "Back",
+        "Delete Oldest",
+        "Delete All Chats"
+    };
+    static const char *optionsArrayNormal[] = {
         "Back",
         "Delete Oldest",
         "Delete This Chat",
@@ -554,12 +566,18 @@ void menuHandler::deleteMessagesMenu()
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Delete Messages";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
 
-    bannerOptions.bannerCallback = [](int selected) -> void {
+    // If viewing ALL chats → hide “Delete This Chat”
+    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+        bannerOptions.optionsArrayPtr = optionsArrayAll;
+        bannerOptions.optionsCount = 3;
+    } else {
+        bannerOptions.optionsArrayPtr = optionsArrayNormal;
+        bannerOptions.optionsCount = 4;
+    }
 
-        auto mode = graphics::MessageRenderer::getThreadMode();
+    bannerOptions.bannerCallback = [mode](int selected) -> void {
+
         int ch = graphics::MessageRenderer::getThreadChannel();
         uint32_t peer = graphics::MessageRenderer::getThreadPeer();
 
@@ -591,6 +609,7 @@ void menuHandler::deleteMessagesMenu()
             return;
         }
 
+        // This only appears in non-ALL modes
         if (selected == DeleteThis) {
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
