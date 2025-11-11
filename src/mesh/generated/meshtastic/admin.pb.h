@@ -272,8 +272,9 @@ typedef struct _meshtastic_AdminMessage {
         int32_t shutdown_seconds;
         /* Tell the node to factory reset config; all device state and configuration will be returned to factory defaults; BLE bonds will be preserved. */
         int32_t factory_reset_config;
-        /* Tell the node to reset the nodedb. */
-        int32_t nodedb_reset;
+        /* Tell the node to reset the nodedb.
+     When true, favorites are preserved through reset. */
+        bool nodedb_reset;
     };
     /* The node generates this key and sends it with any get_x_response packets.
  The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
@@ -459,7 +460,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulato
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,nodedb_reset,nodedb_reset), 100) \
 X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL

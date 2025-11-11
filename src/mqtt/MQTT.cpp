@@ -59,7 +59,27 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
         return;
     }
+
     const meshtastic_Channel &ch = channels.getByName(e.channel_id);
+    // Find channel by channel_id and check downlink_enabled
+    if (!(strcmp(e.channel_id, "PKI") == 0 ||
+          (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
+        return;
+    }
+
+    bool anyChannelHasDownlink = false;
+    size_t numChan = channels.getNumChannels();
+    for (size_t i = 0; i < numChan; ++i) {
+        const auto &c = channels.getByIndex(i);
+        if (c.settings.downlink_enabled) {
+            anyChannelHasDownlink = true;
+            break;
+        }
+    }
+
+    if (strcmp(e.channel_id, "PKI") == 0 && !anyChannelHasDownlink) {
+        return;
+    }
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
@@ -77,11 +97,6 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         return;
     }
 
-    // Find channel by channel_id and check downlink_enabled
-    if (!(strcmp(e.channel_id, "PKI") == 0 ||
-          (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
-        return;
-    }
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
     if (e.packet->hop_limit > HOP_MAX || e.packet->hop_start > HOP_MAX) {
         LOG_INFO("Invalid hop_limit(%u) or hop_start(%u)", e.packet->hop_limit, e.packet->hop_start);
