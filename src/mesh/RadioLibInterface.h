@@ -97,7 +97,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     /** Our ISR code currently needs this to find our active instance
      */
-    static std::vector<RadioLibInterface*> instances;
+    static std::vector<RadioLibInterface *> instances;
 
     /**
      * Glue functions called from ISR land
@@ -118,7 +118,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
-    
+
     ~RadioLibInterface();
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
