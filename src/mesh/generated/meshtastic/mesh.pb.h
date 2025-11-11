@@ -1218,6 +1218,10 @@ typedef struct _meshtastic_ToRadio {
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
         /* Heartbeat message (used to keep the device connection awake on serial) */
         meshtastic_Heartbeat heartbeat;
+        /* Set or clear promiscuous capture mode for LoRa RX.
+     If true, the device will forward all received LoRa packets to FromRadio as encrypted MeshPacket payloads,
+     and will avoid additionally sending the decrypted copies. This is primarily intended for serial sniffing. */
+        bool set_promiscuous;
     };
 } meshtastic_ToRadio;
 
@@ -1605,6 +1609,7 @@ extern "C" {
 #define meshtastic_ToRadio_xmodemPacket_tag      5
 #define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
 #define meshtastic_ToRadio_heartbeat_tag         7
+#define meshtastic_ToRadio_set_promiscuous_tag   8
 #define meshtastic_NodeRemoteHardwarePin_node_num_tag 1
 #define meshtastic_NodeRemoteHardwarePin_pin_tag 2
 #define meshtastic_ChunkedPayload_payload_id_tag 1
@@ -1883,7 +1888,8 @@ X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_i
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,heartbeat,heartbeat),   7)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,heartbeat,heartbeat),   7) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,set_promiscuous,set_promiscuous),   8)
 #define meshtastic_ToRadio_CALLBACK NULL
 #define meshtastic_ToRadio_DEFAULT NULL
 #define meshtastic_ToRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket

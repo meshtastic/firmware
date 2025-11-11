@@ -218,6 +218,8 @@ bool eink_found = true;
 
 uint32_t serialSinceMsec;
 bool pauseBluetoothLogging = false;
+// Global control flag for encrypted-only promiscuous forwarding to FromRadio
+bool serialPromiscuousEnabled = false;
 
 bool pmu_found;
 
