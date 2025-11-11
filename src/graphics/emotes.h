@@ -161,6 +161,150 @@ extern const unsigned char bowling[] PROGMEM;
 #define vulcan_salute_width 16
 #define vulcan_salute_height 16
 extern const unsigned char vulcan_salute[] PROGMEM;
+
+#define jack_o_lantern_width 16
+#define jack_o_lantern_height 16
+extern const unsigned char jack_o_lantern[] PROGMEM;
+
+#define ghost_width 16
+#define ghost_height 16
+extern const unsigned char ghost[] PROGMEM;
+
+#define skull_width 16
+#define skull_height 16
+extern const unsigned char skull[] PROGMEM;
+
+#define vomiting_width 16
+#define vomiting_height 16
+extern const unsigned char vomiting[] PROGMEM;
+
+#define cool_width 16
+#define cool_height 16
+extern const unsigned char cool[] PROGMEM;
+
+#define shortcake_width 16
+#define shortcake_height 16
+extern const unsigned char shortcake[] PROGMEM;
+
+#define caution_width 16
+#define caution_height 16
+extern const unsigned char caution[] PROGMEM;
+
+#define clipboard_width 16
+#define clipboard_height 16
+extern const unsigned char clipboard[] PROGMEM;
+
+#define snowflake_width 16
+#define snowflake_height 16
+extern const unsigned char snowflake[] PROGMEM;
+
+#define drop_width 16
+#define drop_height 16
+extern const unsigned char drop[] PROGMEM;
+
+#define thermometer_width 16
+#define thermometer_height 16
+extern const unsigned char thermometer[] PROGMEM;
+
+#define sun_behind_raincloud_width 16
+#define sun_behind_raincloud_height 16
+extern const unsigned char sun_behind_raincloud[] PROGMEM;
+
+#define sun_behind_cloud_width 16
+#define sun_behind_cloud_height 16
+extern const unsigned char sun_behind_cloud[] PROGMEM;
+
+#define cloud_with_snow_width 16
+#define cloud_with_snow_height 16
+extern const unsigned char cloud_with_snow[] PROGMEM;
+
+#define cloud_with_lightning_width 16
+#define cloud_with_lightning_height 16
+extern const unsigned char cloud_with_lightning[] PROGMEM;
+
+#define cloud_with_lightning_rain_width 16
+#define cloud_with_lightning_rain_height 16
+extern const unsigned char cloud_with_lightning_rain[] PROGMEM;
+
+#define Wind_Face_width 16
+#define Wind_Face_height 16
+extern const unsigned char Wind_Face[] PROGMEM;
+
+#define new_moon_width 16
+#define new_moon_height 16
+extern const unsigned char new_moon[] PROGMEM;
+
+#define waxing_crescent_moon_width 16
+#define waxing_crescent_moon_height 16
+extern const unsigned char waxing_crescent_moon[] PROGMEM;
+
+#define first_quarter_moon_width 16
+#define first_quarter_moon_height 16
+extern const unsigned char first_quarter_moon[] PROGMEM;
+
+#define waxing_gibbous_moon_width 16
+#define waxing_gibbous_moon_height 16
+extern const unsigned char waxing_gibbous_moon[] PROGMEM;
+
+#define full_moon_width 16
+#define full_moon_height 16
+extern const unsigned char full_moon[] PROGMEM;
+
+#define waning_gibbous_moon_width 16
+#define waning_gibbous_moon_height 16
+extern const unsigned char waning_gibbous_moon[] PROGMEM;
+
+#define last_quarter_moon_width 16
+#define last_quarter_moon_height 16
+extern const unsigned char last_quarter_moon[] PROGMEM;
+
+#define waning_crescent_moon_width 16
+#define waning_crescent_moon_height 16
+extern const unsigned char waning_crescent_moon[] PROGMEM;
+
+#define first_quarter_moon_face_width 16
+#define first_quarter_moon_face_height 16
+extern const unsigned char first_quarter_moon_face[] PROGMEM;
+
+#define peach_width 16
+#define peach_height 16
+extern const unsigned char peach[] PROGMEM;
+
+#define South_West_Arrow_width 16
+#define South_West_Arrow_height 16
+extern const unsigned char South_West_Arrow[] PROGMEM;
+
+#define South_East_Arrow_width 16
+#define South_East_Arrow_height 16
+extern const unsigned char South_East_Arrow[] PROGMEM;
+
+#define North_West_Arrow_width 16
+#define North_West_Arrow_height 16
+extern const unsigned char North_West_Arrow[] PROGMEM;
+
+#define North_East_Arrow_width 16
+#define North_East_Arrow_height 16
+extern const unsigned char North_East_Arrow[] PROGMEM;
+
+#define Downwards_Arrow_width 16
+#define Downwards_Arrow_height 16
+extern const unsigned char Downwards_Arrow[] PROGMEM;
+
+#define Leftwards_Arrow_width 16
+#define Leftwards_Arrow_height 16
+extern const unsigned char Leftwards_Arrow[] PROGMEM;
+
+#define Upwards_Arrow_width 16
+#define Upwards_Arrow_height 16
+extern const unsigned char Upwards_Arrow[] PROGMEM;
+
+#define Rightwards_Arrow_width 16
+#define Rightwards_Arrow_height 16
+extern const unsigned char Rightwards_Arrow[] PROGMEM;
+
+#define strong_width 16
+#define strong_height 16
+extern const unsigned char strong[] PROGMEM;
 #endif // EXCLUDE_EMOJI
 
 } // namespace graphics
