@@ -14,7 +14,7 @@
 #include <OLEDDisplayUi.h>
 #include <meshUtils.h>
 
-#define MAGIC_USB_BATTERY_LEVEL 101
+#define MAGIC_USB_BATTERY_LEVEL 0 // If no battery don't want mislead by providing full charge level
 
 int32_t DeviceTelemetryModule::runOnce()
 {
@@ -85,6 +85,7 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 
 meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
 {
+    int getBatteryVoltageMv = powerStatus->getBatteryVoltageMv();
     meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
     t.time = getTime();
@@ -96,11 +97,9 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.has_uptime_seconds = true;
 
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
-    t.variant.device_metrics.battery_level = (!powerStatus->getHasBattery() || powerStatus->getIsCharging())
-                                                 ? MAGIC_USB_BATTERY_LEVEL
-                                                 : powerStatus->getBatteryChargePercent();
+    t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
-    t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    t.variant.device_metrics.voltage = (getBatteryVoltageMv == -1) ? 0 : (float)getBatteryVoltageMv/1000;
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
 
     return t;

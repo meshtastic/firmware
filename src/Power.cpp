@@ -150,9 +150,9 @@ class HasBatteryLevel
     virtual int getBatteryPercent() { return -1; }
 
     /**
-     * The raw voltage of the battery or NAN if unknown
+     * The raw voltage in mV of the battery or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() { return 0; }
+    virtual int16_t getBattVoltage() { return 0; }
 
     /**
      * return true if there is a battery installed in this unit
@@ -240,6 +240,17 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
+    
+    bool batIsCharging = false;
+    bool batIsDischrging = false;
+    bool batIsConnected = false;
+    bool isADCFlactuating = false;
+    int batMeasCount = 0;
+    int batVoltage = 0;                 // in mV
+    uint32_t batMeasTimeLastRead = 0;   // in ms
+    const uint32_t batMeasTimeMinReadingsInterval = 5000; // in ms
+
+
     virtual int getBatteryPercent() override
     {
 #if defined(HAS_RAKPROT) && !defined(HAS_PMU)
@@ -248,14 +259,19 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #endif
 
-        float v = getBattVoltage();
+        int v = getBattVoltage();
+        LOG_DEBUG("getBatteryPercent: getBattVoltage: %d", v);
+        if (v == -1) {return -1;}
 
-        if (v < noBatVolt)
+        if ((float)v < noBatVolt) {
+            batIsConnected = false;
             return -1; // If voltage is super low assume no battery installed
+            LOG_DEBUG("Low voltage. No bettry installed?");
+        }
 
 #ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
-        if (v > chargingVolt)
+        if ((float)v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
 #endif
         /**
@@ -284,7 +300,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override
+    virtual int16_t getBattVoltage() override
     {
 
 #if HAS_TELEMETRY && defined(HAS_RAKPROT) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -304,8 +320,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 
 #ifndef BATTERY_SENSE_SAMPLES
-#define BATTERY_SENSE_SAMPLES                                                                                                    \
-    15 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
+#define BATTERY_SENSE_SAMPLES 1500
+    // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
+    // Keep enough (300+300) to fetch several battery chargger PWM cycles/charging phases (on seeed xiao ~300 cycles per phase). 
+    // Will have 2 sets of reading: 1 set is higher readings, 2 is lower readings.
+    // Will not see difference when BATTERY IS ATTACHED
+    // If BATTERY IS NOT CONNECTED will have two different sets of measurements 
+    // Need this not only to avoid noise but also to recognize disconnected battery
 #endif
 
 #ifdef BATTERY_PIN
@@ -313,24 +334,83 @@ class AnalogBatteryLevel : public HasBatteryLevel
         float operativeAdcMultiplier =
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often.
-        const uint32_t min_read_interval = 5000;
-        if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
-            last_read_time_ms = millis();
+        
+        if (!initial_read_done || !Throttle::isWithinTimespanMs(batMeasTimeLastRead, batMeasTimeMinReadingsInterval)) {
+            batMeasTimeLastRead = millis();
+            batMeasCount++;
 
             uint32_t raw = 0;
+            uint32_t raw_prev = 0;
+            int countRawRaise = 0;
+            int countRawDown = 0;
+            uint32_t rawSum = 0;
+            uint32_t rawAvg = 0;
+            uint32_t batRawMin = 0;
+            uint32_t batRawMax = 0;
+            float batMeasDiffPerc = 0;
             float scaled = 0;
+
+            batIsCharging = false;
+            batIsDischrging = false;
+            isADCFlactuating = false;
 
             adcEnable();
 #ifdef ARCH_ESP32 // ADC block for espressif platforms
-            raw = espAdcRead();
-            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
+            rawSum = espAdcRead();
+            scaled = esp_adc_cal_raw_to_voltage(rawSum, adc_characs);
             scaled *= operativeAdcMultiplier;
 #else // block for all other platforms
-            for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                raw += analogRead(BATTERY_PIN);
+            LOG_DEBUG("batMeasCount: %d", batMeasCount); 
+            for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES+10; i++) {
+                raw = analogRead(BATTERY_PIN);
+                rawSum += raw;
+                // LOG_DEBUG("Battery new measurements: %u", (uint32_t)(raw));
+                // Terminal output will take signifacant time so need adjust number of readings (BATTERY_SENSE_SAMPLES) if debug enabled
+                if (i < 10) { /* skip first due low accuracy (junk)*/ }
+                else if (i == 11) {
+                    batRawMin = raw;
+                    batRawMax = raw;
+                }
+                else {
+                    if (raw < batRawMin) {
+                        batRawMin = raw;
+                        // LOG_DEBUG("Battery new measurements Min: %u", (uint32_t)(batRawMin)); 
+                    }
+                    if (raw > batRawMax) {
+                        batRawMax = raw;
+                        // LOG_DEBUG("Battery new measurements Max: %u", (uint32_t)(batRawMax));
+                    }
+                }
+                if (i > 11) {
+                    if (raw>raw_prev) {countRawRaise++;} // Voltage going up
+                    if (raw<raw_prev) {countRawDown++;}  // Voltage going down
+                }
+                raw_prev = raw;
             }
-            raw = raw / BATTERY_SENSE_SAMPLES;
-            scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
+
+            if (batRawMax > batRawMin) {
+                float diff = batRawMax - batRawMin;
+                batMeasDiffPerc = (float)diff / (float)batRawMin * 100.0;
+                if (batMeasDiffPerc > 10) { // ~11.68% for Seeed XIAO
+                    LOG_WARN("Battery ADC readings have high variance: Min=%u Max=%u Diff=%.2f%%. Probably battery is not connected", (uint32_t)(batRawMin), (uint32_t)(batRawMax),batMeasDiffPerc);
+                    batIsConnected = false;
+                    adcDisable();
+                    batVoltage = 0;
+                    isADCFlactuating = true;
+                    return -1;
+                }
+                LOG_DEBUG("Battery ADC readings variance: Min=%u Max=%u Diff=%.2f%%", (uint32_t)(batRawMin), (uint32_t)(batRawMax),batMeasDiffPerc);
+            }
+
+            if (countRawRaise - countRawDown > BATTERY_SENSE_SAMPLES/100) { batIsCharging = true; }
+            else if (countRawDown - countRawRaise > BATTERY_SENSE_SAMPLES/100) { batIsDischrging = true; }
+            LOG_DEBUG("countRawRaise: %d, countRawDown: %d, batIsCharging: %i, batIsDischrging: %i", countRawRaise, countRawDown, batIsCharging, batIsDischrging);
+            if (batIsCharging) LOG_DEBUG("batIsCharging: true");
+            else if (batIsDischrging) LOG_DEBUG("batIsDischrging: true");
+
+            rawAvg = rawSum / BATTERY_SENSE_SAMPLES;
+            scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * rawAvg;
+            batIsConnected = true;
 #endif
             adcDisable();
 
@@ -344,10 +424,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
             }
 
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
-            // (last_read_value));
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u", BATTERY_PIN, rawAvg, (uint32_t)(scaled), (uint32_t)
+            (last_read_value));
+            batVoltage = last_read_value;
+            return last_read_value;
+        } else {
+            // LOG_DEBUG ("getBattVoltage: Very short interval between calls. Using cached value: %d", batVoltage);
+            return batVoltage;
         }
-        return last_read_value;
 #endif // BATTERY_PIN
         return 0;
     }
@@ -432,7 +516,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return true;
     }
 #else
-    virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
+    virtual bool isBatteryConnect() override { 
+        int batteryPercent = getBatteryPercent();
+        return (batteryPercent != -1) ? true : batIsConnected;
+    }
 #endif
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -456,7 +543,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // if it's not HIGH - check the battery
 #endif
 #endif
-        return getBattVoltage() > chargingVolt;
+        return isADCFlactuating || getBattVoltage() > chargingVolt;
     }
 
     /// Assume charging if we have a battery and external power is connected.
@@ -485,6 +572,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return isBatteryConnect() && isVbusIn();
 #endif
 #endif
+        if (batIsCharging || batIsDischrging) {
+            return true;
+            LOG_DEBUG("isCharging: Flag batIsCharging or batIsDischrging is set therefore return true");
+        }
         // by default, we check the battery voltage only
         return isVbusIn();
     }
@@ -503,7 +594,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // This value is over-written by the first ADC reading, it the voltage seems reasonable.
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
-    uint32_t last_read_time_ms = 0;
+    
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 
@@ -793,6 +884,7 @@ void Power::shutdown()
 void Power::readPowerStatus()
 {
     int32_t batteryVoltageMv = -1; // Assume unknown
+    int BattVoltage = batteryLevel->getBattVoltage();
     int8_t batteryChargePercent = -1;
     OptionalBool usbPowered = OptUnknown;
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
@@ -802,8 +894,13 @@ void Power::readPowerStatus()
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
-        if (hasBattery) {
-            batteryVoltageMv = batteryLevel->getBattVoltage();
+        LOG_DEBUG("BattVoltage: %d", BattVoltage);
+        LOG_DEBUG("hasBattery: %d", hasBattery);
+        LOG_DEBUG("usbPowered: %d", usbPowered);
+        LOG_DEBUG("isChargingNow: %d", isChargingNow);
+        if (hasBattery && BattVoltage != -1) {
+            batteryVoltageMv = BattVoltage;
+            LOG_DEBUG("batteryVoltageMv: %d", batteryVoltageMv);
             // If the AXP192 returns a valid battery percentage, use it
             if (batteryLevel->getBatteryPercent() >= 0) {
                 batteryChargePercent = batteryLevel->getBatteryPercent();
@@ -1301,7 +1398,7 @@ class LipoBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return max17048->getBusVoltageMv(); }
+    virtual int16_t getBattVoltage() override { return max17048->getBusVoltageMv(); }
 
     /**
      * return true if there is a battery installed in this unit
@@ -1430,7 +1527,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
+    virtual int16_t getBattVoltage() override { return bq->getVoltage(); }
 
     /**
      * return true if there is a battery installed in this unit
@@ -1511,7 +1608,7 @@ class meshSolarBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return meshSolarGetBattVoltage(); }
+    virtual int16_t getBattVoltage() override { return meshSolarGetBattVoltage(); }
 
     /**
      * return true if there is a battery installed in this unit
