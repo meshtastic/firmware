@@ -42,6 +42,7 @@ const Emote emotes[] = {
     {"\u270C\uFE0F", peace_sign, peace_sign_width, peace_sign_height},        // ✌️ Victory Hand
     {"\U0001F596", vulcan_salute, vulcan_salute_width, vulcan_salute_height}, // 🖖 Vulcan Salute
     {"\U0001F64F", Praying, Praying_width, Praying_height},                   // 🙏 Praying Hands
+    {"\U0001F4AA", strong, strong_width, strong_height},                      // 💪 Flexed Biceps
     {"\U0001F920", cowboy, cowboy_width, cowboy_height},                      // 🤠 Cowboy Hat Face
     {"\U0001F3A7", deadmau5, deadmau5_width, deadmau5_height},                // 🎧 Headphones
 
@@ -76,6 +77,8 @@ const Emote emotes[] = {
     {"\U0001F316", waning_gibbous_moon, waning_gibbous_moon_width, waning_gibbous_moon_height},    // 🌖 Waning Gibbous Moon
     {"\U0001F317", last_quarter_moon, last_quarter_moon_width, last_quarter_moon_height},          // 🌗 Last Quarter Moon
     {"\U0001F318", waning_crescent_moon, waning_crescent_moon_width, waning_crescent_moon_height}, // 🌘 Waning Crescent Moon
+    {"\U0001F31B", first_quarter_moon_face, first_quarter_moon_face_width,
+     first_quarter_moon_face_height}, // 🌛 First Quarter Moon Face
 
     // --- Misc Faces ---
     {"\U0001F608", devil, devil_width, devil_height}, // 😈 Smiling Face with Horns
@@ -107,14 +110,30 @@ const Emote emotes[] = {
     {"\U0001F3B3", bowling, bowling_width, bowling_height},       // 🎳 Bowling
 
     // --- Arrows ---
-    {"\u2193", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},    // ↓ Downwards Arrow
-    {"\u2199", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙ South West Arrow
-    {"\u2190", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},    // ← Leftwards Arrow
-    {"\u2196", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖ North West Arrow
-    {"\u2191", Upwards_Arrow, Upwards_Arrow_width, Upwards_Arrow_height},          // ↑ Upwards Arrow
-    {"\u2197", North_East_Arrow, North_East_Arrow_width, North_East_Arrow_height}, // ↗ North East Arrow
-    {"\u2192", Rightwards_Arrow, Rightwards_Arrow_width, Rightwards_Arrow_height}, // → Rightwards Arrow
-    {"\u2198", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height}, // ↘ South East Arrow
+    {"\u2193", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},          // ↓ Downwards Arrow
+    {"\u2193\uFE0E", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},    // ↓︎ Downwards Arrow (text)
+    {"\u2193\uFE0F", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},    // ↓️ Downwards Arrow (emoji)
+    {"\u2199", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height},       // ↙ South West Arrow
+    {"\u2199\uFE0E", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙︎ South West Arrow (text)
+    {"\u2199\uFE0F", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙️ South West Arrow (emoji)
+    {"\u2190", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},          // ← Leftwards Arrow
+    {"\u2190\uFE0E", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},    // ←︎ Leftwards Arrow (text)
+    {"\u2190\uFE0F", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},    // ←️ Leftwards Arrow (emoji)
+    {"\u2196", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height},       // ↖ North West Arrow
+    {"\u2196\uFE0E", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖︎ North West Arrow (text)
+    {"\u2196\uFE0F", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖️ North West Arrow (emoji)
+    {"\u2191", Upwards_Arrow, Upwards_Arrow_width, Upwards_Arrow_height},                // ↑ Upwards Arrow
+    {"\u2191\uFE0E", Upwards_Arrow, Upwards_Arrow_width, Upwards_Arrow_height},          // ↑︎ Upwards Arrow (text)
+    {"\u2191\uFE0F", Upwards_Arrow, Upwards_Arrow_width, Upwards_Arrow_height},          // ↑️ Upwards Arrow (emoji)
+    {"\u2197", North_East_Arrow, North_East_Arrow_width, North_East_Arrow_height},       // ↗ North East Arrow
+    {"\u2197\uFE0E", North_East_Arrow, North_East_Arrow_width, North_East_Arrow_height}, // ↗︎ North East Arrow (text)
+    {"\u2197\uFE0F", North_East_Arrow, North_East_Arrow_width, North_East_Arrow_height}, // ↗️ North East Arrow (emoji)
+    {"\u2192", Rightwards_Arrow, Rightwards_Arrow_width, Rightwards_Arrow_height},       // → Rightwards Arrow
+    {"\u2192\uFE0E", Rightwards_Arrow, Rightwards_Arrow_width, Rightwards_Arrow_height}, // →︎ Rightwards Arrow (text)
+    {"\u2192\uFE0F", Rightwards_Arrow, Rightwards_Arrow_width, Rightwards_Arrow_height}, // →️ Rightwards Arrow (emoji)
+    {"\u2198", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height},       // ↘ South East Arrow
+    {"\u2198\uFE0E", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height}, // ↘︎ South East Arrow (text)
+    {"\u2198\uFE0F", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height}, // ↘️ South East Arrow (emoji)
 
     // --- Halloween ---
     {"\U0001F383", jack_o_lantern, jack_o_lantern_width, jack_o_lantern_height}, // 🎃 Jack-O-Lantern
@@ -374,6 +393,10 @@ const unsigned char waning_crescent_moon[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x
                                                       0x40, 0x1E, 0x40, 0x1E, 0x40, 0x1E, 0x40, 0x1E, 0x40, 0x1E, 0x40,
                                                       0x3C, 0x20, 0x7C, 0x20, 0xF8, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
+const unsigned char first_quarter_moon_face[] PROGMEM = {0x00, 0x0F, 0x00, 0x12, 0x00, 0x24, 0x00, 0x44, 0x00, 0x48, 0x00,
+                                                         0x88, 0x00, 0x84, 0x80, 0x93, 0x80, 0x80, 0x03, 0x81, 0x8D, 0x80,
+                                                         0x71, 0x40, 0x82, 0x41, 0x02, 0x20, 0x0C, 0x18, 0xF0, 0x07};
+
 const unsigned char peach[] PROGMEM = {0x70, 0x0F, 0x88, 0x10, 0x78, 0x1F, 0x88, 0x11, 0x04, 0x22, 0x02,
                                        0x44, 0x02, 0x44, 0x02, 0x44, 0x02, 0x44, 0x02, 0x42, 0x02, 0x40,
                                        0x04, 0x20, 0x04, 0x20, 0x08, 0x10, 0x30, 0x0C, 0xC0, 0x03};
@@ -409,6 +432,10 @@ const unsigned char Upwards_Arrow[] PROGMEM = {0x80, 0x01, 0xC0, 0x03, 0xE0, 0x0
 const unsigned char Rightwards_Arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x0C, 0x00, 0x1C, 0x00,
                                                   0x3C, 0xFC, 0x7F, 0xFC, 0xFF, 0xFC, 0xFF, 0xFC, 0x7F, 0x00, 0x3C,
                                                   0x00, 0x1C, 0x00, 0x0C, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00};
+
+const unsigned char strong[] PROGMEM = {0x38, 0x00, 0x44, 0x00, 0x62, 0x00, 0x42, 0x00, 0x42, 0x00, 0x3A,
+                                        0x00, 0x11, 0x3C, 0x11, 0x42, 0xD1, 0x81, 0x31, 0x82, 0x11, 0x82,
+                                        0x21, 0x80, 0x01, 0x80, 0x01, 0x80, 0x02, 0x40, 0xFC, 0x3F};
 #endif
 
 } // namespace graphics
