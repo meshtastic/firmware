@@ -1,5 +1,3 @@
-// #define _VARIANT_RAK3112_
-
 #define I2C_SDA 9
 #define I2C_SCL 40
 
