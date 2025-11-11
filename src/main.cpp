@@ -1401,7 +1401,7 @@ void setup()
 #endif
 
     // check if the radio chip matches the selected region
-    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
+    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && rIf && (!rIf->wideLora())) {
         LOG_WARN("LoRa chip does not support 2.4GHz. Revert to unset");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
