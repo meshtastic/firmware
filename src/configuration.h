@@ -126,9 +126,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
 #endif
 
-#ifdef STATION_G2
-#define NUM_PA_POINTS 19
-#define TX_GAIN_LORA 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 19, 19, 18, 18
+#ifdef RAK13302
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
 // Default system gain to 0 if not defined
@@ -228,6 +228,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ICM20948_ADDR_ALT 0x68
 #define BHI260AP_ADDR 0x28
 #define BMM150_ADDR 0x13
+#define DA217_ADDR 0x26
 
 // -----------------------------------------------------------------------------
 // LED
@@ -250,6 +251,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
 #define CST328_ADDR 0x1A
+#define CHSC6X_ADDR 0x2E
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)

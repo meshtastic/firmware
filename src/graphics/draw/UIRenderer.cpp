@@ -552,6 +552,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         // else show nothing
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************
@@ -563,6 +564,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
 #if defined(M5STACK_UNITC6L)
@@ -740,7 +742,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int yOffset = (isHighResolution) ? 0 : 5;
     std::string longNameStr;
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         longNameStr = sanitizeString(ourNode->user.long_name);
     }
@@ -771,6 +772,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // Start Functions to write date/time to the screen
@@ -1000,24 +1002,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     const char *displayLine = ""; // Initialize to empty string by default
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
-    bool usePhoneGPS = (ourNode && nodeDB->hasValidPosition(ourNode) &&
-                        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED);
-
-    if (usePhoneGPS) {
-        // Phone-provided GPS is active
-        displayLine = "Phone GPS";
-        int yOffset = (isHighResolution) ? 3 : 1;
-        if (isHighResolution) {
-            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
-                                                     imgSatellite_height, imgSatellite, display);
-        } else {
-            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
-                             imgSatellite);
-        }
-        int xOffset = (isHighResolution) ? 6 : 0;
-        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
-    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // GPS disabled / not present
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
         } else {
@@ -1108,9 +1093,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
         // === Final Row: Altitude ===
         char altitudeLine[32] = {0};
-        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
-                          ? ourNode->position.altitude
-                          : geoCoord.getAltitude();
+        int32_t alt = geoCoord.getAltitude();
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0fft", alt * METERS_TO_FEET);
         } else {
@@ -1202,6 +1185,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 #endif
 #endif // HAS_GPS
+    graphics::drawCommonFooter(display, x, y);
 }
 
 #ifdef USERPREFS_OEM_TEXT
@@ -1286,7 +1270,13 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (totalIcons == 0)
         return;
 
-    const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
+    const int navPadding = isHighResolution ? 24 : 12; // padding per side
+
+    int usableWidth = SCREEN_WIDTH - (navPadding * 2);
+    if (usableWidth < iconSize)
+        usableWidth = iconSize;
+
+    const size_t iconsPerPage = usableWidth / (iconSize + spacing);
     const size_t currentPage = currentFrame / iconsPerPage;
     const size_t pageStart = currentPage * iconsPerPage;
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
@@ -1357,6 +1347,47 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(WHITE);
         }
     }
+
+    // Compact arrow drawer
+    auto drawArrow = [&](bool rightSide) {
+        display->setColor(WHITE);
+
+        const int offset = isHighResolution ? 3 : 1;
+        const int halfH = rectHeight / 2;
+
+        const int top = (y - 2) + (rectHeight - halfH) / 2;
+        const int bottom = top + halfH - 1;
+        const int midY = top + (halfH / 2);
+
+        const int maxW = 4;
+
+        // Determine left X coordinate
+        int baseX = rightSide ? (rectX + rectWidth + offset) : // right arrow
+                        (rectX - offset - 1);                  // left arrow
+
+        for (int yy = top; yy <= bottom; yy++) {
+            int dist = abs(yy - midY);
+            int lineW = maxW - (dist * maxW / (halfH / 2));
+            if (lineW < 1)
+                lineW = 1;
+
+            if (rightSide) {
+                display->drawHorizontalLine(baseX, yy, lineW);
+            } else {
+                display->drawHorizontalLine(baseX - lineW + 1, yy, lineW);
+            }
+        }
+    };
+    // Right arrow
+    if (pageEnd < totalIcons) {
+        drawArrow(true);
+    }
+
+    // Left arrow
+    if (pageStart > 0) {
+        drawArrow(false);
+    }
+
     // Knock the corners off the square
     display->setColor(BLACK);
     display->drawRect(rectX, y - 2, 1, 1);

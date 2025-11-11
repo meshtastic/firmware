@@ -302,6 +302,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - yOffset,
                         secondString);
 #endif
+
+    graphics::drawCommonFooter(display, x, y);
 }
 
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
@@ -516,6 +518,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         display->drawLine(centerX, centerY, secondX, secondY);
 #endif
     }
+    graphics::drawCommonFooter(display, x, y);
 }
 
 } // namespace ClockRenderer

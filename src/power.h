@@ -138,6 +138,7 @@ class Power : private concurrency::OSThread
     void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
+    int32_t lastLogTime = 0;
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
