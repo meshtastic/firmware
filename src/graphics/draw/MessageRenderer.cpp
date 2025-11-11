@@ -213,6 +213,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #else
         display->drawString(center_text, getTextPositions(display)[2], messageString);
 #endif
+        graphics::drawCommonFooter(display, x, y);
         return;
     }
 
@@ -423,6 +424,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Draw header at the end to sort out overlapping elements
     graphics::drawCommonHeader(display, x, y, titleStr);
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
