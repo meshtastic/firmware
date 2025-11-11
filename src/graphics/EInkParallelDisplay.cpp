@@ -23,17 +23,17 @@
 #define EPD_RESPONSIVE_MIN_MS 1000 // simple rate-limit (ms) for responsive updates
 #endif
 
-EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rotation) : epaper(nullptr)
+EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot) : epaper(nullptr), rotation(rot)
 {
     LOG_INFO("init EInkParallelDisplay");
     // Set dimensions in OLEDDisplay base class
     this->geometry = GEOMETRY_RAWMODE;
-    this->displayWidth = EPD_WIDTH;
-    this->displayHeight = EPD_HEIGHT;
+    this->displayWidth = width;
+    this->displayHeight = height;
 
     // Round shortest side up to nearest byte, to prevent truncation causing an undersized buffer
-    uint16_t shortSide = min(EPD_WIDTH, EPD_HEIGHT);
-    uint16_t longSide = max(EPD_WIDTH, EPD_HEIGHT);
+    uint16_t shortSide = min(width, height);
+    uint16_t longSide = max(width, height);
     if (shortSide % 8 != 0)
         shortSide = (shortSide | 7) + 1;
 
@@ -91,6 +91,7 @@ bool EInkParallelDisplay::connect()
 #endif
     }
 
+    epaper->setRotation(rotation);
     epaper->setMode(BB_MODE_1BPP);
     epaper->clearWhite();
     epaper->fullUpdate(true);

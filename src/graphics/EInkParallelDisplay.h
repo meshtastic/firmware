@@ -19,9 +19,9 @@ class EInkParallelDisplay : public OLEDDisplay
   public:
     enum EpdRotation {
         EPD_ROT_LANDSCAPE = 0,
-        EPD_ROT_PORTRAIT = 1,
-        EPD_ROT_INVERTED_LANDSCAPE = 2,
-        EPD_ROT_INVERTED_PORTRAIT = 3,
+        EPD_ROT_PORTRAIT = 90,
+        EPD_ROT_INVERTED_LANDSCAPE = 180,
+        EPD_ROT_INVERTED_PORTRAIT = 270,
     };
 
     EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rotation);
@@ -60,6 +60,7 @@ class EInkParallelDisplay : public OLEDDisplay
     uint32_t ghostPixelLimit = EINK_LIMIT_GHOSTING_PX;
 #endif
 
+    EpdRotation rotation;
     uint32_t previousImageHash = 0;
     uint32_t lastUpdateMs = 0;
     int fastRefreshCount = 0;
