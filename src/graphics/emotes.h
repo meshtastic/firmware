@@ -262,6 +262,10 @@ extern const unsigned char last_quarter_moon[] PROGMEM;
 #define waning_crescent_moon_height 16
 extern const unsigned char waning_crescent_moon[] PROGMEM;
 
+#define first_quarter_moon_face_width 16
+#define first_quarter_moon_face_height 16
+extern const unsigned char first_quarter_moon_face[] PROGMEM;
+
 #define peach_width 16
 #define peach_height 16
 extern const unsigned char peach[] PROGMEM;
@@ -297,6 +301,10 @@ extern const unsigned char Upwards_Arrow[] PROGMEM;
 #define Rightwards_Arrow_width 16
 #define Rightwards_Arrow_height 16
 extern const unsigned char Rightwards_Arrow[] PROGMEM;
+
+#define strong_width 16
+#define strong_height 16
+extern const unsigned char strong[] PROGMEM;
 #endif // EXCLUDE_EMOJI
 
 } // namespace graphics
