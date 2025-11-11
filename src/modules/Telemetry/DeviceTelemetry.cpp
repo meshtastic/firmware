@@ -119,7 +119,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (!RadioLibInterface::instances.empty()) {
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instances.front()->txGood;
-        telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instances.front()->rxGood + RadioLibInterface::instances.front()->rxBad;
+        telemetry.variant.local_stats.num_packets_rx =
+            RadioLibInterface::instances.front()->rxGood + RadioLibInterface::instances.front()->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instances.front()->rxBad;
         telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instances.front()->txRelay;
         telemetry.variant.local_stats.num_tx_dropped = RadioLibInterface::instances.front()->txDrop;

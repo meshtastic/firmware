@@ -694,7 +694,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     // data->radio
     JSONObject jsonObjRadio;
-    if(!RadioLibInterface::instances.empty()) {
+    if (!RadioLibInterface::instances.empty()) {
         jsonObjRadio["frequency"] = new JSONValue(RadioLibInterface::instances.front()->getFreq());
         jsonObjRadio["lora_channel"] = new JSONValue((int)RadioLibInterface::instances.front()->getChannelNum() + 1);
     }

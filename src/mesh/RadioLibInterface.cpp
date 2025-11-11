@@ -37,7 +37,8 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
-    : NotifiedWorkerThread(strcpy(ifaceName, std::string("RadioIf" + std::to_string(cs)).c_str())), module(hal, cs, irq, rst, busy), iface(_iface)
+    : NotifiedWorkerThread(strcpy(ifaceName, std::string("RadioIf" + std::to_string(cs)).c_str())),
+      module(hal, cs, irq, rst, busy), iface(_iface)
 {
     noInterrupts();
     instances.push_back(this);
@@ -65,10 +66,8 @@ RadioLibInterface::~RadioLibInterface()
 
 void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
-    for(auto instance : instances)
-    {
-        if(digitalRead(instance->module.getIrq()))
-        {
+    for (auto instance : instances) {
+        if (digitalRead(instance->module.getIrq())) {
             instance->disableInterrupt();
 
             BaseType_t xHigherPriorityTaskWoken;
@@ -94,7 +93,7 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 
 /** Our ISR code currently needs this to find our active instance
  */
-std::vector<RadioLibInterface*> RadioLibInterface::instances;
+std::vector<RadioLibInterface *> RadioLibInterface::instances;
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
