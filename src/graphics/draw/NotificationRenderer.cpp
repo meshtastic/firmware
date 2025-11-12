@@ -85,8 +85,12 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
 void NotificationRenderer::resetBanner()
 {
+    notificationTypeEnum previousType = current_notification_type;
+
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
+
+    OnScreenKeyboardModule::instance().clearPopup();
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
@@ -100,6 +104,13 @@ void NotificationRenderer::resetBanner()
     currentNumber = 0;
 
     nodeDB->pause_sort(false);
+
+    // If we're exiting from text_input (virtual keyboard), stop module and trigger frame update
+    // to ensure any messages received during keyboard use are now displayed
+    if (previousType == notificationTypeEnum::text_input && screen) {
+        OnScreenKeyboardModule::instance().stop(false);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
 }
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -163,13 +174,15 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     // modulo to extract
     uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
     // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
+        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
         if (this_digit == 9) {
             currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
             currentNumber += (pow_of_10(numDigits - curSelected - 1));
         }
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
+               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
         if (this_digit == 0) {
             currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
@@ -251,10 +264,10 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
 
     // Handle input
     if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
-        inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+        inEvent.inputEvent == INPUT_BROKER_ALT_PRESS || inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
         curSelected--;
     } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
-               inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+               inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         alertBannerCallback(selectedNodenum);
@@ -368,10 +381,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // Handle input
     if (alertBannerOptions > 0) {
         if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
-            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS || inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
             curSelected--;
         } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
-                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
             curSelected++;
         } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
             if (optionsEnumPtr != nullptr) {
@@ -821,12 +834,27 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             inEvent.inputEvent = INPUT_BROKER_NONE;
         }
 
+        // Re-check pointer before drawing to avoid use-after-free and crashes
+        if (!virtualKeyboard) {
+            // Ensure we exit text_input state and restore frames
+            if (current_notification_type == notificationTypeEnum::text_input) {
+                resetBanner();
+            }
+            if (screen) {
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            }
+            return;
+        }
+
         // Clear the screen to avoid overlapping with underlying frames or overlays
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
         display->setColor(WHITE);
         // Draw the virtual keyboard
         virtualKeyboard->draw(display, 0, 0);
+
+        // Draw transient popup overlay (if any) managed by OnScreenKeyboardModule
+        OnScreenKeyboardModule::instance().drawPopupOverlay(display);
     } else {
         // If virtualKeyboard is null, reset the banner to avoid getting stuck
         LOG_INFO("Virtual keyboard is null - resetting banner");
@@ -837,6 +865,13 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 bool NotificationRenderer::isOverlayBannerShowing()
 {
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+}
+
+void NotificationRenderer::showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs)
+{
+    if (!title || !content || current_notification_type != notificationTypeEnum::text_input)
+        return;
+    OnScreenKeyboardModule::instance().showPopup(title, content, durationMs);
 }
 
 } // namespace graphics
