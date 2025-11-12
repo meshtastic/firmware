@@ -1921,10 +1921,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int16_t ty = by + padY + (FONT_HEIGHT_SMALL / 2) - (triH / 2) - 1; // -1 for optical centering
 
             // ◄ Left-pointing triangle
-            display->fillTriangle(
-                tx + triW, ty,             // top-right
-                tx,        ty + triH / 2,  // left center
-                tx + triW, ty + triH       // bottom-right
+            display->fillTriangle(tx + triW, ty,       // top-right
+                                  tx, ty + triH / 2,   // left center
+                                  tx + triW, ty + triH // bottom-right
             );
         }
 #endif
