@@ -175,9 +175,6 @@ No longer populated on PCB
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
 
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
-
 /*
  * SPI Interfaces
  */
@@ -210,7 +207,6 @@ No longer populated on PCB
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.916F)
 
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif
