@@ -194,12 +194,6 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     graphics::drawCommonHeader(display, x, y, titleStr, true, true);
     int line = 0;
 
-#ifdef T_WATCH_S3
-    if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, display->getHeight() - 14);
-    }
-#endif
-
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     char timeString[16];
     int hour = 0;
@@ -215,7 +209,6 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     }
 
     bool isPM = hour >= 12;
-    // hour = hour > 12 ? hour - 12 : hour;
     if (config.display.use_12h_clock) {
         hour %= 12;
         if (hour == 0)
@@ -229,19 +222,42 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     char secondString[8];
     snprintf(secondString, sizeof(secondString), "%02d", second);
 
-#ifdef T_WATCH_S3
-    float scale = 1.5;
-#elif defined(CHATTER_2)
-    float scale = 1.1;
-#else
-    float scale = 0.75;
-    if (isHighResolution) {
-        scale = 1.5;
-    }
-#endif
+    // Starting new calculation for scale factor!
+    float screenwidth_target_ratio = 0.80; // Target 80% of display width (adjustable)
+    float scale = 0.75;                    // Starting scale
+    float max_scale = 3.5;                 // Safety limit to avoid runaway scaling
+    float step = 0.05;                     // Step increment per iteration
+
+    float target_width = display->getWidth() * screenwidth_target_ratio;
+    float target_height =
+        display->getHeight() -
+        (isHighResolution ? 46
+                          : 43); // Be careful adjusting this number, we have to account for header and the text under the time
+    float calculated_width_size = 0;
+    float calculated_height_size = 0;
 
     uint16_t segmentWidth = SEGMENT_WIDTH * scale;
     uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    // Increment scale until calculated_width_size is near target_width or target_height
+    while (true) {
+        segmentWidth = SEGMENT_WIDTH * scale;
+        segmentHeight = SEGMENT_HEIGHT * scale;
+
+        calculated_width_size = segmentHeight + ((segmentWidth + (segmentHeight * 2) + 4) * 4);
+        calculated_height_size = segmentHeight + ((segmentHeight + (segmentHeight * 2) + 4) * 2);
+
+        if (calculated_width_size >= target_width || calculated_height_size >= target_height || scale >= max_scale)
+            break;
+
+        scale += step;
+    }
+
+    if (calculated_width_size > target_width) {
+        scale -= step;
+        segmentWidth = SEGMENT_WIDTH * scale;
+        segmentHeight = SEGMENT_HEIGHT * scale;
+    }
 
     // calculate hours:minutes string width
     uint16_t timeStringWidth = strlen(timeString) * 5;
@@ -270,6 +286,9 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             drawSegmentedDisplayColon(display, hourMinuteTextX, hourMinuteTextY, scale);
 
             hourMinuteTextX += segmentHeight + 6;
+            if (scale >= 2.0) {
+                hourMinuteTextX += (4.5 * scale);
+            }
         } else {
             drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character - '0', scale);
 
@@ -285,30 +304,21 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     if (hour >= 10) {
         xOffset += (isHighResolution) ? 32 : 18;
     }
-    int yOffset = (isHighResolution) ? 3 : 1;
-#ifdef SENSECAP_INDICATOR
-    yOffset -= 3;
-#endif
-#ifdef T_DECK
-    yOffset -= 5;
-#endif
+
     if (config.display.use_12h_clock) {
-        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
-                            isPM ? "pm" : "am");
+        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - 1, isPM ? "pm" : "am");
     }
 
 #ifndef USE_EINK
     xOffset = (isHighResolution) ? 18 : 10;
-    display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - yOffset,
+    if (scale >= 2.0) {
+        xOffset -= (4.5 * scale);
+    }
+    display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - 1,
                         secondString);
 #endif
 
     graphics::drawCommonFooter(display, x, y);
-}
-
-void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
-{
-    display->drawFastImage(x, y, 18, 14, bluetoothConnectedIcon);
 }
 
 // Draw an analog clock
@@ -321,11 +331,6 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     graphics::drawCommonHeader(display, x, y, titleStr, true, true);
     int line = 0;
 
-#ifdef T_WATCH_S3
-    if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        drawBluetoothConnectedIcon(display, display->getWidth() - 18, display->getHeight() - 14);
-    }
-#endif
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;
     int16_t centerY = display->getHeight() / 2;
