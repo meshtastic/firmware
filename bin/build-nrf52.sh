@@ -47,6 +47,8 @@ else
 	cp bin/*.uf2 $OUTDIR
 fi
 
+cp $OUTDIR/$basename.uf2 $OUTDIR/$basename-update.uf2
+
 if (echo $1 | grep -q "rak4631"); then
 	echo "Copying hex file"
 	cp .pio/build/$1/firmware.hex $OUTDIR/$basename.hex
