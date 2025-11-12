@@ -210,6 +210,16 @@ No longer populated on PCB
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.916F)
 
+// rf52840 AIN2 = Pin 4
+#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_2
+
+// We have AIN2 with a VBAT divider so AIN2 = VBAT * (100/490)
+// We have the device going deep sleep under 3.1V, which is AIN2 = 0.63V
+// So we can wake up when VBAT>=VDD is restored to 3.3V, where AIN2 = 0.67V
+// Ratio 0.67/3.3 = 0.20, so we can pick a bit higher, 2/8 VDD, which means
+// VBAT=4.04V
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_2_8
+
 #define HAS_RTC 0
 #ifdef __cplusplus
 }
