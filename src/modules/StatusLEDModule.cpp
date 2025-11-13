@@ -63,7 +63,9 @@ int32_t StatusLEDModule::runOnce()
         CHARGE_LED_state = LED_STATE_OFF;
     }
 
-    if (ble_state == unpaired) {
+    if (!config.bluetooth.enabled) {
+        PAIRING_LED_state = LED_STATE_OFF;
+    } else if (ble_state == unpaired) {
         if (slowTrack) {
             PAIRING_LED_state = !PAIRING_LED_state;
             slowTrack = false;
@@ -75,6 +77,7 @@ int32_t StatusLEDModule::runOnce()
     } else {
         PAIRING_LED_state = LED_STATE_ON;
     }
+
 #ifdef LED_CHARGE
     digitalWrite(LED_CHARGE, CHARGE_LED_state);
 #endif
