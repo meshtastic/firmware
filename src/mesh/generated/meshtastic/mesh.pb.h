@@ -288,6 +288,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_WISMESH_TAP_V2 = 116,
     /* RAK3401 */
     meshtastic_HardwareModel_RAK3401 = 117,
+    /* Makerfabs MaTouch_ESP32-S3 SPI TFT with Touch 3.5'' ILI9488*/
+    meshtastic_HardwareModel_MAKERFABS_MATOUCH_3_5_SPI = 118,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
