@@ -19,6 +19,11 @@
 #include "BQ25713.h"
 #endif
 
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void variant_shutdown() __attribute__((weak));
+void variant_shutdown() {}
+
 static inline void debugger_break(void)
 {
     __asm volatile("bkpt #0x01\n\t"
@@ -352,6 +357,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         NRF_GPIO->DIRCLR = (1 << pin);
     }
 #endif
+    variant_shutdown();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event

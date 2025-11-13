@@ -6,6 +6,10 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_AHTX0.h>)
 
+#ifndef AHT10_TEMP_OFFSET
+#define AHT10_TEMP_OFFSET 0
+#endif
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_AHTX0.h>
