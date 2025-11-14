@@ -101,12 +101,12 @@ void NeighborInfoModule::cleanUpNeighbors()
 }
 
 /* Send neighbor info to the mesh */
-void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies, bool sendEmpty)
+void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
     // only send neighbours if we have some to send
-    if (neighborInfo.neighbors_count > 0 or sendEmpty) {
+    if (neighborInfo.neighbors_count > 0) {
         meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
         p->to = dest;
         p->decoded.want_response = wantReplies;
@@ -132,6 +132,36 @@ int32_t NeighborInfoModule::runOnce()
     return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 
+
+meshtastic_MeshPacket *NeighborInfoModule::allocReply()
+{
+    // we end up here when want_response is true.
+    // add any other thresholds. 
+    //if (mp.decoded.want_response && np->neighbors_count == 0) { // want response, and is otherwise empty.
+    LOG_INFO("NeighborInfoRequested.");
+
+    meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
+    collectNeighborInfo(&neighborInfo);
+    //  send neighbours regardless of size
+    return allocDataProtobuf(neighborInfo);
+
+
+    // This was all taken out of the Position module. Likely discard.
+    // if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
+    //     Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
+    //     LOG_DEBUG("Skip Position reply since we sent a reply <3min ago");
+    //     ignoreRequest = true; // Mark it as ignored for MeshModule
+    //     return nullptr;
+    // }
+
+    // meshtastic_MeshPacket *reply = allocPositionPacket();
+    // if (reply) {
+    //     lastSentReply = millis(); // Track when we sent this reply
+    // }
+    // return reply;
+}
+
+
 /*
 Collect a received neighbor info packet from another node
 Pass it to an upper client; do not persist this data on the mesh
@@ -145,11 +175,6 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
-    }
-    if (mp.decoded.want_response && np->neighbors_count == 0) { // want response, and is otherwise empty.
-        LOG_INFO("NeighborInfoRequested.");
-        sendNeighborInfo(mp.from, false, true); // do we want this to be dm, or broadcast?
-        // sendNeighborInfo(NODENUM_BROADCAST, false); // do we want this to be dm, or broadcast?
     }
     // Allow others to handle this packet
     return false;
