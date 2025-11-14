@@ -7,37 +7,36 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 
-#if defined(ARCH_PORTDUINO)
-#include <Adafruit_BME680.h>
-#include <memory>
-#else // defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
 #include <bme68xLibrary.h>
 #include <bsec2.h>
-#endif // defined(ARCH_PORTDUINO)
+#else
+#include <Adafruit_BME680.h>
+#include <memory>
+#endif // BME680_BSEC2_SUPPORTED
 
 #define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of millis()
 
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
 const uint8_t bsec_config[] = {
 #include "config/bme680/bme680_iaq_33v_3s_4d/bsec_iaq.txt"
 };
-#endif // !defined(ARCH_PORTDUINO)
-
+#endif // BME680_BSEC2_SUPPORTED
 class BME680Sensor : public TelemetrySensor
 {
   private:
-#if defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
+    Bsec2 bme680;
+#else
     using BME680Ptr = std::unique_ptr<Adafruit_BME680>;
 
     static BME680Ptr makeBME680(TwoWire *bus) { return std::make_unique<Adafruit_BME680>(bus); }
 
     BME680Ptr bme680;
-#else
-    Bsec2 bme680;
-#endif // defined(ARCH_PORTDUINO)
+#endif // BME680_BSEC2_SUPPORTED
 
   protected:
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
     const char *bsecConfigFileName = "/prefs/bsec.dat";
     uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
     uint8_t accuracy = 0;
@@ -54,13 +53,13 @@ class BME680Sensor : public TelemetrySensor
     void loadState();
     void updateState();
     void checkStatus(const char *functionName);
-#endif // !defined(ARCH_PORTDUINO)
+#endif // BME680_BSEC2_SUPPORTED
 
   public:
     BME680Sensor();
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
     virtual int32_t runOnce() override;
-#endif // !defined(ARCH_PORTDUINO)
+#endif // BME680_BSEC2_SUPPORTED
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };

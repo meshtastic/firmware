@@ -12,7 +12,7 @@
 
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
 
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
 int32_t BME680Sensor::runOnce()
 {
     if (!bme680.run()) {
@@ -20,13 +20,13 @@ int32_t BME680Sensor::runOnce()
     }
     return 35;
 }
-#endif // !defined(ARCH_PORTDUINO)
+#endif // defined(BME680_BSEC2_SUPPORTED)
 
 bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     status = 0;
 
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
     if (!bme680.begin(dev->address.address, *bus))
         checkStatus("begin");
 
@@ -58,7 +58,7 @@ bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     status = 1;
 
-#endif // !defined(ARCH_PORTDUINO)
+#endif // BME680_BSEC2_SUPPORTED
 
     initI2CSensor();
     return status;
@@ -66,7 +66,7 @@ bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
     if (bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal == 0)
         return false;
 
@@ -100,11 +100,11 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.barometric_pressure = bme680->readPressure() / 100.0F;
     measurement->variant.environment_metrics.gas_resistance = bme680->readGas() / 1000.0;
 
-#endif
+#endif // BME680_BSEC2_SUPPORTED
     return true;
 }
 
-#if !defined(ARCH_PORTDUINO)
+#if BME680_BSEC2_SUPPORTED == 1
 void BME680Sensor::loadState()
 {
 #ifdef FSCom
@@ -181,6 +181,6 @@ void BME680Sensor::checkStatus(const char *functionName)
     else if (bme680.sensor.status > BME68X_OK)
         LOG_WARN("%s BME68X code: %d", functionName, bme680.sensor.status);
 }
-#endif // !defined(ARCH_PORTDUINO)
+#endif // BME680_BSEC2_SUPPORTED
 
 #endif
