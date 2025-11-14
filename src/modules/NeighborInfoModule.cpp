@@ -135,30 +135,12 @@ int32_t NeighborInfoModule::runOnce()
 
 meshtastic_MeshPacket *NeighborInfoModule::allocReply()
 {
-    // we end up here when want_response is true.
-    // add any other thresholds. 
-    //if (mp.decoded.want_response && np->neighbors_count == 0) { // want response, and is otherwise empty.
     LOG_INFO("NeighborInfoRequested.");
 
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
-    //  send neighbours regardless of size
+    //  send neighbours regardless of number of neighbors
     return allocDataProtobuf(neighborInfo);
-
-
-    // This was all taken out of the Position module. Likely discard.
-    // if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
-    //     Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
-    //     LOG_DEBUG("Skip Position reply since we sent a reply <3min ago");
-    //     ignoreRequest = true; // Mark it as ignored for MeshModule
-    //     return nullptr;
-    // }
-
-    // meshtastic_MeshPacket *reply = allocPositionPacket();
-    // if (reply) {
-    //     lastSentReply = millis(); // Track when we sent this reply
-    // }
-    // return reply;
 }
 
 
