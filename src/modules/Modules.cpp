@@ -107,6 +107,9 @@
 #include "modules/DropzoneModule.h"
 #endif
 
+// Custom UI module extern declaration
+extern void setup_CustomUIModule();
+
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -301,4 +304,9 @@ void setupModules()
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();
+
+    // Setup custom UI module if building for heltec-v3-custom variant
+#if defined(VARIANT_heltec_v3_custom) || defined(HELTEC_V3_CUSTOM)
+    setup_CustomUIModule();
+#endif
 }

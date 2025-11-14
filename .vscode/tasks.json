@@ -1,15 +1,35 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "type": "PlatformIO",
-      "task": "Build",
-      "problemMatcher": ["$platformio"],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "label": "PlatformIO: Build"
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "PlatformIO",
+			"task": "Build",
+			"problemMatcher": [
+				"$platformio"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"label": "PlatformIO: Build"
+		},
+		{
+			"label": "Test Build Heltec V3",
+			"type": "shell",
+			"command": "platformio run -e heltec-v3",
+			"isBackground": false
+		},
+		{
+			"label": "Build Custom Environment",
+			"type": "shell",
+			"command": "pio run",
+			"isBackground": false
+		},
+		{
+			"label": "Upload Custom Environment",
+			"type": "shell",
+			"command": "platformio run --target upload -e heltec-v3-custom",
+			"isBackground": false
+		}
+	]
 }
