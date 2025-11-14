@@ -5,7 +5,7 @@
 #include "PowerStatus.h"  // For PowerStatus class and extern powerStatus
 #include <Arduino.h>
 
-// Note: powerStatus is declared extern in PowerStatus.h in meshtastic namespace
+using namespace meshtastic;
 
 UIDataState::UIDataState() : systemDataValid(false), nodesDataValid(false) {
     memset(&currentSystemData, 0, sizeof(currentSystemData));

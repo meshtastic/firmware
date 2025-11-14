@@ -8,6 +8,7 @@
 #include "concurrency/OSThread.h"
 #include <Adafruit_ST7789.h>
 #include <Arduino.h>
+#include <Keypad.h>
 
 // Forward declaration
 class UINavigator;
@@ -47,6 +48,15 @@ private:
     int lastButtonState;
     unsigned long lastButtonCheck;
     void checkButtonInput();
+    
+    // Keypad handling
+    static const byte ROWS = 4;
+    static const byte COLS = 4;
+    static char keys[ROWS][COLS];
+    static byte rowPins[ROWS];
+    static byte colPins[COLS];
+    Keypad* keypad;
+    void checkKeypadInput();
     
     // Message queue system (10 message limit)
     static const int MAX_QUEUED_MESSAGES = 10;

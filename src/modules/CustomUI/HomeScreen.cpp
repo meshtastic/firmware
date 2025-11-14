@@ -119,10 +119,12 @@ void HomeScreen::draw(Adafruit_ST7789& tft, UIDataState& dataState) {
     
     // System stats inside box
     tft.setCursor(16, 78);
-    tft.printf("CPU >> %5.1f%%", 15.5f); // Placeholder values
+    // Show LoRa status instead of CPU
+    const char* loraStatus = data.isConnected ? "CONNECTED" : "SEARCHING";
+    tft.printf("LORA >> %s", loraStatus);
     
     tft.setCursor(16, 95);
-    tft.printf("MEM >> %lu KB", data.freeHeapKB); // Use correct field name
+    tft.printf("MEM >> %lu KB", data.freeHeapKB);
     
     // Kernel info on right side of box
     tft.setCursor(200, 78);

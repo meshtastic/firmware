@@ -13,6 +13,7 @@
 #include "UINavigator.h"
 #include <Arduino.h>
 #include <SPI.h>
+#include <Keypad.h>
 
 // Display pins for Heltec V3 with external ST7789 (Software SPI)
 // Based on your wiring: MOSI=5, SCLK=6, CS=1, DC=2, RST=3, BL=4
@@ -25,6 +26,17 @@
 
 CustomUIModule *customUIModule;
 
+// Static keypad configuration
+char CustomUIModule::keys[CustomUIModule::ROWS][CustomUIModule::COLS] = {
+    {'1', '2', '3', 'A'},
+    {'4', '5', '6', 'B'},
+    {'7', '8', '9', 'C'},
+    {'*', '0', '#', 'D'}
+};
+
+byte CustomUIModule::rowPins[CustomUIModule::ROWS] = {47, 33, 34, 7};
+byte CustomUIModule::colPins[CustomUIModule::COLS] = {48, 21, 20, 19};
+
 CustomUIModule::CustomUIModule() 
     : SinglePortModule("CustomUIModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
       OSThread("CustomUIModule"),
@@ -32,6 +44,7 @@ CustomUIModule::CustomUIModule()
       navigator(nullptr),
       lastButtonState(HIGH),
       lastButtonCheck(0),
+      keypad(nullptr),
       queueHead(0),
       queueTail(0),
       queueSize(0),
@@ -46,6 +59,9 @@ CustomUIModule::CustomUIModule()
 int32_t CustomUIModule::runOnce() {
     // Check button state (USER button on Heltec V3)
     checkButtonInput();
+    
+    // Check keypad input
+    checkKeypadInput();
     
     // Check for new unread messages to show
     if (!showingMessagePopup && hasUnreadMessages()) {
@@ -76,7 +92,7 @@ int32_t CustomUIModule::runOnce() {
         }
     }
     
-    return 1000; // Normal refresh rate
+    return 50; // Fast scan rate for instant keypad feedback (20Hz)
 }
 
 bool CustomUIModule::wantUIFrame() {
@@ -119,7 +135,11 @@ void CustomUIModule::initDisplay() {
     // Create UI navigator
     navigator = new UINavigator(tft);
     
-    LOG_INFO("🔧 CUSTOM UI: ST7789 display and UI navigator initialized");
+    // Initialize keypad
+    keypad = new Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+    keypad->setDebounceTime(110); // Set debounce time as specified
+    
+    LOG_INFO("🔧 CUSTOM UI: ST7789 display, UI navigator, and keypad initialized");
 }
 
 void CustomUIModule::checkButtonInput() {
@@ -151,6 +171,45 @@ void CustomUIModule::checkButtonInput() {
     }
     
     lastButtonState = buttonState;
+}
+
+void CustomUIModule::checkKeypadInput() {
+    if (!keypad) return;
+    
+    char key = keypad->getKey();
+    
+    if (key) {
+        LOG_INFO("🔧 CUSTOM UI: Keypad key pressed: %c", key);
+        
+        if (showingMessagePopup) {
+            // Any key dismisses message popup
+            dismissCurrentMessage();
+            LOG_INFO("🔧 CUSTOM UI: Message popup dismissed by keypad");
+        } else {
+            // Handle specific keys
+            switch (key) {
+                case 'A':
+                    // Back navigation
+                    if (navigator) {
+                        LOG_INFO("🔧 CUSTOM UI: Keypad 'A' pressed - navigating back");
+                        navigator->navigateBack();
+                    }
+                    break;
+                    
+                case '1':
+                    // Open nodes list
+                    if (navigator) {
+                        LOG_INFO("🔧 CUSTOM UI: Keypad '1' pressed - opening nodes list");
+                        navigator->navigateToNodes();
+                    }
+                    break;
+                    
+                default:
+                    LOG_DEBUG("🔧 CUSTOM UI: Unhandled keypad key: %c", key);
+                    break;
+            }
+        }
+    }
 }
 
 ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
