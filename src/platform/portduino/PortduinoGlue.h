@@ -55,6 +55,9 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 std::string exec(const char *cmd);
 
+#define interrupts()
+#define noInterrupts()
+
 extern struct portduino_config_struct {
     // Lora
     std::map<lora_module_enum, std::string> loraModules = {
