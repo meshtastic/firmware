@@ -16,7 +16,10 @@ public:
         size_t nodeCount;
         uint32_t uptime;
         uint8_t batteryPercent;
+        int batteryVoltageMv;
         bool hasBattery;
+        bool hasUSB;
+        bool isCharging;
         uint8_t loraRegion;
         uint8_t loraPreset;
         uint32_t freeHeapKB;
@@ -28,7 +31,10 @@ public:
                    strcmp(shortName, other.shortName) != 0 ||
                    nodeCount != other.nodeCount ||
                    batteryPercent != other.batteryPercent ||
+                   batteryVoltageMv != other.batteryVoltageMv ||
                    hasBattery != other.hasBattery ||
+                   hasUSB != other.hasUSB ||
+                   isCharging != other.isCharging ||
                    loraRegion != other.loraRegion ||
                    loraPreset != other.loraPreset ||
                    isConnected != other.isConnected ||

@@ -10,8 +10,9 @@
 #include <Arduino.h>
 #include <Keypad.h>
 
-// Forward declaration
+// Forward declarations
 class UINavigator;
+class MessagePopupScreen;
 
 /**
  * Message structure for queued incoming messages
@@ -19,6 +20,7 @@ class UINavigator;
 struct QueuedMessage {
     String messageText;
     String senderName;
+    String senderLongName;
     uint32_t nodeId;
     unsigned long timestamp;
     bool isRead;
@@ -43,6 +45,7 @@ public:
 private:
     Adafruit_ST7789 tft;
     UINavigator* navigator;
+    MessagePopupScreen* messagePopupScreen;
     
     // Button handling
     int lastButtonState;
@@ -58,8 +61,8 @@ private:
     Keypad* keypad;
     void checkKeypadInput();
     
-    // Message queue system (10 message limit)
-    static const int MAX_QUEUED_MESSAGES = 10;
+    // Message queue system (5 message limit)
+    static const int MAX_QUEUED_MESSAGES = 5;
     QueuedMessage messageQueue[MAX_QUEUED_MESSAGES];
     int queueHead; // Next position to write
     int queueTail; // Next position to read
@@ -68,16 +71,13 @@ private:
     // Message popup display
     bool showingMessagePopup;
     int currentMessageIndex;
-    bool popupNeedsRedraw;
     unsigned long lastTimestampUpdate;
     
     // Message management methods
-    bool addMessageToQueue(const String& messageText, const String& senderName, uint32_t nodeId);
+    bool addMessageToQueue(const String& messageText, const String& senderName, const String& senderLongName, uint32_t nodeId);
     bool hasUnreadMessages() const;
     void showNextMessage();
     void dismissCurrentMessage();
-    void drawMessagePopup();
-    void updateTimestamp(); // Dirty rectangle update for timestamp only
     void drawMessageCounter();
 };
 

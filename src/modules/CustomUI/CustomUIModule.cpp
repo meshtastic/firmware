@@ -11,6 +11,7 @@
 
 #include "CustomUIModule.h"
 #include "UINavigator.h"
+#include "MessagePopupScreen.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <Keypad.h>
@@ -42,6 +43,7 @@ CustomUIModule::CustomUIModule()
       OSThread("CustomUIModule"),
       tft(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST),
       navigator(nullptr),
+      messagePopupScreen(nullptr),
       lastButtonState(HIGH),
       lastButtonCheck(0),
       keypad(nullptr),
@@ -50,7 +52,6 @@ CustomUIModule::CustomUIModule()
       queueSize(0),
       showingMessagePopup(false),
       currentMessageIndex(-1),
-      popupNeedsRedraw(false),
       lastTimestampUpdate(0) {
     
     LOG_INFO("🔧 CUSTOM UI: Module constructed with Software SPI and message queue");
@@ -66,24 +67,24 @@ int32_t CustomUIModule::runOnce() {
     // Check for new unread messages to show
     if (!showingMessagePopup && hasUnreadMessages()) {
         showNextMessage();
+    } else if (showingMessagePopup && messagePopupScreen) {
+        // If popup is showing and queue size changed, update the counter
+        static int lastKnownQueueSize = 0;
+        if (queueSize != lastKnownQueueSize) {
+            messagePopupScreen->updateCounter(tft, 1, queueSize);
+            lastKnownQueueSize = queueSize;
+            LOG_INFO("🔧 CUSTOM UI: Queue size changed to %d, updating counter", queueSize);
+        }
     }
     
     // Update display
-    if (showingMessagePopup) {
-        // Only draw full popup when needed
-        if (popupNeedsRedraw) {
-            drawMessagePopup();
-            popupNeedsRedraw = false;
-            lastTimestampUpdate = millis();
-        } else {
-            // Just update timestamp every 10 seconds (dirty rectangle)
-            unsigned long now = millis();
-            if (now - lastTimestampUpdate > 10000) {
-                updateTimestamp();
-                lastTimestampUpdate = now;
-            }
+    if (showingMessagePopup && messagePopupScreen) {
+        // Update timestamp if needed
+        unsigned long now = millis();
+        if (now - lastTimestampUpdate > 10000) {
+            messagePopupScreen->updateTimestamp(tft, now);
+            lastTimestampUpdate = now;
         }
-        return 1000; // Normal refresh rate
     } else if (navigator) {
         navigator->update();
         // Draw message counter if there are unread messages
@@ -135,11 +136,14 @@ void CustomUIModule::initDisplay() {
     // Create UI navigator
     navigator = new UINavigator(tft);
     
+    // Create message popup screen
+    messagePopupScreen = new MessagePopupScreen(navigator);
+    
     // Initialize keypad
     keypad = new Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
     keypad->setDebounceTime(110); // Set debounce time as specified
     
-    LOG_INFO("🔧 CUSTOM UI: ST7789 display, UI navigator, and keypad initialized");
+    LOG_INFO("🔧 CUSTOM UI: ST7789 display, UI navigator, message popup, and keypad initialized");
 }
 
 void CustomUIModule::checkButtonInput() {
@@ -220,12 +224,23 @@ ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
         
         // Get sender info
         String senderName = "Unknown";
+        String senderLongName = "";
         uint32_t nodeId = mp.from;
         auto nodedbp = nodeDB;
         if (nodedbp) {
             meshtastic_NodeInfoLite *senderNode = nodedbp->getMeshNode(mp.from);
-            if (senderNode && strlen(senderNode->user.short_name) > 0) {
-                senderName = String(senderNode->user.short_name);
+            if (senderNode) {
+                if (strlen(senderNode->user.short_name) > 0) {
+                    senderName = String(senderNode->user.short_name);
+                }
+                if (strlen(senderNode->user.long_name) > 0) {
+                    senderLongName = String(senderNode->user.long_name);
+                }
+                if (senderName == "Unknown") {
+                    char nodeIdStr[16];
+                    snprintf(nodeIdStr, sizeof(nodeIdStr), "%08X", mp.from);
+                    senderName = String(nodeIdStr);
+                }
             } else {
                 char nodeIdStr[16];
                 snprintf(nodeIdStr, sizeof(nodeIdStr), "%08X", mp.from);
@@ -234,7 +249,7 @@ ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
         }
         
         // Add to message queue
-        bool queued = addMessageToQueue(messageText, senderName, nodeId);
+        bool queued = addMessageToQueue(messageText, senderName, senderLongName, nodeId);
         
         if (queued) {
             LOG_INFO("🔧 CUSTOM UI: Message queued from %s: %s", senderName.c_str(), messageText.c_str());
@@ -254,7 +269,7 @@ void setup_CustomUIModule() {
 }
 
 // Message queue management methods
-bool CustomUIModule::addMessageToQueue(const String& messageText, const String& senderName, uint32_t nodeId) {
+bool CustomUIModule::addMessageToQueue(const String& messageText, const String& senderName, const String& senderLongName, uint32_t nodeId) {
     if (queueSize >= MAX_QUEUED_MESSAGES) {
         return false; // Queue is full
     }
@@ -263,6 +278,7 @@ bool CustomUIModule::addMessageToQueue(const String& messageText, const String& 
     QueuedMessage& msg = messageQueue[queueHead];
     msg.messageText = messageText;
     msg.senderName = senderName;
+    msg.senderLongName = senderLongName;
     msg.nodeId = nodeId;
     msg.timestamp = millis();
     msg.isRead = false;
@@ -279,13 +295,29 @@ bool CustomUIModule::hasUnreadMessages() const {
 }
 
 void CustomUIModule::showNextMessage() {
-    if (queueSize == 0) return;
+    if (queueSize == 0 || !messagePopupScreen) return;
     
     currentMessageIndex = queueTail;
-    showingMessagePopup = true;
-    popupNeedsRedraw = true; // Flag for redraw
+    const QueuedMessage& msg = messageQueue[queueTail];
     
-    LOG_INFO("🔧 CUSTOM UI: Showing message popup %d/%d", queueSize - (queueHead - queueTail - 1), queueSize);
+    // Prepare message data for popup
+    MessageData msgData;
+    msgData.messageText = msg.messageText;
+    msgData.senderName = msg.senderName;
+    msgData.senderLongName = msg.senderLongName;
+    msgData.nodeId = msg.nodeId;
+    msgData.timestamp = msg.timestamp;
+    // Calculate actual position: if we have 3 messages, first is 1/3, next is 2/3, last is 3/3
+    // Position = total messages - remaining messages + 1
+    msgData.currentIndex = 1;  // Always showing the "next" message (first in queue)
+    msgData.totalMessages = queueSize;
+    
+    messagePopupScreen->showMessage(msgData);
+    messagePopupScreen->draw(tft, navigator->getDataState());
+    showingMessagePopup = true;
+    lastTimestampUpdate = millis();
+    
+    LOG_INFO("🔧 CUSTOM UI: Showing message popup %d/%d", msgData.currentIndex, msgData.totalMessages);
 }
 
 void CustomUIModule::dismissCurrentMessage() {
@@ -296,126 +328,20 @@ void CustomUIModule::dismissCurrentMessage() {
     queueTail = (queueTail + 1) % MAX_QUEUED_MESSAGES;
     queueSize--;
     
-    showingMessagePopup = false;
-    currentMessageIndex = -1;
-    
-    // Force navigator redraw when returning to normal view
-    if (navigator) {
-        navigator->forceRedraw();
-    }
-}
-
-void CustomUIModule::drawMessagePopup() {
-    if (!showingMessagePopup || currentMessageIndex < 0 || queueSize == 0) return;
-    
-    const QueuedMessage& msg = messageQueue[queueTail];
-    
-    // Draw popup overlay (semi-transparent background effect)
-    tft.fillScreen(ST77XX_BLACK);
-    tft.drawRect(10, 10, 300, 220, ST77XX_CYAN);
-    tft.drawRect(11, 11, 298, 218, ST77XX_CYAN);
-    
-    // Header with message count
-    tft.setTextSize(2);
-    tft.setTextColor(ST77XX_CYAN);
-    tft.setCursor(20, 20);
-    tft.print("NEW MESSAGE");
-    
-    // Message counter
-    tft.setTextSize(1);
-    tft.setCursor(250, 25);
-    tft.printf("(%d/%d)", queueSize - (currentMessageIndex - queueTail), queueSize);
-    
-    // Separator line
-    tft.drawLine(20, 45, 300, 45, ST77XX_CYAN);
-    
-    // Sender info
-    tft.setTextSize(1);
-    tft.setTextColor(ST77XX_YELLOW);
-    tft.setCursor(20, 55);
-    tft.print("From: ");
-    tft.setTextColor(ST77XX_WHITE);
-    tft.print(msg.senderName);
-    
-    // Node ID
-    tft.setTextColor(ST77XX_YELLOW);
-    tft.setCursor(20, 70);
-    tft.print("Node: ");
-    tft.setTextColor(ST77XX_WHITE);
-    tft.printf("%08X", (unsigned int)msg.nodeId);
-    
-    // Time received (static, calculated once)
-    unsigned long secondsAgo = (millis() - msg.timestamp) / 1000;
-    tft.setTextColor(ST77XX_YELLOW);
-    tft.setCursor(20, 85);
-    tft.print("Time: ");
-    tft.setTextColor(ST77XX_WHITE);
-    if (secondsAgo < 60) {
-        tft.printf("%lus ago", secondsAgo);
-    } else if (secondsAgo < 3600) {
-        tft.printf("%lum ago", secondsAgo / 60);
+    // If there are more messages, show the next one
+    if (queueSize > 0) {
+        LOG_INFO("🔧 CUSTOM UI: %d more messages in queue, showing next", queueSize);
+        showNextMessage();
     } else {
-        tft.printf("%luh ago", secondsAgo / 3600);
-    }
-    
-    // Message separator
-    tft.drawLine(20, 105, 300, 105, ST77XX_YELLOW);
-    
-    // Message content with word wrap
-    tft.setTextSize(1);
-    tft.setTextColor(ST77XX_WHITE);
-    
-    // Simple word wrap for popup (smaller area)
-    String wrappedMessage = msg.messageText;
-    int lineLength = 45; // Characters per line in popup
-    int yPos = 120;
-    int startIdx = 0;
-    
-    while (startIdx < wrappedMessage.length() && yPos < 190) {
-        int endIdx = startIdx + lineLength;
-        if (endIdx >= wrappedMessage.length()) {
-            tft.setCursor(20, yPos);
-            tft.println(wrappedMessage.substring(startIdx));
-            break;
-        }
+        // No more messages, return to normal view
+        showingMessagePopup = false;
+        currentMessageIndex = -1;
         
-        // Find last space before line limit
-        int spaceIdx = wrappedMessage.lastIndexOf(' ', endIdx);
-        if (spaceIdx > startIdx) {
-            endIdx = spaceIdx;
+        // Force navigator redraw when returning to normal view
+        if (navigator) {
+            navigator->forceRedraw();
         }
-        
-        tft.setCursor(20, yPos);
-        tft.println(wrappedMessage.substring(startIdx, endIdx));
-        startIdx = endIdx + 1;
-        yPos += 12;
-    }
-    
-    // Footer instructions
-    tft.drawLine(20, 200, 300, 200, ST77XX_CYAN);
-    tft.setTextColor(ST77XX_GREEN);
-    tft.setCursor(20, 210);
-    tft.print("[BUTTON] Dismiss Message");
-}
-
-void CustomUIModule::updateTimestamp() {
-    if (!showingMessagePopup || currentMessageIndex < 0 || queueSize == 0) return;
-    
-    const QueuedMessage& msg = messageQueue[queueTail];
-    
-    // Clear the entire timestamp line (wider area to prevent overlap)
-    tft.fillRect(70, 85, 230, 12, ST77XX_BLACK);
-    
-    // Redraw just the timestamp
-    unsigned long secondsAgo = (millis() - msg.timestamp) / 1000;
-    tft.setTextColor(ST77XX_WHITE);
-    tft.setCursor(70, 85);
-    if (secondsAgo < 60) {
-        tft.printf("%lus ago", secondsAgo);
-    } else if (secondsAgo < 3600) {
-        tft.printf("%lum ago", secondsAgo / 60);
-    } else {
-        tft.printf("%luh ago", secondsAgo / 3600);
+        LOG_INFO("🔧 CUSTOM UI: All messages dismissed, returning to home");
     }
 }
 

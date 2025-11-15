@@ -3,9 +3,45 @@
 #include "configuration.h"
 #include "PowerFSM.h"
 #include "PowerStatus.h"  // For PowerStatus class and extern powerStatus
+#include "power.h"         // For PMU direct access
 #include <Arduino.h>
 
 using namespace meshtastic;
+
+// Battery voltage to percentage lookup table (Li-ion curve)
+// Voltage values in mV for 0%, 10%, 20%... 100%
+static const int batteryVoltageLookup[] = {
+    3000,  // 0%
+    3400,  // 10%
+    3550,  // 20%
+    3650,  // 30%
+    3700,  // 40%
+    3750,  // 50%
+    3800,  // 60%
+    3850,  // 70%
+    3920,  // 80%
+    4000,  // 90%
+    4100   // 100%
+};
+
+// Calculate battery percentage from voltage (more reliable than AXP2101 gauge)
+static uint8_t voltageToPercent(int voltageMv) {
+    // Clamp to valid range
+    if (voltageMv >= 4100) return 100;  // Full charge (even if higher when charging)
+    if (voltageMv <= 3000) return 0;    // Dead battery
+    
+    // Linear interpolation between lookup points
+    for (int i = 0; i < 10; i++) {
+        if (voltageMv <= batteryVoltageLookup[i + 1]) {
+            int v1 = batteryVoltageLookup[i];
+            int v2 = batteryVoltageLookup[i + 1];
+            int pct1 = i * 10;
+            int pct2 = (i + 1) * 10;
+            return pct1 + ((voltageMv - v1) * (pct2 - pct1)) / (v2 - v1);
+        }
+    }
+    return 100;
+}
 
 UIDataState::UIDataState() : systemDataValid(false), nodesDataValid(false) {
     memset(&currentSystemData, 0, sizeof(currentSystemData));
@@ -104,23 +140,65 @@ void UIDataState::invalidateAll() {
 
 void UIDataState::updateBatteryInfo(SystemData& data) {
     // Use Meshtastic's power management system (powerStatus is in meshtastic namespace)
+    // Using the same approach as stock Meshtastic UI (SharedUIDisplay.cpp)
     data.hasBattery = false;
     data.batteryPercent = 0;
+    data.batteryVoltageMv = 0;
+    data.hasUSB = false;
+    data.isCharging = false;
     
     if (powerStatus) {
-        data.hasBattery = powerStatus->getHasBattery();
-        if (data.hasBattery) {
-            data.batteryPercent = powerStatus->getBatteryChargePercent();
-            // Ensure we have a valid percentage
-            if (data.batteryPercent > 100) {
-                data.batteryPercent = 100;
+        // Read values directly from powerStatus (same as stock UI)
+        int chargePercent = powerStatus->getBatteryChargePercent();
+        data.hasUSB = powerStatus->getHasUSB();
+        data.isCharging = powerStatus->getIsCharging();
+        data.batteryVoltageMv = powerStatus->getBatteryVoltageMv();
+        
+        // Handle special case: 101% means external power on boards without USB detection
+        if (chargePercent == 101) {
+            data.hasUSB = true;
+            data.hasBattery = false;
+            data.batteryPercent = 0;
+        } else if (chargePercent >= 0 && chargePercent <= 100) {
+            // Valid battery percentage
+            data.hasBattery = powerStatus->getHasBattery();
+            data.batteryPercent = chargePercent;
+            
+            // Stop charging indicator at 100%
+            if (chargePercent >= 100) {
+                data.isCharging = false;
             }
+        } else {
+            // Invalid percentage, no battery
+            data.hasBattery = false;
+            data.batteryPercent = 0;
         }
-    }
-    
-    // If powerStatus not available or no battery detected, assume external power
-    if (!data.hasBattery) {
-        data.hasBattery = false;
-        data.batteryPercent = 0; // External power, no battery percentage
+        
+        // Sanity check on voltage - if it's way off, try direct PMU reading
+        if (data.batteryVoltageMv < 2500 || data.batteryVoltageMv > 4500) {
+            #ifdef HAS_PMU
+            if (PMU) {
+                int pmuVoltage = PMU->getBattVoltage();
+                if (pmuVoltage >= 2500 && pmuVoltage <= 4500) {
+                    data.batteryVoltageMv = pmuVoltage;
+                    // If percentage is also stuck at 100, calculate from voltage
+                    if (data.hasBattery && data.batteryPercent == 100 && pmuVoltage < 4050) {
+                        data.batteryPercent = voltageToPercent(pmuVoltage);
+                    }
+                }
+            }
+            #endif
+        }
+        
+        // Debug logging to see actual values
+        static unsigned long lastLogTime = 0;
+        if (millis() - lastLogTime > 30000) { // Log every 30 seconds
+            LOG_INFO("🔋 CUSTOM UI Battery: hasBat=%d, hasUSB=%d, charging=%d, pct=%d, mV=%d",
+                     data.hasBattery, data.hasUSB, data.isCharging, 
+                     data.batteryPercent, data.batteryVoltageMv);
+            lastLogTime = millis();
+        }
+    } else {
+        LOG_WARN("🔋 CUSTOM UI: powerStatus is NULL!");
     }
 }

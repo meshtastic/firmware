@@ -88,12 +88,21 @@ void HomeScreen::draw(Adafruit_ST7789& tft, UIDataState& dataState) {
     snprintf(nodeIdStr, sizeof(nodeIdStr), "NODE_%08X", (unsigned int)data.nodeId);
     tft.print(nodeIdStr);
     
-    // Mode and battery on right
+    // Mode and battery/power status on right
     char statusText[32];
-    if (data.hasBattery) {
-        snprintf(statusText, sizeof(statusText), "MESH | %d%%", data.batteryPercent);
+    if (data.hasUSB) {
+        // USB power detected
+        if (data.isCharging) {
+            snprintf(statusText, sizeof(statusText), "MESH | CHG %d%%", data.batteryPercent);
+        } else {
+            snprintf(statusText, sizeof(statusText), "MESH | USB");
+        }
+    } else if (data.hasBattery) {
+        // Running on battery
+        snprintf(statusText, sizeof(statusText), "MESH | BAT %d%%", data.batteryPercent);
     } else {
-        snprintf(statusText, sizeof(statusText), "MESH | EXT");
+        // No battery info
+        snprintf(statusText, sizeof(statusText), "MESH | ---");
     }
     
     // Right-align status text
@@ -324,39 +333,61 @@ void HomeScreen::drawBatteryInfo(Adafruit_ST7789& tft, const UIDataState::System
     tft.setCursor(5, y);
     tft.print("POWER:");
     
-    if (data.hasBattery) {
-        // Show battery percentage with color coding
+    if (data.hasBattery || data.hasUSB) {
+        // Show battery/power status with color coding
         uint16_t batteryColor = COLOR_SUCCESS;
-        if (data.batteryPercent < 20) {
+        if (!data.hasUSB && data.batteryPercent < 20) {
             batteryColor = COLOR_ERROR;
-        } else if (data.batteryPercent < 50) {
+        } else if (!data.hasUSB && data.batteryPercent < 50) {
             batteryColor = COLOR_WARNING;
         }
         
         tft.setTextColor(batteryColor, COLOR_BACKGROUND);
         tft.setCursor(50, y);
-        char battStr[16];
-        snprintf(battStr, sizeof(battStr), "%d%% BATT", data.batteryPercent);
+        char battStr[32];
+        if (data.hasUSB) {
+            if (data.isCharging) {
+                snprintf(battStr, sizeof(battStr), "%d%% CHG %dmV", data.batteryPercent, data.batteryVoltageMv);
+            } else {
+                snprintf(battStr, sizeof(battStr), "USB POWER");
+            }
+        } else {
+            snprintf(battStr, sizeof(battStr), "%d%% %dmV", data.batteryPercent, data.batteryVoltageMv);
+        }
         tft.print(battStr);
         
-        // Draw simple battery icon
-        int battX = 200;
+        // Draw battery icon with charging indicator
+        int battX = 240;
         int battY = y;
         int battW = 30;
         int battH = 10;
         
-        // Battery outline
-        tft.drawRect(battX, battY, battW, battH, COLOR_TEXT);
-        tft.drawRect(battX + battW, battY + 2, 3, battH - 4, COLOR_TEXT);
-        
-        // Battery fill
-        int fillW = (battW - 2) * data.batteryPercent / 100;
-        if (fillW > 0) {
-            tft.fillRect(battX + 1, battY + 1, fillW, battH - 2, batteryColor);
+        if (data.hasUSB && !data.hasBattery) {
+            // USB power without battery - draw plug icon
+            tft.setTextColor(COLOR_SUCCESS, COLOR_BACKGROUND);
+            tft.setCursor(battX, battY);
+            tft.print("[USB]");
+        } else {
+            // Battery outline
+            tft.drawRect(battX, battY, battW, battH, COLOR_TEXT);
+            tft.drawRect(battX + battW, battY + 2, 3, battH - 4, COLOR_TEXT);
+            
+            // Battery fill
+            int fillW = (battW - 2) * data.batteryPercent / 100;
+            if (fillW > 0) {
+                tft.fillRect(battX + 1, battY + 1, fillW, battH - 2, batteryColor);
+            }
+            
+            // Charging indicator (lightning bolt)
+            if (data.isCharging) {
+                tft.setTextColor(COLOR_WARNING, COLOR_BACKGROUND);
+                tft.setCursor(battX + battW + 8, battY);
+                tft.print("*");
+            }
         }
     } else {
         tft.setTextColor(COLOR_TEXT, COLOR_BACKGROUND);
         tft.setCursor(50, y);
-        tft.print("EXTERNAL");
+        tft.print("NO POWER INFO");
     }
 }
