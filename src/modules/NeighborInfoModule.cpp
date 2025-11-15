@@ -164,10 +164,11 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     if (np) {
         printNeighborInfo("RECEIVED", np);
         // Ignore dummy/interceptable packets: single neighbor with nodeId 0 and snr 0
-        if (np->neighbors_count != 1 && np->neighbors[0].node_id != 0 && np->neighbors[0].snr != 0.0f) {
+        if (np->neighbors_count != 1 || np->neighbors[0].node_id != 0 || np->neighbors[0].snr != 0.0f) {
+            LOG_DEBUG("  Updating neighbours");
             updateNeighbors(mp, np);
         } else {
-            LOG_DEBUG("Ignoring dummy neighbor info packet (single neighbor with nodeId 0, snr 0)");
+            LOG_DEBUG("  Ignoring dummy neighbor info packet (single neighbor with nodeId 0, snr 0)");
         }
     } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
         // If the hopLimit is the same as hopStart, then it is a neighbor
