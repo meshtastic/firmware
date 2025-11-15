@@ -8,6 +8,7 @@
 #include "input/SerialKeyboardImpl.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/i2cButton.h"
+#include "modules/RoutingStatsModule.h"
 #include "modules/SystemCommandsModule.h"
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"
@@ -112,6 +113,8 @@
  */
 void setupModules()
 {
+    routingStats = new RoutingStatsModule();
+
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         inputBroker = new InputBroker();
