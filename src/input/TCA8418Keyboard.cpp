@@ -10,9 +10,9 @@
 using Key = TCA8418KeyboardBase::TCA8418Key;
 
 // Num chars per key, Modulus for rotating through characters
-static uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 2, 2, 2};
+static const uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 2, 2, 2};
 
-static unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
+static const uint8_t TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
     {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
     {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
     {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
@@ -27,7 +27,7 @@ static unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
     {'#', '@'},                                                         // #
 };
 
-static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
+static const uint8_t TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
     Key::ESC,   // 1
     Key::UP,    // 2
     Key::NONE,  // 3
@@ -43,7 +43,7 @@ static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 };
 
 TCA8418Keyboard::TCA8418Keyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), last_key(-1), next_key(-1), last_tap(0L), char_idx(0), tap_interval(0),
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), state(Init), last_key(-1), last_tap(0L), char_idx(0), tap_interval(0),
       should_backspace(false)
 {
 }
@@ -56,11 +56,12 @@ void TCA8418Keyboard::reset()
     writeRegister(TCA8418_REG_GPIO_DIR_3, 0x02);
     // Switch off keyboard backlight (COL9 = LOW)
     writeRegister(TCA8418_REG_GPIO_DAT_OUT_3, 0x00);
+    state = Idle;
 }
 
 void TCA8418Keyboard::pressed(uint8_t key)
 {
-    if (state == Init || state == Busy) {
+    if (state != Idle) {
         return;
     }
     uint8_t next_key = 0;
@@ -100,15 +101,21 @@ void TCA8418Keyboard::pressed(uint8_t key)
     last_tap = now;
 }
 
-void TCA8418Keyboard::released()
+void TCA8418Keyboard::released(uint8_t key)
 {
+    // Only handle last pressed key, as this is a multitap keyboard (press same key multiple
+    // times to cycle what character it produces, eg flip phones) it wouldn't be that useful
+    // to track multiple keys being held at the same time
+    (void)key;
+
     if (state != Held) {
         return;
     }
 
+    state = Idle;
+
     if (last_key < 0 || last_key > _TCA8418_NUM_KEYS) { // reset to idle if last_key out of bounds
         last_key = -1;
-        state = Idle;
         return;
     }
     uint32_t now = millis();
