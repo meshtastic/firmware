@@ -124,11 +124,9 @@ void UINavigator::updateDisplay() {
         currentScreen->clearRedrawFlag();
         currentScreen->clearDirtyRects();
         
-        // Mark data as processed
-        if (needsDataUpdate) {
-            dataState.markSystemDataProcessed();
-            dataState.markNodesDataProcessed();
-        }
+        // Mark data as processed after ANY draw to prevent immediate refresh
+        dataState.markSystemDataProcessed();
+        dataState.markNodesDataProcessed();
     }
 }
 

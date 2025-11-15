@@ -2,15 +2,17 @@
 #include "UINavigator.h"
 #include <Arduino.h>
 
+// Use same constant as BaseScreen for consistency
+static const int DEFAULT_ROWS_PER_PAGE = 10;
+
 NodesListScreen::NodesListScreen(UINavigator* navigator) 
-    : BaseScreen(navigator, "NODES"), selectedIndex(0), scrollOffset(0) {
+    : BaseScreen(navigator, "NODES") {
 }
 
 void NodesListScreen::onEnter() {
     LOG_INFO("🔧 UI: Entering Nodes List Screen");
-    markForFullRedraw();
-    selectedIndex = 0;
-    scrollOffset = 0;
+    // Don't force full redraw on enter - let the system decide what needs updating
+    // markForFullRedraw(); // This was causing unnecessary header refresh
 }
 
 void NodesListScreen::onExit() {
@@ -18,24 +20,34 @@ void NodesListScreen::onExit() {
 }
 
 void NodesListScreen::handleInput(uint8_t input) {
-    const auto& nodesData = navigator->getDataState().getNodesData();
+    LOG_INFO("🔧 NodesListScreen: handleInput called with: %d", input);
+    LOG_INFO("🔧 NodesListScreen: isPaginated=%d, currentPage=%d, totalPages=%d", 
+             getIsPaginated(), getCurrentPage(), getTotalPages());
     
     switch (input) {
         case 1: // User button - go back to home
             navigator->navigateBack();
             break;
-        case 2: // Up navigation (if you add more buttons later)
-            if (selectedIndex > 0) {
-                selectedIndex--;
-                adjustScrollOffset(nodesData.nodeCount);
-                markForFullRedraw();
+        case 2: // Previous page
+            LOG_INFO("🔧 NodesListScreen: Key 2 pressed");
+            if (getIsPaginated()) {
+                LOG_INFO("🔧 NodesListScreen: Calling previousPage()");
+                previousPage();
+                // Force content area redraw (but not header/footer)
+                markDirtyRect(CONTENT_X, CONTENT_Y, CONTENT_WIDTH, CONTENT_HEIGHT);
+            } else {
+                LOG_INFO("🔧 NodesListScreen: Not paginated, no action");
             }
             break;
-        case 3: // Down navigation (if you add more buttons later)
-            if (selectedIndex < (int)nodesData.nodeCount - 1) {
-                selectedIndex++;
-                adjustScrollOffset(nodesData.nodeCount);
-                markForFullRedraw();
+        case 3: // Next page
+            LOG_INFO("🔧 NodesListScreen: Key 3 pressed");
+            if (getIsPaginated()) {
+                LOG_INFO("🔧 NodesListScreen: Calling nextPage()");
+                nextPage();
+                // Force content area redraw (but not header/footer)
+                markDirtyRect(CONTENT_X, CONTENT_Y, CONTENT_WIDTH, CONTENT_HEIGHT);
+            } else {
+                LOG_INFO("🔧 NodesListScreen: Not paginated, no action");
             }
             break;
         default:
@@ -45,258 +57,152 @@ void NodesListScreen::handleInput(uint8_t input) {
 }
 
 bool NodesListScreen::needsUpdate(UIDataState& dataState) {
-    return dataState.isNodesDataChanged();
+    // Update when node data changes OR when we have dirty rectangles (e.g., page navigation)
+    return dataState.isNodesDataChanged() || hasDirtyRects();
 }
 
 void NodesListScreen::draw(Adafruit_ST7789& tft, UIDataState& dataState) {
-    tft.fillScreen(ST77XX_BLACK);
-    
     const auto& nodesData = dataState.getNodesData();
     
-    // Draw main border (like Python GUI)
-    tft.drawRect(0, 0, 320, 240, ST77XX_GREEN);
+    // Debug logging
+    LOG_INFO("🔧 NodesListScreen: draw() - nodeCount=%d, filteredNodeCount=%d, CONTENT_ROWS=%d", 
+             nodesData.nodeCount, nodesData.filteredNodeCount, CONTENT_ROWS);
     
-    // Header section
-    tft.setTextSize(1);
-    tft.setTextColor(ST77XX_GREEN);
-    tft.setCursor(8, 8);
-    tft.print("MESH NODES");
+    // Set up pagination based on filtered node count
+    // Use DEFAULT_ROWS_PER_PAGE (10) as threshold since we reserve 1 row for page info when paginated
+    bool needsPagination = nodesData.filteredNodeCount > DEFAULT_ROWS_PER_PAGE;
+    setPaginated(needsPagination, nodesData.filteredNodeCount);
     
-    // Node count on right
-    char countStr[16];
-    snprintf(countStr, sizeof(countStr), "TOTAL: %u", (unsigned)nodesData.nodeCount);
-    int16_t x1, y1;
-    uint16_t w, h;
-    tft.getTextBounds(countStr, 0, 0, &x1, &y1, &w, &h);
-    tft.setCursor(320 - w - 8, 8);
-    tft.print(countStr);
+    LOG_INFO("🔧 NodesListScreen: After setPaginated - isPaginated=%d, totalPages=%d, currentPage=%d",
+             getIsPaginated(), getTotalPages(), getCurrentPage());
     
-    // Header separator line
-    tft.drawLine(8, 25, 312, 25, ST77XX_GREEN);
+    bool needsFullLayout = getNeedsFullRedraw();
+    bool needsHeaderUpdate = hasHeaderDataChanged(dataState);
+    bool needsContentUpdate = hasDirtyRects() || dataState.isNodesDataChanged();
     
-    if (nodesData.nodeCount == 0) {
-        // No nodes message (centered)
-        tft.setTextColor(ST77XX_YELLOW);
-        const char* msg = "[ NO NODES DISCOVERED ]";
-        tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
-        tft.setCursor((320 - w) / 2, 110);
-        tft.print(msg);
-        
-        tft.setTextColor(ST77XX_CYAN);
-        const char* hint = "Waiting for mesh traffic...";
-        tft.getTextBounds(hint, 0, 0, &x1, &y1, &w, &h);
-        tft.setCursor((320 - w) / 2, 130);
-        tft.print(hint);
-    } else {
-        // Column headers
-        tft.setTextColor(ST77XX_CYAN);
-        tft.setCursor(8, 35);
-        tft.print("ID       NAME         LAST HEARD");
-        tft.drawLine(8, 45, 312, 45, ST77XX_CYAN);
-        
-        // Draw nodes in organized rows
-        int yPos = 55;
-        unsigned maxNodes = (nodesData.nodeCount < 16) ? nodesData.nodeCount : 16; // Max 16 nodes can be displayed
-        
-        for (unsigned i = 0; i < maxNodes; i++) {
-            // Standard node display (no selection highlighting for now)
-            tft.setTextColor(ST77XX_WHITE);
-            
-            // Format node info in columns - using actual data structure
-            char nodeStr[32];
-            snprintf(nodeStr, sizeof(nodeStr), "%08X", (unsigned int)nodesData.nodeIds[i]);
-            tft.setCursor(8, yPos);
-            tft.printf("%-8s", nodeStr);
-            
-            // Node name (truncated to fit)
-            char shortName[12];
-            if (strlen(nodesData.nodeList[i]) > 0) {
-                strncpy(shortName, nodesData.nodeList[i], 11);
-                shortName[11] = '\0';
-            } else {
-                strcpy(shortName, "Unknown");
-            }
-            tft.setCursor(80, yPos);
-            tft.printf("%-11s", shortName);
-            
-            // Last heard time (simplified - just show seconds ago)
-            tft.setCursor(190, yPos);
-            uint32_t currentTime = millis();
-            if (nodesData.lastHeard[i] > 0) {
-                uint32_t secondsAgo = (currentTime - nodesData.lastHeard[i]) / 1000;
-                if (secondsAgo < 60) {
-                    tft.printf("%us", (unsigned)secondsAgo);
-                } else if (secondsAgo < 3600) {
-                    tft.printf("%um", (unsigned)(secondsAgo / 60));
-                } else {
-                    tft.printf("%uh", (unsigned)(secondsAgo / 3600));
-                }
-            } else {
-                tft.print("---");
-            }
-            
-            // Status indicator (green for recent, yellow for old, red for very old)
-            uint16_t statusColor = ST77XX_GREEN; // Default to green
-            if (nodesData.lastHeard[i] > 0) {
-                uint32_t secondsAgo = (currentTime - nodesData.lastHeard[i]) / 1000;
-                if (secondsAgo > 3600) statusColor = ST77XX_RED;      // > 1 hour
-                else if (secondsAgo > 300) statusColor = ST77XX_YELLOW; // > 5 minutes
-            }
-            
-            tft.fillRect(300, yPos + 2, 8, 8, statusColor);
-            
-            yPos += 15;
-            if (yPos > 200) break; // Don't draw beyond screen
-        }
-        
-        // Show count if limited
-        if (nodesData.nodeCount > 16) {
-            tft.setTextColor(ST77XX_YELLOW);
-            tft.setCursor(8, 210);
-            tft.printf("Showing first 16 of %u nodes", (unsigned)nodesData.nodeCount);
+    // Mark all content rows as dirty if node data changed (for row-by-row updates)
+    if (dataState.isNodesDataChanged()) {
+        for (int i = 0; i < CONTENT_ROWS; i++) {
+            markContentRowDirty(i);
         }
     }
     
-    // Footer with navigation hints
-    tft.setTextColor(ST77XX_CYAN);
-    tft.setCursor(8, 220);
-    tft.print("[BTN] Back to Home");
-}
-
-void NodesListScreen::drawNodeList(Adafruit_ST7789& tft, const UIDataState::NodesData& data, bool forceRedraw) {
-    if (!forceRedraw) return; // For now, implement fine-grained updating later
+    // Prepare navigation hints
+    const char* hints[4] = {"A:Back", nullptr, nullptr, nullptr};
+    int hintCount = 1;
     
-    // Show node count
-    tft.setTextColor(COLOR_ACCENT, COLOR_BACKGROUND);
-    tft.setTextSize(1);
-    tft.setCursor(5, CONTENT_START_Y);
-    char countStr[32];
-    snprintf(countStr, sizeof(countStr), "Total Nodes: %d", (int)data.nodeCount);
-    tft.print(countStr);
-    
-    if (data.nodeCount == 0) {
-        tft.setTextColor(COLOR_WARNING, COLOR_BACKGROUND);
-        tft.setCursor(5, CONTENT_START_Y + 20);
-        tft.print("No nodes discovered yet");
-        return;
+    if (getIsPaginated() && getTotalPages() > 1) {
+        if (getCurrentPage() > 0) {
+            hints[hintCount++] = "2:Prev";
+        }
+        if (getCurrentPage() < getTotalPages() - 1) {
+            hints[hintCount++] = "3:Next";
+        }
     }
     
-    // Draw scroll indicator if needed
-    if (data.nodeCount > NODES_PER_PAGE) {
-        tft.setTextColor(COLOR_ACCENT, COLOR_BACKGROUND);
-        tft.setCursor(SCREEN_WIDTH - 60, CONTENT_START_Y);
-        char scrollStr[16];
-        int totalPages = (data.nodeCount + NODES_PER_PAGE - 1) / NODES_PER_PAGE;
-        int currentPage = (scrollOffset / NODES_PER_PAGE) + 1;
-        snprintf(scrollStr, sizeof(scrollStr), "(%d/%d)", currentPage, totalPages);
-        tft.print(scrollStr);
-    }
+    // Use efficient row-by-row layout instead of bulk clearing
+    drawRowByRowLayout(tft, dataState, hints, hintCount);
     
-    // Draw node list
-    int y = CONTENT_START_Y + 20;
-    int displayedNodes = 0;
-    
-    for (size_t i = scrollOffset; i < data.nodeCount && i < 16 && displayedNodes < NODES_PER_PAGE; i++) {
-        bool isSelected = (i == selectedIndex);
-        drawNodeEntry(tft, data.nodeList[i], data.nodeIds[i], data.lastHeard[i], i, y, isSelected);
-        y += 20;
-        displayedNodes++;
-    }
-    
-    // Show navigation hints if there are multiple nodes
-    if (data.nodeCount > 1) {
-        tft.setTextColor(COLOR_ACCENT, COLOR_BACKGROUND);
-        tft.setCursor(5, SCREEN_HEIGHT - 40);
-        tft.print("Use additional buttons for navigation");
+    // Draw content only if needed
+    if (needsFullLayout || needsContentUpdate) {
+        drawNodesContent(tft, dataState);
     }
 }
 
-void NodesListScreen::drawNodeEntry(Adafruit_ST7789& tft, const char* nodeName, uint32_t nodeId, 
-                                   uint32_t lastHeard, int index, int y, bool selected) {
+void NodesListScreen::drawNodesContent(Adafruit_ST7789& tft, UIDataState& dataState) {
+    const auto& nodesData = dataState.getNodesData();
+    int startIndex = getPageStartRow();
+    int rowsPerPage = getRowsPerPage();
+    int rowIndex = 0;
     
-    // Background for selected item
-    if (selected) {
-        tft.fillRect(0, y - 2, SCREEN_WIDTH, 16, COLOR_ACCENT);
-        tft.setTextColor(COLOR_BACKGROUND, COLOR_ACCENT);
+    // Draw page info first if paginated
+    if (shouldShowPageInfo()) {
+        if (isRowDirty(rowIndex) || getNeedsFullRedraw()) {
+            drawPageInfo(tft, nodesData.filteredNodeCount, rowIndex);
+        }
+        rowIndex++;
+    }
+    
+    // Draw nodes for current page - only redraw dirty rows
+    for (int i = 0; i < rowsPerPage && startIndex + i < (int)nodesData.filteredNodeCount && rowIndex < CONTENT_ROWS; i++, rowIndex++) {
+        if (isRowDirty(rowIndex) || getNeedsFullRedraw()) {
+            int nodeIndex = startIndex + i;
+            drawNodeRow(tft, nodesData, nodeIndex, rowIndex);
+        }
+    }
+    
+    // Clear any remaining dirty rows that don't have content
+    for (; rowIndex < CONTENT_ROWS; rowIndex++) {
+        if (isRowDirty(rowIndex) || getNeedsFullRedraw()) {
+            int y = CONTENT_Y + BORDER_WIDTH + (rowIndex * ROW_HEIGHT);
+            clearRect(tft, CONTENT_X + 4, y, CONTENT_WIDTH - 8, ROW_HEIGHT);
+        }
+    }
+    
+    // Mark all rows as clean after drawing
+    clearAllRowsDirty();
+}
+
+void NodesListScreen::drawNodeRow(Adafruit_ST7789& tft, const UIDataState::NodesData& nodesData, int nodeIndex, int rowIndex) {
+    // Calculate Y position within content area, accounting for borders
+    int y = CONTENT_Y + BORDER_WIDTH + (rowIndex * ROW_HEIGHT);
+    
+    // Determine colors based on node status
+    uint32_t currentTime = millis();
+    uint16_t textColor = COLOR_TEXT;
+    uint16_t bgColor = COLOR_BACKGROUND;
+    
+    if (nodesData.lastHeard[nodeIndex] > 0) {
+        uint32_t secondsAgo = (currentTime - nodesData.lastHeard[nodeIndex]) / 1000;
+        if (secondsAgo <= 60) {
+            textColor = ST77XX_BLACK;
+            bgColor = ST77XX_GREEN;   // < 1 minute = green
+        } else if (secondsAgo <= 900) {
+            textColor = ST77XX_BLACK;
+            bgColor = ST77XX_YELLOW;  // < 15 minutes = yellow
+        } else if (secondsAgo <= 10800) {
+            textColor = ST77XX_WHITE;
+            bgColor = 0xFD20;  // Orange color (RGB565) - < 3 hours
+        } else {
+            textColor = COLOR_ERROR;  // > 3 hours = red text
+        }
+    }
+    
+    // Format node info with signal strength
+    char nodeStr[64];
+    const char* displayName = nodesData.nodeList[nodeIndex];
+    int8_t rssi = nodesData.signalStrength[nodeIndex];
+    
+    // Show name and signal strength
+    if (rssi != 0) {
+        snprintf(nodeStr, sizeof(nodeStr), "%.12s %ddB", displayName, rssi);
     } else {
-        tft.setTextColor(COLOR_TEXT, COLOR_BACKGROUND);
+        snprintf(nodeStr, sizeof(nodeStr), "%.16s", displayName);
     }
     
-    tft.setTextSize(1);
+    // Add time info if recent
+    if (nodesData.lastHeard[nodeIndex] > 0) {
+        uint32_t secondsAgo = (currentTime - nodesData.lastHeard[nodeIndex]) / 1000;
+        if (secondsAgo < 3600) { // Only show time if less than 1 hour
+            char timeStr[16];
+            if (secondsAgo < 60) {
+                snprintf(timeStr, sizeof(timeStr), " %us", (unsigned)secondsAgo);
+            } else {
+                snprintf(timeStr, sizeof(timeStr), " %um", (unsigned)(secondsAgo / 60));
+            }
+            strncat(nodeStr, timeStr, sizeof(nodeStr) - strlen(nodeStr) - 1);
+        }
+    }
     
-    // Node number/index
-    char indexStr[8];
-    snprintf(indexStr, sizeof(indexStr), "%d.", index + 1);
-    tft.setCursor(5, y);
-    tft.print(indexStr);
-    
-    // Node name or ID
-    tft.setCursor(25, y);
-    if (strlen(nodeName) > 0) {
-        // Show name, truncate if too long
-        char displayName[20];
-        strncpy(displayName, nodeName, sizeof(displayName) - 1);
-        displayName[sizeof(displayName) - 1] = '\0';
-        tft.print(displayName);
+    // Draw the row with background color if status indicates
+    if (bgColor != COLOR_BACKGROUND) {
+        // Draw colored background
+        drawTextInRect(tft, CONTENT_X + 4, y, CONTENT_WIDTH - 8, ROW_HEIGHT,
+                       nodeStr, textColor, bgColor);
     } else {
-        // Show node ID
-        char nodeIdStr[16];
-        snprintf(nodeIdStr, sizeof(nodeIdStr), "%08X", nodeId);
-        tft.print(nodeIdStr);
-    }
-    
-    // Node status
-    tft.setCursor(SCREEN_WIDTH - 80, y);
-    uint16_t statusColor;
-    const char* statusText = getNodeStatusText(lastHeard, statusColor);
-    
-    if (!selected) {
-        tft.setTextColor(statusColor, COLOR_BACKGROUND);
-    }
-    tft.print(statusText);
-}
-
-const char* NodesListScreen::getNodeStatusText(uint32_t lastHeard, uint16_t& color) {
-    uint32_t currentTime = millis() / 1000;
-    
-    if (lastHeard == 0) {
-        color = COLOR_WARNING;
-        return "UNKNOWN";
-    }
-    
-    uint32_t timeSince = currentTime > lastHeard ? currentTime - lastHeard : 0;
-    
-    if (timeSince < 300) { // 5 minutes
-        color = COLOR_SUCCESS;
-        return "ONLINE";
-    } else if (timeSince < 3600) { // 1 hour
-        color = COLOR_WARNING;
-        return "RECENT";
-    } else {
-        color = COLOR_ERROR;
-        return "OFFLINE";
+        // Draw normal text
+        drawTextInRect(tft, CONTENT_X + 4, y, CONTENT_WIDTH - 8, ROW_HEIGHT,
+                       nodeStr, textColor, COLOR_BACKGROUND);
     }
 }
 
-void NodesListScreen::adjustScrollOffset(size_t nodeCount) {
-    // Ensure selected item is visible
-    if (selectedIndex < scrollOffset) {
-        scrollOffset = selectedIndex;
-    } else if (selectedIndex >= scrollOffset + NODES_PER_PAGE) {
-        scrollOffset = selectedIndex - NODES_PER_PAGE + 1;
-    }
-    
-    // Ensure scroll offset is within bounds
-    if (scrollOffset < 0) {
-        scrollOffset = 0;
-    }
-    
-    int maxScrollOffset = (int)nodeCount - NODES_PER_PAGE;
-    if (maxScrollOffset < 0) {
-        maxScrollOffset = 0;
-    }
-    
-    if (scrollOffset > maxScrollOffset) {
-        scrollOffset = maxScrollOffset;
-    }
-}

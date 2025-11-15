@@ -25,7 +25,7 @@ static const int batteryVoltageLookup[] = {
 };
 
 // Calculate battery percentage from voltage (more reliable than AXP2101 gauge)
-static uint8_t voltageToPercent(int voltageMv) {
+static uint8_t __attribute__((used)) voltageToPercent(int voltageMv) {
     // Clamp to valid range
     if (voltageMv >= 4100) return 100;  // Full charge (even if higher when charging)
     if (voltageMv <= 3000) return 0;    // Dead battery
@@ -96,20 +96,77 @@ bool UIDataState::updateNodesData() {
     if (nodedbp) {
         newData.nodeCount = nodedbp->getNumMeshNodes();
         
-        // Cache node information for up to 16 nodes
-        size_t maxNodes = min(newData.nodeCount, (size_t)16);
-        for (size_t i = 0; i < maxNodes; i++) {
+        // Temporary storage for filtering
+        struct TempNodeInfo {
+            uint32_t nodeId;
+            uint32_t lastHeard;
+            int8_t signalStrength;
+            char name[32];
+        };
+        
+        TempNodeInfo tempNodes[33];
+        size_t tempCount = 0;
+        uint32_t currentTime = millis();
+        const uint32_t THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+        
+        // Collect and filter nodes (last 3 hours)
+        for (size_t i = 0; i < newData.nodeCount && tempCount < 33; i++) {
             meshtastic_NodeInfoLite *node = nodedbp->getMeshNodeByIndex(i);
             if (node) {
-                newData.nodeIds[i] = node->num;
-                newData.lastHeard[i] = node->last_heard;
+                // Filter by time (3 hours) or if no RTC, include all
+                bool includeNode = true;
+                if (node->last_heard > 0) {
+                    uint32_t timeSince = (currentTime > node->last_heard) ? 
+                                       (currentTime - node->last_heard) : 0;
+                    if (timeSince > THREE_HOURS_MS) {
+                        includeNode = false;
+                    }
+                }
                 
-                if (strlen(node->user.short_name) > 0) {
-                    strncpy(newData.nodeList[i], node->user.short_name, 31);
-                } else {
-                    snprintf(newData.nodeList[i], 32, "%08X", node->num);
+                if (includeNode) {
+                    tempNodes[tempCount].nodeId = node->num;
+                    tempNodes[tempCount].lastHeard = node->last_heard;
+                    tempNodes[tempCount].signalStrength = node->snr; // Use SNR as signal strength
+                    
+                    if (strlen(node->user.short_name) > 0) {
+                        strncpy(tempNodes[tempCount].name, node->user.short_name, 31);
+                    } else {
+                        snprintf(tempNodes[tempCount].name, 32, "%08X", node->num);
+                    }
+                    tempCount++;
                 }
             }
+        }
+        
+        // Sort by signal strength (highest first) if we have signal data
+        // Otherwise sort by last heard time (most recent first)
+        for (size_t i = 0; i < tempCount - 1; i++) {
+            for (size_t j = i + 1; j < tempCount; j++) {
+                bool shouldSwap = false;
+                
+                // Primary sort: signal strength (if available)
+                if (tempNodes[i].signalStrength != 0 || tempNodes[j].signalStrength != 0) {
+                    shouldSwap = tempNodes[i].signalStrength < tempNodes[j].signalStrength;
+                } else {
+                    // Secondary sort: most recent last heard
+                    shouldSwap = tempNodes[i].lastHeard < tempNodes[j].lastHeard;
+                }
+                
+                if (shouldSwap) {
+                    TempNodeInfo temp = tempNodes[i];
+                    tempNodes[i] = tempNodes[j];
+                    tempNodes[j] = temp;
+                }
+            }
+        }
+        
+        // Copy sorted data to final structure
+        newData.filteredNodeCount = tempCount;
+        for (size_t i = 0; i < tempCount; i++) {
+            newData.nodeIds[i] = tempNodes[i].nodeId;
+            newData.lastHeard[i] = tempNodes[i].lastHeard;
+            newData.signalStrength[i] = tempNodes[i].signalStrength;
+            strncpy(newData.nodeList[i], tempNodes[i].name, 31);
         }
     }
     
@@ -164,10 +221,8 @@ void UIDataState::updateBatteryInfo(SystemData& data) {
             data.hasBattery = powerStatus->getHasBattery();
             data.batteryPercent = chargePercent;
             
-            // Stop charging indicator at 100%
-            if (chargePercent >= 100) {
-                data.isCharging = false;
-            }
+            // Don't override charging status - trust the power management system
+            // Even at 100%, device may still be trickle charging when USB connected
         } else {
             // Invalid percentage, no battery
             data.hasBattery = false;

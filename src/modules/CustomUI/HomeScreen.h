@@ -21,23 +21,8 @@ public:
     bool needsUpdate(UIDataState& dataState) override;
 
 private:
-    // Screen areas for dirty rectangle updates
-    enum ScreenArea {
-        AREA_SYSTEM_INFO = 0,
-        AREA_MESH_STATS = 1,
-        AREA_LORA_CONFIG = 2,
-        AREA_BATTERY = 3
-    };
-    
-    void drawSystemInfo(Adafruit_ST7789& tft, const UIDataState::SystemData& data, bool forceRedraw = false);
-    void drawMeshStats(Adafruit_ST7789& tft, const UIDataState::SystemData& data, bool forceRedraw = false);
-    void drawLoRaConfig(Adafruit_ST7789& tft, const UIDataState::SystemData& data, bool forceRedraw = false);
-    void drawBatteryInfo(Adafruit_ST7789& tft, const UIDataState::SystemData& data, bool forceRedraw = false);
-    
-    // Area coordinates for dirty rectangle optimization
-    struct AreaRect {
-        int x, y, width, height;
-    };
-    
-    static const AreaRect areaRects[4];
+    // Row-based drawing functions (new layout system)
+    void drawSystemInfoRows(Adafruit_ST7789& tft, const UIDataState::SystemData& data);
+    void drawMeshStatsRows(Adafruit_ST7789& tft, const UIDataState::SystemData& data);
+    void drawLoRaConfigRows(Adafruit_ST7789& tft, const UIDataState::SystemData& data);
 };

@@ -20,13 +20,7 @@ public:
     bool needsUpdate(UIDataState& dataState) override;
 
 private:
-    int selectedIndex;
-    int scrollOffset;
-    static const int NODES_PER_PAGE = 8; // Number of nodes visible on screen
-    
-    void drawNodeList(Adafruit_ST7789& tft, const UIDataState::NodesData& data, bool forceRedraw = false);
-    void drawNodeEntry(Adafruit_ST7789& tft, const char* nodeName, uint32_t nodeId, 
-                      uint32_t lastHeard, int index, int y, bool selected);
-    void adjustScrollOffset(size_t nodeCount);
-    const char* getNodeStatusText(uint32_t lastHeard, uint16_t& color);
+    // New row-based rendering methods
+    void drawNodesContent(Adafruit_ST7789& tft, UIDataState& dataState);
+    void drawNodeRow(Adafruit_ST7789& tft, const UIDataState::NodesData& nodesData, int nodeIndex, int rowIndex);
 };

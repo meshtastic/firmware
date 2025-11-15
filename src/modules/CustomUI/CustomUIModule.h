@@ -72,6 +72,7 @@ private:
     bool showingMessagePopup;
     int currentMessageIndex;
     unsigned long lastTimestampUpdate;
+    unsigned long initializationTime;  // Track when initialization completed
     
     // Message management methods
     bool addMessageToQueue(const String& messageText, const String& senderName, const String& senderLongName, uint32_t nodeId);

@@ -53,11 +53,20 @@ CustomUIModule::CustomUIModule()
       showingMessagePopup(false),
       currentMessageIndex(-1),
       lastTimestampUpdate(0) {
-    
+    initializationTime = 0; // Will be set when initialization completes
     LOG_INFO("🔧 CUSTOM UI: Module constructed with Software SPI and message queue");
 }
 
 int32_t CustomUIModule::runOnce() {
+    // Startup protection - give the system time to initialize
+    if (initializationTime > 0 && (millis() - initializationTime) < 3000) {
+        return 1000; // Check again in 1 second during startup
+    }
+    
+    if (initializationTime > 0 && (millis() - initializationTime) >= 3000) {
+        initializationTime = 0; // Disable startup protection
+    }
+    
     // Check button state (USER button on Heltec V3)
     checkButtonInput();
     
@@ -143,6 +152,9 @@ void CustomUIModule::initDisplay() {
     keypad = new Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
     keypad->setDebounceTime(110); // Set debounce time as specified
     
+    // Mark initialization complete with timestamp
+    initializationTime = millis();
+    
     LOG_INFO("🔧 CUSTOM UI: ST7789 display, UI navigator, message popup, and keypad initialized");
 }
 
@@ -205,6 +217,22 @@ void CustomUIModule::checkKeypadInput() {
                     if (navigator) {
                         LOG_INFO("🔧 CUSTOM UI: Keypad '1' pressed - opening nodes list");
                         navigator->navigateToNodes();
+                    }
+                    break;
+                    
+                case '2':
+                    // Pass key 2 to current screen (for scrolling up)
+                    if (navigator) {
+                        LOG_INFO("🔧 CUSTOM UI: Keypad '2' pressed - passing to screen");
+                        navigator->handleInput(2);
+                    }
+                    break;
+                    
+                case '3':
+                    // Pass key 3 to current screen (for scrolling down)
+                    if (navigator) {
+                        LOG_INFO("🔧 CUSTOM UI: Keypad '3' pressed - passing to screen");
+                        navigator->handleInput(3);
                     }
                     break;
                     

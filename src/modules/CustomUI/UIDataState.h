@@ -45,18 +45,21 @@ public:
     
     struct NodesData {
         size_t nodeCount;
+        size_t filteredNodeCount; // Actual number after filtering
         uint32_t lastNodeUpdate;
-        char nodeList[16][32]; // Cache up to 16 node names
-        uint32_t nodeIds[16];
-        uint32_t lastHeard[16];
+        char nodeList[33][32]; // Cache up to 33 node names
+        uint32_t nodeIds[33];
+        uint32_t lastHeard[33];
+        int8_t signalStrength[33]; // RSSI values for sorting
         
         bool operator!=(const NodesData& other) const {
-            if (nodeCount != other.nodeCount) return true;
+            if (nodeCount != other.nodeCount || filteredNodeCount != other.filteredNodeCount) return true;
             
-            for (size_t i = 0; i < nodeCount && i < 16; i++) {
+            for (size_t i = 0; i < filteredNodeCount && i < 33; i++) {
                 if (nodeIds[i] != other.nodeIds[i] ||
                     strcmp(nodeList[i], other.nodeList[i]) != 0 ||
-                    lastHeard[i] != other.lastHeard[i]) {
+                    lastHeard[i] != other.lastHeard[i] ||
+                    signalStrength[i] != other.signalStrength[i]) {
                     return true;
                 }
             }
