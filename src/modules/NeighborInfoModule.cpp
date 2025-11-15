@@ -160,7 +160,7 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("NeighborInfo: handleRecievedProtobuf");
+    LOG_DEBUG("NeighborInfo: handleReceivedProtobuf");
     if (np) {
         printNeighborInfo("RECEIVED", np);
         // Ignore dummy/interceptable packets: single neighbor with nodeId 0 and snr 0
@@ -171,6 +171,7 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             LOG_DEBUG("  Ignoring dummy neighbor info packet (single neighbor with nodeId 0, snr 0)");
         }
     } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
+        LOG_DEBUG("Get or create neighbor: %u with snr %f", mp.from, mp.rx_snr);
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0,
                             mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
