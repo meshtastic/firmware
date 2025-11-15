@@ -70,5 +70,8 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);
     void printNodeDBNeighbors();
+
+  private:
+    uint32_t lastSentReply = 0; // Last time we sent a position reply (used for reply throttling only)
 };
 extern NeighborInfoModule *neighborInfoModule;

@@ -137,11 +137,21 @@ int32_t NeighborInfoModule::runOnce()
 meshtastic_MeshPacket *NeighborInfoModule::allocReply()
 {
     LOG_INFO("NeighborInfoRequested.");
+    if (lastSentReply && Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
+        LOG_DEBUG("Skip Neighbors reply since we sent a reply <3min ago");
+        ignoreRequest = true; // Mark it as ignored for MeshModule
+        return nullptr;
+    }
 
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
-    //  send neighbours regardless of number of neighbors
-    return allocDataProtobuf(neighborInfo);
+
+    meshtastic_MeshPacket *reply = allocDataProtobuf(neighborInfo);
+
+    if (reply) {
+        lastSentReply = millis(); // Track when we sent this reply
+    }
+    return reply;
 }
 
 /*
