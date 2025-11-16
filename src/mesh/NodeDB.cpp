@@ -653,7 +653,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL)||defined(HELTEC_V4_TFT)) &&                                                                                                  \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT)) &&                                                                        \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1651,6 +1651,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // If should_ignore is set,
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
         info->is_ignored = true;
+        info->is_muted = true;
         info->is_favorite = false;
         info->has_device_metrics = false;
         info->has_position = false;

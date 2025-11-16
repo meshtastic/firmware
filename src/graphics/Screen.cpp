@@ -1498,7 +1498,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
 #endif
 
-                } else {
+                } else if (!node->is_muted) {
                     strcpy(banner, "New Message");
                 }
 #if defined(M5STACK_UNITC6L)
