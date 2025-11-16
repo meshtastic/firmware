@@ -259,7 +259,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         }
 
         // If we overshot width, back off one step and recompute segment sizes
-        if (calculated_width_size > target_width) {
+        if (calculated_width_size > target_width || calculated_height_size > target_height) {
             scale -= step;
             segmentWidth = SEGMENT_WIDTH * scale;
             segmentHeight = SEGMENT_HEIGHT * scale;
