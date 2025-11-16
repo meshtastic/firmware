@@ -239,7 +239,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             display->getHeight() -
             (isHighResolution
                  ? 46
-                 : 43); // Be careful adjusting this number, we have to account for header and the text under the time
+                 : 33); // Be careful adjusting this number, we have to account for header and the text under the time
 
         float calculated_width_size = 0.0f;
         float calculated_height_size = 0.0f;
@@ -286,7 +286,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     uint16_t hourMinuteTextX = (display->getWidth() / 2) - (timeStringWidth / 2);
     uint16_t startingHourMinuteTextX = hourMinuteTextX;
 
-    uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2);
+    uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2) + 2;
 
     // iterate over characters in hours:minutes string and draw segmented characters
     for (size_t i = 0; i < len; i++) {
