@@ -790,16 +790,23 @@ void menuHandler::nodeNameLengthMenu()
 
 void menuHandler::resetNodeDBMenu()
 {
-    static const char *optionsArray[] = {"Back", "Confirm"};
+    static const char *optionsArray[] = {"Back", "Reset All", "Preserve Favorites"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Confirm Reset NodeDB";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == 1 || selected == 2) {
             disableBluetooth();
+            screen->setFrames(Screen::FOCUS_DEFAULT);
+        }
+        if (selected == 1) {
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 2) {
+            LOG_INFO("Initiate node-db reset but keeping favorites");
+            nodeDB->resetNodes(1);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
