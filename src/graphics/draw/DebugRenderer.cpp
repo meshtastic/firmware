@@ -16,6 +16,16 @@
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "sleep.h"
+#include "SdFat_Adafruit_Fork.h"
+#include <SPI.h>
+#include <Adafruit_SPIFlash.h>
+extern FatVolume fatfs;
+extern bool flashInitialized;
+extern bool fatfsMounted;
+#if defined(EXTERNAL_FLASH_USE_QSPI)
+extern Adafruit_FlashTransport_QSPI flashTransport;
+#endif
+extern Adafruit_SPIFlash flash;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -583,10 +593,18 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t psramTotal = memGet.getPsramSize();
 
     uint32_t flashUsed = 0, flashTotal = 0;
-#ifdef ESP32
+#ifdef USE_EXTERNAL_FLASH
+    uint32_t bytesPerCluster = fatfs.bytesPerCluster();
+    uint32_t totalCapacity = fatfs.clusterCount() * bytesPerCluster;
+    uint32_t freeSpace = fatfs.freeClusterCount() * bytesPerCluster;
+    flashUsed = (totalCapacity - freeSpace);
+    flashTotal = totalCapacity;
+
+#elif defined(ESP32)
     flashUsed = FSCom.usedBytes();
     flashTotal = FSCom.totalBytes();
 #endif
+
 
     uint32_t sdUsed = 0, sdTotal = 0;
     bool hasSD = false;
@@ -609,6 +627,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     if (flashTotal > 0) {
         line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);
+    }
+#endif
+#ifdef USE_EXTERNAL_FLASH
+    if (flashTotal > 0) {
+        line += 1;
+        drawUsageRow("ExtFl:", flashUsed, flashTotal);
     }
 #endif
     if (hasSD && sdTotal > 0) {

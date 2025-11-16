@@ -536,7 +536,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
             }
         }
     }
-#elif FSCom
+#elif defined(FSCom)
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }
@@ -1265,7 +1265,7 @@ pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
     }
 
 
-#elif FSCom
+#elif defined(FSCom)
     concurrency::LockGuard g(spiLock);
 
     auto f = FSCom.open(filename, FILE_O_READ);
@@ -1628,7 +1628,7 @@ File32 f = fatfs.open(filename, FILE_WRITE);
         }
     }
 
-#elif FSCom
+#elif defined(FSCom)
     auto f = SafeFile(filename, fullAtomic);
 
     LOG_INFO("Save %s", filename);

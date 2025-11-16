@@ -24,8 +24,6 @@
 extern FatVolume fatfs;
 extern bool flashInitialized;
 extern bool fatfsMounted;
-#define EXTERNAL_FLASH_DEVICE
-#define EXTERNAL_FLASH_USE_QSPI
 #if defined(EXTERNAL_FLASH_USE_QSPI)
 extern Adafruit_FlashTransport_QSPI flashTransport;
 #endif
@@ -120,7 +118,7 @@ void check_fat12(void) {
 
 bool copyFile(const char *from, const char *to)
 {
-#ifdef EXTERNAL_FLASH_DEVICE
+#ifdef USE_EXTERNAL_FLASH
     // take SPI Lock
     concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
@@ -146,7 +144,7 @@ bool copyFile(const char *from, const char *to)
     f2.close();
     f1.close();
     return true;
-#elif FSCom
+#elif defined(FSCom)
     // take SPI Lock
     concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
@@ -231,7 +229,7 @@ static void buildPath(char *dest, size_t destLen, const char *parent, const char
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
-#ifdef EXTERNAL_FLASH_DEVICE
+#ifdef USE_EXTERNAL_FLASH
     FatFile root;
     if (!root.open(dirname, O_READ)) {
         return filenames;
@@ -307,7 +305,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
  */
 void listDir(const char *dirname, uint8_t levels, bool del)
 {
-#ifdef EXTERNAL_FLASH_DEVICE
+#ifdef USE_EXTERNAL_FLASH
     FatFile root;
     if (!root.open(dirname, O_READ)) {
         return;
