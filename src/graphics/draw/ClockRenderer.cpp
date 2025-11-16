@@ -226,8 +226,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
     static bool scaleInitialized = false;
     static float scale = 0.75f;
-    static uint16_t segmentWidth = SEGMENT_WIDTH * 0.75f;
-    static uint16_t segmentHeight = SEGMENT_HEIGHT * 0.75f;
+    static float segmentWidth = SEGMENT_WIDTH * 0.75f;
+    static float segmentHeight = SEGMENT_HEIGHT * 0.75f;
 
     if (!scaleInitialized) {
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
