@@ -527,7 +527,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     spiLock->lock();
     rmDir("/prefs"); // this uses spilock internally...
 
-    #ifdef EXTERNAL_FLASH_DEVICES
+    #ifdef USE_EXTERNAL_FLASH
     // Also remove rangetest.csv if it exists
     if (fatfsMounted && flashInitialized) {
         if (fatfs.exists("/static/rangetest.csv")) {
@@ -1180,7 +1180,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
-#ifdef EXTERNAL_FLASH_DEVICES
+#ifdef USE_EXTERNAL_FLASH
 if (!flashInitialized) {
     if (!flash.begin()) {
     LOG_ERROR("Error, failed to initialize flash chip!");
@@ -1511,12 +1511,12 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
                        bool fullAtomic)
 {
     bool okay = false;
-#ifdef EXTERNAL_FLASH_DEVICES
+#ifdef USE_EXTERNAL_FLASH
 
 if (!flashInitialized) {
-    LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
+    LOG_INFO("Initialize external flash chip...");
     if (!flash.begin()) {
-     LOG_ERROR("Error, failed to initialize flash chip!");
+     LOG_ERROR("Error, failed to initialize external flash chip!");
      while (1) {
        delay(1);
      }
@@ -1524,9 +1524,7 @@ if (!flashInitialized) {
    flashInitialized = true;
 }
 LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-//format_fat12();
 check_fat12();
-//LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
 if (!fatfsMounted) {
   if (!fatfs.begin(&flash)) {
     LOG_ERROR("Error, failed to mount filesystem!");

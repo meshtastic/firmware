@@ -451,7 +451,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
  */
 void rmDir(const char *dirname)
 {
-#ifdef EXTERNAL_FLASH_DEVICES
+#ifdef USE_EXTERNAL_FLASH
     // Adafruit SPI Flash FatFs implementation does not support recursive delete, so we do it manually here
     std::vector<meshtastic_FileInfo> files = getFiles(dirname, 10);
     for (auto const &fileInfo : files) {
@@ -481,7 +481,7 @@ __attribute__((weak, noinline)) void preFSBegin() {}
 
 void fsInit()
 {
-#ifdef EXTERNAL_FLASH_DEVICES
+#ifdef USE_EXTERNAL_FLASH
     if (!flashInitialized) {
         LOG_INFO("Adafruit SPI Flash FatFs initialization!");
         if (!flash.begin()) {
