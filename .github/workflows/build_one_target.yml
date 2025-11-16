@@ -41,6 +41,7 @@ permissions:
   security-events: read
   statuses: read
   repository-projects: read
+  artifact-metadata: read
 
 jobs:
   find-targets:
