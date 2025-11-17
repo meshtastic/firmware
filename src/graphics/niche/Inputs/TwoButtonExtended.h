@@ -9,14 +9,13 @@ Interrupt driven
 
 */
 
-/* 
+/*
 
 This expansion adds support for four more buttons
 These buttons are single-action only, no long press
 Interrupt driven
 
 */
-
 
 #pragma once
 
@@ -42,12 +41,12 @@ class TwoButtonExtended : protected concurrency::OSThread
     static uint8_t getUserButtonPin(); // Resolve the GPIO, considering the various possible source of definition
 
     static TwoButtonExtended *getInstance(); // Create or get the singleton instance
-    void start();                    // Start handling button input
-    void stop();                     // Stop handling button input (disconnect ISRs for sleep)
+    void start();                            // Start handling button input
+    void stop();                             // Stop handling button input (disconnect ISRs for sleep)
     void setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup = false);
     void setJoystickWiring(uint8_t uPin, uint8_t dPin, uint8_t lPin, uint8_t rPin, bool internalPullup = false);
     void setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs);
-    void setJoystickDebounce(uint32_t debounceMs); 
+    void setJoystickDebounce(uint32_t debounceMs);
     void setHandlerDown(uint8_t whichButton, Callback onDown);
     void setHandlerUp(uint8_t whichButton, Callback onUp);
     void setHandlerShortPress(uint8_t whichButton, Callback onShortPress);
@@ -55,7 +54,6 @@ class TwoButtonExtended : protected concurrency::OSThread
     void setJoystickDownHandlers(Callback uDown, Callback dDown, Callback ldown, Callback rDown);
     void setJoystickUpHandlers(Callback uUp, Callback dUp, Callback lUp, Callback rUp);
     void setJoystickPressHandlers(Callback uPress, Callback dPress, Callback lPress, Callback rPress);
-    
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
@@ -78,27 +76,27 @@ class TwoButtonExtended : protected concurrency::OSThread
     // Data used for direction (single-action) buttons
     class SimpleButton
     {
-        public:
-	    // Per-button config
-	    uint8_t pin = 0xFF;			 // 0xFF: unset
-	    volatile State state = State::REST;  // Internal state
-	    volatile uint32_t irqAtMillis;	 // millis() when button went down
+      public:
+        // Per-button config
+        uint8_t pin = 0xFF;                 // 0xFF: unset
+        volatile State state = State::REST; // Internal state
+        volatile uint32_t irqAtMillis;      // millis() when button went down
 
-	    // Per-button event callbacks
-	    static void noop(){};
-	    std::function<void()> onDown = noop;
-	    std::function<void()> onUp = noop;
-	    std::function<void()> onPress = noop;
+        // Per-button event callbacks
+        static void noop(){};
+        std::function<void()> onDown = noop;
+        std::function<void()> onUp = noop;
+        std::function<void()> onPress = noop;
     };
-    
+
     // Data used for double-action buttons
     class Button : public SimpleButton
     {
       public:
         // Per-button extended config
-        bool activeLogic = LOW;             // Active LOW by default.
-        uint32_t debounceLength = 50;       // Minimum length for shortpress in ms
-        uint32_t longpressLength = 500;     // Time until longpress in ms
+        bool activeLogic = LOW;         // Active LOW by default.
+        uint32_t debounceLength = 50;   // Minimum length for shortpress in ms
+        uint32_t longpressLength = 500; // Time until longpress in ms
 
         // Per-button event callbacks
         std::function<void()> onLongPress = noop;
@@ -106,8 +104,8 @@ class TwoButtonExtended : protected concurrency::OSThread
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends
-    CallbackObserver<TwoButtonExtended, void *> lsObserver = 
-	CallbackObserver<TwoButtonExtended, void *>(this, &TwoButtonExtended::beforeLightSleep);
+    CallbackObserver<TwoButtonExtended, void *> lsObserver =
+        CallbackObserver<TwoButtonExtended, void *>(this, &TwoButtonExtended::beforeLightSleep);
     CallbackObserver<TwoButtonExtended, esp_sleep_wakeup_cause_t> lsEndObserver =
         CallbackObserver<TwoButtonExtended, esp_sleep_wakeup_cause_t>(this, &TwoButtonExtended::afterLightSleep);
 #endif
@@ -123,13 +121,13 @@ class TwoButtonExtended : protected concurrency::OSThread
     static void isrJoystickDown();
     static void isrJoystickLeft();
     static void isrJoystickRight();
-    
+
     TwoButtonExtended(); // Constructor made private: force use of Button::instance()
 
     // Info about both buttons
     Button buttons[2];
-    bool joystickActiveLogic = LOW;        // Active LOW by default
-    uint32_t joystickDebounceLength = 50;  // time until press in ms
+    bool joystickActiveLogic = LOW;       // Active LOW by default
+    uint32_t joystickDebounceLength = 50; // time until press in ms
     SimpleButton joystick[4];
 };
 

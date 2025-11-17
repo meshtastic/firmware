@@ -54,11 +54,11 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
-    inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
+    inkhud->persistence->settings.rotation = 1; // 90 degrees clockwise
 #if HAS_TRACKBALL
-    inkhud->persistence->settings.joystick.enabled = true;             // Device uses a joystick
-    inkhud->persistence->settings.joystick.alignment = 3;              // 270 degrees
-    inkhud->persistence->settings.optionalMenuItems.nextTile = false;  // Use joystick instead
+    inkhud->persistence->settings.joystick.enabled = true;            // Device uses a joystick
+    inkhud->persistence->settings.joystick.alignment = 3;             // 270 degrees
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Use joystick instead
 #endif
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
@@ -73,7 +73,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
-    
+
     //  Start running InkHUD
     inkhud->begin();
 

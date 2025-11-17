@@ -291,17 +291,17 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-	previousPage = MenuPage::EXIT;
+        previousPage = MenuPage::EXIT;
         break;
 
     case SEND:
         populateSendPage();
-	previousPage = MenuPage::ROOT;
+        previousPage = MenuPage::ROOT;
         break;
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
-	previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case OPTIONS:
@@ -341,24 +341,24 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(
             MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-	previousPage = MenuPage::ROOT;
+        previousPage = MenuPage::ROOT;
         break;
 
     case APPLETS:
         populateAppletPage();
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-	previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case AUTOSHOW:
         populateAutoshowPage();
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-	previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case RECENTS:
         populateRecentsPage();
-	previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case EXIT:
@@ -493,29 +493,29 @@ void InkHUD::MenuApplet::onButtonShortPress()
         // Push the auto-close timer back
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-	// Move menu cursor to next entry, then update
-    	if (cursorShown)
+        // Move menu cursor to next entry, then update
+        if (cursorShown)
             cursor = (cursor + 1) % items.size();
-    	else
+        else
             cursorShown = true;
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     } else {
-    	// Exit the menu
-	showPage(MenuPage::EXIT);
-	
-	requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // Exit the menu
+        showPage(MenuPage::EXIT);
+
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
 }
 
 void InkHUD::MenuApplet::onButtonLongPress()
 {
     if (!settings->joystick.enabled) {
-	// Push the auto-close timer back
+        // Push the auto-close timer back
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    	if (cursorShown)
+        if (cursorShown)
             execute(items.at(cursor));
-    	else
+        else
             showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
 
         // If we didn't already request a specialized update, when handling a menu action,
@@ -524,36 +524,33 @@ void InkHUD::MenuApplet::onButtonLongPress()
         if (!wantsToRender())
             requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     } else {
-    	// Exit the menu
-	showPage(MenuPage::EXIT);
+        // Exit the menu
+        showPage(MenuPage::EXIT);
 
-	requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
 }
 
-
 // The center button of the joystick takes over the role of the a long press on the user button
-void InkHUD::MenuApplet::onStickCenterShort() 
+void InkHUD::MenuApplet::onStickCenterShort()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     if (cursorShown)
-	execute(items.at(cursor));
+        execute(items.at(cursor));
     else
-	showPage(MenuPage::EXIT);
+        showPage(MenuPage::EXIT);
 
     if (!wantsToRender())
-	requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::MenuApplet::onStickCenterLong() 
+void InkHUD::MenuApplet::onStickCenterLong()
 {
     // Exit the menu
     showPage(MenuPage::EXIT);
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-
 }
 
 void InkHUD::MenuApplet::onStickUp()
@@ -562,12 +559,12 @@ void InkHUD::MenuApplet::onStickUp()
 
     // Move menu cursor to previous entry, then update
     if (cursor == 0)
-	cursor = items.size() - 1;
+        cursor = items.size() - 1;
     else
-	cursor--;
-    
+        cursor--;
+
     if (!cursorShown)
-	cursorShown = true;
+        cursorShown = true;
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
@@ -578,9 +575,9 @@ void InkHUD::MenuApplet::onStickDown()
 
     // Move menu cursor to next entry, then update
     if (cursorShown)
-	cursor = (cursor + 1) % items.size();
-    else 
-	cursorShown = true;
+        cursor = (cursor + 1) % items.size();
+    else
+        cursorShown = true;
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
@@ -599,7 +596,7 @@ void InkHUD::MenuApplet::onStickRight()
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     if (cursorShown)
-	execute(items.at(cursor));
+        execute(items.at(cursor));
     if (!wantsToRender())
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
