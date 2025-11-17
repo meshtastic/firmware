@@ -9,7 +9,7 @@ It reflects charging, charged, discharging, and Bluetooth connection states usin
 */
 StatusLEDModule *statusLEDModule;
 
-StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDdModule")
+StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 {
     bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
     powerStatusObserver.observe(&powerStatus->onNewStatus);
