@@ -56,13 +56,22 @@ class InkHUD
     void shortpress();
     void longpress();
 
+    void stickCenterShort();
+    void stickCenterLong();
+    void stickUp();
+    void stickDown();
+    void stickLeft();
+    void stickRight();
+
     // Trigger UI changes
     // - called by various InkHUD components
     // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
 
     void nextApplet();
+    void prevApplet();
     void openMenu();
     void nextTile();
+    void prevTile();
     void rotate();
     void toggleBatteryIcon();
 

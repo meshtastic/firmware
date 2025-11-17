@@ -80,12 +80,56 @@ void InkHUD::InkHUD::longpress()
     events->onButtonLong();
 }
 
+// Call this when your joystick gets a short center press
+void InkHUD::InkHUD::stickCenterShort()
+{
+    events->onStickCenterShort();
+}
+
+// Call this when your joystick gets a long center press
+void InkHUD::InkHUD::stickCenterLong()
+{
+    events->onStickCenterLong();
+}
+
+// Call this when your joystick gets an up input
+void InkHUD::InkHUD::stickUp()
+{
+    events->onStickUp();
+}
+
+// Call this when your joystick gets a down input
+void InkHUD::InkHUD::stickDown()
+{
+    events->onStickDown();
+}
+
+// Call this when your joystick gets a left input
+void InkHUD::InkHUD::stickLeft()
+{
+    events->onStickLeft();
+}
+
+// Call this when your joystick gets a right input
+void InkHUD::InkHUD::stickRight()
+{
+    events->onStickRight();
+}
+
 // Cycle the next user applet to the foreground
 // Only activated applets are cycled
 // If user has a multi-applet layout, the applets will cycle on the "focused tile"
 void InkHUD::InkHUD::nextApplet()
 {
     windowManager->nextApplet();
+}
+
+// Cycle the previous user applet to the foreground
+// Only activated applets are cycled
+// If user has a multi-applet layout, the applets will cycle on the "focused tile"
+void InkHUD::InkHUD::prevApplet()
+{
+    windowManager->prevApplet();
 }
 
 // Show the menu (on the the focused tile)
@@ -100,6 +144,13 @@ void InkHUD::InkHUD::openMenu()
 void InkHUD::InkHUD::nextTile()
 {
     windowManager->nextTile();
+}
+
+// In layouts where multiple applets are shown at once, change which tile is focused
+// The focused tile in the one which cycles applets on button short press, and displays menu on long press
+void InkHUD::InkHUD::prevTile()
+{
+    windowManager->prevTile();
 }
 
 // Rotate the display image by 90 degrees

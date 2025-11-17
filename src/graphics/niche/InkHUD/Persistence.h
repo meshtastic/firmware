@@ -29,7 +29,7 @@ class Persistence
 
     // Used to invalidate old settings, if needed
     // Version 0 is reserved for testing, and will always load defaults
-    static constexpr uint32_t SETTINGS_VERSION = 2;
+    static constexpr uint32_t SETTINGS_VERSION = 3;
 
     struct Settings {
         struct Meta {
@@ -95,6 +95,12 @@ class Persistence
             // this tip is no longer shown
             bool safeShutdownSeen = false;
         } tips;
+
+        // Joystick settings
+        struct Joystick {
+            // Modifies the UI for joystick use
+            bool enabled = false;
+        } joystick;
 
         // Rotation of the display
         // Multiples of 90 degrees clockwise

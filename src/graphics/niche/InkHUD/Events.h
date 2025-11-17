@@ -29,6 +29,12 @@ class Events
 
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
+    void onStickCenterShort();
+    void onStickCenterLong();
+    void onStickUp();
+    void onStickDown();
+    void onStickLeft();
+    void onStickRight();
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
