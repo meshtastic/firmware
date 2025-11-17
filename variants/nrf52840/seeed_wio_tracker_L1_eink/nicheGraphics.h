@@ -19,7 +19,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
-#include "graphics/niche/Inputs/TwoButton.h"
+#include "graphics/niche/Inputs/TwoButtonExtended.h"
 
 void setupNicheGraphics()
 {
@@ -68,22 +68,22 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
-
+    
     //  Start running InkHUD
     inkhud->begin();
 
     //  Buttons
     //  --------------------------
 
-    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
+    Inputs::TwoButtonExtended *buttons = Inputs::TwoButtonExtended::getInstance(); // Shared NicheGraphics component
 
     // #0: Main User Button
-    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
+    buttons->setWiring(0, Inputs::TwoButtonExtended::getUserButtonPin());
     buttons->setTiming(0, 75, 500);
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
-    // Begin handling button events
+   // Begin handling button events
     buttons->start();
 }
 
