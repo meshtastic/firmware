@@ -232,4 +232,10 @@ void InkHUD::TipsApplet::onButtonShortPress()
         requestUpdate();
 }
 
+// Functions the same as the user button
+void InkHUD::TipsApplet::onStickCenterShort()
+{
+    onButtonShortPress();
+}
+
 #endif
