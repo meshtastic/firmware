@@ -1,8 +1,8 @@
 #include "RadioLib.h"
 #include "nrf.h"
 
-// set RF switch configuration for Wio WM1110
-// Wio WM1110 uses DIO5 and DIO6 for RF switching
+// set RF switch configuration for ELECROW ThinkNode M3
+// ELECROW ThinkNode M3 uses DIO5 and DIO6 for RF switching
 
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 
