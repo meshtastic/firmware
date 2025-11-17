@@ -4,7 +4,8 @@
 #include <Arduino.h>
 
 /*
-Generic Thread Module allows for the execution of custom code at a set interval.
+StatusLEDModule manages the device's status LEDs, updating their states based on power and Bluetooth status.
+It reflects charging, charged, discharging, and Bluetooth connection states using the appropriate LEDs.
 */
 StatusLEDModule *statusLEDModule;
 
