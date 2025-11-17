@@ -27,7 +27,7 @@ static const uint8_t SCK = 13;
 // LEDs
 #define LED_BUILTIN LED_GREEN
 
-#ifdef _VARIANT_3112_
+#ifdef _VARIANT_RAK3112_
 /*
  * Serial interfaces
  */
