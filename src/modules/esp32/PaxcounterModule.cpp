@@ -141,6 +141,7 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->drawStringf(display->getWidth() / 2 + x, graphics::getTextPositions(display)[line++], buffer,
                          "WiFi: %d\nBLE: %d\nUptime: %ds", count_from_libpax.wifi_count, count_from_libpax.ble_count,
                          millis() / 1000);
+    graphics::drawCommonFooter(display, x, y);
 }
 #endif // HAS_SCREEN
 
