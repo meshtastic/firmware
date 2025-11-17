@@ -2,6 +2,7 @@
 
 #include "./WindowManager.h"
 
+#include "./Applets/System/AlignStick/AlignStickApplet.h"
 #include "./Applets/System/BatteryIcon/BatteryIconApplet.h"
 #include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
@@ -136,6 +137,15 @@ void InkHUD::WindowManager::openMenu()
 {
     MenuApplet *menu = (MenuApplet *)inkhud->getSystemApplet("Menu");
     menu->show(userTiles.at(settings->userTiles.focused));
+}
+
+// Bring the AlignStick applet to the foreground
+void InkHUD::WindowManager::openAlignStick()
+{
+    if (settings->joystick.enabled) {
+        AlignStickApplet *alignStick = (AlignStickApplet *)inkhud->getSystemApplet("AlignStick");
+        alignStick->bringToForeground();
+    }
 }
 
 // On the currently focussed tile: cycle to the next available user applet
@@ -423,6 +433,8 @@ void InkHUD::WindowManager::createSystemApplets()
     addSystemApplet("Logo", new LogoApplet, new Tile);
     addSystemApplet("Pairing", new PairingApplet, new Tile);
     addSystemApplet("Tips", new TipsApplet, new Tile);
+    if (settings->joystick.enabled)
+        addSystemApplet("AlignStick", new AlignStickApplet, new Tile);
 
     addSystemApplet("Menu", new MenuApplet, nullptr);
 
@@ -445,6 +457,8 @@ void InkHUD::WindowManager::placeSystemTiles()
     inkhud->getSystemApplet("Logo")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Pairing")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Tips")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
+    if (settings->joystick.enabled)
+        inkhud->getSystemApplet("AlignStick")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
 
     inkhud->getSystemApplet("Notification")->getTile()->setRegion(0, 0, inkhud->width(), 20);
 

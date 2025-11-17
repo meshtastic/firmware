@@ -30,6 +30,7 @@ class WindowManager
     void nextTile();
     void prevTile();
     void openMenu();
+    void openAlignStick();
     void nextApplet();
     void prevApplet();
     void rotate();

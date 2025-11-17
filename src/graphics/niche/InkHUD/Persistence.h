@@ -96,10 +96,17 @@ class Persistence
             bool safeShutdownSeen = false;
         } tips;
 
-        // Joystick settings
+        // Joystick settings for enabling and aligning to the screen
         struct Joystick {
             // Modifies the UI for joystick use
             bool enabled = false;
+
+            // gets set to true when AlignStick applet is completed
+            bool aligned = false;
+
+            // Rotation of the joystick
+            // Multiples of 90 degrees clockwise
+            uint8_t alignment = 0;
         } joystick;
 
         // Rotation of the display

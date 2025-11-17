@@ -57,6 +57,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
 #if HAS_TRACKBALL
     inkhud->persistence->settings.joystick.enabled = true;             // Device uses a joystick
+    inkhud->persistence->settings.joystick.alignment = 3;              // 270 degrees
     inkhud->persistence->settings.optionalMenuItems.nextTile = false;  // Use joystick instead
 #endif
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
