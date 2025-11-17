@@ -547,8 +547,7 @@ bool loadConfig(const char *configPath)
             if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
                 YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
                 if (tx_gain_node.IsSequence() && tx_gain_node.size() != 0) {
-                    portduino_config.num_pa_points =
-                        min(tx_gain_node.size(), sizeof(portduino_config.tx_gain_lora) / sizeof(uint16_t));
+                    portduino_config.num_pa_points = min(tx_gain_node.size(), std::size(portduino_config.tx_gain_lora));
                     for (int i = 0; i < portduino_config.num_pa_points; i++) {
                         portduino_config.tx_gain_lora[i] = tx_gain_node[i].as<int>();
                     }
