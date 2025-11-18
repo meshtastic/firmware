@@ -240,6 +240,9 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(debugmsg.c_str());
+#endif
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
                     LOG_DEBUG("Found: %s", message); // Log the found message
@@ -247,9 +250,6 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
-#ifdef GPS_DEBUG
-                    LOG_DEBUG(debugmsg.c_str());
-#endif
                 }
             }
         }
@@ -1275,6 +1275,24 @@ GnssModel_t GPS::probe(int serialSpeed)
         memset(&ublox_info, 0, sizeof(ublox_info));
         delay(100);
 
+#if defined(PIN_GPS_RESET) && PIN_GPS_RESET != -1
+        digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+        delay(10);
+        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+
+        // attempt to detect the chip based on boot messages
+        std::vector<ChipInfo> passive_detect = {
+            {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+            {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+            {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580},
+            // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
+            /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
+        GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
+        if (detectedDriver != GNSS_MODEL_UNKNOWN) {
+            return detectedDriver;
+        }
+#endif
         // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
         _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
         delay(20);
@@ -1473,12 +1491,12 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             }
 
             if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
-#ifdef GPS_DEBUG
-                LOG_DEBUG(response);
-#endif
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
+#ifdef GPS_DEBUG
+                        LOG_DEBUG(response);
+#endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
                         delete[] response; // Cleanup before return
                         return chipInfo.driver;
@@ -1486,6 +1504,9 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 }
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(response);
+#endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
                 response[0] = '\0';
@@ -1572,8 +1593,6 @@ GPS *GPS::createGps()
 
 #ifdef PIN_GPS_RESET
     pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
-    delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
 
