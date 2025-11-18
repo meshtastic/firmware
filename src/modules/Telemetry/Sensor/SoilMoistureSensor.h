@@ -1,18 +1,16 @@
+#pragma once
 #include "configuration.h"
 
-//Based on the already given sensor by Mestatic 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_SoilMoistureSensor.h>)
-
-#pragma once
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<I2CSoilMoistureSensor.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <Adafruit_SoilMoisture.h>
+#include <I2CSoilMoistureSensor.h>
 
 class SoilMoistureSensor : public TelemetrySensor
 {
   private:
-    Adafruit_SoilMoisture soil = Adafruit_SoilMoisture();
+    I2CSoilMoistureSensor soilSensor;
 
   protected:
     virtual void setup() override;

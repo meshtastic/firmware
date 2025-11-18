@@ -151,6 +151,8 @@ MLX90632Sensor mlx90632Sensor;
 NullSensor mlx90632Sensor;
 #endif
 
+
+
 #if __has_include(<DFRobot_LarkWeatherStation.h>)
 #include "Sensor/DFRobotLarkSensor.h"
 DFRobotLarkSensor dfRobotLarkSensor;
@@ -206,12 +208,23 @@ TSL2561Sensor tsl2561Sensor;
 NullSensor tsl2561Sensor;
 #endif
 
+//New update to the Telemtry file to ensure it is being recognize
+// Soil Moisture Sensor - using I2CSoilMoistureSensor library
+#if __has_include(<I2CSoilMoistureSensor.h>)
+#include "Sensor/SoilMoistureSensor.h"
+SoilMoistureSensor soilMoistureSensor;
+#else 
+NullSensor soilMoistureSensor;
+#endif
+
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+//Here is where the frequncy is changing
 int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
@@ -308,8 +321,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = tsl2561Sensor.runOnce();
             if (pct2075Sensor.hasSensor())
                 result = pct2075Sensor.runOnce();
-                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-                // sensormap here.
+            if (soilMoistureSensor.hasSensor()) { //added these lines for updated sensor
+                result = soilMoistureSensor.runOnce();
+}
+                
 #ifdef HAS_RAKPROT
 
             result = rak9154Sensor.runOnce();

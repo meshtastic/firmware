@@ -247,7 +247,7 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 LOG_DEBUG("Start next execution in 5s, then sleep");
                 sleepOnNextExecution = true;
-                setIntervalFromNow(5000);
+                setIntervalFromNow(5000);  //Frequency used in health
             }
         }
         return true;
@@ -256,3 +256,4 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 }
 
 #endif
+
