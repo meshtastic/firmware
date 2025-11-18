@@ -191,20 +191,17 @@ int CannedMessageModule::splitConfiguredMessages()
 
     return this->messagesCount;
 }
+
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
-    if (graphics::isHighResolution) {
-        if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
-        } else {
-            display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
+    if (this->dest == NODENUM_BROADCAST) {
+        const char *broadcastString = "To: Broadcast@%s";
+        if (!graphics::isHighResolution) {
+            broadcastString = "To: Broadc@%.5s";
         }
+        display->drawStringf(x, y, buffer, broadcastString, channels.getName(this->channel));
     } else {
-        if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: Broadc@%.5s", channels.getName(this->channel));
-        } else {
-            display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
-        }
+        display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
     }
 }
 
