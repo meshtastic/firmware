@@ -510,6 +510,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
         currentY += rowHeight;
     }
+    graphics::drawCommonFooter(display, x, y);
 }
 #endif
 

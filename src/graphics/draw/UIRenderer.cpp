@@ -552,6 +552,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         // else show nothing
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************
@@ -771,6 +772,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // Start Functions to write date/time to the screen
@@ -1183,6 +1185,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 #endif
 #endif // HAS_GPS
+    graphics::drawCommonFooter(display, x, y);
 }
 
 #ifdef USERPREFS_OEM_TEXT
@@ -1267,7 +1270,13 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (totalIcons == 0)
         return;
 
-    const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
+    const int navPadding = isHighResolution ? 24 : 12; // padding per side
+
+    int usableWidth = SCREEN_WIDTH - (navPadding * 2);
+    if (usableWidth < iconSize)
+        usableWidth = iconSize;
+
+    const size_t iconsPerPage = usableWidth / (iconSize + spacing);
     const size_t currentPage = currentFrame / iconsPerPage;
     const size_t pageStart = currentPage * iconsPerPage;
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
@@ -1338,6 +1347,47 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(WHITE);
         }
     }
+
+    // Compact arrow drawer
+    auto drawArrow = [&](bool rightSide) {
+        display->setColor(WHITE);
+
+        const int offset = isHighResolution ? 3 : 1;
+        const int halfH = rectHeight / 2;
+
+        const int top = (y - 2) + (rectHeight - halfH) / 2;
+        const int bottom = top + halfH - 1;
+        const int midY = top + (halfH / 2);
+
+        const int maxW = 4;
+
+        // Determine left X coordinate
+        int baseX = rightSide ? (rectX + rectWidth + offset) : // right arrow
+                        (rectX - offset - 1);                  // left arrow
+
+        for (int yy = top; yy <= bottom; yy++) {
+            int dist = abs(yy - midY);
+            int lineW = maxW - (dist * maxW / (halfH / 2));
+            if (lineW < 1)
+                lineW = 1;
+
+            if (rightSide) {
+                display->drawHorizontalLine(baseX, yy, lineW);
+            } else {
+                display->drawHorizontalLine(baseX - lineW + 1, yy, lineW);
+            }
+        }
+    };
+    // Right arrow
+    if (pageEnd < totalIcons) {
+        drawArrow(true);
+    }
+
+    // Left arrow
+    if (pageStart > 0) {
+        drawArrow(false);
+    }
+
     // Knock the corners off the square
     display->setColor(BLACK);
     display->drawRect(rectX, y - 2, 1, 1);
