@@ -443,6 +443,16 @@ int32_t KbI2cBase::runOnce()
                     e.kbchar = c;
                 }
                 break;
+            case 0x6c: // letter l. change layout
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = INPUT_BROKER_LAYOUT_CHANGE;
+                    e.kbchar = INPUT_BROKER_LAYOUT_CHANGE;
+                } else {
+                    e.inputEvent = INPUT_BROKER_ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
             case 0x1b: // ESC
                 e.inputEvent = INPUT_BROKER_CANCEL;
                 break;
@@ -496,6 +506,9 @@ int32_t KbI2cBase::runOnce()
                 // just pass those unmodified
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = c;
+                break;
+            case 0XA2: // fn+l      INPUT_BROKER_LAYOUT_CHANGE
+                e.inputEvent = INPUT_BROKER_LAYOUT_CHANGE;
                 break;
             case 0x0d: // Enter
                 e.inputEvent = INPUT_BROKER_SELECT;

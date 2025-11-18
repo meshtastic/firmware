@@ -50,6 +50,469 @@ static NodeNum lastDest = NODENUM_BROADCAST;
 static uint8_t lastChannel = 0;
 static bool lastDestSet = false;
 
+const char *nextLayout();
+int currentLayout = 0;
+
+struct KeyboardLayout {
+    const char *name;
+    const char *(*mapKey)(char key);
+};
+
+const char *mapEnglish(char key)
+{
+    static char singleChar[2] = {0};
+    singleChar[0] = key;
+    singleChar[1] = 0;
+    return singleChar;
+}
+
+#ifdef OLED_RU
+const char *mapRussian(char key)
+{
+    switch (key) {
+
+    case 'a':
+        return "ф";
+    case 'b':
+        return "и";
+    case 'c':
+        return "с";
+    case 'd':
+        return "в";
+    case 'e':
+        return "у";
+    case 'f':
+        return "а";
+    case 'g':
+        return "п";
+    case 'h':
+        return "р";
+    case 'i':
+        return "ш";
+    case 'j':
+        return "о";
+    case 'k':
+        return "л";
+    case 'l':
+        return "д";
+    case 'm':
+        return "ь";
+    case 'n':
+        return "т";
+    case 'o':
+        return "щ";
+    case 'p':
+        return "з";
+    case 'q':
+        return "й";
+    case 'r':
+        return "к";
+    case 's':
+        return "ы";
+    case 't':
+        return "е";
+    case 'u':
+        return "г";
+    case 'v':
+        return "м";
+    case 'w':
+        return "ц";
+    case 'x':
+        return "ч";
+    case 'y':
+        return "н";
+    case 'z':
+        return "я";
+
+    case 'A':
+        return "Ф";
+    case 'B':
+        return "И";
+    case 'C':
+        return "С";
+    case 'D':
+        return "В";
+    case 'E':
+        return "У";
+    case 'F':
+        return "А";
+    case 'G':
+        return "П";
+    case 'H':
+        return "Р";
+    case 'I':
+        return "Ш";
+    case 'J':
+        return "О";
+    case 'K':
+        return "Л";
+    case 'L':
+        return "Д";
+    case 'M':
+        return "Ь";
+    case 'N':
+        return "Т";
+    case 'O':
+        return "Щ";
+    case 'P':
+        return "З";
+    case 'Q':
+        return "Й";
+    case 'R':
+        return "К";
+    case 'S':
+        return "Ы";
+    case 'T':
+        return "Е";
+    case 'U':
+        return "Г";
+    case 'V':
+        return "М";
+    case 'W':
+        return "Ц";
+    case 'X':
+        return "Ч";
+    case 'Y':
+        return "Н";
+    case 'Z':
+        return "Я";
+
+    case '[':
+        return "х";
+    case ']':
+        return "ъ";
+    case ';':
+        return "ж";
+    case '\'':
+        return "э";
+    case ',':
+        return "б";
+    case '.':
+        return "ю";
+    case '`':
+        return "ё";
+
+    case '{':
+        return "Х";
+    case '}':
+        return "Ъ";
+    case ':':
+        return "Ж";
+    case '"':
+        return "Э";
+    case '<':
+        return "Б";
+    case '>':
+        return "Ю";
+    case '~':
+        return "Ё";
+
+    default: {
+        static char singleChar[2] = {0};
+        singleChar[0] = key;
+        singleChar[1] = 0;
+        return singleChar;
+    }
+    }
+}
+#endif // OLED_RU
+
+#ifdef OLED_UA
+const char *mapUkrainian(char key)
+{
+    switch (key) {
+    case 'g':
+        return "ґ";
+    case 'i':
+        return "і";
+    case 'j':
+        return "ї";
+    case 'u':
+        return "є";
+
+    case 'G':
+        return "Ґ";
+    case 'I':
+        return "І";
+    case 'J':
+        return "Ї";
+    case 'U':
+        return "Є";
+
+    case 'a':
+        return "ф";
+    case 'b':
+        return "и";
+    case 'c':
+        return "с";
+    case 'd':
+        return "в";
+    case 'e':
+        return "у";
+    case 'f':
+        return "а";
+    case 'h':
+        return "р";
+    case 'k':
+        return "л";
+    case 'l':
+        return "д";
+    case 'm':
+        return "ь";
+    case 'n':
+        return "т";
+    case 'o':
+        return "щ";
+    case 'p':
+        return "з";
+    case 'q':
+        return "й";
+    case 'r':
+        return "к";
+    case 's':
+        return "ы";
+    case 't':
+        return "е";
+    case 'v':
+        return "м";
+    case 'w':
+        return "ц";
+    case 'x':
+        return "ч";
+    case 'y':
+        return "н";
+    case 'z':
+        return "я";
+
+    case 'A':
+        return "Ф";
+    case 'B':
+        return "И";
+    case 'C':
+        return "С";
+    case 'D':
+        return "В";
+    case 'E':
+        return "У";
+    case 'F':
+        return "А";
+    case 'H':
+        return "Р";
+    case 'K':
+        return "Л";
+    case 'L':
+        return "Д";
+    case 'M':
+        return "Ь";
+    case 'N':
+        return "Т";
+    case 'O':
+        return "Щ";
+    case 'P':
+        return "З";
+    case 'Q':
+        return "Й";
+    case 'R':
+        return "К";
+    case 'S':
+        return "Ы";
+    case 'T':
+        return "Е";
+    case 'V':
+        return "М";
+    case 'W':
+        return "Ц";
+    case 'X':
+        return "Ч";
+    case 'Y':
+        return "Н";
+    case 'Z':
+        return "Я";
+
+    case '[':
+        return "х";
+    case ']':
+        return "ъ";
+    case ';':
+        return "ж";
+    case '\'':
+        return "э";
+    case ',':
+        return "б";
+    case '.':
+        return "ю";
+    case '`':
+        return "ё";
+
+    case '{':
+        return "Х";
+    case '}':
+        return "Ъ";
+    case ':':
+        return "Ж";
+    case '"':
+        return "Э";
+    case '<':
+        return "Б";
+    case '>':
+        return "Ю";
+    case '~':
+        return "Ё";
+
+    default: {
+        static char singleChar[2] = {0};
+        singleChar[0] = key;
+        singleChar[1] = 0;
+        return singleChar;
+    }
+    }
+}
+#endif // OLED_UA
+
+#ifdef OLED_PL
+const char *mapPolish(char key)
+{
+    switch (key) {
+    case 'a':
+        return "ą";
+    case 'c':
+        return "ć";
+    case 'e':
+        return "ę";
+    case 'l':
+        return "ł";
+    case 'n':
+        return "ń";
+    case 'o':
+        return "ó";
+    case 's':
+        return "ś";
+    case 'z':
+        return "ź";
+    case 'x':
+        return "ż";
+
+    case 'A':
+        return "Ą";
+    case 'C':
+        return "Ć";
+    case 'E':
+        return "Ę";
+    case 'L':
+        return "Ł";
+    case 'N':
+        return "Ń";
+    case 'O':
+        return "Ó";
+    case 'S':
+        return "Ś";
+    case 'Z':
+        return "Ź";
+    case 'X':
+        return "Ż";
+
+    default: {
+        static char singleChar[2] = {0};
+        singleChar[0] = key;
+        singleChar[1] = 0;
+        return singleChar;
+    }
+    }
+}
+#endif // OLED_PL
+
+#ifdef OLED_CS
+const char *mapCzech(char key)
+{
+    switch (key) {
+    case 'a':
+        return "á";
+    case 'c':
+        return "č";
+    case 'e':
+        return "é";
+    case 'i':
+        return "í";
+    case 'n':
+        return "ň";
+    case 'o':
+        return "ó";
+    case 'r':
+        return "ř";
+    case 's':
+        return "š";
+    case 't':
+        return "ť";
+    case 'u':
+        return "ú";
+    case 'y':
+        return "ý";
+    case 'z':
+        return "ž";
+
+    case 'A':
+        return "Á";
+    case 'C':
+        return "Č";
+    case 'E':
+        return "É";
+    case 'I':
+        return "Í";
+    case 'N':
+        return "Ň";
+    case 'O':
+        return "Ó";
+    case 'R':
+        return "Ř";
+    case 'S':
+        return "Š";
+    case 'T':
+        return "Ť";
+    case 'U':
+        return "Ú";
+    case 'Y':
+        return "Ý";
+    case 'Z':
+        return "Ž";
+
+    default: {
+        static char singleChar[2] = {0};
+        singleChar[0] = key;
+        singleChar[1] = 0;
+        return singleChar;
+    }
+    }
+}
+#endif // OLED_CS
+
+KeyboardLayout layouts[] = {
+#ifdef OLED_RU
+    {"Ru", mapRussian},
+#endif
+#ifdef OLED_UA
+    {"Ua", mapUkrainian},
+#endif
+#ifdef OLED_PL
+    {"Pl", mapPolish},
+#endif
+#ifdef OLED_CS
+    {"Cs", mapCzech},
+#endif
+    {"En", mapEnglish},
+};
+
+const char *getCurrentLayoutName()
+{
+    return layouts[currentLayout].name;
+}
+
+const int LAYOUT_COUNT = sizeof(layouts) / sizeof(layouts[0]);
+
+const char *applyCurrentLayout(char key);
+static int utf8_prev_index(const String &s, int idx);
+static int utf8_next_index(const String &s, int idx);
+static bool wordContainsUtf8(const String &s);
+
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
 CannedMessageModule *cannedMessageModule;
@@ -859,6 +1322,14 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return true;
     }
 
+    // fn+l (switch layout)
+    if (event->inputEvent == INPUT_BROKER_LAYOUT_CHANGE) {
+        payload = INPUT_BROKER_LAYOUT_CHANGE;
+        nextLayout();
+        runOnce();
+        return true;
+    }
+
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
         (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
@@ -1164,12 +1635,12 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case INPUT_BROKER_LEFT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
-                this->cursor--;
+                this->cursor = utf8_prev_index(this->freetext, this->cursor);
             }
             break;
         case INPUT_BROKER_RIGHT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
-                this->cursor++;
+                this->cursor = utf8_next_index(this->freetext, this->cursor);
             }
             break;
         default:
@@ -1181,13 +1652,14 @@ int32_t CannedMessageModule::runOnce()
             case 0x08: // backspace
                 if (this->freetext.length() > 0) {
                     if (this->cursor > 0) {
+                        // удаляем предыдущий UTF-8 кодовый символ
+                        int prev = utf8_prev_index(this->freetext, this->cursor);
                         if (this->cursor == this->freetext.length()) {
-                            this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                            this->freetext = this->freetext.substring(0, prev);
                         } else {
-                            this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                             this->freetext.substring(this->cursor, this->freetext.length());
+                            this->freetext = this->freetext.substring(0, prev) + this->freetext.substring(this->cursor);
                         }
-                        this->cursor--;
+                        this->cursor = prev;
                     }
                 } else {
                 }
@@ -1196,18 +1668,28 @@ int32_t CannedMessageModule::runOnce()
                 return 0;
             case INPUT_BROKER_LEFT:
             case INPUT_BROKER_RIGHT:
+            case INPUT_BROKER_LAYOUT_CHANGE:
                 break;
             default:
-                // Only insert ASCII printable characters (32–126)
+                // Only insert ASCII printable characters (32–126), but get layout mapping first
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
+                    // Apply current layout mapping.
+                    char key = (char)this->payload;
+
+                    const char *mapped_c = applyCurrentLayout(key);
+                    String mapped = mapped_c ? String(mapped_c) : String((char)key);
+
                     if (this->cursor == this->freetext.length()) {
-                        this->freetext += (char)this->payload;
+                        this->freetext += mapped;
                     } else {
-                        this->freetext = this->freetext.substring(0, this->cursor) + (char)this->payload +
-                                         this->freetext.substring(this->cursor);
+                        this->freetext =
+                            this->freetext.substring(0, this->cursor) + mapped + this->freetext.substring(this->cursor);
                     }
-                    this->cursor++;
+                    // Increase the cursor by the length of the inserted string.
+                    // Note: multi-byte UTF-8 support is only partial because Arduino's String::length() counts bytes for
+                    // multi-byte characters.
+                    this->cursor += mapped.length();
                     uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
@@ -1710,6 +2192,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    int symbolsLeftShift = 0;                   // move symbols counter to left if needed
     this->displayHeight = display->getHeight(); // Store display height for later use
     char buffer[50];
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1835,13 +2318,41 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // --- Draw node/channel header at the top ---
         drawHeader(display, x, y, buffer);
+        // --- Keyboard Layout symbol:
+        if (LAYOUT_COUNT > 1) {
+            if (graphics::isHighResolution && display->getWidth() > 250) {
+                const int hShift = -2; // move locale symbol left by 2 pixels
+                const int hBorder = 2; // add some border thickness left and right
+                display->setColor(WHITE);
+                snprintf(buffer, sizeof(buffer), "%s", getCurrentLayoutName());
+                symbolsLeftShift = display->getStringWidth(buffer);
+                display->fillRect(x + display->getWidth() - symbolsLeftShift + 2 - hBorder + hShift, y + 0,
+                                  symbolsLeftShift + 2 * hBorder - 4, FONT_HEIGHT_SMALL);
+                display->fillRect(x + display->getWidth() - symbolsLeftShift + 1 - hBorder + hShift, y + 0 + 1,
+                                  symbolsLeftShift + 2 * hBorder - 2, FONT_HEIGHT_SMALL - 2);
+                display->fillRect(x + display->getWidth() - symbolsLeftShift - hBorder + hShift, y + 0 + 2,
+                                  symbolsLeftShift + 2 * hBorder, FONT_HEIGHT_SMALL - 4);
+                display->setColor(BLACK);
+                display->drawString(x + display->getWidth() - symbolsLeftShift + hShift, y + 0, buffer);
+                symbolsLeftShift += 2 + 2 * hBorder - hShift;
+            } else {
+                display->setColor(WHITE);
+                snprintf(buffer, sizeof(buffer), "%c", getCurrentLayoutName()[0]);
+                symbolsLeftShift = display->getStringWidth(buffer);
+                display->fillRect(x + display->getWidth() - symbolsLeftShift, y + 0, symbolsLeftShift, FONT_HEIGHT_SMALL);
+                display->setColor(BLACK);
+                display->drawString(x + display->getWidth() - symbolsLeftShift, y + 0, buffer);
+                symbolsLeftShift += 1;
+            }
+        }
+        display->setColor(WHITE);
 
         // --- Char count right-aligned ---
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
-            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+            display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - symbolsLeftShift, y + 0, buffer);
         }
 
 #if INPUTBROKER_SERIAL_TYPE == 1
@@ -2007,7 +2518,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         int spacePos = text.indexOf(' ', pos);
                         int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space
                         String word = text.substring(pos, endPos);
-                        int wordWidth = display->getStringWidth(word);
+                        int wordWidth = display->getStringWidth(word.c_str(), word.length(), wordContainsUtf8(word));
 
                         if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
                             lines.push_back(currentLine);
@@ -2019,7 +2530,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                             uint16_t charPos = 0;
                             while (charPos < word.length()) {
                                 String oneChar = word.substring(charPos, charPos + 1);
-                                int charWidth = display->getStringWidth(oneChar);
+                                int charWidth =
+                                    display->getStringWidth(oneChar.c_str(), oneChar.length(), wordContainsUtf8(oneChar));
                                 if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
                                     lines.push_back(currentLine);
                                     currentLine.clear();
@@ -2061,7 +2573,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         }
                     } else {
                         display->drawString(nextX, yLine, token.second);
-                        nextX += display->getStringWidth(token.second);
+                        nextX +=
+                            display->getStringWidth(token.second.c_str(), token.second.length(), wordContainsUtf8(token.second));
                     }
                 }
                 yLine += rowHeight;
@@ -2205,7 +2718,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 } else {
                     // Text
                     display->drawString(nextX, lineY + textYOffset, token.second);
-                    nextX += display->getStringWidth(token.second);
+                    nextX += display->getStringWidth(token.second.c_str(), token.second.length(), wordContainsUtf8(token.second));
                 }
             }
 #ifndef USE_EINK
@@ -2375,8 +2888,80 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
 String CannedMessageModule::drawWithCursor(String text, int cursor)
 {
+
+    // Guard against invalid values
+    if (cursor < 0) {
+        cursor = 0;
+    }
+
+    int len = text.length();
+    if (cursor > len) {
+        cursor = len;
+    }
+
+    // If cursor points inside a multi-byte UTF-8 character,
+    // move it to the start of that character to avoid splitting the sequence.
+    if (cursor < len) {
+        const char *buf = text.c_str();
+        if (((uint8_t)buf[cursor] & 0xC0) == 0x80) { // continuation byte
+            cursor = utf8_prev_index(text, cursor);
+        }
+    }
+
     String result = text.substring(0, cursor) + "_" + text.substring(cursor);
     return result;
 }
 
+// Function to apply the current layout
+const char *applyCurrentLayout(char key)
+{
+    return layouts[currentLayout].mapKey(key);
+}
+
+// Function to switch to the next keyboard layout
+const char *nextLayout()
+{
+    currentLayout = (currentLayout + 1) % LAYOUT_COUNT;
+    LOG_INFO("Switched to: %s", layouts[currentLayout].name);
+    return layouts[currentLayout].name;
+}
+
+// Function to check if a string contains non-ASCII characters
+static bool wordContainsUtf8(const String &s)
+{
+    const char *buf = s.c_str();
+    for (size_t i = 0; i < s.length(); ++i) {
+        if (((uint8_t)buf[i] & 0x80) != 0)
+            return true;
+    }
+    return false;
+}
+
+// Function to find the previous UTF-8 characters
+static int utf8_prev_index(const String &s, int idx)
+{
+    const char *buf = s.c_str();
+    if (idx <= 0)
+        return 0;
+    int i = idx - 1;
+    while (i > 0 && (((uint8_t)buf[i] & 0xC0) == 0x80))
+        --i;
+    return i;
+}
+
+// Function to find the next UTF-8 character
+static int utf8_next_index(const String &s, int idx)
+{
+    const char *buf = s.c_str();
+    int len = s.length();
+    if (idx >= len)
+        return len;
+    int i = idx;
+    if (((uint8_t)buf[i] & 0x80) == 0)
+        return i + 1;
+    ++i;
+    while (i < len && (((uint8_t)buf[i] & 0xC0) == 0x80))
+        ++i;
+    return i;
+}
 #endif
