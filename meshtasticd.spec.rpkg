@@ -33,6 +33,7 @@ BuildRequires: python3dist(grpcio[protobuf])
 BuildRequires: python3dist(grpcio-tools)
 BuildRequires: git-core
 BuildRequires: gcc-c++
+BuildRequires: (glibc-devel >= 2.38) or pkgconfig(libbsd-overlay)
 BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(libgpiod)
 BuildRequires: pkgconfig(bluez)
@@ -87,6 +88,9 @@ cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
 
 # Install systemd service
 install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+
+# Install meshtasticd start wrapper
+install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-start.sh
 
 # Install the web files under /usr/share/meshtasticd/web
 mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
