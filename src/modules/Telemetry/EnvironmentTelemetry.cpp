@@ -702,6 +702,9 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     if (pct2075Sensor.hasSensor()) {
         valid = valid && pct2075Sensor.getMetrics(m);
         hasSensor = true;
+    if (soilMoistureSensor.hasSensor()){
+        valid = valid && soilMoistureSensor.getMetrics(m);  //added this for new sensor
+        hasSensor = true;    }
     }
 #ifdef HAS_RAKPROT
     valid = valid && rak9154Sensor.getMetrics(m);
