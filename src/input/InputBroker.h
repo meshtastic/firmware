@@ -18,6 +18,7 @@ enum input_broker_event {
     INPUT_BROKER_USER_PRESS,
     INPUT_BROKER_ALT_PRESS,
     INPUT_BROKER_ALT_LONG,
+    INPUT_BROKER_LAYOUT_CHANGE, // be carefull! next value is 32 - space symbol
     INPUT_BROKER_SHUTDOWN = 0x9b,
     INPUT_BROKER_GPS_TOGGLE = 0x9e,
     INPUT_BROKER_SEND_PING = 0xaf,
