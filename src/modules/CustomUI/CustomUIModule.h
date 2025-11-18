@@ -6,80 +6,89 @@
 
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
-#include <Adafruit_ST7789.h>
-#include <Arduino.h>
+#include <LovyanGFX.hpp>
 #include <Keypad.h>
+#include <Arduino.h>
+#include <vector>
+#include <memory>
 
 // Forward declarations
-class UINavigator;
-class MessagePopupScreen;
+class InitBase;
+class InitDisplay;
+class InitKeypad;
+class BaseScreen;
+class HomeScreen;
+class WiFiListScreen;
+class NodesListScreen;
 
 /**
- * Message structure for queued incoming messages
- */
-struct QueuedMessage {
-    String messageText;
-    String senderName;
-    String senderLongName;
-    uint32_t nodeId;
-    unsigned long timestamp;
-    bool isRead;
-};
-
-/**
- * Custom UI Module for external ST7789 display
- * Handles display initialization, button input, and message display with popup queue
+ * Modular Custom UI Module for external ST7789 display with LovyanGFX
+ * Architecture:
+ * - Modular initializers in init/ directory (initialization only)
+ * - Screen-based UI with BaseScreen abstract class
+ * - CustomUIModule handles navigation and input routing
+ * - LovyanGFX with automatic PSRAM, DMA, and high-speed SPI (80MHz)
+ * - 4x4 keypad for navigation and input
+ * - Extensible for future screens and components
+ * 
+ * Performance targets:
+ * - 40-60 FPS with optimized drawing
+ * - ~150-220KB free memory
+ * - Smooth screen transitions
  */
 class CustomUIModule : public SinglePortModule, private concurrency::OSThread {
 public:
     CustomUIModule();
+    virtual ~CustomUIModule();
     
     // Module interface
     virtual int32_t runOnce() override;
     virtual bool wantUIFrame() override;
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
     
-    // Display management
-    void initDisplay();
-    
+    // Initialization
+    void initAll();
+
 private:
-    Adafruit_ST7789 tft;
-    UINavigator* navigator;
-    MessagePopupScreen* messagePopupScreen;
+    // Modular initializers
+    std::vector<std::unique_ptr<InitBase>> initializers;
     
-    // Button handling
-    int lastButtonState;
-    unsigned long lastButtonCheck;
-    void checkButtonInput();
+    // Component references for easy access
+    InitDisplay* displayInit;
+    InitKeypad* keypadInit;
     
-    // Keypad handling
-    static const byte ROWS = 4;
-    static const byte COLS = 4;
-    static char keys[ROWS][COLS];
-    static byte rowPins[ROWS];
-    static byte colPins[COLS];
+    bool allInitialized;
+    
+    // Display and input handling
+    lgfx::LGFX_Device* tft;
     Keypad* keypad;
+    
+    // Screen management
+    BaseScreen* currentScreen;
+    HomeScreen* homeScreen;
+    WiFiListScreen* wifiListScreen;
+    NodesListScreen* nodesListScreen;
+    
+    // Splash screen animation state
+    bool isSplashActive;
+    unsigned long splashStartTime;
+    int progressDirection; // 1 for forward, -1 for backward
+    int currentProgress;   // 0-100
+    unsigned long lastProgressUpdate;
+    
+    // Helper methods
+    void registerInitializers();
+    void connectComponents();
+    void initScreens();
+    void showSplashScreen();
+    void updateSplashAnimation();  // Update continuous splash animation
+    
+    // Screen navigation
+    void switchToScreen(BaseScreen* newScreen);
+    
+    // Input handling
     void checkKeypadInput();
-    
-    // Message queue system (5 message limit)
-    static const int MAX_QUEUED_MESSAGES = 5;
-    QueuedMessage messageQueue[MAX_QUEUED_MESSAGES];
-    int queueHead; // Next position to write
-    int queueTail; // Next position to read
-    int queueSize; // Current number of messages
-    
-    // Message popup display
-    bool showingMessagePopup;
-    int currentMessageIndex;
-    unsigned long lastTimestampUpdate;
-    unsigned long initializationTime;  // Track when initialization completed
-    
-    // Message management methods
-    bool addMessageToQueue(const String& messageText, const String& senderName, const String& senderLongName, uint32_t nodeId);
-    bool hasUnreadMessages() const;
-    void showNextMessage();
-    void dismissCurrentMessage();
-    void drawMessageCounter();
+    void handleKeyPress(char key);
 };
 
 // Global setup function
