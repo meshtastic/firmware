@@ -1676,10 +1676,12 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
-#ifdef FSCom
+#ifndef USE_EXTERNAL_FLASH
+   #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
+#endif
 #endif
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
@@ -1689,10 +1691,12 @@ bool NodeDB::saveNodeDatabaseToDisk()
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
     bool success = true;
+#ifndef USE_EXTERNAL_FLASH
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
+#endif
 #endif
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
