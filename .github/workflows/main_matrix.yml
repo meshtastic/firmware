@@ -27,6 +27,7 @@ on:
 
 jobs:
   setup:
+    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: true
       matrix:
@@ -57,6 +58,7 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
+    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -89,6 +91,7 @@ jobs:
         run: bin/check-all.sh ${{ matrix.check.board }}
 
   build:
+    if: github.repository == 'meshtastic/firmware'
     needs: [setup, version]
     strategy:
       fail-fast: false
@@ -120,6 +123,7 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   docker:
+    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: false
       matrix:
@@ -359,7 +363,7 @@ jobs:
 
   publish-firmware:
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
     needs: [release-firmware, version]
     env:
       targets: |-
