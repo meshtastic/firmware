@@ -188,6 +188,13 @@ const RegionInfo regions[] = {
     RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
 
     /*
+        EU 866MHz RFID band (ETSI EN 302 208): 4 channels at 865.7/866.3/866.9/867.5 MHz
+        475 kHz gap between channels, 27 dBm, duty cycle 2.5% (mobile) or 10% (fixed)
+        https://www.etsi.org/deliver/etsi_en/302200_302299/302208/03.04.01_60/en_302208v030401p.pdf
+    */
+    RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
@@ -217,6 +224,23 @@ void initRegion()
     LOG_INFO("Wanted region %d, using %s", config.lora.region, r->name);
 #endif
     myRegion = r;
+}
+
+/**
+ * Get duty cycle for current region. EU_866: 10% for routers, 2.5% for mobile.
+ */
+float getEffectiveDutyCycle()
+{
+    if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866) {
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+            return 10.0f;
+        } else {
+            return 2.5f;
+        }
+    }
+    // For all other regions, return the standard duty cycle
+    return myRegion->dutyCycle;
 }
 
 /**
@@ -518,6 +542,11 @@ void RadioInterface::applyModemConfig()
                 cr = 8;
                 sf = 12;
                 break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST:
+                bw = 125;
+                cr = 5;
+                sf = 9;
+                break;
             }
         } else {
             sf = loraConfig.spread_factor;
@@ -551,6 +580,19 @@ void RadioInterface::applyModemConfig()
             // Set to default modem preset
             loraConfig.use_preset = true;
             loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866 && bw != 125) {
+            static const char *err_string = "EU_866 requires 125kHz bandwidth. Fall back to LiteFast preset";
+            LOG_ERROR(err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            sprintf(cn->message, err_string);
+            service->sendClientNotification(cn);
+
+            // Set to LiteFast preset which is compliant
+            loraConfig.use_preset = true;
+            loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
         } else {
             validConfig = true;
         }
@@ -569,8 +611,9 @@ void RadioInterface::applyModemConfig()
     // Set final tx_power back onto config
     loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
 
-    // Calculate the number of channels
-    uint32_t numChannels = floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000)));
+    // Calculate number of channels: spacing = gap between channels (0 for continuous spectrum)
+    float channelSpacing = myRegion->spacing + (bw / 1000);
+    uint32_t numChannels = round((myRegion->freqEnd - myRegion->freqStart + myRegion->spacing) / channelSpacing);
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
@@ -582,11 +625,8 @@ void RadioInterface::applyModemConfig()
         channel_num ==
         hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset)) % numChannels;
 
-    // Old frequency selection formula
-    // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
-
-    // New frequency selection formula
-    float freq = myRegion->freqStart + (bw / 2000) + (channel_num * (bw / 1000));
+    // Calculate frequency: freqStart is band edge, add half bandwidth to get first channel center
+    float freq = myRegion->freqStart + (bw / 2000) + (channel_num * channelSpacing);
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {
