@@ -384,7 +384,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
-        getUptimeStr(node->device_metrics.uptime_seconds * 1000, "Up", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(node->device_metrics.uptime_seconds * 1000, " Up", uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
