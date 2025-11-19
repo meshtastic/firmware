@@ -17,6 +17,20 @@ public:
      */
     void playAnimation(lgfx::LGFX_Device* tft);
     
+    /**
+     * Update the loading animation progress
+     * @param tft LovyanGFX display instance
+     * @param progress Progress percentage (0-100)
+     * @return true if animation is complete
+     */
+    bool updateLoadingProgress(lgfx::LGFX_Device* tft, int progress);
+    
+    /**
+     * Check if loading animation is complete
+     * @return true if animation finished
+     */
+    bool isAnimationComplete() const { return animationComplete; }
+    
 private:
     /**
      * Draw HACKER CENTRAL title
@@ -24,29 +38,35 @@ private:
     void drawHackerCentralTitle(lgfx::LGFX_Device* tft);
     
     /**
-     * Start continuous loading animation that runs until destroyed
+     * Setup initial progress bar frame
      */
-    void startContinuousLoading(lgfx::LGFX_Device* tft);
+    void setupProgressBar(lgfx::LGFX_Device* tft);
     
     /**
-     * Draw loading progress bar animation
+     * Draw completion effect when loading finishes
      */
-    void drawLoadingAnimation(lgfx::LGFX_Device* tft);
-    
-    /**
-     * Draw final "READY" message with fade effect
-     */
-    void drawReadyMessage(lgfx::LGFX_Device* tft);
-    
-    /**
-     * Typewriter effect for text
-     */
-    void typewriterText(lgfx::LGFX_Device* tft, const char* text, int x, int y, uint16_t color, int delayMs = 50);
+    void drawCompletionEffect(lgfx::LGFX_Device* tft);
     
     /**
      * Animated progress bar
      */
     void animatedProgressBar(lgfx::LGFX_Device* tft, int x, int y, int width, int height, int progress, uint16_t color);
+    
+    /**
+     * Draw smooth loading progress bar
+     */
+    void drawSmoothProgressBar(lgfx::LGFX_Device* tft, int progress);
+    
+    // Animation state
+    bool animationComplete = false;
+    bool titleShown = false;
+    int lastDrawnProgress = -1;  // Track last drawn progress to avoid flicker
+    
+    // Progress bar dimensions
+    static const int PROGRESS_BAR_X = 60;
+    static const int PROGRESS_BAR_Y = 140;
+    static const int PROGRESS_BAR_WIDTH = 200;
+    static const int PROGRESS_BAR_HEIGHT = 12;
     
     // Colors for power-efficient display
     static const uint16_t COLOR_BLACK = 0x0000;
@@ -54,4 +74,5 @@ private:
     static const uint16_t COLOR_YELLOW = 0xFFE0;
     static const uint16_t COLOR_DIM_GREEN = 0x4208;
     static const uint16_t COLOR_DARK_RED = 0x7800;
+    static const uint16_t COLOR_BRIGHT_GREEN = 0x07FF;
 };

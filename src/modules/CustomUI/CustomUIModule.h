@@ -21,6 +21,7 @@ class HomeScreen;
 class WiFiListScreen;
 class NodesListScreen;
 
+#include "screens/MessagesScreen.h"
 /**
  * Modular Custom UI Module for external ST7789 display with LovyanGFX
  * Architecture:
@@ -36,6 +37,8 @@ class NodesListScreen;
  * - ~150-220KB free memory
  * - Smooth screen transitions
  */
+class MessagesScreen; // Forward declaration
+
 class CustomUIModule : public SinglePortModule, private concurrency::OSThread {
 public:
     CustomUIModule();
@@ -43,8 +46,8 @@ public:
     
     // Module interface
     virtual int32_t runOnce() override;
-    virtual bool wantUIFrame() override;
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+    virtual bool wantUIFrame() override;
     
     // Initialization
     void initAll();
@@ -68,20 +71,21 @@ private:
     HomeScreen* homeScreen;
     WiFiListScreen* wifiListScreen;
     NodesListScreen* nodesListScreen;
+    MessagesScreen* messagesScreen;
     
     // Splash screen animation state
     bool isSplashActive;
     unsigned long splashStartTime;
-    int progressDirection; // 1 for forward, -1 for backward
-    int currentProgress;   // 0-100
-    unsigned long lastProgressUpdate;
+    int loadingProgress;           // Current progress 0-100
+    unsigned long lastProgressUpdate;  // Last time progress was updated
+    class InitialSplashScreen* splashScreen; // Splash screen instance
     
     // Helper methods
     void registerInitializers();
     void connectComponents();
     void initScreens();
     void showSplashScreen();
-    void updateSplashAnimation();  // Update continuous splash animation
+    void updateSplashAnimation();  // Update progressive loading animation
     
     // Screen navigation
     void switchToScreen(BaseScreen* newScreen);

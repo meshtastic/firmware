@@ -2,6 +2,10 @@
 #include <LovyanGFX.hpp>
 #include <Arduino.h>
 
+#ifdef ESP32
+#include <esp_heap_caps.h>
+#endif
+
 // Add missing logging
 #ifndef LOG_INFO
 #define LOG_INFO(format, ...) Serial.printf("[INFO] " format "\n", ##__VA_ARGS__)
@@ -23,7 +27,7 @@ class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7789 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
-    lgfx::Light_PWM _light_instance;
+    lgfx::Light_PWM _light_instance;    
 
   public:
     LGFX(void)
@@ -31,8 +35,8 @@ class LGFX : public lgfx::LGFX_Device
         {
             auto cfg = _bus_instance.config();
 
-            // Configure optimized SPI for ESP32-S3 with automatic PSRAM and DMA
-            cfg.spi_host = SPI2_HOST;
+            // Configure SPI3_HOST to avoid conflict with LoRa radio on SPI2_HOST
+            cfg.spi_host = SPI3_HOST;  // Use SPI3 instead of SPI2 to avoid LoRa conflict
             cfg.spi_mode = 0;
             cfg.freq_write = 45000000; // 45MHz write speed
             cfg.freq_read = 16000000;  // 16MHz read speed
@@ -110,6 +114,26 @@ bool InitDisplay::init() {
     
     // Initialize the display - LovyanGFX handles SPI setup automatically
     tft->init();
+    
+    // Report memory status and PSRAM availability
+    LOG_INFO("🔧 InitDisplay: Memory Status Report:");
+    LOG_INFO("🔧 InitDisplay: - Total Heap: %zu bytes (%.1fKB)", ESP.getHeapSize(), ESP.getHeapSize()/1024.0);
+    LOG_INFO("🔧 InitDisplay: - Free Heap: %zu bytes (%.1fKB)", ESP.getFreeHeap(), ESP.getFreeHeap()/1024.0);
+    
+#if defined(CONFIG_SPIRAM_SUPPORT) && defined(BOARD_HAS_PSRAM)
+    size_t psramSize = ESP.getPsramSize();
+    if (psramSize > 0) {
+        size_t freePsram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        LOG_INFO("🔧 InitDisplay: - PSRAM Total: %zu bytes (%.1fMB)", psramSize, psramSize/(1024.0*1024.0));
+        LOG_INFO("🔧 InitDisplay: - PSRAM Free: %zu bytes (%.1fMB)", freePsram, freePsram/(1024.0*1024.0));
+        LOG_INFO("🔧 InitDisplay: ✅ PSRAM ENABLED for graphics operations");
+        tft->setColorDepth(16); // Use 16-bit color to optimize PSRAM usage
+    } else {
+        LOG_INFO("🔧 InitDisplay: ⚠️  No PSRAM detected, using standard configuration");
+    }
+#else
+    LOG_INFO("🔧 InitDisplay: ⚠️  PSRAM support not compiled in");
+#endif
     
     delay(100);
     tft->setRotation(1); // Landscape mode: 320x240

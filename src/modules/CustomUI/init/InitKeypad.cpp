@@ -41,10 +41,12 @@ bool InitKeypad::init() {
 }
 
 void InitKeypad::cleanup() {
+    LOG_INFO("🔧 InitKeypad: Cleaning up keypad...");
+    
     if (keypad) {
-        delete keypad;
-        keypad = nullptr;
+        // Safe cleanup without virtual destructor warning
+        keypad = nullptr; // Just nullify pointer, let destructor handle cleanup
+        initialized = false;
+        LOG_INFO("🔧 InitKeypad: Keypad cleaned up");
     }
-    initialized = false;
-    LOG_INFO("🔧 InitKeypad: Cleanup completed");
 }

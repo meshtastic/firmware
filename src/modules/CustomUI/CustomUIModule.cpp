@@ -9,6 +9,7 @@
 #if defined(VARIANT_heltec_v3_custom)
 
 #include "CustomUIModule.h"
+#include "DebugConfiguration.h"
 #include "init/InitBase.h"
 #include "init/InitDisplay.h"
 #include "init/InitKeypad.h"
@@ -16,9 +17,14 @@
 #include "screens/HomeScreen.h"
 #include "screens/WiFiListScreen.h"
 #include "screens/NodesListScreen.h"
+#include "screens/MessagesScreen.h"
 #include "InitialSplashScreen.h"
 #include <LovyanGFX.hpp>
 #include <Arduino.h>
+
+#ifdef ESP32
+#include <esp_heap_caps.h>
+#endif
 
 CustomUIModule *customUIModule;
 
@@ -35,13 +41,22 @@ CustomUIModule::CustomUIModule()
       wifiListScreen(nullptr),
       nodesListScreen(nullptr),
       isSplashActive(false),
-      splashStartTime(0) {
+      splashStartTime(0),
+      loadingProgress(0),
+      lastProgressUpdate(0),
+      splashScreen(nullptr) {
     
     LOG_INFO("🔧 CUSTOM UI: Module constructed with screen-based architecture");
     registerInitializers();
 }
 
 CustomUIModule::~CustomUIModule() {
+    // Cleanup splash screen
+    if (splashScreen) {
+        delete splashScreen;
+        splashScreen = nullptr;
+    }
+    
     // Cleanup screens
     if (homeScreen) {
         delete homeScreen;
@@ -124,15 +139,26 @@ void CustomUIModule::connectComponents() {
         tft = displayInit->getDisplay();
         LOG_INFO("🔧 CUSTOM UI: Display connected");
         
-        // Show splash screen immediately after display is ready
+        // Report current memory status with PSRAM info
+        LOG_INFO("🔧 CUSTOM UI: Post-display Memory Status:");
+        LOG_INFO("🔧 CUSTOM UI: - Free Heap: %zu bytes (%.1fKB)", ESP.getFreeHeap(), ESP.getFreeHeap()/1024.0);
+        
+#if defined(CONFIG_SPIRAM_SUPPORT) && defined(BOARD_HAS_PSRAM)
+        size_t psramSize = ESP.getPsramSize();
+        if (psramSize > 0) {
+            size_t freePsram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+            LOG_INFO("🔧 CUSTOM UI: - PSRAM Total: %zu bytes (%.1fMB)", psramSize, psramSize/(1024.0*1024.0));
+            LOG_INFO("🔧 CUSTOM UI: - PSRAM Free: %zu bytes (%.1fMB)", freePsram, freePsram/(1024.0*1024.0));
+            LOG_INFO("🔧 CUSTOM UI: ✅ PSRAM available for graphics");
+        } else {
+            LOG_INFO("🔧 CUSTOM UI: ⚠️  No PSRAM detected");
+        }
+#else
+        LOG_INFO("🔧 CUSTOM UI: ⚠️  PSRAM support not compiled in");
+#endif
+        
+        // Show splash screen with progressive animation
         showSplashScreen();
-        
-        // Initialize splash animation state
-        isSplashActive = true;
-        splashStartTime = millis();
-        
-        // Keep splash screen active - don't switch to home yet
-        // We'll switch to home screen later in runOnce() when everything is ready
     }
     
     if (keypadInit && keypadInit->isReady()) {
@@ -144,13 +170,20 @@ void CustomUIModule::connectComponents() {
 void CustomUIModule::showSplashScreen() {
     if (!tft) return;
     
-    LOG_INFO("🔧 CUSTOM UI: Starting animated splash screen");
+    LOG_INFO("🔧 CUSTOM UI: Starting progressive loading animation");
     
-    // Create and play the animated splash screen
-    InitialSplashScreen splashScreen;
-    splashScreen.playAnimation(tft);
+    // Create splash screen instance
+    splashScreen = new InitialSplashScreen();
     
-    LOG_INFO("🔧 CUSTOM UI: Animated splash screen completed");
+    // Initialize the splash screen (title and progress bar setup)
+    splashScreen->playAnimation(tft);
+    
+    // Initialize animation state
+    loadingProgress = 0;
+    lastProgressUpdate = millis();
+    isSplashActive = true;
+    
+    LOG_INFO("🔧 CUSTOM UI: Progressive loading animation initialized");
 }
 
 void CustomUIModule::initScreens() {
@@ -158,17 +191,19 @@ void CustomUIModule::initScreens() {
     
     // Create home screen
     homeScreen = new HomeScreen();
-    
+
     // Create WiFi list screen
     wifiListScreen = new WiFiListScreen();
-    
+
     // Create nodes list screen
     nodesListScreen = new NodesListScreen();
-    
-    // DON'T switch to home screen yet - keep splash screen active
-    // We'll switch when everything is fully initialized
-    
-    LOG_INFO("🔧 CUSTOM UI: ✅ Screens created, splash screen still active");
+
+    // Create messages screen
+    messagesScreen = new MessagesScreen();
+
+    // Screens are ready but don't switch yet - animation will handle transition
+
+    LOG_INFO("🔧 CUSTOM UI: ✅ Screens created, animation will handle transition");
 }
 
 int32_t CustomUIModule::runOnce() {
@@ -176,16 +211,26 @@ int32_t CustomUIModule::runOnce() {
         return 1000; // Wait 1 second if not initialized
     }
     
-    // Handle splash screen - just wait for initialization to complete
-    if (isSplashActive && tft) {
-        // Stop splash screen when all components are properly initialized and screens are ready
-        if (allInitialized && homeScreen && wifiListScreen && nodesListScreen) {
-            LOG_INFO("🔧 CUSTOM UI: All components initialized, transitioning to Home screen");
+    // Handle progressive splash screen animation
+    if (isSplashActive && tft && splashScreen) {
+        updateSplashAnimation();
+        
+        // Check if animation is complete
+        if (splashScreen->isAnimationComplete()) {
+            LOG_INFO("🔧 CUSTOM UI: Animation complete, transitioning to Home screen");
             isSplashActive = false;
-            switchToScreen(homeScreen);
+            
+            // Clean up splash screen
+            delete splashScreen;
+            splashScreen = nullptr;
+            
+            // Switch to home screen
+            if (homeScreen) {
+                switchToScreen(homeScreen);
+            }
         }
         
-        return 100; // Simple check every 100ms
+        return 50; // Update every 50ms for smooth animation
     }
     
     if (!currentScreen || !tft) {
@@ -207,9 +252,39 @@ bool CustomUIModule::wantUIFrame() {
     return false; // We don't want to integrate with the main UI
 }
 
+
+// Handle incoming LoRa messages and show MessagesScreen
 ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
-    // Process incoming messages if needed
-    // Future: could trigger screen updates for new messages
+    // Only handle text messages (TEXT_MESSAGE_APP)
+    if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+        // Extract text from payload (payload.bytes is not null-terminated)
+        const meshtastic_Data_payload_t &payload = mp.decoded.payload;
+        String text;
+        if (payload.size > 0 && payload.bytes != nullptr) {
+            text = String(reinterpret_cast<const char *>(payload.bytes), payload.size);
+        }
+        // Try to get sender long name from NodeDB
+        String sender;
+        if (nodeDB) {
+            meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(mp.from);
+            if (info && info->user.long_name[0] != '\0') {
+                sender = String(info->user.long_name);
+            } else {
+                char senderBuf[12];
+                snprintf(senderBuf, sizeof(senderBuf), "%08X", mp.from);
+                sender = String(senderBuf);
+            }
+        } else {
+            char senderBuf[12];
+            snprintf(senderBuf, sizeof(senderBuf), "%08X", mp.from);
+            sender = String(senderBuf);
+        }
+        unsigned long timestamp = millis();
+        if (messagesScreen && text.length() > 0) {
+            messagesScreen->addMessage(text, sender, timestamp);
+            switchToScreen(static_cast<BaseScreen*>(messagesScreen));
+        }
+    }
     return ProcessMessage::CONTINUE;
 }
 
@@ -217,6 +292,34 @@ void setup_CustomUIModule() {
     if (!customUIModule) {
         customUIModule = new CustomUIModule();
         customUIModule->initAll();
+    }
+}
+
+void CustomUIModule::updateSplashAnimation() {
+    if (!splashScreen || !tft) {
+        return;
+    }
+    
+    unsigned long currentTime = millis();
+    
+    // Update progress every 30ms for smooth animation (about 33 FPS)
+    if (currentTime - lastProgressUpdate >= 30) {
+        loadingProgress += 2; // Increment by 2% each update
+        
+        // Ensure we don't exceed 100%
+        if (loadingProgress > 100) {
+            loadingProgress = 100;
+        }
+        
+        // Update the splash screen with current progress
+        splashScreen->updateLoadingProgress(tft, loadingProgress);
+        
+        lastProgressUpdate = currentTime;
+        
+        // Log progress for debugging (every 20%)
+        if (loadingProgress % 20 == 0) {
+            LOG_INFO("🔧 CUSTOM UI: Loading progress: %d%%", loadingProgress);
+        }
     }
 }
 
@@ -228,9 +331,17 @@ void CustomUIModule::switchToScreen(BaseScreen* newScreen) {
     
     LOG_INFO("🔧 CUSTOM UI: Switching to screen: %s", newScreen->getName().c_str());
     
+    // Report memory before switch
+    // size_t freeHeapBefore = ESP.getFreeHeap();
+    
     // Exit current screen
     if (currentScreen) {
         currentScreen->onExit();
+    }
+    
+    // Force garbage collection and memory cleanup
+    if (tft) {
+        tft->waitDisplay(); // Wait for any pending display operations
     }
     
     // Switch to new screen
@@ -239,8 +350,8 @@ void CustomUIModule::switchToScreen(BaseScreen* newScreen) {
     
     // Force full redraw with black background
     if (tft) {
-        tft->fillScreen(0x0000); // Pure black background for testing
-        LOG_INFO("🔧 CUSTOM UI: Switched to black screen");
+        tft->fillScreen(0x0000); // Pure black background
+        LOG_INFO("🔧 CUSTOM UI: Screen switched, memory freed");
     }
 }
 
@@ -258,12 +369,12 @@ void CustomUIModule::checkKeypadInput() {
 
 void CustomUIModule::handleKeyPress(char key) {
     if (!currentScreen) return;
-    
+
     // Let current screen handle the key first
     if (currentScreen->handleKeyPress(key)) {
         return; // Screen handled the key
     }
-    
+
     // Handle global navigation keys
     switch (key) {
         case '1': // Home
@@ -272,39 +383,51 @@ void CustomUIModule::handleKeyPress(char key) {
                 switchToScreen(homeScreen);
             }
             break;
-            
+
         case '3': // WiFi
             if (currentScreen != wifiListScreen) {
                 LOG_INFO("🔧 CUSTOM UI: Navigating to WiFi screen");
                 switchToScreen(wifiListScreen);
             }
             break;
-            
+
         case '7': // Nodes
             if (currentScreen != nodesListScreen) {
                 LOG_INFO("🔧 CUSTOM UI: Navigating to Nodes screen");
                 switchToScreen(nodesListScreen);
             }
             break;
-            
+
         case 'A':
-        case 'a': // Back button
-            if (currentScreen != homeScreen) {
+        case 'a': // Back/Prev/Home button
+            if (currentScreen == messagesScreen) {
+                // If at end of buffer or no messages, go home
+                if (!messagesScreen->hasMessages() || messagesScreen->handleKeyPress(key) == false) {
+                    LOG_INFO("🔧 CUSTOM UI: MessagesScreen [A] - returning to Home");
+                    switchToScreen(homeScreen);
+                }
+            } else if (currentScreen != homeScreen) {
                 LOG_INFO("🔧 CUSTOM UI: Back button - returning to Home");
                 switchToScreen(homeScreen);
             }
             break;
-            
+
         case '*':
             LOG_INFO("🔧 CUSTOM UI: Global clear/back key pressed");
             // Could be used for back navigation in future
             break;
-            
+
         case '#':
             LOG_INFO("🔧 CUSTOM UI: Global menu/enter key pressed");
-            // Could be used for menu in future
+            // Memory status report on demand
+            LOG_INFO("🔧 CUSTOM UI: === MEMORY STATUS REPORT ===");
+            LOG_INFO("🔧 CUSTOM UI: Free Heap: %zu bytes (%.1fKB)", ESP.getFreeHeap(), ESP.getFreeHeap()/1024.0);
+            LOG_INFO("🔧 CUSTOM UI: Total Heap: %zu bytes (%.1fKB)", ESP.getHeapSize(), ESP.getHeapSize()/1024.0);
+            LOG_INFO("🔧 CUSTOM UI: Min Free Heap: %zu bytes (%.1fKB)", ESP.getMinFreeHeap(), ESP.getMinFreeHeap()/1024.0);
+            LOG_INFO("🔧 CUSTOM UI: Memory Usage: %.1f%%", (float)(ESP.getHeapSize() - ESP.getFreeHeap()) * 100.0 / ESP.getHeapSize());
+            LOG_INFO("🔧 CUSTOM UI: Hardware: Heltec V3 (SRAM only, no PSRAM)");
             break;
-            
+
         default:
             LOG_INFO("🔧 CUSTOM UI: Unhandled key: %c", key);
             break;

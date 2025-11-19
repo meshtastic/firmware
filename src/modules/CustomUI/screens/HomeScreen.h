@@ -38,7 +38,7 @@ private:
     String lastStatus;
     int lastNodeCount;
     bool statusChanged;
-    
+
     // Layout constants
     static const int LEFT_COLUMN_X = 10;
     static const int RIGHT_COLUMN_X = 170;

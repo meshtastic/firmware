@@ -1,6 +1,10 @@
 #include "DeviceMetricsHelper.h"
 #include "configuration.h"
 
+#ifdef ARCH_ESP32
+#include <esp_heap_caps.h>
+#endif
+
 // Static member initialization
 size_t DeviceMetricsHelper::lastFreeHeap = 0;
 int DeviceMetricsHelper::lastMemoryPercent = -1;
@@ -111,13 +115,21 @@ String DeviceMetricsHelper::getDetailedMemoryString() {
     result += "/";
     
     // Format total memory
-    if (totalHeap >= 1024) {
+    if (totalHeap >= 1024*1024) {
+        result += String(totalHeap / (1024*1024)) + "MB";
+    } else if (totalHeap >= 1024) {
         result += String(totalHeap / 1024) + "KB";
     } else {
         result += String(totalHeap) + "B";
     }
     
     result += " (" + String(utilization) + "%)";
+    
+#if defined(CONFIG_SPIRAM_SUPPORT) && defined(BOARD_HAS_PSRAM)
+    if (ESP.getPsramSize() > 0) {
+        result += " +PSRAM";
+    }
+#endif
     
     return result;
 }
