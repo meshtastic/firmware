@@ -56,7 +56,7 @@ void InkHUD::AlignStickApplet::drawStick(uint16_t centerX, uint16_t centerY, uin
         uint16_t chamfer = width < 80 ? 1 : 2;
         uint16_t stroke = 3; // pixels
         uint16_t arrowW = width * 0.22;
-        uint16_t hollowW = arrowW + -stroke * 2;
+        uint16_t hollowW = arrowW - stroke * 2;
 
         // Draw center circle
         fillCircle((int16_t)centerX, (int16_t)centerY, (int16_t)(width * 0.2), BLACK);
