@@ -85,10 +85,8 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     switch (event->inputEvent) {
         // GPS
     case INPUT_BROKER_GPS_TOGGLE:
-        LOG_WARN("GPS Toggle");
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
-            LOG_WARN("GPS Toggle2");
             if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
                 config.position.fixed_position == false) {
                 nodeDB->clearLocalPosition();
