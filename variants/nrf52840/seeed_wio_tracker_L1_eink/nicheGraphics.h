@@ -97,7 +97,7 @@ void setupNicheGraphics()
 
     // Joystick Directions
     buttons->setJoystickWiring(TB_UP, TB_DOWN, TB_LEFT, TB_RIGHT);
-    buttons->setJoystickDebounce(30);
+    buttons->setJoystickDebounce(50);
     buttons->setJoystickPressHandlers([inkhud]() { inkhud->stickUp(); }, [inkhud]() { inkhud->stickDown(); },
                                       [inkhud]() { inkhud->stickLeft(); }, [inkhud]() { inkhud->stickRight(); });
 #endif
