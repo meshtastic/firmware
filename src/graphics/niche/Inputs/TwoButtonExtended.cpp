@@ -91,7 +91,7 @@ void TwoButtonExtended::stop()
 }
 
 // Attempt to resolve a GPIO pin for the user button, honoring userPrefs.jsonc and device settings
-// This helper method isn't used by the TweButton class itself, it could be moved elsewhere.
+// This helper method isn't used by the TwoButtonExtended class itself, it could be moved elsewhere.
 // Intention is to pass this value to TwoButtonExtended::setWiring in the setupNicheGraphics method.
 uint8_t TwoButtonExtended::getUserButtonPin()
 {

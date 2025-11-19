@@ -4,7 +4,7 @@
 
 System Applet for manually aligning the joystick with the screen
 
-should be run on at startup if the joystick is enabled
+should be run at startup if the joystick is enabled
 and not aligned to the screen
 
 */
