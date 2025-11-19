@@ -311,7 +311,7 @@ jobs:
           - rp2350
           - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     needs: [release-artifacts, version]
     steps:
       - name: Checkout
@@ -363,7 +363,7 @@ jobs:
 
   publish-firmware:
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     needs: [release-firmware, version]
     env:
       targets: |-
