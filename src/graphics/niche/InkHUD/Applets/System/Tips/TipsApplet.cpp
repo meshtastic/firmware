@@ -125,7 +125,7 @@ void InkHUD::TipsApplet::onRender()
             cursorY += fontSmall.lineHeight() * 1.5;
             printAt(0, cursorY, "Joystick");
             cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- short press: select / switch tile");
+            printAt(0, cursorY, "- short press: switch tile / select");
             cursorY += fontSmall.lineHeight() * 1.2;
             printAt(0, cursorY, "- long press: open / close menu");
         }
