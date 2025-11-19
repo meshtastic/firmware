@@ -42,7 +42,7 @@ class AlignStickApplet : public SystemApplet
     };
 
     void drawStick(uint16_t centerX, uint16_t centerY, uint16_t width);
-    void drawDirection(uint16_t pointX, uint16_t pointY, Direction direction, uint16_t width, uint16_t chamfer, Color color);
+    void drawDirection(uint16_t pointX, uint16_t pointY, Direction direction, uint16_t size, uint16_t chamfer, Color color);
 };
 
 } // namespace NicheGraphics::InkHUD

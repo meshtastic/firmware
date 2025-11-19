@@ -55,44 +55,46 @@ void InkHUD::AlignStickApplet::drawStick(uint16_t centerX, uint16_t centerY, uin
     } else { // large enough to draw the full thing
         uint16_t chamfer = width < 80 ? 1 : 2;
         uint16_t stroke = 3; // pixels
+        uint16_t arrowW = width * 0.22;
+        uint16_t hollowW = arrowW + -stroke * 2;
 
         // Draw center circle
-        fillCircle((int16_t)centerX, (int16_t)centerY, (int16_t)(width / 5), BLACK);
-        fillCircle((int16_t)centerX, (int16_t)centerY, (int16_t)(width / 5) - stroke, WHITE);
+        fillCircle((int16_t)centerX, (int16_t)centerY, (int16_t)(width * 0.2), BLACK);
+        fillCircle((int16_t)centerX, (int16_t)centerY, (int16_t)(width * 0.2) - stroke, WHITE);
 
         // Draw filled up arrow
-        drawDirection(centerX, centerY - width / 2, Direction::UP, width * 0.4, chamfer, BLACK);
+        drawDirection(centerX, centerY - width / 2, Direction::UP, arrowW, chamfer, BLACK);
 
         // Draw down arrow
-        drawDirection(centerX, centerY + width / 2, Direction::DOWN, width * 0.4, chamfer, BLACK);
-        drawDirection(centerX, centerY + width / 2 - stroke, Direction::DOWN, width * 0.4 - stroke * 3, 0, WHITE);
+        drawDirection(centerX, centerY + width / 2, Direction::DOWN, arrowW, chamfer, BLACK);
+        drawDirection(centerX, centerY + width / 2 - stroke, Direction::DOWN, hollowW, 0, WHITE);
 
         // Draw left arrow
-        drawDirection(centerX - width / 2, centerY, Direction::LEFT, width * 0.4, chamfer, BLACK);
-        drawDirection(centerX - width / 2 + stroke, centerY, Direction::LEFT, width * 0.4 - stroke * 3, 0, WHITE);
+        drawDirection(centerX - width / 2, centerY, Direction::LEFT, arrowW, chamfer, BLACK);
+        drawDirection(centerX - width / 2 + stroke, centerY, Direction::LEFT, hollowW, 0, WHITE);
 
         // Draw right arrow
-        drawDirection(centerX + width / 2, centerY, Direction::RIGHT, width * 0.4, chamfer, BLACK);
-        drawDirection(centerX + width / 2 - stroke, centerY, Direction::RIGHT, width * 0.4 - stroke * 3, 0, WHITE);
+        drawDirection(centerX + width / 2, centerY, Direction::RIGHT, arrowW, chamfer, BLACK);
+        drawDirection(centerX + width / 2 - stroke, centerY, Direction::RIGHT, hollowW, 0, WHITE);
     }
 }
 
 // Draw a scalable joystick direction arrow
 // a right-triangle with blunted tips
 /*
-        _ <--point
-       / \
-      /   \
-     /     \
-    |_______|
+            _ <--point
+    ^      / \
+    |     /   \
+   size  /     \
+    |   /       \
+    v  |_________|
 
-    | width |
 */
-void InkHUD::AlignStickApplet::drawDirection(uint16_t pointX, uint16_t pointY, Direction direction, uint16_t width,
+void InkHUD::AlignStickApplet::drawDirection(uint16_t pointX, uint16_t pointY, Direction direction, uint16_t size,
                                              uint16_t chamfer, Color color)
 {
     uint16_t chamferW = chamfer * 2 + 1;
-    uint16_t triangleW = (width + 1) / 2 - chamfer;
+    uint16_t triangleW = size - chamferW;
 
     // Draw arrow
     switch (direction) {
@@ -106,7 +108,7 @@ void InkHUD::AlignStickApplet::drawDirection(uint16_t pointX, uint16_t pointY, D
         break;
     case Direction::DOWN:
         fillRect(pointX - chamfer, pointY - triangleW + 1, chamferW, triangleW, color);
-        fillRect(pointX - chamfer - triangleW, pointY - chamferW - triangleW + 1, chamferW + triangleW * 2, chamferW, color);
+        fillRect(pointX - chamfer - triangleW, pointY - size + 1, chamferW + triangleW * 2, chamferW, color);
         fillTriangle(pointX - chamfer, pointY, pointX - chamfer - triangleW, pointY - triangleW, pointX - chamfer,
                      pointY - triangleW, color);
         fillTriangle(pointX + chamfer, pointY, pointX + chamfer + triangleW, pointY - triangleW, pointX + chamfer,
@@ -122,7 +124,7 @@ void InkHUD::AlignStickApplet::drawDirection(uint16_t pointX, uint16_t pointY, D
         break;
     case Direction::RIGHT:
         fillRect(pointX - triangleW + 1, pointY - chamfer, triangleW, chamferW, color);
-        fillRect(pointX - chamferW - triangleW + 1, pointY - chamfer - triangleW, chamferW, chamferW + triangleW * 2, color);
+        fillRect(pointX - size + 1, pointY - chamfer - triangleW, chamferW, chamferW + triangleW * 2, color);
         fillTriangle(pointX, pointY - chamfer, pointX - triangleW, pointY - chamfer - triangleW, pointX - triangleW,
                      pointY - chamfer, color);
         fillTriangle(pointX, pointY + chamfer, pointX - triangleW, pointY + chamfer + triangleW, pointX - triangleW,
