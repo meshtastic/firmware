@@ -102,7 +102,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "KZ_433",
                                          "KZ_863",
                                          "NP_865",
-                                         "BR_902"};
+                                         "BR_902",
+                                         "EU_866"};
     BannerOverlayOptions bannerOptions;
 #if defined(M5STACK_UNITC6L)
     bannerOptions.message = "LoRa Region";
@@ -111,7 +112,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 #endif
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 27;
+    bannerOptions.optionsCount = 28;
     bannerOptions.InitialSelected = 0;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
@@ -194,8 +195,8 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
-    static const char *optionsArray[] = {"Back",       "LongSlow",  "LongModerate", "LongFast",  "MediumSlow",
-                                         "MediumFast", "ShortSlow", "ShortFast",    "ShortTurbo"};
+    static const char *optionsArray[] = {"Back",       "LongSlow",  "LongModerate", "LongFast",   "MediumSlow",
+                                         "MediumFast", "ShortSlow", "ShortFast",    "ShortTurbo", "LiteFast"};
     enum optionsNumbers {
         Back = 0,
         radiopreset_LongSlow = 1,
@@ -205,12 +206,13 @@ void menuHandler::RadioPresetPicker()
         radiopreset_MediumFast = 5,
         radiopreset_ShortSlow = 6,
         radiopreset_ShortFast = 7,
-        radiopreset_ShortTurbo = 8
+        radiopreset_ShortTurbo = 8,
+        radiopreset_LiteFast = 9
     };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Radio Preset";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 9;
+    bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             menuHandler::menuQueue = menuHandler::lora_Menu;
@@ -232,6 +234,8 @@ void menuHandler::RadioPresetPicker()
             config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
         } else if (selected == radiopreset_ShortTurbo) {
             config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+        } else if (selected == radiopreset_LiteFast) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
         }
         service->reloadConfig(SEGMENT_CONFIG);
         rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
