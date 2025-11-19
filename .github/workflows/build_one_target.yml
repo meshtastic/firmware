@@ -15,7 +15,6 @@ on:
           - rp2040
           - rp2350
           - stm32
-          - native
       target:
         type: string
         required: false
@@ -25,23 +24,7 @@ on:
       #   default: true
       #   description: 'Find the available targets'
 
-permissions:
-  actions: read
-  attestations: read
-  checks: write
-  contents: write
-  deployments: read
-  id-token: write
-  issues: read
-  models: read
-  discussions: read
-  packages: write
-  pages: read
-  pull-requests: read
-  security-events: read
-  statuses: read
-  repository-projects: read
-  artifact-metadata: read
+permissions: read-all
 
 jobs:
   find-targets:
@@ -76,7 +59,7 @@ jobs:
           echo "Arch: ${{matrix.arch}}" >> $GITHUB_STEP_SUMMARY
           echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
           echo "Targets:" >> $GITHUB_STEP_SUMMARY
-          echo $TARGETS | jq -r '.[] | "- " + .board' >> $GITHUB_STEP_SUMMARY
+          echo $TARGETS | jq -r 'sort_by(.board) |.[] | "- " + .board' >> $GITHUB_STEP_SUMMARY
 
   version:
     if: ${{ inputs.target != '' }}
@@ -102,25 +85,6 @@ jobs:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ inputs.target }}
       platform: ${{ inputs.arch }}
-
-  build-debian-src:
-    if: ${{ github.repository == 'meshtastic/firmware' && inputs.arch == 'native' }}
-    uses: ./.github/workflows/build_debian_src.yml
-    with:
-      series: UNRELEASED
-      build_location: local
-    secrets: inherit
-
-  package-pio-deps-native-tft:
-    if: ${{ inputs.arch == 'native' }}
-    uses: ./.github/workflows/package_pio_deps.yml
-    with:
-      pio_env: native-tft
-    secrets: inherit
-
-  test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'workflow_dispatch' ||  !contains(github.ref_name, 'event/') && inputs.arch == 'native' && inputs.target != '' }}
-    uses: ./.github/workflows/test_native.yml
 
   gather-artifacts:
     permissions:
