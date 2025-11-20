@@ -28,6 +28,10 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
      */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *nb) override;
 
+    /* Messages can be received that have the want_response bit set.  If set, this callback will be invoked
+     * so that subclasses can (optionally) send a response back to the original sender.  */
+    virtual meshtastic_MeshPacket *allocReply() override;
+
     /*
      * Collect neighbor info from the nodeDB's history, capping at a maximum number of entries and max time
      * @return the number of entries collected
@@ -66,5 +70,8 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);
     void printNodeDBNeighbors();
+
+  private:
+    uint32_t lastSentReply = 0; // Last time we sent a position reply (used for reply throttling only)
 };
 extern NeighborInfoModule *neighborInfoModule;
