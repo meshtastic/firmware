@@ -92,7 +92,7 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         i2cBus->write((int)0);
     }
     i2cBus->endTransmission();
-    delay(20);
+    delay(50);
     i2cBus->requestFrom(registerLocation.i2cAddress.address, responseWidth);
     if (i2cBus->available() > 1) {
         // Read MSB, then LSB
@@ -378,18 +378,22 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2);
-                if (registerValue == 0x5449) {
-                    type = OPT3001;
-                    logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2) != 0) { // unique SHT4x serial number
-                    type = SHT4X;
-                    logFoundDevice("SHT4X", (uint8_t)addr.address);
-                } else {
-                    type = SHT31;
-                    logFoundDevice("SHT31", (uint8_t)addr.address);
+                {
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2);
+                    LOG_DEBUG("SHT/OPT at 0x%x: 0x7E = 0x%x", addr.address, registerValue);
+                    uint16_t serialValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
+                    LOG_DEBUG("SHT/OPT at 0x%x: 0x89 = 0x%x", addr.address, serialValue);
+                    if (registerValue == 0x5449) {
+                        type = OPT3001;
+                        logFoundDevice("OPT3001", (uint8_t)addr.address);
+                    } else if (serialValue != 0) {
+                        type = SHT4X;
+                        logFoundDevice("SHT4X", (uint8_t)addr.address);
+                    } else {
+                        type = SHT31;
+                        logFoundDevice("SHT31", (uint8_t)addr.address);
+                    }
                 }
-
                 break;
 
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3", (uint8_t)addr.address)
