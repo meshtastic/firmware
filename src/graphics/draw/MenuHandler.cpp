@@ -1312,7 +1312,9 @@ void menuHandler::BluetoothToggleMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1 || selected == 2) {
+        if (selected == 0)
+            return;
+        else if (selected != (config.bluetooth.enabled ? 1 : 2)) {
             InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
@@ -1729,7 +1731,7 @@ void menuHandler::screenOptionsMenu()
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
-    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsArray[options] = "Frame Visibility Toggle";
     optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Display Units";
