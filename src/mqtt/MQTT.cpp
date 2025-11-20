@@ -692,7 +692,7 @@ void MQTT::publishNodeInfo()
 }
 void MQTT::publishQueuedMessages()
 {
-    if (mqttQueue.isEmpty() || !isConnected)
+    if (mqttQueue.isEmpty())
         return;
 
     if (!moduleConfig.mqtt.proxy_to_client_enabled && !isConnected)
