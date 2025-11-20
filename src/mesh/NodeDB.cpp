@@ -2008,6 +2008,7 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
 bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
@@ -2022,6 +2023,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     }
     return false;
 }
+#endif
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
