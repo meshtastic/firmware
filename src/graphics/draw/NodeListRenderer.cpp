@@ -425,6 +425,12 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    bool locationScreen = false;
+
+    if (strcmp(title, "Bearings") == 0)
+        locationScreen = true;
+    else if (strcmp(title, "Distance") == 0)
+        locationScreen = true;
 #if defined(M5STACK_UNITC6L)
     int columnWidth = display->getWidth();
 #else
@@ -440,7 +446,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int totalEntries = nodeDB->getNumMeshNodes();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
-
+    int numskipped = 0;
     int visibleNodeRows = totalRowsAvailable;
 #if defined(M5STACK_UNITC6L)
     int totalColumns = 1;
@@ -460,6 +466,10 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int rowCount = 0;
 
     for (int i = startIndex; i < endIndex; ++i) {
+        if (locationScreen && !nodeDB->getMeshNodeByIndex(i)->has_position) {
+            numskipped++;
+            continue;
+        }
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
         renderer(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth);
@@ -481,6 +491,9 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
                 break;
         }
     }
+
+    // This should correct the scrollbar
+    totalEntries -= numskipped;
 
 #if !defined(M5STACK_UNITC6L)
     // Draw column separator

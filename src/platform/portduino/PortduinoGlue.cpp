@@ -37,6 +37,8 @@ bool yamlOnly = false;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
+char stdoutBuffer[512];
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
@@ -144,6 +146,20 @@ void getMacAddr(uint8_t *dmac)
     }
 }
 
+std::string cleanupNameForAutoconf(std::string name)
+{
+    // Convert spaces -> dashes, lowercase
+
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+        if (c == ' ') {
+            return '-';
+        }
+        return (char)std::tolower(c);
+    });
+
+    return name;
+}
+
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
  * before running 'arduino' code.
@@ -153,6 +169,9 @@ void portduinoSetup()
     int max_GPIO = 0;
     std::string gpioChipName = "gpiochip";
     portduino_config.displayPanel = no_screen;
+
+    // Force stdout to be line buffered
+    setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -213,6 +232,11 @@ void portduinoSetup()
     // If LoRa `Module: auto` (default in config.yaml),
     // attempt to auto config based on Product Strings
     if (portduino_config.lora_module == use_autoconf) {
+        bool found_hat = false;
+        bool found_rak_eeprom = false;
+        bool found_ch341 = false;
+
+        char hat_vendor[96] = {0};
         char autoconf_product[96] = {0};
         // Try CH341
         try {
@@ -222,21 +246,32 @@ void portduinoSetup()
             ch341Hal->getProductString(autoconf_product, 95);
             delete ch341Hal;
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
+
+            found_ch341 = true;
         } catch (...) {
             std::cout << "autoconf: Could not locate CH341 device" << std::endl;
         }
         // Try Pi HAT+
         if (strlen(autoconf_product) < 6) {
             std::cout << "autoconf: Looking for Pi HAT+..." << std::endl;
+            if (access("/proc/device-tree/hat/vendor", R_OK) == 0) {
+                std::ifstream hatVendorFile("/proc/device-tree/hat/vendor");
+                if (hatVendorFile.is_open()) {
+                    hatVendorFile.read(hat_vendor, 95);
+                    hatVendorFile.close();
+                }
+            }
             if (access("/proc/device-tree/hat/product", R_OK) == 0) {
                 std::ifstream hatProductFile("/proc/device-tree/hat/product");
                 if (hatProductFile.is_open()) {
                     hatProductFile.read(autoconf_product, 95);
                     hatProductFile.close();
                 }
-                std::cout << "autoconf: Found Pi HAT+ " << autoconf_product << " at /proc/device-tree/hat/product" << std::endl;
+                std::cout << "autoconf: Found Pi HAT+ " << hat_vendor << " " << autoconf_product << " at /proc/device-tree/hat"
+                          << std::endl;
+                found_hat = true;
             } else {
-                std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
+                std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat" << std::endl;
             }
         }
         // attempt to load autoconf data from an EEPROM on 0x50
@@ -292,6 +327,7 @@ void portduinoSetup()
                         autoconf_product[0] = 0x0;
                     } else {
                         std::cout << "autoconf: Found eeprom data " << autoconf_raw << std::endl;
+                        found_rak_eeprom = true;
                         if (mac_start != nullptr) {
                             std::cout << "autoconf: Found mac data " << mac_start << std::endl;
                             if (strlen(mac_start) == 12)
@@ -320,12 +356,29 @@ void portduinoSetup()
         if (strlen(autoconf_product) > 0) {
             // From configProducts map in PortduinoGlue.h
             std::string product_config = "";
-            try {
+
+            if (configProducts.find(autoconf_product) != configProducts.end()) {
                 product_config = configProducts.at(autoconf_product);
-            } catch (std::out_of_range &e) {
-                std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
-                exit(EXIT_FAILURE);
+            } else {
+                if (found_hat) {
+                    product_config =
+                        cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
+                } else if (found_ch341) {
+                    product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
+                }
+
+                // Don't try to automatically find config for a device with RAK eeprom.
+                if (found_rak_eeprom) {
+                    std::cerr << "autoconf: Found unknown RAK product " << autoconf_product << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (access((portduino_config.available_directory + product_config).c_str(), R_OK) != 0) {
+                    std::cerr << "autoconf: Unable to find config for " << autoconf_product << "(tried " << product_config << ")"
+                              << std::endl;
+                    exit(EXIT_FAILURE);
+                }
             }
+
             if (loadConfig((portduino_config.available_directory + product_config).c_str())) {
                 std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
             } else {
