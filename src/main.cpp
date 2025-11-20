@@ -479,9 +479,8 @@ void setup()
     digitalWrite(RESET_OLED, 1);
     delay(2);
     digitalWrite(RESET_OLED, 0);
-    delay(2);
+    delay(10);
     digitalWrite(RESET_OLED, 1);
-    delay(2);
 #endif
 
 #ifdef SENSOR_POWER_CTRL_PIN
