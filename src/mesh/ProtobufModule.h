@@ -13,7 +13,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     const pb_msgdesc_t *fields;
 
   public:
-    uint8_t numOnlineNodes = 0;
+    uint16_t numOnlineNodes = 0;
     /** Constructor
      * name is for debugging output
      */

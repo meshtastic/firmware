@@ -14,16 +14,16 @@ class NodeStatus : public Status
     CallbackObserver<NodeStatus, const NodeStatus *> statusObserver =
         CallbackObserver<NodeStatus, const NodeStatus *>(this, &NodeStatus::updateStatus);
 
-    uint8_t numOnline = 0;
-    uint8_t numTotal = 0;
+    uint16_t numOnline = 0;
+    uint16_t numTotal = 0;
 
-    uint8_t lastNumTotal = 0;
+    uint16_t lastNumTotal = 0;
 
   public:
     bool forceUpdate = false;
 
     NodeStatus() { statusType = STATUS_TYPE_NODE; }
-    NodeStatus(uint8_t numOnline, uint8_t numTotal, bool forceUpdate = false) : Status()
+    NodeStatus(uint16_t numOnline, uint16_t numTotal, bool forceUpdate = false) : Status()
     {
         this->forceUpdate = forceUpdate;
         this->numOnline = numOnline;
@@ -34,11 +34,11 @@ class NodeStatus : public Status
 
     void observe(Observable<const NodeStatus *> *source) { statusObserver.observe(source); }
 
-    uint8_t getNumOnline() const { return numOnline; }
+    uint16_t getNumOnline() const { return numOnline; }
 
-    uint8_t getNumTotal() const { return numTotal; }
+    uint16_t getNumTotal() const { return numTotal; }
 
-    uint8_t getLastNumTotal() const { return lastNumTotal; }
+    uint16_t getLastNumTotal() const { return lastNumTotal; }
 
     bool matches(const NodeStatus *newStatus) const
     {
@@ -56,7 +56,7 @@ class NodeStatus : public Status
             numTotal = newStatus->getNumTotal();
         }
         if (isDirty || newStatus->forceUpdate) {
-            LOG_DEBUG("Node status update: %d online, %d total", numOnline, numTotal);
+            LOG_DEBUG("Node status update: %u online, %u total", numOnline, numTotal);
             onNewStatus.notifyObservers(this);
         }
         return 0;

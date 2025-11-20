@@ -87,6 +87,18 @@ void PhoneAPI::handleStartConfig()
 void PhoneAPI::close()
 {
     LOG_DEBUG("PhoneAPI::close()");
+    if (service->api_state == service->STATE_BLE && api_type == TYPE_BLE)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_WIFI && api_type == TYPE_WIFI)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_SERIAL && api_type == TYPE_SERIAL)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_PACKET && api_type == TYPE_PACKET)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_HTTP && api_type == TYPE_HTTP)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_ETH && api_type == TYPE_ETH)
+        service->api_state = service->STATE_DISCONNECTED;
 
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
@@ -578,6 +590,19 @@ void PhoneAPI::sendConfigComplete()
     fromRadioScratch.config_complete_id = config_nonce;
     config_nonce = 0;
     state = STATE_SEND_PACKETS;
+    if (api_type == TYPE_BLE) {
+        service->api_state = service->STATE_BLE;
+    } else if (api_type == TYPE_WIFI) {
+        service->api_state = service->STATE_WIFI;
+    } else if (api_type == TYPE_SERIAL) {
+        service->api_state = service->STATE_SERIAL;
+    } else if (api_type == TYPE_PACKET) {
+        service->api_state = service->STATE_PACKET;
+    } else if (api_type == TYPE_HTTP) {
+        service->api_state = service->STATE_HTTP;
+    } else if (api_type == TYPE_ETH) {
+        service->api_state = service->STATE_ETH;
+    }
 
     // Allow subclasses to know we've entered steady-state so they can lower power consumption
     onConfigComplete();
