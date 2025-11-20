@@ -1,4 +1,4 @@
-#include "configuration.h"
+/* #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<I2CSoilMoistureSensor.h>)
 
@@ -25,7 +25,7 @@ int32_t SoilMoistureSensor::runOnce()
     LOG_DEBUG("Initializing soil moisture sensor at address 0x%02X\n", i2cAddr);
 
     // Initialize the sensor
-    soilSensor.begin(i2cAddr, *wirePort);
+    soilSensor.begin(true);
 
     // Verify sensor is working by reading version
     uint8_t version = soilSensor.getVersion();
@@ -80,10 +80,7 @@ bool SoilMoistureSensor::getMetrics(meshtastic_Telemetry *measurement)
     env.has_relative_humidity = true;
     env.relative_humidity = moisturePercent;
 
-    // Optional: You can also store raw capacitance for advanced users
-    // env.soil_moisture = capacitance; // If you add this field to protobuf
-
     return true;
 }
 
-#endif
+#endif */

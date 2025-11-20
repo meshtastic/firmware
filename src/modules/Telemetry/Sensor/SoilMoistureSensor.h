@@ -1,4 +1,4 @@
-#include "configuration.h"
+/* #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<I2CSoilMoistureSensor.h>)
 
@@ -22,4 +22,4 @@ class SoilMoistureSensor : public TelemetrySensor
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
 
-#endif
+#endif */
