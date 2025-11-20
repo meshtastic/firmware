@@ -6,6 +6,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "TypeConversions.h"
 #include "configuration.h"
 #include "main.h"
 
@@ -18,7 +19,10 @@ BleGpsModule::BleGpsModule()
     // Set initial delay before first execution to allow system to initialize
     setIntervalFromNow(setStartDelay());
     
-    LOG_INFO("BleGpsModule initialized - will send position to phone every %d ms", sendIntervalMs);
+    LOG_INFO("========================================");
+    LOG_INFO("BleGpsModule: INITIALIZED");
+    LOG_INFO("BleGpsModule: Will send position to phone every %d ms", sendIntervalMs);
+    LOG_INFO("========================================");
 }
 
 bool BleGpsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *p)
@@ -31,6 +35,13 @@ bool BleGpsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesht
 
 int32_t BleGpsModule::runOnce()
 {
+    // Debug: Log first execution
+    static bool firstRun = true;
+    if (firstRun) {
+        LOG_INFO("BleGpsModule: runOnce() called for the first time");
+        firstRun = false;
+    }
+    
     // Check if enough time has passed since last send
     uint32_t now = millis();
     
@@ -132,11 +143,11 @@ meshtastic_Position BleGpsModule::getCurrentPosition()
     
 #if HAS_GPS
     // Alternative: use gps->p directly if GPS is active and has lock (as per plan 2.2)
-    if (gps && gpsStatus && gpsStatus->getHasLock() && gps->hasValidLocation) {
+    if (gps && gpsStatus && gpsStatus->getHasLock()) {
         // Use position directly from GPS object for most up-to-date data
         position = gps->p;
         
-        // Ensure we have latitude and longitude
+        // Ensure we have latitude and longitude (this also validates the position)
         if (position.has_latitude_i && position.has_longitude_i) {
             // Update timestamp if not set - use best available time quality
             if (position.time == 0) {
@@ -167,8 +178,8 @@ meshtastic_Position BleGpsModule::getCurrentPosition()
         return position;
     }
 
-    // Copy position from nodeDB
-    position = node->position;
+    // Copy position from nodeDB - convert from PositionLite to Position
+    position = TypeConversions::ConvertToPosition(node->position);
     
     // Ensure we have latitude and longitude
     if (!position.has_latitude_i || !position.has_longitude_i) {
