@@ -1353,7 +1353,7 @@ void menuHandler::screenOptionsMenu()
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
-    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsArray[options] = "Frame Visibility Toggle";
     optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Display Units";
