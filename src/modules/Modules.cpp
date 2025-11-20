@@ -42,6 +42,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_GPS && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#include "modules/BleGpsModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
 #include "modules/RemoteHardwareModule.h"
 #endif
@@ -127,6 +130,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_GPS && !MESHTASTIC_EXCLUDE_BLUETOOTH
+    bleGpsModule = new BleGpsModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     waypointModule = new WaypointModule();
