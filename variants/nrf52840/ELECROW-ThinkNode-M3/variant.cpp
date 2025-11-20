@@ -37,8 +37,6 @@ void initVariant()
     digitalWrite(KEY_POWER, HIGH);
     pinMode(RGB_POWER, OUTPUT);
     digitalWrite(RGB_POWER, HIGH);
-    pinMode(GPS_STD_POWER, OUTPUT);
-    digitalWrite(GPS_STD_POWER, HIGH);
     pinMode(green_LED_PIN, OUTPUT);
     digitalWrite(green_LED_PIN, LED_STATE_OFF);
     pinMode(LED_BLUE, OUTPUT);
@@ -69,8 +67,8 @@ void variant_shutdown()
     digitalWrite(KEY_POWER, LOW);
 
     for (int pin = 0; pin < 48; pin++) {
-        if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == GPS_STD_POWER ||
-            pin == DHT_POWER || pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
+        if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == DHT_POWER ||
+            pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
             pin == LR1110_SPI_MOSI_PIN || pin == LR1110_SPI_SCK_PIN || pin == LR1110_SPI_NSS_PIN || pin == LR1110_BUSY_PIN ||
             pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == green_LED_PIN ||
             pin == red_LED_PIN || pin == LED_BLUE) {

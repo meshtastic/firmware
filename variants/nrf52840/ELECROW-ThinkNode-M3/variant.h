@@ -37,7 +37,6 @@ extern "C" {
 
 // Power Pin
 #define NRF_APM
-#define GPS_STD_POWER 6
 #define GPS_POWER 14
 #define PIN_POWER_USB 31
 #define EXT_PWR_DETECT PIN_POWER_USB
@@ -49,6 +48,7 @@ extern "C" {
 #define Battery_POWER 17
 #define RGB_POWER 29
 #define EEPROM_POWER 7
+
 // LED
 #define red_LED_PIN 33
 #define LED_POWER red_LED_PIN
