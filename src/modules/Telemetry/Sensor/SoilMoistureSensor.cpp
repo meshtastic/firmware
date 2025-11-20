@@ -84,3 +84,14 @@ bool SoilMoistureSensor::getMetrics(meshtastic_Telemetry *measurement)
 }
 
 #endif */
+
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_seesaw.h>)
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "SoilMoistureSensor.h"
+#include "TelemetrySensor.h"
+#include "main.h"
+
+#endif

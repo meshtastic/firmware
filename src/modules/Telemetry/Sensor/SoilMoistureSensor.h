@@ -23,3 +23,14 @@ class SoilMoistureSensor : public TelemetrySensor
 };
 
 #endif */
+
+#pragma once
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_seesaw.h>)
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "TelemetrySensor.h"
+#include <Adafruit_seesaw.h>
+
+#endif
