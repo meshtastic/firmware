@@ -39,11 +39,30 @@ int32_t BleGpsModule::runOnce()
         lastSentToPhone = 0;
     }
     
-    // Check if it's time to send position update
-    if ((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendIntervalMs)) {
+    // Check if GPS has valid position before attempting to send
+#if HAS_GPS
+    bool hasValidGpsPosition = false;
+    if (gpsStatus && gpsStatus->getHasLock()) {
+        hasValidGpsPosition = true;
+    } else {
+        // Check if we have fixed position configured
+        if (config.position.fixed_position) {
+            hasValidGpsPosition = true;
+        }
+    }
+    
+    // Only send if we have valid GPS position and enough time has passed
+    if (hasValidGpsPosition && ((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendIntervalMs))) {
         sendPositionToPhone();
         lastSentToPhone = now;
     }
+#else
+    // If GPS is excluded, check if we have fixed position
+    if (config.position.fixed_position && ((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendIntervalMs))) {
+        sendPositionToPhone();
+        lastSentToPhone = now;
+    }
+#endif
     
     // Return interval until next execution
     return sendIntervalMs;
@@ -51,10 +70,24 @@ int32_t BleGpsModule::runOnce()
 
 void BleGpsModule::sendPositionToPhone()
 {
-    // Check if we have a valid GPS position
+    // Check if we have a valid GPS position or fixed position configured
 #if HAS_GPS
-    if (!gpsStatus || !gpsStatus->getHasLock()) {
-        LOG_DEBUG("BleGpsModule: No GPS lock, skipping position send");
+    bool hasValidPosition = false;
+    if (config.position.fixed_position) {
+        // Fixed position is always valid
+        hasValidPosition = true;
+    } else if (gpsStatus && gpsStatus->getHasLock()) {
+        hasValidPosition = true;
+    }
+    
+    if (!hasValidPosition) {
+        LOG_DEBUG("BleGpsModule: No GPS lock and no fixed position, skipping position send");
+        return;
+    }
+#else
+    // If GPS is excluded, only send if fixed position is configured
+    if (!config.position.fixed_position) {
+        LOG_DEBUG("BleGpsModule: No GPS support and no fixed position, skipping position send");
         return;
     }
 #endif
@@ -97,7 +130,31 @@ meshtastic_Position BleGpsModule::getCurrentPosition()
 {
     meshtastic_Position position = meshtastic_Position_init_default;
     
-    // Get current node info from nodeDB
+#if HAS_GPS
+    // Alternative: use gps->p directly if GPS is active and has lock (as per plan 2.2)
+    if (gps && gpsStatus && gpsStatus->getHasLock() && gps->hasValidLocation) {
+        // Use position directly from GPS object for most up-to-date data
+        position = gps->p;
+        
+        // Ensure we have latitude and longitude
+        if (position.has_latitude_i && position.has_longitude_i) {
+            // Update timestamp if not set - use best available time quality
+            if (position.time == 0) {
+                if (getValidTime(RTCQualityNTP) > 0) {
+                    position.time = getValidTime(RTCQualityNTP);
+                } else if (getValidTime(RTCQualityDevice) > 0) {
+                    position.time = getValidTime(RTCQualityDevice);
+                } else {
+                    position.time = getValidTime(RTCQualityFromNet);
+                }
+            }
+            LOG_DEBUG("BleGpsModule: Using position from GPS object");
+            return position;
+        }
+    }
+#endif
+
+    // Fallback: Get current node info from nodeDB
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (!node) {
         LOG_WARN("BleGpsModule: Could not get local node info");
