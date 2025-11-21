@@ -122,6 +122,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             auto changes = SEGMENT_CONFIG;
 
             // This is needed as we wait til picking the LoRa region to generate keys for the first time.
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
             if (!owner.is_licensed) {
                 bool keygenSuccess = false;
                 if (config.security.private_key.size == 32) {
@@ -142,6 +143,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                     memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
                 }
             }
+#endif
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {
