@@ -17,6 +17,7 @@
 #include "screens/HomeScreen.h"
 #include "screens/NodesListScreen.h"
 #include "screens/MessagesScreen.h"
+#include "screens/SnakeGameScreen.h"
 #include "InitialSplashScreen.h"
 #include "sleep.h"
 #include <LovyanGFX.hpp>
@@ -40,6 +41,7 @@ CustomUIModule::CustomUIModule()
       currentScreen(nullptr),
       homeScreen(nullptr),
       nodesListScreen(nullptr),
+      snakeGameScreen(nullptr),
       isSplashActive(false),
       splashStartTime(0),
       loadingProgress(0),
@@ -75,6 +77,11 @@ CustomUIModule::~CustomUIModule() {
     if (nodesListScreen) {
         delete nodesListScreen;
         nodesListScreen = nullptr;
+    }
+    
+    if (snakeGameScreen) {
+        delete snakeGameScreen;
+        snakeGameScreen = nullptr;
     }
     
     // Cleanup all initializers
@@ -204,6 +211,9 @@ void CustomUIModule::initScreens() {
 
     // Create messages screen
     messagesScreen = new MessagesScreen();
+    
+    // Create snake game screen
+    snakeGameScreen = new SnakeGameScreen();
 
     // Screens are ready but don't switch yet - animation will handle transition
 
@@ -234,7 +244,7 @@ int32_t CustomUIModule::runOnce() {
             }
         }
         
-        return 50; // Update every 50ms for smooth animation
+        return 20; // Update every 20ms for smooth animation and responsive input
     }
     
     if (!currentScreen || !tft) {
@@ -257,7 +267,7 @@ int32_t CustomUIModule::runOnce() {
         currentScreen->draw(*tft);
     }
     
-    return 50; // 20 FPS update rate for responsive UI
+    return 20; // 50 FPS update rate for responsive input and smooth UI
 }
 
 bool CustomUIModule::wantUIFrame() {
@@ -409,6 +419,12 @@ void CustomUIModule::handleKeyPress(char key) {
         case '1': // Home
             if (currentScreen != homeScreen) {
                 switchToScreen(homeScreen);
+            }
+            break;
+            
+        case '3': // Snake Game
+            if (currentScreen != snakeGameScreen) {
+                switchToScreen(snakeGameScreen);
             }
             break;
 

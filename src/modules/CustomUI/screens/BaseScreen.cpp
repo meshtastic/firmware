@@ -18,18 +18,29 @@ void BaseScreen::draw(lgfx::LGFX_Device& tft) {
         headerNeedsUpdate = true;
     }
     
+    bool contentNeedsUpdate = false;
+    
     if (needsRedraw) {
         // Full screen redraw - ensure black background
         tft.fillScreen(0x0000); // Pure black background
         drawHeader(tft);
         drawFooter(tft);
-        onDraw(tft);  // Let derived class draw content
+        contentNeedsUpdate = true;
         needsRedraw = false;
         headerNeedsUpdate = false;
     } else if (headerNeedsUpdate) {
         // Update only header
         updateHeader(tft);
         headerNeedsUpdate = false;
+        contentNeedsUpdate = true;
+    } else {
+        // Check if content area needs updating (for games, etc.)
+        contentNeedsUpdate = true; // Let derived classes handle their own dirty rectangle logic
+    }
+    
+    // Always call onDraw - let derived classes decide what to redraw
+    if (contentNeedsUpdate) {
+        onDraw(tft);
     }
 }
 

@@ -43,7 +43,7 @@ public:
     // Screen management
     void draw(lgfx::LGFX_Device& tft);  // Draw complete screen (header + content + footer)
     void forceRedraw() { needsRedraw = true; headerNeedsUpdate = true; }
-    bool needsUpdate() const { return needsRedraw || headerNeedsUpdate; }
+    virtual bool needsUpdate() const { return needsRedraw || headerNeedsUpdate; }
     
     // Navigation
     void setNavigationHints(const std::vector<NavHint>& hints);

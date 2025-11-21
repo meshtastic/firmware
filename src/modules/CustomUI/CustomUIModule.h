@@ -20,6 +20,7 @@ class InitKeypad;
 class BaseScreen;
 class HomeScreen;
 class NodesListScreen;
+class SnakeGameScreen;
 
 #include "screens/MessagesScreen.h"
 /**
@@ -71,6 +72,7 @@ private:
     HomeScreen* homeScreen;
     NodesListScreen* nodesListScreen;
     MessagesScreen* messagesScreen;
+    SnakeGameScreen* snakeGameScreen;
     
     // Splash screen animation state
     bool isSplashActive;

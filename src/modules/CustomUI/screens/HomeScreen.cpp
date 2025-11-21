@@ -8,6 +8,7 @@ HomeScreen::HomeScreen() : BaseScreen("Home"), lastUpdate(0), lastNodeCount(-1),
     // Set navigation hints for home screen
     std::vector<NavHint> hints;
     hints.push_back(NavHint('1', "Home"));
+    hints.push_back(NavHint('3', "Snake"));
     hints.push_back(NavHint('7', "Nodes"));
     setNavigationHints(hints);
     
@@ -58,6 +59,10 @@ bool HomeScreen::handleKeyPress(char key) {
         case '1':
             // Already on home
             return true;
+            
+        case '3':
+            // Let global navigation handle Snake game
+            return false;
             
         case '7':
             // Let global navigation handle this
