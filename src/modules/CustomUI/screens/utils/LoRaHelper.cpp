@@ -104,8 +104,14 @@ std::vector<NodeInfo> LoRaHelper::getNodesList(int maxNodes, bool includeOffline
         
         NodeInfo nodeInfo;
         nodeInfo.nodeNum = meshNode->num;
-        nodeInfo.longName = String(meshNode->user.long_name);
-        nodeInfo.shortName = String(meshNode->user.short_name);
+        
+        // Copy strings to fixed char arrays (no dynamic allocation)
+        strncpy(nodeInfo.longName, meshNode->user.long_name, sizeof(nodeInfo.longName) - 1);
+        nodeInfo.longName[sizeof(nodeInfo.longName) - 1] = '\0';
+        
+        strncpy(nodeInfo.shortName, meshNode->user.short_name, sizeof(nodeInfo.shortName) - 1);
+        nodeInfo.shortName[sizeof(nodeInfo.shortName) - 1] = '\0';
+        
         nodeInfo.lastHeard = meshNode->last_heard;
         nodeInfo.snr = meshNode->snr;
         nodeInfo.signalBars = snrToSignalBars(meshNode->snr);
@@ -115,16 +121,17 @@ std::vector<NodeInfo> LoRaHelper::getNodesList(int maxNodes, bool includeOffline
         nodeInfo.hopsAway = meshNode->has_hops_away ? meshNode->hops_away : 0;
         
         // Use node number as fallback if no long name
-        if (nodeInfo.longName.isEmpty()) {
-            nodeInfo.longName = "Node " + String(meshNode->num, HEX);
+        if (strlen(nodeInfo.longName) == 0) {
+            snprintf(nodeInfo.longName, sizeof(nodeInfo.longName), "Node %08X", meshNode->num);
         }
         
         // Use first two characters as short name if empty
-        if (nodeInfo.shortName.isEmpty()) {
-            if (nodeInfo.longName.length() >= 2) {
-                nodeInfo.shortName = nodeInfo.longName.substring(0, 2);
+        if (strlen(nodeInfo.shortName) == 0) {
+            if (strlen(nodeInfo.longName) >= 2) {
+                strncpy(nodeInfo.shortName, nodeInfo.longName, 2);
+                nodeInfo.shortName[2] = '\0';
             } else {
-                nodeInfo.shortName = String(meshNode->num & 0xFF, HEX);
+                snprintf(nodeInfo.shortName, sizeof(nodeInfo.shortName), "%02X", meshNode->num & 0xFF);
             }
         }
         

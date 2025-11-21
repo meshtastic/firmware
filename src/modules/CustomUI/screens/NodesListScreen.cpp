@@ -47,7 +47,21 @@ void NodesListScreen::onEnter() {
 }
 
 void NodesListScreen::onExit() {
-    LOG_INFO("📡 NodesListScreen: Exiting screen");
+    LOG_INFO("📡 NodesListScreen: Exiting screen - cleaning memory");
+    
+    // Force complete vector deallocation
+    nodes.clear();
+    nodes.shrink_to_fit();
+    std::vector<NodeInfo>().swap(nodes);
+    
+    // Reset all state
+    selectedIndex = 0;
+    scrollOffset = 0;
+    isLoading = false;
+    lastRefreshTime = 0;
+    
+    // Log memory cleanup
+    LOG_INFO("📡 NodesListScreen: Vector memory deallocated, state reset");
 }
 
 void NodesListScreen::onDraw(lgfx::LGFX_Device& tft) {
@@ -105,7 +119,7 @@ bool NodesListScreen::handleKeyPress(char key) {
         case '1':
             if (!nodes.empty()) {
                 LOG_INFO("📡 NodesListScreen: Select pressed for node: %s (0x%08x)", 
-                    nodes[selectedIndex].longName.c_str(), nodes[selectedIndex].nodeNum);
+                    nodes[selectedIndex].longName, nodes[selectedIndex].nodeNum);
                 // TODO: Implement node selection/message
             }
             return true;
@@ -193,7 +207,7 @@ void NodesListScreen::drawNodeEntry(lgfx::LGFX_Device& tft, int index, int y, bo
     // Signal strength bars (first 20px)
     drawSignalBars(tft, 8, y + 2, node.signalBars);
     
-    // Node long name (main area)
+    // Node long name (main area) - use char array directly
     uint16_t textColor = isSelected ? COLOR_YELLOW : COLOR_GREEN;
     if (!node.isOnline) {
         textColor = isSelected ? COLOR_GRAY : COLOR_DIM_GREEN;
@@ -202,9 +216,15 @@ void NodesListScreen::drawNodeEntry(lgfx::LGFX_Device& tft, int index, int y, bo
     tft.setTextColor(textColor, isSelected ? COLOR_DIM_GREEN : COLOR_BLACK);
     tft.setTextSize(1);
     
-    String displayName = node.longName;
-    if (displayName.length() > 18) {
-        displayName = displayName.substring(0, 15) + "...";
+    // Create display name with truncation
+    char displayName[19]; // 18 chars + null
+    strncpy(displayName, node.longName, sizeof(displayName) - 1);
+    displayName[sizeof(displayName) - 1] = '\0';
+    
+    // Add ellipsis if truncated
+    size_t nameLen = strlen(node.longName);
+    if (nameLen > 15) {
+        strcpy(displayName + 15, "...");
     }
     
     tft.setCursor(35, y + 3);

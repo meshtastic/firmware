@@ -73,12 +73,13 @@ std::vector<WiFiNetworkInfo> WiFiHelper::processNetworks(int networkCount, int m
     
     LOG_INFO("📶 WiFiHelper: Found %d networks", networkCount);
     
-    // Collect network information
+    // Collect network information without String allocations
     for (int i = 0; i < networkCount && networks.size() < maxNetworks; i++) {
-        String ssid = WiFi.SSID(i);
+        // Get SSID directly as c_str to avoid String allocation
+        const char* ssidStr = WiFi.SSID(i).c_str();
         
         // Skip hidden networks (empty SSID)
-        if (ssid.length() == 0) {
+        if (strlen(ssidStr) == 0) {
             continue;
         }
         
@@ -89,11 +90,26 @@ std::vector<WiFiNetworkInfo> WiFiHelper::processNetworks(int networkCount, int m
         }
         
         wifi_auth_mode_t authMode = WiFi.encryptionType(i);
-        String security = getSecurityType(authMode);
         uint8_t channel = WiFi.channel(i);
         bool isOpen = (authMode == WIFI_AUTH_OPEN);
         
-        networks.emplace_back(ssid, security, rssi, channel, isOpen);
+        // Create WiFiNetworkInfo directly with char arrays
+        WiFiNetworkInfo networkInfo;
+        
+        // Copy SSID to fixed buffer
+        strncpy(networkInfo.ssid, ssidStr, sizeof(networkInfo.ssid) - 1);
+        networkInfo.ssid[sizeof(networkInfo.ssid) - 1] = '\0';
+        
+        // Copy security type to fixed buffer
+        const char* securityStr = getSecurityTypeCStr(authMode);
+        strncpy(networkInfo.security, securityStr, sizeof(networkInfo.security) - 1);
+        networkInfo.security[sizeof(networkInfo.security) - 1] = '\0';
+        
+        networkInfo.rssi = rssi;
+        networkInfo.channel = channel;
+        networkInfo.isOpen = isOpen;
+        
+        networks.push_back(networkInfo);
     }
     
     // Remove duplicates (keep strongest signal)
@@ -143,6 +159,20 @@ String WiFiHelper::getSecurityType(wifi_auth_mode_t authMode) {
     }
 }
 
+const char* WiFiHelper::getSecurityTypeCStr(wifi_auth_mode_t authMode) {
+    switch (authMode) {
+        case WIFI_AUTH_OPEN: return "Open";
+        case WIFI_AUTH_WEP: return "WEP";
+        case WIFI_AUTH_WPA_PSK: return "WPA";
+        case WIFI_AUTH_WPA2_PSK: return "WPA2";
+        case WIFI_AUTH_WPA_WPA2_PSK: return "WPA/2";
+        case WIFI_AUTH_WPA3_PSK: return "WPA3";
+        case WIFI_AUTH_WPA2_WPA3_PSK: return "WPA2/3";
+        case WIFI_AUTH_WAPI_PSK: return "WAPI";
+        default: return "Unknown";
+    }
+}
+
 bool WiFiHelper::isConnected() {
     return WiFi.status() == WL_CONNECTED;
 }
@@ -174,16 +204,17 @@ void WiFiHelper::sortNetworksBySignal(std::vector<WiFiNetworkInfo>& networks) {
 void WiFiHelper::removeDuplicates(std::vector<WiFiNetworkInfo>& networks) {
     // Sort by SSID first, then by RSSI (strongest first)
     std::sort(networks.begin(), networks.end(), [](const WiFiNetworkInfo& a, const WiFiNetworkInfo& b) {
-        if (a.ssid == b.ssid) {
+        int cmp = strcmp(a.ssid, b.ssid);
+        if (cmp == 0) {
             return a.rssi > b.rssi; // For same SSID, prefer stronger signal
         }
-        return a.ssid < b.ssid;
+        return cmp < 0;
     });
     
     // Remove duplicates, keeping the first (strongest) of each SSID
     auto last = std::unique(networks.begin(), networks.end(), 
         [](const WiFiNetworkInfo& a, const WiFiNetworkInfo& b) {
-            return a.ssid == b.ssid;
+            return strcmp(a.ssid, b.ssid) == 0;
         });
     
     networks.erase(last, networks.end());

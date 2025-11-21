@@ -8,7 +8,6 @@ HomeScreen::HomeScreen() : BaseScreen("Home"), lastUpdate(0), lastNodeCount(-1),
     // Set navigation hints for home screen
     std::vector<NavHint> hints;
     hints.push_back(NavHint('1', "Home"));
-    hints.push_back(NavHint('3', "WiFi"));
     hints.push_back(NavHint('7', "Nodes"));
     setNavigationHints(hints);
     
@@ -57,16 +56,10 @@ void HomeScreen::onDraw(lgfx::LGFX_Device& tft) {
 bool HomeScreen::handleKeyPress(char key) {
     switch (key) {
         case '1':
-            LOG_INFO("Home key pressed (already on home)");
+            // Already on home
             return true;
             
-        case '3':
-            LOG_INFO("WiFi key pressed - will be handled by global navigation");
-            // Let global navigation handle this
-            return false;
-            
         case '7':
-            LOG_INFO("Nodes key pressed - will be handled by global navigation");
             // Let global navigation handle this
             return false;
             

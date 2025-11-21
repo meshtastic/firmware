@@ -15,7 +15,6 @@
 #include "init/InitKeypad.h"
 #include "screens/BaseScreen.h"
 #include "screens/HomeScreen.h"
-#include "screens/WiFiListScreen.h"
 #include "screens/NodesListScreen.h"
 #include "screens/MessagesScreen.h"
 #include "InitialSplashScreen.h"
@@ -24,6 +23,7 @@
 
 #ifdef ESP32
 #include <esp_heap_caps.h>
+#include <esp_heap_caps_init.h>
 #endif
 
 CustomUIModule *customUIModule;
@@ -38,7 +38,6 @@ CustomUIModule::CustomUIModule()
       keypad(nullptr),
       currentScreen(nullptr),
       homeScreen(nullptr),
-      wifiListScreen(nullptr),
       nodesListScreen(nullptr),
       isSplashActive(false),
       splashStartTime(0),
@@ -61,11 +60,6 @@ CustomUIModule::~CustomUIModule() {
     if (homeScreen) {
         delete homeScreen;
         homeScreen = nullptr;
-    }
-    
-    if (wifiListScreen) {
-        delete wifiListScreen;
-        wifiListScreen = nullptr;
     }
     
     if (nodesListScreen) {
@@ -191,9 +185,6 @@ void CustomUIModule::initScreens() {
     
     // Create home screen
     homeScreen = new HomeScreen();
-
-    // Create WiFi list screen
-    wifiListScreen = new WiFiListScreen();
 
     // Create nodes list screen
     nodesListScreen = new NodesListScreen();
@@ -329,29 +320,29 @@ void CustomUIModule::switchToScreen(BaseScreen* newScreen) {
         return;
     }
     
-    LOG_INFO("🔧 CUSTOM UI: Switching to screen: %s", newScreen->getName().c_str());
-    
-    // Report memory before switch
-    // size_t freeHeapBefore = ESP.getFreeHeap();
-    
     // Exit current screen
     if (currentScreen) {
         currentScreen->onExit();
     }
     
-    // Force garbage collection and memory cleanup
+    // Force display buffer clearing
     if (tft) {
-        tft->waitDisplay(); // Wait for any pending display operations
+        tft->waitDisplay();
     }
+    
+    // Memory cleanup
+#ifdef ESP32
+    heap_caps_check_integrity_all(true);
+#endif
+    delay(10);
     
     // Switch to new screen
     currentScreen = newScreen;
     currentScreen->onEnter();
     
-    // Force full redraw with black background
+    // Force full redraw
     if (tft) {
-        tft->fillScreen(0x0000); // Pure black background
-        LOG_INFO("🔧 CUSTOM UI: Screen switched, memory freed");
+        tft->fillScreen(0x0000);
     }
 }
 
@@ -379,21 +370,12 @@ void CustomUIModule::handleKeyPress(char key) {
     switch (key) {
         case '1': // Home
             if (currentScreen != homeScreen) {
-                LOG_INFO("🔧 CUSTOM UI: Navigating to Home screen");
                 switchToScreen(homeScreen);
-            }
-            break;
-
-        case '3': // WiFi
-            if (currentScreen != wifiListScreen) {
-                LOG_INFO("🔧 CUSTOM UI: Navigating to WiFi screen");
-                switchToScreen(wifiListScreen);
             }
             break;
 
         case '7': // Nodes
             if (currentScreen != nodesListScreen) {
-                LOG_INFO("🔧 CUSTOM UI: Navigating to Nodes screen");
                 switchToScreen(nodesListScreen);
             }
             break;
@@ -403,33 +385,30 @@ void CustomUIModule::handleKeyPress(char key) {
             if (currentScreen == messagesScreen) {
                 // If at end of buffer or no messages, go home
                 if (!messagesScreen->hasMessages() || messagesScreen->handleKeyPress(key) == false) {
-                    LOG_INFO("🔧 CUSTOM UI: MessagesScreen [A] - returning to Home");
                     switchToScreen(homeScreen);
                 }
             } else if (currentScreen != homeScreen) {
-                LOG_INFO("🔧 CUSTOM UI: Back button - returning to Home");
                 switchToScreen(homeScreen);
             }
             break;
 
-        case '*':
-            LOG_INFO("🔧 CUSTOM UI: Global clear/back key pressed");
-            // Could be used for back navigation in future
+        case '*': {
+            // Simple memory cleanup
+            ESP.getMinFreeHeap();
+            delay(50);
             break;
+        }
 
-        case '#':
-            LOG_INFO("🔧 CUSTOM UI: Global menu/enter key pressed");
-            // Memory status report on demand
-            LOG_INFO("🔧 CUSTOM UI: === MEMORY STATUS REPORT ===");
-            LOG_INFO("🔧 CUSTOM UI: Free Heap: %zu bytes (%.1fKB)", ESP.getFreeHeap(), ESP.getFreeHeap()/1024.0);
-            LOG_INFO("🔧 CUSTOM UI: Total Heap: %zu bytes (%.1fKB)", ESP.getHeapSize(), ESP.getHeapSize()/1024.0);
-            LOG_INFO("🔧 CUSTOM UI: Min Free Heap: %zu bytes (%.1fKB)", ESP.getMinFreeHeap(), ESP.getMinFreeHeap()/1024.0);
-            LOG_INFO("🔧 CUSTOM UI: Memory Usage: %.1f%%", (float)(ESP.getHeapSize() - ESP.getFreeHeap()) * 100.0 / ESP.getHeapSize());
-            LOG_INFO("🔧 CUSTOM UI: Hardware: Heltec V3 (SRAM only, no PSRAM)");
+        case '#': {
+            // Basic memory status
+            size_t totalHeap = ESP.getHeapSize();
+            size_t freeHeap = ESP.getFreeHeap();
+            LOG_INFO("🔧 Memory: %.1f%% used, %zu KB free", 
+                (float)(totalHeap - freeHeap) * 100.0 / totalHeap, freeHeap/1024);
             break;
+        }
 
         default:
-            LOG_INFO("🔧 CUSTOM UI: Unhandled key: %c", key);
             break;
     }
 }

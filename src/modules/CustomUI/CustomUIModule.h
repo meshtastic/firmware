@@ -18,7 +18,6 @@ class InitDisplay;
 class InitKeypad;
 class BaseScreen;
 class HomeScreen;
-class WiFiListScreen;
 class NodesListScreen;
 
 #include "screens/MessagesScreen.h"
@@ -69,7 +68,6 @@ private:
     // Screen management
     BaseScreen* currentScreen;
     HomeScreen* homeScreen;
-    WiFiListScreen* wifiListScreen;
     NodesListScreen* nodesListScreen;
     MessagesScreen* messagesScreen;
     

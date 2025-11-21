@@ -8,8 +8,8 @@
  */
 struct NodeInfo {
     uint32_t nodeNum;           // Node number
-    String longName;            // Long name (display name)
-    String shortName;           // Short name
+    char longName[32];          // Long name (fixed buffer)
+    char shortName[8];          // Short name (fixed buffer)
     uint32_t lastHeard;         // When we last heard from this node (Unix timestamp)
     float snr;                  // Signal-to-noise ratio in dB
     int signalBars;             // Signal strength as bars (0-4)
@@ -17,6 +17,12 @@ struct NodeInfo {
     bool isFavorite;            // Is node marked as favorite
     bool viaInternet;           // Heard via internet/MQTT
     uint8_t hopsAway;           // Number of hops away
+    
+    NodeInfo() : nodeNum(0), lastHeard(0), snr(0), signalBars(0), 
+                 isOnline(false), isFavorite(false), viaInternet(false), hopsAway(0) {
+        longName[0] = '\0';
+        shortName[0] = '\0';
+    }
 };
 
 /**

@@ -1,5 +1,11 @@
 #include "MessagesScreen.h"
 #include "BaseScreen.h"
+#include "configuration.h"
+
+// Logging macro
+#ifndef LOG_INFO
+#define LOG_INFO(format, ...) Serial.printf("[INFO] " format "\n", ##__VA_ARGS__)
+#endif
 
 MessagesScreen::MessagesScreen() : BaseScreen("Messages"), currentIndex(0) {
     updateNavHint();
@@ -13,7 +19,23 @@ void MessagesScreen::onEnter() {
     forceRedraw();
 }
 
-void MessagesScreen::onExit() {}
+void MessagesScreen::onExit() {
+    LOG_INFO("💬 MessagesScreen: Exiting screen - cleaning memory");
+    
+    // Force complete vector deallocation
+    buffer.clear();
+    buffer.shrink_to_fit();
+    std::vector<MessageEntry>().swap(buffer);
+    
+    // Reset state
+    currentIndex = 0;
+    
+    // Update navigation hints
+    updateNavHint();
+    
+    // Log memory cleanup
+    LOG_INFO("💬 MessagesScreen: Vector memory deallocated, state reset");
+}
 
 void MessagesScreen::onDraw(lgfx::LGFX_Device& tft) {
     tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), 0x0000);

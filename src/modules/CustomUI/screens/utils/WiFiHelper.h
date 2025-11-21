@@ -10,15 +10,24 @@
  */
 
 struct WiFiNetworkInfo {
-    String ssid;
-    String security;
+    char ssid[33];          // Fixed buffer for SSID (max 32 chars + null)
+    char security[8];       // Fixed buffer for security type
     int32_t rssi;
     uint8_t channel;
     bool isOpen;
     
-    WiFiNetworkInfo() : rssi(0), channel(0), isOpen(false) {}
+    WiFiNetworkInfo() : rssi(0), channel(0), isOpen(false) {
+        ssid[0] = '\0';
+        security[0] = '\0';
+    }
+    
     WiFiNetworkInfo(const String& s, const String& sec, int32_t r, uint8_t ch, bool open) 
-        : ssid(s), security(sec), rssi(r), channel(ch), isOpen(open) {}
+        : rssi(r), channel(ch), isOpen(open) {
+        strncpy(ssid, s.c_str(), sizeof(ssid) - 1);
+        ssid[sizeof(ssid) - 1] = '\0';
+        strncpy(security, sec.c_str(), sizeof(security) - 1);
+        security[sizeof(security) - 1] = '\0';
+    }
 };
 
 class WiFiHelper {
@@ -71,6 +80,13 @@ public:
      * @return Security type string
      */
     String getSecurityType(wifi_auth_mode_t authMode);
+    
+    /**
+     * Get security type as C-string (no heap allocation)
+     * @param authMode WiFi authentication mode
+     * @return Security type as const char*
+     */
+    const char* getSecurityTypeCStr(wifi_auth_mode_t authMode);
     
     /**
      * Check if WiFi is currently connected
