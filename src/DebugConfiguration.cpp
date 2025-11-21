@@ -25,6 +25,8 @@ SOFTWARE.*/
 #include "configuration.h"
 
 #include "DebugConfiguration.h"
+#include "gps/RTC.h"
+#include <time.h>
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -176,7 +178,23 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
 
     this->_client->print('<');
     this->_client->print(pri);
-    this->_client->print(F(">1 - "));
+    this->_client->print(F(">1 "));
+
+    // Format RFC5424 timestamp if valid time is available.
+    uint32_t timestamp_sec = getValidTime(RTCQualityDevice, false);
+    if (timestamp_sec != 0) {
+        time_t timestamp = (time_t)timestamp_sec;
+        struct tm *time_info = gmtime(&timestamp);
+        char timestamp_buffer[21];
+        snprintf(timestamp_buffer, sizeof(timestamp_buffer), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                 time_info->tm_year + 1900, time_info->tm_mon + 1, time_info->tm_mday,
+                 time_info->tm_hour, time_info->tm_min, time_info->tm_sec);
+        this->_client->print(timestamp_buffer);
+    } else {
+        this->_client->print(SYSLOG_NILVALUE);
+    }
+
+    this->_client->print(' ');
     this->_client->print(this->_deviceHostname);
     this->_client->print(' ');
     this->_client->print(appName);
