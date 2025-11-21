@@ -23,3 +23,10 @@ extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
+
+/**
+ * Get the effective duty cycle for the current region based on device role.
+ * For EU_866, returns 10% for fixed devices (ROUTER, ROUTER_LATE) and 2.5% for mobile devices.
+ * For other regions, returns the standard duty cycle.
+ */
+extern float getEffectiveDutyCycle();
