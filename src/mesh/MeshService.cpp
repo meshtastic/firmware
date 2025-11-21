@@ -109,7 +109,10 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     }
 
     printPacket("Forwarding to phone", mp);
-    sendToPhone(packetPool.allocCopy(*mp));
+    // If promiscuous mode is enabled, suppress duplicate to phone.
+    if (!serialPromiscuousEnabled) {
+        sendToPhone(packetPool.allocCopy(*mp));
+    }
 
     return 0;
 }
@@ -184,7 +187,10 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
         return;
     }
 #endif
-    p.from = 0;                          // We don't let clients assign nodenums to their sent messages
+    // Allow any encrypted packet as-is in promiscuous mode
+    if (!(serialPromiscuousEnabled && p.which_payload_variant == meshtastic_MeshPacket_encrypted_tag)) {
+        p.from = 0; // We don't let clients assign nodenums to their sent messages
+    }
     p.next_hop = NO_NEXT_HOP_PREFERENCE; // We don't let clients assign next_hop to their sent messages
     p.relay_node = NO_RELAY_NODE;        // We don't let clients assign relay_node to their sent messages
 
@@ -292,7 +298,10 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
-    perhapsDecode(p);
+    // In promiscuous mode, prefer to forward encrypted packets as-is and avoid decoding duplicates
+    if (!serialPromiscuousEnabled) {
+        perhapsDecode(p);
+    }
 
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
@@ -306,8 +315,9 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP)) {
             LOG_WARN("ToPhone queue is full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
