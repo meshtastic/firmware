@@ -26,7 +26,7 @@ bool BMA423Sensor::init()
         // Need to raise the wrist function, need to set the correct axis
         sensor.setRemapAxes(sensor.REMAP_TOP_LAYER_RIGHT_CORNER);
 #else
-        sensor.setReampAxes(sensor.REMAP_BOTTOM_LAYER_BOTTOM_LEFT_CORNER);
+        sensor.setRemapAxes(sensor.REMAP_BOTTOM_LAYER_BOTTOM_LEFT_CORNER);
 #endif
         // sensor.enableFeature(sensor.FEATURE_STEP_CNTR, true);
         sensor.enableFeature(sensor.FEATURE_TILT, true);
