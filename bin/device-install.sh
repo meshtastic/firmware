@@ -43,6 +43,7 @@ BIGDB_16MB=(
     "t-eth-elite"
     "t-watch-s3"
     "tlora-pager"
+    "Makerfabs_MaTouch"
 )
 S3_VARIANTS=(
     "s3"
@@ -64,6 +65,7 @@ S3_VARIANTS=(
     "icarus"
     "tracksenger"
     "elecrow-adv"
+    "Makerfabs_MaTouch"
 )
 
 # Determine the correct esptool command to use

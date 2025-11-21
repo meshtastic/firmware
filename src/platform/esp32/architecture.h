@@ -205,6 +205,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#elif defined(MAKERFABS_MATOUCH)
+#define HW_VENDOR meshtastic_HardwareModel_MAKERFABS_MATOUCH_3_5_SPI
 #endif
 
 // -----------------------------------------------------------------------------
