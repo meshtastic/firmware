@@ -6,6 +6,7 @@
 
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
+#include "Observer.h"
 #include <LovyanGFX.hpp>
 #include <Keypad.h>
 #include <Arduino.h>
@@ -78,12 +79,28 @@ private:
     unsigned long lastProgressUpdate;  // Last time progress was updated
     class InitialSplashScreen* splashScreen; // Splash screen instance
     
+    // Display sleep management
+    bool displayAsleep;
+    unsigned long lastActivityTime;
+    static const unsigned long DISPLAY_SLEEP_TIMEOUT = 30000; // 30 seconds in milliseconds
+    
     // Helper methods
     void registerInitializers();
     void connectComponents();
     void initScreens();
     void showSplashScreen();
     void updateSplashAnimation();  // Update progressive loading animation
+    
+    // Display power management
+    void checkDisplaySleep();
+    void sleepDisplay();
+    void wakeDisplay();
+    void updateLastActivity();
+    
+    // Deep sleep handling
+    int onDeepSleep(void *unused);
+    CallbackObserver<CustomUIModule, void *> deepSleepObserver = 
+        CallbackObserver<CustomUIModule, void *>(this, &CustomUIModule::onDeepSleep);
     
     // Screen navigation
     void switchToScreen(BaseScreen* newScreen);

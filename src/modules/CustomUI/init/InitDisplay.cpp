@@ -4,6 +4,7 @@
 
 #ifdef ESP32
 #include <esp_heap_caps.h>
+#include <driver/gpio.h>  // For gpio_hold_en() function
 #endif
 
 // Add missing logging
@@ -102,12 +103,12 @@ InitDisplay::~InitDisplay() {
 bool InitDisplay::init() {
     LOG_INFO("🔧 InitDisplay: Initializing ST7789 display with LovyanGFX...");
     
-    // Initialize backlight pin first
-    if (TFT_BL >= 0) {
-        pinMode(TFT_BL, OUTPUT);
-        digitalWrite(TFT_BL, HIGH); // Turn on backlight
-        delay(100);
-    }
+    // // Initialize backlight pin first
+    // if (TFT_BL >= 0) {
+    //     pinMode(TFT_BL, OUTPUT);
+    //     digitalWrite(TFT_BL, HIGH); // Turn on backlight
+    //     delay(100);
+    // }
     
     // Create the LovyanGFX display instance
     tft = new LGFX();
@@ -145,10 +146,52 @@ bool InitDisplay::init() {
 }
 
 void InitDisplay::cleanup() {
+
     if (tft) {
+        LOG_INFO("🔧 InitDisplay: Starting enhanced display shutdown sequence");
+        
+        // Phase 1: Proper ST7789 Controller Shutdown
+        // Send sleep command to enter low power mode first
+        tft->sleep();
+        tft->setBrightness(0);
+        
+        // Send the ST7789 deep sleep command (0x10) directly for complete charge pump shutdown
+        tft->writecommand(0x10); 
+        delay(120); // Mandatory delay for charge pump decay
+        
+        // Phase 2: Latch Backlight OFF with Hold
+        // We explicitly drive the pin LOW (assuming active High logic).
+        pinMode(TFT_BL, OUTPUT);
+        digitalWrite(TFT_BL, LOW);
+        
+        // CRITICAL: Enable RTC Pad Hold
+        // This freezes the pin state at the I/O MUX level during deep sleep.
+        gpio_hold_en((gpio_num_t)TFT_BL);
+        
+        // Phase 3: Isolate Data Lines (Prevent Parasitic Power)
+        // When VCC is cut, logic High signals can feed power through ESD diodes.
+        // We drive critical lines LOW.
+        pinMode(TFT_CS, OUTPUT);
+        digitalWrite(TFT_CS, LOW); // Drive CS low to isolate SPI
+        gpio_hold_en((gpio_num_t)TFT_CS);
+        
+        // Also isolate other critical SPI lines if needed
+        pinMode(TFT_DC, OUTPUT);
+        digitalWrite(TFT_DC, LOW);
+        gpio_hold_en((gpio_num_t)TFT_DC);
+        
+        // Phase 4: Cut External Power (Vext)
+        // Heltec V3 Vext Logic: High = OFF (Active Low Enable) 
+        // GPIO 36 controls external 3.3V rail
+        pinMode(36, OUTPUT); // Vext pin (GPIO 36)
+        digitalWrite(36, HIGH); // Turn OFF external power (active low)
+        gpio_hold_en((gpio_num_t)36);
+        
         delete tft;
         tft = nullptr;
+        
+        LOG_INFO("🔧 InitDisplay: Enhanced shutdown complete - All power paths disabled with hold");
     }
+    
     initialized = false;
-    LOG_INFO("🔧 InitDisplay: Cleanup completed");
 }

@@ -18,6 +18,7 @@
 #include "screens/NodesListScreen.h"
 #include "screens/MessagesScreen.h"
 #include "InitialSplashScreen.h"
+#include "sleep.h"
 #include <LovyanGFX.hpp>
 #include <Arduino.h>
 
@@ -43,13 +44,22 @@ CustomUIModule::CustomUIModule()
       splashStartTime(0),
       loadingProgress(0),
       lastProgressUpdate(0),
-      splashScreen(nullptr) {
+      splashScreen(nullptr),
+      displayAsleep(false),
+      lastActivityTime(0) {
     
     LOG_INFO("🔧 CUSTOM UI: Module constructed with screen-based architecture");
     registerInitializers();
+    
+    // Register for deep sleep notifications to ensure proper cleanup
+    deepSleepObserver.observe(&notifyDeepSleep);
+    LOG_INFO("🔧 CUSTOM UI: Registered deep sleep observer");
 }
 
 CustomUIModule::~CustomUIModule() {
+    // Unregister deep sleep observer
+    deepSleepObserver.unobserve(&notifyDeepSleep);
+    
     // Cleanup splash screen
     if (splashScreen) {
         delete splashScreen;
@@ -117,6 +127,9 @@ void CustomUIModule::initAll() {
         
         // Initialize screens
         initScreens();
+        
+        // Set initial activity time
+        updateLastActivity();
         
         allInitialized = true;
         LOG_INFO("🔧 CUSTOM UI: ✅ All initializers and screens completed successfully");
@@ -228,8 +241,16 @@ int32_t CustomUIModule::runOnce() {
         return 1000; // Wait 1 second if no screen ready
     }
     
-    // Handle keypad input
+    // Handle keypad input first (needed to wake display)
     checkKeypadInput();
+    
+    // Check for display sleep timeout
+    checkDisplaySleep();
+    
+    // Skip UI updates if display is asleep
+    // if (displayAsleep) {
+    //     return 1000; // Check for wake conditions every second
+    // }
     
     // Update current screen if needed
     if (currentScreen->needsUpdate()) {
@@ -248,6 +269,14 @@ bool CustomUIModule::wantUIFrame() {
 ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
     // Only handle text messages (TEXT_MESSAGE_APP)
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+        // Wake display if asleep
+        if (displayAsleep) {
+            wakeDisplay();
+        }
+        
+        // Update activity time
+        updateLastActivity();
+        
         // Extract text from payload (payload.bytes is not null-terminated)
         const meshtastic_Data_payload_t &payload = mp.decoded.payload;
         String text;
@@ -353,7 +382,16 @@ void CustomUIModule::checkKeypadInput() {
     char key = keypad->getKey();
     
     if (key) {
-        LOG_INFO("🔧 CUSTOM UI: Keypad key pressed: %c", key);
+        LOG_INFO("🔧 CUSTOM UI: Keypad key pressed: %c (display asleep: %s)", key, displayAsleep ? "YES" : "NO");
+        
+        // Wake display if asleep
+        if (displayAsleep) {
+            wakeDisplay();
+            return; // First keypress just wakes display
+        }
+        
+        // Update activity time and handle key
+        updateLastActivity();
         handleKeyPress(key);
     }
 }
@@ -411,6 +449,109 @@ void CustomUIModule::handleKeyPress(char key) {
         default:
             break;
     }
+}
+
+// ========== Display Power Management ==========
+void CustomUIModule::checkDisplaySleep() {
+    if (displayAsleep || !tft) {
+        return;
+    }
+    
+    unsigned long currentTime = millis();
+    unsigned long timeSinceActivity = currentTime - lastActivityTime;
+    
+    // Check if timeout exceeded
+    if (timeSinceActivity >= DISPLAY_SLEEP_TIMEOUT) {
+        LOG_INFO("🔧 CUSTOM UI: Display sleep timeout reached (%lu ms since last activity)", timeSinceActivity);
+        sleepDisplay();
+    }
+}
+
+void CustomUIModule::sleepDisplay() {
+    if (displayAsleep || !tft) {
+        return;
+    }
+    
+    LOG_INFO("🔧 CUSTOM UI: Putting display to sleep after inactivity");
+    
+    // Turn off display using LovyanGFX sleep function
+    tft->sleep();
+    displayAsleep = true;
+}
+
+void CustomUIModule::wakeDisplay() {
+    if (!displayAsleep || !tft) {
+        return;
+    }
+    
+    LOG_INFO("🔧 CUSTOM UI: Waking display from activity");
+    
+    // Wake up display using LovyanGFX wakeup function
+    tft->wakeup();
+    
+    // Give display time to stabilize
+    delay(50);
+    
+    displayAsleep = false;
+    
+    // Update activity time
+    updateLastActivity();
+    
+    // Force complete screen refresh
+    if (currentScreen) {
+        // Clear screen first
+        tft->fillScreen(0x0000);
+        
+        // Force full redraw
+        currentScreen->forceRedraw();
+        currentScreen->draw(*tft);
+    }
+    
+    LOG_INFO("🔧 CUSTOM UI: Display awakened and screen refreshed");
+}
+
+void CustomUIModule::updateLastActivity() {
+    lastActivityTime = millis();
+}
+
+// ========== Deep Sleep Cleanup ==========
+int CustomUIModule::onDeepSleep(void *unused) {
+    LOG_INFO("🔧 CUSTOM UI: Preparing for deep sleep - cleaning up display");
+    
+    if(displayAsleep){
+        wakeDisplay();
+    }
+
+    // Force any pending display operations to complete
+    if (tft) {
+        tft->waitDisplay();
+        
+        // Show a shutdown message briefly
+        tft->fillScreen(0x0000);
+        tft->setTextColor(0xFFFF); // White text
+        tft->setTextSize(2);
+        tft->setCursor(80, 110);
+        tft->print("Sleeping...");
+        delay(500); // Show message briefly
+        
+        // Put display into sleep mode
+        tft->sleep();
+        LOG_INFO("🔧 CUSTOM UI: Display put to sleep");
+    }
+    
+    // Mark display as asleep
+    displayAsleep = true;
+    
+    // Cleanup all initializers properly
+    for (auto& init : initializers) {
+        if (init) {
+            init->cleanup();
+            LOG_INFO("🔧 CUSTOM UI: Cleaned up %s", init->getName());
+        }
+    }
+    
+    LOG_INFO("🔧 CUSTOM UI: Deep sleep cleanup completed");
+    return 0; // Allow deep sleep to proceed
 }
 
 #endif
