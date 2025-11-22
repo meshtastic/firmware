@@ -13,7 +13,10 @@ DFRobotGravitySensor::DFRobotGravitySensor() : TelemetrySensor(meshtastic_Teleme
 DFRobotGravitySensor::~DFRobotGravitySensor()
 {
     if (gravity) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
         delete gravity;
+#pragma GCC diagnostic pop
         gravity = nullptr;
     }
 }
