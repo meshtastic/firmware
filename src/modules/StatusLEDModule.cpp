@@ -35,14 +35,17 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
         switch (bluetoothStatus->getConnectionState()) {
         case meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED: {
             ble_state = unpaired;
+            PAIRING_LED_starttime = millis();
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::PAIRING: {
             ble_state = pairing;
+            PAIRING_LED_starttime = millis();
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
             ble_state = connected;
+            PAIRING_LED_starttime = millis();
             break;
         }
         }
@@ -64,7 +67,7 @@ int32_t StatusLEDModule::runOnce()
         CHARGE_LED_state = LED_STATE_OFF;
     }
 
-    if (!config.bluetooth.enabled) {
+    if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis()) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
         if (slowTrack) {
