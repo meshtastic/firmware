@@ -477,6 +477,10 @@ void setup()
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);
+    delay(2);
+    digitalWrite(RESET_OLED, 0);
+    delay(10);
+    digitalWrite(RESET_OLED, 1);
 #endif
 
 #ifdef SENSOR_POWER_CTRL_PIN
@@ -959,6 +963,7 @@ void setup()
     i2cScanner.reset();
 #endif
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
     // warn the user about a low entropy key
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
@@ -969,6 +974,7 @@ void setup()
         service->sendClientNotification(cn);
         nodeDB->hasWarned = true;
     }
+#endif
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON

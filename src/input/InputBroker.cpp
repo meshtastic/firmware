@@ -52,7 +52,7 @@ int InputBroker::handleInputEvent(const InputEvent *event)
     powerFSM.trigger(EVENT_INPUT); // todo: not every input should wake, like long hold release
 
     if (event && event->inputEvent != INPUT_BROKER_NONE && externalNotificationModule &&
-        moduleConfig.external_notification.enabled) {
+        moduleConfig.external_notification.enabled && externalNotificationModule->nagging()) {
         externalNotificationModule->stopNow();
     }
 

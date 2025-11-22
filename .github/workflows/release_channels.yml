@@ -61,6 +61,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Always use master branch for version bumps
+          ref: master
 
       - name: Setup Python
         uses: actions/setup-python@v6

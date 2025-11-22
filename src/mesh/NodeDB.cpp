@@ -653,7 +653,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL)||defined(HELTEC_V4_TFT)) &&                                                                                                  \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT)) &&                                                                        \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -2008,6 +2008,7 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
 bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
@@ -2022,6 +2023,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     }
     return false;
 }
+#endif
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
