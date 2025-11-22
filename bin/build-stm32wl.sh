@@ -27,3 +27,5 @@ cp $SRCELF $OUTDIR/$basename.elf
 
 SRCBIN=.pio/build/$1/firmware.bin
 cp $SRCBIN $OUTDIR/$basename.bin
+
+cp $OUTDIR/$basename.bin $OUTDIR/$basename-update.bin
