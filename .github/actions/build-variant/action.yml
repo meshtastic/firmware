@@ -102,7 +102,7 @@ runs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v5
       with:
-        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
