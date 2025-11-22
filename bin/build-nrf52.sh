@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Example: ./bin/build-nrf52.sh heltec-mesh-node-t114
 
 set -e
 
@@ -13,7 +14,7 @@ rm -r $OUTDIR/* || true
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
 platformio pkg install -e $1
 
-echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
+echo "Building for $1 with \$PLATFORMIO_BUILD_FLAGS=$PLATFORMIO_BUILD_FLAGS"
 rm -f .pio/build/$1/firmware.*
 
 # The shell vars the build tool expects to find
