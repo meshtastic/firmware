@@ -255,6 +255,11 @@ NodeDB::NodeDB()
     // Ensure user (nodeinfo) role is set to whatever we're configured to
     owner.role = config.device.role;
     // Ensure macaddr is set to our macaddr as it will be copied in our info below
+    if (config.device.send_mac_address == true) {
+        getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+    } else {
+        memset(ourMacAddr, 0, sizeof(ourMacAddr));
+    }
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
     // Ensure owner.id is always derived from the node number
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
@@ -522,6 +527,7 @@ void NodeDB::installDefaultNodeDatabase()
     nodeDatabase.version = DEVICESTATE_CUR_VER;
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
     numMeshNodes = 0;
+    myNodeInfo.my_node_num = 0;
     meshNodes = &nodeDatabase.nodes;
 }
 
@@ -544,6 +550,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
     config.has_security = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    config.device.send_mac_address = false;
 
     config.lora.sx126x_rx_boosted_gain = true;
     config.lora.tx_enabled =
@@ -1077,7 +1084,7 @@ void NodeDB::installDefaultDeviceState()
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Set default owner name
-    pickNewNodeNum(); // based on macaddr now
+    pickNewNodeNum();
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
     snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
@@ -1089,7 +1096,7 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
 #endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
-    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    memset(owner.macaddr, 0, sizeof(owner.macaddr));
     owner.has_is_unmessagable = true;
     owner.is_unmessagable = false;
 }
@@ -1103,20 +1110,18 @@ void NodeDB::installDefaultDeviceState()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum nodeNum = myNodeInfo.my_node_num;
-    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
     if (nodeNum == 0) {
-        // Pick an initial nodenum based on the macaddr
-        nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+        // Pick a random initial nodenum
+        nodeNum = random(NUM_RESERVED, LONG_MAX);
     }
 
     meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+    while (((found = getMeshNode(nodeNum)) && found != getMeshNodeByIndex(0)) ||
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
-                     "trying for 0x%x",
-                     nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
+            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x",
+                     nodeNum, candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
