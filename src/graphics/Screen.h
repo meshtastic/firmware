@@ -593,7 +593,7 @@ class Screen : public concurrency::OSThread
     void toggleFrameVisibility(const std::string &frameName);
     bool isFrameHidden(const std::string &frameName) const;
 
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     /// Draw an image to remain on E-Ink display after screen off
     void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
 #endif
@@ -682,7 +682,7 @@ class Screen : public concurrency::OSThread
 #ifndef USE_EINK
         bool nodelist = false;
 #endif
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
         bool nodelist_lastheard = false;
         bool nodelist_hopsignal = false;
         bool nodelist_distance = false;
