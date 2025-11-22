@@ -3,8 +3,10 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
+from os import environ
 import subprocess
 import json
+import shlex
 import re
 import time
 from datetime import datetime
@@ -106,38 +108,56 @@ try:
 except subprocess.CalledProcessError:
     repo_owner = "unknown"
 
-jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
-with open(jsonLoc) as f:
-    jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
-    userPrefs = json.loads(jsonStr)
+pref_flags = {}
 
-pref_flags = []
-# Pre-process the userPrefs
-for pref in userPrefs:
-    if userPrefs[pref].startswith("{"):
-        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
-    elif userPrefs[pref].lstrip("-").replace(".", "").isdigit():
-        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
-    elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
-        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
-    elif userPrefs[pref].startswith("meshtastic_"):
-        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
-    # If the value is a string, we need to wrap it in quotes
+def contribute_flag(key, value):
+    if value:
+        pref_flags[key] = f"-D{key}={value}"
     else:
-        pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
+        pref_flags[key] = f"-D{key}"
+
 
 # General options that are passed to the C and C++ compilers
 # Calculate unix epoch for current day (midnight)
 current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 build_epoch = int(current_date.timestamp())
 
-flags = [
-        "-DAPP_VERSION=" + verObj["long"],
-        "-DAPP_VERSION_SHORT=" + verObj["short"],
-        "-DAPP_ENV=" + env.get("PIOENV"),
-        "-DAPP_REPO=" + repo_owner,
-        "-DBUILD_EPOCH=" + str(build_epoch),
-    ] + pref_flags
+contribute_flag("APP_VERSION", verObj["long"])
+contribute_flag("APP_VERSION_SHORT", verObj["short"])
+contribute_flag("APP_ENV", env.get("PIOENV"))
+contribute_flag("APP_REPO", repo_owner)
+contribute_flag("BUILD_EPOCH", f"{build_epoch}")
+
+# userPrefs from file
+jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
+with open(jsonLoc) as f:
+    jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
+    userPrefs = json.loads(jsonStr)
+
+for pref_key, pref_value in userPrefs.items():
+
+    if (
+        pref_value.startswith("{") or
+        pref_value.lstrip("-").replace(".", "").isdigit() or
+        pref_value == "true" or pref_value == "false" or 
+        pref_value.startswith("meshtastic_")
+    ):
+        contribute_flag(pref_key, pref_value)
+
+    else:
+        # If the value is a string, we need to wrap it in quotes
+        contribute_flag(pref_key, env.StringifyMacro(pref_value))
+
+
+# Additional prefs from env
+# Sample: $ PREFS="OLED_RU" ./bin/build-firmware.sh heltec-mesh-node-t114 nrf52
+for pref in shlex.split(environ.get("PREFS", "")):
+    key, sep, value = pref.partition('=')
+    contribute_flag(key, value)
+
+
+# All prefs are gathered now, proceed
+flags = list(pref_flags.values())
 
 print ("Using flags:")
 for flag in flags:
