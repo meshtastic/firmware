@@ -101,3 +101,23 @@ void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
     else
         snprintf(timeStr, maxLength, "unknown age");
 }
+
+void getUptimeStr(uint32_t uptimeMillis, const char *prefix, char *uptimeStr, uint8_t maxLength, bool includeSecs)
+{
+    uint32_t days = uptimeMillis / 86400000;
+    uint32_t hours = (uptimeMillis % 86400000) / 3600000;
+    uint32_t mins = (uptimeMillis % 3600000) / 60000;
+    uint32_t secs = (uptimeMillis % 60000) / 1000;
+
+    if (days) {
+        snprintf(uptimeStr, maxLength, "%s: %ud %uh", prefix, days, hours);
+    } else if (hours) {
+        snprintf(uptimeStr, maxLength, "%s: %uh %um", prefix, hours, mins);
+    } else if (!includeSecs) {
+        snprintf(uptimeStr, maxLength, "%s: %um", prefix, mins);
+    } else if (mins) {
+        snprintf(uptimeStr, maxLength, "%s: %um %us", prefix, mins, secs);
+    } else {
+        snprintf(uptimeStr, maxLength, "%s: %us", prefix, secs);
+    }
+}
