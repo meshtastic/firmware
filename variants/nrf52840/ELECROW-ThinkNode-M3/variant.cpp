@@ -76,7 +76,11 @@ void variant_shutdown()
         }
         pinMode(pin, OUTPUT);
         digitalWrite(pin, LOW);
-        NRF_GPIO->DIRCLR = (1 << pin);
+        if (pin >= 32) {
+            NRF_P1->DIRCLR = (1 << (pin - 32));
+        } else {
+            NRF_GPIO->DIRCLR = (1 << pin);
+        }
     }
 
     nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
