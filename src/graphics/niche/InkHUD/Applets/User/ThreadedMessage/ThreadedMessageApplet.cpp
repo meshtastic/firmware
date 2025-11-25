@@ -108,8 +108,8 @@ void InkHUD::ThreadedMessageApplet::onRender()
             info += "Me";
         else {
             // Check if sender is node db
-            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(m.sender);
-            if (sender)
+            meshtastic_NodeDetail *sender = nodeDB->getMeshNode(m.sender);
+            if (sender && detailHasFlag(*sender, NODEDETAIL_FLAG_HAS_USER))
                 info += parseShortName(sender); // Handle any unprintable chars in short name
             else
                 info += hexifyNodeNum(m.sender); // No node info at all. Print the node num

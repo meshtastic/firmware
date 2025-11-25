@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <cmath>
+#include <cstring>
 #include <pb_encode.h>
 #include <string>
 #include <vector>
@@ -104,8 +106,13 @@ static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
 static constexpr const char *backupFileName = "/backups/backup.proto";
 
+template <typename T> inline T clampValue(T value, T low, T high)
+{
+    return std::max(low, std::min(value, high));
+}
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
-uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
+uint32_t sinceLastSeen(const meshtastic_NodeDetail *n);
 
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
@@ -135,9 +142,9 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes;
+    std::vector<meshtastic_NodeDetail> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
-    meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
+    meshtastic_NodeDetail *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
 
@@ -241,15 +248,15 @@ class NodeDB
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
-    const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
+    const meshtastic_NodeDetail *readNextMeshNode(uint32_t &readIndex);
 
-    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
+    meshtastic_NodeDetail *getMeshNodeByIndex(size_t x)
     {
         assert(x < numMeshNodes);
         return &meshNodes->at(x);
     }
 
-    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    virtual meshtastic_NodeDetail *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
@@ -260,7 +267,7 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeDetail_size);
     }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory
@@ -281,7 +288,7 @@ class NodeDB
         localPosition = position;
     }
 
-    bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+    bool hasValidPosition(const meshtastic_NodeDetail *n);
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
@@ -304,8 +311,8 @@ class NodeDB
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
-    /// Find a node in our DB, create an empty NodeInfoLite if missing
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+    /// Find a node in our DB, create an empty NodeDetail if missing
+    meshtastic_NodeDetail *getOrCreateMeshNode(NodeNum n);
 
     /*
      * Internal boolean to track sorting paused
@@ -369,6 +376,262 @@ extern meshtastic_CriticalErrorCode error_code;
 extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
+
+enum NodeDetailFlag : uint32_t {
+    NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED = 1u << 0,
+    NODEDETAIL_FLAG_HAS_USER = 1u << 1,
+    NODEDETAIL_FLAG_HAS_POSITION = 1u << 2,
+    NODEDETAIL_FLAG_HAS_DEVICE_METRICS = 1u << 3,
+    NODEDETAIL_FLAG_VIA_MQTT = 1u << 4,
+    NODEDETAIL_FLAG_IS_FAVORITE = 1u << 5,
+    NODEDETAIL_FLAG_IS_IGNORED = 1u << 6,
+    NODEDETAIL_FLAG_HAS_HOPS_AWAY = 1u << 7,
+    NODEDETAIL_FLAG_IS_LICENSED = 1u << 8,
+    NODEDETAIL_FLAG_HAS_UNMESSAGABLE = 1u << 9,
+    NODEDETAIL_FLAG_IS_UNMESSAGABLE = 1u << 10,
+    NODEDETAIL_FLAG_HAS_BATTERY_LEVEL = 1u << 11,
+    NODEDETAIL_FLAG_HAS_VOLTAGE = 1u << 12,
+    NODEDETAIL_FLAG_HAS_CHANNEL_UTIL = 1u << 13,
+    NODEDETAIL_FLAG_HAS_AIR_UTIL_TX = 1u << 14,
+    NODEDETAIL_FLAG_HAS_UPTIME = 1u << 15
+};
+
+inline bool detailHasFlag(const meshtastic_NodeDetail &detail, NodeDetailFlag flag)
+{
+    return (detail.flags & static_cast<uint32_t>(flag)) != 0;
+}
+
+inline void detailSetFlag(meshtastic_NodeDetail &detail, NodeDetailFlag flag, bool value = true)
+{
+    if (value) {
+        detail.flags |= static_cast<uint32_t>(flag);
+    } else {
+        detail.flags &= ~static_cast<uint32_t>(flag);
+    }
+}
+
+inline meshtastic_NodeDetail makeDefaultDetail()
+{
+    meshtastic_NodeDetail detail = meshtastic_NodeDetail_init_default;
+    return detail;
+}
+
+inline void clearUserFromDetail(meshtastic_NodeDetail &detail)
+{
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_USER, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_IS_LICENSED, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_UNMESSAGABLE, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_IS_UNMESSAGABLE, false);
+    detail.long_name[0] = '\0';
+    detail.short_name[0] = '\0';
+    memset(detail.macaddr, 0, sizeof(detail.macaddr));
+    detail.hw_model = _meshtastic_HardwareModel_MIN;
+    detail.role = _meshtastic_Config_DeviceConfig_Role_MIN;
+    detail.public_key.size = 0;
+    memset(detail.public_key.bytes, 0, sizeof(detail.public_key.bytes));
+}
+
+inline void applyUserLiteToDetail(meshtastic_NodeDetail &detail, const meshtastic_UserLite &userLite)
+{
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_USER, true);
+    strncpy(detail.long_name, userLite.long_name, sizeof(detail.long_name));
+    detail.long_name[sizeof(detail.long_name) - 1] = '\0';
+    strncpy(detail.short_name, userLite.short_name, sizeof(detail.short_name));
+    detail.short_name[sizeof(detail.short_name) - 1] = '\0';
+    memcpy(detail.macaddr, userLite.macaddr, sizeof(detail.macaddr));
+    detail.hw_model = userLite.hw_model;
+    detail.role = userLite.role;
+
+    const pb_size_t keySize = std::min(userLite.public_key.size, static_cast<pb_size_t>(sizeof(detail.public_key.bytes)));
+    memcpy(detail.public_key.bytes, userLite.public_key.bytes, keySize);
+    detail.public_key.size = keySize;
+
+    detailSetFlag(detail, NODEDETAIL_FLAG_IS_LICENSED, userLite.is_licensed);
+
+    if (userLite.has_is_unmessagable) {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_UNMESSAGABLE, true);
+        detailSetFlag(detail, NODEDETAIL_FLAG_IS_UNMESSAGABLE, userLite.is_unmessagable);
+    } else {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_UNMESSAGABLE, false);
+        detailSetFlag(detail, NODEDETAIL_FLAG_IS_UNMESSAGABLE, false);
+    }
+}
+
+inline void applyUserToDetail(meshtastic_NodeDetail &detail, const meshtastic_User &user)
+{
+    meshtastic_UserLite lite = meshtastic_UserLite_init_default;
+    strncpy(lite.long_name, user.long_name, sizeof(lite.long_name));
+    lite.long_name[sizeof(lite.long_name) - 1] = '\0';
+    strncpy(lite.short_name, user.short_name, sizeof(lite.short_name));
+    lite.short_name[sizeof(lite.short_name) - 1] = '\0';
+    lite.hw_model = user.hw_model;
+    lite.role = user.role;
+    lite.is_licensed = user.is_licensed;
+    memcpy(lite.macaddr, user.macaddr, sizeof(lite.macaddr));
+    const pb_size_t keySize = std::min(user.public_key.size, static_cast<pb_size_t>(sizeof(lite.public_key.bytes)));
+    memcpy(lite.public_key.bytes, user.public_key.bytes, keySize);
+    lite.public_key.size = keySize;
+    lite.has_is_unmessagable = user.has_is_unmessagable;
+    lite.is_unmessagable = user.is_unmessagable;
+    applyUserLiteToDetail(detail, lite);
+}
+
+inline void clearPositionFromDetail(meshtastic_NodeDetail &detail)
+{
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_POSITION, false);
+    detail.latitude_i = 0;
+    detail.longitude_i = 0;
+    detail.altitude = 0;
+    detail.position_time = 0;
+    detail.position_source = _meshtastic_Position_LocSource_MIN;
+}
+
+inline void applyPositionLiteToDetail(meshtastic_NodeDetail &detail, const meshtastic_PositionLite &positionLite)
+{
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_POSITION, true);
+    detail.latitude_i = positionLite.latitude_i;
+    detail.longitude_i = positionLite.longitude_i;
+    detail.altitude = positionLite.altitude;
+    detail.position_time = positionLite.time;
+    detail.position_source = positionLite.location_source;
+}
+
+inline void applyPositionToDetail(meshtastic_NodeDetail &detail, const meshtastic_Position &position)
+{
+    meshtastic_PositionLite lite = meshtastic_PositionLite_init_default;
+    lite.latitude_i = position.latitude_i;
+    lite.longitude_i = position.longitude_i;
+    lite.altitude = position.altitude;
+    lite.location_source = position.location_source;
+    lite.time = position.time;
+    applyPositionLiteToDetail(detail, lite);
+}
+
+inline void clearMetricsFromDetail(meshtastic_NodeDetail &detail)
+{
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_DEVICE_METRICS, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_BATTERY_LEVEL, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_VOLTAGE, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_CHANNEL_UTIL, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_AIR_UTIL_TX, false);
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_UPTIME, false);
+    detail.battery_level = 0;
+    detail.voltage_millivolts = 0;
+    detail.channel_utilization_permille = 0;
+    detail.air_util_tx_permille = 0;
+    detail.uptime_seconds = 0;
+}
+
+inline void applyMetricsToDetail(meshtastic_NodeDetail &detail, const meshtastic_DeviceMetrics &metrics)
+{
+    detailSetFlag(detail, NODEDETAIL_FLAG_HAS_DEVICE_METRICS, true);
+
+    if (metrics.has_battery_level) {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_BATTERY_LEVEL, true);
+        uint32_t battery = metrics.battery_level;
+        if (battery > 255u) {
+            battery = 255u;
+        }
+        detail.battery_level = static_cast<uint8_t>(battery);
+    } else {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_BATTERY_LEVEL, false);
+    }
+
+    if (metrics.has_voltage) {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_VOLTAGE, true);
+        double limitedVoltage = clampValue(static_cast<double>(metrics.voltage), 0.0, 65.535);
+        int millivolts = static_cast<int>(std::lround(limitedVoltage * 1000.0));
+        millivolts = clampValue<int>(millivolts, 0, 0xFFFF);
+        detail.voltage_millivolts = static_cast<uint16_t>(millivolts);
+    } else {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_VOLTAGE, false);
+        detail.voltage_millivolts = 0;
+    }
+
+    if (metrics.has_channel_utilization) {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_CHANNEL_UTIL, true);
+        double limitedUtil = clampValue(static_cast<double>(metrics.channel_utilization), 0.0, 100.0);
+        int permille = static_cast<int>(std::lround(limitedUtil * 10.0));
+        permille = clampValue<int>(permille, 0, 1000);
+        detail.channel_utilization_permille = static_cast<uint16_t>(permille);
+    } else {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_CHANNEL_UTIL, false);
+        detail.channel_utilization_permille = 0;
+    }
+
+    if (metrics.has_air_util_tx) {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_AIR_UTIL_TX, true);
+        double limitedAirUtil = clampValue(static_cast<double>(metrics.air_util_tx), 0.0, 100.0);
+        int permille = static_cast<int>(std::lround(limitedAirUtil * 10.0));
+        permille = clampValue<int>(permille, 0, 1000);
+        detail.air_util_tx_permille = static_cast<uint16_t>(permille);
+    } else {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_AIR_UTIL_TX, false);
+        detail.air_util_tx_permille = 0;
+    }
+
+    if (metrics.has_uptime_seconds) {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_UPTIME, true);
+        detail.uptime_seconds = metrics.uptime_seconds;
+    } else {
+        detailSetFlag(detail, NODEDETAIL_FLAG_HAS_UPTIME, false);
+        detail.uptime_seconds = 0;
+    }
+}
+
+inline bool detailIsFavorite(const meshtastic_NodeDetail &detail)
+{
+    return detailHasFlag(detail, NODEDETAIL_FLAG_IS_FAVORITE);
+}
+
+inline bool detailIsIgnored(const meshtastic_NodeDetail &detail)
+{
+    return detailHasFlag(detail, NODEDETAIL_FLAG_IS_IGNORED);
+}
+
+inline bool detailViaMqtt(const meshtastic_NodeDetail &detail)
+{
+    return detailHasFlag(detail, NODEDETAIL_FLAG_VIA_MQTT);
+}
+
+inline meshtastic_PositionLite detailToPositionLite(const meshtastic_NodeDetail &detail)
+{
+    meshtastic_PositionLite lite = meshtastic_PositionLite_init_default;
+    if (!detailHasFlag(detail, NODEDETAIL_FLAG_HAS_POSITION)) {
+        return lite;
+    }
+
+    lite.latitude_i = detail.latitude_i;
+    lite.longitude_i = detail.longitude_i;
+    lite.altitude = detail.altitude;
+    lite.time = detail.position_time;
+    lite.location_source = detail.position_source;
+    return lite;
+}
+
+inline meshtastic_UserLite detailToUserLite(const meshtastic_NodeDetail &detail)
+{
+    meshtastic_UserLite lite = meshtastic_UserLite_init_default;
+    if (!detailHasFlag(detail, NODEDETAIL_FLAG_HAS_USER)) {
+        return lite;
+    }
+
+    strncpy(lite.long_name, detail.long_name, sizeof(lite.long_name));
+    lite.long_name[sizeof(lite.long_name) - 1] = '\0';
+    strncpy(lite.short_name, detail.short_name, sizeof(lite.short_name));
+    lite.short_name[sizeof(lite.short_name) - 1] = '\0';
+    lite.hw_model = detail.hw_model;
+    lite.role = detail.role;
+    lite.is_licensed = detailHasFlag(detail, NODEDETAIL_FLAG_IS_LICENSED);
+    memcpy(lite.macaddr, detail.macaddr, sizeof(lite.macaddr));
+    lite.public_key.size = std::min(static_cast<pb_size_t>(sizeof(lite.public_key.bytes)), detail.public_key.size);
+    memcpy(lite.public_key.bytes, detail.public_key.bytes, lite.public_key.size);
+    if (detailHasFlag(detail, NODEDETAIL_FLAG_HAS_UNMESSAGABLE)) {
+        lite.has_is_unmessagable = true;
+        lite.is_unmessagable = detailHasFlag(detail, NODEDETAIL_FLAG_IS_UNMESSAGABLE);
+    }
+    return lite;
+}
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

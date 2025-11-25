@@ -151,7 +151,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             }
 
             /*
-            NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
+            meshtastic_NodeDetail *n = nodeDB->getMeshNode(getFrom(&mp));
 
             LOG_DEBUG("-----------------------------------------");
             LOG_DEBUG("p.payload.bytes  \"%s\"", p.payload.bytes);
@@ -189,7 +189,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 #ifdef ARCH_ESP32
     auto &p = mp.decoded;
 
-    meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
+    meshtastic_NodeDetail *n = nodeDB->getMeshNode(getFrom(&mp));
     /*
         LOG_DEBUG("-----------------------------------------");
         LOG_DEBUG("p.payload.bytes  \"%s\"", p.payload.bytes);
@@ -268,27 +268,33 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", getFrom(&mp));                   // From
-    fileToAppend.printf("%s,", n->user.long_name);              // Long Name
-    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);  // Sender Lat
-    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7); // Sender Long
+    fileToAppend.printf("%d,", getFrom(&mp)); // From
+    const char *senderName = (n && strlen(n->long_name) > 0) ? n->long_name : "?";
+    fileToAppend.printf("%s,", senderName); // Long Name
+    double senderLat = (n && detailHasFlag(*n, NODEDETAIL_FLAG_HAS_POSITION)) ? n->latitude_i * 1e-7 : 0.0;
+    double senderLon = (n && detailHasFlag(*n, NODEDETAIL_FLAG_HAS_POSITION)) ? n->longitude_i * 1e-7 : 0.0;
+    fileToAppend.printf("%f,", senderLat); // Sender Lat
+    fileToAppend.printf("%f,", senderLon); // Sender Long
     if (gpsStatus->getIsConnected() || config.position.fixed_position) {
         fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
         fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
         fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
     } else {
         // When the phone API is in use, the node info will be updated with position
-        meshtastic_NodeInfoLite *us = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        fileToAppend.printf("%f,", us->position.latitude_i * 1e-7);  // RX Lat
-        fileToAppend.printf("%f,", us->position.longitude_i * 1e-7); // RX Long
-        fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
+        meshtastic_NodeDetail *us = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        double rxLat = (us && detailHasFlag(*us, NODEDETAIL_FLAG_HAS_POSITION)) ? us->latitude_i * 1e-7 : 0.0;
+        double rxLon = (us && detailHasFlag(*us, NODEDETAIL_FLAG_HAS_POSITION)) ? us->longitude_i * 1e-7 : 0.0;
+        int32_t rxAlt = (us && detailHasFlag(*us, NODEDETAIL_FLAG_HAS_POSITION)) ? us->altitude : 0;
+        fileToAppend.printf("%f,", rxLat); // RX Lat
+        fileToAppend.printf("%f,", rxLon); // RX Long
+        fileToAppend.printf("%d,", rxAlt); // RX Altitude
     }
 
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
-    if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
-        float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
-                                                  gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
+    if (n && detailHasFlag(*n, NODEDETAIL_FLAG_HAS_POSITION) && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
+        float distance = GeoCoord::latLongToMeter(n->latitude_i * 1e-7, n->longitude_i * 1e-7, gpsStatus->getLatitude() * 1e-7,
+                                                  gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {
         fileToAppend.printf("0,");

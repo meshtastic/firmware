@@ -738,9 +738,9 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     JSONArray nodesArray;
 
     uint32_t readIndex = 0;
-    const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
+    const meshtastic_NodeDetail *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     while (tempNodeInfo != NULL) {
-        if (tempNodeInfo->has_user) {
+        if (detailHasFlag(*tempNodeInfo, NODEDETAIL_FLAG_HAS_USER)) {
             JSONObject node;
 
             char id[16];
@@ -748,26 +748,25 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
 
             node["id"] = new JSONValue(id);
             node["snr"] = new JSONValue(tempNodeInfo->snr);
-            node["via_mqtt"] = new JSONValue(BoolToString(tempNodeInfo->via_mqtt));
+            node["via_mqtt"] = new JSONValue(BoolToString(detailViaMqtt(*tempNodeInfo)));
             node["last_heard"] = new JSONValue((int)tempNodeInfo->last_heard);
             node["position"] = new JSONValue();
 
             if (nodeDB->hasValidPosition(tempNodeInfo)) {
                 JSONObject position;
-                position["latitude"] = new JSONValue((float)tempNodeInfo->position.latitude_i * 1e-7);
-                position["longitude"] = new JSONValue((float)tempNodeInfo->position.longitude_i * 1e-7);
-                position["altitude"] = new JSONValue((int)tempNodeInfo->position.altitude);
+                position["latitude"] = new JSONValue(static_cast<float>(tempNodeInfo->latitude_i) * 1e-7f);
+                position["longitude"] = new JSONValue(static_cast<float>(tempNodeInfo->longitude_i) * 1e-7f);
+                position["altitude"] = new JSONValue(static_cast<int>(tempNodeInfo->altitude));
                 node["position"] = new JSONValue(position);
             }
 
-            node["long_name"] = new JSONValue(tempNodeInfo->user.long_name);
-            node["short_name"] = new JSONValue(tempNodeInfo->user.short_name);
+            node["long_name"] = new JSONValue(tempNodeInfo->long_name);
+            node["short_name"] = new JSONValue(tempNodeInfo->short_name);
             char macStr[18];
-            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", tempNodeInfo->user.macaddr[0],
-                     tempNodeInfo->user.macaddr[1], tempNodeInfo->user.macaddr[2], tempNodeInfo->user.macaddr[3],
-                     tempNodeInfo->user.macaddr[4], tempNodeInfo->user.macaddr[5]);
+            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", tempNodeInfo->macaddr[0], tempNodeInfo->macaddr[1],
+                     tempNodeInfo->macaddr[2], tempNodeInfo->macaddr[3], tempNodeInfo->macaddr[4], tempNodeInfo->macaddr[5]);
             node["mac_address"] = new JSONValue(macStr);
-            node["hw_model"] = new JSONValue(tempNodeInfo->user.hw_model);
+            node["hw_model"] = new JSONValue(tempNodeInfo->hw_model);
 
             nodesArray.push_back(new JSONValue(node));
         }

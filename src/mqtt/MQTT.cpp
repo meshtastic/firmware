@@ -131,11 +131,12 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
 
     // PKI messages get accepted even if we can't decrypt
     if (router && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && strcmp(e.channel_id, "PKI") == 0) {
-        const meshtastic_NodeInfoLite *tx = nodeDB->getMeshNode(getFrom(p.get()));
-        const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
+        meshtastic_NodeDetail *tx = nodeDB->getMeshNode(getFrom(p.get()));
+        meshtastic_NodeDetail *rx = nodeDB->getMeshNode(p->to);
         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
         // likely they discovered each other via a channel we have downlink enabled for
-        if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
+        if (isToUs(p.get()) ||
+            (tx && detailHasFlag(*tx, NODEDETAIL_FLAG_HAS_USER) && rx && detailHasFlag(*rx, NODEDETAIL_FLAG_HAS_USER)))
             router->enqueueReceivedMessage(p.release());
     } else if (router &&
                perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key

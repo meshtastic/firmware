@@ -5,6 +5,7 @@
 #include "main.h"
 
 #include "RTC.h"
+#include "mesh/NodeDB.h"
 
 using namespace NicheGraphics;
 
@@ -333,13 +334,13 @@ std::string InkHUD::Applet::parse(std::string text)
 // Get the best version of a node's short name available to us
 // Parses any non-ascii chars
 // Swaps for last-four of node-id if the real short name is unknown or can't be rendered (emoji)
-std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
+std::string InkHUD::Applet::parseShortName(meshtastic_NodeDetail *node)
 {
     assert(node);
 
     // Use the true shortname if known, and doesn't contain any unprintable characters (emoji, etc.)
-    if (node->has_user) {
-        std::string parsed = parse(node->user.short_name);
+    if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER) && node->short_name[0] != '\0') {
+        std::string parsed = parse(node->short_name);
         if (isPrintable(parsed))
             return parsed;
     }
@@ -640,7 +641,9 @@ uint16_t InkHUD::Applet::getActiveNodeCount()
 
     // For each node in db
     for (uint16_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        const meshtastic_NodeDetail *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node)
+            continue;
 
         // Check if heard recently, and not our own node
         if (sinceLastSeen(node) < settings->recentlyActiveSeconds && node->num != nodeDB->getNodeNum())

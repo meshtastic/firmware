@@ -300,14 +300,17 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     int scratchLineNum = 0;
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         char temp_name[16] = {0};
-        if (nodeDB->getMeshNodeByIndex(i + 1)->has_user) {
-            std::string sanitized = sanitizeString(nodeDB->getMeshNodeByIndex(i + 1)->user.long_name);
+        meshtastic_NodeDetail *candidate = nodeDB->getMeshNodeByIndex(i + 1);
+        if (candidate && detailHasFlag(*candidate, NODEDETAIL_FLAG_HAS_USER) && candidate->long_name[0] != '\0') {
+            std::string sanitized = sanitizeString(candidate->long_name);
             strncpy(temp_name, sanitized.c_str(), sizeof(temp_name) - 1);
+        } else if (candidate) {
+            snprintf(temp_name, sizeof(temp_name), "(%04X)", static_cast<uint16_t>(candidate->num & 0xFFFF));
         } else {
-            snprintf(temp_name, sizeof(temp_name), "(%04X)", (uint16_t)(nodeDB->getMeshNodeByIndex(i + 1)->num & 0xFFFF));
+            strncpy(temp_name, "(?)", sizeof(temp_name) - 1);
         }
-        if (i == curSelected) {
-            selectedNodenum = nodeDB->getMeshNodeByIndex(i + 1)->num;
+        if (candidate && i == curSelected) {
+            selectedNodenum = candidate->num;
             if (isHighResolution) {
                 strncpy(scratchLineBuffer[scratchLineNum], "> ", 3);
                 strncpy(scratchLineBuffer[scratchLineNum] + 2, temp_name, 36);

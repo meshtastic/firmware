@@ -313,10 +313,11 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     // Lambda function for adding a long name to the route
                     auto addToRoute = [](JSONArray *route, NodeNum num) {
                         char long_name[40] = "Unknown";
-                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
-                        bool name_known = node ? node->has_user : false;
-                        if (name_known)
-                            memcpy(long_name, node->user.long_name, sizeof(long_name));
+                        meshtastic_NodeDetail *node = nodeDB->getMeshNode(num);
+                        if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER)) {
+                            strncpy(long_name, node->long_name, sizeof(long_name) - 1);
+                            long_name[sizeof(long_name) - 1] = '\0';
+                        }
                         route->push_back(new JSONValue(long_name));
                     };
                     addToRoute(&route, mp->to); // Started at the original transmitter (destination of response)

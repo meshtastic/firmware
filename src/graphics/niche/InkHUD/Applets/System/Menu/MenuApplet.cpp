@@ -8,6 +8,7 @@
 #include "Router.h"
 #include "airtime.h"
 #include "main.h"
+#include "mesh/NodeDB.h"
 #include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -616,7 +617,8 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
     // Count favorites
     for (uint32_t i = 0; i < nodeCount; i++) {
-        if (nodeDB->getMeshNodeByIndex(i)->is_favorite)
+        const meshtastic_NodeDetail *detail = nodeDB->getMeshNodeByIndex(i);
+        if (detail && detailIsFavorite(*detail))
             favoriteCount++;
     }
 
@@ -624,10 +626,12 @@ void InkHUD::MenuApplet::populateRecipientPage()
     // Don't want some monstrous list that takes 100 clicks to reach exit
     if (favoriteCount < 20) {
         for (uint32_t i = 0; i < nodeCount; i++) {
-            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+            const meshtastic_NodeDetail *node = nodeDB->getMeshNodeByIndex(i);
+            if (!node)
+                continue;
 
             // Skip node if not a favorite
-            if (!node->is_favorite)
+            if (!detailIsFavorite(*node))
                 continue;
 
             CannedMessages::RecipientItem r;
@@ -637,8 +641,8 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
             // Set a label for the menu item
             r.label = "DM: ";
-            if (node->has_user)
-                r.label += parse(node->user.long_name);
+            if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER) && node->long_name[0] != '\0')
+                r.label += parse(node->long_name);
             else
                 r.label += hexifyNodeNum(node->num); // Unsure if it's possible to favorite a node without NodeInfo?
 

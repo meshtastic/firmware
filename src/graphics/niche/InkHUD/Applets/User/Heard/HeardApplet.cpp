@@ -6,6 +6,8 @@
 
 #include "./HeardApplet.h"
 
+#include "mesh/NodeDB.h"
+
 using namespace NicheGraphics;
 
 void InkHUD::HeardApplet::onActivate()
@@ -61,7 +63,7 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
 void InkHUD::HeardApplet::populateFromNodeDB()
 {
     // Fill a collection with pointers to each node in db
-    std::vector<meshtastic_NodeInfoLite *> ordered;
+    std::vector<meshtastic_NodeDetail *> ordered;
     for (auto mn = nodeDB->meshNodes->begin(); mn != nodeDB->meshNodes->end(); ++mn) {
         // Only copy if valid, and not our own node
         if (mn->num != 0 && mn->num != nodeDB->getNodeNum())
@@ -69,7 +71,7 @@ void InkHUD::HeardApplet::populateFromNodeDB()
     }
 
     // Sort the collection by age
-    std::sort(ordered.begin(), ordered.end(), [](meshtastic_NodeInfoLite *top, meshtastic_NodeInfoLite *bottom) -> bool {
+    std::sort(ordered.begin(), ordered.end(), [](const meshtastic_NodeDetail *top, const meshtastic_NodeDetail *bottom) -> bool {
         return (top->last_heard > bottom->last_heard);
     });
 
@@ -79,21 +81,21 @@ void InkHUD::HeardApplet::populateFromNodeDB()
         ordered.resize(maxCards());
 
     // Create card info for these (stale) node observations
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    for (meshtastic_NodeInfoLite *node : ordered) {
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    for (meshtastic_NodeDetail *node : ordered) {
         CardInfo c;
         c.nodeNum = node->num;
 
-        if (node->has_hops_away)
+        if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_HOPS_AWAY))
             c.hopsAway = node->hops_away;
 
         if (nodeDB->hasValidPosition(node) && nodeDB->hasValidPosition(ourNode)) {
             // Get lat and long as float
             // Meshtastic stores these as integers internally
-            float ourLat = ourNode->position.latitude_i * 1e-7;
-            float ourLong = ourNode->position.longitude_i * 1e-7;
-            float theirLat = node->position.latitude_i * 1e-7;
-            float theirLong = node->position.longitude_i * 1e-7;
+            float ourLat = ourNode->latitude_i * 1e-7f;
+            float ourLong = ourNode->longitude_i * 1e-7f;
+            float theirLat = node->latitude_i * 1e-7f;
+            float theirLong = node->longitude_i * 1e-7f;
 
             c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
         }

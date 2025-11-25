@@ -267,9 +267,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_OWN_NODEINFO: {
         LOG_DEBUG("Send My NodeInfo");
-        auto us = nodeDB->readNextMeshNode(readIndex);
+        const meshtastic_NodeDetail *us = nodeDB->readNextMeshNode(readIndex);
         if (us) {
-            auto info = TypeConversions::ConvertToNodeInfo(us);
+            auto info = TypeConversions::ConvertToNodeInfo(*us);
             info.has_hops_away = false;
             info.is_favorite = true;
             {
@@ -633,11 +633,11 @@ void PhoneAPI::prefetchNodeInfos()
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
         while (nodeInfoQueue.size() < kNodePrefetchDepth) {
-            auto nextNode = nodeDB->readNextMeshNode(readIndex);
+            const meshtastic_NodeDetail *nextNode = nodeDB->readNextMeshNode(readIndex);
             if (!nextNode)
                 break;
 
-            auto info = TypeConversions::ConvertToNodeInfo(nextNode);
+            auto info = TypeConversions::ConvertToNodeInfo(*nextNode);
             bool isUs = info.num == nodeDB->getNodeNum();
             info.hops_away = isUs ? 0 : info.hops_away;
             info.last_heard = isUs ? getValidTime(RTCQualityFromNet) : info.last_heard;

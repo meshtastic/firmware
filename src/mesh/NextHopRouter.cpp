@@ -94,7 +94,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         // is not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the
         // destination
         if (p->from != 0) {
-            meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
+            meshtastic_NodeDetail *origTx = nodeDB->getMeshNode(p->from);
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
                 // directly from the destination
@@ -176,7 +176,7 @@ uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
     if (isBroadcast(to))
         return NO_NEXT_HOP_PREFERENCE;
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
+    meshtastic_NodeDetail *node = nodeDB->getMeshNode(to);
     if (node && node->next_hop) {
         // We are careful not to return the relay node as the next hop
         if (node->next_hop != relay_node) {
@@ -296,7 +296,7 @@ int32_t NextHopRouter::doRetransmissions()
                         // Last retransmission, reset next_hop (fallback to FloodingRouter)
                         p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
                         // Also reset it in the nodeDB
-                        meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
+                        meshtastic_NodeDetail *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
                             LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;

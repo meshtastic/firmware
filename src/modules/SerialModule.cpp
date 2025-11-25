@@ -84,6 +84,42 @@ SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Seria
 static Print *serialPrint = &Serial2;
 #endif
 
+namespace
+{
+const char *resolveNodeName(const meshtastic_NodeDetail *node, char *buffer, size_t bufferSize, bool preferLongName)
+{
+    if (!node) {
+        return "???";
+    }
+
+    if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER)) {
+        if (preferLongName) {
+            if (node->long_name[0]) {
+                return node->long_name;
+            }
+            if (node->short_name[0]) {
+                return node->short_name;
+            }
+        } else {
+            if (node->short_name[0]) {
+                return node->short_name;
+            }
+            if (node->long_name[0]) {
+                return node->long_name;
+            }
+        }
+    }
+
+    if (buffer && bufferSize > 0) {
+        snprintf(buffer, bufferSize, "(%04X)", static_cast<unsigned int>(node->num & 0xFFFF));
+        buffer[bufferSize - 1] = '\0';
+        return buffer;
+    }
+
+    return "???";
+}
+} // namespace
+
 char serialBytes[512];
 size_t serialPayloadSize;
 
@@ -249,13 +285,15 @@ int32_t SerialModule::runOnce()
                 if (!Throttle::isWithinTimespanMs(lastNmeaTime, 10000)) {
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
-                    const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
-                    while (tempNodeInfo != NULL) {
-                        if (tempNodeInfo->has_user && nodeDB->hasValidPosition(tempNodeInfo)) {
-                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                    const meshtastic_NodeDetail *tempNode = nodeDB->readNextMeshNode(readIndex);
+                    while (tempNode != NULL) {
+                        if (detailHasFlag(*tempNode, NODEDETAIL_FLAG_HAS_USER) && nodeDB->hasValidPosition(tempNode)) {
+                            char nameBuffer[12] = {0};
+                            const char *name = resolveNodeName(tempNode, nameBuffer, sizeof(nameBuffer), true);
+                            printWPL(outbuf, sizeof(outbuf), detailToPositionLite(*tempNode), name, true);
                             serialPrint->printf("%s", outbuf);
                         }
-                        tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
+                        tempNode = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
             }
@@ -402,8 +440,9 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 serialPrint->write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
-                meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-                const char *sender = (node && node->has_user) ? node->user.short_name : "???";
+                meshtastic_NodeDetail *node = nodeDB->getMeshNode(getFrom(&mp));
+                char senderBuffer[12] = {0};
+                const char *sender = resolveNodeName(node, senderBuffer, sizeof(senderBuffer), false);
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
                 serialPrint->println();
@@ -419,7 +458,10 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB->getMeshNode(getFrom(&mp))->user.long_name,
+                    meshtastic_NodeDetail *node = nodeDB->getMeshNode(getFrom(&mp));
+                    char nameBuffer[12] = {0};
+                    const char *name = resolveNodeName(node, nameBuffer, sizeof(nameBuffer), true);
+                    printWPL(outbuf, sizeof(outbuf), *decoded, name,
                              moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
                     serialPrint->printf("%s", outbuf);
                 }

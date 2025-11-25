@@ -131,9 +131,9 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
 }
 
 static bool returnToCannedList = false;
-bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
+bool hasKeyForNode(const meshtastic_NodeDetail *node)
 {
-    return node && node->has_user && node->user.public_key.size > 0;
+    return node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER) && node->public_key.size > 0;
 }
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
@@ -254,11 +254,11 @@ void CannedMessageModule::updateDestinationSelectionList()
     this->filteredNodes.reserve(numMeshNodes);
 
     for (size_t i = 0; i < numMeshNodes; ++i) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
+        meshtastic_NodeDetail *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == myNodeNum || !detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER) || node->public_key.size != 32)
             continue;
 
-        const String &nodeName = node->user.long_name;
+        const String nodeName = node->long_name;
 
         if (searchQuery.length() == 0) {
             this->filteredNodes.push_back({node, sinceLastSeen(node)});
@@ -525,7 +525,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         } else {
             int nodeIndex = destIndex - static_cast<int>(activeChannelIndices.size());
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(filteredNodes.size())) {
-                const meshtastic_NodeInfoLite *selectedNode = filteredNodes[nodeIndex].node;
+                const meshtastic_NodeDetail *selectedNode = filteredNodes[nodeIndex].node;
                 if (selectedNode) {
                     dest = selectedNode->num;
                     channel = selectedNode->channel;
@@ -1253,9 +1253,9 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST)
         return "Broadcast";
 
-    meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user && strlen(info->user.long_name) > 0) {
-        return info->user.long_name;
+    meshtastic_NodeDetail *info = nodeDB->getMeshNode(node);
+    if (info && detailHasFlag(*info, NODEDETAIL_FLAG_HAS_USER) && strlen(info->long_name) > 0) {
+        return info->long_name;
     }
 
     static char fallback[12];
@@ -1565,18 +1565,18 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         else {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                meshtastic_NodeDetail *node = this->filteredNodes[nodeIndex].node;
                 if (node) {
-                    if (node->is_favorite) {
+                    if (detailIsFavorite(*node)) {
 #if defined(M5STACK_UNITC6L)
-                        snprintf(entryText, sizeof(entryText), "* %s", node->user.short_name);
+                        snprintf(entryText, sizeof(entryText), "* %s", node->short_name);
                     } else {
-                        snprintf(entryText, sizeof(entryText), "%s", node->user.short_name);
+                        snprintf(entryText, sizeof(entryText), "%s", node->short_name);
                     }
 #else
-                        snprintf(entryText, sizeof(entryText), "* %s", node->user.long_name);
+                        snprintf(entryText, sizeof(entryText), "* %s", node->long_name);
                     } else {
-                        snprintf(entryText, sizeof(entryText), "%s", node->user.long_name);
+                        snprintf(entryText, sizeof(entryText), "%s", node->long_name);
                     }
 #endif
                 }
@@ -1601,7 +1601,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         if (itemIndex >= numActiveChannels) {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                const meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                const meshtastic_NodeDetail *node = this->filteredNodes[nodeIndex].node;
                 if (node && hasKeyForNode(node)) {
                     int iconX = display->getWidth() - key_symbol_width - 15;
                     int iconY = yOffset + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;

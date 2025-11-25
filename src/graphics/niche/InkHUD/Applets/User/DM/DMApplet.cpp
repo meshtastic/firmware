@@ -65,11 +65,11 @@ void InkHUD::DMApplet::onRender()
     // Sender's id
     // - shortname and long name, if available, or
     // - node id
-    meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(latestMessage->dm.sender);
-    if (sender && sender->has_user) {
+    meshtastic_NodeDetail *sender = nodeDB->getMeshNode(latestMessage->dm.sender);
+    if (sender && detailHasFlag(*sender, NODEDETAIL_FLAG_HAS_USER)) {
         header += parseShortName(sender); // May be last-four of node if unprintable (emoji, etc)
         header += " (";
-        header += parse(sender->user.long_name);
+        header += parse(sender->long_name);
         header += ")";
     } else
         header += hexifyNodeNum(latestMessage->dm.sender);

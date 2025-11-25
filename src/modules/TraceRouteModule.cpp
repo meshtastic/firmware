@@ -317,7 +317,7 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
     if (target == NODENUM_BROADCAST)
         return;
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(target);
+    meshtastic_NodeDetail *node = nodeDB->getMeshNode(target);
     if (node && node->next_hop != nextHopByte) {
         LOG_INFO("Updating next-hop for 0x%08x to 0x%02x based on traceroute", target, nextHopByte);
         node->next_hop = nextHopByte;
@@ -490,13 +490,13 @@ TraceRouteModule::TraceRouteModule()
 
 const char *TraceRouteModule::getNodeName(NodeNum node)
 {
-    meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user) {
-        if (strlen(info->user.short_name) > 0) {
-            return info->user.short_name;
+    const meshtastic_NodeDetail *info = nodeDB->getMeshNode(node);
+    if (info && detailHasFlag(*info, NODEDETAIL_FLAG_HAS_USER)) {
+        if (strlen(info->short_name) > 0) {
+            return info->short_name;
         }
-        if (strlen(info->user.long_name) > 0) {
-            return info->user.long_name;
+        if (strlen(info->long_name) > 0) {
+            return info->long_name;
         }
     }
 

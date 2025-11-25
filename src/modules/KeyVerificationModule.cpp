@@ -1,6 +1,7 @@
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
@@ -36,8 +37,9 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
 
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY &&
                    request->key_verification.nonce == currentNonce) {
-            auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-            remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            if (auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode)) {
+                detailSetFlag(*remoteNodePtr, NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED);
+            }
             resetToIdle();
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
             resetToIdle();
@@ -72,8 +74,9 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         sprintf(cn->message, "Enter Security Number for Key Verification");
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
-        strncpy(cn->payload_variant.key_verification_number_request.remote_longname, // should really check for nulls, etc
-                nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+        const meshtastic_NodeDetail *remoteNode = nodeDB->getMeshNode(currentRemoteNode);
+        const char *remoteLongName = (remoteNode && remoteNode->long_name[0] != '\0') ? remoteNode->long_name : "";
+        strncpy(cn->payload_variant.key_verification_number_request.remote_longname, remoteLongName,
                 sizeof(cn->payload_variant.key_verification_number_request.remote_longname));
         service->sendClientNotification(cn);
         LOG_INFO("Received hash2");
@@ -94,8 +97,9 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                       options.bannerCallback =
                           [=](int selected) {
                               if (selected == 1) {
-                                  auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-                                  remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                                  if (auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode)) {
+                                      detailSetFlag(*remoteNodePtr, NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED);
+                                  }
                               }
                           };
                       screen->showOverlayBanner(options);)
@@ -104,8 +108,10 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             sprintf(cn->message, "Final confirmation for incoming manual key verification %s", message);
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
             cn->payload_variant.key_verification_final.nonce = currentNonce;
-            strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
-                    nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+            const meshtastic_NodeDetail *remoteNodeFinal = nodeDB->getMeshNode(currentRemoteNode);
+            const char *remoteFinalLongName =
+                (remoteNodeFinal && remoteNodeFinal->long_name[0] != '\0') ? remoteNodeFinal->long_name : "";
+            strncpy(cn->payload_variant.key_verification_final.remote_longname, remoteFinalLongName,
                     sizeof(cn->payload_variant.key_verification_final.remote_longname));
             cn->payload_variant.key_verification_final.isSender = false;
             service->sendClientNotification(cn);
@@ -202,8 +208,9 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
             currentSecurityNumber % 1000);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
     cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, // should really check for nulls, etc
-            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+    meshtastic_NodeDetail *remoteNode = nodeDB->getMeshNode(currentRemoteNode);
+    const char *remoteName = (remoteNode && detailHasFlag(*remoteNode, NODEDETAIL_FLAG_HAS_USER)) ? remoteNode->long_name : "";
+    strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, remoteName,
             sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
     cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
     service->sendClientNotification(cn);
@@ -217,9 +224,9 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     uint8_t scratch_hash[32] = {0};
     LOG_WARN("received security number: %u", incomingNumber);
-    meshtastic_NodeInfoLite *remoteNodePtr = nullptr;
-    remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-    if (remoteNodePtr == nullptr || !remoteNodePtr->has_user || remoteNodePtr->user.public_key.size != 32) {
+    meshtastic_NodeDetail *remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
+    if (remoteNodePtr == nullptr || !detailHasFlag(*remoteNodePtr, NODEDETAIL_FLAG_HAS_USER) ||
+        remoteNodePtr->public_key.size != 32) {
         currentState = KEY_VERIFICATION_IDLE;
         return; // should we throw an error here?
     }
@@ -232,7 +239,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     hash.update(&currentRemoteNode, sizeof(currentRemoteNode));
     hash.update(owner.public_key.bytes, owner.public_key.size);
 
-    hash.update(remoteNodePtr->user.public_key.bytes, remoteNodePtr->user.public_key.size);
+    hash.update(remoteNodePtr->public_key.bytes, remoteNodePtr->public_key.size);
     hash.finalize(hash1, 32);
 
     hash.reset();
@@ -265,8 +272,10 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
     cn->payload_variant.key_verification_final.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
-            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+    meshtastic_NodeDetail *remoteNodeFinal = nodeDB->getMeshNode(currentRemoteNode);
+    const char *finalRemoteName =
+        (remoteNodeFinal && detailHasFlag(*remoteNodeFinal, NODEDETAIL_FLAG_HAS_USER)) ? remoteNodeFinal->long_name : "";
+    strncpy(cn->payload_variant.key_verification_final.remote_longname, finalRemoteName,
             sizeof(cn->payload_variant.key_verification_final.remote_longname));
     cn->payload_variant.key_verification_final.isSender = true;
     service->sendClientNotification(cn);

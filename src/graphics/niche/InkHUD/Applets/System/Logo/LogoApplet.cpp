@@ -14,10 +14,10 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     // During onboarding, show the default short name as well as the version string
     // This behavior assists manufacturers during mass production, and should not be modified without good reason
     if (!settings->tips.safeShutdownSeen) {
-        meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
         fontTitle = fontMedium;
         textLeft = xstr(APP_VERSION_SHORT);
-        textRight = parseShortName(ourNode);
+        textRight = ourNode ? parseShortName(ourNode) : "";
         textTitle = "Meshtastic";
     } else {
         fontTitle = fontSmall;
@@ -146,10 +146,10 @@ void InkHUD::LogoApplet::onShutdown()
 
     // Prepare for the powered-off screen now
     // We can change these values because the initial "shutting down" screen has already rendered at this point
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     textLeft = "";
     textRight = "";
-    textTitle = parseShortName(ourNode);
+    textTitle = ourNode ? parseShortName(ourNode) : "";
     fontTitle = fontMedium;
 
     // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete

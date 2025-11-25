@@ -45,7 +45,7 @@ struct Letter {
 };
 
 struct NodeEntry {
-    meshtastic_NodeInfoLite *node;
+    meshtastic_NodeDetail *node;
     uint32_t lastHeard;
 };
 

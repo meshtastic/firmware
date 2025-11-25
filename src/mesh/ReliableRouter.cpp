@@ -119,11 +119,16 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         // stop the immediate relayer's retransmissions.
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
-                } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
-                           (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
-                    LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
-                    sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
-                               routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
+                } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0) {
+                    const meshtastic_NodeDetail *fromDetail = nodeDB->getMeshNode(p->from);
+                    if (!fromDetail || fromDetail->public_key.size == 0) {
+                        LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
+                        sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
+                                   routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
+                    } else {
+                        sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),
+                                   routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
+                    }
                 } else {
                     // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
                     sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),

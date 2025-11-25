@@ -14,9 +14,9 @@ void InkHUD::PositionsApplet::onRender()
     // We might be rendering because we got a position packet from them
     // We might be rendering because our own position updated
     // Either way, we still highlight which node most recently sent us a position packet
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(lastFrom);
+    const meshtastic_NodeDetail *node = nodeDB->getMeshNode(lastFrom);
     if (node && nodeDB->hasValidPosition(node) && enoughMarkers())
-        drawLabeledMarker(node);
+        drawLabeledMarker(const_cast<meshtastic_NodeDetail *>(node));
 }
 
 // Determine if we need to redraw the map, when we receive a new position packet

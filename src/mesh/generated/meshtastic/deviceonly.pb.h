@@ -101,6 +101,49 @@ typedef struct _meshtastic_NodeInfoLite {
     uint32_t bitfield;
 } meshtastic_NodeInfoLite;
 
+typedef PB_BYTES_ARRAY_T(32) meshtastic_NodeDetail_public_key_t;
+/* Flattened node representation used for the compact NodeDB rewrite.
+ Uses integer scaling where possible and a single flags bitfield for booleans. */
+typedef struct _meshtastic_NodeDetail {
+    /* The node number */
+    uint32_t num;
+    /* 48-bit hardware identifier copied from the radio */
+    pb_byte_t macaddr[6];
+    /* Cached long display name */
+    char long_name[40];
+    /* Cached short display name */
+    char short_name[5];
+    /* Hardware model reported by the node */
+    meshtastic_HardwareModel hw_model;
+    /* Role assigned to the node */
+    meshtastic_Config_DeviceConfig_Role role;
+    /* Public key broadcast by the node */
+    meshtastic_NodeDetail_public_key_t public_key;
+    /* Position data flattened from PositionLite */
+    int32_t latitude_i;
+    int32_t longitude_i;
+    int32_t altitude;
+    uint32_t position_time;
+    meshtastic_Position_LocSource position_source;
+    /* Radio performance metrics */
+    float snr;
+    /* Last packet timestamp */
+    uint32_t last_heard;
+    /* Mesh routing metadata */
+    uint8_t channel;
+    uint8_t hops_away;
+    uint8_t next_hop;
+    /* Device metrics cached using integer scaling */
+    uint8_t battery_level;
+    uint32_t uptime_seconds;
+    uint16_t channel_utilization_permille;
+    uint16_t air_util_tx_permille;
+    uint16_t voltage_millivolts;
+    /* Bitset storing boolean flags and presence markers.
+ See NodeDetailFlag shifts for decoded meaning. */
+    uint32_t flags;
+} meshtastic_NodeDetail;
+
 /* This message is never sent over the wire, but it is used for serializing DB
  state to flash in the device code
  FIXME, since we write this each time we enter deep sleep (and have infinite
@@ -148,7 +191,7 @@ typedef struct _meshtastic_NodeDatabase {
  NodeDB.cpp in the device code. */
     uint32_t version;
     /* New lite version of NodeDB to decrease memory footprint */
-    std::vector<meshtastic_NodeInfoLite> nodes;
+    std::vector<meshtastic_NodeDetail> nodes;
 } meshtastic_NodeDatabase;
 
 /* The on-disk saved channels */
@@ -191,6 +234,7 @@ extern "C" {
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_UserLite_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_NodeDetail_init_default       {0, {0}, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_NodeDatabase_init_default     {0, {0}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
@@ -198,6 +242,7 @@ extern "C" {
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_UserLite_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_NodeDetail_init_zero          {0, {0}, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_NodeDatabase_init_zero        {0, {0}}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
@@ -230,6 +275,29 @@ extern "C" {
 #define meshtastic_NodeInfoLite_is_ignored_tag   11
 #define meshtastic_NodeInfoLite_next_hop_tag     12
 #define meshtastic_NodeInfoLite_bitfield_tag     13
+#define meshtastic_NodeDetail_num_tag            1
+#define meshtastic_NodeDetail_macaddr_tag        2
+#define meshtastic_NodeDetail_long_name_tag      3
+#define meshtastic_NodeDetail_short_name_tag     4
+#define meshtastic_NodeDetail_hw_model_tag       5
+#define meshtastic_NodeDetail_role_tag           6
+#define meshtastic_NodeDetail_public_key_tag     7
+#define meshtastic_NodeDetail_latitude_i_tag     8
+#define meshtastic_NodeDetail_longitude_i_tag    9
+#define meshtastic_NodeDetail_altitude_tag       10
+#define meshtastic_NodeDetail_position_time_tag  11
+#define meshtastic_NodeDetail_position_source_tag 12
+#define meshtastic_NodeDetail_snr_tag            13
+#define meshtastic_NodeDetail_last_heard_tag     14
+#define meshtastic_NodeDetail_channel_tag        15
+#define meshtastic_NodeDetail_hops_away_tag      16
+#define meshtastic_NodeDetail_next_hop_tag       17
+#define meshtastic_NodeDetail_battery_level_tag  18
+#define meshtastic_NodeDetail_uptime_seconds_tag 19
+#define meshtastic_NodeDetail_channel_utilization_permille_tag 20
+#define meshtastic_NodeDetail_air_util_tx_permille_tag 21
+#define meshtastic_NodeDetail_voltage_millivolts_tag 22
+#define meshtastic_NodeDetail_flags_tag          23
 #define meshtastic_DeviceState_my_node_tag       2
 #define meshtastic_DeviceState_owner_tag         3
 #define meshtastic_DeviceState_receive_queue_tag 5
@@ -292,6 +360,33 @@ X(a, STATIC,   SINGULAR, UINT32,   bitfield,         13)
 #define meshtastic_NodeInfoLite_position_MSGTYPE meshtastic_PositionLite
 #define meshtastic_NodeInfoLite_device_metrics_MSGTYPE meshtastic_DeviceMetrics
 
+#define meshtastic_NodeDetail_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           2) \
+X(a, STATIC,   SINGULAR, STRING,   long_name,         3) \
+X(a, STATIC,   SINGULAR, STRING,   short_name,        4) \
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
+X(a, STATIC,   SINGULAR, UENUM,    role,              6) \
+X(a, STATIC,   SINGULAR, BYTES,    public_key,        7) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        8) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       9) \
+X(a, STATIC,   SINGULAR, INT32,    altitude,         10) \
+X(a, STATIC,   SINGULAR, FIXED32,  position_time,    11) \
+X(a, STATIC,   SINGULAR, UENUM,    position_source,  12) \
+X(a, STATIC,   SINGULAR, FLOAT,    snr,              13) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,       14) \
+X(a, STATIC,   SINGULAR, UINT32,   channel,          15) \
+X(a, STATIC,   SINGULAR, UINT32,   hops_away,        16) \
+X(a, STATIC,   SINGULAR, UINT32,   next_hop,         17) \
+X(a, STATIC,   SINGULAR, UINT32,   battery_level,    18) \
+X(a, STATIC,   SINGULAR, UINT32,   uptime_seconds,   19) \
+X(a, STATIC,   SINGULAR, UINT32,   channel_utilization_permille,  20) \
+X(a, STATIC,   SINGULAR, UINT32,   air_util_tx_permille,  21) \
+X(a, STATIC,   SINGULAR, UINT32,   voltage_millivolts,  22) \
+X(a, STATIC,   SINGULAR, UINT32,   flags,            23)
+#define meshtastic_NodeDetail_CALLBACK NULL
+#define meshtastic_NodeDetail_DEFAULT NULL
+
 #define meshtastic_DeviceState_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  my_node,           2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  owner,             3) \
@@ -317,7 +412,7 @@ X(a, CALLBACK, REPEATED, MESSAGE,  nodes,             2)
 extern bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field);
 #define meshtastic_NodeDatabase_CALLBACK meshtastic_NodeDatabase_callback
 #define meshtastic_NodeDatabase_DEFAULT NULL
-#define meshtastic_NodeDatabase_nodes_MSGTYPE meshtastic_NodeInfoLite
+#define meshtastic_NodeDatabase_nodes_MSGTYPE meshtastic_NodeDetail
 
 #define meshtastic_ChannelFile_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, MESSAGE,  channels,          1) \
@@ -343,6 +438,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  owner,             6)
 extern const pb_msgdesc_t meshtastic_PositionLite_msg;
 extern const pb_msgdesc_t meshtastic_UserLite_msg;
 extern const pb_msgdesc_t meshtastic_NodeInfoLite_msg;
+extern const pb_msgdesc_t meshtastic_NodeDetail_msg;
 extern const pb_msgdesc_t meshtastic_DeviceState_msg;
 extern const pb_msgdesc_t meshtastic_NodeDatabase_msg;
 extern const pb_msgdesc_t meshtastic_ChannelFile_msg;
@@ -352,6 +448,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define meshtastic_PositionLite_fields &meshtastic_PositionLite_msg
 #define meshtastic_UserLite_fields &meshtastic_UserLite_msg
 #define meshtastic_NodeInfoLite_fields &meshtastic_NodeInfoLite_msg
+#define meshtastic_NodeDetail_fields &meshtastic_NodeDetail_msg
 #define meshtastic_DeviceState_fields &meshtastic_DeviceState_msg
 #define meshtastic_NodeDatabase_fields &meshtastic_NodeDatabase_msg
 #define meshtastic_ChannelFile_fields &meshtastic_ChannelFile_msg
@@ -363,6 +460,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define meshtastic_BackupPreferences_size        2277
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_DeviceState_size              1737
+#define meshtastic_NodeDetail_size               182
 #define meshtastic_NodeInfoLite_size             196
 #define meshtastic_PositionLite_size             28
 #define meshtastic_UserLite_size                 98

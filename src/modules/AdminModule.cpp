@@ -107,14 +107,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
             // Automatically favorite the node that is using the admin key
             auto remoteNode = nodeDB->getMeshNode(mp.from);
-            if (remoteNode && !remoteNode->is_favorite) {
+            if (remoteNode && !detailIsFavorite(*remoteNode)) {
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
                     // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
                     // without the user doing so deliberately.
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
                     LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    remoteNode->is_favorite = true;
+                    nodeDB->set_favorite(true, mp.from);
                 }
             }
         } else {
@@ -341,9 +341,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
         LOG_INFO("Client received set_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
-            node->is_favorite = true;
+            detailSetFlag(*node, NODEDETAIL_FLAG_IS_FAVORITE, true);
             saveChanges(SEGMENT_NODEDATABASE, false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
@@ -352,9 +352,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_remove_favorite_node_tag: {
         LOG_INFO("Client received remove_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
-            node->is_favorite = false;
+            detailSetFlag(*node, NODEDETAIL_FLAG_IS_FAVORITE, false);
             saveChanges(SEGMENT_NODEDATABASE, false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
@@ -363,31 +363,32 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_ignored_node_tag: {
         LOG_INFO("Client received set_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(r->set_ignored_node);
         if (node != NULL) {
-            node->is_ignored = true;
-            node->has_device_metrics = false;
-            node->has_position = false;
-            node->user.public_key.size = 0;
-            node->user.public_key.bytes[0] = 0;
+            detailSetFlag(*node, NODEDETAIL_FLAG_IS_IGNORED, true);
+            clearMetricsFromDetail(*node);
+            clearPositionFromDetail(*node);
+            node->public_key.size = 0;
+            memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
             saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
     case meshtastic_AdminMessage_remove_ignored_node_tag: {
         LOG_INFO("Client received remove_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(r->remove_ignored_node);
         if (node != NULL) {
-            node->is_ignored = false;
+            detailSetFlag(*node, NODEDETAIL_FLAG_IS_IGNORED, false);
             saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        node->has_position = true;
-        node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        if (node) {
+            applyPositionToDetail(*node, r->set_fixed_position);
+        }
         nodeDB->setLocalPosition(r->set_fixed_position);
         config.position.fixed_position = true;
         saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);

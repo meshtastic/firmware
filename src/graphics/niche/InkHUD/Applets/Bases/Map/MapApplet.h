@@ -30,12 +30,12 @@ class MapApplet : public Applet
     void onRender() override;
 
   protected:
-    virtual bool shouldDrawNode(meshtastic_NodeInfoLite *node) { return true; } // Allow derived applets to filter the nodes
+    virtual bool shouldDrawNode(meshtastic_NodeDetail *node) { return true; } // Allow derived applets to filter the nodes
     virtual void getMapCenter(float *lat, float *lng);
     virtual void getMapSize(uint32_t *widthMeters, uint32_t *heightMeters);
 
-    bool enoughMarkers();                                  // Anything to draw?
-    void drawLabeledMarker(meshtastic_NodeInfoLite *node); // Highlight a specific marker
+    bool enoughMarkers();                                // Anything to draw?
+    void drawLabeledMarker(meshtastic_NodeDetail *node); // Highlight a specific marker
 
   private:
     // Position and size of a marker to be drawn

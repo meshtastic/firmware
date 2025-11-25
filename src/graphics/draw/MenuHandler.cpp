@@ -1191,8 +1191,8 @@ void menuHandler::removeFavoriteMenu()
     BannerOverlayOptions bannerOptions;
     std::string message = "Unfavorite This Node?\n";
     auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
-    if (node && node->has_user) {
-        message += sanitizeString(node->user.long_name).substr(0, 15);
+    if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER)) {
+        message += sanitizeString(node->long_name).substr(0, 15);
     }
     bannerOptions.message = message.c_str();
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -1459,8 +1459,10 @@ void menuHandler::keyVerificationFinalPrompt()
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
         options.bannerCallback = [=](int selected) {
             if (selected == 1) {
-                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
-                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                meshtastic_NodeDetail *remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
+                if (remoteNodePtr) {
+                    detailSetFlag(*remoteNodePtr, NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED, true);
+                }
             }
         };
         screen->showOverlayBanner(options);

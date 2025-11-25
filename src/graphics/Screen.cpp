@@ -1106,8 +1106,8 @@ void Screen::setFrames(FrameFocus focus)
         std::vector<FrameCallback> favoriteFrames;
 
         for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-            const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-            if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            const meshtastic_NodeDetail *nodeDetail = nodeDB->getMeshNodeByIndex(i);
+            if (nodeDetail && nodeDetail->num != nodeDB->getNodeNum() && detailIsFavorite(*nodeDetail)) {
                 favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
             }
         }
@@ -1460,10 +1460,10 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 forceDisplay(); // Forces screen redraw
             }
             // === Prepare banner content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+            const meshtastic_NodeDetail *node = nodeDB->getMeshNode(packet->from);
             const meshtastic_Channel channel =
                 channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+            const char *longName = (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER)) ? node->long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 

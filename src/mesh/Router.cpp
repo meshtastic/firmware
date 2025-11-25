@@ -100,21 +100,20 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     // Optimized search for favorite routers with matching last byte
     // Check ordering optimized for IoT devices (cheapest checks first)
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        const meshtastic_NodeDetail *node = nodeDB->getMeshNodeByIndex(i);
         if (!node)
             continue;
 
         // Check 1: is_favorite (cheapest - single bool)
-        if (!node->is_favorite)
+        if (!detailIsFavorite(*node))
             continue;
 
         // Check 2: has_user (cheap - single bool)
-        if (!node->has_user)
+        if (!detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER))
             continue;
 
         // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+        if (!IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
             continue;
         }
 
@@ -261,7 +260,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         // don't override if a channel was requested and no need to set it when PKI is enforced
         if (!p->channel && !p->pki_encrypted && !isBroadcast(p->to)) {
-            meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->to);
+            const meshtastic_NodeDetail *node = nodeDB->getMeshNode(p->to);
             if (node) {
                 p->channel = node->channel;
                 LOG_DEBUG("localSend to channel %d", p->channel);
@@ -409,8 +408,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
+    const meshtastic_NodeDetail *fromDetail = nodeDB->getMeshNode(p->from);
+    const meshtastic_NodeDetail *toDetail = nodeDB->getMeshNode(p->to);
+
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
+        (!fromDetail || !detailHasFlag(*fromDetail, NODEDETAIL_FLAG_HAS_USER))) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
@@ -427,33 +429,38 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && fromDetail != nullptr && toDetail != nullptr &&
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
-        LOG_DEBUG("Attempt PKI decryption");
+        meshtastic_UserLite fromLite = meshtastic_UserLite_init_default;
+        meshtastic_UserLite toLite = meshtastic_UserLite_init_default;
+        fromLite = detailToUserLite(*fromDetail);
+        toLite = detailToUserLite(*toDetail);
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
-            LOG_INFO("PKI Decryption worked!");
+        if (fromLite.public_key.size == 32 && toLite.public_key.size == 32) {
+            LOG_DEBUG("Attempt PKI decryption");
 
-            meshtastic_Data decodedtmp;
-            memset(&decodedtmp, 0, sizeof(decodedtmp));
-            rawSize -= MESHTASTIC_PKC_OVERHEAD;
-            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
-                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
-                decrypted = true;
-                LOG_INFO("Packet decrypted using PKI!");
-                p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
-                p->public_key.size = 32;
-                p->decoded = decodedtmp;
-                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+            if (crypto->decryptCurve25519(p->from, fromLite.public_key, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                LOG_INFO("PKI Decryption worked!");
+
+                meshtastic_Data decodedtmp;
+                memset(&decodedtmp, 0, sizeof(decodedtmp));
+                rawSize -= MESHTASTIC_PKC_OVERHEAD;
+                if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                    decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                    decrypted = true;
+                    LOG_INFO("Packet decrypted using PKI!");
+                    p->pki_encrypted = true;
+                    memcpy(&p->public_key.bytes, fromLite.public_key.bytes, 32);
+                    p->public_key.size = 32;
+                    p->decoded = decodedtmp;
+                    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+                } else {
+                    LOG_ERROR("PKC Decrypted, but pb_decode failed!");
+                    return DecodeState::DECODE_FAILURE;
+                }
             } else {
-                LOG_ERROR("PKC Decrypted, but pb_decode failed!");
-                return DecodeState::DECODE_FAILURE;
+                LOG_WARN("PKC decrypt attempted but failed!");
             }
-        } else {
-            LOG_WARN("PKC decrypt attempted but failed!");
         }
     }
 #endif
@@ -596,7 +603,11 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        const meshtastic_NodeDetail *node = nodeDB->getMeshNode(p->to);
+        meshtastic_UserLite destLite = meshtastic_UserLite_init_default;
+        if (node) {
+            destLite = detailToUserLite(*node);
+        }
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
@@ -613,7 +624,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // Check for valid keys and single node destination
             config.security.private_key.size == 32 && !isBroadcast(p->to) && node != nullptr &&
             // Check for a known public key for the destination
-            (node->user.public_key.size == 32) &&
+            (destLite.public_key.size == 32) &&
             // Some portnums either make no sense to send with PKC
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
@@ -621,12 +632,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                memcmp(p->public_key.bytes, destLite.public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
-                         *node->user.public_key.bytes);
+                         *destLite.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), destLite.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
@@ -776,8 +787,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
-    meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
-    if (node != NULL && node->is_ignored) {
+    const meshtastic_NodeDetail *node = nodeDB->getMeshNode(p->from);
+    if (node != NULL && detailIsIgnored(*node)) {
         LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
         packetPool.release(p);
         return;

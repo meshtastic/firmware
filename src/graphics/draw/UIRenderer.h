@@ -63,7 +63,7 @@ class UIRenderer
     static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static NodeNum currentFavoriteNodeNum;
-    static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
+    static std::vector<meshtastic_NodeDetail *> favoritedNodes;
     static void rebuildFavoritedNodes();
 
 // OEM screens

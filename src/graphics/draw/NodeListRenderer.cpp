@@ -53,22 +53,28 @@ static int scrollIndex = 0;
 // Utility Functions
 // =============================
 
-const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
+const char *getSafeNodeName(OLEDDisplay *display, const meshtastic_NodeDetail *node)
 {
-    const char *name = NULL;
     static char nodeName[16] = "?";
-    if (config.display.use_long_node_name == true) {
-        if (node->has_user && strlen(node->user.long_name) > 0) {
-            name = node->user.long_name;
-        } else {
-            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
+    if (!node) {
+        strncpy(nodeName, "?", sizeof(nodeName));
+        return nodeName;
+    }
+
+    const bool hasUser = detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER);
+    const char *name = nullptr;
+    if (config.display.use_long_node_name) {
+        if (hasUser && node->long_name[0] != '\0') {
+            name = node->long_name;
         }
     } else {
-        if (node->has_user && strlen(node->user.short_name) > 0) {
-            name = node->user.short_name;
-        } else {
-            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
+        if (hasUser && node->short_name[0] != '\0') {
+            name = node->short_name;
         }
+    }
+    if (!name) {
+        snprintf(nodeName, sizeof(nodeName), "(%04X)", static_cast<uint16_t>(node->num & 0xFFFF));
+        name = nodeName;
     }
 
     // Use sanitizeString() function and copy directly into nodeName
@@ -164,7 +170,7 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
 // Entry Renderers
 // =============================
 
-void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeDetail *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int timeOffset = (isHighResolution) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
@@ -189,7 +195,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->drawString(x + ((isHighResolution) ? 6 : 3), y, nodeName);
-    if (node->is_favorite) {
+    if (node && detailIsFavorite(*node)) {
         if (isHighResolution) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
@@ -204,7 +210,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->drawString(rightEdge - textWidth, y, timeStr);
 }
 
-void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeDetail *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
@@ -220,7 +226,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setFont(FONT_SMALL);
 
     display->drawStringMaxWidth(x + ((isHighResolution) ? 6 : 3), y, nameMaxWidth, nodeName);
-    if (node->is_favorite) {
+    if (node && detailIsFavorite(*node)) {
         if (isHighResolution) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
@@ -243,7 +249,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     // Draw hop count
     char hopStr[6] = "";
-    if (node->has_hops_away && node->hops_away > 0)
+    if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_HOPS_AWAY) && node->hops_away > 0)
         snprintf(hopStr, sizeof(hopStr), "[%d]", node->hops_away);
 
     if (hopStr[0] != '\0') {
@@ -253,7 +259,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     }
 }
 
-void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeDetail *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int nameMaxWidth = columnWidth - (isHighResolution ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
@@ -261,12 +267,12 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     const char *nodeName = getSafeNodeName(display, node);
     char distStr[10] = "";
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
-        double lat1 = ourNode->position.latitude_i * 1e-7;
-        double lon1 = ourNode->position.longitude_i * 1e-7;
-        double lat2 = node->position.latitude_i * 1e-7;
-        double lon2 = node->position.longitude_i * 1e-7;
+        double lat1 = ourNode->latitude_i * 1e-7;
+        double lon1 = ourNode->longitude_i * 1e-7;
+        double lat2 = node->latitude_i * 1e-7;
+        double lon2 = node->longitude_i * 1e-7;
 
         double earthRadiusKm = 6371.0;
         double dLat = (lat2 - lat1) * DEG_TO_RAD;
@@ -312,7 +318,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->drawStringMaxWidth(x + ((isHighResolution) ? 6 : 3), y, nameMaxWidth, nodeName);
-    if (node->is_favorite) {
+    if (node && detailIsFavorite(*node)) {
         if (isHighResolution) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
@@ -329,7 +335,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeDetail *node, int16_t x, int16_t y, int columnWidth)
 {
     switch (currentMode) {
     case MODE_LAST_HEARD:
@@ -346,7 +352,7 @@ void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeDetail *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
@@ -358,7 +364,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->drawStringMaxWidth(x + ((isHighResolution) ? 6 : 3), y, nameMaxWidth, nodeName);
-    if (node->is_favorite) {
+    if (node && detailIsFavorite(*node)) {
         if (isHighResolution) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
@@ -367,7 +373,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
+void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeDetail *node, int16_t x, int16_t y, int columnWidth, float myHeading,
                       double userLat, double userLon)
 {
     if (!nodeDB->hasValidPosition(node))
@@ -379,8 +385,8 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     int centerX = x + columnWidth - arrowXOffset;
     int centerY = y + FONT_HEIGHT_SMALL / 2;
 
-    double nodeLat = node->position.latitude_i * 1e-7;
-    double nodeLon = node->position.longitude_i * 1e-7;
+    double nodeLat = node->latitude_i * 1e-7;
+    double nodeLon = node->longitude_i * 1e-7;
     float bearing = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
     float bearingToNode = RAD_TO_DEG * bearing;
     float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
@@ -466,16 +472,17 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int rowCount = 0;
 
     for (int i = startIndex; i < endIndex; ++i) {
-        if (locationScreen && !nodeDB->getMeshNodeByIndex(i)->has_position) {
+        meshtastic_NodeDetail *candidate = nodeDB->getMeshNodeByIndex(i);
+        if (locationScreen && candidate && !detailHasFlag(*candidate, NODEDETAIL_FLAG_HAS_POSITION)) {
             numskipped++;
             continue;
         }
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
-        renderer(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth);
+        renderer(display, candidate, xPos, yPos, columnWidth);
 
         if (extras) {
-            extras(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth, heading, lat, lon);
+            extras(display, candidate, xPos, yPos, columnWidth, heading, lat, lon);
         }
 
         lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
@@ -578,9 +585,12 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     float heading = 0;
     bool validHeading = false;
-    auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    double lat = DegD(ourNode->position.latitude_i);
-    double lon = DegD(ourNode->position.longitude_i);
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
+        return;
+    }
+    double lat = DegD(ourNode->latitude_i);
+    double lon = DegD(ourNode->longitude_i);
 
 #if defined(M5STACK_UNITC6L)
     display->clear();

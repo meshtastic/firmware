@@ -218,18 +218,18 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // === Header Construction ===
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+    const meshtastic_NodeDetail *node = nodeDB->getMeshNode(getFrom(&mp));
     char headerStr[80];
     const char *sender = "???";
 #if defined(M5STACK_UNITC6L)
-    if (node && node->has_user)
-        sender = node->user.short_name;
+    if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER))
+        sender = node->short_name;
 #else
-    if (node && node->has_user) {
-        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
-            sender = node->user.long_name;
+    if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER)) {
+        if (SCREEN_WIDTH >= 200 && node->long_name[0] != '\0') {
+            sender = node->long_name;
         } else {
-            sender = node->user.short_name;
+            sender = node->short_name;
         }
     }
 #endif

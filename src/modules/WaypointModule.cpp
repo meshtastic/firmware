@@ -115,7 +115,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     static char distStr[20];
 
     // Get our node, to use our own position
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // Text fields to draw (left of compass)
     // Last element must be NULL. This signals the end of the char*[] to drawColumns
@@ -135,7 +135,11 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // If our node has a position:
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
-        const meshtastic_PositionLite &op = ourNode->position;
+        meshtastic_PositionLite op = meshtastic_PositionLite_init_default;
+        op.latitude_i = ourNode->latitude_i;
+        op.longitude_i = ourNode->longitude_i;
+        op.altitude = ourNode->altitude;
+        op.location_source = ourNode->position_source;
         float myHeading;
         if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
             myHeading = 0;

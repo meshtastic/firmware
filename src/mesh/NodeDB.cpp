@@ -24,6 +24,7 @@
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <cmath>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
@@ -152,18 +153,19 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
 bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
-        std::vector<meshtastic_NodeInfoLite> const *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
-        for (auto item : *vec) {
+        const auto *vec = reinterpret_cast<const std::vector<meshtastic_NodeDetail> *>(field->pData);
+        for (const auto &item : *vec) {
             if (!pb_encode_tag_for_field(ostream, field))
                 return false;
-            pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item);
+            if (!pb_encode_submessage(ostream, meshtastic_NodeDetail_fields, &item))
+                return false;
         }
     }
     if (istream) {
-        meshtastic_NodeInfoLite node; // this gets good data
-        std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
+        meshtastic_NodeDetail node = meshtastic_NodeDetail_init_default; // this gets good data
+        auto *vec = reinterpret_cast<std::vector<meshtastic_NodeDetail> *>(field->pData);
 
-        if (istream->bytes_left && pb_decode(istream, meshtastic_NodeInfoLite_fields, &node))
+        if (istream->bytes_left && pb_decode(istream, meshtastic_NodeDetail_fields, &node))
             vec->push_back(node);
     }
     return true;
@@ -295,9 +297,8 @@ NodeDB::NodeDB()
     }
 #endif
     // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    info->user = TypeConversions::ConvertToUserLite(owner);
-    info->has_user = true;
+    meshtastic_NodeDetail *info = getOrCreateMeshNode(getNodeNum());
+    applyUserToDetail(*info, owner);
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
@@ -520,7 +521,7 @@ void NodeDB::installDefaultNodeDatabase()
 {
     LOG_DEBUG("Install default NodeDatabase");
     nodeDatabase.version = DEVICESTATE_CUR_VER;
-    nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
+    nodeDatabase.nodes = std::vector<meshtastic_NodeDetail>(MAX_NUM_NODES, makeDefaultDetail());
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
 }
@@ -992,16 +993,16 @@ void NodeDB::resetNodes(bool keepFavorites)
     if (keepFavorites) {
         LOG_INFO("Clearing node database - preserving favorites");
         for (size_t i = 0; i < meshNodes->size(); i++) {
-            meshtastic_NodeInfoLite &node = meshNodes->at(i);
-            if (i > 0 && !node.is_favorite) {
-                node = meshtastic_NodeInfoLite();
+            meshtastic_NodeDetail &detail = meshNodes->at(i);
+            if (i > 0 && !detailIsFavorite(detail)) {
+                detail = makeDefaultDetail();
             } else {
                 numMeshNodes += 1;
             }
         };
     } else {
         LOG_INFO("Clearing node database - removing favorites");
-        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), makeDefaultDetail());
     }
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
@@ -1021,19 +1022,17 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
             removed++;
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
-              meshtastic_NodeInfoLite());
+    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1, makeDefaultDetail());
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
 
 void NodeDB::clearLocalPosition()
 {
-    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
-    node->position.latitude_i = 0;
-    node->position.longitude_i = 0;
-    node->position.altitude = 0;
-    node->position.time = 0;
+    meshtastic_NodeDetail *detail = getMeshNode(nodeDB->getNodeNum());
+    if (detail) {
+        clearPositionFromDetail(*detail);
+    }
     setLocalPosition(meshtastic_Position_init_default);
 }
 
@@ -1041,10 +1040,10 @@ void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user) {
-            if (meshNodes->at(i).user.public_key.size > 0) {
-                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
-                    meshNodes->at(i).user.public_key.size = 0;
+        if (detailHasFlag(meshNodes->at(i), NODEDETAIL_FLAG_HAS_USER)) {
+            if (meshNodes->at(i).public_key.size > 0) {
+                if (memfll(meshNodes->at(i).public_key.bytes, 0, meshNodes->at(i).public_key.size)) {
+                    meshNodes->at(i).public_key.size = 0;
                 }
             }
             if (newPos != i)
@@ -1057,7 +1056,7 @@ void NodeDB::cleanupMeshDB()
     }
     numMeshNodes -= removed;
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
-              meshtastic_NodeInfoLite());
+              makeDefaultDetail());
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
@@ -1109,14 +1108,14 @@ void NodeDB::pickNewNodeNum()
         nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
     }
 
-    meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+    meshtastic_NodeDetail *found;
+    while (((found = getMeshNode(nodeNum)) && memcmp(found->macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
             LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
                      "trying for 0x%x",
-                     nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
+                     nodeNum, found->macaddr[4], found->macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
@@ -1415,7 +1414,7 @@ bool NodeDB::saveDeviceStateToDisk()
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 #endif
-    // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
+    // Note: if MAX_NUM_NODES=100 and meshtastic_NodeDetail_size=182, node storage alone is roughly 18KB of data
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
     return saveProto(deviceStateFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate, true);
 }
@@ -1508,7 +1507,7 @@ bool NodeDB::saveToDisk(int saveWhat)
     return success;
 }
 
-const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
+const meshtastic_NodeDetail *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < numMeshNodes)
         return &meshNodes->at(readIndex++);
@@ -1517,7 +1516,7 @@ const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
-uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
+uint32_t sinceLastSeen(const meshtastic_NodeDetail *n)
 {
     uint32_t now = getTime();
 
@@ -1547,9 +1546,10 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
     // FIXME this implementation is kinda expensive
     for (int i = 0; i < numMeshNodes; i++) {
-        if (localOnly && meshNodes->at(i).via_mqtt)
+        const auto &detail = meshNodes->at(i);
+        if (localOnly && detailViaMqtt(detail))
             continue;
-        if (sinceLastSeen(&meshNodes->at(i)) < NUM_ONLINE_SECS)
+        if (sinceLastSeen(&detail) < NUM_ONLINE_SECS)
             numseen++;
     }
 
@@ -1563,8 +1563,8 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
  */
 void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSource src)
 {
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
-    if (!info) {
+    meshtastic_NodeDetail *detail = getOrCreateMeshNode(nodeId);
+    if (!detail) {
         return;
     }
 
@@ -1574,12 +1574,13 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
                  p.altitude);
 
         setLocalPosition(p);
-        info->position = TypeConversions::ConvertToPositionLite(p);
+        applyPositionToDetail(*detail, p);
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
         LOG_DEBUG("updatePosition SPECIAL time setting time=%u", p.time);
-        info->position.time = p.time;
+        detailSetFlag(*detail, NODEDETAIL_FLAG_HAS_POSITION, true);
+        detail->position_time = p.time;
     } else {
         // Be careful to only update fields that have been set by the REMOTE sender
         // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
@@ -1589,17 +1590,16 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
-        uint32_t tmp_time = info->position.time;
+        uint32_t tmp_time = detail->position_time;
 
         // Next, update atomically
-        info->position = TypeConversions::ConvertToPositionLite(p);
+        applyPositionToDetail(*detail, p);
 
         // Last, restore any fields that may have been overwritten
-        if (!info->position.time)
-            info->position.time = tmp_time;
+        if (!detail->position_time)
+            detail->position_time = tmp_time;
     }
-    info->has_position = true;
-    updateGUIforNode = info;
+    updateGUIforNode = detail;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
@@ -1608,9 +1608,9 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
  */
 void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src)
 {
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
+    meshtastic_NodeDetail *detail = getOrCreateMeshNode(nodeId);
     // Environment metrics should never go to NodeDb but we'll safegaurd anyway
-    if (!info || t.which_variant != meshtastic_Telemetry_device_metrics_tag) {
+    if (!detail || t.which_variant != meshtastic_Telemetry_device_metrics_tag) {
         return;
     }
 
@@ -1620,9 +1620,8 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     } else {
         LOG_DEBUG("updateTelemetry REMOTE node=0x%x ", nodeId);
     }
-    info->device_metrics = t.variant.device_metrics;
-    info->has_device_metrics = true;
-    updateGUIforNode = info;
+    applyMetricsToDetail(*detail, t.variant.device_metrics);
+    updateGUIforNode = detail;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
@@ -1631,32 +1630,32 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
  */
 void NodeDB::addFromContact(meshtastic_SharedContact contact)
 {
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
-    if (!info || !contact.has_user) {
+    meshtastic_NodeDetail *detail = getOrCreateMeshNode(contact.node_num);
+    if (!detail || !contact.has_user) {
         return;
     }
     // If the local node has this node marked as manually verified
     // and the client does not, do not allow the client to update the
     // saved public key.
-    if ((info->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && !contact.manually_verified) {
-        if (contact.user.public_key.size != info->user.public_key.size ||
-            memcmp(contact.user.public_key.bytes, info->user.public_key.bytes, info->user.public_key.size) != 0) {
+    if (detailHasFlag(*detail, NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED) && !contact.manually_verified) {
+        if (contact.user.public_key.size != detail->public_key.size ||
+            memcmp(contact.user.public_key.bytes, detail->public_key.bytes, detail->public_key.size) != 0) {
             return;
         }
     }
-    info->num = contact.node_num;
-    info->has_user = true;
-    info->user = TypeConversions::ConvertToUserLite(contact.user);
+    detail->num = contact.node_num;
+    applyUserToDetail(*detail, contact.user);
     if (contact.should_ignore) {
         // If should_ignore is set,
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
-        info->is_ignored = true;
-        info->is_favorite = false;
-        info->has_device_metrics = false;
-        info->has_position = false;
-        info->user.public_key.size = 0;
-        info->user.public_key.bytes[0] = 0;
+        detailSetFlag(*detail, NODEDETAIL_FLAG_IS_IGNORED, true);
+        detailSetFlag(*detail, NODEDETAIL_FLAG_IS_FAVORITE, false);
+        clearMetricsFromDetail(*detail);
+        clearPositionFromDetail(*detail);
+        detail->public_key.size = 0;
+        memset(detail->public_key.bytes, 0, sizeof(detail->public_key.bytes));
     } else {
+        detailSetFlag(*detail, NODEDETAIL_FLAG_IS_IGNORED, false);
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
          */
@@ -1670,19 +1669,19 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
             // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
             // last_heard to now, so that the add_contact node doesn't immediately get evicted.
-            info->last_heard = getTime();
+            detail->last_heard = getTime();
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            info->is_favorite = true;
+            detailSetFlag(*detail, NODEDETAIL_FLAG_IS_FAVORITE, true);
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
-            info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            detailSetFlag(*detail, NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED, true);
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
-        updateGUIforNode = info;
+        updateGUIforNode = detail;
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
@@ -1693,8 +1692,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
 {
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
-    if (!info) {
+    meshtastic_NodeDetail *detail = getOrCreateMeshNode(nodeId);
+    if (!detail) {
         return false;
     }
 
@@ -1719,9 +1718,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             return false;
         }
     }
-    if (info->user.public_key.size == 32) { // if we have a key for this user already, don't overwrite with a new one
+    if (detail->public_key.size == 32) { // if we have a key for this user already, don't overwrite with a new one
         // if the key doesn't match, don't update nodeDB at all.
-        if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, info->user.public_key.bytes, 32) != 0)) {
+        if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, detail->public_key.bytes, 32) != 0)) {
             LOG_WARN("Public Key mismatch, dropping NodeInfo");
             return false;
         }
@@ -1734,22 +1733,38 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     // Always ensure user.id is derived from nodeId, regardless of what was received
     snprintf(p.id, sizeof(p.id), "!%08x", nodeId);
 
-    // Both of info->user and p start as filled with zero so I think this is okay
-    auto lite = TypeConversions::ConvertToUserLite(p);
-    bool changed = memcmp(&info->user, &lite, sizeof(info->user)) || (info->channel != channelIndex);
+    meshtastic_NodeDetail before = *detail;
 
-    info->user = lite;
-    if (info->user.public_key.size == 32) {
-        printBytes("Saved Pubkey: ", info->user.public_key.bytes, 32);
+    applyUserToDetail(*detail, p);
+
+    if (detail->public_key.size == 32) {
+        printBytes("Saved Pubkey: ", detail->public_key.bytes, 32);
     }
-    if (nodeId != getNodeNum())
-        info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
-    LOG_DEBUG("Update changed=%d user %s/%s, id=0x%08x, channel=%d", changed, info->user.long_name, info->user.short_name, nodeId,
-              info->channel);
-    info->has_user = true;
+
+    if (nodeId != getNodeNum()) {
+        detail->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
+    }
+
+    bool userChanged = strncmp(before.long_name, detail->long_name, sizeof(detail->long_name)) != 0 ||
+                       strncmp(before.short_name, detail->short_name, sizeof(detail->short_name)) != 0 ||
+                       memcmp(before.macaddr, detail->macaddr, sizeof(detail->macaddr)) != 0 ||
+                       before.hw_model != detail->hw_model || before.role != detail->role ||
+                       before.public_key.size != detail->public_key.size ||
+                       memcmp(before.public_key.bytes, detail->public_key.bytes, detail->public_key.size) != 0;
+
+    uint32_t flagDelta = before.flags ^ detail->flags;
+    bool flagChange =
+        (flagDelta & (NODEDETAIL_FLAG_IS_LICENSED | NODEDETAIL_FLAG_HAS_UNMESSAGABLE | NODEDETAIL_FLAG_IS_UNMESSAGABLE)) != 0;
+
+    bool channelChanged = (nodeId != getNodeNum()) && (before.channel != detail->channel);
+
+    bool changed = userChanged || flagChange || channelChanged;
+
+    LOG_DEBUG("Update changed=%d user %s/%s, id=0x%08x, channel=%d", changed, detail->long_name, detail->short_name, nodeId,
+              detail->channel);
 
     if (changed) {
-        updateGUIforNode = info;
+        updateGUIforNode = detail;
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
@@ -1777,23 +1792,24 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 
-        meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
-        if (!info) {
+        meshtastic_NodeDetail *detail = getOrCreateMeshNode(getFrom(&mp));
+        if (!detail) {
             return;
         }
 
         if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
-            info->last_heard = mp.rx_time;
+            detail->last_heard = mp.rx_time;
 
         if (mp.rx_snr)
-            info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+            detail->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
-        info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
+        detailSetFlag(*detail, NODEDETAIL_FLAG_VIA_MQTT, mp.via_mqtt); // Store if we received this packet via MQTT
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
-            info->has_hops_away = true;
-            info->hops_away = mp.hop_start - mp.hop_limit;
+            detailSetFlag(*detail, NODEDETAIL_FLAG_HAS_HOPS_AWAY, true);
+            uint32_t hopDelta = mp.hop_start - mp.hop_limit;
+            detail->hops_away = static_cast<uint8_t>(std::min<uint32_t>(hopDelta, UINT8_MAX));
         }
         sortMeshDB();
     }
@@ -1801,9 +1817,9 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-    if (lite && lite->is_favorite != is_favorite) {
-        lite->is_favorite = is_favorite;
+    meshtastic_NodeDetail *detail = getMeshNode(nodeId);
+    if (detail && detailIsFavorite(*detail) != is_favorite) {
+        detailSetFlag(*detail, NODEDETAIL_FLAG_IS_FAVORITE, is_favorite);
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
@@ -1817,10 +1833,10 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeDetail *detail = getMeshNode(nodeId);
 
-    if (lite) {
-        return lite->is_favorite;
+    if (detail) {
+        return detailIsFavorite(*detail);
     }
     return false;
 }
@@ -1836,23 +1852,21 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
     if (p.to == NODENUM_BROADCAST)
         return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
 
-    meshtastic_NodeInfoLite *lite = NULL;
-
     bool seenFrom = false;
     bool seenTo = false;
 
     for (int i = 0; i < numMeshNodes; i++) {
-        lite = &meshNodes->at(i);
+        auto *detail = &meshNodes->at(i);
 
-        if (lite->num == p.from) {
-            if (lite->is_favorite)
+        if (detail->num == p.from) {
+            if (detailIsFavorite(*detail))
                 return true;
 
             seenFrom = true;
         }
 
-        if (lite->num == p.to) {
-            if (lite->is_favorite)
+        if (detail->num == p.to) {
+            if (detailIsFavorite(*detail))
                 return true;
 
             seenTo = true;
@@ -1888,10 +1902,10 @@ void NodeDB::sortMeshDB()
                     // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
-                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
+                } else if (detailIsFavorite(meshNodes->at(i)) && !detailIsFavorite(meshNodes->at(i - 1))) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
-                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
+                } else if (!detailIsFavorite(meshNodes->at(i)) && detailIsFavorite(meshNodes->at(i - 1))) {
                     // noop
                 } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
@@ -1905,11 +1919,11 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
-    if (!info) {
+    const meshtastic_NodeDetail *detail = getMeshNode(n);
+    if (!detail) {
         return 0; // defaults to PRIMARY
     }
-    return info->channel;
+    return detail->channel;
 }
 
 std::string NodeDB::getNodeId() const
@@ -1921,7 +1935,7 @@ std::string NodeDB::getNodeId() const
 
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
-meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
+meshtastic_NodeDetail *NodeDB::getMeshNode(NodeNum n)
 {
     for (int i = 0; i < numMeshNodes; i++)
         if (meshNodes->at(i).num == n)
@@ -1937,11 +1951,11 @@ bool NodeDB::isFull()
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
-meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
+meshtastic_NodeDetail *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(n);
+    meshtastic_NodeDetail *detail = getMeshNode(n);
 
-    if (!lite) {
+    if (!detail) {
         if (isFull()) {
             LOG_INFO("Node database full with %i nodes and %u bytes free. Erasing oldest entry", numMeshNodes,
                      memGet.getFreeHeap());
@@ -1952,14 +1966,14 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored &&
-                    !(meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) &&
-                    meshNodes->at(i).last_heard < oldest) {
+                const auto &candidate = meshNodes->at(i);
+                if (!detailIsFavorite(candidate) && !detailIsIgnored(candidate) &&
+                    !detailHasFlag(candidate, NODEDETAIL_FLAG_IS_KEY_MANUALLY_VERIFIED) && meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).user.public_key.size == 0 &&
+                if (!detailIsFavorite(candidate) && !detailIsIgnored(candidate) && candidate.public_key.size == 0 &&
                     meshNodes->at(i).last_heard < oldestBoring) {
                     oldestBoring = meshNodes->at(i).last_heard;
                     oldestBoringIndex = i;
@@ -1979,33 +1993,33 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
         }
         // add the node at the end
-        lite = &meshNodes->at((numMeshNodes)++);
+        detail = &meshNodes->at((numMeshNodes)++);
 
         // everything is missing except the nodenum
-        memset(lite, 0, sizeof(*lite));
-        lite->num = n;
+        *detail = makeDefaultDetail();
+        detail->num = n;
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
-    return lite;
+    return detail;
 }
 
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
-bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
+bool NodeDB::hasValidPosition(const meshtastic_NodeDetail *n)
 {
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+    return detailHasFlag(*n, NODEDETAIL_FLAG_HAS_POSITION) && (n->latitude_i != 0 || n->longitude_i != 0);
 }
 
 /// If we have a node / user and they report is_licensed = true
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
-    if (!info || !info->has_user) {
+    meshtastic_NodeDetail *detail = getMeshNode(nodeNum);
+    if (!detail || !detailHasFlag(*detail, NODEDETAIL_FLAG_HAS_USER)) {
         return UserLicenseStatus::NotKnown;
     }
-    return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+    return detailHasFlag(*detail, NODEDETAIL_FLAG_IS_LICENSED) ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)

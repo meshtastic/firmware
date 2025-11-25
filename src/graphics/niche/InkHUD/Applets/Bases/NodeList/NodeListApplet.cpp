@@ -3,7 +3,7 @@
 #include "RTC.h"
 
 #include "GeoCoord.h"
-#include "NodeDB.h"
+#include "mesh/NodeDB.h"
 
 #include "./NodeListApplet.h"
 
@@ -50,19 +50,19 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     c.signal = getSignalStrength(mp.rx_snr, mp.rx_rssi);
 
     // Assemble info: from nodeDB (needed to detect changes)
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(c.nodeNum);
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *node = nodeDB->getMeshNode(c.nodeNum);
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node) {
-        if (node->has_hops_away)
+        if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_HOPS_AWAY))
             c.hopsAway = node->hops_away;
 
         if (nodeDB->hasValidPosition(node) && nodeDB->hasValidPosition(ourNode)) {
             // Get lat and long as float
             // Meshtastic stores these as integers internally
-            float ourLat = ourNode->position.latitude_i * 1e-7;
-            float ourLong = ourNode->position.longitude_i * 1e-7;
-            float theirLat = node->position.latitude_i * 1e-7;
-            float theirLong = node->position.longitude_i * 1e-7;
+            float ourLat = ourNode->latitude_i * 1e-7f;
+            float ourLong = ourNode->longitude_i * 1e-7f;
+            float theirLat = node->latitude_i * 1e-7f;
+            float theirLong = node->longitude_i * 1e-7f;
 
             c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
         }
@@ -144,7 +144,7 @@ void InkHUD::NodeListApplet::onRender()
         std::string distance;  // handled below;
         uint8_t &hopsAway = card->hopsAway;
 
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(nodeNum);
 
         // Skip deleted nodes
         if (!node) {
@@ -162,8 +162,8 @@ void InkHUD::NodeListApplet::onRender()
         // -- Longname --
         // Parse special chars in long name
         // Use node id if unknown
-        if (node && node->has_user)
-            longName = parse(node->user.long_name); // Found in nodeDB
+        if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER))
+            longName = parse(node->long_name); // Found in nodeDB
         else {
             // Not found in nodeDB, show a hex nodeid instead
             longName = hexifyNodeNum(nodeNum);

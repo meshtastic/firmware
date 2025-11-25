@@ -86,12 +86,15 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
     bool isPreferredRebroadcaster = config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER;
+    meshtastic_NodeDetail *fromNode = nodeDB->getMeshNode(mp->from);
+
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && fromNode &&
+               !detailHasFlag(*fromNode, NODEDETAIL_FLAG_HAS_USER) && nodeInfoModule && !isPreferredRebroadcaster &&
+               !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
             auto hopStart = mp->hop_start;
@@ -269,7 +272,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
 bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     assert(node);
 
@@ -376,24 +379,25 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
     fromNum++;
 }
 
-meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
+meshtastic_NodeDetail *MeshService::refreshLocalMeshNode()
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     assert(node);
 
-    // We might not have a position yet for our local node, in that case, at least try to send the time
-    if (!node->has_position) {
-        memset(&node->position, 0, sizeof(node->position));
-        node->has_position = true;
+    // Ensure we have a position container so time fields stay fresh even without GPS fixes
+    if (!detailHasFlag(*node, NODEDETAIL_FLAG_HAS_POSITION)) {
+        detailSetFlag(*node, NODEDETAIL_FLAG_HAS_POSITION, true);
+        node->latitude_i = 0;
+        node->longitude_i = 0;
+        node->altitude = 0;
+        node->position_source = _meshtastic_Position_LocSource_MIN;
     }
-
-    meshtastic_PositionLite &position = node->position;
 
     // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
-    position.time = getValidTime(RTCQualityFromNet);
+    node->position_time = getValidTime(RTCQualityFromNet);
 
     if (powerStatus->getHasBattery() == 1) {
         updateBatteryLevel(powerStatus->getBatteryChargePercent());
@@ -406,7 +410,7 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    const meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
+    const meshtastic_NodeDetail *node = refreshLocalMeshNode();
     meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {
@@ -421,7 +425,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Use fixed position");
-        pos = TypeConversions::ConvertToPosition(node->position);
+        pos = TypeConversions::ConvertToPosition(detailToPositionLite(*node));
     }
 
     // Add a fresh timestamp

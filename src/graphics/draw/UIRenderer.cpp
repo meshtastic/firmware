@@ -27,22 +27,22 @@ static uint32_t lastSwitchTime = 0;
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
-std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
+std::vector<meshtastic_NodeDetail *> graphics::UIRenderer::favoritedNodes;
 
 void graphics::UIRenderer::rebuildFavoritedNodes()
 {
     favoritedNodes.clear();
     size_t total = nodeDB->getNumMeshNodes();
     for (size_t i = 0; i < total; i++) {
-        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        meshtastic_NodeDetail *n = nodeDB->getMeshNodeByIndex(i);
         if (!n || n->num == nodeDB->getNodeNum())
             continue;
-        if (n->is_favorite)
+        if (detailIsFavorite(*n))
             favoritedNodes.push_back(n);
     }
 
     std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-              [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+              [](const meshtastic_NodeDetail *a, const meshtastic_NodeDetail *b) { return a->num < b->num; });
 }
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -289,8 +289,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     if (nodeIndex < 0 || nodeIndex >= (int)favoritedNodes.size())
         return;
 
-    meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
-    if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
+    meshtastic_NodeDetail *node = favoritedNodes[nodeIndex];
+    if (!node || node->num == nodeDB->getNodeNum() || !detailIsFavorite(*node))
         return;
     display->clear();
 #if defined(M5STACK_UNITC6L)
@@ -303,7 +303,9 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 #endif
     currentFavoriteNodeNum = node->num;
     // === Create the shortName and title string ===
-    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+    const bool hasUser = detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER);
+    const char *shortNameCandidate = (hasUser && node->short_name[0] != '\0') ? node->short_name : nullptr;
+    const char *shortName = (shortNameCandidate && haveGlyphs(shortNameCandidate)) ? shortNameCandidate : "Node";
     char titlestr[32] = {0};
     snprintf(titlestr, sizeof(titlestr), "Fav: %s", shortName);
 
@@ -321,9 +323,9 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     std::string usernameStr;
     // === 1. Long Name (always try to show first) ===
 #if defined(M5STACK_UNITC6L)
-    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.short_name : nullptr;
+    const char *username = (hasUser && node->long_name[0]) ? node->short_name : nullptr;
 #else
-    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+    const char *username = (hasUser && node->long_name[0]) ? node->long_name : nullptr;
 #endif
 
     if (username) {
@@ -349,7 +351,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         haveSignal = true;
     }
     // If hops is valid (>0), show right after signal
-    if (node->hops_away > 0) {
+    if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_HOPS_AWAY) && node->hops_away > 0) {
         size_t len = strlen(signalHopsStr);
         // Decide between "1 Hop" and "N Hops"
         if (haveSignal) {
@@ -383,23 +385,23 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 #if !defined(M5STACK_UNITC6L)
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
-    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
-        getUptimeStr(node->device_metrics.uptime_seconds * 1000, " Up", uptimeStr, sizeof(uptimeStr));
+    if (detailHasFlag(*node, NODEDETAIL_FLAG_HAS_UPTIME)) {
+        getUptimeStr(node->uptime_seconds * 1000, " Up", uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
     }
 
     // === 5. Distance (only if both nodes have GPS position) ===
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     char distStr[24] = ""; // Make buffer big enough for any string
     bool haveDistance = false;
 
     if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
-        double lat1 = ourNode->position.latitude_i * 1e-7;
-        double lon1 = ourNode->position.longitude_i * 1e-7;
-        double lat2 = node->position.latitude_i * 1e-7;
-        double lon2 = node->position.longitude_i * 1e-7;
+        double lat1 = ourNode->latitude_i * 1e-7;
+        double lon1 = ourNode->longitude_i * 1e-7;
+        double lat2 = node->latitude_i * 1e-7;
+        double lon2 = node->longitude_i * 1e-7;
         double earthRadiusKm = 6371.0;
         double dLat = (lat2 - lat1) * DEG_TO_RAD;
         double dLon = (lon2 - lon1) * DEG_TO_RAD;
@@ -457,6 +459,10 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             showCompass = true;
         }
         if (showCompass) {
+            const double ourLatDeg = DegD(ourNode->latitude_i);
+            const double ourLonDeg = DegD(ourNode->longitude_i);
+            const double nodeLatDeg = DegD(node->latitude_i);
+            const double nodeLonDeg = DegD(node->longitude_i);
             const int16_t topY = getTextPositions(display)[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
             const int16_t usableHeight = bottomY - topY - 5;
@@ -467,16 +473,10 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-            const auto &op = ourNode->position;
-            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
-                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            float myHeading =
+                screen->hasHeading() ? screen->getHeading() * PI / 180 : screen->estimatedHeading(ourLatDeg, ourLonDeg);
 
-            const auto &p = node->position;
-            /* unused
-            float d =
-                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            */
-            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            float bearing = GeoCoord::bearing(ourLatDeg, ourLonDeg, nodeLatDeg, nodeLonDeg);
             if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = 0;
             } else {
@@ -520,20 +520,21 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             int compassX = x + SCREEN_WIDTH / 2;
             int compassY = yBelowContent + availableHeight / 2;
 
-            const auto &op = ourNode->position;
+            const double ourLatDeg = DegD(ourNode->latitude_i);
+            const double ourLonDeg = DegD(ourNode->longitude_i);
             float myHeading = 0;
             if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
-                myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
-                                                 : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+                myHeading =
+                    screen->hasHeading() ? screen->getHeading() * PI / 180 : screen->estimatedHeading(ourLatDeg, ourLonDeg);
             }
             graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
 
-            const auto &p = node->position;
+            const double nodeLatDeg = DegD(node->latitude_i);
+            const double nodeLonDeg = DegD(node->longitude_i);
             /* unused
-            float d =
-                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float d = GeoCoord::latLongToMeter(nodeLatDeg, nodeLonDeg, ourLatDeg, ourLonDeg);
             */
-            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            float bearing = GeoCoord::bearing(ourLatDeg, ourLonDeg, nodeLatDeg, nodeLonDeg);
             if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
                 bearing -= myHeading;
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
@@ -555,7 +556,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeDetail *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
 #if defined(M5STACK_UNITC6L)
@@ -723,8 +724,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int yOffset = (isHighResolution) ? 0 : 5;
     std::string longNameStr;
 
-    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        longNameStr = sanitizeString(ourNode->user.long_name);
+    if (ourNode && detailHasFlag(*ourNode, NODEDETAIL_FLAG_HAS_USER) && ourNode->long_name[0] != '\0') {
+        longNameStr = sanitizeString(ourNode->long_name);
     }
     char shortnameble[35];
     snprintf(shortnameble, sizeof(shortnameble), "%s",
@@ -981,8 +982,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     config.display.heading_bold = false;
 
     const char *displayLine = ""; // Initialize to empty string by default
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";

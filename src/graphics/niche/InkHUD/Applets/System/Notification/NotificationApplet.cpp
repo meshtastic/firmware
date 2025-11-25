@@ -5,6 +5,7 @@
 #include "./Notification.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 
+#include "mesh/NodeDB.h"
 #include "meshUtils.h"
 #include "modules/TextMessageModule.h"
 
@@ -206,13 +207,13 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             isBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
 
         // Find info about the sender
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);
+        meshtastic_NodeDetail *node = nodeDB->getMeshNode(message->sender);
 
         // Leading tag (channel vs. DM)
         text += isBroadcast ? "From:" : "DM: ";
 
         // Sender id
-        if (node && node->has_user)
+        if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER))
             text += parseShortName(node);
         else
             text += hexifyNodeNum(message->sender);
@@ -226,7 +227,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text += isBroadcast ? "Msg from " : "DM from ";
 
             // Sender id
-            if (node && node->has_user)
+            if (node && detailHasFlag(*node, NODEDETAIL_FLAG_HAS_USER))
                 text += parseShortName(node);
             else
                 text += hexifyNodeNum(message->sender);
