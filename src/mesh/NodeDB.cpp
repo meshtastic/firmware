@@ -27,13 +27,6 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
-#include "SdFat_Adafruit_Fork.h"
-#include <SPI.h>
-#include <Adafruit_SPIFlash.h>
-#include "ff.h"
-#include "diskio.h"
-
-
 
 #ifdef ARCH_ESP32
 #if HAS_WIFI
@@ -74,40 +67,6 @@ meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 3
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
-extern Adafruit_FlashTransport_QSPI flashTransport;
-extern Adafruit_SPIFlash flash;
-extern FatVolume fatfs;
-extern bool flashInitialized;
-extern bool fatfsMounted;
-// up to 11 characters
-#define DISK_LABEL "EXT FLASH"
-#define EXTERNAL_FLASH_USE_QSPI
-#if defined(EXTERNAL_FLASH_USE_QSPI)
-Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
-#endif
-Adafruit_SPIFlash flash(&flashTransport);
-
-
-// Nanopb input callback for FatFs
-bool nanopb_fatfs_read(pb_istream_t *stream, pb_byte_t *buf, size_t count) {
-    File32 *file = (File32 *)stream->state;
-    int got = file->read(buf, count);
-    return got == (int)count;
-}
-
-// Nanopb output callback for FatFs
-bool nanopb_fatfs_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count) {
-    File32 *file = (File32 *)stream->state;
-    int written = file->write(buf, count);
-    return written == (int)count;
-}
-
-
-
-
-
-
-
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
 #endif
@@ -119,7 +78,6 @@ static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 #endif
 
 #ifdef HELTEC_MESH_NODE_T114
-
 
 uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
@@ -527,7 +485,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     spiLock->lock();
     rmDir("/prefs"); // this uses spilock internally...
 
-    #ifdef USE_EXTERNAL_FLASH
+#ifdef USE_EXTERNAL_FLASH
     // Also remove rangetest.csv if it exists
     if (fatfsMounted && flashInitialized) {
         if (fatfs.exists("/static/rangetest.csv")) {
@@ -704,7 +662,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL)||defined(HELTEC_V4_TFT)) &&                                                                                                  \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT)) &&                                                                        \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1181,28 +1139,28 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef USE_EXTERNAL_FLASH
-if (!flashInitialized) {
-    if (!flash.begin()) {
-    LOG_ERROR("Error, failed to initialize flash chip!");
-    return state;
-  }
-  flashInitialized = true;
-}
-if (!fatfsMounted) {
-  if (!fatfs.begin(&flash)) {
-    LOG_ERROR("Error, failed to mount filesystem!");
-    // Device does not have a filesystem
-    state = LoadFileResult::NO_FILESYSTEM;
-    LOG_INFO("Formatting filesystem...");
-    format_fat12();
-    if (!fatfs.begin(&flash)) {
-      LOG_ERROR("Error, failed to mount filesystem after format!");
-      return state;
+    if (!flashInitialized) {
+        if (!flash.begin()) {
+            LOG_ERROR("Error, failed to initialize flash chip!");
+            return state;
+        }
+        flashInitialized = true;
     }
- }
-LOG_INFO("Filesystem mounted!");
-fatfsMounted = true;
-}
+    if (!fatfsMounted) {
+        if (!fatfs.begin(&flash)) {
+            LOG_ERROR("Error, failed to mount filesystem!");
+            // Device does not have a filesystem
+            state = LoadFileResult::NO_FILESYSTEM;
+            LOG_INFO("Formatting filesystem...");
+            format_fat12();
+            if (!fatfs.begin(&flash)) {
+                LOG_ERROR("Error, failed to mount filesystem after format!");
+                return state;
+            }
+        }
+        LOG_INFO("Filesystem mounted!");
+        fatfsMounted = true;
+    }
 
     File32 f = fatfs.open(filename, FILE_READ);
     if (f) {
@@ -1215,43 +1173,43 @@ fatfsMounted = true;
         // Read raw binary into the protobuf struct (non-protobuf/raw dump)
         int got = f.read(reinterpret_cast<uint8_t*>(dest_struct), objSize);
         */
-       ///////////////////////////////////////////////////////////////
-       /*
-        // --- Streaming read implementation ---
-         const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
-         size_t totalRead = 0;
-         uint8_t* dest = reinterpret_cast<uint8_t*>(dest_struct);
+        ///////////////////////////////////////////////////////////////
+        /*
+         // --- Streaming read implementation ---
+          const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
+          size_t totalRead = 0;
+          uint8_t* dest = reinterpret_cast<uint8_t*>(dest_struct);
 
-         while (totalRead < objSize) {
-            size_t toRead = CHUNK_SIZE;
-            if (totalRead + CHUNK_SIZE > objSize)
-             toRead = objSize - totalRead;
+          while (totalRead < objSize) {
+             size_t toRead = CHUNK_SIZE;
+             if (totalRead + CHUNK_SIZE > objSize)
+              toRead = objSize - totalRead;
 
-        int got = f.read(dest + totalRead, toRead);
-        if (got <= 0) {
-            LOG_ERROR("Error reading file: read %d bytes at offset %u", got, (unsigned)totalRead);
-            break;
-        }
-        totalRead += got;
-    }
-        // Ensure all data is written to storage
-        f.flush();
-        // Always close the file
-        f.close();
-        if (totalRead != objSize) {
-        //if (got != int(objSize)) {
-            LOG_ERROR("Error reading file: read %u of %u bytes", (unsigned)totalRead, (unsigned)objSize);
-            //LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)objSize);
-            state = LoadFileResult::DECODE_FAILED;
-        } else {
-            LOG_INFO("Loaded %s successfully", filename);
-            state = LoadFileResult::LOAD_SUCCESS;
-        }
-    } else {
-        LOG_ERROR("Could not open / read %s", filename);
-    }
-    */
-pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
+         int got = f.read(dest + totalRead, toRead);
+         if (got <= 0) {
+             LOG_ERROR("Error reading file: read %d bytes at offset %u", got, (unsigned)totalRead);
+             break;
+         }
+         totalRead += got;
+     }
+         // Ensure all data is written to storage
+         f.flush();
+         // Always close the file
+         f.close();
+         if (totalRead != objSize) {
+         //if (got != int(objSize)) {
+             LOG_ERROR("Error reading file: read %u of %u bytes", (unsigned)totalRead, (unsigned)objSize);
+             //LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)objSize);
+             state = LoadFileResult::DECODE_FAILED;
+         } else {
+             LOG_INFO("Loaded %s successfully", filename);
+             state = LoadFileResult::LOAD_SUCCESS;
+         }
+     } else {
+         LOG_ERROR("Could not open / read %s", filename);
+     }
+     */
+        pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
             state = LoadFileResult::DECODE_FAILED;
@@ -1263,7 +1221,6 @@ pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
     } else {
         LOG_ERROR("Could not open / read %s", filename);
     }
-
 
 #elif defined(FSCom)
     concurrency::LockGuard g(spiLock);
@@ -1513,104 +1470,104 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     bool okay = false;
 #ifdef USE_EXTERNAL_FLASH
 
-if (!flashInitialized) {
-    LOG_INFO("Initialize external flash chip...");
-    if (!flash.begin()) {
-     LOG_ERROR("Error, failed to initialize external flash chip!");
-     while (1) {
-       delay(1);
-     }
-   }
-   flashInitialized = true;
-}
-LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-check_fat12();
-if (!fatfsMounted) {
-  if (!fatfs.begin(&flash)) {
-    LOG_ERROR("Error, failed to mount filesystem!");
-    while (1) {
-      delay(1);
+    if (!flashInitialized) {
+        LOG_INFO("Initialize external flash chip...");
+        if (!flash.begin()) {
+            LOG_ERROR("Error, failed to initialize external flash chip!");
+            while (1) {
+                delay(1);
+            }
+        }
+        flashInitialized = true;
+        LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+        check_fat12();
     }
-  }
-  fatfsMounted = true;
-  LOG_INFO("Filesystem mounted!");
-}
 
-if (!fatfs.exists("/prefs")) {
-    LOG_INFO("/prefs directory not found, creating...");
+    if (!fatfsMounted) {
+        if (!fatfs.begin(&flash)) {
+            LOG_ERROR("Error, failed to mount filesystem!");
+            while (1) {
+                delay(1);
+            }
+        }
+        fatfsMounted = true;
+        LOG_INFO("Filesystem mounted!");
+    }
 
-    // Use mkdir to create directory (note you should _not_ have a trailing
-    // slash).
-    fatfs.mkdir("/prefs");
-    auto f = fatfs.open("/prefs/" xstr(BUILD_EPOCH), FILE_WRITE);
+    if (!fatfs.exists("/prefs")) {
+        LOG_INFO("/prefs directory not found, creating...");
+
+        // Use mkdir to create directory (note you should _not_ have a trailing
+        // slash).
+        fatfs.mkdir("/prefs");
+        auto f = fatfs.open("/prefs/" xstr(BUILD_EPOCH), FILE_WRITE);
         if (f) {
             f.flush();
             f.close();
         }
-    if (!fatfs.exists("/prefs")) {
-      LOG_INFO("Error, failed to create directory!");
-    } else {
-      LOG_INFO("Created directory!");
+        if (!fatfs.exists("/prefs")) {
+            LOG_INFO("Error, failed to create directory!");
+        } else {
+            LOG_INFO("Created directory!");
+        }
     }
-  }
-  // First remove existing file
+    // First remove existing file
     if (fatfs.exists(filename)) {
         if (!fatfs.remove(filename)) {
             LOG_ERROR("Error removing existing file %s", filename);
             return false;
         }
     }
-LOG_INFO("Save %s", filename);
-File32 f = fatfs.open(filename, FILE_WRITE);
-  if (!f) {
-    LOG_ERROR("Error opening file for writing!");
-    return false;
-  }
-  else{
-    /*size_t written = f.write(reinterpret_cast<const uint8_t*>(dest_struct), protoSize);
-    // Make sure to flush and close properly
-    f.flush();
-    f.close();
-    if (written == protoSize) {
-        LOG_INFO("File saved!");
-        LOG_INFO("File closed!");
-        okay = true;
+    LOG_INFO("Save %s", filename);
+    File32 f = fatfs.open(filename, FILE_WRITE);
+    if (!f) {
+        LOG_ERROR("Error opening file for writing!");
+        return false;
     } else {
-        LOG_ERROR("Error: wrote %u of %u bytes", written, protoSize);
-    }*/
-   ///////////////////////////////////////////////////////////////
-   /*
-    // --- Streaming write implementation ---
-     const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
-     size_t totalWritten = 0;
-     const uint8_t* src = reinterpret_cast<const uint8_t*>(dest_struct);
+        /*size_t written = f.write(reinterpret_cast<const uint8_t*>(dest_struct), protoSize);
+        // Make sure to flush and close properly
+        f.flush();
+        f.close();
+        if (written == protoSize) {
+            LOG_INFO("File saved!");
+            LOG_INFO("File closed!");
+            okay = true;
+        } else {
+            LOG_ERROR("Error: wrote %u of %u bytes", written, protoSize);
+        }*/
+        ///////////////////////////////////////////////////////////////
+        /*
+         // --- Streaming write implementation ---
+          const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
+          size_t totalWritten = 0;
+          const uint8_t* src = reinterpret_cast<const uint8_t*>(dest_struct);
 
-     while (totalWritten < protoSize) {
-        size_t toWrite = CHUNK_SIZE;
-        if (totalWritten + CHUNK_SIZE > protoSize)
-         toWrite = protoSize - totalWritten;
+          while (totalWritten < protoSize) {
+             size_t toWrite = CHUNK_SIZE;
+             if (totalWritten + CHUNK_SIZE > protoSize)
+              toWrite = protoSize - totalWritten;
 
-        int written = f.write(src + totalWritten, toWrite);
-         if (written <= 0) {
-            LOG_ERROR("Error writing file: wrote %d bytes at offset %u", written, (unsigned)totalWritten);
-            break;
+             int written = f.write(src + totalWritten, toWrite);
+              if (written <= 0) {
+                 LOG_ERROR("Error writing file: wrote %d bytes at offset %u", written, (unsigned)totalWritten);
+                 break;
+              }
+             totalWritten += written;
          }
-        totalWritten += written;
-    }
-    f.flush();
-    f.close();
+         f.flush();
+         f.close();
 
-    if (totalWritten != protoSize) {
-        LOG_ERROR("Error: wrote %u of %u bytes", (unsigned)totalWritten, (unsigned)protoSize);
-        okay = false;
-    } else {
-        LOG_INFO("File saved!");
-        LOG_INFO("File closed!");
-        okay = true;
-    }
-  }
-    */
-   pb_ostream_t stream = {&nanopb_fatfs_write, &f, protoSize, 0};
+         if (totalWritten != protoSize) {
+             LOG_ERROR("Error: wrote %u of %u bytes", (unsigned)totalWritten, (unsigned)protoSize);
+             okay = false;
+         } else {
+             LOG_INFO("File saved!");
+             LOG_INFO("File closed!");
+             okay = true;
+         }
+       }
+         */
+        pb_ostream_t stream = {&nanopb_fatfs_write, &f, protoSize, 0};
         if (!pb_encode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
             okay = false;
@@ -1677,7 +1634,7 @@ bool NodeDB::saveDeviceStateToDisk()
 bool NodeDB::saveNodeDatabaseToDisk()
 {
 #ifndef USE_EXTERNAL_FLASH
-   #ifdef FSCom
+#ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
@@ -1741,91 +1698,89 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         success &= saveNodeDatabaseToDisk();
     }
 
+    /*
 
+    LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
+    if (!flash.begin()) {
+        LOG_ERROR("Error, failed to initialize flash chip!");
+        while (1) {
+          delay(1);
+        }
+      }
 
-/*
+      LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+      format_fat12();
+      check_fat12();
+      LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
+      if (!fatfs.begin(&flash)) {
+        LOG_ERROR("Error, failed to mount filesystem!");
+        while (1) {
+          delay(1);
+        }
+        }
+        LOG_INFO("Filesystem mounted!");
+        fatfs.remove(FILE_NAME);
 
-LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
-if (!flash.begin()) {
-    LOG_ERROR("Error, failed to initialize flash chip!");
-    while (1) {
-      delay(1);
-    }
-  }
+        File32 writeFile = fatfs.open(FILE_NAME, FILE_WRITE);
+      if (!writeFile) {
+        LOG_ERROR("Error, failed to create file!");
 
-  LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-  format_fat12();
-  check_fat12();
-  LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
-  if (!fatfs.begin(&flash)) {
-    LOG_ERROR("Error, failed to mount filesystem!");
-    while (1) {
-      delay(1);
-    }
-    }
-    LOG_INFO("Filesystem mounted!");
-    fatfs.remove(FILE_NAME);
-    
-    File32 writeFile = fatfs.open(FILE_NAME, FILE_WRITE);
-  if (!writeFile) {
-    LOG_ERROR("Error, failed to create file!");
-    
-  }
-  LOG_INFO("File created!");
-   writeFile.write(reinterpret_cast<const uint8_t*>(&config), sizeof(config));
-   writeFile.close();
-   LOG_INFO("File closed!");
+      }
+      LOG_INFO("File created!");
+       writeFile.write(reinterpret_cast<const uint8_t*>(&config), sizeof(config));
+       writeFile.close();
+       LOG_INFO("File closed!");
 
-   File32 dataFile = fatfs.open(FILE_NAME, FILE_READ);
-   if (dataFile) {
-     LOG_INFO("OPENED FILE");
-     // Read raw binary into the protobuf struct (non-protobuf/raw dump)
-     size_t want = sizeof(meshtastic_LocalConfig);
-     config.version = 0;  // uint32 - ok to clear directly
-     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;  // using proper enum
-     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-     strncpy(config.network.ntp_server, "", sizeof(config.network.ntp_server)-1);
-     config.display.screen_on_secs = 0;
-     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;;
-     config.security.private_key.size = 0;
-       LOG_INFO("config.version=%d", config.version);
-       LOG_INFO("device.role=%d", config.device.role);
-       LOG_INFO("lora.region=%d", config.lora.region);
-       LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
-       LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
-       LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
-       LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
-       LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
+       File32 dataFile = fatfs.open(FILE_NAME, FILE_READ);
+       if (dataFile) {
+         LOG_INFO("OPENED FILE");
+         // Read raw binary into the protobuf struct (non-protobuf/raw dump)
+         size_t want = sizeof(meshtastic_LocalConfig);
+         config.version = 0;  // uint32 - ok to clear directly
+         config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;  // using proper enum
+         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+         config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+         strncpy(config.network.ntp_server, "", sizeof(config.network.ntp_server)-1);
+         config.display.screen_on_secs = 0;
+         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;;
+         config.security.private_key.size = 0;
+           LOG_INFO("config.version=%d", config.version);
+           LOG_INFO("device.role=%d", config.device.role);
+           LOG_INFO("lora.region=%d", config.lora.region);
+           LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
+           LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
+           LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
+           LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
+           LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
 
-     int got = dataFile.read(reinterpret_cast<uint8_t*>(&config), want);
-     dataFile.close();
-     if (got == (int)want) {
-       LOG_INFO("Read %u bytes into config", got);
-       // Print useful fields to serial / log
-       LOG_INFO("config.version=%d", config.version);
-       LOG_INFO("device.role=%d", config.device.role);
-       LOG_INFO("lora.region=%d", config.lora.region);
-       LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
-       LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
-       LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
-       LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
-       LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
-       if (config.security.private_key.size > 0) {
-         char hexbuf[65] = {0};
-         size_t n = config.security.private_key.size;
-         if (n > 32) n = 32;
-         for (size_t i = 0; i < n; ++i)
-           sprintf(hexbuf + strlen(hexbuf), "%02x", config.security.private_key.bytes[i]);
-         LOG_INFO("security.private_key=%s", hexbuf);
+         int got = dataFile.read(reinterpret_cast<uint8_t*>(&config), want);
+         dataFile.close();
+         if (got == (int)want) {
+           LOG_INFO("Read %u bytes into config", got);
+           // Print useful fields to serial / log
+           LOG_INFO("config.version=%d", config.version);
+           LOG_INFO("device.role=%d", config.device.role);
+           LOG_INFO("lora.region=%d", config.lora.region);
+           LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
+           LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
+           LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
+           LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
+           LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
+           if (config.security.private_key.size > 0) {
+             char hexbuf[65] = {0};
+             size_t n = config.security.private_key.size;
+             if (n > 32) n = 32;
+             for (size_t i = 0; i < n; ++i)
+               sprintf(hexbuf + strlen(hexbuf), "%02x", config.security.private_key.bytes[i]);
+             LOG_INFO("security.private_key=%s", hexbuf);
+           }
+         } else {
+           LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)want);
+         }
+       } else {
+         LOG_ERROR("Error opening file for read");
        }
-     } else {
-       LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)want);
-     }
-   } else {
-     LOG_ERROR("Error opening file for read");
-   }
-   */
+       */
 
     return success;
 }
@@ -1838,10 +1793,30 @@ bool NodeDB::saveToDisk(int saveWhat)
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+#ifdef USE_EXTERNAL_FLASH
+        if (!fatfsMounted) {
+            if (!fatfs.begin(&flash)) {
+                LOG_ERROR("Error, failed to mount filesystem!");
+                return false;
+            }
+            fatfsMounted = true;
+            LOG_INFO("Filesystem mounted!");
+        }
+        LOG_INFO("Formatting filesystem...");
+        format_fat12();
+        check_fat12();
+        if (!fatfs.begin(&flash)) {
+            LOG_ERROR("Error, failed to mount filesystem after format!");
+            return false;
+        }
+        LOG_INFO("Filesystem mounted!");
+        fatfsMounted = true;
+#elif
         spiLock->lock();
         FSCom.format();
         spiLock->unlock();
 
+#endif
 #endif
         success = saveToDiskNoRetry(saveWhat);
 
@@ -2475,63 +2450,66 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 #endif
 }
 
-
-
 extern "C" {
 
-DSTATUS disk_status(BYTE pdrv) {
-  (void)pdrv;
-  return 0;
+DSTATUS disk_status(BYTE pdrv)
+{
+    (void)pdrv;
+    return 0;
 }
 
-DSTATUS disk_initialize(BYTE pdrv) {
-  (void)pdrv;
-  return 0;
+DSTATUS disk_initialize(BYTE pdrv)
+{
+    (void)pdrv;
+    return 0;
 }
 
-DRESULT disk_read(BYTE pdrv,  /* Physical drive nmuber to identify the drive */
-                  BYTE *buff, /* Data buffer to store read data */
+DRESULT disk_read(BYTE pdrv,    /* Physical drive nmuber to identify the drive */
+                  BYTE *buff,   /* Data buffer to store read data */
                   DWORD sector, /* Start sector in LBA */
                   UINT count    /* Number of sectors to read */
-) {
-  (void)pdrv;
-  return flash.readBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
+)
+{
+    (void)pdrv;
+    return flash.readBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
 }
 
-DRESULT disk_write(BYTE pdrv, /* Physical drive nmuber to identify the drive */
+DRESULT disk_write(BYTE pdrv,        /* Physical drive nmuber to identify the drive */
                    const BYTE *buff, /* Data to be written */
                    DWORD sector,     /* Start sector in LBA */
                    UINT count        /* Number of sectors to write */
-) {
-  (void)pdrv;
-  return flash.writeBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
+)
+{
+    (void)pdrv;
+    return flash.writeBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, /* Physical drive nmuber (0..) */
                    BYTE cmd,  /* Control code */
                    void *buff /* Buffer to send/receive control data */
-) {
-  (void)pdrv;
+)
+{
+    (void)pdrv;
 
-  switch (cmd) {
-  case CTRL_SYNC:
-    flash.syncBlocks();
-    return RES_OK;
+    switch (cmd) {
+    case CTRL_SYNC:
+        flash.syncBlocks();
+        return RES_OK;
 
-  case GET_SECTOR_COUNT:
-    *((DWORD *)buff) = flash.size() / 512;
-    return RES_OK;
+    case GET_SECTOR_COUNT:
+        *((DWORD *)buff) = flash.size() / 512;
+        return RES_OK;
 
-  case GET_SECTOR_SIZE:
-    *((WORD *)buff) = 512;
-    return RES_OK;
+    case GET_SECTOR_SIZE:
+        *((WORD *)buff) = 512;
+        return RES_OK;
 
-  case GET_BLOCK_SIZE:
-    *((DWORD *)buff) = 8; // erase block size in units of sector size
-    return RES_OK;
+    case GET_BLOCK_SIZE:
+        *((DWORD *)buff) = 8; // erase block size in units of sector size
+        return RES_OK;
 
-  default:
-    return RES_PARERR;
-  }
+    default:
+        return RES_PARERR;
+    }
 }
 }

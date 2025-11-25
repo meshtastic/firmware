@@ -4,7 +4,7 @@
 #include "SPILock.h"
 #include "configuration.h"
 
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
 
 /**
  * This class provides 'safe'/paranoid file writing.
@@ -46,5 +46,4 @@ class SafeFile : public Print
     bool fullAtomic;
     uint8_t hash = 0;
 };
-
 #endif

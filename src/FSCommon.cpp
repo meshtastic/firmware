@@ -11,29 +11,14 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "configuration.h"
-#include "SdFat_Adafruit_Fork.h"
-#include <SPI.h>
-#include <Adafruit_SPIFlash.h>
-#include "ff.h"
-#include "diskio.h"
-// up to 11 characters
-#define DISK_LABEL "EXT FLASH"
-
-//extern Adafruit_FlashTransport_QSPI flashTransport;
-//extern Adafruit_SPIFlash flash;
-extern FatVolume fatfs;
-extern bool flashInitialized;
-extern bool fatfsMounted;
 #if defined(EXTERNAL_FLASH_USE_QSPI)
-extern Adafruit_FlashTransport_QSPI flashTransport;
+Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
 #endif
-extern Adafruit_SPIFlash flash;
+Adafruit_SPIFlash flash(&flashTransport);
 
 FatVolume fatfs;
 bool flashInitialized = false;
 bool fatfsMounted = false;
-#define FILE_NAME "test2.txt"
-
 
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
@@ -61,59 +46,60 @@ SPIClass SPI_HSPI(HSPI);
  * @return true if the file was successfully copied, false otherwise.
  */
 
-
-void format_fat12(void) {
+void format_fat12(void)
+{
 // Working buffer for f_mkfs.
 #ifdef __AVR__
-  uint8_t workbuf[512];
+    uint8_t workbuf[512];
 #else
-  uint8_t workbuf[4096];
+    uint8_t workbuf[4096];
 #endif
 
-  // Elm Cham's fatfs objects
-  FATFS elmchamFatfs;
+    // Elm Cham's fatfs objects
+    FATFS elmchamFatfs;
 
-  // Make filesystem.
-  FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
-  if (r != FR_OK) {
-    LOG_ERROR("Error, f_mkfs failed");
-    while (1)
-      delay(1);
-  }
+    // Make filesystem.
+    FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
+    if (r != FR_OK) {
+        LOG_ERROR("Error, f_mkfs failed");
+        while (1)
+            delay(1);
+    }
 
-  // mount to set disk label
-  r = f_mount(&elmchamFatfs, "0:", 1);
-  if (r != FR_OK) {
-    LOG_ERROR("Error, f_mount failed");
-    while (1)
-      delay(1);
-  }
+    // mount to set disk label
+    r = f_mount(&elmchamFatfs, "0:", 1);
+    if (r != FR_OK) {
+        LOG_ERROR("Error, f_mount failed");
+        while (1)
+            delay(1);
+    }
 
-  // Setting label
-  LOG_INFO("Setting disk label to: " DISK_LABEL);
-  r = f_setlabel(DISK_LABEL);
-  if (r != FR_OK) {
-    LOG_ERROR("Error, f_setlabel failed");
-    while (1)
-      delay(1);
-  }
+    // Setting label
+    LOG_INFO("Setting disk label to: " DISK_LABEL);
+    r = f_setlabel(DISK_LABEL);
+    if (r != FR_OK) {
+        LOG_ERROR("Error, f_setlabel failed");
+        while (1)
+            delay(1);
+    }
 
-  // unmount
-  f_unmount("0:");
+    // unmount
+    f_unmount("0:");
 
-  // sync to make sure all data is written to flash
-  flash.syncBlocks();
+    // sync to make sure all data is written to flash
+    flash.syncBlocks();
 
-  LOG_INFO("Formatted flash!");
+    LOG_INFO("Formatted flash!");
 }
 
-void check_fat12(void) {
-  // Check new filesystem
-  if (!fatfs.begin(&flash)) {
-    LOG_ERROR("Error, failed to mount newly formatted filesystem!");
-    while (1)
-      delay(1);
-  }
+void check_fat12(void)
+{
+    // Check new filesystem
+    if (!fatfs.begin(&flash)) {
+        LOG_ERROR("Error, failed to mount newly formatted filesystem!");
+        while (1)
+            delay(1);
+    }
 }
 
 bool copyFile(const char *from, const char *to)
@@ -206,9 +192,9 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 
 #include <vector>
 
-
 // Helper for building full path
-static void buildPath(char *dest, size_t destLen, const char *parent, const char *child) {
+static void buildPath(char *dest, size_t destLen, const char *parent, const char *child)
+{
     if (strcmp(parent, "/") == 0) {
         snprintf(dest, destLen, "/%s", child);
     } else {
@@ -491,9 +477,9 @@ void fsInit()
         flashInitialized = true;
     }
     LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-    //format_fat12();
+    // format_fat12();
     check_fat12();
-    //LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
+    // LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
     if (!fatfsMounted) {
         if (!fatfs.begin(&flash)) {
             LOG_ERROR("Error, failed to mount filesystem!");

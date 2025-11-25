@@ -32,7 +32,23 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     }
 }
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+// Nanopb input callback for FatFs
+bool nanopb_fatfs_read(pb_istream_t *stream, pb_byte_t *buf, size_t count)
+{
+    File32 *file = (File32 *)stream->state;
+    int got = file->read(buf, count);
+    return got == (int)count;
+}
+
+// Nanopb output callback for FatFs
+bool nanopb_fatfs_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count)
+{
+    File32 *file = (File32 *)stream->state;
+    int written = file->write(buf, count);
+    return written == (int)count;
+}
+#elif defined(FSCom)
 /// Read from an Arduino File
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {

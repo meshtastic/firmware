@@ -5,7 +5,6 @@
 
 // Cross platform filesystem API
 
-
 #if defined(ARCH_PORTDUINO)
 // Portduino version
 #include "PortduinoFS.h"
@@ -42,11 +41,28 @@ using namespace STM32_LittleFS_Namespace;
 #endif
 
 #if defined(ARCH_NRF52)
-// NRF52 version
+#if defined(USE_EXTERNAL_FLASH)
+// nRF52 version with external flash#include "SdFat_Adafruit_Fork.h"
+#include "diskio.h"
+#include "ff.h"
+#include <Adafruit_SPIFlash.h>
+#include <SPI.h>
+#define DISK_LABEL "EXT FLASH"
+#define EXTERNAL_FLASH_USE_QSPI
+#if defined(EXTERNAL_FLASH_USE_QSPI)
+extern Adafruit_FlashTransport_QSPI flashTransport;
+#endif
+extern Adafruit_SPIFlash flash;
+extern FatVolume fatfs;
+extern bool flashInitialized;
+extern bool fatfsMounted;
+#else
+// nRF52 version without external flash
 #include "InternalFileSystem.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin() // InternalFS formats on failure
 using namespace Adafruit_LittleFS_Namespace;
+#endif
 #endif
 
 void fsInit();
