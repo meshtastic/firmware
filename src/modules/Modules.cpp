@@ -181,12 +181,13 @@ void setupModules()
     // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+#ifndef T_LORA_PAGER
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
         if (!rotaryEncoderInterruptImpl1->init()) {
             delete rotaryEncoderInterruptImpl1;
             rotaryEncoderInterruptImpl1 = nullptr;
         }
-#ifdef T_LORA_PAGER
+#elif defined(T_LORA_PAGER)
         // use a special FSM based rotary encoder version for T-LoRa Pager
         rotaryEncoderImpl = new RotaryEncoderImpl();
         if (!rotaryEncoderImpl->init()) {
