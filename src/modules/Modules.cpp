@@ -13,6 +13,8 @@
 #include "input/TrackballInterruptImpl1.h"
 #endif
 
+#include "modules/StatusLEDModule.h"
+
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
 #endif
@@ -119,6 +121,10 @@ void setupModules()
         buzzerFeedbackThread = new BuzzerFeedbackThread();
     }
 #endif
+#if defined(LED_CHARGE) || defined(LED_PAIRING)
+    statusLEDModule = new StatusLEDModule();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif
