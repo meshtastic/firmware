@@ -157,7 +157,17 @@ void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
-    highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+    if (sensor->dataReady()) {
+        sensor->getAGMT();
+        highestX = sensor->agmt.mag.axes.x;
+        lowestX = sensor->agmt.mag.axes.x;
+        highestY = sensor->agmt.mag.axes.y;
+        lowestY = sensor->agmt.mag.axes.y;
+        highestZ = sensor->agmt.mag.axes.z;
+        lowestZ = sensor->agmt.mag.axes.z;
+    } else {
+        highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+    }
 
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
