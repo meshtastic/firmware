@@ -426,12 +426,12 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     if (drawConnectionState) {
+        const int scale = isHighResolution ? 2 : 1;
+        display->setColor(BLACK);
+        display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
+                          (connection_icon_height * scale) + (2 * scale));
+        display->setColor(WHITE);
         if (isHighResolution) {
-            const int scale = 2;
-            display->setColor(BLACK);
-            display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
-                              (connection_icon_height * scale) + (2 * scale));
-            display->setColor(WHITE);
             const int bytesPerRow = (connection_icon_width + 7) / 8;
             int iconX = 0;
             int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
@@ -448,9 +448,6 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
             }
 
         } else {
-            display->setColor(BLACK);
-            display->fillRect(0, SCREEN_HEIGHT - connection_icon_height - 1, connection_icon_width, connection_icon_height + 2);
-            display->setColor(WHITE);
             display->drawXbm(0, SCREEN_HEIGHT - connection_icon_height, connection_icon_width, connection_icon_height,
                              connection_icon);
         }
