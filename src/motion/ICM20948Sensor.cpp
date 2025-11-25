@@ -173,7 +173,7 @@ void ICM20948Sensor::calibrate(uint16_t forSeconds)
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     LOG_DEBUG("Old calibration data: highestX = %f, lowestX = %f, highestY = %f, lowestY = %f, highestZ = %f, lowestZ = %f",
               highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-    LOG_DEBUG("Compass calibration started for %is", forSeconds);
+    LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
     if (sensor->dataReady()) {
         sensor->getAGMT();
         highestX = sensor->agmt.mag.axes.x;
