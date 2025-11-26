@@ -202,8 +202,6 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     p->decoded.payload.size = strlen(message);
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    else
-        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     lastSentToMesh = millis();
