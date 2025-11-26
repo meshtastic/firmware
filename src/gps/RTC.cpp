@@ -112,7 +112,11 @@ RTCSetResult readFromRTC()
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
         uint32_t now = millis();
+#ifdef MUZI_BASE
+        ArtronShop_RX8130CE rtc(&Wire1);
+#else
         ArtronShop_RX8130CE rtc(&Wire);
+#endif
         tm t;
         if (rtc.getTime(&t)) {
             tv.tv_sec = gm_mktime(&t);
@@ -245,7 +249,11 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         }
 #elif defined(RX8130CE_RTC)
         if (rtc_found.address == RX8130CE_RTC) {
+#ifdef MUZI_BASE
+            ArtronShop_RX8130CE rtc(&Wire1);
+#else
             ArtronShop_RX8130CE rtc(&Wire);
+#endif
             tm *t = gmtime(&tv->tv_sec);
             if (rtc.setTime(*t)) {
                 LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
