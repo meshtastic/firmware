@@ -13,7 +13,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
 
   private:
     bool firstTime = true;
-    bool interruptDriven = false;
+    bool nRFSenseSleep = false;
     uint32_t lastSentToMesh = 0;
     bool wasDetected = false;
     void sendDetectionMessage();

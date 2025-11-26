@@ -67,7 +67,7 @@ int32_t DetectionSensorModule::runOnce()
 
 #ifdef ARCH_NRF52
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-          interruptDriven = true;
+          nRFSenseSleep = true;
         }
 #endif
     
@@ -78,13 +78,11 @@ int32_t DetectionSensorModule::runOnce()
         digitalWrite(DETECTION_SENSOR_EN, HIGH);
 #endif
 
-
-        
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
 
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            if (interruptDriven) {
+            if (nRFSenseSleep) {
                 nrf_gpio_pin_sense_t detectsense;
                 switch (moduleConfig.detection_sensor.detection_trigger_type) {
                     case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_LOW:
@@ -131,7 +129,7 @@ int32_t DetectionSensorModule::runOnce()
         return setStartDelay();
     }
 
-    if (interruptDriven) {
+    if (nRFSenseSleep) {
         doDeepSleep(DELAY_FOREVER, false, true);
     }
 
@@ -175,6 +173,11 @@ void DetectionSensorModule::sendDetectionMessage()
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    else
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
@@ -197,6 +200,11 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    else
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     lastSentToMesh = millis();
     if (!channels.isDefaultChannel(0)) {
