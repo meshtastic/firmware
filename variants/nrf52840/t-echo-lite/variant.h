@@ -140,11 +140,12 @@ static const uint8_t A0 = PIN_A0;
 #define HAS_GPS 1
 // #define PIN_GPS_REINIT (32 + 5) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 
-#define PIN_GPS_STANDBY (32 + 10) // An output to wake GPS, low means allow sleep, high means force wake
-// Seems to be missing on this new board
-#define PIN_GPS_PPS (0 + 29) // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 15) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 13) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_EN (32 + 11) // GPS power
+#define GPS_EN_ACTIVE 1
+#define PIN_GPS_STANDBY (32 + 13) // wakeup pin
+#define PIN_GPS_PPS (32 + 15)
+#define GPS_TX_PIN (32 + 10) // L76K module RX PIN
+#define GPS_RX_PIN (0 + 29)  // L76K module TX PIN
 
 #define GPS_THREAD_INTERVAL 50
 

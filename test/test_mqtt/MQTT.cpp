@@ -83,8 +83,8 @@ class MockNodeDB : public NodeDB
 class MockRoutingModule : public RoutingModule
 {
   public:
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                    uint8_t hopLimit = 0) override
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false) override
     {
         ackNacks_.emplace_back(err, to, idFrom, chIndex, hopLimit);
     }
@@ -332,7 +332,7 @@ void setUp(void)
     };
     channelFile.channels_count = 1;
     owner = meshtastic_User{.id = "!12345678"};
-    myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 10};
+    myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
         meshtastic_Position{.has_latitude_i = true, .latitude_i = 7 * 1e7, .has_longitude_i = true, .longitude_i = 3 * 1e7};
 
@@ -591,7 +591,7 @@ void test_receiveEncryptedPKITopicToUs(void)
 // Should ignore messages published to MQTT by this gateway.
 void test_receiveIgnoresOwnPublishedMessages(void)
 {
-    unitTest->publish(&decoded, owner.id);
+    unitTest->publish(&decoded, nodeDB->getNodeId().c_str());
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
     TEST_ASSERT_TRUE(mockRoutingModule->ackNacks_.empty());
@@ -603,7 +603,7 @@ void test_receiveAcksOwnSentMessages(void)
     meshtastic_MeshPacket p = decoded;
     p.from = myNodeInfo.my_node_num;
 
-    unitTest->publish(&p, owner.id);
+    unitTest->publish(&p, nodeDB->getNodeId().c_str());
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
     TEST_ASSERT_EQUAL(1, mockRoutingModule->ackNacks_.size());

@@ -4,6 +4,10 @@
 #include "sys/time.h"
 #include <Arduino.h>
 
+#ifdef RX8130CE_RTC
+#include <ArtronShop_RX8130CE.h>
+#endif
+
 enum RTCQuality {
 
     /// We haven't had our RTC set yet

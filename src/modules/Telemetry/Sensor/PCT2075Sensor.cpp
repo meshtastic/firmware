@@ -9,24 +9,18 @@
 
 PCT2075Sensor::PCT2075Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_PCT2075, "PCT2075") {}
 
-int32_t PCT2075Sensor::runOnce()
+bool PCT2075Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
+    status = pct2075.begin(dev->address.address, bus);
 
-    status = pct2075.begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
-
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void PCT2075Sensor::setup() {}
 
 bool PCT2075Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.has_temperature = true;
-
     measurement->variant.environment_metrics.temperature = pct2075.getTemperature();
 
     return true;

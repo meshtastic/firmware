@@ -65,7 +65,7 @@ void fixPriority(meshtastic_MeshPacket *p)
 }
 
 /** enqueue a packet, return false if full */
-bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
+bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p, bool *dropped)
 {
     // no space - try to replace a lower priority packet in the queue
     if (queue.size() >= maxLen) {
@@ -73,7 +73,14 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
         if (!replaced) {
             LOG_WARN("TX queue is full, and there is no lower-priority packet available to evict in favour of 0x%08x", p->id);
         }
+        if (dropped) {
+            *dropped = true;
+        }
         return replaced;
+    }
+
+    if (dropped) {
+        *dropped = false;
     }
 
     // Find the correct position using upper_bound to maintain a stable order
@@ -103,12 +110,26 @@ meshtastic_MeshPacket *MeshPacketQueue::getFront()
     return p;
 }
 
-/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
-meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late)
+/** Get a packet from this queue. Returns a pointer to the packet, or NULL if not found. */
+meshtastic_MeshPacket *MeshPacketQueue::getPacketFromQueue(NodeNum from, PacketId id)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
-        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after))) {
+        if (getFrom(p) == from && p->id == id) {
+            return p;
+        }
+    }
+
+    return NULL;
+}
+
+/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
+meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late, uint8_t hop_limit_lt)
+{
+    for (auto it = queue.begin(); it != queue.end(); it++) {
+        auto p = (*it);
+        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after)) &&
+            (!hop_limit_lt || p->hop_limit < hop_limit_lt)) {
             queue.erase(it);
             return p;
         }
@@ -120,14 +141,7 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
 /* Attempt to find a packet from this queue. Return true if it was found. */
 bool MeshPacketQueue::find(const NodeNum from, const PacketId id)
 {
-    for (auto it = queue.begin(); it != queue.end(); it++) {
-        const auto *p = *it;
-        if (getFrom(p) == from && p->id == id) {
-            return true;
-        }
-    }
-
-    return false;
+    return getPacketFromQueue(from, id) != NULL;
 }
 
 /**

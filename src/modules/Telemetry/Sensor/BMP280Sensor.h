@@ -11,13 +11,10 @@ class BMP280Sensor : public TelemetrySensor
   private:
     Adafruit_BMP280 bmp280;
 
-  protected:
-    virtual void setup() override;
-
   public:
     BMP280Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

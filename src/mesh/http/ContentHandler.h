@@ -26,7 +26,7 @@ class HttpAPI : public PhoneAPI
 {
 
   public:
-    // Nothing here yet
+    HttpAPI() { api_type = TYPE_HTTP; }
 
   private:
     // Nothing here yet

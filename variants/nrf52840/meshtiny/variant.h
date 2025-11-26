@@ -19,7 +19,9 @@
 #ifndef _VARIANT_MESHTINY_
 #define _VARIANT_MESHTINY_
 
+#ifndef MESHTINY
 #define MESHTINY
+#endif
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)

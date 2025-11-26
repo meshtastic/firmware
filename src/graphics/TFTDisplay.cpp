@@ -422,7 +422,57 @@ static LGFX *tft = nullptr;
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
+#ifdef HELTEC_V4_TFT
+#include "chsc6x.h"
+#include "lgfx/v1/Touch.hpp"
+namespace lgfx
+{
+inline namespace v1
+{
+class TOUCH_CHSC6X : public ITouch
+{
+  public:
+    TOUCH_CHSC6X(void)
+    {
+        _cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+        _cfg.x_min = 0;
+        _cfg.x_max = 240;
+        _cfg.y_min = 0;
+        _cfg.y_max = 320;
+    };
 
+    bool init(void) override
+    {
+        if (chsc6xTouch == nullptr) {
+            chsc6xTouch = new chsc6x(&Wire1, TOUCH_SDA_PIN, TOUCH_SCL_PIN, TOUCH_INT_PIN, TOUCH_RST_PIN);
+        }
+        chsc6xTouch->chsc6x_init();
+        return true;
+    };
+
+    uint_fast8_t getTouchRaw(touch_point_t *tp, uint_fast8_t count) override
+    {
+        uint16_t raw_x, raw_y;
+        if (chsc6xTouch->chsc6x_read_touch_info(&raw_x, &raw_y) == 0) {
+            tp[0].x = 320 - 1 - raw_y;
+            tp[0].y = 240 - 1 - raw_x;
+            tp[0].size = 1;
+            tp[0].id = 1;
+            return 1;
+        }
+        tp[0].size = 0;
+        return 0;
+    };
+
+    void wakeup(void) override{};
+    void sleep(void) override{};
+
+  private:
+    chsc6x *chsc6xTouch = nullptr;
+};
+} // namespace v1
+} // namespace lgfx
+#endif
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7789 _panel_instance;
@@ -431,6 +481,8 @@ class LGFX : public lgfx::LGFX_Device
 #if HAS_TOUCHSCREEN
 #if defined(T_WATCH_S3) || defined(ELECROW)
     lgfx::Touch_FT5x06 _touch_instance;
+#elif defined(HELTEC_V4_TFT)
+    lgfx::TOUCH_CHSC6X _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
 #endif
@@ -464,9 +516,9 @@ class LGFX : public lgfx::LGFX_Device
         {                                        // Set the display panel control.
             auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
 
-            cfg.pin_cs = ST7789_CS; // Pin number where CS is connected (-1 = disable)
-            cfg.pin_rst = -1;       // Pin number where RST is connected  (-1 = disable)
-            cfg.pin_busy = -1;      // Pin number where BUSY is connected (-1 = disable)
+            cfg.pin_cs = ST7789_CS;     // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = ST7789_RESET; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = ST7789_BUSY; // Pin number where BUSY is connected (-1 = disable)
 
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
@@ -751,10 +803,8 @@ static LGFX *tft = nullptr;
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 #elif ARCH_PORTDUINO
+#include "Panel_sdl.hpp"
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
-#if defined(LGFX_SDL)
-#include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
-#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
@@ -783,10 +833,10 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9488;
         else if (portduino_config.displayPanel == hx8357d)
             _panel_instance = new lgfx::Panel_HX8357D;
-#if defined(LGFX_SDL)
-        else if (portduino_config.displayPanel == x11) {
+#if defined(SDL_h_)
+
+        else if (portduino_config.displayPanel == x11)
             _panel_instance = new lgfx::Panel_sdl;
-        }
 #endif
         else {
             _panel_instance = new lgfx::Panel_NULL;
@@ -799,8 +849,9 @@ class LGFX : public lgfx::LGFX_Device
 
         buscfg.pin_dc = portduino_config.displayDC.pin; // Set SPI DC pin number (-1 = disable)
 
-        _bus_instance.config(buscfg);            // applies the set value to the bus.
-        _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
+        _bus_instance.config(buscfg); // applies the set value to the bus.
+        if (portduino_config.displayPanel != x11)
+            _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
         LOG_DEBUG("Width: %d, Height: %d", portduino_config.displayWidth, portduino_config.displayHeight);
@@ -848,7 +899,7 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
         }
-#if defined(LGFX_SDL)
+#if defined(SDL_h_)
         if (portduino_config.displayPanel == x11) {
             lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)_panel_instance;
             sdl_panel_->setup();
@@ -1237,7 +1288,7 @@ void TFTDisplay::display(bool fromBlank)
 
 void TFTDisplay::sdlLoop()
 {
-#if defined(LGFX_SDL)
+#if defined(SDL_h_)
     static int lastPressed = 0;
     static int shuttingDown = false;
     if (portduino_config.displayPanel == x11) {
@@ -1247,27 +1298,26 @@ void TFTDisplay::sdlLoop()
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
-
         // debounce
-        if (lastPressed != 0 && !lgfx::v1::gpio_in(lastPressed))
+        if (lastPressed != 0 && !sdl_panel_->gpio_in(lastPressed))
             return;
-        if (!lgfx::v1::gpio_in(37)) {
+        if (!sdl_panel_->gpio_in(37)) {
             lastPressed = 37;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_RIGHT, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(36)) {
+        } else if (!sdl_panel_->gpio_in(36)) {
             lastPressed = 36;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_UP, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(38)) {
+        } else if (!sdl_panel_->gpio_in(38)) {
             lastPressed = 38;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_DOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(39)) {
+        } else if (!sdl_panel_->gpio_in(39)) {
             lastPressed = 39;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_LEFT, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(SDL_SCANCODE_KP_ENTER)) {
+        } else if (!sdl_panel_->gpio_in(SDL_SCANCODE_KP_ENTER)) {
             lastPressed = SDL_SCANCODE_KP_ENTER;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SELECT, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);

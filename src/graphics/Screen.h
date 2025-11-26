@@ -249,6 +249,8 @@ class Screen : public concurrency::OSThread
 
     bool isOverlayBannerShowing();
 
+    bool isScreenOn() { return screenOn; }
+
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
     char ourId[5];
@@ -259,15 +261,7 @@ class Screen : public concurrency::OSThread
     void setup();
 
     /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
-    void setOn(bool on, FrameCallback einkScreensaver = NULL)
-    {
-        if (!on)
-            // We handle off commands immediately, because they might be called because the CPU is shutting down
-            handleSetOn(false, einkScreensaver);
-        else
-            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
-    }
-
+    void setOn(bool on, FrameCallback einkScreensaver = NULL);
     /**
      * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
      * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code

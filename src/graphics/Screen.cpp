@@ -83,6 +83,11 @@ extern uint16_t TFT_MESH;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
+#if defined(T_LORA_PAGER)
+// KB backlight control
+#include "input/cardKbI2cImpl.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -95,7 +100,7 @@ namespace graphics
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
-
+#define ASCII_BELL '\x07'
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
@@ -430,6 +435,14 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
+#if defined(MUZI_BASE)
+            dispdev->init();
+            dispdev->setBrightness(brightness);
+            dispdev->flipScreenVertically();
+            dispdev->resetDisplay();
+            digitalWrite(SCREEN_12V_ENABLE, HIGH);
+            delay(100);
+#endif
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -438,7 +451,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             if (uiconfig.screen_brightness == 1)
                 digitalWrite(PIN_EINK_EN, HIGH);
 #elif defined(PCA_PIN_EINK_EN)
-            if (uiconfig.screen_brightness == 1)
+            if (uiconfig.screen_brightness > 0)
                 io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
@@ -448,7 +461,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOn();
-#ifdef HELTEC_TRACKER_V1_X
+#if defined(HELTEC_TRACKER_V1_X) || defined(HELTEC_WIRELESS_TRACKER_V2)
             ui->init();
 #endif
 #ifdef USE_ST7789
@@ -479,6 +492,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOff();
+
+#ifdef SCREEN_12V_ENABLE
+            digitalWrite(SCREEN_12V_ENABLE, LOW);
+#endif
 #ifdef USE_ST7789
             SPI1.end();
 #if defined(ARCH_ESP32)
@@ -529,13 +546,16 @@ void Screen::setup()
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
 #endif
 
-#ifdef USE_SH1107_128_64
+#if defined(USE_SH1107_128_64) || defined(USE_SH1107)
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
 #if defined(USE_ST7789) && defined(TFT_MESH)
     // Apply custom RGB color (e.g. Heltec T114/T190)
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+#if defined(MUZI_BASE)
+    dispdev->delayPoweron = true;
 #endif
 
     // === Initialize display and UI system ===
@@ -653,6 +673,19 @@ void Screen::setup()
 
     // === Notify modules that support UI events ===
     MeshModule::observeUIEvents(&uiFrameEventObserver);
+}
+
+void Screen::setOn(bool on, FrameCallback einkScreensaver)
+{
+#if defined(T_LORA_PAGER)
+    if (cardKbI2cImpl)
+        cardKbI2cImpl->toggleBacklight(on);
+#endif
+    if (!on)
+        // We handle off commands immediately, because they might be called because the CPU is shutting down
+        handleSetOn(false, einkScreensaver);
+    else
+        enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
 }
 
 void Screen::forceDisplay(bool forceUiUpdate)
@@ -1410,6 +1443,9 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         }
         nodeDB->updateGUI = false;
         break;
+    case STATUS_TYPE_POWER:
+        forceDisplay(true);
+        break;
     }
 
     return 0;
@@ -1440,28 +1476,36 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             }
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+            const meshtastic_Channel channel =
+                channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 
             char banner[256];
 
-            // Check for bell character in message to determine alert type
             bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
 
+            if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
+                moduleConfig.external_notification.alert_bell_buzzer)
+                // Check for bell character to determine if this message is an alert
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == ASCII_BELL) {
+                        isAlert = true;
+                        break;
+                    }
+                }
+
+            // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
+            // 'mute' preferences set to any specific node or channel.
             if (isAlert) {
                 if (longName && longName[0]) {
                     snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
                 } else {
                     strcpy(banner, "Alert Received");
                 }
-            } else {
+                screen->showSimpleBanner(banner, 3000);
+            } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
                 if (longName && longName[0]) {
 #if defined(M5STACK_UNITC6L)
                     strcpy(banner, "New Message");
@@ -1472,14 +1516,21 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 } else {
                     strcpy(banner, "New Message");
                 }
-            }
 #if defined(M5STACK_UNITC6L)
-            screen->setOn(true);
-            screen->showSimpleBanner(banner, 1500);
-            playLongBeep();
+                screen->setOn(true);
+                screen->showSimpleBanner(banner, 1500);
+                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
+                    (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
+                    (!isBroadcast(packet->to) && isToUs(packet))) {
+                    // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
+                    // - packet contains an alert and alert bell buzzer is enabled
+                    // - packet is a non-broadcast that is addressed to this node
+                    playLongBeep();
+                }
 #else
-            screen->showSimpleBanner(banner, 3000);
+                screen->showSimpleBanner(banner, 3000);
 #endif
+            }
         }
     }
 

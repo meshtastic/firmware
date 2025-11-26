@@ -1,6 +1,10 @@
-#include "graphics/SharedUIDisplay.h"
+#include "configuration.h"
+#if HAS_SCREEN
+#include "MeshService.h"
 #include "RTC.h"
+#include "draw/NodeListRenderer.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
@@ -284,7 +288,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
 
-                if (isInverted) {
+                if (isInverted && !force_no_invert) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mute_symbol_big_width + 2, mute_symbol_big_height + 2);
                     display->setColor(BLACK);
@@ -396,6 +400,43 @@ const int *getTextPositions(OLEDDisplay *display)
     return textPositions;
 }
 
+// *************************
+// * Common Footer Drawing *
+// *************************
+void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    bool drawConnectionState = false;
+    if (service->api_state == service->STATE_BLE || service->api_state == service->STATE_WIFI ||
+        service->api_state == service->STATE_SERIAL || service->api_state == service->STATE_PACKET ||
+        service->api_state == service->STATE_HTTP || service->api_state == service->STATE_ETH) {
+        drawConnectionState = true;
+    }
+
+    if (drawConnectionState) {
+        if (isHighResolution) {
+            const int scale = 2;
+            const int bytesPerRow = (connection_icon_width + 7) / 8;
+            int iconX = 0;
+            int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
+
+            for (int yy = 0; yy < connection_icon_height; ++yy) {
+                const uint8_t *rowPtr = connection_icon + yy * bytesPerRow;
+                for (int xx = 0; xx < connection_icon_width; ++xx) {
+                    const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
+                    const uint8_t bitMask = 1U << (xx & 7); // XBM is LSB-first
+                    if (byteVal & bitMask) {
+                        display->fillRect(iconX + xx * scale, iconY + yy * scale, scale, scale);
+                    }
+                }
+            }
+
+        } else {
+            display->drawXbm(0, SCREEN_HEIGHT - connection_icon_height, connection_icon_width, connection_icon_height,
+                             connection_icon);
+        }
+    }
+}
+
 bool isAllowedPunctuation(char c)
 {
     const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
@@ -423,3 +464,4 @@ std::string sanitizeString(const std::string &input)
 }
 
 } // namespace graphics
+#endif
