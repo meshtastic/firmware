@@ -5,8 +5,14 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
-#include "sleep.h"
 #include <Throttle.h>
+#ifdef ARCH_NRF52
+    #include "sleep.h"
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+        nRFSenseSleep = true;
+    }
+#endif
+
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
@@ -64,12 +70,6 @@ int32_t DetectionSensorModule::runOnce()
 
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
-
-#ifdef ARCH_NRF52
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-          nRFSenseSleep = true;
-        }
-#endif
     
     if (firstTime) {
 
