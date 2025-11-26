@@ -7,7 +7,7 @@
 #include "main.h"
 #include <Throttle.h>
 #ifdef ARCH_NRF52
-    #include "sleep.h"
+#include "sleep.h"
 #endif
 
 DetectionSensorModule *detectionSensorModule;
@@ -107,6 +107,7 @@ int32_t DetectionSensorModule::runOnce()
 
                 nrf_gpio_cfg_sense_set(
                     moduleConfig.detection_sensor.monitor_pin, detectsense);
+                
                 if (NRF_P0->LATCH || NRF_P1->LATCH) {
                     uint32_t gpioMask = NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH;
                     uint32_t gpioPort = NRF_P0->LATCH ? 0 : 1;
@@ -114,9 +115,11 @@ int32_t DetectionSensorModule::runOnce()
                     NRF_P0->LATCH = 0xFFFFFFFF;
                     LOG_INFO("Woke up by interrupt from GPIO %d on port P%d. Sending message.", __builtin_ctz(gpioMask), gpioPort);
                     sendDetectionMessage();
-                }
+                } 
+
                 LOG_INFO("Detection Sensor Module: init in interrupt mode");
-                return (config.power.min_wake_secs > 5) ? config.power.min_wake_secs * 1000 : FIVE_SECONDS_MS;
+                // go to sleep after ~90s, this allows remote configuration and in case a wake up by timer the sending of telemetry data (after ~62s)
+                return 1000 * 90;    //90s
                 
             } else {
                 pinMode(moduleConfig.detection_sensor.monitor_pin,
@@ -133,7 +136,9 @@ int32_t DetectionSensorModule::runOnce()
     }
 
     if (nRFSenseSleep) {
-        doDeepSleep(DELAY_FOREVER, false, true);
+        uint32_t nightyNightMs = Default::getConfiguredOrMinimumValue(Default::getConfiguredOrDefaultMs(config.power.sds_secs), ONE_MINUTE_MS * 60);
+        LOG_DEBUG("Sleeping for %ims", nightyNightMs);
+        doDeepSleep(nightyNightMs, false, true);
     }
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
