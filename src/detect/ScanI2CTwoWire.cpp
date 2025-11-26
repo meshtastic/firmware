@@ -547,6 +547,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case ICM20948_ADDR:     // same as BMX160_ADDR
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+#ifdef HAS_ICM20948
+                type = ICM20948;
+                logFoundDevice("ICM20948", (uint8_t)addr.address);
+                break;
+#endif
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
