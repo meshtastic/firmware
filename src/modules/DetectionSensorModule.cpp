@@ -118,8 +118,9 @@ int32_t DetectionSensorModule::runOnce()
                 } 
 
                 LOG_INFO("Detection Sensor Module: init in interrupt mode");
-                // go to sleep after ~90s, this allows remote configuration and in case a wake up by timer the sending of telemetry data (after ~62s)
-                return 1000 * 90;    //90s
+                // least time should be 5s to send the message. choose >70s for comfortable connectivity
+                // via BLE or USB and allow telemetry data to be sent, which happens after ~62s
+                return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
                 
             } else {
                 pinMode(moduleConfig.detection_sensor.monitor_pin,
