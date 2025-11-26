@@ -67,12 +67,6 @@ int32_t DetectionSensorModule::runOnce()
 
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
-
-#ifdef ARCH_NRF52
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-        nRFSenseSleep = true;
-    }
-#endif
     
     if (firstTime) {
 
@@ -85,7 +79,9 @@ int32_t DetectionSensorModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            if (nRFSenseSleep) {
+
+#ifdef ARCH_NRF52          
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 nrf_gpio_pin_sense_t detectsense;
                 switch (moduleConfig.detection_sensor.detection_trigger_type) {
                     case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_LOW:
@@ -122,12 +118,11 @@ int32_t DetectionSensorModule::runOnce()
                 // comfortable connectivity via BLE or USB and allow telemetry
                 // data to be sent, which happens after ~62s
                 return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
-                
-            } else {
+            } else
+#endif
                 pinMode(moduleConfig.detection_sensor.monitor_pin,
                         moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP
                                                                 : INPUT);
-            }
         } else {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
@@ -137,10 +132,12 @@ int32_t DetectionSensorModule::runOnce()
         return setStartDelay();
     }
 
-    if (nRFSenseSleep) {
+#ifdef ARCH_NRF52 
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
         uint32_t nightyNightMs = Default::getConfiguredOrMinimumValue(Default::getConfiguredOrDefaultMs(config.power.sds_secs), ONE_MINUTE_MS * 60);
         doDeepSleep(nightyNightMs, false, true);
     }
+#endif
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
