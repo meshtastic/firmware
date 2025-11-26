@@ -118,8 +118,9 @@ int32_t DetectionSensorModule::runOnce()
                 } 
 
                 LOG_INFO("Detection Sensor Module: init in interrupt mode");
-                // least time should be 5s to send the message. choose >70s for comfortable connectivity
-                // via BLE or USB and allow telemetry data to be sent, which happens after ~62s
+                // least time should be 5s to send the message. choose >70s for
+                // comfortable connectivity via BLE or USB and allow telemetry
+                // data to be sent, which happens after ~62s
                 return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
                 
             } else {
@@ -138,7 +139,6 @@ int32_t DetectionSensorModule::runOnce()
 
     if (nRFSenseSleep) {
         uint32_t nightyNightMs = Default::getConfiguredOrMinimumValue(Default::getConfiguredOrDefaultMs(config.power.sds_secs), ONE_MINUTE_MS * 60);
-        LOG_DEBUG("Sleeping for %ims", nightyNightMs);
         doDeepSleep(nightyNightMs, false, true);
     }
 
