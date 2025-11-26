@@ -108,6 +108,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #elif defined(HELTEC_MESH_SOLAR)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
+#elif defined(MUZI_BASE)
+#define HW_VENDOR meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

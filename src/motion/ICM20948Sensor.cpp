@@ -47,6 +47,21 @@ int32_t ICM20948Sensor::runOnce()
 int32_t ICM20948Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+#if defined(MUZI_BASE) // temporarily gated to single device due to feature freeze
+    if (screen && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+        if (!isAsleep) {
+            LOG_DEBUG("sleeping IMU");
+            sensor->sleep(true);
+            isAsleep = true;
+        }
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    }
+    if (isAsleep) {
+        sensor->sleep(false);
+        isAsleep = false;
+    }
+#endif
+
     float magX = 0, magY = 0, magZ = 0;
     if (sensor->dataReady()) {
         sensor->getAGMT();
@@ -156,6 +171,8 @@ int32_t ICM20948Sensor::runOnce()
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    LOG_DEBUG("Old calibration data: highestX = %f, lowestX = %f, highestY = %f, lowestY = %f, highestZ = %f, lowestZ = %f",
+              highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
     if (sensor->dataReady()) {
         sensor->getAGMT();
