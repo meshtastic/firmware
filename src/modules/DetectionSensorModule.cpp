@@ -5,6 +5,7 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include "sleep.h"
 #include <Throttle.h>
 DetectionSensorModule *detectionSensorModule;
 
@@ -64,6 +65,12 @@ int32_t DetectionSensorModule::runOnce()
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
 
+#ifdef ARCH_NRF52
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+          interruptDriven = true;
+        }
+#endif
+    
     if (firstTime) {
 
 #ifdef DETECTION_SENSOR_EN
@@ -71,10 +78,50 @@ int32_t DetectionSensorModule::runOnce()
         digitalWrite(DETECTION_SENSOR_EN, HIGH);
 #endif
 
+
+        
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
+
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
+            if (interruptDriven) {
+                nrf_gpio_pin_sense_t detectsense;
+                switch (moduleConfig.detection_sensor.detection_trigger_type) {
+                    case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_LOW:
+                    case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_FALLING_EDGE:
+                        detectsense = NRF_GPIO_PIN_SENSE_LOW;
+                        break;
+                    case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH:
+                    case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_RISING_EDGE:
+                        detectsense = NRF_GPIO_PIN_SENSE_HIGH;
+                        break;
+                    default:
+                        LOG_ERROR("cant detect 'any edge', defaulting to falling edge");
+                        detectsense = NRF_GPIO_PIN_SENSE_LOW;
+                }
+                nrf_gpio_cfg_input(moduleConfig.detection_sensor.monitor_pin,
+                                moduleConfig.detection_sensor.use_pullup
+                                    ? NRF_GPIO_PIN_PULLUP
+                                    : NRF_GPIO_PIN_NOPULL);
+
+                nrf_gpio_cfg_sense_set(
+                    moduleConfig.detection_sensor.monitor_pin, detectsense);
+                if (NRF_P0->LATCH || NRF_P1->LATCH) {
+                    uint32_t gpioMask = NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH;
+                    uint32_t gpioPort = NRF_P0->LATCH ? 0 : 1;
+                    NRF_P1->LATCH = 0xFFFFFFFF;
+                    NRF_P0->LATCH = 0xFFFFFFFF;
+                    LOG_INFO("Woke up by interrupt from GPIO %d on port P%d. Sending message.", __builtin_ctz(gpioMask), gpioPort);
+                    sendDetectionMessage();
+                }
+                LOG_INFO("Detection Sensor Module: init in interrupt mode");
+                return (config.power.min_wake_secs > 5) ? config.power.min_wake_secs * 1000 : FIVE_SECONDS_MS;
+                
+            } else {
+                pinMode(moduleConfig.detection_sensor.monitor_pin,
+                        moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP
+                                                                : INPUT);
+            }
         } else {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
@@ -82,6 +129,10 @@ int32_t DetectionSensorModule::runOnce()
         LOG_INFO("Detection Sensor Module: init");
 
         return setStartDelay();
+    }
+
+    if (interruptDriven) {
+        doDeepSleep(DELAY_FOREVER, false, true);
     }
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
