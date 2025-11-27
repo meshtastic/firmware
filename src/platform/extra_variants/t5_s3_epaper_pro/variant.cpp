@@ -13,7 +13,12 @@ bool readTouch(int16_t *x, int16_t *y)
 {
     if (!digitalRead(GT911_PIN_INT)) {
         concurrency::LockGuard g(spiLock);
-        if (touch.getPoint(x, y) && (*x >= 0) && (*y >= 0) && (*x < EPD_WIDTH) && (*y < EPD_HEIGHT)) {
+        int16_t raw_x;
+        int16_t raw_y;
+        if (touch.getPoint(&raw_x, &raw_y) /*&& (*x >= 0) && (*y >= 0) && (*x < EPD_WIDTH) && (*y < EPD_HEIGHT)*/) {
+            // rotate 90° for landscape
+            *x = raw_y;
+            *y = EPD_WIDTH - 1 - raw_x;
             LOG_DEBUG("touched(%d/%d)", *x, *y);
             return true;
         }
