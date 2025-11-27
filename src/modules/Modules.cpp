@@ -9,6 +9,8 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "input/i2cButton.h"
 #include "modules/SystemCommandsModule.h"
+#include "modules/ModuleRegistry.h"
+
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"
 #endif
@@ -301,4 +303,6 @@ void setupModules()
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();
+
+    init_all_modules();
 }
