@@ -51,6 +51,7 @@ constexpr int reconnectMax = 5;
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
 static bool isMqttServerAddressPrivate = false;
+static bool isConnected = false;
 
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
@@ -64,6 +65,20 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     // Find channel by channel_id and check downlink_enabled
     if (!(strcmp(e.channel_id, "PKI") == 0 ||
           (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
+        return;
+    }
+
+    bool anyChannelHasDownlink = false;
+    size_t numChan = channels.getNumChannels();
+    for (size_t i = 0; i < numChan; ++i) {
+        const auto &c = channels.getByIndex(i);
+        if (c.settings.downlink_enabled) {
+            anyChannelHasDownlink = true;
+            break;
+        }
+    }
+
+    if (strcmp(e.channel_id, "PKI") == 0 && !anyChannelHasDownlink) {
         return;
     }
     // Generate node ID from nodenum for comparison
@@ -306,8 +321,10 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     std::string nodeId = nodeDB->getNodeId();
     const bool connected = pubSub.connect(nodeId.c_str(), config.mqttUsername, config.mqttPassword);
     if (connected) {
+        isConnected = true;
         LOG_INFO("MQTT connected");
     } else {
+        isConnected = false;
         LOG_WARN("Failed to connect to MQTT server");
     }
     return connected;
@@ -493,6 +510,7 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
 
 void MQTT::reconnect()
 {
+    isConnected = false;
     if (wantsLink()) {
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
             LOG_INFO("MQTT connect via client proxy instead");
@@ -520,7 +538,7 @@ void MQTT::reconnect()
             runASAP = true;
             reconnectCount = 0;
             isMqttServerAddressPrivate = isPrivateIpAddress(clientConnection->remoteIP());
-
+            isConnected = true;
             publishNodeInfo();
             sendSubscriptions();
         } else {
@@ -675,6 +693,9 @@ void MQTT::publishNodeInfo()
 void MQTT::publishQueuedMessages()
 {
     if (mqttQueue.isEmpty())
+        return;
+
+    if (!moduleConfig.mqtt.proxy_to_client_enabled && !isConnected)
         return;
 
     LOG_DEBUG("Publish enqueued MQTT message");
