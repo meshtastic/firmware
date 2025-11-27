@@ -1259,7 +1259,7 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 
 void Screen::toggleFrameVisibility(const std::string &frameName)
 {
-#ifndef USE_EINK
+#if !defined(USE_EINK) && !defined(USE_EPD)
     if (frameName == "nodelist") {
         hiddenFrames.nodelist = !hiddenFrames.nodelist;
     }
@@ -1299,11 +1299,11 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
 
 bool Screen::isFrameHidden(const std::string &frameName) const
 {
-#ifndef USE_EINK
+#if !defined(USE_EINK) && !defined(USE_EPD)
     if (frameName == "nodelist")
         return hiddenFrames.nodelist;
 #endif
-#ifdef USE_EINK
+#if defined(USE_EINK) || defined(USE_EPD)
     if (frameName == "nodelist_lastheard")
         return hiddenFrames.nodelist_lastheard;
     if (frameName == "nodelist_hopsignal")
@@ -1629,7 +1629,8 @@ int Screen::handleInputEvent(const InputEvent *event)
         return 0;
     }
 
-#ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
+#if defined(USE_EINK) || defined(USE_EPD) // the screen is the last input handler, so if an event makes it here, we can assume it
+                                          // will prompt a screen draw.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
     EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
     handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
