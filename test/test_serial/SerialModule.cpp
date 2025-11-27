@@ -71,11 +71,17 @@ void test_serialConfigWithOverrideConsoleSimpleModeIsInvalid(void)
     TEST_ASSERT_FALSE(SerialModule::isValidConfig(config));
 }
 
-// Test that configuration with override_console_serial_port and TEXTMSG mode is invalid.
+// Test that configuration with override_console_serial_port and TEXTMSG or DETECTION_SENSOR_APP_TEXTMSG mode is invalid.
 void test_serialConfigWithOverrideConsoleTextMsgModeIsInvalid(void)
 {
-    meshtastic_ModuleConfig_SerialConfig config = {
+    meshtastic_ModuleConfig_SerialConfig config;
+    config = {
         .enabled = true, .override_console_serial_port = true, .mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG};
+
+    TEST_ASSERT_FALSE(SerialModule::isValidConfig(config));
+
+    config = {
+        .enabled = true, .override_console_serial_port = true, .mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DETECTION_SENSOR_APP_TEXTMSG};
 
     TEST_ASSERT_FALSE(SerialModule::isValidConfig(config));
 }
@@ -116,6 +122,10 @@ void test_serialConfigVariousModesWithoutOverrideAreValid(void)
 
     // Test CALTOPO mode
     config.mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO;
+    TEST_ASSERT_TRUE(SerialModule::isValidConfig(config));
+
+    // Test DETECTION_SENSOR_APP_TEXTMSG mode
+    config.mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DETECTION_SENSOR_APP_TEXTMSG;
     TEST_ASSERT_TRUE(SerialModule::isValidConfig(config));
 }
 

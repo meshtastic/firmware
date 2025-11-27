@@ -119,6 +119,9 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO:
         ourPortNum = meshtastic_PortNum_POSITION_APP;
         break;
+    case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DETECTION_SENSOR_APP_TEXTMSG:
+        ourPortNum = meshtastic_PortNum_DETECTION_SENSOR_APP;
+        break;
     default:
         ourPortNum = meshtastic_PortNum_SERIAL_APP;
         // restrict to the serial channel for rx
@@ -402,7 +405,8 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 serialPrint->write(p.payload.bytes, p.payload.size);
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG ||
+                        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DETECTION_SENSOR_APP_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
