@@ -499,7 +499,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(CST328_ADDR, CST328, "CST328", (uint8_t)addr.address);
+            case CST328_ADDR:
+                // Do we have the CST328 or the CST226SE
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
+                if (registerValue == 0xA9) {
+                    type = CST226SE;
+                    logFoundDevice("CST226SE", (uint8_t)addr.address);
+                } else {
+                    type = CST328;
+                    logFoundDevice("CST328", (uint8_t)addr.address);
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(CHSC6X_ADDR, CHSC6X, "CHSC6X", (uint8_t)addr.address);
             case LTR553ALS_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x86), 1); // Part ID register
@@ -528,8 +539,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
 
             case MLX90614_ADDR_DEF:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1);
-                if (registerValue == 0x5a) {
+                // Do we have the MLX90614 or the MPR121KB or the CST226SE
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x06), 1);
+                if (registerValue == 0xAB) {
+                    type = CST226SE;
+                    logFoundDevice("CST226SE", (uint8_t)addr.address);
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1) == 0x5a) {
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
                 } else {
