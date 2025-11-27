@@ -734,6 +734,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
+#ifdef COMPASS_ORIENTATION
+    config.display.compass_orientation = COMPASS_ORIENTATION;
+#endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (WiFiOTA::isUpdated()) {
         WiFiOTA::recoverConfig(&config.network);
