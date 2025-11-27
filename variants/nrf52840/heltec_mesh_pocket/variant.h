@@ -120,7 +120,7 @@ No longer populated on PCB
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER (4.90F)
+#define ADC_MULTIPLIER (4.6425F)
 
 #undef HAS_GPS
 #define HAS_GPS 0

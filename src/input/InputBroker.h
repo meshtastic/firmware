@@ -59,7 +59,7 @@ class InputBroker : public Observable<const InputEvent *>
     InputBroker();
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     void requestPollSoon(InputPollable *pollable);
     void queueInputEvent(const InputEvent *event);
     void processInputEventQueue();
@@ -69,7 +69,7 @@ class InputBroker : public Observable<const InputEvent *>
     int handleInputEvent(const InputEvent *event);
 
   private:
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     QueueHandle_t inputEventQueue;
     QueueHandle_t pollSoonQueue;
     TaskHandle_t pollSoonTask;

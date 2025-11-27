@@ -360,6 +360,10 @@ const uint8_t chirpy_hirez[] = {
 #define chirpy_small_image_height 8
 const uint8_t chirpy_small[] = {0x7f, 0x41, 0x55, 0x55, 0x55, 0x55, 0x41, 0x7f};
 
+#define connection_icon_width 7
+#define connection_icon_height 5
+const uint8_t connection_icon[] = {0x36, 0x41, 0x5D, 0x41, 0x36};
+
 #ifdef M5STACK_UNITC6L
 #include "img/icon_small.xbm"
 #else

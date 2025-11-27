@@ -11,6 +11,113 @@ extern graphics::Screen *screen;
 
 TraceRouteModule *traceRouteModule;
 
+void TraceRouteModule::setResultText(const String &text)
+{
+    resultText = text;
+    resultLines.clear();
+    resultLinesDirty = true;
+}
+
+void TraceRouteModule::clearResultLines()
+{
+    resultLines.clear();
+    resultLinesDirty = false;
+}
+#if HAS_SCREEN
+void TraceRouteModule::rebuildResultLines(OLEDDisplay *display)
+{
+    if (!display) {
+        resultLinesDirty = false;
+        return;
+    }
+
+    resultLines.clear();
+
+    if (resultText.length() == 0) {
+        resultLinesDirty = false;
+        return;
+    }
+
+    int maxWidth = display->getWidth() - 4;
+    if (maxWidth <= 0) {
+        resultLinesDirty = false;
+        return;
+    }
+
+    int start = 0;
+    int textLength = resultText.length();
+
+    while (start <= textLength) {
+        int newlinePos = resultText.indexOf('\n', start);
+        String segment;
+
+        if (newlinePos != -1) {
+            segment = resultText.substring(start, newlinePos);
+            start = newlinePos + 1;
+        } else {
+            segment = resultText.substring(start);
+            start = textLength + 1;
+        }
+
+        if (segment.length() == 0) {
+            resultLines.push_back("");
+            continue;
+        }
+
+        if (display->getStringWidth(segment) <= maxWidth) {
+            resultLines.push_back(segment);
+            continue;
+        }
+
+        String remaining = segment;
+
+        while (remaining.length() > 0) {
+            String tempLine = "";
+            int lastGoodBreak = -1;
+            bool lineComplete = false;
+
+            for (int i = 0; i < static_cast<int>(remaining.length()); i++) {
+                char ch = remaining.charAt(i);
+                String testLine = tempLine + ch;
+
+                if (display->getStringWidth(testLine) > maxWidth) {
+                    if (lastGoodBreak >= 0) {
+                        resultLines.push_back(remaining.substring(0, lastGoodBreak + 1));
+                        remaining = remaining.substring(lastGoodBreak + 1);
+                        lineComplete = true;
+                        break;
+                    } else if (tempLine.length() > 0) {
+                        resultLines.push_back(tempLine);
+                        remaining = remaining.substring(i);
+                        lineComplete = true;
+                        break;
+                    } else {
+                        resultLines.push_back(String(ch));
+                        remaining = remaining.substring(i + 1);
+                        lineComplete = true;
+                        break;
+                    }
+                } else {
+                    tempLine = testLine;
+                    if (ch == ' ' || ch == '>' || ch == '<' || ch == '-' || ch == '(' || ch == ')' || ch == ',') {
+                        lastGoodBreak = i;
+                    }
+                }
+            }
+
+            if (!lineComplete) {
+                if (tempLine.length() > 0) {
+                    resultLines.push_back(tempLine);
+                }
+                break;
+            }
+        }
+    }
+
+    resultLinesDirty = false;
+}
+#endif
+
 bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r)
 {
     // We only alter the packet in alterReceivedProtobuf()
@@ -20,6 +127,11 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     const meshtastic_Data &incoming = p.decoded;
+
+    // Update next-hops using returned route
+    if (incoming.request_id) {
+        updateNextHops(p, r);
+    }
 
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);
@@ -150,6 +262,65 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
             LOG_INFO("Trace route result: %s", result.c_str());
             handleTraceRouteResult(result);
         }
+    }
+}
+
+void TraceRouteModule::updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+{
+    // E.g. if the route is A->B->C->D and we are B, we can set C as next-hop for C and D
+    // Similarly, if we are C, we can set D as next-hop for D
+    // If we are A, we can set B as next-hop for B, C and D
+
+    // First check if we were the original sender or in the original route
+    int8_t nextHopIndex = -1;
+    if (isToUs(&p)) {
+        nextHopIndex = 0; // We are the original sender, next hop is first in route
+    } else {
+        // Check if we are in the original route
+        for (uint8_t i = 0; i < r->route_count; i++) {
+            if (r->route[i] == nodeDB->getNodeNum()) {
+                nextHopIndex = i + 1; // Next hop is the one after us
+                break;
+            }
+        }
+    }
+
+    // If we are in the original route, update the next hops
+    if (nextHopIndex != -1) {
+        // For every node after us, we can set the next-hop to the first node after us
+        NodeNum nextHop;
+        if (nextHopIndex == r->route_count) {
+            nextHop = p.from; // We are the last in the route, next hop is destination
+        } else {
+            nextHop = r->route[nextHopIndex];
+        }
+
+        if (nextHop == NODENUM_BROADCAST) {
+            return;
+        }
+        uint8_t nextHopByte = nodeDB->getLastByteOfNodeNum(nextHop);
+
+        // For the rest of the nodes in the route, set their next-hop
+        // Note: if we are the last in the route, this loop will not run
+        for (int8_t i = nextHopIndex; i < r->route_count; i++) {
+            NodeNum targetNode = r->route[i];
+            maybeSetNextHop(targetNode, nextHopByte);
+        }
+
+        // Also set next-hop for the destination node
+        maybeSetNextHop(p.from, nextHopByte);
+    }
+}
+
+void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
+{
+    if (target == NODENUM_BROADCAST)
+        return;
+
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(target);
+    if (node && node->next_hop != nextHopByte) {
+        LOG_INFO("Updating next-hop for 0x%08x to 0x%02x based on traceroute", target, nextHopByte);
+        node->next_hop = nextHopByte;
     }
 }
 
@@ -342,7 +513,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     if (node == 0 || node == NODENUM_BROADCAST) {
         LOG_ERROR("Invalid node number for trace route: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "Invalid node";
+        setResultText("Invalid node");
         resultShowTime = millis();
         tracingNode = 0;
 
@@ -356,7 +527,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     if (node == nodeDB->getNodeNum()) {
         LOG_ERROR("Cannot trace route to self: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "Cannot trace self";
+        setResultText("Cannot trace self");
         resultShowTime = millis();
         tracingNode = 0;
 
@@ -383,6 +554,8 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         unsigned long wait = (cooldownMs - (now - lastTraceRouteTime)) / 1000;
         bannerText = String("Wait for ") + String(wait) + String("s");
         runState = TRACEROUTE_STATE_COOLDOWN;
+        resultText = "";
+        clearResultLines();
 
         requestFocus();
         UIFrameEvent e;
@@ -395,6 +568,8 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     tracingNode = node;
     lastTraceRouteTime = now;
     runState = TRACEROUTE_STATE_TRACKING;
+    resultText = "";
+    clearResultLines();
     bannerText = String("Tracing ") + getNodeName(node);
 
     LOG_INFO("TraceRoute UI: Starting trace route to node 0x%08x, requesting focus", node);
@@ -437,7 +612,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         } else {
             LOG_ERROR("MeshService is NULL!");
             runState = TRACEROUTE_STATE_RESULT;
-            resultText = "Service unavailable";
+            setResultText("Service unavailable");
             resultShowTime = millis();
             tracingNode = 0;
 
@@ -450,7 +625,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     } else {
         LOG_ERROR("Failed to allocate TraceRoute packet from router");
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "Failed to send";
+        setResultText("Failed to send");
         resultShowTime = millis();
         tracingNode = 0;
 
@@ -468,7 +643,7 @@ void TraceRouteModule::launch(NodeNum node)
     if (node == 0 || node == NODENUM_BROADCAST) {
         LOG_ERROR("Invalid node number for trace route: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "Invalid node";
+        setResultText("Invalid node");
         resultShowTime = millis();
         tracingNode = 0;
 
@@ -482,7 +657,7 @@ void TraceRouteModule::launch(NodeNum node)
     if (node == nodeDB->getNodeNum()) {
         LOG_ERROR("Cannot trace route to self: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "Cannot trace self";
+        setResultText("Cannot trace self");
         resultShowTime = millis();
         tracingNode = 0;
 
@@ -504,6 +679,8 @@ void TraceRouteModule::launch(NodeNum node)
         unsigned long wait = (cooldownMs - (now - lastTraceRouteTime)) / 1000;
         bannerText = String("Wait for ") + String(wait) + String("s");
         runState = TRACEROUTE_STATE_COOLDOWN;
+        resultText = "";
+        clearResultLines();
 
         requestFocus();
         UIFrameEvent e;
@@ -516,6 +693,8 @@ void TraceRouteModule::launch(NodeNum node)
     runState = TRACEROUTE_STATE_TRACKING;
     tracingNode = node;
     lastTraceRouteTime = now;
+    resultText = "";
+    clearResultLines();
     bannerText = String("Tracing ") + getNodeName(node);
 
     requestFocus();
@@ -550,14 +729,14 @@ void TraceRouteModule::launch(NodeNum node)
         } else {
             LOG_ERROR("MeshService is NULL!");
             runState = TRACEROUTE_STATE_RESULT;
-            resultText = "Service unavailable";
+            setResultText("Service unavailable");
             resultShowTime = millis();
             tracingNode = 0;
         }
     } else {
         LOG_ERROR("Failed to allocate TraceRoute packet from router");
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "Failed to send";
+        setResultText("Failed to send");
         resultShowTime = millis();
         tracingNode = 0;
     }
@@ -565,7 +744,7 @@ void TraceRouteModule::launch(NodeNum node)
 
 void TraceRouteModule::handleTraceRouteResult(const String &result)
 {
-    resultText = result;
+    setResultText(result);
     runState = TRACEROUTE_STATE_RESULT;
     resultShowTime = millis();
     tracingNode = 0;
@@ -615,83 +794,15 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->setFont(FONT_SMALL);
 
         if (resultText.length() > 0) {
-            std::vector<String> lines;
-            String currentLine = "";
-            int maxWidth = display->getWidth() - 4;
-
-            int start = 0;
-            int newlinePos = resultText.indexOf('\n', start);
-
-            while (newlinePos != -1 || start < static_cast<int>(resultText.length())) {
-                String segment;
-                if (newlinePos != -1) {
-                    segment = resultText.substring(start, newlinePos);
-                    start = newlinePos + 1;
-                    newlinePos = resultText.indexOf('\n', start);
-                } else {
-                    segment = resultText.substring(start);
-                    start = resultText.length();
-                }
-
-                if (display->getStringWidth(segment) <= maxWidth) {
-                    lines.push_back(segment);
-                } else {
-                    // Try to break at better positions (space, >, <, -)
-                    String remaining = segment;
-
-                    while (remaining.length() > 0) {
-                        String tempLine = "";
-                        int lastGoodBreak = -1;
-                        bool lineComplete = false;
-
-                        for (int i = 0; i < static_cast<int>(remaining.length()); i++) {
-                            char ch = remaining.charAt(i);
-                            String testLine = tempLine + ch;
-
-                            if (display->getStringWidth(testLine) > maxWidth) {
-                                if (lastGoodBreak >= 0) {
-                                    // Break at the last good position
-                                    lines.push_back(remaining.substring(0, lastGoodBreak + 1));
-                                    remaining = remaining.substring(lastGoodBreak + 1);
-                                    lineComplete = true;
-                                    break;
-                                } else if (tempLine.length() > 0) {
-                                    lines.push_back(tempLine);
-                                    remaining = remaining.substring(i);
-                                    lineComplete = true;
-                                    break;
-                                } else {
-                                    // Single character exceeds width
-                                    lines.push_back(String(ch));
-                                    remaining = remaining.substring(i + 1);
-                                    lineComplete = true;
-                                    break;
-                                }
-                            } else {
-                                tempLine = testLine;
-                                // Mark good break positions
-                                if (ch == ' ' || ch == '>' || ch == '<' || ch == '-' || ch == '(' || ch == ')') {
-                                    lastGoodBreak = i;
-                                }
-                            }
-                        }
-
-                        if (!lineComplete) {
-                            // Reached end of remaining text
-                            if (tempLine.length() > 0) {
-                                lines.push_back(tempLine);
-                            }
-                            break;
-                        }
-                    }
-                }
+            if (resultLinesDirty) {
+                rebuildResultLines(display);
             }
 
             int lineHeight = FONT_HEIGHT_SMALL + 1; // Use proper font height with 1px spacing
-            for (size_t i = 0; i < lines.size(); i++) {
+            for (size_t i = 0; i < resultLines.size(); i++) {
                 int lineY = contentStartY + (i * lineHeight);
                 if (lineY + FONT_HEIGHT_SMALL <= display->getHeight()) {
-                    display->drawString(x + 2, lineY, lines[i]);
+                    display->drawString(x + 2, lineY, resultLines[i]);
                 }
             }
         }
@@ -715,7 +826,7 @@ int32_t TraceRouteModule::runOnce()
     if (runState == TRACEROUTE_STATE_TRACKING && now - lastTraceRouteTime > trackingTimeoutMs) {
         LOG_INFO("TraceRoute timeout, no response received");
         runState = TRACEROUTE_STATE_RESULT;
-        resultText = "No response received";
+        setResultText("No response received");
         resultShowTime = now;
         tracingNode = 0;
 
@@ -751,6 +862,8 @@ int32_t TraceRouteModule::runOnce()
             // Cooldown finished
             LOG_INFO("TraceRoute cooldown finished, returning to IDLE");
             runState = TRACEROUTE_STATE_IDLE;
+            resultText = "";
+            clearResultLines();
             bannerText = "";
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -764,6 +877,7 @@ int32_t TraceRouteModule::runOnce()
             LOG_INFO("TraceRoute result display timeout, returning to IDLE");
             runState = TRACEROUTE_STATE_IDLE;
             resultText = "";
+            clearResultLines();
             bannerText = "";
             tracingNode = 0;
             UIFrameEvent e;

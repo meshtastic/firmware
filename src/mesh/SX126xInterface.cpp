@@ -266,6 +266,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.

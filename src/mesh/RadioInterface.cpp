@@ -272,10 +272,10 @@ uint32_t RadioInterface::getTxDelayMsec()
 uint8_t RadioInterface::getCWsize(float snr)
 {
     // The minimum value for a LoRa SNR
-    const uint32_t SNR_MIN = -20;
+    const int32_t SNR_MIN = -20;
 
     // The maximum value for a LoRa SNR
-    const uint32_t SNR_MAX = 10;
+    const int32_t SNR_MAX = 10;
 
     return map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
 }
@@ -647,23 +647,24 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     }
 
 #ifndef NUM_PA_POINTS
-    if (TX_GAIN_LORA > 0) {
+    if (TX_GAIN_LORA > 0 && !devicestate.owner.is_licensed) {
         LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, TX_GAIN_LORA);
         power -= TX_GAIN_LORA;
     }
 #else
-    // we have an array of PA gain values.  Find the highest power setting that works.
-    const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
-    for (int radio_dbm = 0; radio_dbm < NUM_PA_POINTS; radio_dbm++) {
-        if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
-            ((radio_dbm == (NUM_PA_POINTS - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
-            // we've exceeded the power limit, or hit the max we can do
-            LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
-            power -= tx_gain[radio_dbm];
-            break;
+    if (!devicestate.owner.is_licensed) {
+        // we have an array of PA gain values.  Find the highest power setting that works.
+        const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
+        for (int radio_dbm = 0; radio_dbm < NUM_PA_POINTS; radio_dbm++) {
+            if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
+                ((radio_dbm == (NUM_PA_POINTS - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
+                // we've exceeded the power limit, or hit the max we can do
+                LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
+                power -= tx_gain[radio_dbm];
+                break;
+            }
         }
     }
-
 #endif
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;

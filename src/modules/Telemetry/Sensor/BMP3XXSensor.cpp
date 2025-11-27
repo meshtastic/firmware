@@ -6,20 +6,18 @@
 
 BMP3XXSensor::BMP3XXSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BMP3XX, "BMP3XX") {}
 
-void BMP3XXSensor::setup() {}
-
-int32_t BMP3XXSensor::runOnce()
+bool BMP3XXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
 
     // Get a singleton instance and initialise the bmp3xx
     if (bmp3xx == nullptr) {
         bmp3xx = BMP3XXSingleton::GetInstance();
     }
-    status = bmp3xx->begin_I2C(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
+    status = bmp3xx->begin_I2C(dev->address.address, bus);
+    if (!status) {
+        return status;
+    }
 
     // set up oversampling and filter initialization
     bmp3xx->setTemperatureOversampling(BMP3_OVERSAMPLING_4X);
@@ -31,7 +29,8 @@ int32_t BMP3XXSensor::runOnce()
     for (int i = 0; i < 3; i++) {
         bmp3xx->performReading();
     }
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
 
 bool BMP3XXSensor::getMetrics(meshtastic_Telemetry *measurement)

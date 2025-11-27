@@ -204,6 +204,10 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     this->packetHistory[this->packetHistoryTotalCount].rx_rssi = mp.rx_rssi;
     this->packetHistory[this->packetHistoryTotalCount].rx_snr = mp.rx_snr;
+    this->packetHistory[this->packetHistoryTotalCount].hop_start = mp.hop_start;
+    this->packetHistory[this->packetHistoryTotalCount].hop_limit = mp.hop_limit;
+    this->packetHistory[this->packetHistoryTotalCount].via_mqtt = mp.via_mqtt;
+    this->packetHistory[this->packetHistoryTotalCount].transport_mechanism = mp.transport_mechanism;
     memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 
     this->packetHistoryTotalCount++;
@@ -256,6 +260,10 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
                 p->rx_snr = this->packetHistory[i].rx_snr;
+                p->hop_start = this->packetHistory[i].hop_start;
+                p->hop_limit = this->packetHistory[i].hop_limit;
+                p->via_mqtt = this->packetHistory[i].via_mqtt;
+                p->transport_mechanism = (meshtastic_MeshPacket_TransportMechanism)this->packetHistory[i].transport_mechanism;
 
                 // Let's assume that if the server received the S&F request that the client is in range.
                 //   TODO: Make this configurable.

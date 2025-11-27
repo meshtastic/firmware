@@ -12,12 +12,9 @@ class TSL2561Sensor : public TelemetrySensor
     // The magic number is a sensor id, the actual value doesn't matter
     Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_LOW, 12345);
 
-  protected:
-    virtual void setup() override;
-
   public:
     TSL2561Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 #endif
