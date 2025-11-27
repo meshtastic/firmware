@@ -683,7 +683,7 @@ void Screen::setup()
     handleSetOn(true);
     determineResolution(dispdev->height(), dispdev->width());
     ui->update();
-#if defined(USE_EINK) || defined(USE_EPD)
+#if !defined(USE_EINK) && !defined(USE_EPD)
     ui->update(); // Some SSD1306 clones drop the first draw, so run twice
 #endif
     serialSinceMsec = millis();
@@ -810,7 +810,7 @@ int32_t Screen::runOnce()
         static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
         ui->setFrames(bootOEMFrames, bootOEMFrameCount);
         ui->update();
-#ifndef USE_EINK
+#if !defined(USE_EINK) && !defined(USE_EPD)
         ui->update();
 #endif
         showingOEMBootScreen = false;
@@ -1063,7 +1063,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
 
-#ifndef USE_EINK
+#if !defined(USE_EINK) && !defined(USE_EPD)
     if (!hiddenFrames.nodelist) {
         fsi.positions.nodelist = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
