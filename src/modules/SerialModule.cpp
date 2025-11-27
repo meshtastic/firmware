@@ -543,7 +543,7 @@ void SerialModule::processWXSerial()
 #if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
     !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M3) && !defined(ELECROW_ThinkNode_M4) &&  \
     !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL) && !defined(MUZI_BASE)
-  
+
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
