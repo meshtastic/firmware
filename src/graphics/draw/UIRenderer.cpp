@@ -256,8 +256,9 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
         snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words.c_str());
     }
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) || defined(USE_ST7796)) &&            \
+#if (defined(USE_EINK) || defined(USE_EPD) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) ||        \
+     defined(ST7735_CS) || defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) ||             \
+     defined(ST7796_CS) || defined(USE_ST7796)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (isHighResolution) {
@@ -499,7 +500,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                                                         : getTextPositions(display)[1];
             const int margin = 4;
 // --------- PATCH FOR EINK NAV BAR (ONLY CHANGE BELOW) -----------
-#if defined(USE_EINK)
+#if defined(USE_EINK) || defined(USE_EPD)
             const int iconSize = (isHighResolution) ? 16 : 8;
             const int navBarHeight = iconSize + 6;
 #else
@@ -1031,7 +1032,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         if (gpsStatus->getLastFixMillis() > 0) {
             uint32_t delta = millis() - gpsStatus->getLastFixMillis();
             char uptimeStr[32];
-#if defined(USE_EINK)
+#if defined(USE_EINK) || defined(USE_EPD)
             // E-Ink: skip seconds, show only days/hours/mins
             getUptimeStr(delta, "Last", uptimeStr, sizeof(uptimeStr), false);
 #else
@@ -1106,7 +1107,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             int yBelowContent = getTextPositions(display)[5] + FONT_HEIGHT_SMALL + 2;
             const int margin = 4;
             int availableHeight =
-#if defined(USE_EINK)
+#if defined(USE_EINK) || defined(USE_EPD)
                 SCREEN_HEIGHT - yBelowContent - 24; // Leave extra space for nav bar on E-Ink
 #else
                 SCREEN_HEIGHT - yBelowContent - margin;
@@ -1249,7 +1250,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
     int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
 
-#if defined(USE_EINK)
+#if defined(USE_EINK) || defined(USE_EPD)
     // Only show bar briefly after switching frames
     static uint32_t navBarLastShown = 0;
     static bool cosmeticRefreshDone = false;
