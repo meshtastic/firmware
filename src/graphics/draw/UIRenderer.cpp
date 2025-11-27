@@ -258,7 +258,8 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
+     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (isHighResolution) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
