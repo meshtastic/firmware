@@ -15,8 +15,7 @@ DetectionSensorModule *detectionSensorModule;
 #define GPIO_POLLING_INTERVAL 100
 #define DELAYED_INTERVAL 1000
 
-typedef enum
-{
+typedef enum {
     DetectionSensorVerdictDetected,
     DetectionSensorVerdictSendState,
     DetectionSensorVerdictNoop,
@@ -36,8 +35,7 @@ static DetectionSensorTriggerVerdict detection_trigger_single_edge(bool prev, bo
 
 static DetectionSensorTriggerVerdict detection_trigger_either_edge(bool prev, bool current)
 {
-    if (prev == current)
-    {
+    if (prev == current) {
         return DetectionSensorVerdictNoop;
     }
     return current ? DetectionSensorVerdictDetected : DetectionSensorVerdictSendState;
@@ -70,8 +68,7 @@ int32_t DetectionSensorModule::runOnce()
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
 
-    if (firstTime)
-    {
+    if (firstTime) {
 
 #ifdef DETECTION_SENSOR_EN
         pinMode(DETECTION_SENSOR_EN, OUTPUT);
@@ -81,15 +78,12 @@ int32_t DetectionSensorModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
 
-        if (moduleConfig.detection_sensor.monitor_pin > 0)
-        {
+        if (moduleConfig.detection_sensor.monitor_pin > 0) {
 
 #ifdef ARCH_NRF52
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)
-            {
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 nrf_gpio_pin_sense_t detectsense;
-                switch (moduleConfig.detection_sensor.detection_trigger_type)
-                {
+                switch (moduleConfig.detection_sensor.detection_trigger_type) {
                 case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_LOW:
                 case meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_FALLING_EDGE:
                     detectsense = NRF_GPIO_PIN_SENSE_LOW;
@@ -103,15 +97,11 @@ int32_t DetectionSensorModule::runOnce()
                     detectsense = NRF_GPIO_PIN_SENSE_LOW;
                 }
                 nrf_gpio_cfg_input(moduleConfig.detection_sensor.monitor_pin,
-                                   moduleConfig.detection_sensor.use_pullup
-                                       ? NRF_GPIO_PIN_PULLUP
-                                       : NRF_GPIO_PIN_NOPULL);
+                                   moduleConfig.detection_sensor.use_pullup ? NRF_GPIO_PIN_PULLUP : NRF_GPIO_PIN_NOPULL);
 
-                nrf_gpio_cfg_sense_set(
-                    moduleConfig.detection_sensor.monitor_pin, detectsense);
+                nrf_gpio_cfg_sense_set(moduleConfig.detection_sensor.monitor_pin, detectsense);
 
-                if (NRF_P0->LATCH || NRF_P1->LATCH)
-                {
+                if (NRF_P0->LATCH || NRF_P1->LATCH) {
                     uint32_t gpioMask = NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH;
                     uint32_t gpioPort = NRF_P0->LATCH ? 0 : 1;
                     NRF_P1->LATCH = 0xFFFFFFFF;
@@ -125,15 +115,11 @@ int32_t DetectionSensorModule::runOnce()
                 // comfortable connectivity via BLE or USB and allow telemetry
                 // data to be sent, which happens after ~62s
                 return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
-            }
-            else
+            } else
 #endif
                 pinMode(moduleConfig.detection_sensor.monitor_pin,
-                        moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP
-                                                                 : INPUT);
-        }
-        else
-        {
+                        moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
+        } else {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
         }
@@ -143,9 +129,7 @@ int32_t DetectionSensorModule::runOnce()
     }
 
 #ifdef ARCH_NRF52
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR &&
-         config.power.is_power_saving))
-    {
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
         // currently only sleeping 'forever' is possible
         doDeepSleep(DELAY_FOREVER, false, true);
     }
@@ -154,14 +138,12 @@ int32_t DetectionSensorModule::runOnce()
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
-                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs)))
-    {
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
         DetectionSensorTriggerVerdict verdict =
             handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
         wasDetected = isDetected;
-        switch (verdict)
-        {
+        switch (verdict) {
         case DetectionSensorVerdictDetected:
             sendDetectionMessage();
             return DELAYED_INTERVAL;
@@ -178,8 +160,7 @@ int32_t DetectionSensorModule::runOnce()
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
-                                                                        default_telemetry_broadcast_interval_secs)))
-    {
+                                                                        default_telemetry_broadcast_interval_secs))) {
         sendCurrentStateMessage(hasDetectionEvent());
         return DELAYED_INTERVAL;
     }
@@ -198,19 +179,16 @@ void DetectionSensorModule::sendDetectionMessage()
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
 
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN)
-    {
+    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
         p->decoded.payload.size++;
     }
     lastSentToMesh = millis();
-    if (!channels.isDefaultChannel(0))
-    {
+    if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    }
-    else
+    } else
         LOG_ERROR("Message not allow on Public channel");
     delete[] message;
 }
@@ -227,12 +205,10 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
 
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     lastSentToMesh = millis();
-    if (!channels.isDefaultChannel(0))
-    {
+    if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    }
-    else
+    } else
         LOG_ERROR("Message not allow on Public channel");
     delete[] message;
 }
