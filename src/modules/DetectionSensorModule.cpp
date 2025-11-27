@@ -114,7 +114,7 @@ int32_t DetectionSensorModule::runOnce()
                 } 
 
                 LOG_INFO("Detection Sensor Module: init in interrupt mode");
-                // least time should be 5s to send the message. choose >70s for
+                // least time should be 5s to send just the message. choose >70s for
                 // comfortable connectivity via BLE or USB and allow telemetry
                 // data to be sent, which happens after ~62s
                 return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
@@ -132,10 +132,11 @@ int32_t DetectionSensorModule::runOnce()
         return setStartDelay();
     }
 
-#ifdef ARCH_NRF52 
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
-        uint32_t nightyNightMs = Default::getConfiguredOrMinimumValue(Default::getConfiguredOrDefaultMs(config.power.sds_secs), ONE_MINUTE_MS * 60);
-        doDeepSleep(nightyNightMs, false, true);
+#ifdef ARCH_NRF52
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR &&
+         config.power.is_power_saving)) {
+        //currently only sleeping 'forever' is possible
+        doDeepSleep(DELAY_FOREVER, false, true);
     }
 #endif
 
