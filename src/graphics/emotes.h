@@ -270,6 +270,14 @@ extern const unsigned char first_quarter_moon_face[] PROGMEM;
 #define peach_height 16
 extern const unsigned char peach[] PROGMEM;
 
+#define turkey_width 16
+#define turkey_height 16
+extern const unsigned char turkey[] PROGMEM;
+
+#define turkey_leg_width 16
+#define turkey_leg_height 16
+extern const unsigned char turkey_leg[] PROGMEM;
+
 #define South_West_Arrow_width 16
 #define South_West_Arrow_height 16
 extern const unsigned char South_West_Arrow[] PROGMEM;
@@ -305,6 +313,26 @@ extern const unsigned char Rightwards_Arrow[] PROGMEM;
 #define strong_width 16
 #define strong_height 16
 extern const unsigned char strong[] PROGMEM;
+
+#define check_mark_width 16
+#define check_mark_height 16
+extern const unsigned char check_mark[] PROGMEM;
+
+#define house_width 16
+#define house_height 16
+extern const unsigned char house[] PROGMEM;
+
+#define shrug_width 16
+#define shrug_height 16
+extern const unsigned char shrug[] PROGMEM;
+
+#define eyes_width 16
+#define eyes_height 16
+extern const unsigned char eyes[] PROGMEM;
+
+#define eye_width 16
+#define eye_height 16
+extern const unsigned char eye[] PROGMEM;
 #endif // EXCLUDE_EMOJI
 
 } // namespace graphics
