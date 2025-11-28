@@ -41,3 +41,7 @@ src/mesh/raspihttp/private_key.pem
 
 # Ignore logo (set at build time with platformio-custom.py)
 data/boot/logo.*
+
+# Ignore 3rd party plugins
+src/plugins/*
+!src/plugins/.gitkeep
