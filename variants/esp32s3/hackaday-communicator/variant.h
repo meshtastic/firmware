@@ -1,6 +1,3 @@
-
-#define TFT_CS 41
-
 #define TFT_BL 2
 #define SPI_FREQUENCY 2000000
 #define SPI_READ_FREQUENCY 16000000

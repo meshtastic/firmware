@@ -194,8 +194,8 @@ void HackadayCommunicatorKeyboard::released()
 
     uint32_t now = millis();
     last_tap = now;
-
-    queueEvent(HackadayCommunicatorTapMap[last_key][modifierFlag % HackadayCommunicatorTapMod[last_key]]);
+    if (HackadayCommunicatorTapMod[last_key])
+        queueEvent(HackadayCommunicatorTapMap[last_key][modifierFlag % HackadayCommunicatorTapMod[last_key]]);
     if (isModifierKey(last_key) == false)
         modifierFlag = 0;
 }
