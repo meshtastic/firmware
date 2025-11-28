@@ -17,6 +17,7 @@
 #include <memory.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
+#include "HardwareRNG.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "error.h"
@@ -288,15 +289,13 @@ void nrf52Setup()
 #endif
 
     // Init random seed
-    union seedParts {
-        uint32_t seed32;
-        uint8_t seed8[4];
-    } seed;
-    nRFCrypto.begin();
-    nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
-    LOG_DEBUG("Set random seed %u", seed.seed32);
-    randomSeed(seed.seed32);
-    nRFCrypto.end();
+    uint32_t seed = 0;
+    if (!HardwareRNG::seed(seed)) {
+        LOG_WARN("Hardware RNG seed unavailable, using PRNG fallback");
+        seed = random();
+    }
+    LOG_DEBUG("Set random seed %u", seed);
+    randomSeed(seed);
 
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can

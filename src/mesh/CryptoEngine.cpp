@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
+#include "HardwareRNG.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
@@ -25,6 +26,15 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
     // Mix in any randomness we can, to make key generation stronger.
     CryptRNG.begin(optstr(APP_VERSION));
+
+    uint8_t hardwareEntropy[64] = {0};
+    if (HardwareRNG::fill(hardwareEntropy, sizeof(hardwareEntropy))) {
+        CryptRNG.stir(hardwareEntropy, sizeof(hardwareEntropy));
+    } else {
+        LOG_WARN("Hardware entropy unavailable, falling back to software RNG");
+    }
+    memset(hardwareEntropy, 0, sizeof(hardwareEntropy));
+
     if (myNodeInfo.device_id.size == 16) {
         CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
     }
