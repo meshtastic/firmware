@@ -15,6 +15,10 @@
 extern SX1509 gpioExtender;
 #endif
 
+#ifdef TFT_BL_EXT
+#include "GpioExtLogic.h"
+#endif
+
 #ifdef TFT_MESH_OVERRIDE
 uint16_t TFT_MESH = TFT_MESH_OVERRIDE;
 #else
@@ -479,7 +483,7 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 #if HAS_TOUCHSCREEN
-#if defined(T_WATCH_S3) || defined(ELECROW)
+#if defined(T_WATCH_S3) || defined(ELECROW) || defined(ARDUINO_NESSO_N1)
     lgfx::Touch_FT5x06 _touch_instance;
 #elif defined(HELTEC_V4_TFT)
     lgfx::TOUCH_CHSC6X _touch_instance;
@@ -1160,6 +1164,9 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
             virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
         p = virtPin;
     }
+#elif defined(TFT_BL_EXT)
+    #include "GpioExtLogic.h"
+    GpioPin *p = new GpioExtPin(TFT_BL_EXT);
 #else
     GpioPin *p = new GpioVirtPin(); // Just simulate a pin
 #endif

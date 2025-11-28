@@ -4,7 +4,7 @@
 #include "OneButton.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
-#if defined(M5STACK_UNITC6L)
+#if defined(M5STACK_UNITC6L) || defined(ARDUINO_NESSO_N1)
 
 class i2cButtonThread : public Observable<const InputEvent *>, public concurrency::OSThread
 {
