@@ -36,6 +36,8 @@ const Emote emotes[] = {
     {"\U0001F62D", Loudly_Crying_Face, Loudly_Crying_Face_width, Loudly_Crying_Face_height}, // 😭 Loudly Crying Face
     {"\U0001F92E", vomiting, vomiting_width, vomiting_height},                               // 🤮 Face Vomiting
     {"\U0001F60E", cool, cool_width, cool_height},                                           // 😎 Smiling Face with Sunglasses
+    {"\U0001F440", eyes, eyes_width, eyes_height},                                           // 👀 Eyes
+    {"\U0001F441\uFE0F", eye, eye_width, eye_height},                                        // 👁️ Eye
 
     // --- Gestures and People ---
     {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},             // 👋 Waving Hand
@@ -43,8 +45,15 @@ const Emote emotes[] = {
     {"\U0001F596", vulcan_salute, vulcan_salute_width, vulcan_salute_height}, // 🖖 Vulcan Salute
     {"\U0001F64F", Praying, Praying_width, Praying_height},                   // 🙏 Praying Hands
     {"\U0001F4AA", strong, strong_width, strong_height},                      // 💪 Flexed Biceps
+    {"\U0001F937", shrug, shrug_width, shrug_height},                         // 🤷 Person Shrugging
     {"\U0001F920", cowboy, cowboy_width, cowboy_height},                      // 🤠 Cowboy Hat Face
     {"\U0001F3A7", deadmau5, deadmau5_width, deadmau5_height},                // 🎧 Headphones
+
+    // --- Symbols ---
+    {"\u2714\uFE0F", check_mark, check_mark_width, check_mark_height}, // ✔️ Check Mark
+    {"\u2705", check_mark, check_mark_width, check_mark_height},       // ✅ Check Mark Button
+    {"\u2611\uFE0F", check_mark, check_mark_width, check_mark_height}, // ☑️ Check Box with Check
+    {"\U0001F3E0", house, house_width, house_height},                  // 🏠 House
 
     // --- Weather ---
     {"\u2600", sun, sun_width, sun_height},                                   // ☀ Sun (without variation selector)
@@ -98,16 +107,18 @@ const Emote emotes[] = {
     {"\U0001F498", heart, heart_width, heart_height},   // 💘 Heart with Arrow
 
     // --- Objects ---
-    {"\U0001F4A9", poo, poo_width, poo_height},                   // 💩 Pile of Poo
-    {"\U0001F514", bell_icon, bell_icon_width, bell_icon_height}, // 🔔 Bell
-    {"\U0001F4CB", clipboard, clipboard_width, clipboard_height}, // 📋 Clipboard
-    {"\U0001F36A", cookie, cookie_width, cookie_height},          // 🍪 Cookie
-    {"\U0001F370", shortcake, shortcake_width, shortcake_height}, // 🍰 Shortcake
-    {"\U0001F351", peach, peach_width, peach_height},             // 🍑 Peach
-    {"\U0001F525", Fire, Fire_width, Fire_height},                // 🔥 Fire
-    {"\u2728", Sparkles, Sparkles_width, Sparkles_height},        // ✨ Sparkles
-    {"\U0001F573\uFE0F", hole, hole_width, hole_height},          // 🕳️ Hole
-    {"\U0001F3B3", bowling, bowling_width, bowling_height},       // 🎳 Bowling
+    {"\U0001F4A9", poo, poo_width, poo_height},                      // 💩 Pile of Poo
+    {"\U0001F514", bell_icon, bell_icon_width, bell_icon_height},    // 🔔 Bell
+    {"\U0001F4CB", clipboard, clipboard_width, clipboard_height},    // 📋 Clipboard
+    {"\U0001F36A", cookie, cookie_width, cookie_height},             // 🍪 Cookie
+    {"\U0001F370", shortcake, shortcake_width, shortcake_height},    // 🍰 Shortcake
+    {"\U0001F351", peach, peach_width, peach_height},                // 🍑 Peach
+    {"\U0001F983", turkey, turkey_width, turkey_height},             // 🦃 Turkey
+    {"\U0001F357", turkey_leg, turkey_leg_width, turkey_leg_height}, // 🍗 Poultry Leg
+    {"\U0001F525", Fire, Fire_width, Fire_height},                   // 🔥 Fire
+    {"\u2728", Sparkles, Sparkles_width, Sparkles_height},           // ✨ Sparkles
+    {"\U0001F573\uFE0F", hole, hole_width, hole_height},             // 🕳️ Hole
+    {"\U0001F3B3", bowling, bowling_width, bowling_height},          // 🎳 Bowling
 
     // --- Arrows ---
     {"\u2193", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},          // ↓ Downwards Arrow
@@ -401,6 +412,14 @@ const unsigned char peach[] PROGMEM = {0x70, 0x0F, 0x88, 0x10, 0x78, 0x1F, 0x88,
                                        0x44, 0x02, 0x44, 0x02, 0x44, 0x02, 0x44, 0x02, 0x42, 0x02, 0x40,
                                        0x04, 0x20, 0x04, 0x20, 0x08, 0x10, 0x30, 0x0C, 0xC0, 0x03};
 
+const unsigned char turkey[] PROGMEM = {0x00, 0x00, 0x38, 0x00, 0x44, 0x38, 0x56, 0x54, 0x45, 0x52, 0xE2,
+                                        0x21, 0x2C, 0x56, 0x14, 0x58, 0x0A, 0x37, 0x86, 0x68, 0x82, 0x50,
+                                        0x82, 0x20, 0x04, 0x41, 0xF8, 0x7F, 0x40, 0x02, 0xF0, 0x07};
+
+const unsigned char turkey_leg[] PROGMEM = {0x0C, 0x00, 0x1E, 0x00, 0x1F, 0x00, 0x2F, 0x00, 0x46, 0x00, 0x88,
+                                            0x01, 0x10, 0x0E, 0x20, 0x30, 0x20, 0x40, 0x40, 0x40, 0x40, 0x80,
+                                            0x40, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00, 0x43, 0x00, 0x3C};
+
 const unsigned char South_West_Arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x1C, 0x00, 0x3E, 0x00,
                                                   0x1F, 0x80, 0x0F, 0xC2, 0x07, 0xE6, 0x03, 0xFE, 0x01, 0xFE, 0x00,
                                                   0x7E, 0x00, 0x7E, 0x00, 0xFE, 0x00, 0xFE, 0x01, 0x00, 0x00};
@@ -436,6 +455,26 @@ const unsigned char Rightwards_Arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 
 const unsigned char strong[] PROGMEM = {0x38, 0x00, 0x44, 0x00, 0x62, 0x00, 0x42, 0x00, 0x42, 0x00, 0x3A,
                                         0x00, 0x11, 0x3C, 0x11, 0x42, 0xD1, 0x81, 0x31, 0x82, 0x11, 0x82,
                                         0x21, 0x80, 0x01, 0x80, 0x01, 0x80, 0x02, 0x40, 0xFC, 0x3F};
+
+const unsigned char check_mark[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x70, 0x00, 0x3C, 0x00,
+                                            0x1E, 0x00, 0x0F, 0x80, 0x07, 0xC3, 0x03, 0xEE, 0x03, 0xFC, 0x01,
+                                            0xF8, 0x00, 0xF0, 0x00, 0x70, 0x00, 0x60, 0x00, 0x20, 0x00};
+
+const unsigned char house[] PROGMEM = {0x80, 0x01, 0x5C, 0x02, 0x34, 0x04, 0x14, 0x08, 0x0C, 0x10, 0x04,
+                                       0x20, 0x02, 0x40, 0xFF, 0xFF, 0x02, 0x40, 0x7A, 0x5F, 0x4A, 0x55,
+                                       0x4A, 0x5F, 0x6A, 0x55, 0x4A, 0x5F, 0x4A, 0x40, 0xFE, 0x7F};
+
+const unsigned char shrug[] PROGMEM = {0xC0, 0x03, 0x20, 0x04, 0x10, 0x08, 0x50, 0x0A, 0x10, 0x08, 0x90,
+                                       0x09, 0x27, 0xE4, 0x49, 0x92, 0xAA, 0x55, 0x16, 0x68, 0x12, 0x48,
+                                       0x02, 0x40, 0x02, 0x40, 0x0C, 0x30, 0x08, 0x10, 0xF8, 0x1F};
+
+const unsigned char eyes[] PROGMEM = {0x00, 0x00, 0x3C, 0x3C, 0x42, 0x42, 0x81, 0x81, 0x85, 0x85, 0x8F,
+                                      0x8F, 0x8F, 0x8F, 0x8F, 0x8F, 0x8F, 0x8F, 0x8F, 0x8F, 0x8F, 0x8F,
+                                      0x85, 0x85, 0x81, 0x81, 0x42, 0x42, 0x3C, 0x3C, 0x00, 0x00};
+
+const unsigned char eye[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x07, 0xF8, 0x1F, 0xF4,
+                                     0x2F, 0x7A, 0x5E, 0x39, 0x9C, 0x39, 0x9C, 0x7A, 0x5E, 0xF4, 0x2F,
+                                     0xF8, 0x1F, 0xE0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #endif
 
 } // namespace graphics
