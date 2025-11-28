@@ -74,12 +74,26 @@ void getMacAddr(uint8_t *dmac)
 
 static void initBrownout()
 {
-    auto vccthresh = POWER_POFCON_THRESHOLD_V24;
+    // POF protection prevents flash memory writes when VDD voltage is 2.7V or less to avoid memory corruption
+    // In this setting voltage is checked both against VDD and VDDH so particular board
+    // wiring does not matter.
+    // It must be set to value greater than 2.5V because 2.5V is minimum voltage that can be supplied at VDDH
+    // and it borders at cutoff voltage for li-ion battery protectors.
+    // Originally it was set at 2.4V and it did cause a lot of flash memory corruptions when battery was around 2.5-2.6V
+
+    // NiceNano!2 board have decent LDO which goes down to 2V
+    // In the future - boards with crappy LDO can be set to prevent memory corruption at higher voltage - like 3V
+    // using custom variant definition like #define LDO_3V_CUTOFF but this voltage detection must be done
+    // using sd_power_pof_thresholdvddh_set function and POWER_POFCON_THRESHOLDVDDH_V30 flag.
+    // You also need to be sure those boards supply voltage at VDDH (and not VDD and VDDH together) for it to work.
+
+
+    auto vddthresh = POWER_POFCON_THRESHOLD_V27;
 
     auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
     assert(err_code == NRF_SUCCESS);
 
-    err_code = sd_power_pof_threshold_set(vccthresh);
+    err_code = sd_power_pof_threshold_set(vddthresh);
     assert(err_code == NRF_SUCCESS);
 
     // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
