@@ -219,8 +219,6 @@ static void powerIdle()
 
 static void powerExit()
 {
-    if (screen)
-        screen->setOn(true);
     setBluetoothEnable(true);
 }
 
