@@ -44,4 +44,5 @@ data/boot/logo.*
 
 # Ignore 3rd party plugins
 src/plugins/*
-!src/plugins/.gitkeep
+!src/plugins/README.md
+!src/plugins/sample-plugin
