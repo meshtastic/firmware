@@ -6,17 +6,14 @@ class HackadayCommunicatorKeyboard : public TCA8418KeyboardBase
     HackadayCommunicatorKeyboard();
     void reset(void);
     void trigger(void) override;
-    void setBacklight(bool on) override;
     virtual ~HackadayCommunicatorKeyboard() {}
 
   protected:
     void pressed(uint8_t key) override;
     void released(void) override;
-    void hapticFeedback(void);
 
     void updateModifierFlag(uint8_t key);
     bool isModifierKey(uint8_t key);
-    void toggleBacklight(bool off = false);
 
   private:
     uint8_t modifierFlag;        // Flag to indicate if a modifier key is pressed
@@ -26,5 +23,4 @@ class HackadayCommunicatorKeyboard : public TCA8418KeyboardBase
     uint32_t last_tap;
     uint8_t char_idx;
     int32_t tap_interval;
-    uint32_t brightness = 0;
 };

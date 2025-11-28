@@ -3,18 +3,6 @@
 #include "HackadayCommunicatorKeyboard.h"
 #include "main.h"
 
-#ifndef LEDC_BACKLIGHT_CHANNEL
-#define LEDC_BACKLIGHT_CHANNEL 4
-#endif
-
-#ifndef LEDC_BACKLIGHT_BIT_WIDTH
-#define LEDC_BACKLIGHT_BIT_WIDTH 8
-#endif
-
-#ifndef LEDC_BACKLIGHT_FREQ
-#define LEDC_BACKLIGHT_FREQ 1000 // Hz
-#endif
-
 #define _TCA8418_COLS 10
 #define _TCA8418_ROWS 8
 #define _TCA8418_NUM_KEYS 80
@@ -148,26 +136,10 @@ void HackadayCommunicatorKeyboard::trigger()
     }
 }
 
-void HackadayCommunicatorKeyboard::setBacklight(bool on)
-{
-    uint32_t _brightness = 0;
-    if (on)
-        _brightness = brightness;
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-    ledcWrite(KB_BL_PIN, _brightness);
-#else
-    ledcWrite(LEDC_BACKLIGHT_CHANNEL, _brightness);
-#endif
-}
-
 void HackadayCommunicatorKeyboard::pressed(uint8_t key)
 {
     if (state == Init || state == Busy) {
         return;
-    }
-    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
-        hapticFeedback();
     }
 
     if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
@@ -223,35 +195,9 @@ void HackadayCommunicatorKeyboard::released()
     uint32_t now = millis();
     last_tap = now;
 
-    if (HackadayCommunicatorTapMap[last_key][modifierFlag % HackadayCommunicatorTapMod[last_key]] == Key::BL_TOGGLE) {
-        toggleBacklight();
-        return;
-    }
-
     queueEvent(HackadayCommunicatorTapMap[last_key][modifierFlag % HackadayCommunicatorTapMod[last_key]]);
     if (isModifierKey(last_key) == false)
         modifierFlag = 0;
-}
-
-void HackadayCommunicatorKeyboard::hapticFeedback() {}
-
-// toggle brightness of the backlight in three steps
-void HackadayCommunicatorKeyboard::toggleBacklight(bool off)
-{
-    if (off) {
-        brightness = 0;
-    } else {
-        if (brightness == 0) {
-            brightness = 40;
-        } else if (brightness == 40) {
-            brightness = 127;
-        } else if (brightness >= 127) {
-            brightness = 0;
-        }
-    }
-    LOG_DEBUG("Toggle backlight: %d", brightness);
-
-    setBacklight(true);
 }
 
 void HackadayCommunicatorKeyboard::updateModifierFlag(uint8_t key)
