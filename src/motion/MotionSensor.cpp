@@ -69,7 +69,8 @@ void MotionSensor::wakeScreen()
 {
     if (powerFSM.getState() == &stateDARK) {
         LOG_DEBUG("Motion wakeScreen detected");
-        powerFSM.trigger(EVENT_INPUT);
+        if (config.display.wake_on_tap_or_motion)
+            powerFSM.trigger(EVENT_INPUT);
     }
 }
 
