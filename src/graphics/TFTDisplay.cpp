@@ -1165,7 +1165,6 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
         p = virtPin;
     }
 #elif defined(TFT_BL_EXT)
-    #include "GpioExtLogic.h"
     GpioPin *p = new GpioExtPin(TFT_BL_EXT);
 #else
     GpioPin *p = new GpioVirtPin(); // Just simulate a pin
