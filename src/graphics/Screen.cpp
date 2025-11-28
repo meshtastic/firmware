@@ -324,7 +324,7 @@ static int8_t prevFrame = -1;
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
 // Uses a single frame and changes data every few seconds (E-Ink variant is separate)
 
-#if defined(ESP_PLATFORM) && defined(USE_ST7789)
+#if defined(ESP_PLATFORM) && (defined(USE_ST7789) || defined(USE_ST7796))
 SPIClass SPI1(HSPI);
 #endif
 
@@ -356,7 +356,18 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
+#elif defined(USE_ST7796)
+#ifdef ESP_PLATFORM
+    dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
+                            ST7796_MISO, ST7796_SCK, TFT_SPI_FREQUENCY);
+#else
+    dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
+#if defined(USE_ST7789)
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#elif defined(USE_ST7796)
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -435,6 +446,14 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
+#if defined(MUZI_BASE)
+            dispdev->init();
+            dispdev->setBrightness(brightness);
+            dispdev->flipScreenVertically();
+            dispdev->resetDisplay();
+            digitalWrite(SCREEN_12V_ENABLE, HIGH);
+            delay(100);
+#endif
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -467,6 +486,15 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
+#ifdef USE_ST7796
+            ui->init();
+#ifdef ESP_PLATFORM
+            analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
+#else
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
+#endif
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -484,6 +512,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOff();
+
+#ifdef SCREEN_12V_ENABLE
+            digitalWrite(SCREEN_12V_ENABLE, LOW);
+#endif
 #ifdef USE_ST7789
             SPI1.end();
 #if defined(ARCH_ESP32)
@@ -498,6 +530,21 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             nrf_gpio_cfg_default(ST7789_RESET);
             nrf_gpio_cfg_default(ST7789_RS);
             nrf_gpio_cfg_default(ST7789_NSS);
+#endif
+#endif
+#ifdef USE_ST7796
+            SPI1.end();
+#if defined(ARCH_ESP32)
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, LOW);
+            pinMode(ST7796_RESET, ANALOG);
+            pinMode(ST7796_RS, ANALOG);
+            pinMode(ST7796_NSS, ANALOG);
+#else
+            nrf_gpio_cfg_default(VTFT_LEDA);
+            nrf_gpio_cfg_default(ST7796_RESET);
+            nrf_gpio_cfg_default(ST7796_RS);
+            nrf_gpio_cfg_default(ST7796_NSS);
 #endif
 #endif
 
@@ -534,13 +581,20 @@ void Screen::setup()
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
 #endif
 
-#ifdef USE_SH1107_128_64
+#if defined(USE_SH1107_128_64) || defined(USE_SH1107)
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
 #if defined(USE_ST7789) && defined(TFT_MESH)
     // Apply custom RGB color (e.g. Heltec T114/T190)
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+#if defined(MUZI_BASE)
+    dispdev->delayPoweron = true;
+#endif
+#if defined(USE_ST7796) && defined(TFT_MESH)
+    // Custom text color, if defined in variant.h
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
     // === Initialize display and UI system ===
@@ -605,6 +659,8 @@ void Screen::setup()
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
+#elif defined(USE_ST7796)
+        static_cast<ST7796Spi *>(dispdev)->mirrorScreen();
 #elif !defined(M5STACK_UNITC6L)
         dispdev->flipScreenVertically();
 #endif
@@ -637,7 +693,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN && !defined(USE_EINK)
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !HAS_CST226SE
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();

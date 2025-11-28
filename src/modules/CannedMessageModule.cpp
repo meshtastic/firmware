@@ -837,6 +837,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -845,6 +846,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         payload = INPUT_BROKER_LEFT;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -852,6 +854,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_RIGHT) {
         payload = INPUT_BROKER_RIGHT;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }

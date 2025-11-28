@@ -11,6 +11,7 @@
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "target_specific.h"
@@ -256,7 +257,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
     }
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS)) &&            \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) || defined(USE_ST7796)) &&            \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (isHighResolution) {
@@ -383,17 +384,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
-        uint32_t uptime = node->device_metrics.uptime_seconds;
-        uint32_t days = uptime / 86400;
-        uint32_t hours = (uptime % 86400) / 3600;
-        uint32_t mins = (uptime % 3600) / 60;
-        // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
-        if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
-        else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
-        else
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+        getUptimeStr(node->device_metrics.uptime_seconds * 1000, " Up", uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
@@ -592,18 +583,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
 #endif
     char uptimeStr[32] = "";
-    uint32_t uptime = millis() / 1000;
-    uint32_t days = uptime / 86400;
-    uint32_t hours = (uptime % 86400) / 3600;
-    uint32_t mins = (uptime % 3600) / 60;
-    // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
 #if !defined(M5STACK_UNITC6L)
-    if (days)
-        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %ud %uh", days, hours);
-    else if (hours)
-        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
-    else
-        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
+    getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
 #endif
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
@@ -1048,36 +1029,17 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
         // === Second Row: Last GPS Fix ===
         if (gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
-            uint32_t days = delta / 86400;
-            uint32_t hours = (delta % 86400) / 3600;
-            uint32_t mins = (delta % 3600) / 60;
-            uint32_t secs = delta % 60;
-
-            char buf[32];
+            uint32_t delta = millis() - gpsStatus->getLastFixMillis();
+            char uptimeStr[32];
 #if defined(USE_EINK)
             // E-Ink: skip seconds, show only days/hours/mins
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
-            } else {
-                snprintf(buf, sizeof(buf), "Last: %um", mins);
-            }
+            getUptimeStr(delta, "Last", uptimeStr, sizeof(uptimeStr), false);
 #else
             // Non E-Ink: include seconds where useful
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
-            } else if (mins > 0) {
-                snprintf(buf, sizeof(buf), "Last: %um %us", mins, secs);
-            } else {
-                snprintf(buf, sizeof(buf), "Last: %us", secs);
-            }
+            getUptimeStr(delta, "Last", uptimeStr, sizeof(uptimeStr), true);
 #endif
 
-            display->drawString(0, getTextPositions(display)[line++], buf);
+            display->drawString(0, getTextPositions(display)[line++], uptimeStr);
         } else {
             display->drawString(0, getTextPositions(display)[line++], "Last: ?");
         }
