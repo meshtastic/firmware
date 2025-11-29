@@ -250,8 +250,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A
+#define CST328_ADDR 0x1A // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
+#define CST226SE_ADDR_ALT 0x5A
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -394,6 +395,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Support multiple RGB LED configuration
 #if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #define HAS_RGB_LED
+#endif
+
+#ifndef LED_STATE_OFF
+#define LED_STATE_OFF 0
+#endif
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
 #endif
 
 // default mapping of pins
