@@ -301,7 +301,7 @@ void setupModules()
         new RangeTestModule();
 #endif
 
-    init_all_plugin_modules();
+    init_dynamic_modules();
 
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
