@@ -40,10 +40,11 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (12)
-#define PIN_LED2 (7)
-#define LED_BUILTIN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_BUILTIN -1
+#define LED_BLUE -1
+#define LED_CHARGE (12)
+#define LED_PAIRING (7)
+
 #define LED_STATE_ON 1
 
 // USB power detection
