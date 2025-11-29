@@ -19,23 +19,31 @@ src/plugins/
 - All source files must be placed in `./src`
 - Only files in `./src` are compiled (the root plugin directory and all other subdirectories are excluded from the build)
 
+## Python Dependencies
+
+Before building or working with plugins, install the Python tooling into a local vendor directory so PlatformIO can import it:
+
+```bash
+# From the firmware repo root (directory containing platformio.ini)
+python -m pip install -r requirements.txt -t pyvendor
+```
+
+This vendors the Mesh Plugin Manager (MPM) and its dependencies (including `nanopb`) into `pyvendor/`. The build scripts automatically add `pyvendor/` to `sys.path` when PlatformIO runs.
+
 ## Automatic Protobuf Generation
 
 For convenience, the Meshtastic Plugin Manager (MPM) automatically scans for and generates protobuf files:
 
 - **Discovery**: MPM recursively scans plugin directories for `.proto` files
 - **Options file**: Auto-detects matching `.options` files (e.g., `mymodule.proto` → `mymodule.options`)
-- **Generation**: Uses `pipx run --spec nanopb nanopb_generator` to generate C++ files (requires `pipx` to be installed)
+- **Generation**: Uses the vendored `nanopb` tooling from `pyvendor/` to generate C++ files
 - **Output**: Generated files are placed in the same directory as the `.proto` file
 - **Timing**: Runs during PlatformIO pre-build phase (configured in `platformio.ini`)
 
-**Note**: You can run `bin/mpm.py` from the command line to list all discovered plugins and generate all protobuf files manually:
-
-```bash
-python3 bin/mpm.py
-```
+**Note**: Once `pyvendor/` is populated as described above, you can also use the Mesh Plugin Manager CLI from a Python environment that has `pyvendor/` on its `PYTHONPATH` to inspect or manage plugins.
 
 Example protobuf structure:
+
 ```
 src/plugins/myplugin/src/
 ├── mymodule.proto      # Protobuf definition
@@ -61,6 +69,7 @@ If your plugin implements a Meshtastic module, you can use the automatic registr
 3. Your module will be automatically initialized when the firmware starts
 
 Example:
+
 ```cpp
 #include "MyModule.h"
 #include "ModuleRegistry.h"
@@ -77,6 +86,7 @@ For details on writing Meshtastic modules, see the [Module API documentation](ht
 ## Example Plugin
 
 See the `lobbs` plugin for a complete example that demonstrates:
+
 - Protobuf definitions with options file
 - Module implementation with automatic registration
 - Proper source file organization

@@ -50,3 +50,6 @@ data/boot/logo.*
 plugins/*
 !plugins/README.md
 !plugins/sample-plugin
+
+# Ignore Python vendor directory
+pyvendor
