@@ -14,10 +14,10 @@
 
 // Thresholds for choosing partial vs full update
 #ifndef EPD_PARTIAL_THRESHOLD_ROWS
-#define EPD_PARTIAL_THRESHOLD_ROWS 64 // if changed region <= this many rows, prefer partial
+#define EPD_PARTIAL_THRESHOLD_ROWS 128 // if changed region <= this many rows, prefer partial
 #endif
 #ifndef EPD_FULLSLOW_PERIOD
-#define EPD_FULLSLOW_PERIOD 50 // every N full updates do a slow (CLEAR_SLOW) full refresh
+#define EPD_FULLSLOW_PERIOD 100 // every N full updates do a slow (CLEAR_SLOW) full refresh
 #endif
 #ifndef EPD_RESPONSIVE_MIN_MS
 #define EPD_RESPONSIVE_MIN_MS 1000 // simple rate-limit (ms) for responsive updates
@@ -91,7 +91,7 @@ bool EInkParallelDisplay::connect()
 #endif
     }
 
-    epaper->setRotation(rotation);
+    // epaper->setRotation(rotation); // does not work, messes up width/height
     epaper->setMode(BB_MODE_1BPP);
     epaper->clearWhite();
     epaper->fullUpdate(true);
@@ -133,12 +133,8 @@ void EInkParallelDisplay::startAsyncFullUpdate(int clearMode)
     );
     if (rc != pdPASS) {
         LOG_WARN("Failed to create async full-update task, falling back to blocking update");
-        // fallback: blocking call
-        {
-            concurrency::LockGuard g(spiLock);
-            epaper->fullUpdate(clearMode, false);
-            epaper->backupPlane();
-        }
+        epaper->fullUpdate(clearMode, false);
+        epaper->backupPlane();
         asyncFullRunning.store(false);
         asyncTaskHandle = nullptr;
     }
@@ -155,22 +151,18 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
         return;
     }
 
-    // Acquire SPI lock and run the full update inside the critical section
-    {
-        // choose CLEAR_SLOW occasionally
-        int clearMode = CLEAR_FAST;
-        if (self->fastRefreshCount >= EPD_FULLSLOW_PERIOD) {
-            clearMode = CLEAR_SLOW;
-            self->fastRefreshCount = 0;
-        } else {
-            // when running async full, treat it as a full so reset fast count
-            self->fastRefreshCount = 0;
-        }
-
-        concurrency::LockGuard g(spiLock);
-        self->epaper->fullUpdate(clearMode, false);
-        self->epaper->backupPlane();
+    // choose CLEAR_SLOW occasionally
+    int clearMode = CLEAR_FAST;
+    if (self->fastRefreshCount >= EPD_FULLSLOW_PERIOD) {
+        clearMode = CLEAR_SLOW;
+        self->fastRefreshCount = 0;
+    } else {
+        // when running async full, treat it as a full so reset fast count
+        self->fastRefreshCount = 0;
     }
+
+    self->epaper->fullUpdate(clearMode, false);
+    self->epaper->backupPlane();
 
 #ifdef EINK_LIMIT_GHOSTING_PX
     // A full refresh clears ghosting state
@@ -322,7 +314,7 @@ void EInkParallelDisplay::display(void)
 #ifdef EINK_LIMIT_GHOSTING_PX
     // If ghost pixels exceed limit, force a full update to clear ghosting
     if (ghostPixelCount > ghostPixelLimit) {
-        LOG_DEBUG("ghost pixels %u > limit %u, forcing full refresh", ghostPixelCount, ghostPixelLimit);
+        LOG_WARN("ghost pixels %u > limit %u, forcing full refresh", ghostPixelCount, ghostPixelLimit);
         forceFull = true;
     }
 #endif
@@ -330,37 +322,24 @@ void EInkParallelDisplay::display(void)
     // Compute pixel bounds from newTop/newBottom
     int startRow = (newTop / 8) * 8;
     int endRow = (newBottom / 8) * 8 + 7;
-    if (startRow < 0)
-        startRow = 0;
-    if (endRow > (int)h - 1)
-        endRow = (int)h - 1;
 
     LOG_DEBUG("EPD update rows=%d..%d alignedRows=%d..%d rowBytes=%u", newTop, newBottom, startRow, endRow, rowBytes);
 
     if (epaper->getMode() == BB_MODE_1BPP && !forceFull && (newBottom - newTop) <= EPD_PARTIAL_THRESHOLD_ROWS) {
         // Prefer partial update path if driver is reliable; otherwise use clipped fullUpdate fallback.
 #ifdef FAST_EPD_PARTIAL_UPDATE_BUG
-        // LOG_DEBUG("Using clipped fullUpdate workaround for partial update bug");
+        // Workaround for FastEPD partial update bug: use clipped fullUpdate instead
+        // Build a pixel rectangle for a clipped fullUpdate using the changed columns
         int startCol = (newLeftByte <= newRightByte) ? (newLeftByte * 8) : 0;
         int endCol = (newLeftByte <= newRightByte) ? ((newRightByte + 1) * 8 - 1) : (w - 1);
-        if (startCol < 0)
-            startCol = 0;
-        if (endCol >= (int)w)
-            endCol = (int)w - 1;
 
         BB_RECT rect{startCol, startRow, endCol - startCol + 1, endRow - startRow + 1};
         // LOG_DEBUG("Using clipped fullUpdate rect x=%d y=%d w=%d h=%d", rect.x, rect.y, rect.w, rect.h);
-        {
-            concurrency::LockGuard g(spiLock);
-            // alternate CLEAR_FAST / CLEAR_SLOW handled elsewhere by fastRefreshCount logic
-            epaper->fullUpdate(CLEAR_FAST, false, &rect);
-        }
+        epaper->fullUpdate(CLEAR_FAST, false, &rect);
 #else
-        // LOG_DEBUG("calling partialUpdate startRow=%d endRow=%d", startRow, endRow);
-        {
-            concurrency::LockGuard g(spiLock);
-            epaper->partialUpdate(true, startRow, endRow);
-        }
+        // Use rows for partial update
+        LOG_DEBUG("calling partialUpdate startRow=%d endRow=%d", startRow, endRow);
+        epaper->partialUpdate(true, startRow, endRow);
 #endif
         epaper->backupPlane();
         fastRefreshCount++;
@@ -384,7 +363,6 @@ void EInkParallelDisplay::markDirtyBits(const uint8_t *prevBuf, uint32_t pos, ui
     if (!dirtyPixels || !prevBuf)
         return;
 
-    // bits that differ from previous buffer
     // 'out' is in FASTEPD polarity (1 = black, 0 = white)
     uint8_t newBlack = out & mask;    // bits that will be black now
     uint8_t newWhite = (~out) & mask; // bits that will be white now
@@ -431,7 +409,6 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 void EInkParallelDisplay::endUpdate()
 {
     {
-        concurrency::LockGuard g(spiLock);
         // ensure any async full update is started/completed
         if (asyncFullRunning.load()) {
             // nothing to do; background task will run and call backupPlane when done
