@@ -27,6 +27,10 @@ nanopb*
 flash.uf2
 cmake-build*
 __pycache__
+*.egg-info/
+*.egg
+dist/
+build/
 
 *.swp
 *.swo
@@ -43,6 +47,6 @@ src/mesh/raspihttp/private_key.pem
 data/boot/logo.*
 
 # Ignore 3rd party plugins
-src/plugins/*
-!src/plugins/README.md
-!src/plugins/sample-plugin
+plugins/*
+!plugins/README.md
+!plugins/sample-plugin
