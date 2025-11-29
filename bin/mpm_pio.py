@@ -33,6 +33,14 @@ else:
 if os.path.isdir(_pyvendor) and _pyvendor not in sys.path:
     sys.path.insert(0, _pyvendor)
 
+# Add pyvendor/bin to PATH so nanopb_generator and other console scripts can be found
+_pyvendor_bin = os.path.join(_pyvendor, "bin")
+if os.path.isdir(_pyvendor_bin):
+    current_path = os.environ.get("PATH", "")
+    if _pyvendor_bin not in current_path:
+        os.environ["PATH"] = f"{_pyvendor_bin}:{current_path}" if current_path else _pyvendor_bin
+        print(f"Added {_pyvendor_bin} to PATH")
+
 if IS_PLATFORMIO:
     # Use the installed `mpm` package
     from mpm.build import init_plugins  # type: ignore[import]
