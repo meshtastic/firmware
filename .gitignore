@@ -27,10 +27,6 @@ nanopb*
 flash.uf2
 cmake-build*
 __pycache__
-*.egg-info/
-*.egg
-dist/
-build/
 
 *.swp
 *.swo
