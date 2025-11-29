@@ -16,7 +16,7 @@ extern std::vector<ModuleInitFunc> g_module_init_functions;
 void register_module_initializer(ModuleInitFunc func);
 
 // Function called by the core firmware setup to initialize all modules
-void init_all_modules();
+void init_all_plugin_modules();
 
 /**
  * @brief Macro used by module authors to self-register a new Meshtastic Module.

@@ -20,8 +20,8 @@ void register_module_initializer(ModuleInitFunc func) {
  * @brief Initializes all modules that have self-registered.
  * Called once by the core Meshtastic firmware setup routine.
  */
-void init_all_modules() {
-    LOG_INFO("Initializing self-registering application modules via vector...\n");
+void init_all_plugin_modules() {
+    LOG_INFO("Initializing self-registering plugin modules via vector...\n");
 
     // Loop through the collected pointers and execute the setup functions
     for (ModuleInitFunc func : g_module_init_functions) {
