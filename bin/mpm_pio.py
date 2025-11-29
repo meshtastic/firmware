@@ -33,6 +33,12 @@ else:
 if os.path.isdir(_pyvendor) and _pyvendor not in sys.path:
     sys.path.insert(0, _pyvendor)
 
+# Add pyvendor to PYTHONPATH so subprocesses (like nanopb_generator) can find modules
+current_pythonpath = os.environ.get("PYTHONPATH", "")
+if _pyvendor not in current_pythonpath:
+    os.environ["PYTHONPATH"] = f"{_pyvendor}:{current_pythonpath}" if current_pythonpath else _pyvendor
+    print(f"MPM: Added {_pyvendor} to PYTHONPATH")
+
 # Add pyvendor/bin to PATH so nanopb_generator and other console scripts can be found
 _pyvendor_bin = os.path.join(_pyvendor, "bin")
 if os.path.isdir(_pyvendor_bin):
