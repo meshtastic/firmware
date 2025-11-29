@@ -15,6 +15,8 @@
 #include "input/TrackballInterruptImpl1.h"
 #endif
 
+#include "modules/StatusLEDModule.h"
+
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
 #endif
@@ -121,6 +123,10 @@ void setupModules()
         buzzerFeedbackThread = new BuzzerFeedbackThread();
     }
 #endif
+#if defined(LED_CHARGE) || defined(LED_PAIRING)
+    statusLEDModule = new StatusLEDModule();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif
@@ -177,12 +183,13 @@ void setupModules()
     // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+#ifndef T_LORA_PAGER
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
         if (!rotaryEncoderInterruptImpl1->init()) {
             delete rotaryEncoderInterruptImpl1;
             rotaryEncoderInterruptImpl1 = nullptr;
         }
-#ifdef T_LORA_PAGER
+#elif defined(T_LORA_PAGER)
         // use a special FSM based rotary encoder version for T-LoRa Pager
         rotaryEncoderImpl = new RotaryEncoderImpl();
         if (!rotaryEncoderImpl->init()) {
