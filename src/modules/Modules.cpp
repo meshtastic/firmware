@@ -201,8 +201,10 @@ void setupModules()
             upDownInterruptImpl1 = nullptr;
         }
 #endif
+#if !MESHTASTIC_EXCLUDE_I2C
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+#endif
 #if defined(M5STACK_UNITC6L)
         i2cButton = new i2cButtonThread("i2cButtonThread");
 #endif
