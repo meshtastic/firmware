@@ -1047,7 +1047,8 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
         uint8_t TFT_MESH_r = 0;
         uint8_t TFT_MESH_g = 0;
         uint8_t TFT_MESH_b = 0;
@@ -1356,7 +1357,7 @@ void menuHandler::screenOptionsMenu()
     static int optionsEnumArray[5] = {Back};
     int options = 1;
 
-#if defined(T_DECK) || defined(T_LORA_PAGER)
+#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Show Long/Short Name";
     optionsEnumArray[options++] = NodeNameLength;
 #endif
@@ -1368,7 +1369,8 @@ void menuHandler::screenOptionsMenu()
     }
 
     // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
