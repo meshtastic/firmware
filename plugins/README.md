@@ -21,14 +21,21 @@ src/plugins/
 
 ## Python Dependencies
 
-Before building or working with plugins, install the Python tooling into a local vendor directory so PlatformIO can import it:
+The Mesh Plugin Manager (MPM) is installed as a development dependency via Poetry. To use MPM commands, run them through Poetry:
 
 ```bash
 # From the firmware repo root (directory containing platformio.ini)
-python -m pip install -r requirements.txt -t pyvendor
+poetry run mpm <command>
 ```
 
-This vendors the Mesh Plugin Manager (MPM) and its dependencies (including `nanopb`) into `pyvendor/`. The build scripts automatically add `pyvendor/` to `sys.path` when PlatformIO runs.
+**Important**: Poetry must be configured to create the virtual environment in the project directory (`.venv`) so that the PlatformIO build system can find it. Configure it locally for the project:
+
+```bash
+poetry config virtualenvs.in-project true --local
+poetry install
+```
+
+The build system automatically uses MPM from the Poetry virtual environment during PlatformIO builds.
 
 ## Automatic Protobuf Generation
 
@@ -36,11 +43,11 @@ For convenience, the Meshtastic Plugin Manager (MPM) automatically scans for and
 
 - **Discovery**: MPM recursively scans plugin directories for `.proto` files
 - **Options file**: Auto-detects matching `.options` files (e.g., `mymodule.proto` → `mymodule.options`)
-- **Generation**: Uses the vendored `nanopb` tooling from `pyvendor/` to generate C++ files
+- **Generation**: Uses `nanopb` tooling from the Poetry virtual environment to generate C++ files
 - **Output**: Generated files are placed in the same directory as the `.proto` file
 - **Timing**: Runs during PlatformIO pre-build phase (configured in `platformio.ini`)
 
-**Note**: Once `pyvendor/` is populated as described above, you can also use the Mesh Plugin Manager CLI from a Python environment that has `pyvendor/` on its `PYTHONPATH` to inspect or manage plugins.
+**Note**: You can use the Mesh Plugin Manager CLI via `poetry run mpm` to inspect or manage plugins.
 
 Example protobuf structure:
 
