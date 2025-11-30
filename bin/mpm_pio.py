@@ -29,7 +29,7 @@ def find_site_packages(venv_dir):
 
 def add_to_path(directory, env_var="PATH", label=""):
     """Add directory to environment variable if it exists and isn't already present."""
-    if not directory or not os.path.isdir(directory):
+    if directory is None or not os.path.isdir(directory):
         return False
     current = os.environ.get(env_var, "")
     if directory not in current:
@@ -41,7 +41,7 @@ def add_to_path(directory, env_var="PATH", label=""):
 
 def add_to_sys_path(directory, label=""):
     """Add directory to sys.path if it exists and isn't already present."""
-    if not directory or not os.path.isdir(directory):
+    if directory is None or not os.path.isdir(directory):
         return False
     if directory not in sys.path:
         sys.path.insert(0, directory)
@@ -86,8 +86,9 @@ add_to_path(mpm_venv_bin, "PATH")
 
 for site_packages in [mpm_site_packages, firmware_site_packages]:
     add_to_path(site_packages, "PYTHONPATH")
-    nanopb_generator = os.path.join(site_packages, "nanopb", "generator")
-    add_to_path(nanopb_generator, "PATH", "nanopb/generator")
+    if site_packages:
+        nanopb_generator = os.path.join(site_packages, "nanopb", "generator")
+        add_to_path(nanopb_generator, "PATH", "nanopb/generator")
 
 # Use the installed `mpm` package
 from mesh_plugin_manager.build import init_plugins  # type: ignore[import]
