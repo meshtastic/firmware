@@ -104,11 +104,11 @@ bool NAU7802Sensor::saveCalibrationData()
     bool okay = false;
 
     LOG_INFO("%s state write to %s", sensorName, nau7802ConfigFileName);
-#ifdef USE_EXTERNAL_FLASH
-    pb_ostream_t stream = {&nanopb_fatfs_write, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
-#else
+//#ifdef USE_EXTERNAL_FLASH
+//    pb_ostream_t stream = {&nanopb_fatfs_write, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
+//#else
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
-#endif
+//#endif
 
     if (!pb_encode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
         LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
@@ -124,6 +124,7 @@ bool NAU7802Sensor::saveCalibrationData()
 bool NAU7802Sensor::loadCalibrationData()
 {
     spiLock->lock();
+    /*
 #ifdef USE_EXTERNAL_FLASH
     auto file = fatfs.open(nau7802ConfigFileName, FILE_READ);
     bool okay = false;
@@ -145,7 +146,12 @@ bool NAU7802Sensor::loadCalibrationData()
     return okay;
 }
 #else
+*/
+    #ifdef USE_EXTERNAL_FLASH
+    auto file = fatfs.open(nau7802ConfigFileName, FILE_READ);
+    #else
     auto file = FSCom.open(nau7802ConfigFileName, FILE_O_READ);
+    #endif
     bool okay = false;
     if (file) {
         LOG_INFO("%s state read from %s", sensorName, nau7802ConfigFileName);
@@ -165,4 +171,4 @@ bool NAU7802Sensor::loadCalibrationData()
     return okay;
 }
 #endif
-#endif
+//#endif

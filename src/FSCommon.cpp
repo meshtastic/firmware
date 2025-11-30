@@ -169,7 +169,14 @@ bool copyFile(const char *from, const char *to)
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+// take SPI Lock
+    spiLock->lock();
+    bool result = fatfs.rename(pathFrom, pathTo);
+    spiLock->unlock();
+    return result;
+
+#elif defined(FSCom)
 
 #ifdef ARCH_ESP32
     // take SPI Lock

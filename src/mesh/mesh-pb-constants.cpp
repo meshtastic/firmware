@@ -32,7 +32,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     }
 }
 
-#ifdef USE_EXTERNAL_FLASH
+/*
 // Nanopb input callback for FatFs
 bool nanopb_fatfs_read(pb_istream_t *stream, pb_byte_t *buf, size_t count)
 {
@@ -48,13 +48,16 @@ bool nanopb_fatfs_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count
     int written = file->write(buf, count);
     return written == (int)count;
 }
-#elif defined(FSCom)
+*/
 /// Read from an Arduino File
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
     bool status = false;
+    #ifdef USE_EXTERNAL_FLASH
+    File32 *file = (File32 *)stream->state; //FILE32 for FatFs
+    #else
     File *file = (File *)stream->state;
-
+    #endif
     if (buf == NULL) {
         while (count-- && file->read() != EOF)
             ;
@@ -73,13 +76,16 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
     spiLock->lock();
+    #ifdef USE_EXTERNAL_FLASH
+    File32 *file = (File32 *)stream->state; //FILE32 for FatFs
+    #else
     auto file = (Print *)stream->state;
+    #endif
     // LOG_DEBUG("writing %d bytes to protobuf file", count);
     bool status = file->write(buf, count) == count;
     spiLock->unlock();
     return status;
 }
-#endif
 
 bool is_in_helper(uint32_t n, const uint32_t *array, pb_size_t count)
 {

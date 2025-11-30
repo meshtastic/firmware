@@ -1138,6 +1138,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
+/*
 #ifdef USE_EXTERNAL_FLASH
     if (!flashInitialized) {
         if (!flash.begin()) {
@@ -1169,46 +1170,6 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
         if (fields != &meshtastic_NodeDatabase_msg) { // special case for NodeDB which contains a vector
             memset(dest_struct, 0, objSize);
         }
-        /*
-        // Read raw binary into the protobuf struct (non-protobuf/raw dump)
-        int got = f.read(reinterpret_cast<uint8_t*>(dest_struct), objSize);
-        */
-        ///////////////////////////////////////////////////////////////
-        /*
-         // --- Streaming read implementation ---
-          const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
-          size_t totalRead = 0;
-          uint8_t* dest = reinterpret_cast<uint8_t*>(dest_struct);
-
-          while (totalRead < objSize) {
-             size_t toRead = CHUNK_SIZE;
-             if (totalRead + CHUNK_SIZE > objSize)
-              toRead = objSize - totalRead;
-
-         int got = f.read(dest + totalRead, toRead);
-         if (got <= 0) {
-             LOG_ERROR("Error reading file: read %d bytes at offset %u", got, (unsigned)totalRead);
-             break;
-         }
-         totalRead += got;
-     }
-         // Ensure all data is written to storage
-         f.flush();
-         // Always close the file
-         f.close();
-         if (totalRead != objSize) {
-         //if (got != int(objSize)) {
-             LOG_ERROR("Error reading file: read %u of %u bytes", (unsigned)totalRead, (unsigned)objSize);
-             //LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)objSize);
-             state = LoadFileResult::DECODE_FAILED;
-         } else {
-             LOG_INFO("Loaded %s successfully", filename);
-             state = LoadFileResult::LOAD_SUCCESS;
-         }
-     } else {
-         LOG_ERROR("Could not open / read %s", filename);
-     }
-     */
         pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -1221,12 +1182,14 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     } else {
         LOG_ERROR("Could not open / read %s", filename);
     }
-
-#elif defined(FSCom)
+*/
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     concurrency::LockGuard g(spiLock);
-
+    #ifdef USE_EXTERNAL_FLASH
+    File32 f = fatfs.open(filename, FILE_READ);
+    #else
     auto f = FSCom.open(filename, FILE_O_READ);
-
+    #endif
     if (f) {
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
@@ -1265,14 +1228,23 @@ void NodeDB::loadFromDisk()
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
     spiLock->unlock();
 #endif
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
 #ifdef FACTORY_INSTALL
     spiLock->lock();
+    #ifdef USE_EXTERNAL_FLASH
+    if (!fatfs.exists("/prefs/" xstr(BUILD_EPOCH))) {
+        LOG_WARN("Factory Install Reset!");
+        format_fat12();
+        check_fat12();
+        fatfs.mkdir("/prefs");
+        File32 f2 = fatfs.open("/prefs/" xstr(BUILD_EPOCH), FILE_WRITE);
+    #else
     if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
         LOG_WARN("Factory Install Reset!");
         FSCom.format();
         FSCom.mkdir("/prefs");
         File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
+    #endif
         if (f2) {
             f2.flush();
             f2.close();
@@ -1281,7 +1253,11 @@ void NodeDB::loadFromDisk()
     spiLock->unlock();
 #endif
     spiLock->lock();
+    #ifdef USE_EXTERNAL_FLASH
+    if (fatfs.exists(legacyPrefFileName)) {
+    #else
     if (FSCom.exists(legacyPrefFileName)) {
+    #endif
         spiLock->unlock();
         LOG_WARN("Legacy prefs version found, factory resetting");
         if (loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
@@ -1468,6 +1444,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
                        bool fullAtomic)
 {
     bool okay = false;
+    /*
 #ifdef USE_EXTERNAL_FLASH
 
     if (!flashInitialized) {
@@ -1524,49 +1501,6 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         LOG_ERROR("Error opening file for writing!");
         return false;
     } else {
-        /*size_t written = f.write(reinterpret_cast<const uint8_t*>(dest_struct), protoSize);
-        // Make sure to flush and close properly
-        f.flush();
-        f.close();
-        if (written == protoSize) {
-            LOG_INFO("File saved!");
-            LOG_INFO("File closed!");
-            okay = true;
-        } else {
-            LOG_ERROR("Error: wrote %u of %u bytes", written, protoSize);
-        }*/
-        ///////////////////////////////////////////////////////////////
-        /*
-         // --- Streaming write implementation ---
-          const size_t CHUNK_SIZE = 2; // Tune this for your available RAM
-          size_t totalWritten = 0;
-          const uint8_t* src = reinterpret_cast<const uint8_t*>(dest_struct);
-
-          while (totalWritten < protoSize) {
-             size_t toWrite = CHUNK_SIZE;
-             if (totalWritten + CHUNK_SIZE > protoSize)
-              toWrite = protoSize - totalWritten;
-
-             int written = f.write(src + totalWritten, toWrite);
-              if (written <= 0) {
-                 LOG_ERROR("Error writing file: wrote %d bytes at offset %u", written, (unsigned)totalWritten);
-                 break;
-              }
-             totalWritten += written;
-         }
-         f.flush();
-         f.close();
-
-         if (totalWritten != protoSize) {
-             LOG_ERROR("Error: wrote %u of %u bytes", (unsigned)totalWritten, (unsigned)protoSize);
-             okay = false;
-         } else {
-             LOG_INFO("File saved!");
-             LOG_INFO("File closed!");
-             okay = true;
-         }
-       }
-         */
         pb_ostream_t stream = {&nanopb_fatfs_write, &f, protoSize, 0};
         if (!pb_encode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
@@ -1584,10 +1518,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
             LOG_ERROR("Error: failed to encode or write file");
         }
     }
-
-#elif defined(FSCom)
+*/
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     auto f = SafeFile(filename, fullAtomic);
-
     LOG_INFO("Save %s", filename);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
@@ -2383,14 +2316,23 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location, int restoreWhat)
 {
     bool success = false;
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
         spiLock->lock();
+        #ifdef USE_EXTERNAL_FLASH
+        if (!fatfs.exists(backupFileName)) {
+            spiLock->unlock();
+            LOG_WARN("Could not restore. No backup file found");
+            return false;
+        }
+        #else
         if (!FSCom.exists(backupFileName)) {
             spiLock->unlock();
             LOG_WARN("Could not restore. No backup file found");
             return false;
-        } else {
+        }
+        #endif
+         else {
             spiLock->unlock();
         }
         meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;

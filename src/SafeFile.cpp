@@ -63,6 +63,7 @@ bool SafeFile::close()
         return false;
 
     spiLock->lock();
+    f.flush();
     f.close();
     spiLock->unlock();
 

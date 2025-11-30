@@ -42,9 +42,10 @@ using namespace STM32_LittleFS_Namespace;
 
 #if defined(ARCH_NRF52)
 #if defined(USE_EXTERNAL_FLASH)
-// nRF52 version with external flash#include "SdFat_Adafruit_Fork.h"
-#include "diskio.h"
+// nRF52 version with external flash
+#include "SdFat_Adafruit_Fork.h"
 #include "ff.h"
+#include "diskio.h"
 #include <Adafruit_SPIFlash.h>
 #include <SPI.h>
 #define DISK_LABEL "EXT FLASH"
