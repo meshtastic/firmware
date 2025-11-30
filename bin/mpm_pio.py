@@ -47,6 +47,14 @@ if os.path.isdir(_pyvendor_bin):
         os.environ["PATH"] = f"{_pyvendor_bin}:{current_path}" if current_path else _pyvendor_bin
         print(f"Added {_pyvendor_bin} to PATH")
 
+# Add pyvendor/nanopb/generator to PATH so nanopb generator executables can be found
+_nanopb_generator = os.path.join(_pyvendor, "nanopb", "generator")
+if os.path.isdir(_nanopb_generator):
+    current_path = os.environ.get("PATH", "")
+    if _nanopb_generator not in current_path:
+        os.environ["PATH"] = f"{_nanopb_generator}:{current_path}" if current_path else _nanopb_generator
+        print(f"Added {_nanopb_generator} to PATH")
+
 if IS_PLATFORMIO:
     # Use the installed `mpm` package
     from mpm.build import init_plugins  # type: ignore[import]
