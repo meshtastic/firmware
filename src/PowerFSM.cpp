@@ -370,7 +370,7 @@ void PowerFSM_setup()
     // Don't add power saving transitions if we are a power saving tracker or sensor or have Wifi enabled. Sleep will be initiated
     // through the modules
 
-#if HAS_WIFI || !defined(MESHTASTIC_EXCLUDE_WIFI)
+#if HAS_WIFI && !defined(MESHTASTIC_EXCLUDE_WIFI)
     bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
