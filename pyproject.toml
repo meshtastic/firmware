@@ -5,7 +5,7 @@ description = ""
 authors = [{ name = "Your Name", email = "you@example.com" }]
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = ["mesh-plugin-manager (>=0.1.0,<0.2.0)"]
+dependencies = ["mesh-plugin-manager (>=0.1.0,<2.0.0)"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
