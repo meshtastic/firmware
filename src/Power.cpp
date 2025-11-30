@@ -460,7 +460,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
         // if it's not HIGH - check the battery
 #endif
-#elif defined(MUZI_BASE)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
         return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
 #endif
         return getBattVoltage() > chargingVolt;
