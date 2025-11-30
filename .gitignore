@@ -41,6 +41,9 @@ src/mesh/raspihttp/private_key.pem
 
 # Ignore logo (set at build time with platformio-custom.py)
 data/boot/logo.*
+/tmp/
+!/tmp/.gitkeep
+.env
 
 # pioarduino platform
 managed_components/*
