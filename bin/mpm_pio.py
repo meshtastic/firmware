@@ -60,9 +60,9 @@ if os.path.isdir(_venv_dir):
                 print(f"MPM: Added {_nanopb_generator} to PATH")
 
 # Use the installed `mpm` package
-from mpm.build import init_plugins  # type: ignore[import]
-from mpm.build_utils import scan_plugins  # type: ignore[import]
-from mpm.proto import generate_all_protobuf_files  # type: ignore[import]
+from mesh_plugin_manager.build import init_plugins  # type: ignore[import]
+from mesh_plugin_manager.build_utils import scan_plugins  # type: ignore[import]
+from mesh_plugin_manager.proto import generate_all_protobuf_files  # type: ignore[import]
 
 # Auto-initialize when imported by PlatformIO (not when run as __main__)
 if __name__ != "__main__":
