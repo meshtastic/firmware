@@ -18,9 +18,11 @@ Import("env")  # type: ignore[name-defined]  # noqa: F821
 def find_site_packages(venv_dir):
     """Find site-packages directory in a venv (handles different Python versions)."""
     if not os.path.isdir(venv_dir):
+        print(f"MPM: {venv_dir} does not exist or is not a directory")
         return None
     lib_dir = os.path.join(venv_dir, "lib")
     if not os.path.isdir(lib_dir):
+        print(f"MPM: {lib_dir} does not exist or is not a directory")
         return None
     pattern = os.path.join(lib_dir, "python*/site-packages")
     matches = glob.glob(pattern)
@@ -29,7 +31,8 @@ def find_site_packages(venv_dir):
 
 def add_to_path(directory, env_var="PATH", label=""):
     """Add directory to environment variable if it exists and isn't already present."""
-    if directory is None or not os.path.isdir(directory):
+    if not directory or not os.path.isdir(directory):
+        print(f"MPM: {directory} does not exist or is not a directory")
         return False
     current = os.environ.get(env_var, "")
     if directory not in current:
@@ -41,7 +44,8 @@ def add_to_path(directory, env_var="PATH", label=""):
 
 def add_to_sys_path(directory, label=""):
     """Add directory to sys.path if it exists and isn't already present."""
-    if directory is None or not os.path.isdir(directory):
+    if not directory or not os.path.isdir(directory):
+        print(f"MPM: {directory} does not exist or is not a directory")
         return False
     if directory not in sys.path:
         sys.path.insert(0, directory)
@@ -62,16 +66,20 @@ mpm_dir = os.path.abspath(mpm_dir)  # Resolve relative path
 mpm_source_dir = os.path.join(mpm_dir, "src")
 mpm_venv_dir = os.path.join(mpm_dir, ".venv")
 firmware_venv_dir = os.path.join(project_dir, ".venv")
+mpm_site_packages = find_site_packages(mpm_venv_dir)
+firmware_site_packages = find_site_packages(firmware_venv_dir)
+mpm_venv_bin = os.path.join(mpm_venv_dir, "bin") 
+firmware_venv_bin = os.path.join(firmware_venv_dir, "bin")
 
 print(f"MPM Directories:")
 print(f"  mpm_dir: {mpm_dir}")
 print(f"  mpm_source_dir: {mpm_source_dir}")
 print(f"  mpm_venv_dir: {mpm_venv_dir}")
 print(f"  firmware_venv_dir: {firmware_venv_dir}")
-
-
-mpm_site_packages = find_site_packages(mpm_venv_dir)
-firmware_site_packages = find_site_packages(firmware_venv_dir)
+print(f"  mpm_site_packages: {mpm_site_packages}")
+print(f"  firmware_site_packages: {firmware_site_packages}")
+print(f"  mpm_venv_bin: {mpm_venv_bin}")
+print(f"  firmware_venv_bin: {firmware_venv_bin}")
 
 # These are in reverse order because they are prepended to sys.path
 add_to_sys_path(firmware_site_packages, "firmware .venv") # Look for this last
@@ -79,16 +87,11 @@ add_to_sys_path(mpm_site_packages, "mpm .venv") # Look for this next
 add_to_sys_path(mpm_source_dir, "mpm source") # Look for this first
 
 # Add .venv/bin to PATH (prioritize mpm's .venv)
-mpm_venv_bin = os.path.join(mpm_venv_dir, "bin") 
-firmware_venv_bin = os.path.join(firmware_venv_dir, "bin")
 add_to_path(firmware_venv_bin, "PATH")
 add_to_path(mpm_venv_bin, "PATH")
 
 for site_packages in [mpm_site_packages, firmware_site_packages]:
     add_to_path(site_packages, "PYTHONPATH")
-    if site_packages:
-        nanopb_generator = os.path.join(site_packages, "nanopb", "generator")
-        add_to_path(nanopb_generator, "PATH", "nanopb/generator")
 
 # Use the installed `mpm` package
 from mesh_plugin_manager.build import init_plugins  # type: ignore[import]
