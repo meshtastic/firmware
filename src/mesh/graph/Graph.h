@@ -23,6 +23,7 @@ struct Route {
     float cost;
     uint32_t timestamp;
 
+    Route() : destination(0), nextHop(0), cost(0), timestamp(0) {}
     Route(NodeNum dest, NodeNum hop, float c, uint32_t ts)
         : destination(dest), nextHop(hop), cost(c), timestamp(ts) {}
 };
