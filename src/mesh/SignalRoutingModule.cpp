@@ -200,15 +200,18 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
-    // Check if destination is signal-based capable (unicast)
-    if (!isBroadcast(p->to) && isSignalBasedCapable(p->to)) {
-        return true;
+    // Signal-based routing only applies to UNICAST packets where we can calculate a next-hop
+    // Broadcast packets MUST use traditional flooding with hop_limit decrement to prevent loops
+    if (isBroadcast(p->to)) {
+        return false;  // Never use signal-based routing for broadcasts
     }
 
-    // Check if ≥60% of heard nodes are signal-based capable (broadcast)
-    if (isBroadcast(p->to)) {
-        float percentage = getSignalBasedCapablePercentage();
-        return percentage >= 60.0f;
+    // For unicast: check if destination is signal-based capable AND we have a route
+    if (isSignalBasedCapable(p->to)) {
+        NodeNum nextHop = getNextHop(p->to);
+        if (nextHop != 0) {
+            return true;  // We have a valid route
+        }
     }
 
     return false;
@@ -283,7 +286,8 @@ bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId)
 
 float SignalRoutingModule::getSignalBasedCapablePercentage()
 {
+    // Currently unused - broadcasts always use traditional flooding
+    // This could be used in the future for hybrid routing decisions
     // TODO: Track actual capability from received SignalRoutingInfo packets
-    // For now, return 100% to enable signal-based routing for broadcasts
-    return 100.0f;
+    return 0.0f;
 }
