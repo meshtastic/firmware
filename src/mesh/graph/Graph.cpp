@@ -146,7 +146,7 @@ void Graph::clearCache() {
     routeCache.clear();
 }
 
-float Graph::calculateETX(int32_t rssi, int32_t snr) {
+float Graph::calculateETX(int32_t rssi, float snr) {
     // ETX calculation based on RSSI and SNR
     // This is a simplified model - in practice, this would be based on
     // empirical measurements of delivery probability
@@ -163,10 +163,10 @@ float Graph::calculateETX(int32_t rssi, int32_t snr) {
         deliveryProb = 0.95f;
     }
 
-    // Factor in SNR
-    if (snr < 5) {
+    // Factor in SNR (now correctly a float)
+    if (snr < 5.0f) {
         deliveryProb *= 0.5f;
-    } else if (snr < 10) {
+    } else if (snr < 10.0f) {
         deliveryProb *= 0.8f;
     }
 
