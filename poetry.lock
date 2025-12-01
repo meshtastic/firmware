@@ -305,14 +305,14 @@ all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2
 
 [[package]]
 name = "mesh-plugin-manager"
-version = "1.0.0"
+version = "1.0.1"
 description = ""
 optional = false
 python-versions = ">=3.14"
 groups = ["main"]
 files = [
-    {file = "mesh_plugin_manager-1.0.0-py3-none-any.whl", hash = "sha256:e98fcceeaaba37d24a4831892abf77d44ffec8ad94e8895245bf857a3a0c4334"},
-    {file = "mesh_plugin_manager-1.0.0.tar.gz", hash = "sha256:58a607e2a89de609a71ed797cebaa6baf32f1b276005c1206a37f1974e0b87c5"},
+    {file = "mesh_plugin_manager-1.0.1-py3-none-any.whl", hash = "sha256:2880baf3d9991102d30297d597730c89cfa7977d2c6b9003c98bec92bd553160"},
+    {file = "mesh_plugin_manager-1.0.1.tar.gz", hash = "sha256:f307ac5569e9922157bd8c5047b607dba3f31e4bff11f23255cf0eacc186f99f"},
 ]
 
 [package.dependencies]
