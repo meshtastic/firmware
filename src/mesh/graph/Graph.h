@@ -77,7 +77,7 @@ public:
     /**
      * Calculate ETX from RSSI and SNR values
      */
-    static float calculateETX(int32_t rssi, int32_t snr);
+    static float calculateETX(int32_t rssi, float snr);
 
     /**
      * Update stability weighting for an edge

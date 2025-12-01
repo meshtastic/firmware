@@ -216,7 +216,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
         float etx = Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
-        LOG_INFO("SignalRouting: Direct neighbor %s: RSSI=%d, SNR=%d, ETX=%.2f",
+        LOG_INFO("SignalRouting: Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
@@ -330,7 +330,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
     return 0; // No route found
 }
 
-void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, int32_t snr, uint32_t lastRxTime, uint32_t variance)
+void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance)
 {
     if (!routingGraph) return;
 
