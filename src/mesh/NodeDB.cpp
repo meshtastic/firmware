@@ -560,8 +560,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.has_network = true;
     config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
     config.has_security = true;
-    config.has_routing = true;
-    config.routing.signal_based_routing = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
 
     config.lora.sx126x_rx_boosted_gain = true;
