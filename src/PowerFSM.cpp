@@ -64,8 +64,17 @@ static void sdsEnter()
 
 static void lowBattSDSEnter()
 {
-    LOG_POWERFSM("State: Lower batt SDS");
+#if defined(ARCH_ESP32) && defined(LOW_BATTERY_RECOVERY_ENABLED)
+    LOG_POWERFSM("State: Low battery SDS - entering recovery mode");
+    // Set the low battery recovery flag so we wake periodically to check battery level
+    inLowBatteryRecoveryMode = true;
+    // Sleep for configured interval, so we can periodically check if battery recovered
+    doDeepSleep(LOW_BATT_SLEEP_INTERVAL_MS, false, true);
+#else
+    LOG_POWERFSM("State: Low battery SDS");
+    // Standard behavior: use sds_secs for sleep duration
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
+#endif
 }
 extern Power *power;
 

@@ -1,5 +1,9 @@
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
+// Enable low battery recovery mode - wakes periodically to check for power restoration
+// Note: T-Beam S3 uses PMU for battery sensing, so early boot check does a brief normal boot
+#define LOW_BATTERY_RECOVERY_ENABLED
+
 #define I2C_SDA1 42 // Used for PMU management and PCF8563
 #define I2C_SCL1 41 // Used for PMU management and PCF8563
 

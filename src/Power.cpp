@@ -915,16 +915,55 @@ void Power::readPowerStatus()
 
 #endif
 
-    // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
-    // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
-    //
+    // If we have a battery at all and it is at or below the low battery threshold, force deep sleep
+    // if we have more than 10 consecutive low readings. This triggers at LOW_BATT_ENTER_THRESHOLD (5%)
+    // to allow the device to enter a recovery mode that periodically wakes to check for power restoration.
 
-    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
+    if (batteryLevel && powerStatus2.getHasBattery()) {
+        int batteryPercent = batteryLevel->getBatteryPercent();
+        bool hasUSB = powerStatus2.getHasUSB();
+        bool isCharging = powerStatus2.getIsCharging();
+
+        // Skip low battery check if USB is connected AND actively charging
+        // This allows the device to stay running while charging from USB/solar
+        if (hasUSB && isCharging) {
+            low_voltage_counter = 0;
+            return; // USB is providing sufficient power
+        }
+
+        // Check if USB is connected but NOT charging (insufficient power)
+        // This can happen with weak USB sources or small solar panels
+        bool insufficientUSBPower = hasUSB && !isCharging && batteryPercent >= 0 && batteryPercent < 95;
+        if (insufficientUSBPower && batteryPercent <= LOW_BATT_ENTER_THRESHOLD) {
+            LOG_WARN("USB connected but not charging at %d%% - insufficient USB power", batteryPercent);
+            // Fall through to low battery check - USB isn't helping
+        } else if (hasUSB) {
+            // USB connected, either charging or battery is full - we're fine
+            low_voltage_counter = 0;
+            return;
+        }
+
+        // No USB, or USB with insufficient power - check for low battery
+        bool isLowBattery = false;
+
+        if (batteryPercent >= 0) {
+            // Have valid percentage - use percentage-based threshold
+            isLowBattery = (batteryPercent <= LOW_BATT_ENTER_THRESHOLD);
+        } else {
+            // No percentage available - fall back to minimum voltage check
+            isLowBattery = (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]);
+        }
+
+        if (isLowBattery) {
             low_voltage_counter++;
-            LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
+            LOG_DEBUG("Low battery counter: %d/10 (battery=%d%%, USB=%s, charging=%s)", low_voltage_counter,
+                      batteryPercent >= 0 ? batteryPercent : -1, hasUSB ? "yes" : "no", isCharging ? "yes" : "no");
             if (low_voltage_counter > 10) {
-                LOG_INFO("Low voltage detected, trigger deep sleep");
+                if (insufficientUSBPower) {
+                    LOG_INFO("Low battery (%d%%) with insufficient USB power, trigger deep sleep", batteryPercent);
+                } else {
+                    LOG_INFO("Low battery detected (%d%%), trigger deep sleep", batteryPercent >= 0 ? batteryPercent : 0);
+                }
                 powerFSM.trigger(EVENT_LOW_BATTERY);
             }
         } else {

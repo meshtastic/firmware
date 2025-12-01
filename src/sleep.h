@@ -4,6 +4,25 @@
 #include "Observer.h"
 #include "configuration.h"
 
+// Low battery recovery mode - can be enabled/configured per variant
+// To enable: #define LOW_BATTERY_RECOVERY_ENABLED in variant.h
+// To customize thresholds, define these before including sleep.h:
+//   LOW_BATT_SLEEP_INTERVAL_MS - wake interval (default: 5 minutes)
+//   LOW_BATT_ENTER_THRESHOLD   - enter sleep at this % (default: 5%)
+//   LOW_BATT_EXIT_THRESHOLD    - exit sleep at this % (default: 10%)
+
+#ifndef LOW_BATT_SLEEP_INTERVAL_MS
+#define LOW_BATT_SLEEP_INTERVAL_MS (5 * 60 * 1000) // 5 minutes wake interval
+#endif
+
+#ifndef LOW_BATT_ENTER_THRESHOLD
+#define LOW_BATT_ENTER_THRESHOLD 5 // Enter deep sleep at 5% battery
+#endif
+
+#ifndef LOW_BATT_EXIT_THRESHOLD
+#define LOW_BATT_EXIT_THRESHOLD 10 // Exit deep sleep at 10% battery
+#endif
+
 void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), cpuDeepSleep(uint32_t msecToWake);
 
 #ifdef ARCH_ESP32
@@ -27,6 +46,11 @@ void setCPUFast(bool on);
 bool doPreflightSleep();
 
 extern int bootCount;
+
+#if defined(ARCH_ESP32) && defined(LOW_BATTERY_RECOVERY_ENABLED)
+// Tracks if we're in low battery recovery mode (persists across deep sleep)
+extern bool inLowBatteryRecoveryMode;
+#endif
 
 // is bluetooth sw currently running?
 extern bool bluetoothOn;

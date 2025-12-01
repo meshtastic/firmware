@@ -66,6 +66,162 @@ Observable<esp_sleep_wakeup_cause_t> notifyLightSleepEnd;
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
 
+#if defined(ARCH_ESP32) && defined(LOW_BATTERY_RECOVERY_ENABLED)
+// Low battery recovery mode - persists across deep sleep cycles
+RTC_DATA_ATTR bool inLowBatteryRecoveryMode = false;
+
+/**
+ * Quick USB power detection for early boot
+ * Returns true if external USB power is detected
+ */
+static bool quickUSBCheck()
+{
+#ifdef EXT_PWR_DETECT
+    // Direct USB detection via GPIO
+#ifdef EXT_PWR_DETECT_VALUE
+    pinMode(EXT_PWR_DETECT, INPUT);
+    return digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE;
+#else
+    pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
+    return digitalRead(EXT_PWR_DETECT) == LOW; // Most boards use active-low
+#endif
+#else
+    return false; // No direct USB detection available
+#endif
+}
+
+/**
+ * Quick battery check for early boot - used to decide if we should go back to sleep
+ * Returns approximate battery percentage (0-100), or -1 if unable to read
+ * Also sets isCharging to true if voltage suggests USB/charging power
+ */
+static int quickBatteryCheck(bool &isCharging)
+{
+    isCharging = false;
+
+    // First, check for direct USB power detection
+    if (quickUSBCheck()) {
+        isCharging = true;
+        LOG_INFO("Low battery recovery: USB power detected via GPIO");
+        return 100; // USB power present, report as "charged"
+    }
+
+#if defined(BATTERY_PIN)
+    // OCV table for LiIon (matches power.h default)
+    const uint16_t OCV[11] = {4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100};
+
+#ifndef ADC_MULTIPLIER
+#define ADC_MULTIPLIER 2.0
+#endif
+
+    // Enable ADC if needed
+#ifdef ADC_CTRL
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, INPUT);
+    uint8_t adc_ctl_enable_value = !(digitalRead(ADC_CTRL));
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, adc_ctl_enable_value);
+#else
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
+    delay(10);
+#endif
+
+    // Take a few samples for stability
+    uint32_t raw = 0;
+    for (int i = 0; i < 5; i++) {
+        raw += analogRead(BATTERY_PIN);
+        delay(1);
+    }
+    raw = raw / 5;
+
+    // Convert to millivolts (simplified - not using calibration)
+    // Note: ESP32 ADC is 12-bit (0-4095), reference ~3.3V
+    float voltage = (raw / 4095.0f) * 3300.0f * ADC_MULTIPLIER;
+
+    // Disable ADC
+#ifdef ADC_CTRL
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, ANALOG);
+#else
+    digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
+#endif
+
+    // If voltage is suspiciously low, assume no battery connected (USB-only power)
+    // This prevents false low-battery triggers on USB-powered nodes without batteries
+    const float noBatteryVolt = OCV[10] - 500; // ~2600mV - below this means no battery
+    if (voltage < noBatteryVolt) {
+        return -1; // No battery detected
+    }
+
+    // Check if voltage suggests charging (above fully charged voltage)
+    const float chargingVolt = OCV[0] + 100; // ~4290mV indicates charging
+    if (voltage > chargingVolt) {
+        isCharging = true;
+        return 100; // Assume full if charging
+    }
+
+    // Convert voltage to percentage using OCV table
+    for (int i = 0; i < 11; i++) {
+        if (OCV[i] <= voltage) {
+            if (i == 0) {
+                return 100;
+            }
+            // Linear interpolation between points
+            int pct = 100 - (i * 10) + (int)(10.0f * (voltage - OCV[i]) / (OCV[i - 1] - OCV[i]));
+            return (pct < 0) ? 0 : ((pct > 100) ? 100 : pct);
+        }
+    }
+    return 0; // Below minimum voltage
+#else
+    // No battery pin - can't do early check
+    return -1;
+#endif // BATTERY_PIN
+}
+
+/**
+ * Check if we should go back to sleep during low battery recovery mode
+ * Called early in boot before full system initialization
+ * Returns true if we should continue sleeping, false to proceed with normal boot
+ */
+static bool shouldContinueLowBatterySleep()
+{
+    if (!inLowBatteryRecoveryMode) {
+        return false;
+    }
+
+    bool isCharging = false;
+    int batteryPct = quickBatteryCheck(isCharging);
+
+    // If charging/USB detected, exit low battery mode
+    if (isCharging) {
+        LOG_INFO("Low battery recovery: USB/charging detected, resuming normal boot");
+        inLowBatteryRecoveryMode = false;
+        return false;
+    }
+
+    // If we couldn't read battery, be conservative and continue boot
+    if (batteryPct < 0) {
+        LOG_INFO("Low battery recovery: Unable to read battery, resuming normal boot");
+        inLowBatteryRecoveryMode = false;
+        return false;
+    }
+
+    // Check if battery has recovered above exit threshold
+    if (batteryPct >= LOW_BATT_EXIT_THRESHOLD) {
+        LOG_INFO("Low battery recovery: Battery at %d%% (>=%d%%), resuming normal boot", batteryPct, LOW_BATT_EXIT_THRESHOLD);
+        inLowBatteryRecoveryMode = false;
+        return false;
+    }
+
+    // Still low battery - should go back to sleep
+    LOG_INFO("Low battery recovery: Battery at %d%% (<%d%%), returning to sleep", batteryPct, LOW_BATT_EXIT_THRESHOLD);
+    return true;
+}
+#endif // ARCH_ESP32 && LOW_BATTERY_RECOVERY_ENABLED
+
 // -----------------------------------------------------------------------------
 // Application
 // -----------------------------------------------------------------------------
@@ -172,7 +328,18 @@ void initDeepSleep()
     }
 #endif
 
-#endif
+#ifdef LOW_BATTERY_RECOVERY_ENABLED
+    // Low battery recovery check - if we woke from timer while in low battery mode,
+    // check if battery has recovered. If not, go back to sleep immediately.
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER && shouldContinueLowBatterySleep()) {
+        // Go right back to deep sleep - skip full initialization
+        // Use cpuDeepSleep directly to avoid full doDeepSleep() overhead
+        esp_sleep_enable_timer_wakeup(LOW_BATT_SLEEP_INTERVAL_MS * 1000ULL);
+        esp_deep_sleep_start();
+    }
+#endif // LOW_BATTERY_RECOVERY_ENABLED
+
+#endif // ARCH_ESP32
 }
 
 bool doPreflightSleep()

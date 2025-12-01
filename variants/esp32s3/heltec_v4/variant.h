@@ -1,3 +1,6 @@
+// Enable low battery recovery mode - wakes periodically to check for power restoration
+#define LOW_BATTERY_RECOVERY_ENABLED
+
 #define VEXT_ENABLE 36 // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
