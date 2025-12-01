@@ -71,18 +71,20 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
     meshtastic_SignalRoutingInfo info = meshtastic_SignalRoutingInfo_init_zero;
     buildSignalRoutingInfo(info);
 
-    // Only send if we have neighbors to report
+    char ourName[64];
+    getNodeDisplayName(nodeDB->getNodeNum(), ourName, sizeof(ourName));
+
     if (info.neighbors_count > 0) {
         meshtastic_MeshPacket *p = allocDataProtobuf(info);
         p->to = dest;
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-        char ourName[64];
-        getNodeDisplayName(nodeDB->getNodeNum(), ourName, sizeof(ourName));
         LOG_INFO("SignalRouting: Broadcasting %d neighbors from %s", info.neighbors_count, ourName);
 
         service->sendToMesh(p);
         lastBroadcast = millis();
+    } else {
+        LOG_INFO("SignalRouting: No direct neighbors to broadcast from %s (waiting for direct packets)", ourName);
     }
 }
 
@@ -170,12 +172,18 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     uint8_t fromLastByte = mp.from & 0xFF;
     bool isDirectFromSender = (mp.relay_node == fromLastByte);
     
+    // Debug logging to understand why packets might not be tracked
+    if (hasSignalData) {
+        LOG_DEBUG("SignalRouting: Packet from 0x%08x: relay=0x%02x, fromLastByte=0x%02x, viaMqtt=%d, direct=%d",
+                  mp.from, mp.relay_node, fromLastByte, mp.via_mqtt, isDirectFromSender);
+    }
+    
     if (hasSignalData && notViaMqtt && isDirectFromSender) {
         char senderName[64];
         getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
         float etx = Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
-        LOG_DEBUG("SignalRouting: Direct neighbor %s: RSSI=%d, SNR=%d, ETX=%.2f",
+        LOG_INFO("SignalRouting: Direct neighbor %s: RSSI=%d, SNR=%d, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
