@@ -353,7 +353,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     jsonObj["from"] = (unsigned int)mp->from;
     jsonObj["channel"] = (unsigned int)mp->channel;
     jsonObj["type"] = msgType.c_str();
-    jsonObj["sender"] = owner.id;
+    jsonObj["sender"] = nodeDB->getNodeId().c_str();
     if (mp->rx_rssi != 0)
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)

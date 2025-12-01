@@ -16,6 +16,7 @@
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
+#include "input/SerialKeyboard.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
@@ -255,7 +256,7 @@ void CannedMessageModule::updateDestinationSelectionList()
 
     for (size_t i = 0; i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == myNodeNum)
+        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
             continue;
 
         const String &nodeName = node->user.long_name;
@@ -404,14 +405,14 @@ bool CannedMessageModule::isUpEvent(const InputEvent *event)
     return event->inputEvent == INPUT_BROKER_UP ||
            ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
              runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
-            event->inputEvent == INPUT_BROKER_ALT_PRESS);
+            (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS));
 }
 bool CannedMessageModule::isDownEvent(const InputEvent *event)
 {
     return event->inputEvent == INPUT_BROKER_DOWN ||
            ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
              runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
-            event->inputEvent == INPUT_BROKER_USER_PRESS);
+            (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS));
 }
 bool CannedMessageModule::isSelectEvent(const InputEvent *event)
 {
@@ -692,10 +693,10 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
+#if CANNED_MESSAGE_ADD_CONFIRMATION
             // Show confirmation dialog before sending canned message
             NodeNum destNode = dest;
             ChannelIndex chan = channel;
-#if CANNED_MESSAGE_ADD_CONFIRMATION
             graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
                 this->sendText(destNode, chan, current, false);
                 payload = runState;
@@ -836,6 +837,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -844,6 +846,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         payload = INPUT_BROKER_LEFT;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -851,6 +854,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_RIGHT) {
         payload = INPUT_BROKER_RIGHT;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -973,9 +977,17 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     LOG_INFO("Send message id=%u, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     if (p->to != 0xffffffff) {
-        LOG_INFO("Proactively adding %x as favorite node", p->to);
-        nodeDB->set_favorite(true, p->to);
+        // Only add as favorite if our role is NOT CLIENT_BASE
+        if (config.device.role != 12) {
+            LOG_INFO("Proactively adding %x as favorite node", p->to);
+            nodeDB->set_favorite(true, p->to);
+        } else {
+            LOG_DEBUG("Not favoriting node %x as we are CLIENT_BASE role", p->to);
+        }
+
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+        p->pki_encrypted = true;
+        p->channel = 0;
     }
 
     // Send to mesh and phone (even if no phone connected, to track ACKs)
@@ -1119,7 +1131,6 @@ int32_t CannedMessageModule::runOnce()
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
@@ -1561,10 +1572,17 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
                 if (node) {
                     if (node->is_favorite) {
+#if defined(M5STACK_UNITC6L)
+                        snprintf(entryText, sizeof(entryText), "* %s", node->user.short_name);
+                    } else {
+                        snprintf(entryText, sizeof(entryText), "%s", node->user.short_name);
+                    }
+#else
                         snprintf(entryText, sizeof(entryText), "* %s", node->user.long_name);
                     } else {
                         snprintf(entryText, sizeof(entryText), "%s", node->user.long_name);
                     }
+#endif
                 }
             }
         }
@@ -1735,7 +1753,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         int yOffset = y + 10;
 #else
         display->setFont(FONT_MEDIUM);
+#if defined(M5STACK_UNITC6L)
+        int yOffset = y;
+#else
         int yOffset = y + 10;
+#endif
 #endif
 
         // --- Delivery Status Message ---
@@ -1760,13 +1782,20 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
 
         display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
+#if defined(M5STACK_UNITC6L)
+        yOffset += lineCount * FONT_HEIGHT_MEDIUM - 5; // only 1 line gap, no extra padding
+#else
         yOffset += lineCount * FONT_HEIGHT_MEDIUM; // only 1 line gap, no extra padding
-
+#endif
 #ifndef USE_EINK
         // --- SNR + RSSI Compact Line ---
         if (this->ack) {
             display->setFont(FONT_SMALL);
+#if defined(M5STACK_UNITC6L)
+            snprintf(buffer, sizeof(buffer), "SNR: %.1f dB \nRSSI: %d", this->lastRxSnr, this->lastRxRssi);
+#else
             snprintf(buffer, sizeof(buffer), "SNR: %.1f dB   RSSI: %d", this->lastRxSnr, this->lastRxRssi);
+#endif
             display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
         }
 #endif
@@ -1820,7 +1849,88 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
-        // --- Draw Free Text input with multi-emote support and proper line wrapping ---
+#if INPUTBROKER_SERIAL_TYPE == 1
+        // Chatter Modifier key mode label (right side)
+        {
+            uint8_t mode = globalSerialKeyboard ? globalSerialKeyboard->getShift() : 0;
+            const char *label = (mode == 0) ? "a" : (mode == 1) ? "A" : "#";
+
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            const int16_t th = FONT_HEIGHT_SMALL;
+            const int16_t tw = display->getStringWidth(label);
+            const int16_t padX = 3;
+            const int16_t padY = 2;
+            const int16_t r = 3;
+
+            const int16_t bw = tw + padX * 2;
+            const int16_t bh = th + padY * 2;
+
+            const int16_t bx = x + display->getWidth() - bw - 2;
+            const int16_t by = y + display->getHeight() - bh - 2;
+
+            display->setColor(WHITE);
+            display->fillRect(bx + r, by, bw - r * 2, bh);
+            display->fillRect(bx, by + r, r, bh - r * 2);
+            display->fillRect(bx + bw - r, by + r, r, bh - r * 2);
+            display->fillCircle(bx + r, by + r, r);
+            display->fillCircle(bx + bw - r - 1, by + r, r);
+            display->fillCircle(bx + r, by + bh - r - 1, r);
+            display->fillCircle(bx + bw - r - 1, by + bh - r - 1, r);
+
+            display->setColor(BLACK);
+            display->drawString(bx + padX, by + padY, label);
+        }
+
+        // LEFT-SIDE DESTINATION-HINT BOX (“Dest: Shift + ◄”)
+        {
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            const char *label = "Dest: Shift + ";
+            int16_t labelW = display->getStringWidth(label);
+
+            // triangle size visually matches glyph height, not full line height
+            const int triH = FONT_HEIGHT_SMALL - 3;
+            const int triW = triH * 0.7;
+
+            const int16_t padX = 3;
+            const int16_t padY = 2;
+            const int16_t r = 3;
+
+            const int16_t bw = labelW + triW + padX * 2 + 2;
+            const int16_t bh = FONT_HEIGHT_SMALL + padY * 2;
+
+            const int16_t bx = x + 2;
+            const int16_t by = y + display->getHeight() - bh - 2;
+
+            // Rounded white box
+            display->setColor(WHITE);
+            display->fillRect(bx + r, by, bw - (r * 2), bh);
+            display->fillRect(bx, by + r, r, bh - (r * 2));
+            display->fillRect(bx + bw - r, by + r, r, bh - (r * 2));
+            display->fillCircle(bx + r, by + r, r);
+            display->fillCircle(bx + bw - r - 1, by + r, r);
+            display->fillCircle(bx + r, by + bh - r - 1, r);
+            display->fillCircle(bx + bw - r - 1, by + bh - r - 1, r);
+
+            // Draw text
+            display->setColor(BLACK);
+            display->drawString(bx + padX, by + padY, label);
+
+            // Perfectly center triangle on text baseline
+            int16_t tx = bx + padX + labelW;
+            int16_t ty = by + padY + (FONT_HEIGHT_SMALL / 2) - (triH / 2) - 1; // -1 for optical centering
+
+            // ◄ Left-pointing triangle
+            display->fillTriangle(tx + triW, ty,       // top-right
+                                  tx, ty + triH / 2,   // left center
+                                  tx + triW, ty + triH // bottom-right
+            );
+        }
+#endif
+        // Draw Free Text input with multi-emote support and proper line wrapping
         display->setColor(WHITE);
         {
             int inputY = 0 + y + FONT_HEIGHT_SMALL;

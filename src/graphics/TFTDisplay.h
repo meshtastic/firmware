@@ -20,6 +20,9 @@ class TFTDisplay : public OLEDDisplay
     */
     TFTDisplay(uint8_t, int, int, OLEDDISPLAY_GEOMETRY, HW_I2C);
 
+    // Destructor to clean up allocated memory
+    ~TFTDisplay();
+
     // Write the buffer to the display memory
     virtual void display() override { display(false); };
     virtual void display(bool fromBlank);
@@ -58,4 +61,6 @@ class TFTDisplay : public OLEDDisplay
 
     // Connect to the display
     virtual bool connect() override;
+
+    uint16_t *linePixelBuffer = nullptr;
 };

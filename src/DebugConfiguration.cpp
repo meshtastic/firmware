@@ -146,7 +146,7 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
 {
     int result;
 #ifdef ARCH_PORTDUINO
-    bool utf = !settingsMap[ascii_logs];
+    bool utf = !portduino_config.ascii_logs;
 #else
     bool utf = true;
 #endif

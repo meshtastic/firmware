@@ -34,6 +34,8 @@
 #define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
 #elif defined(SEEED_SOLAR_NODE)
 #define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3087, 2786
+#elif defined(WISMESH_TAG)
+#define OCV_ARRAY 4240, 4112, 4029, 3970, 3906, 3846, 3824, 3802, 3776, 3650, 3072
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -128,15 +130,20 @@ class Power : private concurrency::OSThread
     bool lipoInit();
     /// Setup a Lipo charger
     bool lipoChargerInit();
+    /// Setup a meshSolar battery sensor
+    bool meshSolarInit();
 
   private:
     void shutdown();
     void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
+    uint32_t lastLogTime = 0;
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
 };
+
+void battery_adcEnable();
 
 extern Power *power;

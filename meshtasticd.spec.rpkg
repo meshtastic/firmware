@@ -33,6 +33,7 @@ BuildRequires: python3dist(grpcio[protobuf])
 BuildRequires: python3dist(grpcio-tools)
 BuildRequires: git-core
 BuildRequires: gcc-c++
+BuildRequires: (glibc-devel >= 2.38) or pkgconfig(libbsd-overlay)
 BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(libgpiod)
 BuildRequires: pkgconfig(bluez)
@@ -48,6 +49,13 @@ BuildRequires: pkgconfig(libulfius)
 BuildRequires: pkgconfig(x11)
 BuildRequires: pkgconfig(libinput)
 BuildRequires: pkgconfig(xkbcommon-x11)
+
+# libbsd is needed on older Fedora/RHEL to provide 'strlcpy'
+%if 0%{?fedora} >= 39 || 0%{?rhel} >= 10
+BuildRequires: glibc-devel >= 2.38
+%else
+BuildRequires: pkgconfig(libbsd-overlay)
+%endif
 
 Requires:      systemd-udev
 

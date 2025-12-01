@@ -76,6 +76,9 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
             return digitalRead(buttonPin); // Most buttons are active low by default
     }
 
+    // Returns true while this thread's button is physically held down
+    bool isHeld() { return isButtonPressed(_pinNum); }
+
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused);

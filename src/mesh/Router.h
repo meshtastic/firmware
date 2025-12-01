@@ -105,6 +105,18 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
     /**
+     * Determine if hop_limit should be decremented for a relay operation.
+     * Returns false (preserve hop_limit) only if all conditions are met:
+     * - It's NOT the first hop (first hop must always decrement)
+     * - Local device is a ROUTER, ROUTER_LATE, or CLIENT_BASE
+     * - Previous relay is a favorite ROUTER, ROUTER_LATE, or CLIENT_BASE
+     *
+     * @param p The packet being relayed
+     * @return true if hop_limit should be decremented, false to preserve it
+     */
+    bool shouldDecrementHopLimit(const meshtastic_MeshPacket *p);
+
+    /**
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
@@ -113,7 +125,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false);
 
   private:
     /**

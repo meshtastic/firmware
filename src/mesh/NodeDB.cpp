@@ -204,7 +204,7 @@ NodeDB::NodeDB()
 
     int saveWhat = 0;
     // Get device unique id
-#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     uint32_t unique_id[4];
     // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
     // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
@@ -254,6 +254,8 @@ NodeDB::NodeDB()
     owner.role = config.device.role;
     // Ensure macaddr is set to our macaddr as it will be copied in our info below
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    // Ensure owner.id is always derived from the node number
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
 
     if (!config.has_security) {
         config.has_security = true;
@@ -539,10 +541,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
-    // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
+    // Restrict ROUTER*, LOST AND FOUND roles for security reasons
     if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_REPEATER,
-                  meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
+                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
         LOG_WARN("ROUTER roles are restricted, falling back to CLIENT role");
         config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     } else {
@@ -637,7 +638,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL)) &&                                                                                                  \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT)) &&                                                                        \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -648,7 +649,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306) ||         \
+    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -658,7 +660,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
-    if (settingsMap[displayPanel])
+    if (portduino_config.displayPanel)
         hasScreen = true;
     else
         hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
@@ -686,7 +688,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
     config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
 #else
-    config.network.enabled_protocols = 1;
+    config.network.enabled_protocols = 0;
 #endif
 #endif
 
@@ -702,6 +704,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.wifi_psk, USERPREFS_NETWORK_WIFI_PSK, sizeof(config.network.wifi_psk));
 #endif
 
+#if defined(USERPREFS_NETWORK_IPV6_ENABLED)
+    config.network.ipv6_enabled = USERPREFS_NETWORK_IPV6_ENABLED;
+#else
+    config.network.ipv6_enabled = default_network_ipv6_enabled;
+#endif
+
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
@@ -711,6 +719,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
+#endif
+#ifdef COMPASS_ORIENTATION
+    config.display.compass_orientation = COMPASS_ORIENTATION;
 #endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (WiFiOTA::isUpdated()) {
@@ -816,6 +827,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
+#ifdef T_LORA_PAGER
+    moduleConfig.canned_message.updown1_enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;
+    moduleConfig.canned_message.inputbroker_pin_b = ROTARY_B;
+    moduleConfig.canned_message.inputbroker_pin_press = ROTARY_PRESS;
+    moduleConfig.canned_message.inputbroker_event_cw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(28);
+    moduleConfig.canned_message.inputbroker_event_ccw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(29);
+    moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+#endif
     moduleConfig.has_canned_message = true;
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
@@ -882,11 +902,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        owner.has_is_unmessagable = true;
-        owner.is_unmessagable = true;
-        config.display.screen_on_secs = 1;
-        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
@@ -958,12 +973,25 @@ void NodeDB::installDefaultChannels()
     channelFile.version = DEVICESTATE_CUR_VER;
 }
 
-void NodeDB::resetNodes()
+void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    if (keepFavorites) {
+        LOG_INFO("Clearing node database - preserving favorites");
+        for (size_t i = 0; i < meshNodes->size(); i++) {
+            meshtastic_NodeInfoLite &node = meshNodes->at(i);
+            if (i > 0 && !node.is_favorite) {
+                node = meshtastic_NodeInfoLite();
+            } else {
+                numMeshNodes += 1;
+            }
+        };
+    } else {
+        LOG_INFO("Clearing node database - removing favorites");
+        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    }
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1134,6 +1162,20 @@ void NodeDB::loadFromDisk()
     spiLock->unlock();
 #endif
 #ifdef FSCom
+#ifdef FACTORY_INSTALL
+    spiLock->lock();
+    if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
+        LOG_WARN("Factory Install Reset!");
+        FSCom.format();
+        FSCom.mkdir("/prefs");
+        File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
+        if (f2) {
+            f2.flush();
+            f2.close();
+        }
+    }
+    spiLock->unlock();
+#endif
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
         spiLock->unlock();
@@ -1310,8 +1352,8 @@ void NodeDB::loadFromDisk()
     }
 #if ARCH_PORTDUINO
     // set any config overrides
-    if (settingsMap[has_configDisplayMode]) {
-        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)settingsMap[configDisplayMode];
+    if (portduino_config.has_configDisplayMode) {
+        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
     }
 
 #endif
@@ -1579,8 +1621,17 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 void NodeDB::addFromContact(meshtastic_SharedContact contact)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
-    if (!info) {
+    if (!info || !contact.has_user) {
         return;
+    }
+    // If the local node has this node marked as manually verified
+    // and the client does not, do not allow the client to update the
+    // saved public key.
+    if ((info->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && !contact.manually_verified) {
+        if (contact.user.public_key.size != info->user.public_key.size ||
+            memcmp(contact.user.public_key.bytes, info->user.public_key.bytes, info->user.public_key.size) != 0) {
+            return;
+        }
     }
     info->num = contact.node_num;
     info->has_user = true;
@@ -1589,17 +1640,38 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // If should_ignore is set,
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
         info->is_ignored = true;
+        info->is_favorite = false;
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
         info->user.public_key.bytes[0] = 0;
     } else {
-        info->last_heard = getValidTime(RTCQualityNTP);
-        info->is_favorite = true;
-        info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+        /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
+         * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
+         */
+
+        /* "Boring old nodes" are the first to be evicted out of the node database when full. This includes a newly-zeroed
+         * nodeinfo because it has: !is_favorite && last_heard==0. To keep this from happening when we addFromContact, we set the
+         * new node as a favorite, and we leave last_heard alone (even if it's zero).
+         */
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+            // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
+            // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
+            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
+            info->last_heard = getTime();
+        } else {
+            // Normal case: set is_favorite to prevent expiration.
+            // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
+            info->is_favorite = true;
+        }
+
+        // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
+        if (contact.manually_verified) {
+            info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+        }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
-        // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
@@ -1643,13 +1715,13 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             return false;
         }
         LOG_INFO("Public Key set for node, not updating!");
-        // we copy the key into the incoming packet, to prevent overwrite
-        p.public_key.size = 32;
-        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
     } else if (p.public_key.size == 32) {
         LOG_INFO("Update Node Pubkey!");
     }
 #endif
+
+    // Always ensure user.id is derived from nodeId, regardless of what was received
+    snprintf(p.id, sizeof(p.id), "!%08x", nodeId);
 
     // Both of info->user and p start as filled with zero so I think this is okay
     auto lite = TypeConversions::ConvertToUserLite(p);
@@ -1687,10 +1759,10 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
-    // if (mp.from == getNodeNum()) {
-    //     LOG_DEBUG("Ignore update from self");
-    //     return;
-    // }
+    if (mp.from == getNodeNum()) {
+        LOG_DEBUG("Ignore update from self");
+        return;
+    }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 
@@ -1724,6 +1796,65 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
+}
+
+bool NodeDB::isFavorite(uint32_t nodeId)
+{
+    // returns true if nodeId is_favorite; false if not or not found
+
+    // NODENUM_BROADCAST will never be in the DB
+    if (nodeId == NODENUM_BROADCAST)
+        return false;
+
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+
+    if (lite) {
+        return lite->is_favorite;
+    }
+    return false;
+}
+
+bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
+{
+    // This method is logically equivalent to:
+    //   return isFavorite(p.from) || isFavorite(p.to);
+    // but is more efficient by:
+    //   1. doing only one pass through the database, instead of two
+    //   2. exiting early when a favorite is found, or if both from and to have been seen
+
+    if (p.to == NODENUM_BROADCAST)
+        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
+
+    meshtastic_NodeInfoLite *lite = NULL;
+
+    bool seenFrom = false;
+    bool seenTo = false;
+
+    for (int i = 0; i < numMeshNodes; i++) {
+        lite = &meshNodes->at(i);
+
+        if (lite->num == p.from) {
+            if (lite->is_favorite)
+                return true;
+
+            seenFrom = true;
+        }
+
+        if (lite->num == p.to) {
+            if (lite->is_favorite)
+                return true;
+
+            seenTo = true;
+        }
+
+        if (seenFrom && seenTo)
+            return false; // we've seen both, and neither is a favorite, so we can stop searching early
+
+        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
+        // all favorited nodes first.
+    }
+
+    return false;
 }
 
 void NodeDB::pause_sort(bool paused)
@@ -1768,6 +1899,13 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
         return 0; // defaults to PRIMARY
     }
     return info->channel;
+}
+
+std::string NodeDB::getNodeId() const
+{
+    char nodeId[16];
+    snprintf(nodeId, sizeof(nodeId), "!%08x", myNodeInfo.my_node_num);
+    return std::string(nodeId);
 }
 
 /// Find a node in our DB, return null for missing
@@ -1859,6 +1997,7 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
 bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
@@ -1873,6 +2012,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     }
     return false;
 }
+#endif
 
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
