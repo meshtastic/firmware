@@ -9,14 +9,14 @@ plugins:
 lint:
   enabled:
     - checkov@3.2.495
-    - renovate@42.26.3
-    - prettier@3.7.1
+    - renovate@42.27.1
+    - prettier@3.7.3
     - trufflehog@3.91.1
     - yamllint@1.37.1
     - bandit@1.9.2
     - trivy@0.67.2
     - taplo@0.10.0
-    - ruff@0.14.6
+    - ruff@0.14.7
     - isort@7.0.0
     - markdownlint@0.46.0
     - oxipng@9.1.5
