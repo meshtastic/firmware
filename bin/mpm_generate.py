@@ -34,23 +34,36 @@ if os.path.exists(plugins_dir) and os.path.isdir(plugins_dir):
             print(f"MPM: Added include path {rel_path}")
 
 
-
-print(env["SRC_FILTER"])
-print(env["BUILD_FLAGS"])
-
-# Run mpm generate
+# Check if mpm command is available
+mpm_available = False
 try:
     result = subprocess.run(
-        ["mpm", "generate"],
-        cwd=project_dir,
+        ["mpm", "version"],
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
-        print(f"Warning: mpm generate failed: {result.stderr}", file=sys.stderr)
-    elif result.stdout:
-        print(result.stdout)
-except FileNotFoundError:
-    print("Warning: mpm command not found. Skipping protobuf generation.", file=sys.stderr)
-except Exception as e:
-    print(f"Warning: Failed to run mpm generate: {e}", file=sys.stderr)
+    if result.returncode == 0:
+        mpm_available = True
+except (FileNotFoundError, subprocess.SubprocessError):
+    pass
+
+if not mpm_available:
+    print("Warning: mpm command not found. Run 'pip install mesh-plugin-manager' to enable plugin support.", file=sys.stderr)
+
+# Run mpm generate if available
+if mpm_available:
+    try:
+        result = subprocess.run(
+            ["mpm", "generate"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"Warning: mpm generate failed: {result.stderr}", file=sys.stderr)
+        elif result.stdout:
+            print(result.stdout)
+    except Exception as e:
+        print(f"Warning: Failed to run mpm generate: {e}", file=sys.stderr)
+else:
+    print("Skipping protobuf generation (mpm not available).", file=sys.stderr)
