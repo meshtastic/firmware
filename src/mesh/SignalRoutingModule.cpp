@@ -25,7 +25,9 @@ SignalRoutingModule::SignalRoutingModule() : MeshModule("SignalRouting")
 }
 
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p) {
-    if (!config.routing.signal_based_routing || !routingGraph) {
+    // Signal-based routing enabled by default in this fork
+    // TODO: Use config.routing.signal_based_routing after protobuf regeneration
+    if (!signalBasedRoutingEnabled || !routingGraph) {
         return false;
     }
 
@@ -105,41 +107,38 @@ void SignalRoutingModule::onNodeInfoChanged() {
 }
 
 bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) {
+    // TODO: Check node->signal_based_capable after protobuf regeneration
+    // For now, assume all nodes we've heard from recently are capable
+    // (this is a temporary heuristic until we can exchange capability info)
     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeId);
-    return node && node->signal_based_capable;
+    if (!node) return false;
+
+    // Consider a node capable if we've heard from it in the last 5 minutes
+    uint32_t now = getValidTime(RTCQualityFromNet);
+    return (now - node->last_heard) < 300;
 }
 
 float SignalRoutingModule::getSignalBasedCapablePercentage() {
-    int totalNodes = 0;
-    int capableNodes = 0;
+    // int totalNodes = 0;
+    // int capableNodes = 0;
 
-    for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (node) {
-            totalNodes++;
-            if (node->signal_based_capable) {
-                capableNodes++;
-            }
-        }
-    }
+    // for (int i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+    //     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+    //     if (node) {
+    //         totalNodes++;
+    //         if (node->signal_based_capable) {
+    //             capableNodes++;
+    //         }
+    //     }
+    // }
 
-    if (totalNodes == 0) return 0.0f;
-    return (static_cast<float>(capableNodes) / totalNodes) * 100.0f;
+    // if (totalNodes == 0) return 0.0f;
+    // return (static_cast<float>(capableNodes) / totalNodes) * 100.0f;
+    return 100.0f;
 }
 
 void SignalRoutingModule::updateSignalBasedCapable() {
-    // Update our own node info to indicate signal-based capability
-    meshtastic_NodeInfo *ourNodeInfo = nodeDB->getMutableNodeInfo();
-    if (ourNodeInfo) {
-        ourNodeInfo->signal_based_capable = true;
-
-        // Update neighbors list (max 6 as per requirements)
-        ourNodeInfo->neighbors_count = std::min(static_cast<size_t>(6), neighbors.size());
-        for (size_t i = 0; i < ourNodeInfo->neighbors_count; i++) {
-            ourNodeInfo->neighbors[i] = neighbors[i];
-        }
-
-        LOG_DEBUG("SignalRouting: Updated NodeInfo - signal_based_capable=true, neighbors=%d",
-                  ourNodeInfo->neighbors_count);
-    }
+    // TODO: Set ourNodeInfo->signal_based_capable = true after protobuf regeneration
+    // For now, this is a no-op since the field doesn't exist yet
+    LOG_DEBUG("SignalRouting: Module initialized (signal_based_capable will be set after protobuf update)");
 }

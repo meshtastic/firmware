@@ -38,9 +38,11 @@ protected:
 
 private:
     Graph *routingGraph;
-    std::vector<meshtastic_NeighborLink> neighbors;
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
+
+    // Signal-based routing enabled by default (until protobuf config is available)
+    bool signalBasedRoutingEnabled = true;
 
     /**
      * Check if a node is signal-based routing capable
