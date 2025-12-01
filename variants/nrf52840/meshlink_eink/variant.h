@@ -121,8 +121,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define PIN_GPS_PPS (26) // Pulse per second input from the GPS
 
-#define GPS_TX_PIN PIN_SERIAL1_RX // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN PIN_SERIAL1_TX // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN PIN_SERIAL1_TX // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN PIN_SERIAL1_RX // This is for bits going TOWARDS the GPS
 
 // #define GPS_THREAD_INTERVAL 50
 
