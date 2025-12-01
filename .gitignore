@@ -32,7 +32,7 @@ __pycache__
 *.swo
 *~
 
-.venv/
+venv/
 release/
 .vscode/extensions.json
 /compile_commands.json
@@ -46,6 +46,3 @@ data/boot/logo.*
 plugins/*
 !plugins/README.md
 !plugins/sample-plugin
-
-# Ignore Python vendor directory
-pyvendor
