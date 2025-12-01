@@ -65,7 +65,15 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
                 perhapsRebroadcast(p);
             }
         } else {
+            // Check if this is a "repeated" packet (sender retrying because they didn't hear a rebroadcast)
+            // hop_start == hop_limit means this is the first hop OR signal routing preserved hop_limit
             bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+
+            // Don't treat signal-routed packets as "repeated" - they preserve hop_limit by design
+            if (isRepeated && signalRoutingModule && signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+                isRepeated = false;
+            }
+
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
