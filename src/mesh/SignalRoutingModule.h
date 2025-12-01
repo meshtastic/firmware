@@ -1,10 +1,19 @@
 #pragma once
-#include "MeshModule.h"
-#include "mesh-pb-constants.h"
+#include "ProtobufModule.h"
+#include "concurrency/OSThread.h"
 
 class Graph;
 
-class SignalRoutingModule : public MeshModule
+// Routing protocol version for compatibility checking
+#define SIGNAL_ROUTING_VERSION 1
+
+// Maximum neighbors we track/broadcast
+#define MAX_SIGNAL_ROUTING_NEIGHBORS 10
+
+// Broadcast interval for signal routing info (5 minutes)
+#define SIGNAL_ROUTING_BROADCAST_SECS 300
+
+class SignalRoutingModule : public ProtobufModule<meshtastic_SignalRoutingInfo>, private concurrency::OSThread
 {
 public:
     SignalRoutingModule();
@@ -22,7 +31,7 @@ public:
     /**
      * Update neighbor information from a directly received packet
      */
-    void updateNeighborInfo(NodeNum nodeId, int32_t rssi, int32_t snr, uint32_t lastRxTime);
+    void updateNeighborInfo(NodeNum nodeId, int32_t rssi, int32_t snr, uint32_t lastRxTime, uint32_t variance = 0);
 
     /**
      * Handle speculative retransmit for unicast packets
@@ -30,35 +39,33 @@ public:
     void handleSpeculativeRetransmit(const meshtastic_MeshPacket *p);
 
     /**
-     * Populate the User struct with our neighbor information before sending NodeInfo
-     * Called by NodeInfoModule when preparing to send our node info
+     * Send our signal routing info to the mesh
      */
-    void populateNeighbors(meshtastic_User &user);
-
-    /**
-     * Process neighbor information received from another node's NodeInfo
-     * Called when we receive a NodeInfo packet with neighbor data
-     */
-    void processReceivedNeighbors(NodeNum fromNode, const meshtastic_User &user);
+    void sendSignalRoutingInfo(NodeNum dest = NODENUM_BROADCAST);
 
 protected:
-    /** Called to handle a particular incoming message */
+    /** Called to handle received SignalRoutingInfo protobuf */
+    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_SignalRoutingInfo *p) override;
+
+    /** Called to handle any received packet (for updating neighbor info from RSSI/SNR) */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-    /** We want to see all packets to update neighbor info */
+    /** We want to see all packets to update neighbor info from signal quality */
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }
+
+    /** Periodic broadcast of our routing info */
+    virtual int32_t runOnce() override;
 
 private:
     Graph *routingGraph;
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
 
-    // Signal-based routing enabled by default (until protobuf config is available)
+    // Signal-based routing enabled by default
     bool signalBasedRoutingEnabled = true;
 
-    // Last time we triggered a NodeInfo broadcast
-    uint32_t lastNodeInfoBroadcast = 0;
-    static constexpr uint32_t NODE_INFO_MIN_INTERVAL_MS = 60 * 1000; // 60 seconds minimum between broadcasts
+    // Last time we sent signal routing info
+    uint32_t lastBroadcast = 0;
 
     /**
      * Check if a node is signal-based routing capable
@@ -71,9 +78,9 @@ private:
     float getSignalBasedCapablePercentage();
 
     /**
-     * Update our own signal_based_capable flag in NodeInfo
+     * Build a SignalRoutingInfo packet with our current neighbor data
      */
-    void updateSignalBasedCapable();
+    void buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &info);
 };
 
 extern SignalRoutingModule *signalRoutingModule;
