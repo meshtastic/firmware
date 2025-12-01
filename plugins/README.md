@@ -7,7 +7,7 @@ This directory houses plugins that extend the Meshtastic firmware. Plugins are a
 The only requirement for a plugin is that it must have a `./src` directory:
 
 ```
-src/plugins/
+plugins/
 └── myplugin/
     └── src/
         ├── MyModule.h
@@ -21,21 +21,17 @@ src/plugins/
 
 ## Python Dependencies
 
-The Mesh Plugin Manager (MPM) is installed as a development dependency via Poetry. To use MPM commands, run them through Poetry:
+The Mesh Plugin Manager (MPM) is installed via pip. To use MPM commands:
 
 ```bash
+# Install MPM
+pip install mesh-plugin-manager
+
 # From the firmware repo root (directory containing platformio.ini)
-poetry run mpm <command>
+mpm <command>
 ```
 
-**Important**: Poetry must be configured to create the virtual environment in the project directory (`.venv`) so that the PlatformIO build system can find it. Configure it locally for the project:
-
-```bash
-poetry config virtualenvs.in-project true --local
-poetry install
-```
-
-The build system automatically uses MPM from the Poetry virtual environment during PlatformIO builds.
+The build system automatically uses MPM during PlatformIO builds.
 
 ## Automatic Protobuf Generation
 
@@ -43,11 +39,11 @@ For convenience, the Meshtastic Plugin Manager (MPM) automatically scans for and
 
 - **Discovery**: MPM recursively scans plugin directories for `.proto` files
 - **Options file**: Auto-detects matching `.options` files (e.g., `mymodule.proto` → `mymodule.options`)
-- **Generation**: Uses `nanopb` tooling from the Poetry virtual environment to generate C++ files
+- **Generation**: Uses `nanopb` tooling to generate C++ files
 - **Output**: Generated files are placed in the same directory as the `.proto` file
 - **Timing**: Runs during PlatformIO pre-build phase (configured in `platformio.ini`)
 
-**Note**: You can use the Mesh Plugin Manager CLI via `poetry run mpm` to inspect or manage plugins.
+**Note**: You can use the Mesh Plugin Manager CLI via `mpm` to inspect or manage plugins.
 
 Example protobuf structure:
 
