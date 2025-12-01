@@ -394,6 +394,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
 #endif
+#ifndef USE_TFTDISPLAY
+#define USE_TFTDISPLAY 0
+#endif
 
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined

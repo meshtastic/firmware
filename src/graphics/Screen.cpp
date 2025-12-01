@@ -69,7 +69,7 @@ using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
 
-#if HAS_TFT
+#if USE_TFTDISPLAY
 extern uint16_t TFT_MESH;
 #else
 uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);

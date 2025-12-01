@@ -10,6 +10,7 @@
 #define HAS_SCREEN 1
 #define TFT_BLACK 0
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#define USE_TFTDISPLAY 1
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
