@@ -109,6 +109,9 @@
 #include "modules/DropzoneModule.h"
 #endif
 
+#if defined(HAS_HARDWARE_WATCHDOG)
+#include "watchdog/watchdogThread.h"
+#endif
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -304,6 +307,9 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
     if (moduleConfig.has_range_test && moduleConfig.range_test.enabled)
         new RangeTestModule();
+#endif
+#if defined(HAS_HARDWARE_WATCHDOG)
+    watchdogThread = new WatchdogThread();
 #endif
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks

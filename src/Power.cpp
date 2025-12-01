@@ -135,34 +135,7 @@ XPowersPPM *PPM = NULL;
 #include "bq27220.h"
 #endif
 
-#ifdef HAS_PMU
-XPowersLibInterface *PMU = NULL;
-#else
 
-// Copy of the base class defined in axp20x.h.
-// I'd rather not include axp20x.h as it brings Wire dependency.
-class HasBatteryLevel
-{
-  public:
-    /**
-     * Battery state of charge, from 0 to 100 or -1 for unknown
-     */
-    virtual int getBatteryPercent() { return -1; }
-
-    /**
-     * The raw voltage of the battery or NAN if unknown
-     */
-    virtual uint16_t getBattVoltage() { return 0; }
-
-    /**
-     * return true if there is a battery installed in this unit
-     */
-    virtual bool isBatteryConnect() { return false; }
-
-    virtual bool isVbusIn() { return false; }
-    virtual bool isCharging() { return false; }
-};
-#endif
 
 bool pmu_irq = false;
 
@@ -190,7 +163,6 @@ using namespace meshtastic;
 /**
  * If this board has a battery level sensor, set this to a valid implementation
  */
-static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
 #ifdef BATTERY_PIN
 
@@ -922,7 +894,11 @@ void Power::readPowerStatus()
     //
 
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
+// #if defined(HELTEC_MESH_SOLAR)
+//         if (batteryLevel->getBatteryPercent() < 5) { 
+// #else
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
+// #endif
             low_voltage_counter++;
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
