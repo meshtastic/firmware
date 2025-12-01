@@ -7,6 +7,8 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     DetectionSensorModule() : SinglePortModule("detection", meshtastic_PortNum_DETECTION_SENSOR_APP), OSThread("DetectionSensor")
     {
     }
+    boolean shouldSleep();
+    void lpLoop(uint32_t msecToWake);
 
   protected:
     virtual int32_t runOnce() override;
@@ -18,6 +20,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     void sendDetectionMessage();
     void sendCurrentStateMessage(bool state);
     bool hasDetectionEvent();
+    boolean getState();
 };
 
 extern DetectionSensorModule *detectionSensorModule;

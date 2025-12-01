@@ -6,10 +6,22 @@
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
+#ifdef ARCH_NRF52
+#include "sleep.h"
+#endif
+
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
 #define DELAYED_INTERVAL 1000
+
+// Reserved values for GPREGRET are: 0xF5 (NRF52_MAGIC_LFS_IS_CORRUPT)
+// and for the bootloader 0xB1, 0xA8, 0x4E, 0x57, 0x6D, lets choose free ones,
+// although the bootloader shouldn't be called in the following soft reset.
+
+constexpr uint32_t BOOT_FROM_COLD = 0x00;
+constexpr uint32_t BOOT_FROM_TIMEOUT = 0xC0;
+constexpr uint32_t BOOT_FROM_GPIOEVENT = 0xFE;
 
 typedef enum {
     DetectionSensorVerdictDetected,
@@ -73,16 +85,73 @@ int32_t DetectionSensorModule::runOnce()
 
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
+
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
+
+#ifdef ARCH_NRF52
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+                nrf_gpio_pin_sense_t toSense =
+                    (moduleConfig.detection_sensor.detection_trigger_type & 1) ? NRF_GPIO_PIN_SENSE_HIGH : NRF_GPIO_PIN_SENSE_LOW;
+                nrf_gpio_cfg_input(moduleConfig.detection_sensor.monitor_pin,
+                                   moduleConfig.detection_sensor.use_pullup ? NRF_GPIO_PIN_PULLUP : NRF_GPIO_PIN_NOPULL);
+                nrf_gpio_cfg_sense_set(moduleConfig.detection_sensor.monitor_pin, toSense);
+
+                uint32_t regret = BOOT_FROM_COLD;
+                if (sd_power_gpregret_get(0, &regret) != NRF_SUCCESS) {
+                    // necessary if softdevice is not enabled yet
+                    regret = NRF_POWER->GPREGRET;
+                }
+
+                if (NRF_P0->LATCH || NRF_P1->LATCH) {
+                    LOG_INFO("Woke up from eternal sleep by GPIO. Sending message.",
+                             __builtin_ctz(NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH), NRF_P0->LATCH ? 0 : 1);
+                    NRF_P1->LATCH = 0xFFFFFFFF;
+                    NRF_P0->LATCH = 0xFFFFFFFF;
+                    sendDetectionMessage();
+                } else if (regret == BOOT_FROM_TIMEOUT) {
+                    LOG_INFO("Woke up from timeout. Sending state message.");
+                    sendCurrentStateMessage(hasDetectionEvent());
+                } else if (regret == BOOT_FROM_GPIOEVENT) {
+                    LOG_INFO("Woke up from sleep by GPIO. Sending detection message.");
+                    sendDetectionMessage();
+                } else {
+                    // We booted fresh. Enforce sending on first detection event.
+                    lastSentToMesh = -Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs);
+                }
+
+                if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS)) {
+                    NRF_POWER->GPREGRET = BOOT_FROM_COLD;
+                }
+
+                LOG_INFO("Detection Sensor Module: init in power saving mode");
+                // Choose the minimum wakeup time (config.power.min_wake_sec) depending to your needs.
+                // The least time should be 5s to send just the detection message.
+                // Choose 45s+ for comfortable connectivity via BLE or USB.
+                // Device Telemetry is sent after ~62s.
+                return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
+            } else
+#endif
+                pinMode(moduleConfig.detection_sensor.monitor_pin,
+                        moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
         }
-        LOG_INFO("Detection Sensor Module: init");
+        LOG_INFO("Detection Sensor Module: init in default mode");
 
         return setStartDelay();
     }
+
+#ifdef ARCH_NRF52
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
+        // if a 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_secs) is specified it will be used, if
+        // unset the sleep will be forever in the first case the module enters a low power mode, in the 2nd case it will shutdown
+        // with least power consumption possible
+        uint32_t nightyNightMs =
+            Default::getConfiguredOrDefault(moduleConfig.detection_sensor.state_broadcast_secs * 1000, DELAY_FOREVER);
+        doDeepSleep(nightyNightMs, false, true);
+    }
+#endif
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
@@ -124,6 +193,9 @@ void DetectionSensorModule::sendDetectionMessage()
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
@@ -146,6 +218,9 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     lastSentToMesh = millis();
     if (!channels.isDefaultChannel(0)) {
@@ -156,9 +231,44 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     delete[] message;
 }
 
+boolean DetectionSensorModule::getState()
+{
+    return digitalRead(moduleConfig.detection_sensor.monitor_pin);
+}
+
 bool DetectionSensorModule::hasDetectionEvent()
 {
-    bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
+    bool currentState = getState();
     // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
     return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
 }
+
+boolean DetectionSensorModule::shouldSleep()
+{
+    return moduleConfig.detection_sensor.enabled && config.power.is_power_saving && moduleConfig.detection_sensor.monitor_pin > 0;
+}
+
+#ifdef ARCH_NRF52
+void DetectionSensorModule::lpLoop(uint32_t msecToWake)
+{
+    for (uint32_t i = msecToWake / 100;; i--) {
+        delay(100);
+        if (hasDetectionEvent() &&
+            !Throttle::isWithinTimespanMs(
+                lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+            if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
+                  sd_power_gpregret_set(0, BOOT_FROM_GPIOEVENT) == NRF_SUCCESS)) {
+                // necessary if softdevice is not enabled yet or never was
+                NRF_POWER->GPREGRET = BOOT_FROM_GPIOEVENT;
+            }
+            break;
+        }
+        if (i == 0) {
+            if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, BOOT_FROM_TIMEOUT) == NRF_SUCCESS)) {
+                NRF_POWER->GPREGRET = BOOT_FROM_TIMEOUT;
+            }
+            break;
+        }
+    }
+}
+#endif

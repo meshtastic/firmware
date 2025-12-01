@@ -30,6 +30,10 @@
 #include "BQ25713.h"
 #endif
 
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
+#include "modules/DetectionSensorModule.h"
+#endif
+
 // Weak empty variant initialization function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
@@ -405,14 +409,25 @@ void cpuDeepSleep(uint32_t msecToWake)
                    meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR) &&
          config.power.is_power_saving == true)) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
-        delay(msecToWake);
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
+        if (detectionSensorModule != nullptr && detectionSensorModule->shouldSleep()) {
+            detectionSensorModule->lpLoop(msecToWake);
+        } else
+#endif
+            delay(msecToWake);
+
         NVIC_SystemReset();
+
     } else {
         // Resume on user button press
         // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
         constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
-        sd_power_gpregret_clr(0, 0xFF);           // Clear the register before setting a new values in it for stability reasons
-        sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
+
+        // Clear the register before setting a new values in it for stability reasons
+        // if sd_functions fail the softdevice is not initialized. Fallback to setting GPREGRET directly.
+        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, DFU_MAGIC_SKIP) == NRF_SUCCESS)) {
+            NRF_POWER->GPREGRET = DFU_MAGIC_SKIP;
+        }
 
         // FIXME, use system off mode with ram retention for key state?
         // FIXME, use non-init RAM per
