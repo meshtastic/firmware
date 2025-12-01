@@ -10,8 +10,11 @@ class Graph;
 // Maximum neighbors we track/broadcast
 #define MAX_SIGNAL_ROUTING_NEIGHBORS 10
 
-// Broadcast interval for signal routing info (5 minutes)
-#define SIGNAL_ROUTING_BROADCAST_SECS 300
+// Broadcast interval for signal routing info (2 minutes)
+#define SIGNAL_ROUTING_BROADCAST_SECS 120
+
+// Speculative retransmit timeout (600ms)
+#define SPECULATIVE_RETRANSMIT_TIMEOUT_MS 600
 
 class SignalRoutingModule : public ProtobufModule<meshtastic_SignalRoutingInfo>, private concurrency::OSThread
 {
@@ -20,11 +23,18 @@ public:
 
     /**
      * Check if signal-based routing should be used for a packet
+     * Works for both unicast (route to destination) and broadcast (coordinated flooding)
      */
     bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p);
 
     /**
-     * Get the next hop for signal-based routing
+     * Check if we should relay a broadcast packet
+     * Uses graph-based coverage calculation to coordinate with other nodes
+     */
+    bool shouldRelayBroadcast(const meshtastic_MeshPacket *p);
+
+    /**
+     * Get the next hop for signal-based routing (unicast only)
      */
     NodeNum getNextHop(NodeNum destination);
 
@@ -42,6 +52,11 @@ public:
      * Send our signal routing info to the mesh
      */
     void sendSignalRoutingInfo(NodeNum dest = NODENUM_BROADCAST);
+
+    /**
+     * Get the routing graph (for external access)
+     */
+    Graph* getGraph() { return routingGraph; }
 
 protected:
     /** Called to handle received SignalRoutingInfo protobuf */
