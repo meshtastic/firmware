@@ -33,8 +33,8 @@ protected:
     /** Called to handle a particular incoming message */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-    /** Called every time our node info changes - update our neighbors */
-    virtual void onNodeInfoChanged() override;
+    /** We want to see all packets to update neighbor info */
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }
 
 private:
     Graph *routingGraph;
