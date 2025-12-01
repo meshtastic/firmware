@@ -90,16 +90,16 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define BUTTON_PIN (32 + 0) // P1.00
 
 // GPS
-#define PIN_GPS_TX (0 + 22) // P0.22
-#define PIN_GPS_RX (0 + 20) // P0.20
+#define PIN_GPS_TX (0 + 20) // P0.20
+#define PIN_GPS_RX (0 + 22) // P0.22
 
 #define PIN_GPS_EN (0 + 24) // P0.24
 #define GPS_UBLOX
 // define GPS_DEBUG
 
 // UART interfaces
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_TX PIN_GPS_TX
+#define PIN_SERIAL1_RX PIN_GPS_RX
 
 #define PIN_SERIAL2_RX (0 + 6) // P0.06
 #define PIN_SERIAL2_TX (0 + 8) // P0.08
