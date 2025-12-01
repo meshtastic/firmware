@@ -8,6 +8,40 @@ Graph::Graph() {}
 Graph::~Graph() {}
 
 int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance) {
+    // Check if this is a new node
+    bool isNewNode = (adjacencyList.find(from) == adjacencyList.end());
+    
+    if (isNewNode && adjacencyList.size() >= MAX_NODES_IN_GRAPH) {
+        // Graph is full - find the worst node to potentially evict
+        // "Worst" = node with highest average ETX across its edges (farthest/poorest links)
+        NodeNum worstNode = 0;
+        float worstAvgEtx = 0;
+        
+        for (const auto& pair : adjacencyList) {
+            if (pair.second.empty()) continue;
+            
+            float totalEtx = 0;
+            for (const auto& edge : pair.second) {
+                totalEtx += edge.etx;
+            }
+            float avgEtx = totalEtx / pair.second.size();
+            
+            if (avgEtx > worstAvgEtx) {
+                worstAvgEtx = avgEtx;
+                worstNode = pair.first;
+            }
+        }
+        
+        // Only evict if the new edge is better than the worst node's average
+        if (worstNode != 0 && etx < worstAvgEtx) {
+            adjacencyList.erase(worstNode);
+            routeCache.clear(); // Invalidate cache since topology changed
+        } else {
+            // New node isn't better than existing ones, don't add
+            return EDGE_NO_CHANGE;
+        }
+    }
+
     auto& edges = adjacencyList[from];
 
     // Find existing edge
@@ -26,6 +60,24 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
 
         return (change > ETX_CHANGE_THRESHOLD) ? EDGE_SIGNIFICANT_CHANGE : EDGE_NO_CHANGE;
     } else {
+        // Check edge limit per node
+        if (edges.size() >= MAX_EDGES_PER_NODE) {
+            // Find the worst edge (highest ETX) and replace if new one is better
+            auto worstIt = std::max_element(edges.begin(), edges.end(),
+                [](const Edge& a, const Edge& b) { return a.etx < b.etx; });
+            
+            if (etx < worstIt->etx) {
+                // Replace worst edge with new better one
+                worstIt->to = to;
+                worstIt->etx = etx;
+                worstIt->lastUpdate = timestamp;
+                worstIt->variance = variance;
+                return EDGE_SIGNIFICANT_CHANGE;
+            }
+            // New edge is worse than all existing, don't add
+            return EDGE_NO_CHANGE;
+        }
+
         // Add new edge
         Edge newEdge(from, to, etx, timestamp);
         newEdge.variance = variance;
