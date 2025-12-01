@@ -135,6 +135,10 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_MAP_REPORT_APP = 73,
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
+    /* Signal-based routing protocol for community mesh networks.
+ Exchanges neighbor link quality information for intelligent route selection.
+ ENCODING: Protobuf (SignalRoutingInfo) */
+    meshtastic_PortNum_SIGNAL_ROUTING_APP = 75,
     /* Reticulum Network Stack Tunnel App
  ENCODING: Fragmented RNS Packet. Handled by Meshtastic RNS interface */
     meshtastic_PortNum_RETICULUM_TUNNEL_APP = 76,
