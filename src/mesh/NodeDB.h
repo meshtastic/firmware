@@ -287,6 +287,12 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
 
+    /// Consolidate crypto key generation logic used across multiple modules
+    /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
+    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
+
+    bool createNewIdentity();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -369,6 +375,9 @@ extern meshtastic_CriticalErrorCode error_code;
 extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
+
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 1
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1 << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

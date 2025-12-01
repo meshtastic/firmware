@@ -119,28 +119,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             auto changes = SEGMENT_CONFIG;
 
             // This is needed as we wait til picking the LoRa region to generate keys for the first time.
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    // public key is derived from private, so this will always have the same result.
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
-            }
-#endif
+            // Use consolidated key generation function
+            nodeDB->generateCryptoKeyPair();
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {

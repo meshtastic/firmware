@@ -500,6 +500,25 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (p->decoded.has_bitfield)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
+        if (p->decoded.has_xeddsa_signature) {
+            LOG_WARN("packet shows XEdDSA");
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+            if (node && node->user.public_key.size == 32) {
+                LOG_WARN("attempting to verify");
+                p->xeddsa_signed = crypto->xeddsa_verify(node->user.public_key.bytes, p->decoded.payload.bytes,
+                                                         p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+            } else {
+                LOG_WARN("Don't have key to verify");
+            }
+        }
+        if (p->xeddsa_signed) {
+            LOG_WARN("Received XEdDSA Signed Packet!");
+        } else if (p->decoded.has_xeddsa_signature) {
+            LOG_ERROR("Node sent signed packet, but cannot verify!");
+        } else {
+            LOG_WARN("Received Unsigned Packet!");
+        }
+
         /* Not actually ever used.
         // Decompress if needed. jm
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
@@ -549,6 +568,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
+            if (p->pki_encrypted == false && isBroadcast(p->to) && p->decoded.payload.size < 120) {
+                crypto->xeddsa_sign(p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                p->decoded.xeddsa_signature.size = 64;
+                p->decoded.has_xeddsa_signature = true;
+                LOG_WARN("XEDDSA Signed!");
+            }
         }
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
