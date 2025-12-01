@@ -66,6 +66,10 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             }
         } else {
             bool isRepeated = getHopsAway(*p) == 0;
+            // Don't treat signal-routed packets as "repeated" - they preserve hop_limit by design
+            if (isRepeated && signalRoutingModule && signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+                isRepeated = false;
+            }
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
