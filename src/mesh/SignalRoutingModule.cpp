@@ -11,9 +11,10 @@ SignalRoutingModule *signalRoutingModule;
 SignalRoutingModule::SignalRoutingModule() : MeshModule("SignalRouting")
 {
 #ifdef ARCH_RP2040
-    // RP2040 RAM guard: disable signal-based routing if free heap is below 50KB
+    // RP2040 RAM guard: Graph uses ~25-35KB worst case (100 nodes, 6 edges each)
+    // 30KB threshold leaves headroom for graph + Dijkstra temp allocations
     uint32_t freeHeap = memGet.getFreeHeap();
-    if (freeHeap < 50 * 1024) {
+    if (freeHeap < 30 * 1024) {
         LOG_WARN("SignalRouting: Insufficient RAM on RP2040 (%u bytes free), disabling signal-based routing", freeHeap);
         routingGraph = nullptr;
         return;
