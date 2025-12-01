@@ -208,10 +208,14 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
-    // Signal-based routing only applies to UNICAST packets where we can calculate a next-hop
-    // Broadcast packets MUST use traditional flooding with hop_limit decrement to prevent loops
+    // For broadcasts: use coordinated flooding if we have graph data
     if (isBroadcast(p->to)) {
-        return false;  // Never use signal-based routing for broadcasts
+        // Check if we have enough graph data to make informed decisions
+        auto allNodes = routingGraph->getAllNodes();
+        if (allNodes.size() >= 2) {
+            return true;  // We have graph data, use coordinated flooding
+        }
+        return false;  // Not enough data, fall back to traditional flooding
     }
 
     // For unicast: check if destination is signal-based capable AND we have a route
@@ -223,6 +227,51 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     }
 
     return false;
+}
+
+bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
+{
+    if (!routingGraph || !isBroadcast(p->to)) {
+        return true;  // No graph data or not a broadcast - use traditional flooding
+    }
+
+    NodeNum myNode = nodeDB->getNodeNum();
+    NodeNum sourceNode = p->from;
+
+    // Determine who we heard this from (the last relayer)
+    // If relay_node matches source's last byte, it came directly from source
+    uint8_t sourceLastByte = sourceNode & 0xFF;
+    NodeNum heardFrom = (p->relay_node == sourceLastByte) ? sourceNode : 0;
+
+    // If we can't determine heardFrom, try to find a node with matching relay_node
+    if (heardFrom == 0) {
+        // Look through our neighbors to find one matching relay_node
+        auto neighbors = routingGraph->getDirectNeighbors(myNode);
+        for (NodeNum neighbor : neighbors) {
+            if ((neighbor & 0xFF) == p->relay_node) {
+                heardFrom = neighbor;
+                break;
+            }
+        }
+    }
+
+    // If still unknown, fall back to source
+    if (heardFrom == 0) {
+        heardFrom = sourceNode;
+    }
+
+    uint32_t currentTime = getValidTime(RTCQualityFromNet);
+    bool shouldRelay = routingGraph->shouldRelay(myNode, sourceNode, heardFrom, currentTime);
+
+    char myName[64], sourceName[64], heardFromName[64];
+    getNodeDisplayName(myNode, myName, sizeof(myName));
+    getNodeDisplayName(sourceNode, sourceName, sizeof(sourceName));
+    getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
+
+    LOG_INFO("SignalRouting: Broadcast from %s (heard via %s): %s relay",
+             sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT");
+
+    return shouldRelay;
 }
 
 NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
