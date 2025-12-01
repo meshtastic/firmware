@@ -208,14 +208,14 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
-    // For broadcasts: use coordinated flooding if we have graph data
+    // For broadcasts: use coordinated flooding if we have any graph data
     if (isBroadcast(p->to)) {
-        // Check if we have enough graph data to make informed decisions
+        // We need at least some graph data to make relay decisions
         auto allNodes = routingGraph->getAllNodes();
         if (allNodes.size() >= 2) {
-            return true;  // We have graph data, use coordinated flooding
+            return true;
         }
-        return false;  // Not enough data, fall back to traditional flooding
+        return false;
     }
 
     // For unicast: check if destination is signal-based capable AND we have a route
