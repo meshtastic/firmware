@@ -6,22 +6,21 @@
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
+
 #ifdef ARCH_NRF52
 #include "sleep.h"
+// Reserved values for GPREGRET are: 0xF5 (NRF52_MAGIC_LFS_IS_CORRUPT)
+// and for the bootloader 0xB1, 0xA8, 0x4E, 0x57, 0x6D, lets choose free ones,
+// although the bootloader shouldn't be called in the following soft reset.
+constexpr uint32_t BOOT_FROM_COLD = 0x00;
+constexpr uint32_t BOOT_FROM_TIMEOUT = 0xC0;
+constexpr uint32_t BOOT_FROM_GPIOEVENT = 0xFE;
 #endif
 
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
 #define DELAYED_INTERVAL 1000
-
-// Reserved values for GPREGRET are: 0xF5 (NRF52_MAGIC_LFS_IS_CORRUPT)
-// and for the bootloader 0xB1, 0xA8, 0x4E, 0x57, 0x6D, lets choose free ones,
-// although the bootloader shouldn't be called in the following soft reset.
-
-constexpr uint32_t BOOT_FROM_COLD = 0x00;
-constexpr uint32_t BOOT_FROM_TIMEOUT = 0xC0;
-constexpr uint32_t BOOT_FROM_GPIOEVENT = 0xFE;
 
 typedef enum {
     DetectionSensorVerdictDetected,
@@ -77,7 +76,6 @@ int32_t DetectionSensorModule::runOnce()
         return disable();
 
     if (firstTime) {
-
 #ifdef DETECTION_SENSOR_EN
         pinMode(DETECTION_SENSOR_EN, OUTPUT);
         digitalWrite(DETECTION_SENSOR_EN, HIGH);
@@ -87,7 +85,6 @@ int32_t DetectionSensorModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-
 #ifdef ARCH_NRF52
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 nrf_gpio_pin_sense_t toSense =
@@ -109,10 +106,10 @@ int32_t DetectionSensorModule::runOnce()
                     NRF_P0->LATCH = 0xFFFFFFFF;
                     sendDetectionMessage();
                 } else if (regret == BOOT_FROM_TIMEOUT) {
-                    LOG_INFO("Woke up from timeout. Sending state message.");
-                    sendCurrentStateMessage(hasDetectionEvent());
+                    LOG_INFO("Woke up by timeout. Sending state message.");
+                    sendCurrentStateMessage(getState());
                 } else if (regret == BOOT_FROM_GPIOEVENT) {
-                    LOG_INFO("Woke up from sleep by GPIO. Sending detection message.");
+                    LOG_INFO("Woke up from interval sleep by GPIO. Sending detection message.");
                     sendDetectionMessage();
                 } else {
                     // We booted fresh. Enforce sending on first detection event.
@@ -123,7 +120,7 @@ int32_t DetectionSensorModule::runOnce()
                     NRF_POWER->GPREGRET = BOOT_FROM_COLD;
                 }
 
-                LOG_INFO("Detection Sensor Module: init in power saving mode");
+                LOG_INFO("Cold boot. Init in power saving mode");
                 // Choose the minimum wakeup time (config.power.min_wake_sec) depending to your needs.
                 // The least time should be 5s to send just the detection message.
                 // Choose 45s+ for comfortable connectivity via BLE or USB.
@@ -134,10 +131,10 @@ int32_t DetectionSensorModule::runOnce()
                 pinMode(moduleConfig.detection_sensor.monitor_pin,
                         moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
-            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
+            LOG_WARN("Enabled, but no monitor pin is set. Disabling module");
             return disable();
         }
-        LOG_INFO("Detection Sensor Module: init in default mode");
+        LOG_INFO("Init in default mode");
 
         return setStartDelay();
     }
@@ -153,8 +150,6 @@ int32_t DetectionSensorModule::runOnce()
     }
 #endif
 
-    // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
-
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
@@ -166,7 +161,7 @@ int32_t DetectionSensorModule::runOnce()
             sendDetectionMessage();
             return DELAYED_INTERVAL;
         case DetectionSensorVerdictSendState:
-            sendCurrentStateMessage(isDetected);
+            sendCurrentStateMessage(getState());
             return DELAYED_INTERVAL;
         case DetectionSensorVerdictNoop:
             break;
@@ -179,7 +174,7 @@ int32_t DetectionSensorModule::runOnce()
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
-        sendCurrentStateMessage(hasDetectionEvent());
+        sendCurrentStateMessage(getState());
         return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
@@ -214,7 +209,8 @@ void DetectionSensorModule::sendDetectionMessage()
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
     char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
+    sprintf(message, "%s state %s, %d%%", moduleConfig.detection_sensor.name, state ? "high" : "low",
+            powerStatus->getBatteryChargePercent());
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
