@@ -156,13 +156,6 @@ static int quickBatteryCheck(bool &isCharging)
         return -1; // No battery detected
     }
 
-    // Check if voltage suggests charging (above fully charged voltage)
-    const float chargingVolt = OCV[0] + 100; // ~4290mV indicates charging
-    if (voltage > chargingVolt) {
-        isCharging = true;
-        return 100; // Assume full if charging
-    }
-
     // Convert voltage to percentage using OCV table
     for (int i = 0; i < 11; i++) {
         if (OCV[i] <= voltage) {
@@ -192,15 +185,12 @@ static bool shouldContinueLowBatterySleep()
         return false;
     }
 
-    bool isCharging = false;
-    int batteryPct = quickBatteryCheck(isCharging);
+    // Check if USB is connected via GPIO
+    bool hasUSB = quickUSBCheck();
 
-    // If charging/USB detected, exit low battery mode
-    if (isCharging) {
-        LOG_INFO("Low battery recovery: USB/charging detected, resuming normal boot");
-        inLowBatteryRecoveryMode = false;
-        return false;
-    }
+    // Get battery percentage
+    bool unusedCharging = false;
+    int batteryPct = quickBatteryCheck(unusedCharging);
 
     // If we couldn't read battery, be conservative and continue boot
     if (batteryPct < 0) {
@@ -209,7 +199,16 @@ static bool shouldContinueLowBatterySleep()
         return false;
     }
 
-    // Check if battery has recovered above exit threshold
+    // If USB connected AND battery is above USB threshold (5%), wake up
+    // USB power will prevent further discharge and likely charge the battery
+    if (hasUSB && batteryPct > LOW_BATT_USB_THRESHOLD) {
+        LOG_INFO("Low battery recovery: USB connected and battery at %d%% (>%d%%), resuming normal boot", batteryPct,
+                 LOW_BATT_USB_THRESHOLD);
+        inLowBatteryRecoveryMode = false;
+        return false;
+    }
+
+    // Check if battery has recovered above exit threshold (15%) - no USB needed
     if (batteryPct >= LOW_BATT_EXIT_THRESHOLD) {
         LOG_INFO("Low battery recovery: Battery at %d%% (>=%d%%), resuming normal boot", batteryPct, LOW_BATT_EXIT_THRESHOLD);
         inLowBatteryRecoveryMode = false;
@@ -217,7 +216,12 @@ static bool shouldContinueLowBatterySleep()
     }
 
     // Still low battery - should go back to sleep
-    LOG_INFO("Low battery recovery: Battery at %d%% (<%d%%), returning to sleep", batteryPct, LOW_BATT_EXIT_THRESHOLD);
+    if (hasUSB) {
+        LOG_INFO("Low battery recovery: USB connected but battery still at %d%% (<=%d%%), returning to sleep", batteryPct,
+                 LOW_BATT_USB_THRESHOLD);
+    } else {
+        LOG_INFO("Low battery recovery: Battery at %d%% (<%d%%), returning to sleep", batteryPct, LOW_BATT_EXIT_THRESHOLD);
+    }
     return true;
 }
 #endif // ARCH_ESP32 && LOW_BATTERY_RECOVERY_ENABLED
