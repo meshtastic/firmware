@@ -10,6 +10,13 @@ SignalRoutingModule *signalRoutingModule;
 
 SignalRoutingModule::SignalRoutingModule() : MeshModule("SignalRouting")
 {
+#ifdef ARCH_STM32WL
+    // STM32WL only has 64KB RAM total - disable signal routing entirely
+    LOG_INFO("SignalRouting: Disabled on STM32WL (insufficient RAM)");
+    routingGraph = nullptr;
+    return;
+#endif
+
 #ifdef ARCH_RP2040
     // RP2040 RAM guard: Graph uses ~25-35KB worst case (100 nodes, 6 edges each)
     // 30KB threshold leaves headroom for graph + Dijkstra temp allocations
