@@ -102,11 +102,6 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     return ProcessMessage::CONTINUE;
 }
 
-void SignalRoutingModule::onNodeInfoChanged() {
-    // Update our neighbors list when node info changes
-    updateSignalBasedCapable();
-}
-
 bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) {
     // TODO: Check node->signal_based_capable after protobuf regeneration
     // For now, assume all nodes we've heard from recently are capable
