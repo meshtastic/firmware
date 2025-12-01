@@ -6,41 +6,53 @@
 #include "SoilMoistureSensor.h"
 #include "TelemetrySensor.h"
 #include "main.h"
+#include "detect/ScanI2C.h"  // <--- ADD THIS INCLUDE
 
 SoilMoistureSensor::SoilMoistureSensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_SHTC3, "SoilMoisture") // temporary type
+    : TelemetrySensor(meshtastic_TelemetrySensorType_CUSTOM_SENSOR, "SoilMoisture") 
 {
 }
 
 int32_t SoilMoistureSensor::runOnce()
 {
+    // Check if already initialized
+    if (hasSensor()) {
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    }
+
+    // If scanner found the device, map it to our sensor type
+        nodeTelemetrySensorsMap[sensorType].first = 0x39;
+        LOG_INFO("Mapped Soil Moisture Sensor at 0x%x", 0x39);
+
+    // Now proceed with initialization using the mapped address
     LOG_INFO("Init SoilMoistureSensor: %s", sensorName);
+    delay(100);
 
-    if (!hasSensor()) {
+    uint8_t addr = nodeTelemetrySensorsMap[sensorType].first;
+    if (!ss.begin(addr)) { 
+        LOG_ERROR("SoilMoistureSensor init failed at 0x%x", addr);
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    if (!ss.begin(0x36)) { // default I2C address for STEMMA Soil Sensor
-        LOG_ERROR("SoilMoistureSensor not detected at I2C 0x36");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
-    // Initialize capacitive touch module for moisture reading
     ss.pinMode(0, INPUT);
+    
+    status = addr;  // Set status for initI2CSensor
     return initI2CSensor();
 }
 
 void SoilMoistureSensor::setup()
 {
-    LOG_INFO("SoilMoistureSensor setup complete");
 }
 
 bool SoilMoistureSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.environment_metrics.has_soil_moisture = true;
+    uint16_t raw_cap = ss.touchRead(0); 
+    
+    float moisture_percent = map(raw_cap, 200, 2000, 0, 100); 
+    moisture_percent = constrain(moisture_percent, 0.0, 100.0);
 
-    uint16_t moisture = ss.touchRead(0); // read capacitive moisture value from channel 0
-    measurement->variant.environment_metrics.soil_moisture = moisture;
+    measurement->variant.environment_metrics.has_soil_moisture = true;
+    measurement->variant.environment_metrics.soil_moisture = moisture_percent;
 
     return true;
 }

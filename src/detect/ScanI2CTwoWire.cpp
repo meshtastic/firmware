@@ -540,6 +540,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
+            case 0x39:
+                logFoundDevice("Soil Moisture Sensor", (uint8_t)addr.address);
+                type = SOIL_MOISTURE;
+                break;
+
             case 0x48: {
                 i2cBus->beginTransmission(addr.address);
                 uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
