@@ -158,13 +158,24 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    // Update neighbor information from any received packet's signal quality
-    if (mp.rx_rssi != 0 || mp.rx_snr != 0) {
+    // Only track DIRECT neighbors - packets heard directly over radio with no relays
+    // Conditions for a direct neighbor:
+    // 1. Has valid signal data (rx_rssi or rx_snr)
+    // 2. Not received via MQTT
+    // 3. relay_node matches the last byte of mp.from (meaning the sender transmitted directly to us)
+    //    When a packet is relayed, relay_node is set to the relayer's last byte, not the original sender's
+    
+    bool hasSignalData = (mp.rx_rssi != 0 || mp.rx_snr != 0);
+    bool notViaMqtt = !mp.via_mqtt;
+    uint8_t fromLastByte = mp.from & 0xFF;
+    bool isDirectFromSender = (mp.relay_node == fromLastByte);
+    
+    if (hasSignalData && notViaMqtt && isDirectFromSender) {
         char senderName[64];
         getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
         float etx = Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
-        LOG_DEBUG("SignalRouting: Heard %s: RSSI=%d, SNR=%d, ETX=%.2f",
+        LOG_DEBUG("SignalRouting: Direct neighbor %s: RSSI=%d, SNR=%d, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
