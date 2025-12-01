@@ -5,6 +5,7 @@
 #include "modules/TraceRouteModule.h"
 #endif
 #include "NodeDB.h"
+#include "SignalRoutingModule.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -130,6 +131,18 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
+
+                    // Signal-based routing: for broadcasts, check if we should relay
+                    if (signalRoutingModule && isBroadcast(p->to)) {
+                        if (signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+                            if (!signalRoutingModule->shouldRelayBroadcast(p)) {
+                                LOG_INFO("SignalRouting: Not relaying broadcast 0x%08x (another node is better positioned)", p->id);
+                                return false;
+                            }
+                            LOG_INFO("SignalRouting: Relaying broadcast 0x%08x (we are best positioned)", p->id);
+                        }
+                    }
+
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                     LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
 
