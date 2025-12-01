@@ -45,6 +45,8 @@ extern bool isMuted;
 extern bool isHighResolution;
 void determineResolution(int16_t screenheight, int16_t screenwidth);
 
+void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second);
+
 // Rounded highlight (used for inverted headers)
 void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r);
 

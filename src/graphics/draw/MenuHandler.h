@@ -43,6 +43,10 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
+        message_response_menu,
+        message_viewmode_menu,
+        reply_menu,
+        delete_messages_menu,
         node_name_length_menu,
         FrameToggles,
         DisplayUnits
@@ -61,6 +65,9 @@ class menuHandler
     static void TwelveHourPicker();
     static void ClockFacePicker();
     static void messageResponseMenu();
+    static void messageViewModeMenu();
+    static void replyMenu();
+    static void deleteMessagesMenu();
     static void homeBaseMenu();
     static void textMessageBaseMenu();
     static void systemBaseMenu();

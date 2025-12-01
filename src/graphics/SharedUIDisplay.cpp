@@ -31,6 +31,19 @@ void determineResolution(int16_t screenheight, int16_t screenwidth)
     }
 }
 
+void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second)
+{
+    hour = 0;
+    minute = 0;
+    second = 0;
+    if (rtc_sec == 0)
+        return;
+    uint32_t hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
+    hour = hms / SEC_PER_HOUR;
+    minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+    second = hms % SEC_PER_MIN;
+}
+
 // === Shared External State ===
 bool hasUnreadMessage = false;
 bool isMuted = false;
@@ -199,8 +212,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     if (rtc_sec > 0) {
         // === Build Time String ===
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
-        int hour = hms / SEC_PER_HOUR;
-        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int hour, minute, second;
+        graphics::decomposeTime(rtc_sec, hour, minute, second);
         snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
 
         // === Build Date String ===
@@ -413,8 +426,12 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     if (drawConnectionState) {
+        const int scale = isHighResolution ? 2 : 1;
+        display->setColor(BLACK);
+        display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
+                          (connection_icon_height * scale) + (2 * scale));
+        display->setColor(WHITE);
         if (isHighResolution) {
-            const int scale = 2;
             const int bytesPerRow = (connection_icon_width + 7) / 8;
             int iconX = 0;
             int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
