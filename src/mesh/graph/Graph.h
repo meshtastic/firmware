@@ -39,6 +39,10 @@ public:
     // Threshold for significant ETX change (20%)
     static constexpr float ETX_CHANGE_THRESHOLD = 0.20f;
 
+    // Graph size limits to conserve memory
+    static constexpr size_t MAX_NODES_IN_GRAPH = 10;      // Max nodes we track in the graph
+    static constexpr size_t MAX_EDGES_PER_NODE = 10;      // Max edges (neighbors) per node
+
     Graph();
     ~Graph();
 
