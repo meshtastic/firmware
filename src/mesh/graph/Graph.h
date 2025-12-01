@@ -11,10 +11,11 @@ struct Edge {
     NodeNum to;
     float etx; // Expected Transmission Count
     uint32_t lastUpdate; // Timestamp of last update
-    float stability; // Stability weighting factor
+    float stability; // Stability weighting factor (1.0 = stable, lower = less stable)
+    uint32_t variance; // Position variance - higher means more mobile/unreliable
 
     Edge(NodeNum f, NodeNum t, float e, uint32_t timestamp)
-        : from(f), to(t), etx(e), lastUpdate(timestamp), stability(1.0f) {}
+        : from(f), to(t), etx(e), lastUpdate(timestamp), stability(1.0f), variance(0) {}
 };
 
 struct Route {
@@ -30,13 +31,23 @@ struct Route {
 
 class Graph {
 public:
+    // Return values for updateEdge()
+    static constexpr int EDGE_NO_CHANGE = 0;
+    static constexpr int EDGE_NEW = 1;
+    static constexpr int EDGE_SIGNIFICANT_CHANGE = 2;
+
+    // Threshold for significant ETX change (20%)
+    static constexpr float ETX_CHANGE_THRESHOLD = 0.20f;
+
     Graph();
     ~Graph();
 
     /**
      * Add or update an edge in the graph
+     * @param variance Position variance (0 = stationary/reliable, higher = mobile/unreliable)
+     * @return EDGE_NO_CHANGE, EDGE_NEW, or EDGE_SIGNIFICANT_CHANGE
      */
-    void updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp);
+    int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0);
 
     /**
      * Remove edges that haven't been updated in the last 300 seconds
@@ -67,6 +78,18 @@ public:
      * Update stability weighting for an edge
      */
     void updateStability(NodeNum from, NodeNum to, float newStability);
+
+    /**
+     * Get all edges originating from a node
+     * @return pointer to vector of edges, or nullptr if node has no edges
+     */
+    const std::vector<Edge>* getEdgesFrom(NodeNum node) const;
+
+    /**
+     * Reverse calculate RSSI and SNR from ETX (approximate)
+     * Used when populating NeighborLink from stored ETX values
+     */
+    static void etxToSignal(float etx, int32_t &rssi, int32_t &snr);
 
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;
