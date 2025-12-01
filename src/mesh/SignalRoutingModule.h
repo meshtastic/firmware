@@ -41,7 +41,7 @@ public:
     /**
      * Update neighbor information from a directly received packet
      */
-    void updateNeighborInfo(NodeNum nodeId, int32_t rssi, int32_t snr, uint32_t lastRxTime, uint32_t variance = 0);
+    void updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance = 0);
 
     /**
      * Handle speculative retransmit for unicast packets
