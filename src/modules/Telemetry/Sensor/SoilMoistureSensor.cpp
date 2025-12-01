@@ -6,7 +6,6 @@
 #include "SoilMoistureSensor.h"
 #include "TelemetrySensor.h"
 #include "main.h"
-#include "detect/ScanI2C.h"  // <--- ADD THIS INCLUDE
 
 SoilMoistureSensor::SoilMoistureSensor()
     : TelemetrySensor(meshtastic_TelemetrySensorType_CUSTOM_SENSOR, "SoilMoisture") 
