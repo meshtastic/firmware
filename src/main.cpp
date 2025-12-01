@@ -288,6 +288,51 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void lateInitVariant() __attribute__((weak));
 void lateInitVariant() {}
 
+
+// NRF52 (and probably other platforms) can report when system is in power failure mode
+// (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
+// For example NRF52 will prevent any flash writes in that case automatically
+// (but it causes issues we need to handle).
+// This detection is independent from whatever ADC or dividers used in Meshtastic
+// boards and is internal to chip.
+
+// Other platforms or variants can define it too - by knowing board's LDO cutoff voltage and measuring
+// battery pin using ADC.
+
+__attribute__((weak, noinline)) bool isPowerLevelSafe() { return true;}
+
+// wait until isPowerLevelSafe() reports true
+// blink user led in 3 flashes sequence to indicate what is happening
+void waitUntilPowerLevelSafe(){
+
+ //   pinMode(POWER_LED, OUTPUT);
+  //  digitalWrite(POWER_LED, HIGH ^ LED_STATE_ON);
+
+   pinMode(LED_PIN, OUTPUT);
+
+    while(isPowerLevelSafe() == false){
+
+
+        #ifdef LED_PIN
+
+        // 3x: blink for 500 ms, pause for 500 ms
+
+        for(int i=0;i<3;i++){
+             digitalWrite(LED_PIN, LED_STATE_ON);
+             delay(500);
+             digitalWrite(LED_PIN, LED_STATE_OFF);
+             delay(500);
+        }
+        #endif
+
+        // sleep for 2s
+        delay(2000);
+
+    }
+
+}
+
+
 /**
  * Print info as a structured log message (for automated log processing)
  */
@@ -298,6 +343,12 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+
+
+    // prevent booting if device is in power failure mode
+    // boot sequence will follow when battery level raises to safe mode
+    waitUntilPowerLevelSafe();
+
 #if defined(R1_NEO)
     pinMode(DCDC_EN_HOLD, OUTPUT);
     digitalWrite(DCDC_EN_HOLD, HIGH);

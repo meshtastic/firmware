@@ -38,6 +38,8 @@ void variant_shutdown() {}
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
+bool pofcon_configured = false;
+
 static inline void debugger_break(void)
 {
     __asm volatile("bkpt #0x01\n\t"
@@ -96,8 +98,25 @@ static void initBrownout()
     err_code = sd_power_pof_threshold_set(vddthresh);
     assert(err_code == NRF_SUCCESS);
 
+    pofcon_configured = true;
+
     // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
 }
+
+
+bool isPowerLevelSafe(){
+
+    return false;
+
+    if(!pofcon_configured){
+        initBrownout();
+    }
+
+    if(NRF_POWER->EVENTS_POFWARN)
+        return false;
+    return true;
+}
+
 
 // This is a public global so that the debugger can set it to false automatically from our gdbinit
 bool useSoftDevice = true; // Set to false for easier debugging
