@@ -7,7 +7,7 @@ Graph::Graph() {}
 
 Graph::~Graph() {}
 
-void Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp) {
+int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance) {
     auto& edges = adjacencyList[from];
 
     // Find existing edge
@@ -15,12 +15,22 @@ void Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp) 
         [to](const Edge& e) { return e.to == to; });
 
     if (it != edges.end()) {
+        // Check for significant change
+        float oldEtx = it->etx;
+        float change = std::abs(etx - oldEtx) / oldEtx;
+
         // Update existing edge
         it->etx = etx;
         it->lastUpdate = timestamp;
+        it->variance = variance;
+
+        return (change > ETX_CHANGE_THRESHOLD) ? EDGE_SIGNIFICANT_CHANGE : EDGE_NO_CHANGE;
     } else {
         // Add new edge
-        edges.emplace_back(from, to, etx, timestamp);
+        Edge newEdge(from, to, etx, timestamp);
+        newEdge.variance = variance;
+        edges.push_back(newEdge);
+        return EDGE_NEW;
     }
 }
 
@@ -179,12 +189,51 @@ Route Graph::dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime)
 }
 
 float Graph::getWeightedCost(const Edge& edge, uint32_t currentTime) {
-    // Age factor - older edges cost more
+    // Age factor - older edges cost more (up to 2x penalty at timeout)
     uint32_t age = currentTime - edge.lastUpdate;
     float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_MS));
 
-    // Stability weighting
+    // Stability weighting (historical reliability)
     float stabilityFactor = 1.0f / edge.stability;
 
-    return edge.etx * ageFactor * stabilityFactor;
+    // Variance factor - mobile/unreliable nodes get penalized
+    // variance of 0 = no penalty, variance of 1000+ = significant penalty
+    // Formula: 1.0 + (variance / 500) caps at ~3x penalty for very mobile nodes
+    float varianceFactor = 1.0f + (edge.variance / 500.0f);
+    if (varianceFactor > 3.0f) varianceFactor = 3.0f; // Cap at 3x penalty
+
+    return edge.etx * ageFactor * stabilityFactor * varianceFactor;
+}
+
+const std::vector<Edge>* Graph::getEdgesFrom(NodeNum node) const {
+    auto it = adjacencyList.find(node);
+    if (it != adjacencyList.end()) {
+        return &it->second;
+    }
+    return nullptr;
+}
+
+void Graph::etxToSignal(float etx, int32_t &rssi, int32_t &snr) {
+    // Reverse the ETX calculation (approximate)
+    // Original: etx = 1.0 / (prr * prr) where prr depends on rssi/snr
+    // This is an approximation - we'll estimate reasonable values
+
+    // ETX of 1.0 = perfect link (RSSI ~ -60, SNR ~ 10)
+    // ETX of 2.0 = 50% packet loss (RSSI ~ -90, SNR ~ 0)
+    // ETX of 4.0 = 75% packet loss (RSSI ~ -110, SNR ~ -5)
+
+    if (etx <= 1.0f) {
+        rssi = -60;
+        snr = 10;
+    } else if (etx <= 2.0f) {
+        // Linear interpolation between good and medium
+        float t = (etx - 1.0f);
+        rssi = -60 - static_cast<int32_t>(t * 30);
+        snr = 10 - static_cast<int32_t>(t * 10);
+    } else {
+        // Linear interpolation between medium and poor
+        float t = std::min((etx - 2.0f) / 2.0f, 1.0f);
+        rssi = -90 - static_cast<int32_t>(t * 20);
+        snr = 0 - static_cast<int32_t>(t * 5);
+    }
 }
