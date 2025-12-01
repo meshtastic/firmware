@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "SignalRoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
@@ -42,6 +43,12 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
         the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
         bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+
+        // Don't treat signal-routed packets as "repeated" - they preserve hop_limit by design
+        if (isRepeated && signalRoutingModule && signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+            isRepeated = false;
+        }
+
         if (isRepeated) {
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
