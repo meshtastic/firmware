@@ -92,10 +92,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
     }
-    if (!crypto->setDHPublicKey(remotePublic.bytes)) {
+    if (!setDHPublicKey(remotePublic.bytes)) {
         return false;
     }
-    crypto->hash(shared_key, 32);
+    hash(shared_key, 32);
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
@@ -134,10 +134,10 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     }
 
     // Calculate the shared secret with the sending node and decrypt
-    if (!crypto->setDHPublicKey(remotePublic.bytes)) {
+    if (!setDHPublicKey(remotePublic.bytes)) {
         return false;
     }
-    crypto->hash(shared_key, 32);
+    hash(shared_key, 32);
 
     initNonce(fromNode, packetNum, extraNonce);
     printBytes("Attempt decrypt with nonce: ", nonce, 13);

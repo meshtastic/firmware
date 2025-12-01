@@ -136,6 +136,7 @@ class PhoneAPI
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
+    bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
   protected:
     /// Our fromradio packet while it is being assembled
@@ -158,8 +159,25 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
+    /// Subclasses can use these lifecycle hooks for transport-specific behavior around config/steady-state
+    /// (i.e. BLE connection params)
+    virtual void onConfigStart() {}
+    virtual void onConfigComplete() {}
+
     /// begin a new connection
     void handleStartConfig();
+
+    enum APIType {
+        TYPE_NONE, // Initial state, don't send anything until the client starts asking for config
+        TYPE_BLE,
+        TYPE_WIFI,
+        TYPE_SERIAL,
+        TYPE_PACKET,
+        TYPE_HTTP,
+        TYPE_ETH
+    };
+
+    APIType api_type = TYPE_NONE;
 
   private:
     void releasePhonePacket();
