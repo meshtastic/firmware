@@ -1,6 +1,7 @@
 #pragma once
 #include "NodeDB.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <queue>
 #include <limits>
@@ -94,6 +95,53 @@ public:
      * Used when populating NeighborLink from stored ETX values
      */
     static void etxToSignal(float etx, int32_t &rssi, int32_t &snr);
+
+    /**
+     * Get all nodes reachable from a given node (direct neighbors)
+     * @return set of node IDs that can be reached
+     */
+    std::unordered_set<NodeNum> getDirectNeighbors(NodeNum node) const;
+
+    /**
+     * Get all nodes in the graph
+     * @return set of all known node IDs
+     */
+    std::unordered_set<NodeNum> getAllNodes() const;
+
+    /**
+     * Calculate which nodes would be covered if a specific relay rebroadcasts
+     * @param relay The node that would relay
+     * @param alreadyCovered Nodes that have already received the packet
+     * @return set of NEW nodes that would be covered
+     */
+    std::unordered_set<NodeNum> getCoverageIfRelays(NodeNum relay, const std::unordered_set<NodeNum>& alreadyCovered) const;
+
+    /**
+     * Find the best relay node to cover uncovered nodes
+     * @param alreadyCovered Nodes that have already received the packet
+     * @param candidates Candidate nodes that could relay (nodes that heard the packet)
+     * @param currentTime Current timestamp for cost calculation
+     * @return NodeNum of best relay, or 0 if no good relay found
+     */
+    NodeNum findBestRelay(const std::unordered_set<NodeNum>& alreadyCovered,
+                          const std::unordered_set<NodeNum>& candidates,
+                          uint32_t currentTime) const;
+
+    /**
+     * Check if a specific node should relay a broadcast
+     * @param myNode Our node ID
+     * @param sourceNode Original sender of the packet
+     * @param heardFrom Node we heard the packet from (last relayer)
+     * @param currentTime Current timestamp
+     * @return true if we should relay, false otherwise
+     */
+    bool shouldRelay(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
+
+    /**
+     * Get the cost to reach a node from another node (direct edge cost)
+     * @return edge cost, or infinity if not directly connected
+     */
+    float getEdgeCost(NodeNum from, NodeNum to, uint32_t currentTime) const;
 
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;

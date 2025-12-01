@@ -289,3 +289,146 @@ void Graph::etxToSignal(float etx, int32_t &rssi, int32_t &snr) {
         snr = 0 - static_cast<int32_t>(t * 5);
     }
 }
+
+std::unordered_set<NodeNum> Graph::getDirectNeighbors(NodeNum node) const {
+    std::unordered_set<NodeNum> neighbors;
+    auto it = adjacencyList.find(node);
+    if (it != adjacencyList.end()) {
+        for (const Edge& edge : it->second) {
+            neighbors.insert(edge.to);
+        }
+    }
+    return neighbors;
+}
+
+std::unordered_set<NodeNum> Graph::getAllNodes() const {
+    std::unordered_set<NodeNum> nodes;
+    for (const auto& pair : adjacencyList) {
+        nodes.insert(pair.first);
+        for (const Edge& edge : pair.second) {
+            nodes.insert(edge.to);
+        }
+    }
+    return nodes;
+}
+
+std::unordered_set<NodeNum> Graph::getCoverageIfRelays(NodeNum relay, const std::unordered_set<NodeNum>& alreadyCovered) const {
+    std::unordered_set<NodeNum> newCoverage;
+
+    // Get all nodes that can hear this relay (nodes that have edges TO the relay)
+    // Since our graph stores edges as "from -> to", we need to find edges where to == relay
+    // But that's expensive. Instead, we use the relay's neighbors (nodes the relay can reach)
+    // Assumption: if relay can reach X, then X can hear relay (bidirectional links)
+
+    auto neighbors = getDirectNeighbors(relay);
+    for (NodeNum neighbor : neighbors) {
+        if (alreadyCovered.find(neighbor) == alreadyCovered.end()) {
+            newCoverage.insert(neighbor);
+        }
+    }
+
+    return newCoverage;
+}
+
+float Graph::getEdgeCost(NodeNum from, NodeNum to, uint32_t currentTime) const {
+    auto it = adjacencyList.find(from);
+    if (it == adjacencyList.end()) {
+        return std::numeric_limits<float>::infinity();
+    }
+
+    for (const Edge& edge : it->second) {
+        if (edge.to == to) {
+            // Calculate weighted cost (same as in dijkstra)
+            uint32_t age = currentTime - edge.lastUpdate;
+            float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_MS));
+            float stabilityFactor = 1.0f / edge.stability;
+            float varianceFactor = 1.0f + (edge.variance / 500.0f);
+            if (varianceFactor > 3.0f) varianceFactor = 3.0f;
+            return edge.etx * ageFactor * stabilityFactor * varianceFactor;
+        }
+    }
+
+    return std::numeric_limits<float>::infinity();
+}
+
+NodeNum Graph::findBestRelay(const std::unordered_set<NodeNum>& alreadyCovered,
+                              const std::unordered_set<NodeNum>& candidates,
+                              uint32_t currentTime) const {
+    NodeNum bestRelay = 0;
+    size_t bestCoverageCount = 0;
+    float bestCost = std::numeric_limits<float>::infinity();
+
+    for (NodeNum candidate : candidates) {
+        auto newCoverage = getCoverageIfRelays(candidate, alreadyCovered);
+        size_t coverageCount = newCoverage.size();
+
+        if (coverageCount == 0) continue;
+
+        // Calculate average cost to covered nodes
+        float totalCost = 0;
+        for (NodeNum covered : newCoverage) {
+            totalCost += getEdgeCost(candidate, covered, currentTime);
+        }
+        float avgCost = totalCost / coverageCount;
+
+        // Prefer: more coverage first, then lower cost
+        if (coverageCount > bestCoverageCount ||
+            (coverageCount == bestCoverageCount && avgCost < bestCost)) {
+            bestRelay = candidate;
+            bestCoverageCount = coverageCount;
+            bestCost = avgCost;
+        }
+    }
+
+    return bestRelay;
+}
+
+bool Graph::shouldRelay(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const {
+    // Build set of nodes that have already "covered" (source + anyone who relayed)
+    std::unordered_set<NodeNum> alreadyCovered;
+    alreadyCovered.insert(sourceNode);
+
+    // Add all nodes that the source can reach directly
+    auto sourceNeighbors = getDirectNeighbors(sourceNode);
+    for (NodeNum n : sourceNeighbors) {
+        alreadyCovered.insert(n);
+    }
+
+    // If we heard from a relayer (not the source), add their coverage too
+    if (heardFrom != sourceNode) {
+        alreadyCovered.insert(heardFrom);
+        auto relayerNeighbors = getDirectNeighbors(heardFrom);
+        for (NodeNum n : relayerNeighbors) {
+            alreadyCovered.insert(n);
+        }
+    }
+
+    // Get all nodes that heard this packet (source's neighbors + relayer's neighbors)
+    // These are the candidates who could relay
+    std::unordered_set<NodeNum> candidates;
+    for (NodeNum n : sourceNeighbors) {
+        candidates.insert(n);
+    }
+    if (heardFrom != sourceNode) {
+        auto relayerNeighbors = getDirectNeighbors(heardFrom);
+        for (NodeNum n : relayerNeighbors) {
+            candidates.insert(n);
+        }
+    }
+
+    // Find the best relay among candidates
+    NodeNum bestRelay = findBestRelay(alreadyCovered, candidates, currentTime);
+
+    // Should we relay?
+    if (bestRelay == myNode) {
+        return true;
+    }
+
+    // If no good relay found (all nodes covered), don't relay
+    if (bestRelay == 0) {
+        return false;
+    }
+
+    // We're not the best relay - let the best one handle it
+    return false;
+}
