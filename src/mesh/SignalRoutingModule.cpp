@@ -52,9 +52,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination) {
     Route route = routingGraph->calculateRoute(destination, currentTime);
 
     if (route.nextHop != 0) {
-#ifdef DEBUG_SIGNAL_ROUTING
         LOG_DEBUG("SignalRouting: Next hop for %08x is %08x (cost: %.2f)", destination, route.nextHop, route.cost);
-#endif
         return route.nextHop;
     }
 
@@ -65,9 +63,7 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, int32
     float etx = Graph::calculateETX(rssi, snr);
     routingGraph->updateEdge(nodeDB->getNodeNum(), nodeId, etx, lastRxTime);
 
-#ifdef DEBUG_SIGNAL_ROUTING
     LOG_DEBUG("SignalRouting: Updated edge to %08x: RSSI=%d, SNR=%d, ETX=%.2f", nodeId, rssi, snr, etx);
-#endif
 }
 
 void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacket *p) {
@@ -79,10 +75,7 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
     if (!isBroadcast(p->to)) {
         // Schedule a retransmit after 400ms if no ACK received
         // This would typically be handled by the Router/ReliableRouter
-        // For now, just log the intent
-#ifdef DEBUG_SIGNAL_ROUTING
         LOG_DEBUG("SignalRouting: Scheduling speculative retransmit for packet %08x to %08x", p->id, p->to);
-#endif
     }
 }
 
@@ -99,9 +92,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             routingGraph->ageEdges(currentTime);
             lastGraphUpdate = currentTime;
 
-#ifdef DEBUG_SIGNAL_ROUTING
             LOG_DEBUG("SignalRouting: Aged edges and updated graph");
-#endif
         }
     }
 
@@ -148,9 +139,7 @@ void SignalRoutingModule::updateSignalBasedCapable() {
             ourNodeInfo->neighbors[i] = neighbors[i];
         }
 
-#ifdef DEBUG_SIGNAL_ROUTING
         LOG_DEBUG("SignalRouting: Updated NodeInfo - signal_based_capable=true, neighbors=%d",
                   ourNodeInfo->neighbors_count);
-#endif
     }
 }
