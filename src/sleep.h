@@ -8,19 +8,19 @@
 // To enable: #define LOW_BATTERY_RECOVERY_ENABLED in variant.h
 // To customize thresholds, define these before including sleep.h:
 //   LOW_BATT_SLEEP_INTERVAL_MS - wake interval (default: 5 minutes)
-//   LOW_BATT_ENTER_THRESHOLD   - enter sleep at this % (default: 5%)
-//   LOW_BATT_EXIT_THRESHOLD    - exit sleep at this % (default: 10%)
+//   LOW_BATT_ENTER_THRESHOLD   - enter sleep at this % (default: 10%)
+//   LOW_BATT_EXIT_THRESHOLD    - exit sleep at this % (default: 15%)
 
 #ifndef LOW_BATT_SLEEP_INTERVAL_MS
 #define LOW_BATT_SLEEP_INTERVAL_MS (5 * 60 * 1000) // 5 minutes wake interval
 #endif
 
 #ifndef LOW_BATT_ENTER_THRESHOLD
-#define LOW_BATT_ENTER_THRESHOLD 5 // Enter deep sleep at 5% battery
+#define LOW_BATT_ENTER_THRESHOLD 10 // Enter deep sleep at 10% battery
 #endif
 
 #ifndef LOW_BATT_EXIT_THRESHOLD
-#define LOW_BATT_EXIT_THRESHOLD 10 // Exit deep sleep at 10% battery
+#define LOW_BATT_EXIT_THRESHOLD 15 // Exit deep sleep at 15% battery
 #endif
 
 void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), cpuDeepSleep(uint32_t msecToWake);
