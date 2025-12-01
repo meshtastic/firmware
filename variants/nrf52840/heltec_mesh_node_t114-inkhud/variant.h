@@ -30,7 +30,6 @@ extern "C" {
 #define PIN_LED1 (32 + 3) // green (confirmed on 1.0 board)
 #define LED_BLUE PIN_LED1 // fake for bluefruit library
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels

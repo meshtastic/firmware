@@ -31,7 +31,6 @@ extern "C" {
 // LEDs
 #define PIN_LED1 (24) // Built in white led for status
 #define LED_BLUE PIN_LED1
-#define LED_BUILTIN PIN_LED1
 
 #define LED_STATE_ON 0 // State when LED is litted
 #define LED_INVERTED 1

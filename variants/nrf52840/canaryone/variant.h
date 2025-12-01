@@ -52,7 +52,6 @@ extern "C" {
 
 #define LED_BLUE PIN_LED1
 
-#define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED3
 
 #define LED_STATE_ON 0 // State when LED is lit
