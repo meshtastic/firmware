@@ -329,13 +329,37 @@ void initDeepSleep()
 #endif
 
 #ifdef LOW_BATTERY_RECOVERY_ENABLED
-    // Low battery recovery check - if we woke from timer while in low battery mode,
-    // check if battery has recovered. If not, go back to sleep immediately.
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER && shouldContinueLowBatterySleep()) {
-        // Go right back to deep sleep - skip full initialization
-        // Use cpuDeepSleep directly to avoid full doDeepSleep() overhead
-        esp_sleep_enable_timer_wakeup(LOW_BATT_SLEEP_INTERVAL_MS * 1000ULL);
-        esp_deep_sleep_start();
+    // Low battery recovery check
+    if (inLowBatteryRecoveryMode) {
+        // If user pressed button, exit recovery mode immediately (manual override)
+        if (wakeCause == ESP_SLEEP_WAKEUP_EXT0 || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+            LOG_INFO("Low battery recovery: Button press detected, manual wake override");
+            inLowBatteryRecoveryMode = false;
+            // Continue to normal boot
+        }
+        // If woke from timer, check if battery has recovered
+        else if (wakeCause == ESP_SLEEP_WAKEUP_TIMER && shouldContinueLowBatterySleep()) {
+            // Go right back to deep sleep - skip full initialization
+            // Enable both timer wake AND button wake for manual override
+            esp_sleep_enable_timer_wakeup(LOW_BATT_SLEEP_INTERVAL_MS * 1000ULL);
+
+#ifdef BUTTON_PIN
+            // Enable button wake so user can manually wake the device
+#if SOC_PM_SUPPORT_EXT_WAKEUP
+            uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
+#ifdef BUTTON_NEED_PULLUP
+            gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+#endif
+#ifdef CONFIG_IDF_TARGET_ESP32
+            esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+            esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
+#endif // SOC_PM_SUPPORT_EXT_WAKEUP
+#endif // BUTTON_PIN
+
+            esp_deep_sleep_start();
+        }
     }
 #endif // LOW_BATTERY_RECOVERY_ENABLED
 
