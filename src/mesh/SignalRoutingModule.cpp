@@ -6,6 +6,7 @@
 #include "configuration.h"
 #include "memGet.h"
 #include "MeshService.h"
+#include "pb_decode.h"
 
 SignalRoutingModule *signalRoutingModule;
 
@@ -120,8 +121,39 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     }
 }
 
+void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPacket *p)
+{
+    if (!routingGraph || !p) return;
+
+    // Only process SignalRoutingInfo packets
+    if (p->decoded.portnum != meshtastic_PortNum_SIGNAL_ROUTING_APP) return;
+
+    // Decode the protobuf to get neighbor data
+    meshtastic_SignalRoutingInfo info = meshtastic_SignalRoutingInfo_init_zero;
+    if (!pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size,
+                              &meshtastic_SignalRoutingInfo_msg, &info)) {
+        return;
+    }
+
+    if (info.neighbors_count == 0) return;
+
+    char senderName[64];
+    getNodeDisplayName(p->from, senderName, sizeof(senderName));
+    LOG_DEBUG("SignalRouting: Pre-processing %d neighbors from %s for relay decision",
+              info.neighbors_count, senderName);
+
+    // Add edges from the sender to each of their neighbors
+    for (pb_size_t i = 0; i < info.neighbors_count; i++) {
+        const meshtastic_NeighborLink& neighbor = info.neighbors[i];
+        float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
+        routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
+    }
+}
+
 bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_SignalRoutingInfo *p)
 {
+    // Note: Graph may have already been updated by preProcessSignalRoutingPacket()
+    // This is intentional - we want up-to-date data for relay decisions
     if (!routingGraph || !p) return false;
 
     char senderName[64];
@@ -137,6 +169,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
              p->signal_based_capable ? "true" : "false");
 
     // Add edges from the sender to each of their neighbors
+    // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
     for (pb_size_t i = 0; i < p->neighbors_count; i++) {
         const meshtastic_NeighborLink& neighbor = p->neighbors[i];
 
@@ -233,6 +266,12 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 {
     if (!routingGraph || !isBroadcast(p->to)) {
         return true;  // No graph data or not a broadcast - use traditional flooding
+    }
+
+    // For SignalRoutingInfo packets, pre-process to update graph BEFORE making relay decision
+    // This ensures we have the sender's neighbor data when deciding
+    if (p->decoded.portnum == meshtastic_PortNum_SIGNAL_ROUTING_APP) {
+        preProcessSignalRoutingPacket(p);
     }
 
     NodeNum myNode = nodeDB->getNodeNum();
