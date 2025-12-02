@@ -96,7 +96,7 @@ int32_t SignalRoutingModule::runOnce()
     bool notificationsIdle = (nowMs - lastNotificationTime) > MIN_FLASH_INTERVAL_MS;
     bool heartbeatDue = (nowMs - lastHeartbeatTime) >= heartbeatIntervalMs;
     if (!rgbLedActive && notificationsIdle && heartbeatDue) {
-        flashRgbLed(24, 24, 24, HEARTBEAT_FLASH_MS);
+        flashRgbLed(24, 24, 24, HEARTBEAT_FLASH_MS, false);
         lastHeartbeatTime = nowMs;
     }
 #endif
@@ -266,7 +266,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
              p->signal_based_capable ? "true" : "false");
 
     // Flash cyan for network topology update
-    flashRgbLed(0, 255, 255, 150);
+    flashRgbLed(0, 255, 255, 150, true);
 
     // Add edges from the sender to each of their neighbors
     // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
@@ -331,7 +331,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
         // Brief purple flash for any direct packet received
-        flashRgbLed(128, 0, 128, 100);
+        flashRgbLed(128, 0, 128, 100, true);
 
         // Record that this node transmitted (for contention window tracking)
         if (routingGraph) {
@@ -430,9 +430,9 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 
     if (shouldRelay) {
         routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
-        flashRgbLed(255, 128, 0, 150);
+        flashRgbLed(255, 128, 0, 150, true);
     } else {
-        flashRgbLed(255, 0, 0, 100);
+        flashRgbLed(255, 0, 0, 100, true);
     }
 
     return shouldRelay;
@@ -474,11 +474,11 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
         if (changeType == Graph::EDGE_NEW) {
             LOG_INFO("SignalRouting: New neighbor %s detected", neighborName);
             // Flash green for new neighbor
-            flashRgbLed(0, 255, 0, 300);
+            flashRgbLed(0, 255, 0, 300, true);
         } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
             LOG_INFO("SignalRouting: Significant ETX change for %s", neighborName);
             // Flash blue for signal quality change
-            flashRgbLed(0, 0, 255, 300);
+            flashRgbLed(0, 0, 255, 300, true);
         }
 
         // Trigger early broadcast if we haven't sent recently (rate limit: 60s)
@@ -566,10 +566,14 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
  * Flash RGB LED for Signal Routing notifications
  * Colors: Green = new neighbor, Blue = signal change, Cyan = topology update
  */
-void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms)
+void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms, bool isNotification)
 {
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
     uint32_t now = millis();
+
+    if (isNotification && (now - lastEventFlashTime) < MIN_EVENT_FLASH_INTERVAL_MS) {
+        return;
+    }
 
     // Debounce: ignore rapid-fire flash requests
     if (now - lastFlashTime < MIN_FLASH_INTERVAL_MS) {
@@ -596,6 +600,9 @@ void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t 
 
     // Track notification time to prevent heartbeat during active notifications
     lastNotificationTime = now;
+    if (isNotification) {
+        lastEventFlashTime = now;
+    }
 #endif
 }
 

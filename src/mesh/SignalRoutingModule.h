@@ -124,7 +124,7 @@ private:
      *   Blue (0,0,255)         - Significant signal quality change
      *   Cyan (0,255,255)       - Topology update received (SignalRoutingInfo)
      */
-    void flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms = 200);
+    void flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms = 200, bool isNotification = false);
 
     /**
      * Turn off RGB LED when timer expires
@@ -136,11 +136,13 @@ private:
     uint32_t rgbLedOffTime = 0;
     uint32_t lastFlashTime = 0;
     static constexpr uint32_t MIN_FLASH_INTERVAL_MS = 500;   // Minimum time between flashes
+    static constexpr uint32_t MIN_EVENT_FLASH_INTERVAL_MS = 4000;
 
     // Heartbeat timing
     uint32_t lastHeartbeatTime = 0;
     uint32_t lastNotificationTime = 0;
     uint32_t heartbeatIntervalMs = 2000;                     // Configurable, default 2 seconds
+    uint32_t lastEventFlashTime = 0;
 
     enum class CapabilityStatus : uint8_t {
         Unknown = 0,
