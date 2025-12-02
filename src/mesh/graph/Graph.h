@@ -31,6 +31,24 @@ struct Route {
         : destination(dest), nextHop(hop), cost(c), timestamp(ts) {}
 };
 
+struct RelayCandidate {
+    NodeNum nodeId;
+    size_t coverageCount;
+    float avgCost;
+    int tier;  // 0 = primary, 1 = backup, etc.
+
+    RelayCandidate() : nodeId(0), coverageCount(0), avgCost(0), tier(0) {}
+    RelayCandidate(NodeNum node, size_t coverage, float cost, int t)
+        : nodeId(node), coverageCount(coverage), avgCost(cost), tier(t) {}
+
+    // Sort by tier first (lower is better), then coverage (higher is better), then cost (lower is better)
+    bool operator<(const RelayCandidate& other) const {
+        if (tier != other.tier) return tier < other.tier;
+        if (coverageCount != other.coverageCount) return coverageCount > other.coverageCount;
+        return avgCost < other.avgCost;
+    }
+};
+
 class Graph {
 public:
     // Return values for updateEdge()
@@ -46,6 +64,11 @@ public:
     static constexpr uint32_t MIN_FREE_HEAP_FOR_GRAPH = 8 * 1024; // Keep at least 8KB free for other operations
     static constexpr size_t EDGE_MEMORY_ESTIMATE = 32;            // Approximate bytes per Edge struct
     static constexpr size_t NODE_OVERHEAD_ESTIMATE = 64;          // Approximate overhead per node in adjacency list
+
+    // Relay algorithm constants
+    static constexpr uint32_t CONTENTION_WINDOW_MS = 200;         // 200ms contention window
+    static constexpr uint32_t RELAY_TIMEOUT_MS = 400;             // 400ms total timeout for relay decision
+    static constexpr size_t MAX_RELAY_TIERS = 3;                  // Primary + 2 backup tiers
 
     Graph();
     ~Graph();
@@ -157,11 +180,71 @@ public:
      */
     size_t getNodeCount() const { return adjacencyList.size(); }
 
+    /**
+     * Record that a node has transmitted a packet (for contention window tracking)
+     * @param nodeId The node that transmitted
+     * @param packetId The packet ID that was transmitted
+     * @param currentTime Current timestamp
+     */
+    void recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32_t currentTime);
+
+    /**
+     * Check if a node has already transmitted in the current contention window
+     * @param nodeId Node to check
+     * @param packetId Current packet ID
+     * @param currentTime Current timestamp
+     * @return true if node already transmitted for this packet
+     */
+    bool hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) const;
+
+    /**
+     * Find all relay candidates with their coverage and tiers
+     * @param alreadyCovered Nodes that have already received the packet
+     * @param candidates Candidate nodes that could relay
+     * @param currentTime Current timestamp
+     * @param packetId Current packet ID for contention window checking
+     * @return Vector of relay candidates sorted by priority
+     */
+    std::vector<RelayCandidate> findAllRelayCandidates(const std::unordered_set<NodeNum>& alreadyCovered,
+                                                      const std::unordered_set<NodeNum>& candidates,
+                                                      uint32_t currentTime, uint32_t packetId) const;
+
+    /**
+     * Check if a node is a gateway (bridges disconnected network segments)
+     * @param nodeId Node to check
+     * @param sourceNode Original packet source
+     * @return true if node is a gateway bridging otherwise disconnected segments
+     */
+    bool isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const;
+
+    /**
+     * Enhanced shouldRelay with contention window awareness and gateway detection
+     * @param myNode Our node ID
+     * @param sourceNode Original sender of the packet
+     * @param heardFrom Node we heard the packet from (last relayer)
+     * @param currentTime Current timestamp
+     * @param packetId Packet ID for contention window tracking
+     * @return true if we should relay, false otherwise
+     */
+    bool shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
+                           uint32_t currentTime, uint32_t packetId) const;
+
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;
     std::unordered_map<NodeNum, Route> routeCache;
+
+    // Relay state tracking for contention window management
+    struct RelayState {
+        uint32_t lastTxTime;     // When this node last transmitted
+        uint32_t packetId;       // ID of last packet relayed
+        RelayState() : lastTxTime(0), packetId(0) {}
+        RelayState(uint32_t time, uint32_t pid) : lastTxTime(time), packetId(pid) {}
+    };
+    std::unordered_map<NodeNum, RelayState> relayStates;
+
     static constexpr uint32_t ROUTE_CACHE_TIMEOUT_MS = 300 * 1000; // 300 seconds
     static constexpr uint32_t EDGE_AGING_TIMEOUT_MS = 300 * 1000; // 300 seconds
+    static constexpr uint32_t RELAY_STATE_TIMEOUT_MS = 2000;      // Forget relay state after 2 seconds
 
     /**
      * Dijkstra implementation for finding lowest cost path
