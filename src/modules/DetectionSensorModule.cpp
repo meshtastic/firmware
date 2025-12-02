@@ -112,7 +112,8 @@ int32_t DetectionSensorModule::runOnce()
                     sendDetectionMessage();
                 } else if (regret == BOOT_FROM_TIMEOUT) {
                     LOG_INFO("Woke up by timeout.");
-                    // only send if set a sleep timeout ourself. else so other module triggered it
+                    // When encountering a timeout without setting the timer ourself the source must be another module running
+                    // concurrently
                     if (moduleConfig.detection_sensor.state_broadcast_secs)
                         sendCurrentStateMessage(getState());
                 } else if (regret == BOOT_FROM_GPIOEVENT) {
@@ -161,7 +162,8 @@ int32_t DetectionSensorModule::runOnce()
                     }
                     break;
                 case ESP_SLEEP_WAKEUP_TIMER:
-                    // only send if set a sleep timeout ourself. else so other module triggered it
+                    // When encountering a timeout without setting the timer ourself the source must be another module running
+                    // concurrently
                     LOG_INFO("Woke up by timeout.");
                     if (moduleConfig.detection_sensor.state_broadcast_secs)
                         sendCurrentStateMessage(getState());
@@ -212,9 +214,10 @@ int32_t DetectionSensorModule::runOnce()
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
         // If 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_secs) is specified it will be used, if
         // unset the sleep will last 'forever', interrupted by specified GPIO event
-        // nRF52: Using a timeout the module enters a low power loop, without it will shutdown with least power consumption
-        // ESP32: Always using deep sleep with RTC
-        // TODO: check why DELAY_FOREVER does not work on ESP
+        // nRF52: Using a timeout the module enters a low power loop. Without, it will enter a low power delay to comply with the
+        // minimum_broadcast_secs and finally 'shutdown' while sensing the GPIO.
+        // ESP32: Always uses deep sleep with RTC
+
         uint32_t nightyNightMs =
             Default::getConfiguredOrDefault(moduleConfig.detection_sensor.state_broadcast_secs * 1000, portMAX_DELAY);
 

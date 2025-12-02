@@ -402,8 +402,9 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     variant_shutdown();
 
-    // Sleepy trackers or sensors can low power "sleep"
-    // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
+    // Sleepy trackers or sensors can low power "sleep".
+    // When they wake up in regular intervals enter the following delay loop, which monitors user inputs and potential GPIO events
+    // of the detection sensor if active. Detection Sensors may also shutdown and still monitor their assigned GPIO
     if (msecToWake != portMAX_DELAY &&
         (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                    meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR) &&
