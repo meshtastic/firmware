@@ -67,7 +67,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 extern MessageStore messageStore;
 
+#if USE_TFTDISPLAY
 extern uint16_t TFT_MESH;
+#else
+uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
