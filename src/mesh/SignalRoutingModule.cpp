@@ -7,6 +7,7 @@
 #include "memGet.h"
 #include "MeshService.h"
 #include "pb_decode.h"
+#include <Arduino.h>
 
 SignalRoutingModule *signalRoutingModule;
 
@@ -60,6 +61,9 @@ int32_t SignalRoutingModule::runOnce()
     if (!routingGraph || !signalBasedRoutingEnabled) {
         return disable();
     }
+
+    // Update RGB LED state (turn off if timer expired)
+    updateRgbLed();
 
     // Send our signal routing info periodically
     sendSignalRoutingInfo();
@@ -167,6 +171,9 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     LOG_INFO("SignalRouting: Received %d neighbors from %s (version %d, capable=%s)",
              p->neighbors_count, senderName, p->routing_version,
              p->signal_based_capable ? "true" : "false");
+
+    // Flash cyan for network topology update
+    flashRgbLed(0, 255, 255, 150);
 
     // Add edges from the sender to each of their neighbors
     // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
@@ -345,8 +352,12 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
 
         if (changeType == Graph::EDGE_NEW) {
             LOG_INFO("SignalRouting: New neighbor %s detected", neighborName);
-        } else {
+            // Flash green for new neighbor
+            flashRgbLed(0, 255, 0, 300);
+        } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
             LOG_INFO("SignalRouting: Significant ETX change for %s", neighborName);
+            // Flash blue for signal quality change
+            flashRgbLed(0, 0, 255, 300);
         }
 
         // Trigger early broadcast if we haven't sent recently (rate limit: 60s)
@@ -386,4 +397,50 @@ float SignalRoutingModule::getSignalBasedCapablePercentage()
     // This could be used in the future for hybrid routing decisions
     // TODO: Track actual capability from received SignalRoutingInfo packets
     return 0.0f;
+}
+
+/**
+ * Flash RGB LED for Signal Routing notifications
+ * Colors: Green = new neighbor, Blue = signal change, Red = connection lost
+ */
+void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms)
+{
+#if defined(HAS_RGB_LED)
+    // Set LED to specified color
+#ifdef RGBLED_CA
+    analogWrite(RGBLED_RED, 255 - r); // CA type needs reverse logic
+    analogWrite(RGBLED_GREEN, 255 - g);
+    analogWrite(RGBLED_BLUE, 255 - b);
+#else
+    analogWrite(RGBLED_RED, r);
+    analogWrite(RGBLED_GREEN, g);
+    analogWrite(RGBLED_BLUE, b);
+#endif
+
+    // Schedule LED off after duration
+    uint32_t now = millis();
+    rgbLedOffTime = now + duration_ms;
+    rgbLedActive = true;
+#endif
+}
+
+/**
+ * Turn off RGB LED (called periodically)
+ */
+void SignalRoutingModule::updateRgbLed()
+{
+#if defined(HAS_RGB_LED)
+    if (rgbLedActive && millis() >= rgbLedOffTime) {
+#ifdef RGBLED_CA
+        analogWrite(RGBLED_RED, 255);   // CA type: high = off
+        analogWrite(RGBLED_GREEN, 255);
+        analogWrite(RGBLED_BLUE, 255);
+#else
+        analogWrite(RGBLED_RED, 0);     // Regular: low = off
+        analogWrite(RGBLED_GREEN, 0);
+        analogWrite(RGBLED_BLUE, 0);
+#endif
+        rgbLedActive = false;
+    }
+#endif
 }
