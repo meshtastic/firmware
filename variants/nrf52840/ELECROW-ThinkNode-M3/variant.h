@@ -57,7 +57,6 @@ extern "C" {
 #define LED_BLUE 37
 #define LED_PAIRING LED_BLUE // Signals the Status LED Module to handle this LED
 
-#define LED_BUILTIN -1
 #define LED_STATE_ON LOW
 #define LED_STATE_OFF HIGH
 

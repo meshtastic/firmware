@@ -48,7 +48,6 @@ extern "C" {
 
 #define PIN_LED1 (0 + 24) // P0.24
 #define LED_PIN PIN_LED1
-#define LED_BUILTIN -1
 #define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 

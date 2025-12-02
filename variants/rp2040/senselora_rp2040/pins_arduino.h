@@ -13,7 +13,6 @@ static const uint8_t A3 = PIN_A3;
 // LEDs
 #define PIN_LED (23u)
 #define PIN_LED1 PIN_LED
-#define LED_BUILTIN PIN_LED
 
 #define ADC_RESOLUTION 12
 
