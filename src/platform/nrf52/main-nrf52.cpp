@@ -465,6 +465,13 @@ void cpuDeepSleep(uint32_t msecToWake)
             ;
 #endif
 
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
+        // enforce the rules of minimum_broadcast_secs of the detectionSensorModule. simply by delaying deep sleep
+        // in a low power mode delay
+        if (detectionSensorModule != nullptr && detectionSensorModule->shouldSleep())
+            detectionSensorModule->lpDelay();
+#endif
+
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");

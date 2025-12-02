@@ -315,6 +315,12 @@ boolean DetectionSensorModule::shouldSleep()
     return moduleConfig.detection_sensor.enabled && config.power.is_power_saving && moduleConfig.detection_sensor.monitor_pin > 0;
 }
 
+void DetectionSensorModule::lpDelay()
+{
+    sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+    delay(moduleConfig.detection_sensor.minimum_broadcast_secs - config.power.min_wake_secs);
+}
+
 void DetectionSensorModule::lpLoop(uint32_t msecToWake)
 {
     for (uint32_t i = msecToWake / 100;; i--) {

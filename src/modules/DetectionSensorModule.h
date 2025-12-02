@@ -15,6 +15,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
 
 #ifdef ARCH_NRF52
     boolean shouldSleep();
+    void lpDelay();
     void lpLoop(uint32_t msecToWake);
 #elif defined(ESP32_WITH_EXT0)
     bool skipGPIO(int gpio);
