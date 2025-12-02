@@ -102,6 +102,20 @@ private:
      * Build a SignalRoutingInfo packet with our current neighbor data
      */
     void buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &info);
+
+    /**
+     * Flash RGB LED for Signal Routing notifications
+     */
+    void flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms = 200);
+
+    /**
+     * Turn off RGB LED when timer expires
+     */
+    void updateRgbLed();
+
+    // RGB LED timing
+    bool rgbLedActive = false;
+    uint32_t rgbLedOffTime = 0;
 };
 
 extern SignalRoutingModule *signalRoutingModule;
