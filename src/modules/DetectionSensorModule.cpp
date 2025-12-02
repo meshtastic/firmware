@@ -112,7 +112,9 @@ int32_t DetectionSensorModule::runOnce()
                     sendDetectionMessage();
                 } else if (regret == BOOT_FROM_TIMEOUT) {
                     LOG_INFO("Woke up by timeout.");
-                    sendCurrentStateMessage(getState());
+                    // only send if set a sleep timeout ourself. else so other module triggered it
+                    if (moduleConfig.detection_sensor.state_broadcast_secs)
+                        sendCurrentStateMessage(getState());
                 } else if (regret == BOOT_FROM_GPIOEVENT) {
                     LOG_INFO("Woke up from interval sleep by GPIO.");
                     sendDetectionMessage();
@@ -159,8 +161,10 @@ int32_t DetectionSensorModule::runOnce()
                     }
                     break;
                 case ESP_SLEEP_WAKEUP_TIMER:
-                    LOG_INFO("Woke up by timeout. Sending state message.");
-                    sendCurrentStateMessage(getState());
+                    // only send if set a sleep timeout ourself. else so other module triggered it
+                    LOG_INFO("Woke up by timeout.");
+                    if (moduleConfig.detection_sensor.state_broadcast_secs)
+                        sendCurrentStateMessage(getState());
                     break;
                 case ESP_SLEEP_WAKEUP_TOUCHPAD:
                 case ESP_SLEEP_WAKEUP_ULP:
