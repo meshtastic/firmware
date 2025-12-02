@@ -15,6 +15,13 @@
 constexpr uint32_t BOOT_FROM_COLD = 0x00;
 constexpr uint32_t BOOT_FROM_TIMEOUT = 0xC0;
 constexpr uint32_t BOOT_FROM_GPIOEVENT = 0xFE;
+#elif defined(ESP32_WITH_EXT0)
+#include "esp32/clk.h"
+#include "sleep.h"
+#include "soc/rtc.h"
+#include <driver/rtc_io.h>
+RTC_DATA_ATTR static uint32_t time_acc_s = 0;
+RTC_DATA_ATTR static uint32_t sleepTime_s;
 #endif
 
 DetectionSensorModule *detectionSensorModule;
@@ -98,24 +105,22 @@ int32_t DetectionSensorModule::runOnce()
                     // necessary if softdevice is not enabled yet
                     regret = NRF_POWER->GPREGRET;
                 }
-
                 if (NRF_P0->LATCH || NRF_P1->LATCH) {
-                    LOG_INFO("Woke up from eternal sleep by GPIO. Sending message.",
-                             __builtin_ctz(NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH), NRF_P0->LATCH ? 0 : 1);
+                    LOG_INFO("Woke up from eternal sleep by GPIO.", __builtin_ctz(NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH),
+                             NRF_P0->LATCH ? 0 : 1);
                     NRF_P1->LATCH = 0xFFFFFFFF;
                     NRF_P0->LATCH = 0xFFFFFFFF;
                     sendDetectionMessage();
                 } else if (regret == BOOT_FROM_TIMEOUT) {
-                    LOG_INFO("Woke up by timeout. Sending state message.");
+                    LOG_INFO("Woke up by timeout.");
                     sendCurrentStateMessage(getState());
                 } else if (regret == BOOT_FROM_GPIOEVENT) {
-                    LOG_INFO("Woke up from interval sleep by GPIO. Sending detection message.");
+                    LOG_INFO("Woke up from interval sleep by GPIO.");
                     sendDetectionMessage();
                 } else {
                     // We booted fresh. Enforce sending on first detection event.
                     lastSentToMesh = -Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs);
                 }
-
                 if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS)) {
                     NRF_POWER->GPREGRET = BOOT_FROM_COLD;
                 }
@@ -127,6 +132,67 @@ int32_t DetectionSensorModule::runOnce()
                 // Device Telemetry is sent after ~62s.
                 return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
             } else
+#elif defined(ESP32_WITH_EXT0)
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+
+                esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
+                uint64_t timeNow_us;
+                uint32_t timeDiff_s;
+
+                switch (wakeCause) {
+                case ESP_SLEEP_WAKEUP_EXT0:
+                case ESP_SLEEP_WAKEUP_EXT1:
+                    LOG_INFO("Woke up from interval sleep by GPIO. Sending detection message.");
+                    timeNow_us = rtc_time_slowclk_to_us(rtc_time_get(), esp_clk_slowclk_cal_get());
+                    timeDiff_s = (timeNow_us / 1000000 - sleepTime_s) + config.power.min_wake_secs;
+                    // LOG_INFO("sleeptime (effectivly lastSentToMesh): %u", timeDiff_s - config.power.min_wake_secs);
+                    // LOG_INFO("time since last run (effectivly lastSentToMesh): %us", timeDiff_s);
+
+                    if (timeDiff_s + time_acc_s > moduleConfig.detection_sensor.minimum_broadcast_secs) {
+                        // LOG_INFO("sending as %u > %u", timeDiff_s + time_acc_s,
+                        //          moduleConfig.detection_sensor.minimum_broadcast_secs);
+                        time_acc_s = 0;
+                        sendDetectionMessage();
+                    } else {
+                        // LOG_INFO("not sending as did not reach broadcast threshold. %us < %us", timeDiff_s + time_acc_s,
+                        //          moduleConfig.detection_sensor.minimum_broadcast_secs);
+                        time_acc_s += timeDiff_s;
+                    }
+                    break;
+                case ESP_SLEEP_WAKEUP_TIMER:
+                    LOG_INFO("Woke up by timeout. Sending state message.");
+                    sendCurrentStateMessage(getState());
+                    break;
+                case ESP_SLEEP_WAKEUP_TOUCHPAD:
+                case ESP_SLEEP_WAKEUP_ULP:
+                default:
+                    // We booted fresh. Enforce sending on first detection event.
+                    LOG_INFO("Cold boot. Init in power saving mode");
+                    break;
+                }
+
+                if (rtc_gpio_is_valid_gpio((gpio_num_t)moduleConfig.detection_sensor.monitor_pin)) {
+                    if (moduleConfig.detection_sensor.use_pullup) {
+                        rtc_gpio_pulldown_dis((gpio_num_t)moduleConfig.detection_sensor.monitor_pin);
+                        rtc_gpio_pullup_en((gpio_num_t)moduleConfig.detection_sensor.monitor_pin);
+                    } else {
+                        rtc_gpio_pulldown_dis((gpio_num_t)moduleConfig.detection_sensor.monitor_pin);
+                        rtc_gpio_pullup_dis((gpio_num_t)moduleConfig.detection_sensor.monitor_pin);
+                    }
+                    if (esp_sleep_enable_ext0_wakeup((gpio_num_t)moduleConfig.detection_sensor.monitor_pin,
+                                                     (moduleConfig.detection_sensor.detection_trigger_type & 1) ? 1 : 0) !=
+                        ESP_OK)
+                        LOG_ERROR("error enabling ext0 on gpio %d", moduleConfig.detection_sensor.monitor_pin);
+                    return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
+                } else {
+                    LOG_WARN("Enabled, but specified pin is not an RTC pin. Disabling module");
+                    printRtcPins();
+                    return disable();
+                }
+            } else
+#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32H2)
+            LOG_WARN("Enabled, but used ESP32 variant lacks necessary EXT0. Disabling module");
+            return disable();
 #endif
                 pinMode(moduleConfig.detection_sensor.monitor_pin,
                         moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
@@ -139,13 +205,19 @@ int32_t DetectionSensorModule::runOnce()
         return setStartDelay();
     }
 
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52) || defined(ESP32_WITH_EXT0)
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
-        // if a 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_secs) is specified it will be used, if
-        // unset the sleep will be forever in the first case the module enters a low power mode, in the 2nd case it will shutdown
-        // with least power consumption possible
+        // If 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_secs) is specified it will be used, if
+        // unset the sleep will last 'forever', interrupted by specified GPIO event
+        // nRF52: Using a timeout the module enters a low power loop, without it will shutdown with least power consumption
+        // ESP32: Always using deep sleep with RTC
+        // TODO: check why DELAY_FOREVER does not work on ESP
         uint32_t nightyNightMs =
-            Default::getConfiguredOrDefault(moduleConfig.detection_sensor.state_broadcast_secs * 1000, DELAY_FOREVER);
+            Default::getConfiguredOrDefault(moduleConfig.detection_sensor.state_broadcast_secs * 1000, portMAX_DELAY);
+
+#ifdef ESP32_WITH_EXT0
+        sleepTime_s = rtc_time_slowclk_to_us(rtc_time_get(), esp_clk_slowclk_cal_get()) / 1000000;
+#endif
         doDeepSleep(nightyNightMs, false, true);
     }
 #endif
@@ -235,16 +307,15 @@ boolean DetectionSensorModule::getState()
 bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = getState();
-    // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
     return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
 }
 
+#ifdef ARCH_NRF52
 boolean DetectionSensorModule::shouldSleep()
 {
     return moduleConfig.detection_sensor.enabled && config.power.is_power_saving && moduleConfig.detection_sensor.monitor_pin > 0;
 }
 
-#ifdef ARCH_NRF52
 void DetectionSensorModule::lpLoop(uint32_t msecToWake)
 {
     for (uint32_t i = msecToWake / 100;; i--) {
@@ -266,5 +337,22 @@ void DetectionSensorModule::lpLoop(uint32_t msecToWake)
             break;
         }
     }
+}
+#elif defined(ESP32_WITH_EXT0)
+void DetectionSensorModule::printRtcPins()
+{
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    LOG_WARN("Available GPIOs for wakeup: 0,2,4,12-15,25-27,32-39");
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+    LOG_WARN("Available GPIOs for wakeup: 0-21");
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    LOG_WARN("Available GPIOs for wakeup: 0-21");
+#endif
+}
+
+bool DetectionSensorModule::skipGPIO(int gpio)
+{
+    return moduleConfig.detection_sensor.enabled && config.power.is_power_saving &&
+           moduleConfig.detection_sensor.monitor_pin == gpio;
 }
 #endif
