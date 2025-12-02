@@ -360,4 +360,10 @@ bool DetectionSensorModule::skipGPIO(int gpio)
     return moduleConfig.detection_sensor.enabled && config.power.is_power_saving &&
            moduleConfig.detection_sensor.monitor_pin == gpio;
 }
+#else
+bool DetectionSensorModule::skipGPIO(int gpio)
+{
+    // always return false for ESP32s without EXT0 (e.g ESP32c6)
+    return false;
+}
 #endif

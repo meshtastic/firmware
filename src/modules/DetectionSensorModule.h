@@ -17,7 +17,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     boolean shouldSleep();
     void lpDelay();
     void lpLoop(uint32_t msecToWake);
-#elif defined(ESP32_WITH_EXT0)
+#else
     bool skipGPIO(int gpio);
 #endif
 
@@ -32,10 +32,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     void sendCurrentStateMessage(bool state);
     bool hasDetectionEvent();
     boolean getState();
-#ifdef ESP32_WITH_EXT0
-    bool isRtcGpio(int gpio);
     void printRtcPins();
-#endif
 };
 
 extern DetectionSensorModule *detectionSensorModule;
