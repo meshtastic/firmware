@@ -1,6 +1,8 @@
 #pragma once
 #include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
+#include <unordered_map>
+#include <vector>
 
 class Graph;
 
@@ -81,6 +83,11 @@ private:
     Graph *routingGraph;
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
+    static constexpr uint32_t HEARTBEAT_FLASH_MS = 60;
+    static constexpr uint32_t CAPABILITY_TTL_SECS = 600;
+    static constexpr float MIN_CAPABLE_RATIO = 0.4f;
+    static constexpr size_t MIN_CAPABLE_NODES = 3;
+    static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
 
     // Signal-based routing enabled by default
     bool signalBasedRoutingEnabled = true;
@@ -96,7 +103,7 @@ private:
     /**
      * Calculate percentage of signal-based capable nodes
      */
-    float getSignalBasedCapablePercentage();
+    float getSignalBasedCapablePercentage() const;
 
     /**
      * Build a SignalRoutingInfo packet with our current neighbor data
@@ -107,7 +114,7 @@ private:
      * Flash RGB LED for Signal Routing notifications
      * 
      * Color meanings:
-     *   White (dim, breathing) - Heartbeat (idle indicator)
+     *   White (dim pulse)      - Heartbeat (idle indicator)
      *   Purple (128,0,128)     - Direct packet received from neighbor
      *   Orange (255,128,0)     - Relay decision: YES (relaying broadcast)
      *   Red (255,0,0)          - Relay decision: NO (suppressing relay)
@@ -128,13 +135,52 @@ private:
     uint32_t lastFlashTime = 0;
     static constexpr uint32_t MIN_FLASH_INTERVAL_MS = 500;   // Minimum time between flashes
 
-    // Heartbeat timing and breathing effect
+    // Heartbeat timing
     uint32_t lastHeartbeatTime = 0;
     uint32_t lastNotificationTime = 0;
     uint32_t heartbeatIntervalMs = 2000;                     // Configurable, default 2 seconds
-    static constexpr uint32_t HEARTBEAT_BREATH_DURATION_MS = 600; // Total breath cycle duration
-    bool heartbeatBreathing = false;
-    uint32_t heartbeatBreathStart = 0;
+
+    enum class CapabilityStatus : uint8_t {
+        Unknown = 0,
+        Capable,
+        Legacy
+    };
+
+    struct CapabilityRecord {
+        CapabilityStatus status = CapabilityStatus::Unknown;
+        uint32_t lastUpdated = 0;
+    };
+
+    struct RelayIdentityEntry {
+        NodeNum nodeId = 0;
+        uint32_t lastHeardMs = 0;
+    };
+
+    struct SpeculativeRetransmitEntry {
+        uint64_t key = 0;
+        NodeNum origin = 0;
+        uint32_t packetId = 0;
+        uint32_t expiryMs = 0;
+        meshtastic_MeshPacket *packetCopy = nullptr;
+    };
+
+    std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
+    std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
+    std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
+
+    void trackNodeCapability(NodeNum nodeId, CapabilityStatus status);
+    void pruneCapabilityCache(uint32_t nowSecs);
+    CapabilityStatus getCapabilityStatus(NodeNum nodeId) const;
+    bool topologyHealthyForBroadcast() const;
+    bool topologyHealthyForUnicast(NodeNum destination) const;
+    bool isLegacyRouter(NodeNum nodeId) const;
+    void rememberRelayIdentity(NodeNum nodeId, uint8_t relayId);
+    void pruneRelayIdentityCache(uint32_t nowMs);
+    NodeNum resolveRelayIdentity(uint8_t relayId) const;
+    NodeNum resolveHeardFrom(const meshtastic_MeshPacket *p, NodeNum sourceNode) const;
+    void processSpeculativeRetransmits(uint32_t nowMs);
+    void cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId);
+    static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
 };
 
 extern SignalRoutingModule *signalRoutingModule;
