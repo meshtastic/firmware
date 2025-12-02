@@ -5,6 +5,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "power/PowerHAL.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
 #include "ReliableRouter.h"
@@ -296,22 +297,18 @@ void lateInitVariant() {}
 // This detection is independent from whatever ADC or dividers used in Meshtastic
 // boards and is internal to chip.
 
-// Other platforms or variants can define it too - by knowing board's LDO cutoff voltage and measuring
-// battery pin using ADC.
+// we use powerHAL layer to get this info and delay booting until power level is safe
 
-__attribute__((weak, noinline)) bool isPowerLevelSafe() { return true;}
-
-// wait until isPowerLevelSafe() reports true
+// wait until power level is safe to continue booting (to avoid bootloops)
 // blink user led in 3 flashes sequence to indicate what is happening
 void waitUntilPowerLevelSafe(){
 
- //   pinMode(POWER_LED, OUTPUT);
-  //  digitalWrite(POWER_LED, HIGH ^ LED_STATE_ON);
 
-   pinMode(LED_PIN, OUTPUT);
+    #ifdef LED_PIN
+        pinMode(LED_PIN, OUTPUT);
+    #endif
 
-    while(isPowerLevelSafe() == false){
-
+    while(powerHAL_isPowerLevelSafe() == false){
 
         #ifdef LED_PIN
 
@@ -319,9 +316,9 @@ void waitUntilPowerLevelSafe(){
 
         for(int i=0;i<3;i++){
              digitalWrite(LED_PIN, LED_STATE_ON);
-             delay(500);
+             delay(300);
              digitalWrite(LED_PIN, LED_STATE_OFF);
-             delay(500);
+             delay(300);
         }
         #endif
 
@@ -344,6 +341,8 @@ void printInfo()
 void setup()
 {
 
+    // initialize power HAL layer as early as possible
+    powerHAL_init();
 
     // prevent booting if device is in power failure mode
     // boot sequence will follow when battery level raises to safe mode
