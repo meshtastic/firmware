@@ -410,7 +410,7 @@ void cpuDeepSleep(uint32_t msecToWake)
          config.power.is_power_saving == true)) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
 #ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
-        if (detectionSensorModule != nullptr && detectionSensorModule->shouldSleep()) {
+        if (detectionSensorModule != nullptr && detectionSensorModule->shouldLoop()) {
             detectionSensorModule->lpLoop(msecToWake);
         } else
 #endif
@@ -468,7 +468,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
         // enforce the rules of minimum_broadcast_secs of the detectionSensorModule. simply by delaying deep sleep
         // in a low power mode delay
-        if (detectionSensorModule != nullptr && detectionSensorModule->shouldSleep())
+        if (detectionSensorModule != nullptr && detectionSensorModule->shouldLoop())
             detectionSensorModule->lpDelay();
 #endif
 

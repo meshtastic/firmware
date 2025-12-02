@@ -14,7 +14,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     }
 
 #ifdef ARCH_NRF52
-    boolean shouldSleep();
+    boolean shouldLoop();
     void lpDelay();
     void lpLoop(uint32_t msecToWake);
 #else

@@ -310,7 +310,7 @@ bool DetectionSensorModule::hasDetectionEvent()
 }
 
 #ifdef ARCH_NRF52
-boolean DetectionSensorModule::shouldSleep()
+boolean DetectionSensorModule::shouldLoop()
 {
     return moduleConfig.detection_sensor.enabled && config.power.is_power_saving && moduleConfig.detection_sensor.monitor_pin > 0;
 }
