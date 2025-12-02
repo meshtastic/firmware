@@ -345,6 +345,11 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
     }
 
+    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
+        handleNodeInfoPacket(mp);
+    }
+
     // Periodic graph maintenance
     if (routingGraph) {
         uint32_t currentTime = getValidTime(RTCQualityFromNet);
@@ -616,6 +621,44 @@ void SignalRoutingModule::updateRgbLed()
         rgbLedActive = false;
     }
 #endif
+}
+
+void SignalRoutingModule::handleNodeInfoPacket(const meshtastic_MeshPacket &mp)
+{
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &user)) {
+        return;
+    }
+
+    CapabilityStatus status = capabilityFromRole(user.role);
+    if (status != CapabilityStatus::Unknown) {
+        trackNodeCapability(mp.from, status);
+    }
+
+    if (user.has_is_unmessagable && user.is_unmessagable) {
+        trackNodeCapability(mp.from, CapabilityStatus::Legacy);
+    }
+}
+
+SignalRoutingModule::CapabilityStatus SignalRoutingModule::capabilityFromRole(
+    meshtastic_Config_DeviceConfig_Role role) const
+{
+    switch (role) {
+    case meshtastic_Config_DeviceConfig_Role_ROUTER:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
+        return CapabilityStatus::Capable;
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE:
+    case meshtastic_Config_DeviceConfig_Role_TRACKER:
+    case meshtastic_Config_DeviceConfig_Role_SENSOR:
+    case meshtastic_Config_DeviceConfig_Role_TAK:
+    case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+    case meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND:
+        return CapabilityStatus::Legacy;
+    default:
+        return CapabilityStatus::Unknown;
+    }
 }
 
 void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus status)
