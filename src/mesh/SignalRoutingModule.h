@@ -2,6 +2,7 @@
 #include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <unordered_map>
 #include <vector>
 
@@ -184,6 +185,10 @@ private:
     static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;
+    void handleSniffedPayload(const meshtastic_MeshPacket &mp, bool isDirectNeighbor);
+    void handlePositionPacket(const meshtastic_MeshPacket &mp, bool isDirectNeighbor);
+    void handleTelemetryPacket(const meshtastic_MeshPacket &mp);
+    void handleRoutingControlPacket(const meshtastic_MeshPacket &mp);
 };
 
 extern SignalRoutingModule *signalRoutingModule;

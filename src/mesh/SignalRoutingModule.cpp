@@ -345,9 +345,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
     }
 
-    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
-        handleNodeInfoPacket(mp);
+    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        handleSniffedPayload(mp, hasSignalData && notViaMqtt && isDirectFromSender);
     }
 
     // Periodic graph maintenance
@@ -638,6 +637,138 @@ void SignalRoutingModule::handleNodeInfoPacket(const meshtastic_MeshPacket &mp)
     if (user.has_is_unmessagable && user.is_unmessagable) {
         trackNodeCapability(mp.from, CapabilityStatus::Legacy);
     }
+}
+
+void SignalRoutingModule::handleSniffedPayload(const meshtastic_MeshPacket &mp, bool isDirectNeighbor)
+{
+    switch (mp.decoded.portnum) {
+    case meshtastic_PortNum_NODEINFO_APP:
+        handleNodeInfoPacket(mp);
+        break;
+    case meshtastic_PortNum_POSITION_APP:
+        handlePositionPacket(mp, isDirectNeighbor);
+        break;
+    case meshtastic_PortNum_TELEMETRY_APP:
+        handleTelemetryPacket(mp);
+        break;
+    case meshtastic_PortNum_ROUTING_APP:
+        handleRoutingControlPacket(mp);
+        break;
+    default:
+        break;
+    }
+}
+
+void SignalRoutingModule::handlePositionPacket(const meshtastic_MeshPacket &mp, bool isDirectNeighbor)
+{
+    meshtastic_Position position = meshtastic_Position_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &position)) {
+        return;
+    }
+
+    char senderName[64];
+    getNodeDisplayName(mp.from, senderName, sizeof(senderName));
+
+    double latitude = position.has_latitude_i ? position.latitude_i / 1e7 : 0.0;
+    double longitude = position.has_longitude_i ? position.longitude_i / 1e7 : 0.0;
+    uint32_t dop = position.PDOP;
+    uint32_t speed = position.has_ground_speed ? position.ground_speed : 0;
+
+    LOG_DEBUG("SignalRouting: Position packet from %s (direct=%s) lat=%.5f lon=%.5f speed=%u m/s PDOP=%u",
+              senderName, isDirectNeighbor ? "true" : "false", latitude, longitude, speed, dop);
+
+    if (isDirectNeighbor && mp.rx_rssi != 0) {
+        uint32_t variance = 0;
+        if (position.gps_accuracy && position.PDOP) {
+            uint32_t dopFactor = std::max<uint32_t>(1, position.PDOP / 100);
+            variance = std::min<uint32_t>(3000, (position.gps_accuracy / 1000) * dopFactor);
+        } else if (position.has_ground_speed && position.ground_speed) {
+            variance = std::min<uint32_t>(3000, position.ground_speed * 5);
+        }
+
+        if (variance > 0) {
+            updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time, variance);
+        }
+    }
+}
+
+void SignalRoutingModule::handleTelemetryPacket(const meshtastic_MeshPacket &mp)
+{
+    meshtastic_Telemetry telemetry = meshtastic_Telemetry_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Telemetry_msg, &telemetry)) {
+        return;
+    }
+
+    char senderName[64];
+    getNodeDisplayName(mp.from, senderName, sizeof(senderName));
+
+    switch (telemetry.which_variant) {
+    case meshtastic_Telemetry_device_metrics_tag: {
+        const meshtastic_DeviceMetrics &metrics = telemetry.variant.device_metrics;
+        int battery = metrics.has_battery_level ? static_cast<int>(metrics.battery_level) : 0;
+        float voltage = metrics.has_voltage ? metrics.voltage : 0.0f;
+        float air = metrics.has_air_util_tx ? metrics.air_util_tx : 0.0f;
+        LOG_DEBUG("SignalRouting: Device metrics from %s batt=%s%d%% volt=%s%.2fV airUtil=%s%.1f%%",
+                  senderName, metrics.has_battery_level ? "" : "~", battery, metrics.has_voltage ? "" : "~", voltage,
+                  metrics.has_air_util_tx ? "" : "~", air);
+        break;
+    }
+    case meshtastic_Telemetry_environment_metrics_tag: {
+        const meshtastic_EnvironmentMetrics &env = telemetry.variant.environment_metrics;
+        LOG_DEBUG("SignalRouting: Environment metrics from %s temp=%s%.1fC humidity=%s%.1f%% pressure=%s%.1fhPa",
+                  senderName, env.has_temperature ? "" : "~",
+                  env.has_temperature ? env.temperature : 0.0f, env.has_relative_humidity ? "" : "~",
+                  env.has_relative_humidity ? env.relative_humidity : 0.0f, env.has_barometric_pressure ? "" : "~",
+                  env.has_barometric_pressure ? env.barometric_pressure : 0.0f);
+        break;
+    }
+    case meshtastic_Telemetry_air_quality_metrics_tag:
+    case meshtastic_Telemetry_power_metrics_tag:
+    case meshtastic_Telemetry_local_stats_tag:
+    case meshtastic_Telemetry_health_metrics_tag:
+    case meshtastic_Telemetry_host_metrics_tag:
+        LOG_DEBUG("SignalRouting: Telemetry variant %u from %s", telemetry.which_variant, senderName);
+        break;
+    default:
+        LOG_DEBUG("SignalRouting: Unknown telemetry variant %u from %s", telemetry.which_variant, senderName);
+        break;
+    }
+
+    CapabilityStatus currentStatus = getCapabilityStatus(mp.from);
+    if (currentStatus == CapabilityStatus::Unknown) {
+        trackNodeCapability(mp.from, CapabilityStatus::Legacy);
+    } else {
+        trackNodeCapability(mp.from, currentStatus);
+    }
+}
+
+void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket &mp)
+{
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Routing_msg, &routing)) {
+        return;
+    }
+
+    char senderName[64];
+    getNodeDisplayName(mp.from, senderName, sizeof(senderName));
+
+    switch (routing.which_variant) {
+    case meshtastic_Routing_route_request_tag:
+        LOG_DEBUG("SignalRouting: Routing request from %s with %u hops recorded", senderName,
+                  routing.route_request.route_count);
+        break;
+    case meshtastic_Routing_route_reply_tag:
+        LOG_DEBUG("SignalRouting: Routing reply from %s for %u hops", senderName, routing.route_reply.route_back_count);
+        break;
+    case meshtastic_Routing_error_reason_tag:
+        LOG_WARN("SignalRouting: Routing error from %s reason=%u", senderName, routing.error_reason);
+        break;
+    default:
+        LOG_DEBUG("SignalRouting: Routing control variant %u from %s", routing.which_variant, senderName);
+        break;
+    }
+
+    trackNodeCapability(mp.from, CapabilityStatus::Capable);
 }
 
 SignalRoutingModule::CapabilityStatus SignalRoutingModule::capabilityFromRole(
