@@ -131,7 +131,18 @@ int32_t SignalRoutingModule::runOnce()
         timeToSpeculative = soonest;
     }
 
-    uint32_t nextDelay = std::min({timeToHeartbeat, timeToBroadcast, timeToSpeculative});
+    uint32_t timeToLed = UINT32_MAX;
+#if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
+    if (rgbLedActive) {
+        if (rgbLedOffTime > nowMs) {
+            timeToLed = rgbLedOffTime - nowMs;
+        } else {
+            timeToLed = 0;
+        }
+    }
+#endif
+
+    uint32_t nextDelay = std::min({timeToHeartbeat, timeToBroadcast, timeToSpeculative, timeToLed});
     if (nextDelay < 20) {
         nextDelay = 20;
     }
