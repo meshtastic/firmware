@@ -69,7 +69,11 @@ using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
 
+#if USE_TFTDISPLAY
 extern uint16_t TFT_MESH;
+#else
+uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"

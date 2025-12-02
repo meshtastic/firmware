@@ -34,6 +34,9 @@
 #define LORA_PA_EN 2
 #define LORA_PA_TX_EN 46 // enable tx
 
+#if HAS_TFT
+#define USE_TFTDISPLAY 1
+#endif
 /*
  * GPS pins
  */

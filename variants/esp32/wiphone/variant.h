@@ -34,6 +34,7 @@
 #define ST7789_SCK 18
 #define ST7789_CS 5
 #define ST7789_RS 26
+#define USE_TFTDISPLAY 1
 // I don't have a 'wiphone' but this I think should not be defined this way (don't set TFT_BL if we don't have a hw way to control
 // it)
 // #define ST7789_BL -1 // EXTENDER_PIN(9)
