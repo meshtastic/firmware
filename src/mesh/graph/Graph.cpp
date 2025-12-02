@@ -134,6 +134,15 @@ void Graph::ageEdges(uint32_t currentTime) {
             ++it;
         }
     }
+
+    // Age relay states - remove old transmission records
+    for (auto it = relayStates.begin(); it != relayStates.end();) {
+        if ((currentTime - it->second.lastTxTime) > RELAY_STATE_TIMEOUT_MS) {
+            it = relayStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 Route Graph::calculateRoute(NodeNum destination, uint32_t currentTime) {
@@ -460,4 +469,274 @@ bool Graph::shouldRelay(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, u
 
     // We're not the best relay - let the best one handle it
     return false;
+}
+
+void Graph::recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) {
+    relayStates[nodeId] = RelayState(currentTime, packetId);
+    LOG_DEBUG("Graph: Recorded transmission from node %08x for packet %08x at time %u", nodeId, packetId, currentTime);
+}
+
+bool Graph::hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) const {
+    auto it = relayStates.find(nodeId);
+    if (it == relayStates.end()) {
+        LOG_DEBUG("Graph: Node %08x has no recent transmission record", nodeId);
+        return false;  // Node hasn't transmitted anything recently
+    }
+
+    const RelayState& state = it->second;
+
+    // If it's a different packet, they haven't transmitted for this one
+    if (state.packetId != packetId) {
+        LOG_DEBUG("Graph: Node %08x transmitted for different packet %08x (current: %08x)", nodeId, state.packetId, packetId);
+        return false;
+    }
+
+    // Check if transmission was within the contention window
+    uint32_t timeSinceTx = currentTime - state.lastTxTime;
+    bool hasTransmitted = timeSinceTx <= CONTENTION_WINDOW_MS;
+    LOG_DEBUG("Graph: Node %08x %s transmitted for packet %08x (%ums ago, window: %ums)",
+              nodeId, hasTransmitted ? "HAS" : "has NOT", packetId, timeSinceTx, CONTENTION_WINDOW_MS);
+    return hasTransmitted;
+}
+
+std::vector<RelayCandidate> Graph::findAllRelayCandidates(const std::unordered_set<NodeNum>& alreadyCovered,
+                                                         const std::unordered_set<NodeNum>& candidates,
+                                                         uint32_t currentTime, uint32_t packetId) const {
+    std::vector<RelayCandidate> relayCandidates;
+
+    LOG_DEBUG("Graph: Finding relay candidates from %zu potential nodes", candidates.size());
+
+    for (NodeNum candidate : candidates) {
+        // Skip candidates that have already transmitted for this packet
+        if (hasNodeTransmitted(candidate, packetId, currentTime)) {
+            continue;
+        }
+
+        auto newCoverage = getCoverageIfRelays(candidate, alreadyCovered);
+        size_t coverageCount = newCoverage.size();
+
+        if (coverageCount == 0) {
+            LOG_DEBUG("Graph: Candidate %08x provides no additional coverage", candidate);
+            continue;
+        }
+
+        // Calculate average cost to covered nodes
+        float totalCost = 0;
+        for (NodeNum covered : newCoverage) {
+            totalCost += getEdgeCost(candidate, covered, currentTime);
+        }
+        float avgCost = totalCost / coverageCount;
+
+        relayCandidates.emplace_back(candidate, coverageCount, avgCost, 0);  // Tier will be set later
+        LOG_DEBUG("Graph: Candidate %08x covers %zu nodes with avg cost %.2f", candidate, coverageCount, avgCost);
+    }
+
+    // Sort candidates by coverage (descending) then cost (ascending)
+    std::sort(relayCandidates.begin(), relayCandidates.end(),
+              [](const RelayCandidate& a, const RelayCandidate& b) {
+                  if (a.coverageCount != b.coverageCount) return a.coverageCount > b.coverageCount;
+                  return a.avgCost < b.avgCost;
+              });
+
+    // Assign tiers: top coverage gets tier 0, next get tier 1, etc.
+    int currentTier = 0;
+    size_t currentTierCoverage = 0;
+    for (auto& candidate : relayCandidates) {
+        if (candidate.coverageCount < currentTierCoverage) {
+            currentTier++;
+            if (currentTier >= MAX_RELAY_TIERS) break;
+        }
+        candidate.tier = currentTier;
+        currentTierCoverage = candidate.coverageCount;
+        LOG_DEBUG("Graph: Candidate %08x assigned to tier %d (covers %zu nodes)",
+                  candidate.nodeId, candidate.tier, candidate.coverageCount);
+    }
+
+    LOG_DEBUG("Graph: Selected %zu relay candidates across %d tiers", relayCandidates.size(), currentTier + 1);
+    return relayCandidates;
+}
+
+bool Graph::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const {
+    // A node is a gateway if it connects to nodes that are not reachable from the source
+    // through any other path (i.e., it bridges otherwise disconnected components)
+
+    auto gatewayNeighbors = getDirectNeighbors(nodeId);
+    auto sourceNeighbors = getDirectNeighbors(sourceNode);
+
+    LOG_DEBUG("Graph: Checking if %08x is gateway for source %08x (%zu vs %zu neighbors)",
+              nodeId, sourceNode, gatewayNeighbors.size(), sourceNeighbors.size());
+
+    // Check if this node connects to any nodes that the source doesn't connect to
+    // (excluding the gateway node itself)
+    for (NodeNum neighbor : gatewayNeighbors) {
+        if (neighbor == sourceNode) continue;  // Don't count direct connection to source
+
+        // If source doesn't have this neighbor, gateway might be bridging
+        if (sourceNeighbors.find(neighbor) == sourceNeighbors.end()) {
+            // Additional check: see if this neighbor is connected to other nodes
+            // that form a separate component
+            auto neighborNeighbors = getDirectNeighbors(neighbor);
+            bool hasOtherConnections = false;
+            for (NodeNum nn : neighborNeighbors) {
+                if (nn != nodeId && sourceNeighbors.find(nn) == sourceNeighbors.end()) {
+                    hasOtherConnections = true;
+                    break;
+                }
+            }
+            if (hasOtherConnections) {
+                LOG_DEBUG("Graph: Node %08x IS a gateway (bridges to %08x and separate component)", nodeId, neighbor);
+                return true;  // This node bridges to a separate component
+            }
+        }
+    }
+
+    LOG_DEBUG("Graph: Node %08x is NOT a gateway", nodeId);
+    return false;
+}
+
+bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
+                               uint32_t currentTime, uint32_t packetId) const {
+    LOG_DEBUG("Graph: === Relay decision for node %08x, source %08x, heard from %08x, packet %08x ===",
+              myNode, sourceNode, heardFrom, packetId);
+
+    // Build set of nodes that have already "covered" (source + anyone who relayed)
+    std::unordered_set<NodeNum> alreadyCovered;
+    alreadyCovered.insert(sourceNode);
+
+    // Add all nodes that the source can reach directly
+    auto sourceNeighbors = getDirectNeighbors(sourceNode);
+    for (NodeNum n : sourceNeighbors) {
+        alreadyCovered.insert(n);
+    }
+
+    // If we heard from a relayer (not the source), add their coverage too
+    if (heardFrom != sourceNode) {
+        alreadyCovered.insert(heardFrom);
+        auto relayerNeighbors = getDirectNeighbors(heardFrom);
+        for (NodeNum n : relayerNeighbors) {
+            alreadyCovered.insert(n);
+        }
+    }
+
+    LOG_DEBUG("Graph: Already covered: %zu nodes", alreadyCovered.size());
+
+    // Get all nodes that heard this packet (source's neighbors + relayer's neighbors)
+    std::unordered_set<NodeNum> candidates;
+    for (NodeNum n : sourceNeighbors) {
+        candidates.insert(n);
+    }
+    if (heardFrom != sourceNode) {
+        auto relayerNeighbors = getDirectNeighbors(heardFrom);
+        for (NodeNum n : relayerNeighbors) {
+            candidates.insert(n);
+        }
+    }
+
+    LOG_DEBUG("Graph: Potential candidates: %zu nodes", candidates.size());
+
+    // Get all relay candidates with their tiers
+    auto relayCandidates = findAllRelayCandidates(alreadyCovered, candidates, currentTime, packetId);
+
+    if (relayCandidates.empty()) {
+        LOG_DEBUG("Graph: No relay candidates found - not relaying");
+        return false;  // No one can provide additional coverage
+    }
+
+    // Find candidates in tier 0 (primary relays)
+    std::vector<NodeNum> primaryRelays;
+    for (const auto& candidate : relayCandidates) {
+        if (candidate.tier == 0) {
+            primaryRelays.push_back(candidate.nodeId);
+        }
+    }
+
+    LOG_DEBUG("Graph: Found %zu primary relays", primaryRelays.size());
+
+    // Check if we're a primary relay
+    bool isPrimaryRelay = std::find(primaryRelays.begin(), primaryRelays.end(), myNode) != primaryRelays.end();
+    if (isPrimaryRelay) {
+        LOG_DEBUG("Graph: WE ARE PRIMARY RELAY - TRANSMITTING");
+        return true;  // We're a primary relay - transmit
+    }
+
+    // If we're not a primary relay, check if we're a gateway node
+    if (isGatewayNode(myNode, sourceNode)) {
+        LOG_DEBUG("Graph: WE ARE GATEWAY NODE - TRANSMITTING");
+        return true;  // We're a gateway bridging disconnected segments
+    }
+
+    // Check if any primary relays have transmitted
+    bool primaryRelayHasTransmitted = false;
+    for (NodeNum primary : primaryRelays) {
+        if (hasNodeTransmitted(primary, packetId, currentTime)) {
+            primaryRelayHasTransmitted = true;
+            LOG_DEBUG("Graph: Primary relay %08x has transmitted", primary);
+            break;
+        }
+    }
+
+    // If no primary relay has transmitted and we're in tier 1 (backup), transmit
+    if (!primaryRelayHasTransmitted) {
+        for (const auto& candidate : relayCandidates) {
+            if (candidate.tier == 1 && candidate.nodeId == myNode) {
+                LOG_DEBUG("Graph: WE ARE BACKUP RELAY (tier 1) - TRANSMITTING");
+                return true;  // We're the backup relay
+            }
+        }
+    } else {
+        LOG_DEBUG("Graph: Primary relay has transmitted, not checking backup status");
+    }
+
+    // Check if all our direct neighbors are already covered
+    auto myNeighbors = getDirectNeighbors(myNode);
+    bool allNeighborsCovered = true;
+    for (NodeNum neighbor : myNeighbors) {
+        if (alreadyCovered.find(neighbor) == alreadyCovered.end()) {
+            allNeighborsCovered = false;
+            break;
+        }
+    }
+
+    LOG_DEBUG("Graph: Our %zu neighbors - %s covered", myNeighbors.size(),
+              allNeighborsCovered ? "ALL" : "NOT ALL");
+
+    // If all our neighbors are covered and we haven't transmitted yet, don't relay
+    if (allNeighborsCovered && !hasNodeTransmitted(myNode, packetId, currentTime)) {
+        LOG_DEBUG("Graph: All neighbors covered and we haven't transmitted - NOT relaying");
+        return false;
+    }
+
+    // Final check: if we can provide coverage that no higher-tier relay can provide
+    auto myCoverage = getCoverageIfRelays(myNode, alreadyCovered);
+    if (!myCoverage.empty()) {
+        LOG_DEBUG("Graph: We can cover %zu additional nodes", myCoverage.size());
+        // Check if any higher-priority relay can cover these same nodes
+        bool coveredByHigherTier = false;
+        for (const auto& candidate : relayCandidates) {
+            if (candidate.tier <= 1) {  // Check primary and backup relays
+                auto theirCoverage = getCoverageIfRelays(candidate.nodeId, alreadyCovered);
+                bool coversAll = true;
+                for (NodeNum covered : myCoverage) {
+                    if (theirCoverage.find(covered) == theirCoverage.end()) {
+                        coversAll = false;
+                        break;
+                    }
+                }
+                if (coversAll) {
+                    coveredByHigherTier = true;
+                    LOG_DEBUG("Graph: Higher-tier relay %08x covers our nodes", candidate.nodeId);
+                    break;
+                }
+            }
+        }
+        if (!coveredByHigherTier) {
+            LOG_DEBUG("Graph: We provide unique coverage - TRANSMITTING");
+            return true;  // We can cover nodes that higher-tier relays can't
+        }
+    } else {
+        LOG_DEBUG("Graph: We provide no additional coverage");
+    }
+
+    LOG_DEBUG("Graph: No relay condition met - NOT relaying");
+    return false;  // Don't relay
 }

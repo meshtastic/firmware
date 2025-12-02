@@ -166,6 +166,12 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 
         service->sendToMesh(p);
         lastBroadcast = millis();
+
+        // Record our transmission for contention window tracking
+        if (routingGraph) {
+            uint32_t currentTime = getValidTime(RTCQualityFromNet);
+            routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
+        }
     } else {
         LOG_INFO("SignalRouting: No direct neighbors to broadcast from %s (waiting for direct packets)", ourName);
     }
@@ -307,6 +313,12 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // Brief purple flash for any direct packet received
         flashRgbLed(128, 0, 128, 100);
 
+        // Record that this node transmitted (for contention window tracking)
+        if (routingGraph) {
+            uint32_t currentTime = getValidTime(RTCQualityFromNet);
+            routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
+        }
+
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
     }
 
@@ -388,7 +400,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     }
 
     uint32_t currentTime = getValidTime(RTCQualityFromNet);
-    bool shouldRelay = routingGraph->shouldRelay(myNode, sourceNode, heardFrom, currentTime);
+    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
 
     char myName[64], sourceName[64], heardFromName[64];
     getNodeDisplayName(myNode, myName, sizeof(myName));
@@ -398,8 +410,9 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     LOG_INFO("SignalRouting: Broadcast from %s (heard via %s): %s relay",
              sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT");
 
-    // Flash for relay decision: yellow if relaying, red if not relaying
+    // Record our transmission for contention window tracking
     if (shouldRelay) {
+        routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
         flashRgbLed(255, 128, 0, 150); // Orange/yellow for relay
     } else {
         flashRgbLed(255, 0, 0, 100);   // Red for suppressed relay
