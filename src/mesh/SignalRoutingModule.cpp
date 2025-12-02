@@ -681,8 +681,9 @@ void SignalRoutingModule::handlePositionPacket(const meshtastic_MeshPacket &mp, 
     uint32_t dop = position.PDOP;
     uint32_t speed = position.has_ground_speed ? position.ground_speed : 0;
 
-    LOG_DEBUG("SignalRouting: Position packet from %s (direct=%s) lat=%.5f lon=%.5f speed=%u m/s PDOP=%u",
-              senderName, isDirectNeighbor ? "true" : "false", latitude, longitude, speed, dop);
+    LOG_DEBUG("SignalRouting: Position packet from %s (direct=%s) lat=%.5f lon=%.5f speed=%u m/s PDOP=%u "
+              "rssi=%d snr=%.1f",
+              senderName, isDirectNeighbor ? "true" : "false", latitude, longitude, speed, dop, mp.rx_rssi, mp.rx_snr);
 
     if (isDirectNeighbor && mp.rx_rssi != 0) {
         uint32_t variance = 0;
