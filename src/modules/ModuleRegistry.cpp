@@ -28,7 +28,14 @@ void init_dynamic_modules()
     LOG_INFO("Initializing dynamic modules via vector...\n");
 
     // Loop through the collected pointers and execute the setup functions
-    for (ModuleInitFunc func : g_module_init_functions) {
-        func(); // Executes the module's initialization code (e.g., new MyModule())
+    for (size_t i = 0; i < g_module_init_functions.size(); ++i) {
+        ModuleInitFunc func = g_module_init_functions[i];
+        try {
+            func(); // Executes the module's initialization code (e.g., new MyModule())
+        } catch (const std::exception& e) {
+            LOG_ERROR("Module initialization failed at index %zu: %s\n", i, e.what());
+        } catch (...) {
+            LOG_ERROR("Module initialization failed at index %zu: unknown exception\n", i);
+        }
     }
 }
