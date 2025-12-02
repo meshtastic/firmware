@@ -229,7 +229,9 @@ void cpuDeepSleep(uint32_t msecToWake)
         34, 35, 37};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
         if (detectionSensorModule == nullptr || !detectionSensorModule->skipGPIO(rtcGpios[i]))
+#endif
             rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
 #endif
 
