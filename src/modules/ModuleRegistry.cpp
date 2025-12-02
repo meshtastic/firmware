@@ -14,7 +14,9 @@ std::vector<ModuleInitFunc> g_module_init_functions;
 void register_module_initializer(ModuleInitFunc func)
 {
     // This push_back happens during C++ static initialization, before main().
-    g_module_init_functions.push_back(func);
+    if (func) {
+        g_module_init_functions.push_back(func);
+    }
 }
 
 /**
