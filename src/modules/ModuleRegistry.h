@@ -21,7 +21,7 @@ void init_dynamic_modules();
 /**
  * @brief Macro used by module authors to self-register a new Meshtastic Module.
  * This creates a lambda that instantiates the module and automatically applies the constructor attribute.
- * * @param ModuleClassName The name of the module's C++ class (e.g., MySensorModule).
+ * @param ModuleClassName The name of the module's C++ class (e.g., MySensorModule).
  */
 #define MESHTASTIC_REGISTER_MODULE(ModuleClassName)                                                                              \
     static void __attribute__((constructor)) register_##ModuleClassName()                                                        \
