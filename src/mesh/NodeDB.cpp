@@ -673,7 +673,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306)
+    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306) ||         \
+    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -742,6 +743,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
+#endif
+#ifdef COMPASS_ORIENTATION
+    config.display.compass_orientation = COMPASS_ORIENTATION;
 #endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (WiFiOTA::isUpdated()) {
@@ -2260,6 +2264,7 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
 bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
@@ -2274,6 +2279,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     }
     return false;
 }
+#endif
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {

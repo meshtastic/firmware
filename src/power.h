@@ -13,6 +13,7 @@
 #define NUM_OCV_POINTS 11
 #endif
 
+// Device specific curves go in variant.h
 #ifndef OCV_ARRAY
 #ifdef CELL_TYPE_LIFEPO4
 #define OCV_ARRAY 3400, 3350, 3320, 3290, 3270, 3260, 3250, 3230, 3200, 3120, 3000
@@ -24,18 +25,6 @@
 #define OCV_ARRAY 1400, 1300, 1280, 1270, 1260, 1250, 1240, 1230, 1210, 1150, 1000
 #elif defined(CELL_TYPE_LTO)
 #define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
-#elif defined(TRACKER_T1000_E)
-#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
-#elif defined(HELTEC_MESH_POCKET_BATTERY_5000)
-#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
-#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
-#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
-#elif defined(SEEED_WIO_TRACKER_L1)
-#define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
-#elif defined(SEEED_SOLAR_NODE)
-#define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3087, 2786
-#elif defined(R1_NEO)
-#define OCV_ARRAY 4330, 4292, 4254, 4216, 4178, 4140, 4102, 4064, 4026, 3988, 3950
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -138,10 +127,12 @@ class Power : private concurrency::OSThread
     void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
-    int32_t lastLogTime = 0;
+    uint32_t lastLogTime = 0;
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
 };
+
+void battery_adcEnable();
 
 extern Power *power;

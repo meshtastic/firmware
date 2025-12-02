@@ -119,6 +119,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             auto changes = SEGMENT_CONFIG;
 
             // This is needed as we wait til picking the LoRa region to generate keys for the first time.
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
             if (!owner.is_licensed) {
                 bool keygenSuccess = false;
                 if (config.security.private_key.size == 32) {
@@ -139,6 +140,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                     memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
                 }
             }
+#endif
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {
@@ -574,18 +576,15 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
     optionsArray[options] = "Notifications";
     optionsEnumArray[options++] = Notifications;
-#if defined(ST7789_CS) || defined(ST7796_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) ||              \
-    defined(USE_SH1107) || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
     optionsArray[options] = "Display Options";
     optionsEnumArray[options++] = ScreenOptions;
-#endif
 
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "Bluetooth";
@@ -593,6 +592,10 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Bluetooth Toggle";
 #endif
     optionsEnumArray[options++] = Bluetooth;
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    optionsArray[options] = "WiFi Toggle";
+    optionsEnumArray[options++] = WiFiToggle;
+#endif
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "Power";
 #else
@@ -630,6 +633,11 @@ void menuHandler::systemBaseMenu()
         } else if (selected == Bluetooth) {
             menuQueue = bluetooth_toggle_menu;
             screen->runNow();
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        } else if (selected == WiFiToggle) {
+            menuQueue = wifi_toggle_menu;
+            screen->runNow();
+#endif
         } else if (selected == Back && !test_enabled) {
             test_count++;
             if (test_count > 4) {
@@ -785,16 +793,23 @@ void menuHandler::nodeNameLengthMenu()
 
 void menuHandler::resetNodeDBMenu()
 {
-    static const char *optionsArray[] = {"Back", "Confirm"};
+    static const char *optionsArray[] = {"Back", "Reset All", "Preserve Favorites"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Confirm Reset NodeDB";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == 1 || selected == 2) {
             disableBluetooth();
+            screen->setFrames(Screen::FOCUS_DEFAULT);
+        }
+        if (selected == 1) {
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 2) {
+            LOG_INFO("Initiate node-db reset but keeping favorites");
+            nodeDB->resetNodes(1);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
@@ -931,7 +946,9 @@ void menuHandler::BluetoothToggleMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1 || selected == 2) {
+        if (selected == 0)
+            return;
+        else if (selected != (config.bluetooth.enabled ? 1 : 2)) {
             InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
@@ -1030,7 +1047,8 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
         uint8_t TFT_MESH_r = 0;
         uint8_t TFT_MESH_g = 0;
         uint8_t TFT_MESH_b = 0;
@@ -1270,17 +1288,26 @@ void menuHandler::wifiBaseMenu()
 
 void menuHandler::wifiToggleMenu()
 {
-    enum optionsNumbers { Back, Wifi_toggle };
+    enum optionsNumbers { Back, Wifi_disable, Wifi_enable };
 
-    static const char *optionsArray[] = {"Back", "Disable"};
+    static const char *optionsArray[] = {"Back", "WiFi Disabled", "WiFi Enabled"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Disable Wifi and\nEnable Bluetooth?";
+    bannerOptions.message = "WiFi Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
+    if (config.network.wifi_enabled == true)
+        bannerOptions.InitialSelected = 2;
+    else
+        bannerOptions.InitialSelected = 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Wifi_toggle) {
+        if (selected == Wifi_disable) {
             config.network.wifi_enabled = false;
             config.bluetooth.enabled = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == Wifi_enable) {
+            config.network.wifi_enabled = true;
+            config.bluetooth.enabled = false;
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
@@ -1330,7 +1357,7 @@ void menuHandler::screenOptionsMenu()
     static int optionsEnumArray[5] = {Back};
     int options = 1;
 
-#if defined(T_DECK) || defined(T_LORA_PAGER)
+#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Show Long/Short Name";
     optionsEnumArray[options++] = NodeNameLength;
 #endif
@@ -1342,12 +1369,13 @@ void menuHandler::screenOptionsMenu()
     }
 
     // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
-    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsArray[options] = "Frame Visibility Toggle";
     optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Display Units";

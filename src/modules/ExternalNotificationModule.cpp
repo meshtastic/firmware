@@ -314,11 +314,10 @@ void ExternalNotificationModule::stopNow()
         audioThread->stop();
 #endif
     // Turn off all outputs
-    LOG_INFO("Turning off setExternalStates: ");
+    LOG_INFO("Turning off setExternalStates");
     for (int i = 0; i < 3; i++) {
         setExternalState(i, false);
         externalTurnedOn[i] = 0;
-        LOG_INFO("%d ", i);
     }
     setIntervalFromNow(0);
 #ifdef T_WATCH_S3
