@@ -7,33 +7,62 @@ Graph::Graph() {}
 
 Graph::~Graph() {}
 
+bool Graph::hasMemoryForNewNode() const {
+    uint32_t freeHeap = memGet.getFreeHeap();
+    // Estimate memory needed for a new node with average edges
+    size_t estimatedMemory = NODE_OVERHEAD_ESTIMATE + (MAX_EDGES_PER_NODE / 2) * EDGE_MEMORY_ESTIMATE;
+    return freeHeap > (MIN_FREE_HEAP_FOR_GRAPH + estimatedMemory);
+}
+
 int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance) {
     // Check if this is a new node
     bool isNewNode = (adjacencyList.find(from) == adjacencyList.end());
-    
-    if (isNewNode && adjacencyList.size() >= MAX_NODES_IN_GRAPH) {
-        // Graph is full - find the worst node to potentially evict
-        // "Worst" = node with highest average ETX across its edges (farthest/poorest links)
+    NodeNum myNode = nodeDB->getNodeNum();
+
+    if (isNewNode && !hasMemoryForNewNode()) {
+        // Graph is full - find the least connected node to potentially evict
+        // Prioritize keeping well-connected "hub" nodes for better network reliability
+        // NEVER evict nodes whose only connection is to us - we're their bridge to the network
+        // "Worst" = node with fewest neighbors (least connected)
+        // Tie-breaker: highest average ETX (poorest links)
         NodeNum worstNode = 0;
+        size_t worstNeighborCount = SIZE_MAX;
         float worstAvgEtx = 0;
-        
+
         for (const auto& pair : adjacencyList) {
             if (pair.second.empty()) continue;
-            
+
+            // Never evict nodes that only connect to us - we're their only path to the network
+            if (pair.second.size() == 1 && pair.second[0].to == myNode) {
+                continue;
+            }
+
+            size_t neighborCount = pair.second.size();
             float totalEtx = 0;
             for (const auto& edge : pair.second) {
                 totalEtx += edge.etx;
             }
-            float avgEtx = totalEtx / pair.second.size();
-            
-            if (avgEtx > worstAvgEtx) {
+            float avgEtx = totalEtx / neighborCount;
+
+            // Prefer to evict nodes with fewer neighbors
+            // If same neighbor count, evict the one with worse average ETX
+            if (neighborCount < worstNeighborCount ||
+                (neighborCount == worstNeighborCount && avgEtx > worstAvgEtx)) {
+                worstNeighborCount = neighborCount;
                 worstAvgEtx = avgEtx;
                 worstNode = pair.first;
             }
         }
-        
-        // Only evict if the new edge is better than the worst node's average
-        if (worstNode != 0 && etx < worstAvgEtx) {
+
+        // If no evictable node found (all are bridge-dependent), don't add new node
+        if (worstNode == 0) {
+            return EDGE_NO_CHANGE;
+        }
+
+        // Evict if the new node could potentially be better connected
+        // We don't know yet how many neighbors the new node has, so we're optimistic
+        // and allow it if the worst node has only 1 neighbor, or if the new edge is good
+        if (worstNeighborCount <= 1 || etx < worstAvgEtx) {
             adjacencyList.erase(worstNode);
             routeCache.clear(); // Invalidate cache since topology changed
         } else {

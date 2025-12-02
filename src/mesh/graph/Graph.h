@@ -1,5 +1,6 @@
 #pragma once
 #include "NodeDB.h"
+#include "memGet.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -40,9 +41,11 @@ public:
     // Threshold for significant ETX change (20%)
     static constexpr float ETX_CHANGE_THRESHOLD = 0.20f;
 
-    // Graph size limits to conserve memory
-    static constexpr size_t MAX_NODES_IN_GRAPH = 10;      // Max nodes we track in the graph
-    static constexpr size_t MAX_EDGES_PER_NODE = 10;      // Max edges (neighbors) per node
+    // Memory management - dynamic limits based on available heap
+    static constexpr size_t MAX_EDGES_PER_NODE = 10;              // Max edges (neighbors) per node
+    static constexpr uint32_t MIN_FREE_HEAP_FOR_GRAPH = 8 * 1024; // Keep at least 8KB free for other operations
+    static constexpr size_t EDGE_MEMORY_ESTIMATE = 32;            // Approximate bytes per Edge struct
+    static constexpr size_t NODE_OVERHEAD_ESTIMATE = 64;          // Approximate overhead per node in adjacency list
 
     Graph();
     ~Graph();
@@ -142,6 +145,17 @@ public:
      * @return edge cost, or infinity if not directly connected
      */
     float getEdgeCost(NodeNum from, NodeNum to, uint32_t currentTime) const;
+
+    /**
+     * Check if there's enough free heap memory to add a new node to the graph
+     * @return true if we have enough memory, false otherwise
+     */
+    bool hasMemoryForNewNode() const;
+
+    /**
+     * Get current number of nodes in the graph
+     */
+    size_t getNodeCount() const { return adjacencyList.size(); }
 
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;
