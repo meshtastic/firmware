@@ -189,7 +189,7 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_PRESSED: {
             // Ignore if: TX in progress
             // Uncommon T-Echo hardware bug, LoRa TX triggers touch button
-            if (_touchQuirk && RadioLibInterface::instance && RadioLibInterface::instance->isSending())
+            if (_touchQuirk && !RadioLibInterface::instances.empty() && RadioLibInterface::instances.front()->isSending())
                 break;
 
             // Check if this is part of a short-press + long-press combination
