@@ -105,6 +105,15 @@ private:
 
     /**
      * Flash RGB LED for Signal Routing notifications
+     * 
+     * Color meanings:
+     *   White (dim, breathing) - Heartbeat (idle indicator)
+     *   Purple (128,0,128)     - Direct packet received from neighbor
+     *   Orange (255,128,0)     - Relay decision: YES (relaying broadcast)
+     *   Red (255,0,0)          - Relay decision: NO (suppressing relay)
+     *   Green (0,255,0)        - New neighbor detected
+     *   Blue (0,0,255)         - Significant signal quality change
+     *   Cyan (0,255,255)       - Topology update received (SignalRoutingInfo)
      */
     void flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms = 200);
 
@@ -116,6 +125,16 @@ private:
     // RGB LED timing
     bool rgbLedActive = false;
     uint32_t rgbLedOffTime = 0;
+    uint32_t lastFlashTime = 0;
+    static constexpr uint32_t MIN_FLASH_INTERVAL_MS = 500;   // Minimum time between flashes
+
+    // Heartbeat timing and breathing effect
+    uint32_t lastHeartbeatTime = 0;
+    uint32_t lastNotificationTime = 0;
+    uint32_t heartbeatIntervalMs = 2000;                     // Configurable, default 2 seconds
+    static constexpr uint32_t HEARTBEAT_BREATH_DURATION_MS = 600; // Total breath cycle duration
+    bool heartbeatBreathing = false;
+    uint32_t heartbeatBreathStart = 0;
 };
 
 extern SignalRoutingModule *signalRoutingModule;
