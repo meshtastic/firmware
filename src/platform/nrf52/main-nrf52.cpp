@@ -415,7 +415,6 @@ void cpuDeepSleep(uint32_t msecToWake)
         } else
 #endif
             delay(msecToWake);
-
         NVIC_SystemReset();
 
     } else {

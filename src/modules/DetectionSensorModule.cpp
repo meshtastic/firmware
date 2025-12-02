@@ -87,7 +87,6 @@ int32_t DetectionSensorModule::runOnce()
         pinMode(DETECTION_SENSOR_EN, OUTPUT);
         digitalWrite(DETECTION_SENSOR_EN, HIGH);
 #endif
-
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
 

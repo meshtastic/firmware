@@ -17,7 +17,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     boolean shouldSleep();
     void lpLoop(uint32_t msecToWake);
 #elif defined(ESP32_WITH_EXT0)
-    bool skipGPIO(int);
+    bool skipGPIO(int gpio);
 #endif
 
   protected:
@@ -28,12 +28,11 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     uint32_t lastSentToMesh = 0;
     bool wasDetected = false;
     void sendDetectionMessage();
-    void sendCurrentStateMessage(bool);
+    void sendCurrentStateMessage(bool state);
     bool hasDetectionEvent();
     boolean getState();
 #ifdef ESP32_WITH_EXT0
     bool isRtcGpio(int gpio);
-    void setExt0Wakeup(gpio_num_t, int);
     void printRtcPins();
 #endif
 };
