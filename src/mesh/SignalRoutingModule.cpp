@@ -1,13 +1,15 @@
 #include "SignalRoutingModule.h"
 #include "graph/Graph.h"
+#include "MeshService.h"
+#include "MeshTypes.h"
 #include "NodeDB.h"
-#include "Router.h"
 #include "RTC.h"
+#include "Router.h"
 #include "configuration.h"
 #include "memGet.h"
-#include "MeshService.h"
 #include "pb_decode.h"
 #include <Arduino.h>
+#include <algorithm>
 
 SignalRoutingModule *signalRoutingModule;
 
@@ -46,6 +48,10 @@ SignalRoutingModule::SignalRoutingModule()
 #endif
 
     routingGraph = new Graph();
+    trackNodeCapability(nodeDB->getNodeNum(), CapabilityStatus::Capable);
+    uint32_t nowMs = millis();
+    lastHeartbeatTime = nowMs;
+    lastNotificationTime = nowMs;
 
     // We want to see all packets for signal quality updates
     isPromiscuous = true;
@@ -70,7 +76,6 @@ SignalRoutingModule::SignalRoutingModule()
     analogWrite(RGBLED_BLUE, 0);
 #endif
     // Initialize heartbeat timing so first heartbeat is delayed
-    lastHeartbeatTime = millis();
     LOG_INFO("SignalRouting: RGB LED initialized");
 #endif
 
@@ -79,74 +84,58 @@ SignalRoutingModule::SignalRoutingModule()
 
 int32_t SignalRoutingModule::runOnce()
 {
-    if (!routingGraph || !signalBasedRoutingEnabled) {
-        return disable();
-    }
+    uint32_t nowMs = millis();
+    uint32_t nowSecs = getTime();
 
-    uint32_t now = millis();
+    pruneCapabilityCache(nowSecs);
+    pruneRelayIdentityCache(nowMs);
+    processSpeculativeRetransmits(nowMs);
 
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
-    // Update RGB LED state (turn off if timer expired)
     updateRgbLed();
+    bool notificationsIdle = (nowMs - lastNotificationTime) > MIN_FLASH_INTERVAL_MS;
+    bool heartbeatDue = (nowMs - lastHeartbeatTime) >= heartbeatIntervalMs;
+    if (!rgbLedActive && notificationsIdle && heartbeatDue) {
+        flashRgbLed(24, 24, 24, HEARTBEAT_FLASH_MS);
+        lastHeartbeatTime = nowMs;
+    }
+#endif
 
-    // Handle breathing heartbeat animation
-    if (heartbeatBreathing) {
-        uint32_t elapsed = now - heartbeatBreathStart;
-        if (elapsed >= HEARTBEAT_BREATH_DURATION_MS) {
-            // Breath complete, turn off LED
-            heartbeatBreathing = false;
-#ifdef RGBLED_CA
-            analogWrite(RGBLED_RED, 255);
-            analogWrite(RGBLED_GREEN, 255);
-            analogWrite(RGBLED_BLUE, 255);
-#else
-            analogWrite(RGBLED_RED, 0);
-            analogWrite(RGBLED_GREEN, 0);
-            analogWrite(RGBLED_BLUE, 0);
-#endif
-            // Update lastHeartbeatTime to when breath finished, so next heartbeat is properly delayed
-            lastHeartbeatTime = now;
-        } else {
-            // Calculate brightness using sine wave for smooth breathing
-            // Maps 0..DURATION to 0..PI for a single up-down cycle
-            float phase = (float)elapsed / HEARTBEAT_BREATH_DURATION_MS * 3.14159f;
-            uint8_t brightness = (uint8_t)(sin(phase) * 40); // Max brightness 40 (dim)
-#ifdef RGBLED_CA
-            analogWrite(RGBLED_RED, 255 - brightness);
-            analogWrite(RGBLED_GREEN, 255 - brightness);
-            analogWrite(RGBLED_BLUE, 255 - brightness);
-#else
-            analogWrite(RGBLED_RED, brightness);
-            analogWrite(RGBLED_GREEN, brightness);
-            analogWrite(RGBLED_BLUE, brightness);
-#endif
+    if (routingGraph && signalBasedRoutingEnabled) {
+        if (nowMs - lastBroadcast >= SIGNAL_ROUTING_BROADCAST_SECS * 1000) {
+            sendSignalRoutingInfo();
         }
-        return 20; // Update every 20ms for smooth animation
     }
 
-    // Check for heartbeat - start breathing only if enough time has passed since last heartbeat
-    // AND we're not currently doing a notification flash
-    if (!rgbLedActive && (now - lastHeartbeatTime > heartbeatIntervalMs)) {
-        heartbeatBreathing = true;
-        heartbeatBreathStart = now;
-        return 20; // Start updating immediately
+    uint32_t timeToHeartbeat = heartbeatIntervalMs;
+    if (nowMs - lastHeartbeatTime < heartbeatIntervalMs) {
+        timeToHeartbeat = heartbeatIntervalMs - (nowMs - lastHeartbeatTime);
     }
 
-    // If LED is active (from notification flash), run frequently to turn it off promptly
-    if (rgbLedActive) {
-        return 50; // Check every 50ms while LED is on
-    }
-#endif
-
-    // Send our signal routing info periodically
-    if (now - lastBroadcast >= SIGNAL_ROUTING_BROADCAST_SECS * 1000) {
-        sendSignalRoutingInfo();
+    uint32_t timeToBroadcast = SIGNAL_ROUTING_BROADCAST_SECS * 1000;
+    if (nowMs - lastBroadcast < SIGNAL_ROUTING_BROADCAST_SECS * 1000) {
+        timeToBroadcast = (SIGNAL_ROUTING_BROADCAST_SECS * 1000) - (nowMs - lastBroadcast);
     }
 
-    // Return time until next heartbeat check or broadcast, whichever is sooner
-    uint32_t timeToNextHeartbeat = heartbeatIntervalMs - (now - lastHeartbeatTime);
-    uint32_t timeToNextBroadcast = (SIGNAL_ROUTING_BROADCAST_SECS * 1000) - (now - lastBroadcast);
-    return min(timeToNextHeartbeat, timeToNextBroadcast);
+    uint32_t timeToSpeculative = timeToBroadcast;
+    if (!speculativeRetransmits.empty()) {
+        uint32_t soonest = timeToBroadcast;
+        for (const auto& entry : speculativeRetransmits) {
+            if (entry.second.expiryMs > nowMs) {
+                soonest = std::min(soonest, entry.second.expiryMs - nowMs);
+            } else {
+                soonest = 0;
+                break;
+            }
+        }
+        timeToSpeculative = soonest;
+    }
+
+    uint32_t nextDelay = std::min({timeToHeartbeat, timeToBroadcast, timeToSpeculative});
+    if (nextDelay < 20) {
+        nextDelay = 20;
+    }
+    return static_cast<int32_t>(nextDelay);
 }
 
 void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
@@ -170,6 +159,9 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
         // Record our transmission for contention window tracking
         if (routingGraph) {
             uint32_t currentTime = getValidTime(RTCQualityFromNet);
+            if (!currentTime) {
+                currentTime = getTime();
+            }
             routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
         }
     } else {
@@ -225,6 +217,8 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 
     if (info.neighbors_count == 0) return;
 
+    trackNodeCapability(p->from, info.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
+
     char senderName[64];
     getNodeDisplayName(p->from, senderName, sizeof(senderName));
     LOG_DEBUG("SignalRouting: Pre-processing %d neighbors from %s for relay decision",
@@ -233,6 +227,8 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     // Add edges from the sender to each of their neighbors
     for (pb_size_t i = 0; i < info.neighbors_count; i++) {
         const meshtastic_NeighborLink& neighbor = info.neighbors[i];
+        trackNodeCapability(neighbor.node_id,
+                            neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
         float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
         routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
     }
@@ -246,6 +242,8 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
     char senderName[64];
     getNodeDisplayName(mp.from, senderName, sizeof(senderName));
+
+    trackNodeCapability(mp.from, p->signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
 
     if (p->neighbors_count == 0) {
         LOG_DEBUG("SignalRouting: %s has no neighbors (version %d)", senderName, p->routing_version);
@@ -267,6 +265,9 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         char neighborName[64];
         getNodeDisplayName(neighbor.node_id, neighborName, sizeof(neighborName));
 
+        trackNodeCapability(neighbor.node_id,
+                            neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
+
         // Calculate ETX from the received RSSI/SNR
         float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
 
@@ -284,6 +285,11 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.request_id != 0 &&
+        mp.to == nodeDB->getNodeNum()) {
+        cancelSpeculativeRetransmit(nodeDB->getNodeNum(), mp.decoded.request_id);
+    }
+
     // Only track DIRECT neighbors - packets heard directly over radio with no relays
     // Conditions for a direct neighbor:
     // 1. Has valid signal data (rx_rssi or rx_snr)
@@ -303,6 +309,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     }
     
     if (hasSignalData && notViaMqtt && isDirectFromSender) {
+        rememberRelayIdentity(mp.from, fromLastByte);
+        trackNodeCapability(mp.from, CapabilityStatus::Unknown);
+
         char senderName[64];
         getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
@@ -316,6 +325,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // Record that this node transmitted (for contention window tracking)
         if (routingGraph) {
             uint32_t currentTime = getValidTime(RTCQualityFromNet);
+            if (!currentTime) {
+                currentTime = getTime();
+            }
             routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
         }
 
@@ -325,6 +337,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     // Periodic graph maintenance
     if (routingGraph) {
         uint32_t currentTime = getValidTime(RTCQualityFromNet);
+        if (!currentTime) {
+            currentTime = getTime();
+        }
         if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_MS) {
             routingGraph->ageEdges(currentTime);
             lastGraphUpdate = currentTime;
@@ -337,69 +352,57 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p)
 {
-    if (!signalBasedRoutingEnabled || !routingGraph) {
+    if (!p || !signalBasedRoutingEnabled || !routingGraph) {
         return false;
     }
 
-    // For broadcasts: use coordinated flooding if we have any graph data
     if (isBroadcast(p->to)) {
-        // We need at least some graph data to make relay decisions
-        auto allNodes = routingGraph->getAllNodes();
-        if (allNodes.size() >= 2) {
-            return true;
-        }
+        return topologyHealthyForBroadcast();
+    }
+
+    if (!topologyHealthyForUnicast(p->to)) {
         return false;
     }
 
-    // For unicast: check if destination is signal-based capable AND we have a route
-    if (isSignalBasedCapable(p->to)) {
-        NodeNum nextHop = getNextHop(p->to);
-        if (nextHop != 0) {
-            return true;  // We have a valid route
-        }
+    if (!isSignalBasedCapable(p->to) && !isLegacyRouter(p->to)) {
+        return false;
     }
 
-    return false;
+    NodeNum nextHop = getNextHop(p->to);
+    if (nextHop == 0) {
+        return false;
+    }
+
+    if (!isSignalBasedCapable(nextHop) && !isLegacyRouter(nextHop)) {
+        return false;
+    }
+
+    return true;
 }
 
 bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 {
     if (!routingGraph || !isBroadcast(p->to)) {
-        return true;  // No graph data or not a broadcast - use traditional flooding
+        return true;
     }
 
-    // For SignalRoutingInfo packets, pre-process to update graph BEFORE making relay decision
-    // This ensures we have the sender's neighbor data when deciding
+    if (!topologyHealthyForBroadcast()) {
+        return true;
+    }
+
     if (p->decoded.portnum == meshtastic_PortNum_SIGNAL_ROUTING_APP) {
         preProcessSignalRoutingPacket(p);
     }
 
     NodeNum myNode = nodeDB->getNodeNum();
     NodeNum sourceNode = p->from;
-
-    // Determine who we heard this from (the last relayer)
-    // If relay_node matches source's last byte, it came directly from source
-    uint8_t sourceLastByte = sourceNode & 0xFF;
-    NodeNum heardFrom = (p->relay_node == sourceLastByte) ? sourceNode : 0;
-
-    // If we can't determine heardFrom, try to find a node with matching relay_node
-    if (heardFrom == 0) {
-        // Look through our neighbors to find one matching relay_node
-        auto neighbors = routingGraph->getDirectNeighbors(myNode);
-        for (NodeNum neighbor : neighbors) {
-            if ((neighbor & 0xFF) == p->relay_node) {
-                heardFrom = neighbor;
-                break;
-            }
-        }
-    }
-
-    // If still unknown, fall back to source
-    if (heardFrom == 0) {
-        heardFrom = sourceNode;
-    }
+    NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
     uint32_t currentTime = getValidTime(RTCQualityFromNet);
+    if (!currentTime) {
+        currentTime = getTime();
+    }
+
     bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
 
     char myName[64], sourceName[64], heardFromName[64];
@@ -410,12 +413,11 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     LOG_INFO("SignalRouting: Broadcast from %s (heard via %s): %s relay",
              sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT");
 
-    // Record our transmission for contention window tracking
     if (shouldRelay) {
         routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
-        flashRgbLed(255, 128, 0, 150); // Orange/yellow for relay
+        flashRgbLed(255, 128, 0, 150);
     } else {
-        flashRgbLed(255, 0, 0, 100);   // Red for suppressed relay
+        flashRgbLed(255, 0, 0, 100);
     }
 
     return shouldRelay;
@@ -428,6 +430,9 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
     }
 
     uint32_t currentTime = getValidTime(RTCQualityFromNet);
+    if (!currentTime) {
+        currentTime = getTime();
+    }
     Route route = routingGraph->calculateRoute(destination, currentTime);
 
     if (route.nextHop != 0) {
@@ -471,33 +476,75 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
 
 void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacket *p)
 {
+    if (!p || !signalBasedRoutingEnabled || !routingGraph) {
+        return;
+    }
+
+    if (isBroadcast(p->to) || p->from != nodeDB->getNodeNum() || p->id == 0) {
+        return;
+    }
+
     if (!shouldUseSignalBasedRouting(p)) {
         return;
     }
 
-    // For unicast packets, implement 400ms listen + one speculative retransmit
-    if (!isBroadcast(p->to)) {
-        LOG_DEBUG("SignalRouting: Scheduling speculative retransmit for packet %08x to %08x", p->id, p->to);
+    uint64_t key = makeSpeculativeKey(p->from, p->id);
+    if (speculativeRetransmits.find(key) != speculativeRetransmits.end()) {
+        return;
     }
+
+    meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
+    if (!copy) {
+        return;
+    }
+
+    SpeculativeRetransmitEntry entry;
+    entry.key = key;
+    entry.origin = p->from;
+    entry.packetId = p->id;
+    entry.expiryMs = millis() + SPECULATIVE_RETRANSMIT_TIMEOUT_MS;
+    entry.packetCopy = copy;
+    speculativeRetransmits[key] = entry;
+
+    LOG_DEBUG("SignalRouting: Speculative retransmit armed for packet %08x (expires in %ums)", p->id,
+              SPECULATIVE_RETRANSMIT_TIMEOUT_MS);
 }
 
 bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId)
 {
-    // For now, assume all nodes we've heard from recently are capable
-    // In the future, we'll track this from received SignalRoutingInfo
-    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeId);
-    if (!node) return false;
+    if (nodeId == nodeDB->getNodeNum()) {
+        return true;
+    }
 
-    uint32_t now = getValidTime(RTCQualityFromNet);
-    return (now - node->last_heard) < 300;
+    CapabilityStatus status = getCapabilityStatus(nodeId);
+    return status == CapabilityStatus::Capable;
 }
 
-float SignalRoutingModule::getSignalBasedCapablePercentage()
+float SignalRoutingModule::getSignalBasedCapablePercentage() const
 {
-    // Currently unused - broadcasts always use traditional flooding
-    // This could be used in the future for hybrid routing decisions
-    // TODO: Track actual capability from received SignalRoutingInfo packets
-    return 0.0f;
+    uint32_t now = getTime();
+    size_t total = 1;   // include ourselves
+    size_t capable = 1; // we are always capable
+
+    size_t nodeCount = nodeDB->getNumMeshNodes();
+    for (size_t i = 0; i < nodeCount; ++i) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == nodeDB->getNodeNum()) {
+            continue;
+        }
+        if (node->last_heard == 0 || (now - node->last_heard) > CAPABILITY_TTL_SECS) {
+            continue;
+        }
+        total++;
+        if (getCapabilityStatus(node->num) == CapabilityStatus::Capable) {
+            capable++;
+        }
+    }
+
+    if (total == 0) {
+        return 0.0f;
+    }
+    return static_cast<float>(capable) / static_cast<float>(total);
 }
 
 /**
@@ -513,9 +560,6 @@ void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t 
     if (now - lastFlashTime < MIN_FLASH_INTERVAL_MS) {
         return;
     }
-
-    // Stop any breathing animation
-    heartbeatBreathing = false;
 
     // Set LED to specified color
 #ifdef RGBLED_CA
@@ -561,4 +605,231 @@ void SignalRoutingModule::updateRgbLed()
         rgbLedActive = false;
     }
 #endif
+}
+
+void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus status)
+{
+    if (nodeId == 0) {
+        return;
+    }
+
+    uint32_t now = getTime();
+    auto &record = capabilityRecords[nodeId];
+    record.lastUpdated = now;
+
+    if (status == CapabilityStatus::Capable) {
+        record.status = CapabilityStatus::Capable;
+    } else if (status == CapabilityStatus::Legacy) {
+        record.status = CapabilityStatus::Legacy;
+    } else if (record.status == CapabilityStatus::Unknown) {
+        record.status = CapabilityStatus::Unknown;
+    }
+}
+
+void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
+{
+    for (auto it = capabilityRecords.begin(); it != capabilityRecords.end();) {
+        if ((nowSecs - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
+            it = capabilityRecords.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(NodeNum nodeId) const
+{
+    auto it = capabilityRecords.find(nodeId);
+    if (it == capabilityRecords.end()) {
+        return CapabilityStatus::Unknown;
+    }
+
+    uint32_t now = getTime();
+    if ((now - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
+        return CapabilityStatus::Unknown;
+    }
+
+    return it->second.status;
+}
+
+bool SignalRoutingModule::isLegacyRouter(NodeNum nodeId) const
+{
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeId);
+    if (!node || !node->has_user) {
+        return false;
+    }
+
+    auto role = node->user.role;
+    return role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+           role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
+           role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT;
+}
+
+bool SignalRoutingModule::topologyHealthyForBroadcast() const
+{
+    if (!routingGraph) {
+        return false;
+    }
+
+    if (routingGraph->getNodeCount() < MIN_CAPABLE_NODES) {
+        return false;
+    }
+
+    return getSignalBasedCapablePercentage() >= MIN_CAPABLE_RATIO;
+}
+
+bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
+{
+    if (!routingGraph) {
+        return false;
+    }
+
+    if (routingGraph->getNodeCount() < 2) {
+        return false;
+    }
+
+    float ratio = getSignalBasedCapablePercentage();
+    if (ratio < (MIN_CAPABLE_RATIO / 2.0f)) {
+        return false;
+    }
+
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(destination);
+    if (!node || node->last_heard == 0) {
+        return false;
+    }
+
+    uint32_t now = getTime();
+    return (now - node->last_heard) < CAPABILITY_TTL_SECS;
+}
+
+void SignalRoutingModule::rememberRelayIdentity(NodeNum nodeId, uint8_t relayId)
+{
+    if (relayId == 0 || nodeId == 0) {
+        return;
+    }
+
+    uint32_t nowMs = millis();
+    auto &bucket = relayIdentityCache[relayId];
+    bucket.erase(std::remove_if(bucket.begin(), bucket.end(),
+                                [nowMs](const RelayIdentityEntry &entry) {
+                                    return (nowMs - entry.lastHeardMs) > RELAY_ID_CACHE_TTL_MS;
+                                }),
+                 bucket.end());
+
+    for (auto &entry : bucket) {
+        if (entry.nodeId == nodeId) {
+            entry.lastHeardMs = nowMs;
+            return;
+        }
+    }
+
+    RelayIdentityEntry entry;
+    entry.nodeId = nodeId;
+    entry.lastHeardMs = nowMs;
+    bucket.push_back(entry);
+}
+
+void SignalRoutingModule::pruneRelayIdentityCache(uint32_t nowMs)
+{
+    for (auto it = relayIdentityCache.begin(); it != relayIdentityCache.end();) {
+        auto &bucket = it->second;
+        bucket.erase(std::remove_if(bucket.begin(), bucket.end(),
+                                    [nowMs](const RelayIdentityEntry &entry) {
+                                        return (nowMs - entry.lastHeardMs) > RELAY_ID_CACHE_TTL_MS;
+                                    }),
+                     bucket.end());
+        if (bucket.empty()) {
+            it = relayIdentityCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+NodeNum SignalRoutingModule::resolveRelayIdentity(uint8_t relayId) const
+{
+    auto it = relayIdentityCache.find(relayId);
+    if (it == relayIdentityCache.end()) {
+        return 0;
+    }
+
+    uint32_t nowMs = millis();
+    NodeNum bestNode = 0;
+    uint32_t newest = 0;
+    for (const auto &entry : it->second) {
+        if ((nowMs - entry.lastHeardMs) > RELAY_ID_CACHE_TTL_MS) {
+            continue;
+        }
+        if (entry.lastHeardMs >= newest) {
+            newest = entry.lastHeardMs;
+            bestNode = entry.nodeId;
+        }
+    }
+    return bestNode;
+}
+
+NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, NodeNum sourceNode) const
+{
+    if (!p) {
+        return sourceNode;
+    }
+
+    if (p->relay_node == 0) {
+        return sourceNode;
+    }
+
+    if ((sourceNode & 0xFF) == p->relay_node) {
+        return sourceNode;
+    }
+
+    NodeNum resolved = resolveRelayIdentity(p->relay_node);
+    if (resolved != 0) {
+        return resolved;
+    }
+
+    if (routingGraph) {
+        auto neighbors = routingGraph->getDirectNeighbors(nodeDB->getNodeNum());
+        for (NodeNum neighbor : neighbors) {
+            if ((neighbor & 0xFF) == p->relay_node) {
+                return neighbor;
+            }
+        }
+    }
+
+    return sourceNode;
+}
+
+void SignalRoutingModule::processSpeculativeRetransmits(uint32_t nowMs)
+{
+    for (auto it = speculativeRetransmits.begin(); it != speculativeRetransmits.end();) {
+        if (nowMs >= it->second.expiryMs) {
+            if (it->second.packetCopy) {
+                LOG_INFO("SignalRouting: Speculative retransmit for packet %08x", it->second.packetId);
+                service->sendToMesh(it->second.packetCopy);
+                it->second.packetCopy = nullptr;
+            }
+            it = speculativeRetransmits.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void SignalRoutingModule::cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId)
+{
+    uint64_t key = makeSpeculativeKey(origin, packetId);
+    auto it = speculativeRetransmits.find(key);
+    if (it == speculativeRetransmits.end()) {
+        return;
+    }
+
+    if (it->second.packetCopy) {
+        packetPool.release(it->second.packetCopy);
+    }
+    speculativeRetransmits.erase(it);
+}
+
+uint64_t SignalRoutingModule::makeSpeculativeKey(NodeNum origin, uint32_t packetId)
+{
+    return (static_cast<uint64_t>(origin) << 32) | packetId;
 }
