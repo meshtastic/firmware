@@ -53,6 +53,27 @@ SignalRoutingModule::SignalRoutingModule()
     // Set initial broadcast delay (30 seconds after startup)
     setIntervalFromNow(30 * 1000);
 
+    // Initialize RGB LED pins and turn off
+#if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
+    pinMode(RGBLED_RED, OUTPUT);
+    pinMode(RGBLED_GREEN, OUTPUT);
+    pinMode(RGBLED_BLUE, OUTPUT);
+#ifdef RGBLED_CA
+    // Common anode: high = off
+    analogWrite(RGBLED_RED, 255);
+    analogWrite(RGBLED_GREEN, 255);
+    analogWrite(RGBLED_BLUE, 255);
+#else
+    // Common cathode: low = off
+    analogWrite(RGBLED_RED, 0);
+    analogWrite(RGBLED_GREEN, 0);
+    analogWrite(RGBLED_BLUE, 0);
+#endif
+    // Initialize heartbeat timing so first heartbeat is delayed
+    lastHeartbeatTime = millis();
+    LOG_INFO("SignalRouting: RGB LED initialized");
+#endif
+
     LOG_INFO("SignalRouting: Module initialized (version %d)", SIGNAL_ROUTING_VERSION);
 }
 
@@ -62,13 +83,70 @@ int32_t SignalRoutingModule::runOnce()
         return disable();
     }
 
+    uint32_t now = millis();
+
+#if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
     // Update RGB LED state (turn off if timer expired)
     updateRgbLed();
 
-    // Send our signal routing info periodically
-    sendSignalRoutingInfo();
+    // Handle breathing heartbeat animation
+    if (heartbeatBreathing) {
+        uint32_t elapsed = now - heartbeatBreathStart;
+        if (elapsed >= HEARTBEAT_BREATH_DURATION_MS) {
+            // Breath complete, turn off LED
+            heartbeatBreathing = false;
+#ifdef RGBLED_CA
+            analogWrite(RGBLED_RED, 255);
+            analogWrite(RGBLED_GREEN, 255);
+            analogWrite(RGBLED_BLUE, 255);
+#else
+            analogWrite(RGBLED_RED, 0);
+            analogWrite(RGBLED_GREEN, 0);
+            analogWrite(RGBLED_BLUE, 0);
+#endif
+            // Update lastHeartbeatTime to when breath finished, so next heartbeat is properly delayed
+            lastHeartbeatTime = now;
+        } else {
+            // Calculate brightness using sine wave for smooth breathing
+            // Maps 0..DURATION to 0..PI for a single up-down cycle
+            float phase = (float)elapsed / HEARTBEAT_BREATH_DURATION_MS * 3.14159f;
+            uint8_t brightness = (uint8_t)(sin(phase) * 40); // Max brightness 40 (dim)
+#ifdef RGBLED_CA
+            analogWrite(RGBLED_RED, 255 - brightness);
+            analogWrite(RGBLED_GREEN, 255 - brightness);
+            analogWrite(RGBLED_BLUE, 255 - brightness);
+#else
+            analogWrite(RGBLED_RED, brightness);
+            analogWrite(RGBLED_GREEN, brightness);
+            analogWrite(RGBLED_BLUE, brightness);
+#endif
+        }
+        return 20; // Update every 20ms for smooth animation
+    }
 
-    return SIGNAL_ROUTING_BROADCAST_SECS * 1000;
+    // Check for heartbeat - start breathing only if enough time has passed since last heartbeat
+    // AND we're not currently doing a notification flash
+    if (!rgbLedActive && (now - lastHeartbeatTime > heartbeatIntervalMs)) {
+        heartbeatBreathing = true;
+        heartbeatBreathStart = now;
+        return 20; // Start updating immediately
+    }
+
+    // If LED is active (from notification flash), run frequently to turn it off promptly
+    if (rgbLedActive) {
+        return 50; // Check every 50ms while LED is on
+    }
+#endif
+
+    // Send our signal routing info periodically
+    if (now - lastBroadcast >= SIGNAL_ROUTING_BROADCAST_SECS * 1000) {
+        sendSignalRoutingInfo();
+    }
+
+    // Return time until next heartbeat check or broadcast, whichever is sooner
+    uint32_t timeToNextHeartbeat = heartbeatIntervalMs - (now - lastHeartbeatTime);
+    uint32_t timeToNextBroadcast = (SIGNAL_ROUTING_BROADCAST_SECS * 1000) - (now - lastBroadcast);
+    return min(timeToNextHeartbeat, timeToNextBroadcast);
 }
 
 void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
@@ -226,6 +304,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         LOG_INFO("SignalRouting: Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
+        // Brief purple flash for any direct packet received
+        flashRgbLed(128, 0, 128, 100);
+
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
     }
 
@@ -317,6 +398,13 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     LOG_INFO("SignalRouting: Broadcast from %s (heard via %s): %s relay",
              sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT");
 
+    // Flash for relay decision: yellow if relaying, red if not relaying
+    if (shouldRelay) {
+        flashRgbLed(255, 128, 0, 150); // Orange/yellow for relay
+    } else {
+        flashRgbLed(255, 0, 0, 100);   // Red for suppressed relay
+    }
+
     return shouldRelay;
 }
 
@@ -401,26 +489,41 @@ float SignalRoutingModule::getSignalBasedCapablePercentage()
 
 /**
  * Flash RGB LED for Signal Routing notifications
- * Colors: Green = new neighbor, Blue = signal change, Red = connection lost
+ * Colors: Green = new neighbor, Blue = signal change, Cyan = topology update
  */
 void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms)
 {
-#if defined(HAS_RGB_LED)
+#if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
+    uint32_t now = millis();
+
+    // Debounce: ignore rapid-fire flash requests
+    if (now - lastFlashTime < MIN_FLASH_INTERVAL_MS) {
+        return;
+    }
+
+    // Stop any breathing animation
+    heartbeatBreathing = false;
+
     // Set LED to specified color
 #ifdef RGBLED_CA
-    analogWrite(RGBLED_RED, 255 - r); // CA type needs reverse logic
+    // Common anode: high = off, low = on (invert values)
+    analogWrite(RGBLED_RED, 255 - r);
     analogWrite(RGBLED_GREEN, 255 - g);
     analogWrite(RGBLED_BLUE, 255 - b);
 #else
+    // Common cathode: low = off, high = on
     analogWrite(RGBLED_RED, r);
     analogWrite(RGBLED_GREEN, g);
     analogWrite(RGBLED_BLUE, b);
 #endif
 
     // Schedule LED off after duration
-    uint32_t now = millis();
     rgbLedOffTime = now + duration_ms;
     rgbLedActive = true;
+    lastFlashTime = now;
+
+    // Track notification time to prevent heartbeat during active notifications
+    lastNotificationTime = now;
 #endif
 }
 
@@ -429,14 +532,16 @@ void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t 
  */
 void SignalRoutingModule::updateRgbLed()
 {
-#if defined(HAS_RGB_LED)
+#if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
     if (rgbLedActive && millis() >= rgbLedOffTime) {
 #ifdef RGBLED_CA
-        analogWrite(RGBLED_RED, 255);   // CA type: high = off
+        // Common anode: high = off
+        analogWrite(RGBLED_RED, 255);
         analogWrite(RGBLED_GREEN, 255);
         analogWrite(RGBLED_BLUE, 255);
 #else
-        analogWrite(RGBLED_RED, 0);     // Regular: low = off
+        // Common cathode: low = off
+        analogWrite(RGBLED_RED, 0);
         analogWrite(RGBLED_GREEN, 0);
         analogWrite(RGBLED_BLUE, 0);
 #endif
