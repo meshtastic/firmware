@@ -1,6 +1,7 @@
 #pragma once
 #include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <unordered_map>
 #include <vector>
 
@@ -181,6 +182,8 @@ private:
     void processSpeculativeRetransmits(uint32_t nowMs);
     void cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId);
     static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
+    void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
+    CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;
 };
 
 extern SignalRoutingModule *signalRoutingModule;
