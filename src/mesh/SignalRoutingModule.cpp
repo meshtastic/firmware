@@ -151,6 +151,10 @@ int32_t SignalRoutingModule::runOnce()
 
 void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 {
+    if (!isActiveRoutingRole()) {
+        return;
+    }
+
     meshtastic_SignalRoutingInfo info = meshtastic_SignalRoutingInfo_init_zero;
     buildSignalRoutingInfo(info);
 
@@ -183,7 +187,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &info)
 {
     info.node_id = nodeDB->getNodeNum();
-    info.signal_based_capable = true;
+    info.signal_based_capable = isActiveRoutingRole();
     info.routing_version = SIGNAL_ROUTING_VERSION;
     info.neighbors_count = 0;
 
@@ -372,7 +376,14 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     }
 
     if (isBroadcast(p->to)) {
+        if (!isActiveRoutingRole()) {
+            return true; // enter SR path so shouldRelayBroadcast can veto the relay
+        }
         return topologyHealthyForBroadcast();
+    }
+
+    if (!isActiveRoutingRole()) {
+        return false;
     }
 
     if (!topologyHealthyForUnicast(p->to)) {
@@ -399,6 +410,10 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 {
     if (!routingGraph || !isBroadcast(p->to)) {
         return true;
+    }
+
+    if (!isActiveRoutingRole()) {
+        return false;
     }
 
     if (!topologyHealthyForBroadcast()) {
@@ -495,6 +510,10 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
         return;
     }
 
+    if (!isActiveRoutingRole()) {
+        return;
+    }
+
     if (isBroadcast(p->to) || p->from != nodeDB->getNodeNum() || p->id == 0) {
         return;
     }
@@ -528,7 +547,7 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
 bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId)
 {
     if (nodeId == nodeDB->getNodeNum()) {
-        return true;
+        return isActiveRoutingRole();
     }
 
     CapabilityStatus status = getCapabilityStatus(nodeId);
@@ -779,16 +798,27 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
     trackNodeCapability(mp.from, CapabilityStatus::Capable);
 }
 
+bool SignalRoutingModule::isActiveRoutingRole() const
+{
+    switch (config.device.role) {
+    case meshtastic_Config_DeviceConfig_Role_ROUTER:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT:
+    case meshtastic_Config_DeviceConfig_Role_REPEATER:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
+        return true;
+    default:
+        return false;
+    }
+}
+
 SignalRoutingModule::CapabilityStatus SignalRoutingModule::capabilityFromRole(
     meshtastic_Config_DeviceConfig_Role role) const
 {
     switch (role) {
-    case meshtastic_Config_DeviceConfig_Role_ROUTER:
-    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
-    case meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT:
-    case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
-        return CapabilityStatus::Capable;
     case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN:
     case meshtastic_Config_DeviceConfig_Role_TRACKER:
     case meshtastic_Config_DeviceConfig_Role_SENSOR:
     case meshtastic_Config_DeviceConfig_Role_TAK:
@@ -853,9 +883,15 @@ bool SignalRoutingModule::isLegacyRouter(NodeNum nodeId) const
     }
 
     auto role = node->user.role;
-    return role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-           role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
-           role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT;
+    switch (role) {
+    case meshtastic_Config_DeviceConfig_Role_ROUTER:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT:
+    case meshtastic_Config_DeviceConfig_Role_REPEATER:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool SignalRoutingModule::topologyHealthyForBroadcast() const
