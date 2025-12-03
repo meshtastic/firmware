@@ -16,7 +16,7 @@ class OnScreenKeyboardModule
   public:
     static OnScreenKeyboardModule &instance();
 
-    void start(const char *header, const char *initialText, uint32_t, std::function<void(const std::string &)> callback);
+    void start(const char *header, const char *initialText, uint32_t durationMs, std::function<void(const std::string &)> callback);
 
     void stop(bool callEmptyCallback);
 
