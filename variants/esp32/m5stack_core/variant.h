@@ -34,11 +34,13 @@
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
 
+#define ILI9341_DRIVER
 #define TFT_HEIGHT 240
 #define TFT_WIDTH 320
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 #define TFT_BUSY -1
+#define USE_TFTDISPLAY 1
 
 // LCD screens are slow, so slowdown the wipe so it looks better
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
