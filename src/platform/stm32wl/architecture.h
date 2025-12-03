@@ -17,6 +17,18 @@
 #endif
 
 //
+// ADC defaults for STM32WL
+//
+#if defined(LL_ADC_RESOLUTION_12B)
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_12B
+#elif defined(LL_ADC_DS_DATA_WIDTH_12_BIT)
+#define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
+#else
+#error "ADC resolution could not be defined!"
+#endif
+#define ADC_RANGE 4096
+
+//
 // set HW_VENDOR
 //
 #ifdef _VARIANT_WIOE5_
