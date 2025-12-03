@@ -110,18 +110,19 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define ADC_MULTIPLIER 3.3
 #define BATTERY_PIN PIN_VBAT // PIN_A7
 #define AREF_VOLTAGE 3.3
+#define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3087, 2786
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define PIN_GPS_RX D6 // 44
-#define PIN_GPS_TX D7 // 43
+#define PIN_GPS_TX D6 // 44
+#define PIN_GPS_RX D7 // 43
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_TX PIN_GPS_TX
+#define PIN_SERIAL1_RX PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
 #define GPS_EN D18 // P1.05
 #endif

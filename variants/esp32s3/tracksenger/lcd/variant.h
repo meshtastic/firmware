@@ -16,6 +16,7 @@
 #define ST7789_CS 38
 #define ST7789_RS 40
 #define ST7789_BL 21
+#define USE_TFTDISPLAY 1
 // P#define TFT_BL 21 /* V1.1 PCB marking */
 
 #define ST7789_RESET -1
