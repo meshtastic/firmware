@@ -14,6 +14,7 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "power/PowerHAL.h"
 #include "Throttle.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
@@ -461,8 +462,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
         // if it's not HIGH - check the battery
 #endif
+
+// technically speaking this should work for all(?) NRF52 boards
+// but needs testing across multiple devices. NRF52 USB would not even work if
+// VBUS was not properly connected and detected by the CPU
 #elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
-        return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
+        return powerHAL_isVBUSConnected();
 #endif
         return getBattVoltage() > chargingVolt;
     }
