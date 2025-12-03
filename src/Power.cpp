@@ -470,6 +470,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
+        LOG_INFO("test");
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(HAS_PMU)
         if (hasRAK()) {
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
@@ -611,7 +612,10 @@ bool Power::analogInit()
 #ifdef EXT_CHRG_DETECT
     pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
 #endif
-
+#if defined(ELECROW_ThinkNode_M4)
+    batteryLevel = &analogLevel;
+    return true;
+#endif
 #ifdef BATTERY_PIN
     LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 

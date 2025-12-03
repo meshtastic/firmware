@@ -1168,10 +1168,13 @@ int32_t GPS::runOnce()
                 p = meshtastic_Position_init_default;
                 hasValidLocation = false;
                 shouldPublish = true;
+#if defined(ELECROW_ThinkNode_M4)
+                set_gps_connect_status(GPS_SEEK);
+#endif
 #ifdef GPS_DEBUG
                 LOG_DEBUG("hasValidLocation FALLING EDGE");
 #endif
-            }
+            }          
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
@@ -1179,6 +1182,9 @@ int32_t GPS::runOnce()
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
+#if defined(ELECROW_ThinkNode_M4)
+                set_gps_connect_status(GPS_LOCATING);
+#endif     
             }
             if (shouldPublish) {
                 fixHoldEnds = 0;

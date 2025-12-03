@@ -47,7 +47,11 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
 {
   public:
     const char *_originName;
+#if defined(ELECROW_ThinkNode_M4)
+    static const uint32_t c_holdOffTime = 5000;
+#else
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
+#endif
     bool initButton(const ButtonConfig &config);
 
     enum ButtonEventType {

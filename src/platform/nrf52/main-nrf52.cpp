@@ -230,6 +230,17 @@ void nrf52Loop()
     }
     nrfx_wdt_channel_feed(&nrfx_wdt, nrfx_wdt_channel_id_nrf52_main);
 
+#if defined(ELECROW_ThinkNode_M4)
+    if (get_off_status() == false)
+    {
+        PWE_LED_status();
+        DATA_LED_status();
+        User_Battery_state();
+        Battery_LED_status();
+        delay(10);
+    }
+#endif
+
     checkSDEvents();
     reportLittleFSCorruptionOnce();
 }
@@ -396,6 +407,33 @@ void cpuDeepSleep(uint32_t msecToWake)
         NRF_GPIO->DIRCLR = (1 << pin);
     }
 #endif
+#ifdef ELECROW_ThinkNode_M4
+for (int pin = 0; pin < 48; pin++)
+    {
+        if (pin == GPS_EN || pin == BUTTON_PIN)
+        {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+    }
+    for (int pin = 0; pin < 48; pin++)
+    {
+        if (pin == GPS_EN || pin == BUTTON_PIN)
+        {
+            continue;
+        }
+        digitalWrite(pin, LOW);
+    }
+    for (int pin = 0; pin < 48; pin++)
+    {
+        if (pin == GPS_EN || pin == BUTTON_PIN)
+        {
+            continue;
+        }
+        NRF_GPIO->DIRCLR = (1 << pin);
+    }
+    digitalWrite(GPS_EN, HIGH);
+#endif
     variant_shutdown();
 
     // Sleepy trackers or sensors can low power "sleep"
@@ -426,6 +464,13 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_gpio_cfg_input(PIN_BUTTON2, NRF_GPIO_PIN_PULLUP);
         nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
         nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
+#endif
+
+
+#ifdef ELECROW_ThinkNode_M4
+    nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+    nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
+    nrf_gpio_cfg_sense_set(BUTTON_PIN, sense1);
 #endif
 
 #ifdef PROMICRO_DIY_TCXO

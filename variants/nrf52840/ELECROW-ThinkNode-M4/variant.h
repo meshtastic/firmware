@@ -39,33 +39,42 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
+// Power Pin
+#define GPS_EN (32 + 11)
+
 // LEDs
+#define PWR_LED (32 + 9)
+#define DATA_LED (13)
+#define Battery_LED_1 (15)
+#define Battery_LED_2 (17)
+#define Battery_LED_3 (32 + 2)
+#define Battery_LED_4 (32 + 4)
+
 #define LED_BUILTIN -1
 #define LED_BLUE -1
-#define LED_CHARGE (32 + 9)
-#define LED_PAIRING (13)
+#define LED_CHARGE -1
+#define LED_PAIRING -1
 
 #define LED_STATE_ON 1
-
-// USB / power detection
-#define EXT_PWR_DETECT (32 + 3) // P1.03 USB present sense
 
 // Button
 #define PIN_BUTTON1 (4)
 
 // Battery ADC
-#define PIN_A0 (2)
-#define BATTERY_PIN PIN_A0
-#define BATTERY_SENSE_SAMPLES 30
-#define ADC_RESOLUTION 14
-#define BATTERY_SENSE_RESOLUTION_BITS 12
-#define BATTERY_SENSE_RESOLUTION 4096.0
-#define ADC_MULTIPLIER (2.00F)
-#undef AREF_VOLTAGE
-#define AREF_VOLTAGE 3.0
-#define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+#define MY_SERIAL_RX 30
+#define My_SERIAL_TX 5
 
-static const uint8_t A0 = PIN_A0;
+// #define PIN_A0 (2)
+// #define BATTERY_PIN PIN_A0
+// #define BATTERY_SENSE_SAMPLES 30
+// #define ADC_RESOLUTION 14
+// #define BATTERY_SENSE_RESOLUTION_BITS 12
+// #define BATTERY_SENSE_RESOLUTION 4096.0
+// #define ADC_MULTIPLIER (2.00F)
+// #undef AREF_VOLTAGE
+// #define AREF_VOLTAGE 3.0
+// #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+// static const uint8_t A0 = PIN_A0;
 
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
@@ -75,12 +84,12 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_WIRE_SDA (23)
 #define PIN_WIRE_SCL (25)
 
-// actually the LORA Radio
+// // actually the LORA Radio
 #define PIN_POWER_EN (11)
 
-// charger status
+// // charger status
 #define EXT_CHRG_DETECT (32 + 6)
-#define EXT_CHRG_DETECT_VALUE LOW
+#define EXT_CHRG_DETECT_VALUE HIGH
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
@@ -116,8 +125,8 @@ static const uint8_t A0 = PIN_A0;
 #define HAS_GPS 1
 #define GPS_L76K
 #define GPS_BAUDRATE 9600
-#define PIN_GPS_EN (32 + 11)
-#define GPS_EN_ACTIVE LOW
+// #define PIN_GPS_EN (32 + 11)
+// #define GPS_EN_ACTIVE LOW
 #define PIN_GPS_RESET (3)
 #define GPS_RESET_MODE HIGH
 #define PIN_GPS_STANDBY (28)

@@ -5,6 +5,9 @@
 #include "buzz.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#if defined(ELECROW_ThinkNode_M4)
+#include "main.h"
+#endif
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -13,7 +16,22 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     auto &p = mp.decoded;
     LOG_INFO("Received text msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
-
+#if defined(ELECROW_ThinkNode_M4)
+    if (!(mp.from))
+    {
+        LOG_DEBUG("start TX!!!!");
+        set_data_led_state(DATA_LORA_TX_BLINK);
+        set_txstatus(true);
+        set_tx_id(mp.id);
+    }
+    else
+    {
+        LOG_DEBUG("start RX!!!!");
+        set_data_led_state(DATA_LORA_RX_BLINK);
+        set_rxstatus(true);
+        set_rx_id(mp.id);
+    }
+#endif
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
     devicestate.rx_text_message = mp;

@@ -343,7 +343,32 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = delay;
             }
         }
-
+#if defined(ELECROW_ThinkNode_M4)
+        if(get_periphstatus())
+        {
+            LOG_INFO("connect environment!!!");
+            if (((lastSentToMesh == 0) ||
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.environment_update_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+            airTime->isTxAllowedAirUtil()) 
+            {
+                sendTelemetry();
+                lastSentToMesh = millis();
+            } 
+            else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
+                    (service->isToPhoneQueueEmpty())) 
+            {
+                // Just send to phone when it's not our time to send to mesh yet
+                // Only send while queue is empty (phone assumed connected)
+                sendTelemetry(NODENUM_BROADCAST, true);
+                lastSentToPhone = millis();
+            }
+        }
+        else
+            LOG_INFO("Disconnect environment!!!");
+#else
         if (((lastSentToMesh == 0) ||
              !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
                                                                moduleConfig.telemetry.environment_update_interval,
@@ -359,6 +384,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }
+#endif  
     }
     return min(sendToPhoneIntervalMs, result);
 }

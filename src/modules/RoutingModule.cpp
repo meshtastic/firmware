@@ -34,6 +34,11 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
     // Note: we are careful not to send back packets that started with the phone back to the phone
     if ((isBroadcast(mp.to) || isToUs(&mp)) && (mp.from != 0)) {
         printPacket("Delivering rx packet", &mp);
+#if defined(ELECROW_ThinkNode_M4)
+        LOG_DEBUG("stop RX!!!!");
+        if (get_rx_id() == mp.id)
+            set_rxstatus(false);
+#endif
         service->handleFromRadio(&mp);
     }
 
