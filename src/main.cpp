@@ -230,6 +230,807 @@ Router *router = NULL; // Users of router don't care what sort of subclass imple
 
 const char *firmware_version = optstr(APP_VERSION_SHORT);
 
+#if defined(ELECROW_ThinkNode_M4)
+nRF52_PWM *My_PWM_Instance;
+SoftwareSerial mySerial(MY_SERIAL_RX, My_SERIAL_TX);
+
+User_Battery_State Battery_state = BATTERY_IDLE;
+Battery_value_t value;
+DATA_LED_State DATA_LED_state = DATA_LED_IDLE;
+PWR_LED_State PWR_LED_state = PWR_LED_IDLE;
+User_GPS_State GPS_state = GPS_DISENABLE;
+BAT_LED_State BAT_LED_state = BAT_LED_IDLE;
+static BAT_LED_State last_BAT_LED_state = BAT_LED_IDLE;
+const uint8_t BAT_LED[4] = {Battery_LED_1, Battery_LED_2, Battery_LED_3, Battery_LED_4};
+
+bool Ble_flag = false;
+bool OFF_flag = false;
+bool periph_status = false;
+bool lora_rx_status = false;
+bool lora_tx_status = false;
+bool battery_flag = false;
+
+uint32_t tx_id = 0;
+uint32_t rx_id = 0;
+static uint32_t bat_last_time = 0;
+
+bool get_off_status()
+{
+    return OFF_flag;
+}
+
+void set_off_status(bool state)
+{
+    OFF_flag = state;
+}
+
+void set_txstatus(bool state)
+{
+    lora_tx_status = state;
+}
+
+void set_tx_id(uint32_t id)
+{
+    tx_id = id;
+}
+
+uint32_t get_tx_id()
+{
+    return tx_id;
+}
+
+void set_rxstatus(bool state)
+{
+    lora_rx_status = state;
+}
+
+void set_rx_id(uint32_t id)
+{
+    rx_id = id;
+}
+
+uint32_t get_rx_id()
+{
+    return rx_id;
+}
+
+void set_gps_connect_status(User_GPS_State state)
+{
+    GPS_state = state;
+}
+
+User_GPS_State get_gps_connect_status()
+{
+    return GPS_state;
+}
+
+void set_gps_state(bool state)
+{
+    if (state)
+    {
+        if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) && (gps != nullptr))
+        {
+            gps->toggleGpsMode();
+            set_gps_connect_status(GPS_SEEK);
+        }
+        else if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gps != nullptr) && (get_gps_connect_status() == GPS_LOCATING))
+        {
+            set_gps_connect_status(GPS_LOCATING);
+        }
+        else if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gps != nullptr) && (get_gps_connect_status() == GPS_DISENABLE))
+        {
+            set_gps_connect_status(GPS_SEEK);
+        }
+    }
+    else
+    {
+        if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gps != nullptr))
+        {
+            gps->toggleGpsMode();
+            set_gps_connect_status(GPS_DISENABLE);
+        }
+        else
+        {
+            set_gps_connect_status(GPS_DISENABLE);
+        }
+    }
+}
+
+bool get_ble_flag()
+{
+    return Ble_flag;
+}
+
+bool get_periphstatus(void)
+{
+    return periph_status;
+}
+
+void SetperiphMode(bool state)
+{
+
+    periph_status = state;
+}
+
+void set_data_led_state(DATA_LED_State state)
+{
+    DATA_LED_state = state;
+}
+
+void set_data_led_status(bool state)
+{
+    if (state)
+        My_PWM_Instance->setPWM(DATA_LED, 100, 99);
+    else
+        My_PWM_Instance->setPWM(DATA_LED, 100, 0);
+}
+
+void data_led_toggle()
+{
+    static bool state = false;
+    if (state)
+        My_PWM_Instance->setPWM(DATA_LED, 100, 99);
+    else
+        My_PWM_Instance->setPWM(DATA_LED, 100, 0);
+    state = !state;
+}
+
+void DATA_LED_status()
+{
+    uint32_t now_time = millis();
+    static uint32_t last_time;
+
+    static uint64_t cnt = 0;
+    static uint32_t breathe = 0;
+    static bool direction = false;
+    static bool GPS = false;
+    switch (DATA_LED_state)
+    {
+    case DATA_LED_IDLE:
+        last_time = now_time;
+        break;
+
+    case DATA_LED_ON:
+        My_PWM_Instance->setPWM(DATA_LED, 100, 99);
+        cnt = 0;
+        breathe = 0;
+        direction = false;
+        GPS = false;
+        set_data_led_state(DATA_LED_IDLE);
+        break;
+
+    case DATA_LED_OFF:
+        if (get_ble_flag())
+        {
+            My_PWM_Instance->setPWM(DATA_LED, 100, 0);
+            cnt = 0;
+            breathe = 0;
+            direction = false;
+            GPS = false;
+            set_data_led_state(DATA_LED_IDLE);
+        }
+        break;
+
+    case DATA_LORA_TX_BLINK:
+        if (get_ble_flag())
+        {
+            if (now_time > last_time)
+            {
+                if (now_time - last_time >= 200)
+                {
+                    if (lora_tx_status)
+                    {
+                        data_led_toggle();
+                        last_time = now_time;
+                    }
+                    else
+                    {
+                        if (get_gps_connect_status() == GPS_SEEK)
+                        {
+                            set_data_led_state(DATA_GPS_BREATHE);
+                        }
+                        else if (get_gps_connect_status() == GPS_LOCATING)
+                        {
+                            set_data_led_state(DATA_GPS_BLINK);
+                        }
+                        else if (get_gps_connect_status() == GPS_DISENABLE)
+                        {
+                            set_data_led_state(DATA_LED_OFF);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                last_time = now_time;
+            }
+        }
+        break;
+
+    case DATA_LORA_RX_BLINK:
+        if (get_ble_flag())
+        {
+            if (now_time > last_time)
+            {
+                if (now_time - last_time >= 200)
+                {
+                    if (lora_rx_status)
+                    {
+                        data_led_toggle();
+                        cnt = 0;
+                        last_time = now_time;
+                    }
+                    else
+                    {
+                        cnt++;
+                        data_led_toggle();
+                        if (cnt >= 8)
+                        {
+                            cnt = 0;
+                            if (get_gps_connect_status() == GPS_SEEK)
+                            {
+                                set_data_led_state(DATA_GPS_BREATHE);
+                            }
+                            else if (get_gps_connect_status() == GPS_LOCATING)
+                            {
+                                set_data_led_state(DATA_GPS_BLINK);
+                            }
+                            else if (get_gps_connect_status() == GPS_DISENABLE)
+                            {
+                                set_data_led_state(DATA_LED_OFF);
+                            }
+                        }
+                        last_time = now_time;
+                    }
+                }
+            }
+            else
+            {
+                last_time = now_time;
+            }
+        }
+        break;
+
+    case DATA_GPS_BREATHE:
+        if (get_ble_flag())
+        {
+            if (now_time > last_time)
+            {
+                if (now_time - last_time >= 20)
+                {
+                    if (get_gps_connect_status() == GPS_SEEK)
+                    {
+                        if (direction)
+                        {
+                            breathe--;
+                            My_PWM_Instance->setPWM(DATA_LED, 100, breathe);
+                            if (breathe <= 0)
+                                direction = !direction;
+                        }
+                        else
+                        {
+                            breathe++;
+                            My_PWM_Instance->setPWM(DATA_LED, 100, breathe);
+                            if (breathe >= 99)
+                                direction = !direction;
+                        }
+                        last_time = now_time;
+                    }
+                    else if (get_gps_connect_status() == GPS_LOCATING)
+                    {
+                        breathe = 0;
+                        direction = false;
+                        last_time = now_time;
+                        set_data_led_state(DATA_GPS_BLINK);
+                    }
+                    else if (get_gps_connect_status() == GPS_DISENABLE)
+                    {
+                        breathe = 0;
+                        direction = false;
+                        last_time = now_time;
+                        set_data_led_state(DATA_LED_OFF);
+                    }
+                }
+            }
+            else
+            {
+                last_time = now_time;
+            }
+        }
+        break;
+
+    case DATA_GPS_BLINK:
+        if (get_ble_flag())
+        {
+            if (now_time > last_time)
+            {
+                if ((now_time - last_time >= 100) && (!GPS))
+                {
+                    My_PWM_Instance->setPWM(DATA_LED, 100, 0);
+                    GPS = !GPS;
+                    last_time = now_time;
+                }
+                else if ((now_time - last_time >= 2000) && (GPS))
+                {
+                    My_PWM_Instance->setPWM(DATA_LED, 100, 99);
+                    GPS = !GPS;
+                    last_time = now_time;
+                }
+                if (get_gps_connect_status() == GPS_DISENABLE)
+                {
+                    GPS = false;
+                    set_data_led_state(DATA_LED_OFF);
+                }
+            }
+            else
+            {
+                last_time = now_time;
+            }
+        }
+        break;
+    }
+}
+
+void set_pwr_led_state(PWR_LED_State state)
+{
+    PWR_LED_state = state;
+}
+
+void PWE_LED_status()
+{
+    uint32_t now_time = millis();
+    static uint32_t last_time;
+    static uint64_t ble_connect_cnt = 0;
+    static uint64_t ble_disconnect_cnt = 0;
+    switch (PWR_LED_state)
+    {
+    case PWR_LED_IDLE:
+        last_time = now_time;
+        break;
+    case PWR_BLE_PAIRING:
+        ble_disconnect_cnt = 0;
+        ble_connect_cnt = 0;
+        if (now_time > last_time)
+        {
+            if (now_time - last_time >= 1000)
+            {
+                digitalToggle(PWR_LED);
+                last_time = now_time;
+            }
+        }
+        else
+        {
+            last_time = now_time;
+        }
+        break;
+    case PWR_BLE_CONNECTD:
+        My_PWM_Instance->setPWM(DATA_LED, 100, 0);
+        ble_disconnect_cnt = 0;
+        if (now_time > last_time)
+        {
+            if (now_time - last_time >= 200)
+            {
+                digitalToggle(PWR_LED);
+                ble_connect_cnt++;
+                if (ble_connect_cnt >= 6)
+                {
+                    ble_connect_cnt = 0;
+                    Ble_flag = true;
+                    if (get_gps_connect_status() == GPS_SEEK)
+                    {
+                        set_data_led_state(DATA_GPS_BREATHE);
+                    }
+                    else if (get_gps_connect_status() == GPS_LOCATING)
+                    {
+                        set_data_led_state(DATA_GPS_BLINK);
+                    }
+                    else if (get_gps_connect_status() == GPS_DISENABLE)
+                    {
+                        set_data_led_state(DATA_LED_OFF);
+                    }
+                    set_pwr_led_state(PWR_LED_IDLE);
+                }
+                last_time = now_time;
+            }
+        }
+        else
+        {
+            last_time = now_time;
+        }
+        break;
+    case PWR_BLE_DISCONNECTD:
+        ble_connect_cnt = 0;
+        My_PWM_Instance->setPWM(DATA_LED, 100, 0);
+        if (now_time > last_time)
+        {
+            if (now_time - last_time >= 500)
+            {
+                digitalToggle(PWR_LED);
+                ble_disconnect_cnt++;
+                if (ble_disconnect_cnt >= 11)
+                {
+                    ble_disconnect_cnt = 0;
+                    Ble_flag = false;
+                    set_pwr_led_state(PWR_LED_IDLE);
+                }
+                last_time = now_time;
+            }
+        }
+        else
+        {
+            last_time = now_time;
+        }
+        break;
+    }
+}
+
+void FAST_BLINK_ON(void)
+{
+    digitalWrite(PWR_LED, HIGH);
+    delay(200);
+    digitalWrite(PWR_LED, LOW);
+    delay(200);
+    digitalWrite(PWR_LED, HIGH);
+    delay(200);
+    digitalWrite(PWR_LED, LOW);
+    delay(200);
+    digitalWrite(PWR_LED, HIGH);
+    delay(200);
+    digitalWrite(PWR_LED, LOW);
+    delay(200);
+    digitalWrite(PWR_LED, HIGH);
+}
+
+void FAST_BLINK_STOP(void)
+{
+    if (Ble_flag)
+    {
+        digitalWrite(PWR_LED, HIGH);
+        delay(200);
+        digitalWrite(PWR_LED, LOW);
+        delay(200);
+        digitalWrite(PWR_LED, HIGH);
+        delay(200);
+        digitalWrite(PWR_LED, LOW);
+        delay(200);
+        digitalWrite(PWR_LED, HIGH);
+        delay(200);
+        digitalWrite(PWR_LED, LOW);
+    }
+    else
+    {
+        digitalWrite(PWR_LED, LOW);
+        delay(200);
+        digitalWrite(PWR_LED, HIGH);
+        delay(200);
+        digitalWrite(PWR_LED, LOW);
+        delay(200);
+        digitalWrite(PWR_LED, HIGH);
+        delay(200);
+        digitalWrite(PWR_LED, LOW);
+        delay(200);
+        digitalWrite(PWR_LED, HIGH);
+        delay(200);
+        digitalWrite(PWR_LED, LOW);
+    }
+}
+
+uint32_t get_battery_soc()
+{
+    return value.soc_voltage;
+}
+
+float get_battery_voltage()
+{
+    return ((value.voltage) * 2);
+}
+
+void set_battery_state(BAT_LED_State state)
+{
+    BAT_LED_state = state;
+}
+
+bool get_battery_flag()
+{
+    return battery_flag;
+}
+
+void set_battery_flag(bool state)
+{
+    battery_flag = state;
+}
+
+void set_bat_last_time(uint32_t time)
+{
+    bat_last_time = time;
+}
+
+BAT_LED_State get_last_BAT_LED_state()
+{
+    return last_BAT_LED_state;
+}
+
+bool get_charge_state()
+{
+    return digitalRead(EXT_CHRG_DETECT);
+}
+
+void User_Battery_state()
+{
+    static uint8_t Data[6] = {0};
+    static uint8_t num = 0;
+    static bool first_state = true;
+    static BAT_State battery_state = BAT_LOW;
+    static BAT_State last_battery_state = BAT_LOW;
+    switch (Battery_state)
+    {
+    case BATTERY_IDLE:
+        if (mySerial.available())
+        {
+            Data[num] = (uint8_t)mySerial.read();
+            if (Data[0] == 0xFE)
+            {
+                // LOG_INFO("data[%d]=0x%02X", num, Data[num]);
+                num++;
+                if (num == 6)
+                {
+                    num = 0;
+                    Battery_state = BATTERY_WORK;
+                }
+            }
+        }
+        break;
+    case BATTERY_WORK:
+        if (Data[5] == 0xFD)
+        {
+            if (Data[1] > 0x64)
+            {
+                Battery_state = BATTERY_IDLE;
+            }
+            else
+            {
+                value.soc_voltage = (uint32_t)Data[1];
+                LOG_INFO("soc_voltage=%d", value.soc_voltage);
+                value.voltage = Data[2] + (((float)Data[3]) / 100) + (((float)Data[4]) / 10000);
+                LOG_INFO("voltage=%.4f", ((value.voltage) * 2));
+                if ((value.soc_voltage >= 0) && (value.soc_voltage <= 25))
+                {
+                    battery_state = BAT_LOW;
+                }
+                else if ((value.soc_voltage > 25) && (value.soc_voltage <= 50))
+                {
+                    battery_state = BAT_MIDDLE_LOW;
+                }
+                else if ((value.soc_voltage > 50) && (value.soc_voltage <= 75))
+                {
+                    battery_state = BAT_MIDDLE_HIGH;
+                }
+                else if ((value.soc_voltage > 75) && (value.soc_voltage <= 100))
+                {
+                    battery_state = BAT_HIGH;
+                }
+                if (first_state)
+                {
+                    switch (battery_state)
+                    {
+                    case BAT_LOW:
+                        set_battery_state(BAT_LED_LOW);
+                        last_BAT_LED_state = BAT_LED_LOW;
+                        break;
+                    case BAT_MIDDLE_LOW:
+                        set_battery_state(BAT_LED_MIDDLE_LOW);
+                        last_BAT_LED_state = BAT_LED_MIDDLE_LOW;
+                        break;
+                    case BAT_MIDDLE_HIGH:
+                        set_battery_state(BAT_LED_MIDDLE_HIGH);
+                        last_BAT_LED_state = BAT_LED_MIDDLE_HIGH;
+                        break;
+                    case BAT_HIGH:
+                        set_battery_state(BAT_LED_HIGH);
+                        last_BAT_LED_state = BAT_LED_HIGH;
+                        break;
+                    }
+                    bat_last_time = millis();
+                    battery_flag = true;
+                    last_battery_state = battery_state;
+                    first_state = false;
+                }
+                else
+                {
+                    if (battery_state != last_battery_state)
+                    {
+                        switch (battery_state)
+                        {
+                        case BAT_LOW:
+                            set_battery_state(BAT_LED_LOW);
+                            last_BAT_LED_state = BAT_LED_LOW;
+                            break;
+                        case BAT_MIDDLE_LOW:
+                            set_battery_state(BAT_LED_MIDDLE_LOW);
+                            last_BAT_LED_state = BAT_LED_MIDDLE_LOW;
+                            break;
+                        case BAT_MIDDLE_HIGH:
+                            set_battery_state(BAT_LED_MIDDLE_HIGH);
+                            last_BAT_LED_state = BAT_LED_MIDDLE_HIGH;
+                            break;
+                        case BAT_HIGH:
+                            set_battery_state(BAT_LED_HIGH);
+                            last_BAT_LED_state = BAT_LED_HIGH;
+                            break;
+                        }
+                        bat_last_time = millis();
+                        battery_flag = true;
+                        last_battery_state = battery_state;
+                    }
+                }
+                Battery_state = BATTERY_IDLE;
+            }
+        }
+        else
+        {
+            Battery_state = BATTERY_IDLE;
+        }
+        break;
+    }
+}
+
+void Battery_LED_status()
+{
+    uint32_t now_time = millis();
+    static uint32_t last_time = 0;
+    static bool charge_state = false;
+    static bool last_charge_state = false;
+    static bool state = false;
+    charge_state = get_charge_state();
+    if (charge_state != last_charge_state)
+    {
+        digitalWrite(Battery_LED_1, LOW);
+        digitalWrite(Battery_LED_2, LOW);
+        digitalWrite(Battery_LED_3, LOW);
+        digitalWrite(Battery_LED_4, LOW);
+        state = false;
+        BAT_LED_state = BAT_LED_IDLE;
+    }
+    if (charge_state)
+    {
+        battery_flag = false;
+        if (value.soc_voltage >= 100)
+        {
+            digitalWrite(Battery_LED_1, HIGH);
+            digitalWrite(Battery_LED_2, HIGH);
+            digitalWrite(Battery_LED_3, HIGH);
+            digitalWrite(Battery_LED_4, HIGH);
+        }
+        else
+        {
+            if (now_time >= last_time)
+            {
+                if (now_time - last_time >= 1000)
+                {
+                    switch (last_BAT_LED_state)
+                    {
+                    case BAT_LED_IDLE:
+                        break;
+                    case BAT_LED_LOW:
+                        digitalWrite(Battery_LED_1, state);
+                        digitalWrite(Battery_LED_2, LOW);
+                        digitalWrite(Battery_LED_3, LOW);
+                        digitalWrite(Battery_LED_4, LOW);
+                        state = !state;
+                        break;
+                    case BAT_LED_MIDDLE_LOW:
+                        digitalWrite(Battery_LED_1, state);
+                        digitalWrite(Battery_LED_2, state);
+                        digitalWrite(Battery_LED_3, LOW);
+                        digitalWrite(Battery_LED_4, LOW);
+                        state = !state;
+                        break;
+                    case BAT_LED_MIDDLE_HIGH:
+                        digitalWrite(Battery_LED_1, state);
+                        digitalWrite(Battery_LED_2, state);
+                        digitalWrite(Battery_LED_3, state);
+                        digitalWrite(Battery_LED_4, LOW);
+                        state = !state;
+                        break;
+                    case BAT_LED_HIGH:
+                        digitalWrite(Battery_LED_1, state);
+                        digitalWrite(Battery_LED_2, state);
+                        digitalWrite(Battery_LED_3, state);
+                        digitalWrite(Battery_LED_4, state);
+                        state = !state;
+                        break;
+                    }
+                    last_time = now_time;
+                }
+            }
+            else
+            {
+                last_time = now_time;
+            }
+        }
+    }
+    else
+    {
+        switch (BAT_LED_state)
+        {
+        case BAT_LED_IDLE:
+            if (battery_flag)
+            {
+                if (now_time >= bat_last_time)
+                {
+                    if (now_time - bat_last_time >= 10000)
+                    {
+                        digitalWrite(Battery_LED_1, LOW);
+                        digitalWrite(Battery_LED_2, LOW);
+                        digitalWrite(Battery_LED_3, LOW);
+                        digitalWrite(Battery_LED_4, LOW);
+                        battery_flag = false;
+                        BAT_LED_state = BAT_LED_IDLE;
+                    }
+                }
+                else
+                {
+                    bat_last_time = now_time;
+                }
+            }
+            break;
+        case BAT_LED_LOW:
+            digitalWrite(Battery_LED_1, LOW);
+            digitalWrite(Battery_LED_2, LOW);
+            digitalWrite(Battery_LED_3, LOW);
+            digitalWrite(Battery_LED_4, LOW);
+            digitalWrite(Battery_LED_1, HIGH);
+            digitalWrite(Battery_LED_2, LOW);
+            digitalWrite(Battery_LED_3, LOW);
+            digitalWrite(Battery_LED_4, LOW);
+            BAT_LED_state = BAT_LED_IDLE;
+            break;
+        case BAT_LED_MIDDLE_LOW:
+            digitalWrite(Battery_LED_1, LOW);
+            digitalWrite(Battery_LED_2, LOW);
+            digitalWrite(Battery_LED_3, LOW);
+            digitalWrite(Battery_LED_4, LOW);
+            digitalWrite(Battery_LED_1, HIGH);
+            digitalWrite(Battery_LED_2, HIGH);
+            digitalWrite(Battery_LED_3, LOW);
+            digitalWrite(Battery_LED_4, LOW);
+            BAT_LED_state = BAT_LED_IDLE;
+            break;
+        case BAT_LED_MIDDLE_HIGH:
+            digitalWrite(Battery_LED_1, LOW);
+            digitalWrite(Battery_LED_2, LOW);
+            digitalWrite(Battery_LED_3, LOW);
+            digitalWrite(Battery_LED_4, LOW);
+            digitalWrite(Battery_LED_1, HIGH);
+            digitalWrite(Battery_LED_2, HIGH);
+            digitalWrite(Battery_LED_3, HIGH);
+            digitalWrite(Battery_LED_4, LOW);
+            BAT_LED_state = BAT_LED_IDLE;
+            break;
+        case BAT_LED_HIGH:
+            digitalWrite(Battery_LED_1, LOW);
+            digitalWrite(Battery_LED_2, LOW);
+            digitalWrite(Battery_LED_3, LOW);
+            digitalWrite(Battery_LED_4, LOW);
+            digitalWrite(Battery_LED_1, HIGH);
+            digitalWrite(Battery_LED_2, HIGH);
+            digitalWrite(Battery_LED_3, HIGH);
+            digitalWrite(Battery_LED_4, HIGH);
+            BAT_LED_state = BAT_LED_IDLE;
+            break;
+        }
+    }
+    last_charge_state = charge_state;
+}
+
+void reboot(int32_t seconds)
+{
+    LOG_INFO("Reboot in %d seconds", seconds);
+    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+}
+
+#endif
+
 const char *getDeviceName()
 {
     uint8_t dmac[6];
@@ -308,6 +1109,31 @@ void setup()
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
+#endif
+
+#if defined(ELECROW_ThinkNode_M4)
+    mySerial.begin(4800);
+    /*Power*/
+    pinMode(GPS_EN, OUTPUT);
+    digitalWrite(GPS_EN, LOW);
+    SetperiphMode(true);
+    /*LED*/
+    pinMode(Battery_LED_1, OUTPUT);
+    pinMode(Battery_LED_2, OUTPUT);
+    pinMode(Battery_LED_3, OUTPUT);
+    pinMode(Battery_LED_4, OUTPUT);
+    pinMode(PWR_LED, OUTPUT);
+    digitalWrite(Battery_LED_1, LOW);
+    digitalWrite(Battery_LED_2, LOW);
+    digitalWrite(Battery_LED_3, LOW);
+    digitalWrite(Battery_LED_4, LOW);
+    digitalWrite(PWR_LED, LOW);
+    My_PWM_Instance = new nRF52_PWM(DATA_LED, 100, 0.0f);
+    if ((!My_PWM_Instance) || !My_PWM_Instance->isPWMEnabled())
+    {
+        LOG_INFO("PWM INIT FAIL");
+    }
+    FAST_BLINK_ON();
 #endif
 
 #if defined(ELECROW_ThinkNode_M5)
@@ -1086,7 +1912,27 @@ void setup()
 #ifndef BUTTON_ACTIVE_PULLUP
 #define BUTTON_ACTIVE_PULLUP true
 #endif
-
+#if defined(ELECROW_ThinkNode_M4)
+        LOG_DEBUG("ThinkNode_M4 button");
+        UserButtonThread = new ButtonThread("FunctionButton");
+        ButtonConfig userConfig;
+        userConfig.pinNumber = (uint8_t)_pinNum;
+        userConfig.activeLow = BUTTON_ACTIVE_LOW;
+        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfig.pullupSense = pullup_sense;
+        userConfig.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            UserButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfig.singlePress = INPUT_BROKER_SEND_PING;
+        userConfig.longLongPressTime = 3000;
+        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+        userConfig.doublePress = INPUT_BROKER_GPS_TOGGLE;
+        UserButtonThread->initButton(userConfig);
+#else
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
@@ -1130,7 +1976,7 @@ void setup()
         UserButtonThread->initButton(userConfigNoScreen);
     }
 #endif
-
+#endif
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS

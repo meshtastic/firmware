@@ -6,7 +6,9 @@
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
-
+#if defined(ELECROW_ThinkNode_M4)
+#include "main.h"
+#endif
 // ReliableRouter::ReliableRouter() {}
 
 /**
@@ -152,6 +154,18 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if (ackId || nakId) {
             LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
+#if defined(ELECROW_ThinkNode_M4)
+            if (ackId == get_tx_id())
+            {
+                LOG_DEBUG("stop TX!!!!");
+                set_txstatus(false);
+            }
+            else if (nakId == get_tx_id())
+            {
+                LOG_DEBUG("TX error!!!!");
+                set_txstatus(false);
+            }
+#endif
             if (ackId) {
                 stopRetransmission(p->to, ackId);
             } else {

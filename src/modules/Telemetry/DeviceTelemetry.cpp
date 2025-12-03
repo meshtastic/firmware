@@ -96,11 +96,17 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.has_uptime_seconds = true;
 
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
+#if defined(ELECROW_ThinkNode_M4)
+    t.variant.device_metrics.battery_level = (powerStatus->getIsCharging())? MAGIC_USB_BATTERY_LEVEL : get_battery_soc();
+    t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
+    t.variant.device_metrics.voltage = get_battery_voltage();
+#else
     t.variant.device_metrics.battery_level = (!powerStatus->getHasBattery() || powerStatus->getIsCharging())
                                                  ? MAGIC_USB_BATTERY_LEVEL
                                                  : powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+#endif
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
 
     return t;

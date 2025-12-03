@@ -175,15 +175,39 @@ int32_t ButtonThread::runOnce()
         evt.touchY = 0;
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
+#if defined(ELECROW_ThinkNode_M4)
+            if (get_off_status() == false)
+            {
+                if (get_ble_flag())
+                {
+                    // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
+                    evt.inputEvent = _singlePress;
+                    // evt.kbchar = _singlePress; // todo: fix this. Some events are kb characters rather than event types
+                    this->notifyObservers(&evt);
+                }
+                if (get_charge_state() == false)
+                {
+                    if (get_battery_flag() == false)
+                    {
+                        set_battery_flag(true);
+                        set_battery_state(get_last_BAT_LED_state());
+                        set_bat_last_time(millis());
+                    }
+                }
+            }
+            // Start tracking for potential combination
+            waitingForLongPress = true;
+            shortPressTime = millis();
+#else
             // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
             evt.inputEvent = _singlePress;
             // evt.kbchar = _singlePress; // todo: fix this. Some events are kb characters rather than event types
             this->notifyObservers(&evt);
-
+            
             // Start tracking for potential combination
             waitingForLongPress = true;
             shortPressTime = millis();
-
+#endif
             break;
         }
         case BUTTON_EVENT_LONG_PRESSED: {
@@ -216,7 +240,32 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
             LOG_INFO("Double press!");
-
+#if defined(ELECROW_ThinkNode_M4)
+            waitingForLongPress = false;
+            if (get_ble_flag())
+            {
+                if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) && (gps != nullptr))
+                {
+                    evt.inputEvent = _doublePress;
+                    this->notifyObservers(&evt);
+                    playComboTune();
+                    digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE);
+                    SetperiphMode(true);
+                    set_gps_connect_status(GPS_SEEK);
+                    set_data_led_state(DATA_GPS_BREATHE);
+                }
+                else if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gps != nullptr))
+                {
+                    evt.inputEvent = _doublePress;
+                    this->notifyObservers(&evt);
+                    playComboTune();
+                    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE);
+                    SetperiphMode(false);
+                    set_gps_connect_status(GPS_DISENABLE);
+                    set_data_led_state(DATA_LED_OFF);
+                }
+            }
+#else
             // Reset combination tracking
             waitingForLongPress = false;
 
@@ -224,7 +273,7 @@ int32_t ButtonThread::runOnce()
             // evt.kbchar = _doublePress;
             this->notifyObservers(&evt);
             playComboTune();
-
+#endif
             break;
         }
 
@@ -255,6 +304,22 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
+#if defined(ELECROW_ThinkNode_M4)
+            if (_longLongPress != INPUT_BROKER_NONE && (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed && (millis() - buttonPressStartTime) < 10000) {
+                set_data_led_status(false);
+                set_off_status(true);
+                digitalWrite(Battery_LED_1, LOW);
+                digitalWrite(Battery_LED_2, LOW);
+                digitalWrite(Battery_LED_3, LOW);
+                digitalWrite(Battery_LED_4, LOW);
+                FAST_BLINK_STOP();
+                evt.inputEvent = _longLongPress;
+                this->notifyObservers(&evt);
+            }
+            // Reset combination tracking
+            waitingForLongPress = false;
+            leadUpPlayed = false;
+#else
             if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
                 (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
                 evt.inputEvent = _longLongPress;
@@ -263,7 +328,7 @@ int32_t ButtonThread::runOnce()
             // Reset combination tracking
             waitingForLongPress = false;
             leadUpPlayed = false;
-
+#endif
             break;
         }
 

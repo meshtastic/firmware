@@ -76,6 +76,14 @@ void onConnect(uint16_t conn_handle)
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     LOG_INFO("BLE Disconnected, reason = 0x%x", reason);
+#if defined(ELECROW_ThinkNode_M4)
+    if (get_off_status() == false)
+    {
+        digitalWrite(PWR_LED, LOW);
+        set_pwr_led_state(PWR_BLE_DISCONNECTD);
+    }
+    set_gps_state(false);
+#endif
     if (bluetoothPhoneAPI) {
         bluetoothPhoneAPI->close();
     }
@@ -320,12 +328,21 @@ void NRF52Bluetooth::clearBonds()
 void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
     LOG_INFO("BLE connection secured");
+#if defined(ELECROW_ThinkNode_M4)
+    digitalWrite(PWR_LED, LOW);
+    set_pwr_led_state(PWR_BLE_CONNECTD);
+    set_gps_state(true);
+#endif
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
     char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
     char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
     LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
+#if defined(ELECROW_ThinkNode_M4)
+    set_pwr_led_state(PWR_BLE_PAIRING);
+    digitalWrite(PWR_LED, LOW);
+#endif
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string

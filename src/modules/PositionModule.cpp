@@ -191,6 +191,10 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Send location with precision %i", precision);
+#if defined(ELECROW_ThinkNode_M4)
+        p.latitude_i = localPosition.latitude_i;
+        p.longitude_i = localPosition.longitude_i;
+#else
     if (precision < 32 && precision > 0) {
         p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
         p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
@@ -202,6 +206,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
         p.latitude_i = localPosition.latitude_i;
         p.longitude_i = localPosition.longitude_i;
     }
+#endif
     p.precision_bits = precision;
     p.has_latitude_i = true;
     p.has_longitude_i = true;
