@@ -19,7 +19,6 @@
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
 
-#include "mesh/Default.h"
 #include "modules/TraceRouteModule.h"
 #include <functional>
 
