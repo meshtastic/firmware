@@ -492,7 +492,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
         // Consider extra width for signal bars on lines that contain "Signal:"
         uint16_t potentialWidth = lineWidths[lineCount];
-        if (graphics::bannerSignalBars >= 0 && strstr(lines[lineCount], "Signal:") != nullptr) {
+        if (graphics::bannerSignalBars >= 0 && strncmp(lines[lineCount], "Signal:", 7) == 0) {
             const int totalBars = 5;
             const int barWidth = 3;
             const int barSpacing = 2;
