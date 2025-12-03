@@ -7,10 +7,13 @@
 #include "main.h"
 #include <Throttle.h>
 
+// When using this module with power-save enabled and in role sensor you can benefit from very low power consumption on nRF52 and
+// ESP32/S/S2 Mind setting a valid, non-used GPIO pin. On ESP it is manditory to choose a 'RTC GPIO'.
+
 #ifdef ARCH_NRF52
 #include "sleep.h"
 // Reserved values for GPREGRET are: 0xF5 (NRF52_MAGIC_LFS_IS_CORRUPT)
-// and for the bootloader 0xB1, 0xA8, 0x4E, 0x57, 0x6D, lets choose free ones,
+// and for the bootloader 0xB1, 0xA8, 0x4E, 0x57, 0x6D
 // although the bootloader shouldn't be called in the following soft reset.
 constexpr uint32_t BOOT_FROM_COLD = 0x00;
 constexpr uint32_t BOOT_FROM_TIMEOUT = 0xC0;
@@ -73,8 +76,8 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.enabled = true;
     // moduleConfig.detection_sensor.monitor_pin = 10; // WisBlock PIR IO6
     // moduleConfig.detection_sensor.monitor_pin = 21; // WisBlock RAK12013 Radar IO6
-    // moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
-    // moduleConfig.detection_sensor.state_broadcast_secs = 120;
+    // moduleConfig.detection_sensor.message_rate_limit = 30;
+    // moduleConfig.detection_sensor.state_broadcast_interval = 120;
     // moduleConfig.detection_sensor.detection_trigger_type =
     // meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     // strcpy(moduleConfig.detection_sensor.name, "Motion");
@@ -105,8 +108,7 @@ int32_t DetectionSensorModule::runOnce()
                     regret = NRF_POWER->GPREGRET;
                 }
                 if (NRF_P0->LATCH || NRF_P1->LATCH) {
-                    LOG_INFO("Woke up from eternal sleep by GPIO.", __builtin_ctz(NRF_P0->LATCH ? NRF_P0->LATCH : NRF_P1->LATCH),
-                             NRF_P0->LATCH ? 0 : 1);
+                    LOG_INFO("Woke up from eternal sleep by GPIO.");
                     NRF_P1->LATCH = 0xFFFFFFFF;
                     NRF_P0->LATCH = 0xFFFFFFFF;
                     sendDetectionMessage();
@@ -114,14 +116,14 @@ int32_t DetectionSensorModule::runOnce()
                     LOG_INFO("Woke up by timeout.");
                     // When encountering a timeout without setting the timer ourself the source must be another module running
                     // concurrently
-                    if (moduleConfig.detection_sensor.state_broadcast_secs)
+                    if (moduleConfig.detection_sensor.state_broadcast_interval)
                         sendCurrentStateMessage(getState());
                 } else if (regret == BOOT_FROM_GPIOEVENT) {
                     LOG_INFO("Woke up from interval sleep by GPIO.");
                     sendDetectionMessage();
                 } else {
                     // We booted fresh. Enforce sending on first detection event.
-                    lastSentToMesh = -Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs);
+                    lastSentToMesh = -Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.message_rate_limit);
                 }
                 if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS)) {
                     NRF_POWER->GPREGRET = BOOT_FROM_COLD;
@@ -144,20 +146,20 @@ int32_t DetectionSensorModule::runOnce()
                 switch (wakeCause) {
                 case ESP_SLEEP_WAKEUP_EXT0:
                 case ESP_SLEEP_WAKEUP_EXT1:
-                    LOG_INFO("Woke up from interval sleep by GPIO. Sending detection message.");
+                    LOG_INFO("Woke up from interval sleep by GPIO");
                     timeNow_us = rtc_time_slowclk_to_us(rtc_time_get(), esp_clk_slowclk_cal_get());
                     timeDiff_s = (timeNow_us / 1000000 - sleepTime_s) + config.power.min_wake_secs;
                     // LOG_INFO("sleeptime (effectivly lastSentToMesh): %u", timeDiff_s - config.power.min_wake_secs);
                     // LOG_INFO("time since last run (effectivly lastSentToMesh): %us", timeDiff_s);
 
-                    if (timeDiff_s + time_acc_s > moduleConfig.detection_sensor.minimum_broadcast_secs) {
+                    if (timeDiff_s + time_acc_s > moduleConfig.detection_sensor.message_rate_limit) {
                         // LOG_INFO("sending as %u > %u", timeDiff_s + time_acc_s,
-                        //          moduleConfig.detection_sensor.minimum_broadcast_secs);
+                        //          moduleConfig.detection_sensor.message_rate_limit);
                         time_acc_s = 0;
                         sendDetectionMessage();
                     } else {
                         // LOG_INFO("not sending as did not reach broadcast threshold. %us < %us", timeDiff_s + time_acc_s,
-                        //          moduleConfig.detection_sensor.minimum_broadcast_secs);
+                        //          moduleConfig.detection_sensor.message_rate_limit);
                         time_acc_s += timeDiff_s;
                     }
                     break;
@@ -165,7 +167,7 @@ int32_t DetectionSensorModule::runOnce()
                     // When encountering a timeout without setting the timer ourself the source must be another module running
                     // concurrently
                     LOG_INFO("Woke up by timeout.");
-                    if (moduleConfig.detection_sensor.state_broadcast_secs)
+                    if (moduleConfig.detection_sensor.state_broadcast_interval)
                         sendCurrentStateMessage(getState());
                     break;
                 case ESP_SLEEP_WAKEUP_TOUCHPAD:
@@ -185,8 +187,7 @@ int32_t DetectionSensorModule::runOnce()
                         rtc_gpio_pullup_dis((gpio_num_t)moduleConfig.detection_sensor.monitor_pin);
                     }
                     if (esp_sleep_enable_ext0_wakeup((gpio_num_t)moduleConfig.detection_sensor.monitor_pin,
-                                                     (moduleConfig.detection_sensor.detection_trigger_type & 1) ? 1 : 0) !=
-                        ESP_OK)
+                                                     (moduleConfig.detection_sensor.detection_trigger_type & 1)) != ESP_OK)
                         LOG_ERROR("error enabling ext0 on gpio %d", moduleConfig.detection_sensor.monitor_pin);
                     return Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, 90);
                 } else {
@@ -212,14 +213,14 @@ int32_t DetectionSensorModule::runOnce()
 
 #if defined(ARCH_NRF52) || defined(ESP32_WITH_EXT0)
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
-        // If 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_secs) is specified it will be used, if
+        // If 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_interval) is specified it will be used, if
         // unset the sleep will last 'forever', interrupted by specified GPIO event
         // nRF52: Using a timeout the module enters a low power loop. Without, it will enter a low power delay to comply with the
-        // minimum_broadcast_secs and finally 'shutdown' while sensing the GPIO.
+        // message_rate_limit and finally 'shutdown' while sensing the GPIO.
         // ESP32: Always uses deep sleep with RTC
 
         uint32_t nightyNightMs =
-            Default::getConfiguredOrDefault(moduleConfig.detection_sensor.state_broadcast_secs * 1000, portMAX_DELAY);
+            Default::getConfiguredOrDefault(moduleConfig.detection_sensor.state_broadcast_interval * 1000, portMAX_DELAY);
 
 #ifdef ESP32_WITH_EXT0
         sleepTime_s = rtc_time_slowclk_to_us(rtc_time_get(), esp_clk_slowclk_cal_get()) / 1000000;
@@ -229,7 +230,7 @@ int32_t DetectionSensorModule::runOnce()
 #endif
 
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
-                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.message_rate_limit))) {
         bool isDetected = hasDetectionEvent();
         DetectionSensorTriggerVerdict verdict =
             handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
@@ -248,9 +249,9 @@ int32_t DetectionSensorModule::runOnce()
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
-    if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
+    if (moduleConfig.detection_sensor.state_broadcast_interval > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
-                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_interval,
                                                                         default_telemetry_broadcast_interval_secs))) {
         sendCurrentStateMessage(getState());
         return DELAYED_INTERVAL;
@@ -325,7 +326,7 @@ boolean DetectionSensorModule::shouldLoop()
 void DetectionSensorModule::lpDelay()
 {
     sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
-    delay(moduleConfig.detection_sensor.minimum_broadcast_secs - config.power.min_wake_secs);
+    delay(moduleConfig.detection_sensor.message_rate_limit - config.power.min_wake_secs);
 }
 
 void DetectionSensorModule::lpLoop(uint32_t msecToWake)
@@ -333,8 +334,8 @@ void DetectionSensorModule::lpLoop(uint32_t msecToWake)
     for (uint32_t i = msecToWake / 100;; i--) {
         delay(100);
         if (hasDetectionEvent() &&
-            !Throttle::isWithinTimespanMs(
-                lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+            !Throttle::isWithinTimespanMs(lastSentToMesh,
+                                          Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.message_rate_limit))) {
             if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
                   sd_power_gpregret_set(0, BOOT_FROM_GPIOEVENT) == NRF_SUCCESS)) {
                 // necessary if softdevice is not enabled yet or never was

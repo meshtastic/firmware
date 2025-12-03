@@ -467,7 +467,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 
 #ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
-        // enforce the rules of minimum_broadcast_secs of the detectionSensorModule. simply by delaying deep sleep
+        // enforce the rules of message_rate_limit of the detectionSensorModule. simply by delaying deep sleep
         // in a low power mode delay
         if (detectionSensorModule != nullptr && detectionSensorModule->shouldLoop())
             detectionSensorModule->lpDelay();
