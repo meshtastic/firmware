@@ -185,6 +185,7 @@ private:
     void processSpeculativeRetransmits(uint32_t nowMs);
     void cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId);
     static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
+    bool isActiveRoutingRole() const;
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;
     void handleSniffedPayload(const meshtastic_MeshPacket &mp, bool isDirectNeighbor);
