@@ -158,7 +158,7 @@ int32_t DetectionSensorModule::runOnce()
                         time_acc_s = 0;
                         sendDetectionMessage();
                     } else {
-                        // LOG_INFO("not sending as did not reach broadcast threshold. %us < %us", timeDiff_s + time_acc_s,
+                        // LOG_INFO("not sending as did not reach the rate limit. %us < %us", timeDiff_s + time_acc_s,
                         //          moduleConfig.detection_sensor.message_rate_limit);
                         time_acc_s += timeDiff_s;
                     }
@@ -214,7 +214,7 @@ int32_t DetectionSensorModule::runOnce()
 #if defined(ARCH_NRF52) || defined(ESP32_WITH_EXT0)
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving)) {
         // If 'State Broadcast Interval' (moduleConfig.detection_sensor.state_broadcast_interval) is specified it will be used, if
-        // unset the sleep will last 'forever', interrupted by specified GPIO event
+        // unset, the sleep will last 'forever', interrupted by specified GPIO event
         // nRF52: Using a timeout the module enters a low power loop. Without, it will enter a low power delay to comply with the
         // message_rate_limit and finally 'shutdown' while sensing the GPIO.
         // ESP32: Always uses deep sleep with RTC
@@ -247,7 +247,7 @@ int32_t DetectionSensorModule::runOnce()
         }
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
-    // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
+    // of heartbeat. We only do this if the broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
     if (moduleConfig.detection_sensor.state_broadcast_interval > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
