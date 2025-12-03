@@ -229,7 +229,8 @@ class NodeDB
      */
     size_t getNumOnlineMeshNodes(bool localOnly = false);
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
+        removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
@@ -282,7 +283,9 @@ class NodeDB
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+#endif
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
