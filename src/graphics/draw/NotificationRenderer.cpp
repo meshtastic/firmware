@@ -843,6 +843,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             if (screen) {
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
+            // If screen is null, do nothing (safe fallback)
             return;
         }
 
