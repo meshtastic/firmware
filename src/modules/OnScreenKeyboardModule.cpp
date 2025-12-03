@@ -26,7 +26,7 @@ OnScreenKeyboardModule::~OnScreenKeyboardModule()
     }
 }
 
-void OnScreenKeyboardModule::start(const char *header, const char *initialText, uint32_t,
+void OnScreenKeyboardModule::start(const char *header, const char *initialText, uint32_t durationMs,
                                    std::function<void(const std::string &)> cb)
 {
     if (keyboard) {
