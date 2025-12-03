@@ -103,13 +103,15 @@ int32_t TrackballInterruptBase::runOnce()
             directionPressedNow = TB_ACTION_RIGHT;
         }
 
-        if (directionPressedNow < 3) {
+        const uint8_t DIRECTION_REPEAT_THRESHOLD = 3;
+
+        if (directionPressedNow == TB_ACTION_NONE) {
             // Reset state
             directionDetected = false;
             directionStartTime = 0;
             directionInterval = 0;
             this->action = TB_ACTION_NONE;
-        } else if (directionDuration >= LONG_PRESS_DURATION && directionPressedNow >= 3 && directionInterval >= 3) {
+        } else if (directionDuration >= LONG_PRESS_DURATION && directionInterval >= DIRECTION_REPEAT_THRESHOLD) {
             // repeat event when long press these direction.
             switch (directionPressedNow) {
             case TB_ACTION_UP:
