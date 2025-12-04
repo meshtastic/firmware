@@ -173,7 +173,8 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
     p->to = dest;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    LOG_INFO("SignalRouting: Broadcasting %d neighbors from %s", info.neighbors_count, ourName);
+    LOG_INFO("[SR] SENDING: Broadcasting %d neighbors from %s (capable=%s)",
+             info.neighbors_count, ourName, info.signal_based_capable ? "yes" : "no");
 
     service->sendToMesh(p);
     lastBroadcast = millis();
@@ -271,7 +272,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         return false;
     }
 
-    LOG_INFO("[SR] %s reports %d neighbors (SR v%d, %s)",
+    LOG_INFO("[SR] RECEIVED: %s reports %d neighbors (SR v%d, %s)",
              senderName, p->neighbors_count, p->routing_version,
              p->signal_based_capable ? "SR-capable" : "legacy mode");
 
@@ -426,7 +427,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
         }
 
-        updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
+        updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000);
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
         // Process relayed packets to infer network topology
         // We don't have direct signal info to the original sender, but we can infer connectivity
@@ -444,7 +445,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
             // If we have signal data to the relayer, we can update that edge
             if (hasSignalData) {
-                updateNeighborInfo(inferredRelayer, mp.rx_rssi, mp.rx_snr, mp.rx_time);
+                updateNeighborInfo(inferredRelayer, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000);
             }
 
             // Record transmission for contention window tracking
@@ -501,8 +502,9 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         }
 
         bool healthy = topologyHealthyForBroadcast();
-        LOG_DEBUG("SignalRouting: Broadcast topology %s (capable_ratio=%.1f%%)",
-                 healthy ? "HEALTHY" : "unhealthy",
+        LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% capable)",
+                 healthy ? "HEALTHY - SR active" : "UNHEALTHY - flooding only",
+                 routingGraph ? routingGraph->getEdgesFrom(nodeDB->getNodeNum())->size() : 0,
                  getSignalBasedCapablePercentage());
         return healthy;
     }
@@ -888,7 +890,7 @@ void SignalRoutingModule::handlePositionPacket(const meshtastic_MeshPacket &mp, 
         }
 
         if (variance > 0) {
-            updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time, variance);
+            updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000, variance);
         }
     }
 }
