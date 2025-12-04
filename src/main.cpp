@@ -1567,6 +1567,11 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
 #endif
+
+#if defined(ARCH_NRF52)
+    deviceMetadata.bootloader_version = NRF_TIMER2->CC[0]; // BOOTLOADER_VERSION_REGISTER
+#endif
+
     return deviceMetadata;
 }
 
