@@ -372,37 +372,80 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p)
 {
     if (!p || !signalBasedRoutingEnabled || !routingGraph) {
+        LOG_DEBUG("SignalRouting: SR disabled or unavailable (enabled=%d, graph=%p)",
+                 signalBasedRoutingEnabled, routingGraph);
         return false;
     }
+
+    char destName[64], senderName[64];
+    getNodeDisplayName(p->to, destName, sizeof(destName));
+    getNodeDisplayName(p->from, senderName, sizeof(senderName));
 
     if (isBroadcast(p->to)) {
+        LOG_DEBUG("SignalRouting: Considering broadcast from %s to %s (hop_limit=%d)",
+                 senderName, destName, p->hop_limit);
+
         if (!isActiveRoutingRole()) {
+            LOG_DEBUG("SignalRouting: Passive role - entering SR path for relay veto");
             return true; // enter SR path so shouldRelayBroadcast can veto the relay
         }
-        return topologyHealthyForBroadcast();
+
+        bool healthy = topologyHealthyForBroadcast();
+        LOG_DEBUG("SignalRouting: Broadcast topology %s (capable_ratio=%.1f%%)",
+                 healthy ? "HEALTHY" : "unhealthy",
+                 getSignalBasedCapablePercentage());
+        return healthy;
     }
+
+    // Unicast routing
+    LOG_DEBUG("SignalRouting: Considering unicast from %s to %s (hop_limit=%d)",
+             senderName, destName, p->hop_limit);
 
     if (!isActiveRoutingRole()) {
+        LOG_DEBUG("SignalRouting: Passive role - not using SR for unicast");
         return false;
     }
 
-    if (!topologyHealthyForUnicast(p->to)) {
+    bool topologyHealthy = topologyHealthyForUnicast(p->to);
+    LOG_DEBUG("SignalRouting: Unicast topology %s for destination",
+             topologyHealthy ? "HEALTHY" : "unhealthy");
+
+    if (!topologyHealthy) {
+        LOG_DEBUG("SignalRouting: Insufficient SR-capable nodes for reliable unicast");
         return false;
     }
 
-    if (!isSignalBasedCapable(p->to) && !isLegacyRouter(p->to)) {
+    bool destCapable = isSignalBasedCapable(p->to);
+    bool destLegacy = isLegacyRouter(p->to);
+    LOG_DEBUG("SignalRouting: Destination %s (SR-capable=%d, legacy-router=%d)",
+             destName, destCapable, destLegacy);
+
+    if (!destCapable && !destLegacy) {
+        LOG_DEBUG("SignalRouting: Destination not SR-capable and not legacy router - fallback to flood");
         return false;
     }
 
     NodeNum nextHop = getNextHop(p->to);
     if (nextHop == 0) {
+        LOG_DEBUG("SignalRouting: No route found to destination");
         return false;
     }
 
-    if (!isSignalBasedCapable(nextHop) && !isLegacyRouter(nextHop)) {
+    char nextHopName[64];
+    getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
+
+    bool nextHopCapable = isSignalBasedCapable(nextHop);
+    bool nextHopLegacy = isLegacyRouter(nextHop);
+    LOG_DEBUG("SignalRouting: Next hop %s (SR-capable=%d, legacy-router=%d)",
+             nextHopName, nextHopCapable, nextHopLegacy);
+
+    if (!nextHopCapable && !nextHopLegacy) {
+        LOG_DEBUG("SignalRouting: Next hop not SR-capable and not legacy router - fallback to flood");
         return false;
     }
 
+    LOG_INFO("SignalRouting: Using SR for unicast from %s to %s via %s",
+             senderName, destName, nextHopName);
     return true;
 }
 
@@ -456,6 +499,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
 {
     if (!routingGraph) {
+        LOG_DEBUG("SignalRouting: No graph available for routing");
         return 0;
     }
 
@@ -463,13 +507,29 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
     if (!currentTime) {
         currentTime = getTime();
     }
+
+    char destName[64];
+    getNodeDisplayName(destination, destName, sizeof(destName));
+
     Route route = routingGraph->calculateRoute(destination, currentTime);
 
     if (route.nextHop != 0) {
-        LOG_DEBUG("SignalRouting: Next hop for %08x is %08x (cost: %.2f)", destination, route.nextHop, route.cost);
+        char nextHopName[64];
+        getNodeDisplayName(route.nextHop, nextHopName, sizeof(nextHopName));
+
+        LOG_DEBUG("SignalRouting: Route to %s via %s (cost: %.2f)",
+                 destName, nextHopName, route.cost);
+
+        // Log route quality indicators
+        if (route.cost > 10.0f) {
+            LOG_WARN("SignalRouting: High-cost route to %s (%.2f) - poor link quality expected",
+                    destName, route.cost);
+        }
+
         return route.nextHop;
     }
 
+    LOG_DEBUG("SignalRouting: No route found to %s", destName);
     return 0; // No route found
 }
 
