@@ -369,9 +369,8 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            const char* prefix = (i == sortedEdges.size() - 1) ? "  +- " : "  +- ";
-            LOG_INFO("    %s %s: %s link (ETX=%.1f, %u sec ago)",
-                    prefix, neighborName, quality, edge.etx,
+            LOG_INFO("    +- %s: %s link (ETX=%.1f, %u sec ago)",
+                    neighborName, quality, edge.etx,
                     (getTime() - edge.lastUpdate));
         }
     }
