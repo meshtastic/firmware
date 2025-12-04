@@ -355,7 +355,10 @@ void SignalRoutingModule::logNetworkTopology()
 
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
-            LOG_INFO("[SR] +- %s: (isolated)", nodeName);
+            CapabilityStatus status = getCapabilityStatus(nodeId);
+            const char* statusStr = (status == CapabilityStatus::Capable) ? "SR-capable" :
+                                   (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
+            LOG_INFO("[SR] +- %s: no neighbors (%s)", nodeName, statusStr);
             continue;
         }
 
@@ -377,13 +380,9 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            uint32_t currentTime = getValidTime(RTCQualityFromNet);
-            if (!currentTime) {
-                currentTime = getTime();
-            }
             LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %u sec ago)",
                     neighborName, quality, edge.etx,
-                    (currentTime - edge.lastUpdate));
+                    (getTime() - edge.lastUpdate));
         }
     }
 
@@ -410,9 +409,12 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     bool isDirectFromSender = (mp.relay_node == fromLastByte);
     
     // Debug logging to understand why packets might not be tracked
-    if (hasSignalData) {
-        LOG_DEBUG("[SR] Packet from 0x%08x: relay=0x%02x, fromLastByte=0x%02x, viaMqtt=%d, direct=%d",
-                  mp.from, mp.relay_node, fromLastByte, mp.via_mqtt, isDirectFromSender);
+    if (hasSignalData && notViaMqtt) {
+        LOG_DEBUG("[SR] Packet from 0x%08x: relay=0x%02x, fromLastByte=0x%02x, direct=%d",
+                  mp.from, mp.relay_node, fromLastByte, isDirectFromSender);
+        if (!isDirectFromSender && mp.relay_node != 0) {
+            LOG_DEBUG("[SR] Relayed packet detected - not updating neighbor graph");
+        }
     }
     
     if (hasSignalData && notViaMqtt && isDirectFromSender) {
@@ -439,6 +441,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         }
 
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000);
+        LOG_DEBUG("[SR] Direct neighbor %s detected (RSSI=%d, SNR=%.1f)",
+                 senderName, mp.rx_rssi, mp.rx_snr);
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
         // Process relayed packets to infer network topology
         // We don't have direct signal info to the original sender, but we can infer connectivity
@@ -513,10 +517,27 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         }
 
         bool healthy = topologyHealthyForBroadcast();
+        size_t neighborCount = routingGraph ? routingGraph->getEdgesFrom(nodeDB->getNodeNum())->size() : 0;
         LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% capable)",
                  healthy ? "HEALTHY - SR active" : "UNHEALTHY - flooding only",
-                 routingGraph ? routingGraph->getEdgesFrom(nodeDB->getNodeNum())->size() : 0,
-                 getSignalBasedCapablePercentage());
+                 neighborCount, getSignalBasedCapablePercentage());
+
+        if (!healthy && neighborCount > 0) {
+            LOG_INFO("[SR] SR not activated despite having neighbors - checking capability status");
+            if (routingGraph) {
+                const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+                if (edges) {
+                    for (const Edge& edge : *edges) {
+                        CapabilityStatus status = getCapabilityStatus(edge.to);
+                        char neighborName[64];
+                        getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
+                        LOG_INFO("[SR] Neighbor %s: status=%s", neighborName,
+                                status == CapabilityStatus::Capable ? "SR-capable" :
+                                status == CapabilityStatus::Legacy ? "legacy" : "unknown");
+                    }
+                }
+            }
+        }
         return healthy;
     }
 
