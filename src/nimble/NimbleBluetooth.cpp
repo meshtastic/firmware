@@ -20,12 +20,13 @@
 #include "PowerStatus.h"
 #endif
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 #if defined(CONFIG_NIMBLE_CPP_IDF)
 #include "host/ble_gap.h"
 #else
 #include "nimble/nimble/host/include/host/ble_gap.h"
 #endif
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 
 namespace
 {
@@ -118,7 +119,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     */
 
   public:
-    BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") {}
+    BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") { api_type = TYPE_BLE; }
 
     /* Packets from phone (BLE onWrite callback) */
     std::mutex fromPhoneMutex;
@@ -776,16 +777,35 @@ bool NimbleBluetooth::isConnected()
 
 int NimbleBluetooth::getRssi()
 {
-    if (bleServer && isConnected()) {
-        auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
-        uint16_t handle = service->getHandle();
-#ifdef NIMBLE_TWO
-        return NimBLEDevice::getClientByHandle(handle)->getRssi();
-#else
-        return NimBLEDevice::getClientByID(handle)->getRssi();
-#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    if (!bleServer || !isConnected()) {
+        return 0; // No active BLE connection
     }
-    return 0; // FIXME figure out where to source this
+
+    uint16_t connHandle = nimbleBluetoothConnHandle.load();
+
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+        const auto peers = bleServer->getPeerDevices();
+        if (!peers.empty()) {
+            connHandle = peers.front();
+            nimbleBluetoothConnHandle = connHandle;
+        }
+    }
+
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+        return 0; // Connection handle not available yet
+    }
+
+    int8_t rssi = 0;
+    const int rc = ble_gap_conn_rssi(connHandle, &rssi);
+
+    if (rc == 0) {
+        return rssi;
+    }
+    LOG_DEBUG("BLE RSSI read failed, rc=%d", rc);
+#endif
+
+    return 0;
 }
 
 void NimbleBluetooth::setup()

@@ -1,4 +1,5 @@
 #include "SystemCommandsModule.h"
+#include "input/InputBroker.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
 #include "graphics/Screen.h"
@@ -22,7 +23,7 @@ SystemCommandsModule::SystemCommandsModule()
 
 int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 {
-    LOG_INFO("Input event %u! kb %u", event->inputEvent, event->kbchar);
+    LOG_INPUT("SystemCommands Input event %u! kb %u", event->inputEvent, event->kbchar);
     // System commands (all others fall through)
     switch (event->kbchar) {
     // Fn key symbols
@@ -85,10 +86,8 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     switch (event->inputEvent) {
         // GPS
     case INPUT_BROKER_GPS_TOGGLE:
-        LOG_WARN("GPS Toggle");
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
-            LOG_WARN("GPS Toggle2");
             if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
                 config.position.fixed_position == false) {
                 nodeDB->clearLocalPosition();

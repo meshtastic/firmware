@@ -7,6 +7,7 @@
 #if HAS_SCREEN
 #include "OLEDDisplayUi.h"
 #endif
+#include <vector>
 
 #define ROUTE_SIZE sizeof(((meshtastic_RouteDiscovery *)0)->route) / sizeof(((meshtastic_RouteDiscovery *)0)->route[0])
 
@@ -49,11 +50,22 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     virtual int32_t runOnce() override;
 
   private:
+    void setResultText(const String &text);
+    void clearResultLines();
+#if HAS_SCREEN
+    void rebuildResultLines(OLEDDisplay *display);
+#endif
     // Call to add unknown hops (e.g. when a node couldn't decrypt it) to the route based on hopStart and current hopLimit
     void insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r, bool isTowardsDestination);
 
     // Call to add your ID to the route array of a RouteDiscovery message
     void appendMyIDandSNR(meshtastic_RouteDiscovery *r, float snr, bool isTowardsDestination, bool SNRonly);
+
+    // Update next-hops in the routing table based on the returned route
+    void updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r);
+
+    // Helper to update next-hop for a single node
+    void maybeSetNextHop(NodeNum target, uint8_t nextHopByte);
 
     /* Call to print the route array of a RouteDiscovery message.
        Set origin to where the request came from.
@@ -68,6 +80,8 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     unsigned long trackingTimeoutMs = 10000;
     String bannerText;
     String resultText;
+    std::vector<String> resultLines;
+    bool resultLinesDirty = false;
     NodeNum tracingNode = 0;
     bool initialized = false;
 };

@@ -25,6 +25,7 @@ void deInitApiServer()
 
 WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : ServerAPI(_client)
 {
+    api_type = TYPE_WIFI;
     LOG_INFO("Incoming wifi connection");
 }
 

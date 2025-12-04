@@ -26,3 +26,31 @@ void getMacAddr(uint8_t *dmac)
 }
 
 void cpuDeepSleep(uint32_t msecToWake) {}
+
+// Hacks to force more code and data out.
+
+// By default __assert_func uses fiprintf which pulls in stdio.
+extern "C" void __wrap___assert_func(const char *, int, const char *, const char *)
+{
+    while (true)
+        ;
+    return;
+}
+
+// By default strerror has a lot of strings we probably don't use. Make it return an empty string instead.
+char empty = 0;
+extern "C" char *__wrap_strerror(int)
+{
+    return &empty;
+}
+
+#ifdef MESHTASTIC_EXCLUDE_TZ
+struct _reent;
+
+// Even if you don't use timezones, mktime will try to set the timezone anyway with _tzset_unlocked(), which pulls in scanf and
+// friends. The timezone is initialized to UTC by default.
+extern "C" void __wrap__tzset_unlocked_r(struct _reent *reent_ptr)
+{
+    return;
+}
+#endif

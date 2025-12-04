@@ -50,6 +50,7 @@ void consolePrintf(const char *format, ...)
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
 {
+    api_type = TYPE_SERIAL;
     assert(!console);
     console = this;
     canWrite = false; // We don't send packets to our port until it has talked to us first

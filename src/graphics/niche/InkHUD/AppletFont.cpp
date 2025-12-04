@@ -124,7 +124,7 @@ uint32_t InkHUD::AppletFont::toUtf32(std::string utf8)
         utf32 |= (utf8.at(3) & 0b00111111);
         break;
     default:
-        assert(false);
+        return 0;
     }
 
     return utf32;

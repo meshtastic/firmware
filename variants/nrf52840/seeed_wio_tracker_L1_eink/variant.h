@@ -122,6 +122,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
 #define AREF_VOLTAGE 3.6
+#define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

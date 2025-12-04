@@ -62,10 +62,12 @@
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 #define TFT_INVERT false
+#define FORCE_LOW_RES 1
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 #define TFT_BACKLIGHT_ON LOW
+#define USE_TFTDISPLAY 1
 
 // Battery
 
