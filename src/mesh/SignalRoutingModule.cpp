@@ -331,7 +331,7 @@ void SignalRoutingModule::logNetworkTopology()
 
     auto allNodes = routingGraph->getAllNodes();
     if (allNodes.empty()) {
-        LOG_INFO("🕸️  Network Topology: No nodes in graph yet");
+        LOG_INFO("[SR] Network Topology: No nodes in graph yet");
         return;
     }
 
@@ -347,11 +347,11 @@ void SignalRoutingModule::logNetworkTopology()
 
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
-            LOG_INFO("  +- %s: (isolated)", nodeName);
+            LOG_INFO("[SR] +- %s: (isolated)", nodeName);
             continue;
         }
 
-        LOG_INFO("  +- %s: connected to %d nodes", nodeName, edges->size());
+        LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->size());
 
         // Sort edges by ETX for consistent output
         std::vector<Edge> sortedEdges = *edges;
@@ -369,7 +369,7 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            LOG_INFO("    +- %s: %s link (ETX=%.1f, %u sec ago)",
+            LOG_INFO("[SR]   +- %s: %s link (ETX=%.1f, %u sec ago)",
                     neighborName, quality, edge.etx,
                     (getTime() - edge.lastUpdate));
         }
