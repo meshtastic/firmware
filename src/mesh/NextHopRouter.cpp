@@ -144,10 +144,10 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     if (signalRoutingModule && isBroadcast(p->to)) {
                         if (signalRoutingModule->shouldUseSignalBasedRouting(p)) {
                             if (!signalRoutingModule->shouldRelayBroadcast(p)) {
-                                LOG_INFO("SignalRouting: Not relaying broadcast 0x%08x (another node is better positioned)", p->id);
+                                LOG_INFO("[SR] Not relaying broadcast 0x%08x (another node is better positioned)", p->id);
                                 return false;
                             }
-                            LOG_INFO("SignalRouting: Relaying broadcast 0x%08x (we are best positioned)", p->id);
+                            LOG_INFO("[SR] Relaying broadcast 0x%08x (we are best positioned)", p->id);
                         }
                     }
 
