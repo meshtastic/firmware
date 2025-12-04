@@ -101,8 +101,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_WATCH_S3
 #elif defined(GENIEBLOCKS)
 #define HW_VENDOR meshtastic_HardwareModel_GENIEBLOCKS
-#elif defined(PRIVATE_HW)
-#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(NANO_G1)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
 #elif defined(M5STACK)
@@ -205,6 +203,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#else
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
 
 // -----------------------------------------------------------------------------
