@@ -265,13 +265,13 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     trackNodeCapability(mp.from, p->signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
 
     if (p->neighbors_count == 0) {
-        LOG_INFO("📡 SignalRouting: %s is online (SR v%d, %s) - no neighbors detected yet",
+        LOG_INFO("[SR] %s is online (SR v%d, %s) - no neighbors detected yet",
                  senderName, p->routing_version,
                  p->signal_based_capable ? "SR-capable" : "legacy mode");
         return false;
     }
 
-    LOG_INFO("📡 SignalRouting: %s reports %d neighbors (SR v%d, %s)",
+    LOG_INFO("[SR] %s reports %d neighbors (SR v%d, %s)",
              senderName, p->neighbors_count, p->routing_version,
              p->signal_based_capable ? "SR-capable" : "legacy mode");
 
@@ -335,7 +335,7 @@ void SignalRoutingModule::logNetworkTopology()
         return;
     }
 
-    LOG_INFO("🕸️  Network Topology: %d nodes total", allNodes.size());
+    LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
 
     // Sort nodes for consistent output
     std::vector<NodeNum> sortedNodes(allNodes.begin(), allNodes.end());
@@ -347,11 +347,11 @@ void SignalRoutingModule::logNetworkTopology()
 
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
-            LOG_INFO("  └── %s: (isolated)", nodeName);
+            LOG_INFO("  +- %s: (isolated)", nodeName);
             continue;
         }
 
-        LOG_INFO("  ├── %s: connected to %d nodes", nodeName, edges->size());
+        LOG_INFO("  +- %s: connected to %d nodes", nodeName, edges->size());
 
         // Sort edges by ETX for consistent output
         std::vector<Edge> sortedEdges = *edges;
@@ -369,9 +369,9 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            const char* treeChar = (i == sortedEdges.size() - 1) ? "└──" : "├──";
-            LOG_INFO("      %s %s: %s link (ETX=%.1f, %u sec ago)",
-                    treeChar, neighborName, quality, edge.etx,
+            const char* prefix = (i == sortedEdges.size() - 1) ? "  +- " : "  +- ";
+            LOG_INFO("    %s %s: %s link (ETX=%.1f, %u sec ago)",
+                    prefix, neighborName, quality, edge.etx,
                     (getTime() - edge.lastUpdate));
         }
     }
