@@ -303,6 +303,9 @@ void lateInitVariant() {}
 // blink user led in 3 flashes sequence to indicate what is happening
 void waitUntilPowerLevelSafe(){
 
+    // TODO: do not use delay but RTC/IRQ whatever so we don't burn
+    // energy which is already scarce
+
     #ifdef LED_PIN
         pinMode(LED_PIN, OUTPUT);
     #endif
