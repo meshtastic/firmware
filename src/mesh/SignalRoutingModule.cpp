@@ -161,28 +161,23 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
     char ourName[64];
     getNodeDisplayName(nodeDB->getNodeNum(), ourName, sizeof(ourName));
 
-    if (info.neighbors_count > 0) {
-        meshtastic_MeshPacket *p = allocDataProtobuf(info);
-        p->to = dest;
-        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    // Always send SignalRoutingInfo to announce our capability, even with 0 neighbors
+    meshtastic_MeshPacket *p = allocDataProtobuf(info);
+    p->to = dest;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-        LOG_INFO("SignalRouting: Broadcasting %d neighbors from %s", info.neighbors_count, ourName);
+    LOG_INFO("SignalRouting: Broadcasting %d neighbors from %s", info.neighbors_count, ourName);
 
-        service->sendToMesh(p);
-        lastBroadcast = millis();
+    service->sendToMesh(p);
+    lastBroadcast = millis();
 
-        // Record our transmission for contention window tracking
-        if (routingGraph) {
-            uint32_t currentTime = getValidTime(RTCQualityFromNet);
-            if (!currentTime) {
-                currentTime = getTime();
-            }
-            routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
+    // Record our transmission for contention window tracking
+    if (routingGraph) {
+        uint32_t currentTime = getValidTime(RTCQualityFromNet);
+        if (!currentTime) {
+            currentTime = getTime();
         }
-    } else {
-        LOG_DEBUG("SignalRouting: No direct neighbors to broadcast from %s (waiting for direct packets)", ourName);
-        // Still update lastBroadcast to prevent immediate retry
-        lastBroadcast = millis();
+        routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
     }
 }
 
@@ -263,13 +258,15 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     trackNodeCapability(mp.from, p->signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
 
     if (p->neighbors_count == 0) {
-        LOG_DEBUG("SignalRouting: %s has no neighbors (version %d)", senderName, p->routing_version);
+        LOG_INFO("📡 SignalRouting: %s is online (SR v%d, %s) - no neighbors detected yet",
+                 senderName, p->routing_version,
+                 p->signal_based_capable ? "SR-capable" : "legacy mode");
         return false;
     }
 
-    LOG_INFO("SignalRouting: Received %d neighbors from %s (version %d, capable=%s)",
-             p->neighbors_count, senderName, p->routing_version,
-             p->signal_based_capable ? "true" : "false");
+    LOG_INFO("📡 SignalRouting: %s reports %d neighbors (SR v%d, %s)",
+             senderName, p->neighbors_count, p->routing_version,
+             p->signal_based_capable ? "SR-capable" : "legacy mode");
 
     // Flash cyan for network topology update
     flashRgbLed(0, 255, 255, 150, true);
@@ -291,10 +288,23 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         // Add edge: sender -> neighbor with variance for route cost calculation
         routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
 
-        LOG_INFO("  -> %s: RSSI=%d, SNR=%d, ETX=%.2f, variance=%u, capable=%s",
-                 neighborName, neighbor.rssi, neighbor.snr, etx, neighbor.position_variance,
-                 neighbor.signal_based_capable ? "true" : "false");
+        // Classify signal quality for user-friendly display
+        const char* quality;
+        if (etx < 2.0f) quality = "excellent";
+        else if (etx < 4.0f) quality = "good";
+        else if (etx < 8.0f) quality = "fair";
+        else quality = "poor";
+
+        LOG_INFO("  ├── %s: %s link (%s, ETX=%.1f, %u sec ago)",
+                 neighborName,
+                 neighbor.signal_based_capable ? "SR-node" : "legacy",
+                 quality, etx,
+                 (getTime() - neighbor.last_rx_time));
     }
+
+    // Log network topology summary
+    LOG_DEBUG("SignalRouting: Network topology updated - %s now connected to %d neighbors",
+             senderName, p->neighbors_count);
 
     // Allow others to see this packet too
     return false;
