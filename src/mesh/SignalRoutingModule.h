@@ -193,6 +193,11 @@ private:
     void handlePositionPacket(const meshtastic_MeshPacket &mp, bool isDirectNeighbor);
     void handleTelemetryPacket(const meshtastic_MeshPacket &mp);
     void handleRoutingControlPacket(const meshtastic_MeshPacket &mp);
+
+    /**
+     * Log the current network topology graph in a readable format
+     */
+    void logNetworkTopology();
 };
 
 extern SignalRoutingModule *signalRoutingModule;
