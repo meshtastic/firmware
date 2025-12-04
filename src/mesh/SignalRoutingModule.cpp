@@ -173,7 +173,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
     p->to = dest;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    LOG_INFO("[SR] SENDING: Broadcasting %d neighbors from %s (capable=%s)",
+    LOG_INFO("[SR] SENDING: Broadcasting %d neighbors from %s (capable=%s) to network",
              info.neighbors_count, ourName, info.signal_based_capable ? "yes" : "no");
 
     service->sendToMesh(p);
@@ -263,7 +263,14 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     char senderName[64];
     getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
-    trackNodeCapability(mp.from, p->signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
+    CapabilityStatus newStatus = p->signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy;
+    CapabilityStatus oldStatus = getCapabilityStatus(mp.from);
+    trackNodeCapability(mp.from, newStatus);
+
+    if (oldStatus != newStatus) {
+        LOG_INFO("[SR] Capability update: %s changed from %d to %d",
+                senderName, (int)oldStatus, (int)newStatus);
+    }
 
     if (p->neighbors_count == 0) {
         LOG_INFO("[SR] %s is online (SR v%d, %s) - no neighbors detected yet",
@@ -370,9 +377,13 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
+            uint32_t currentTime = getValidTime(RTCQualityFromNet);
+            if (!currentTime) {
+                currentTime = getTime();
+            }
             LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %u sec ago)",
                     neighborName, quality, edge.etx,
-                    (getTime() - edge.lastUpdate));
+                    (currentTime - edge.lastUpdate));
         }
     }
 
@@ -663,12 +674,12 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
             // Flash green for new neighbor
             flashRgbLed(0, 255, 0, 300, true);
             // Log topology for new connections
+            LOG_INFO("[SR] Topology changed: new neighbor %s", neighborName);
             logNetworkTopology();
         } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
-            LOG_INFO("SignalRouting: Significant ETX change for %s", neighborName);
+            LOG_INFO("[SR] Topology changed: ETX change for %s", neighborName);
             // Flash blue for signal quality change
             flashRgbLed(0, 0, 255, 300, true);
-            // Log topology for significant link quality changes
             logNetworkTopology();
         }
 
@@ -742,7 +753,7 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
         if (!node || node->num == nodeDB->getNodeNum()) {
             continue;
         }
-        if (node->last_heard == 0 || (now - node->last_heard) > CAPABILITY_TTL_SECS) {
+        if (node->last_heard == 0 || (now - (node->last_heard / 1000)) > CAPABILITY_TTL_SECS) {
             continue;
         }
         total++;
@@ -751,10 +762,9 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
         }
     }
 
-    if (total == 0) {
-        return 0.0f;
-    }
-    return static_cast<float>(capable) / static_cast<float>(total);
+    float percentage = static_cast<float>(capable) / static_cast<float>(total);
+    LOG_DEBUG("[SR] Capability calculation: %d/%d = %.1f%%", capable, total, percentage * 100.0f);
+    return percentage;
 }
 
 /**
