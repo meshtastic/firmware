@@ -349,10 +349,40 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         }
 
         updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
+    } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
+        // Process relayed packets to infer network topology
+        // We don't have direct signal info to the original sender, but we can infer connectivity
+        NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
+
+        if (inferredRelayer != 0 && inferredRelayer != mp.from) {
+            // We know that inferredRelayer relayed a packet from mp.from
+            // This suggests connectivity between mp.from and inferredRelayer
+            LOG_DEBUG("SignalRouting: Inferred connectivity: %08x -> %08x (relayed via %02x)",
+                     mp.from, inferredRelayer, mp.relay_node);
+
+            // Track that both the original sender and relayer are active
+            trackNodeCapability(mp.from, CapabilityStatus::Unknown);
+            trackNodeCapability(inferredRelayer, CapabilityStatus::Unknown);
+
+            // If we have signal data to the relayer, we can update that edge
+            if (hasSignalData) {
+                updateNeighborInfo(inferredRelayer, mp.rx_rssi, mp.rx_snr, mp.rx_time);
+            }
+
+            // Record transmission for contention window tracking
+            if (routingGraph) {
+                uint32_t currentTime = getValidTime(RTCQualityFromNet);
+                if (!currentTime) {
+                    currentTime = getTime();
+                }
+                routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
+                routingGraph->recordNodeTransmission(inferredRelayer, mp.id, currentTime);
+            }
+        }
     }
 
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        handleSniffedPayload(mp, hasSignalData && notViaMqtt && isDirectFromSender);
+        handleSniffedPayload(mp, isDirectFromSender);
     }
 
     // Periodic graph maintenance
