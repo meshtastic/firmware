@@ -2,9 +2,11 @@
 
 # Notes
 
+News 2025-12-04 - The GPS pin definitions have been changed!!! This has no material effect on current builds, but future builders may wish to review how they are using the wires.
+
 ## General
 
-The pinout is contained in the variant.h file, and a [generic schematic](./Schematic_Pro-Micro_Pinouts.pdf) is located in this directory.
+The pinout is contained in the variant.h file, and a [generic schematic](./Schematic_Pro-Micro_Pinouts_2025-12-04.pdf) is located in this directory.
 
 This variant is suitable for both TCXO and XTAL types of modules. The old XTAL variant has been removed to reduce confusion.
 
