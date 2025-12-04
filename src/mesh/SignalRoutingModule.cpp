@@ -1080,15 +1080,18 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
         return false; // No direct neighbors at all
     }
 
-    // Count how many direct neighbors are SR-capable
+    // Count how many direct neighbors are SR-capable or potentially capable (unknown status)
     size_t capableNeighbors = 0;
     for (const Edge& edge : *edges) {
-        if (isSignalBasedCapable(edge.to) || isLegacyRouter(edge.to)) {
+        CapabilityStatus status = getCapabilityStatus(edge.to);
+        if (status == CapabilityStatus::Capable || status == CapabilityStatus::Unknown) {
+            capableNeighbors++;
+        } else if (isLegacyRouter(edge.to)) {
             capableNeighbors++;
         }
     }
 
-    // Need at least 1 direct SR-capable neighbor for meaningful broadcast routing
+    // Need at least 1 direct neighbor that could be SR-capable for meaningful broadcast routing
     return capableNeighbors >= 1;
 }
 
