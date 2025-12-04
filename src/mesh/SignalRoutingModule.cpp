@@ -105,6 +105,13 @@ int32_t SignalRoutingModule::runOnce()
         if (nowMs - lastBroadcast >= SIGNAL_ROUTING_BROADCAST_SECS * 1000) {
             sendSignalRoutingInfo();
         }
+
+        // Periodic topology logging (every 5 minutes)
+        static uint32_t lastTopologyLog = 0;
+        if (nowMs - lastTopologyLog >= 300 * 1000) {
+            logNetworkTopology();
+            lastTopologyLog = nowMs;
+        }
     }
 
     uint32_t timeToHeartbeat = heartbeatIntervalMs;
@@ -286,7 +293,12 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
 
         // Add edge: sender -> neighbor with variance for route cost calculation
-        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
+        int edgeChange = routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
+
+        // Log topology if this is a new edge or significant change
+        if (edgeChange == Graph::EDGE_NEW || edgeChange == Graph::EDGE_SIGNIFICANT_CHANGE) {
+            logNetworkTopology();
+        }
 
         // Classify signal quality for user-friendly display
         const char* quality;
@@ -308,6 +320,63 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
     // Allow others to see this packet too
     return false;
+}
+
+/**
+ * Log the current network topology graph in a readable format
+ */
+void SignalRoutingModule::logNetworkTopology()
+{
+    if (!routingGraph) return;
+
+    auto allNodes = routingGraph->getAllNodes();
+    if (allNodes.empty()) {
+        LOG_INFO("🕸️  Network Topology: No nodes in graph yet");
+        return;
+    }
+
+    LOG_INFO("🕸️  Network Topology: %d nodes total", allNodes.size());
+
+    // Sort nodes for consistent output
+    std::vector<NodeNum> sortedNodes(allNodes.begin(), allNodes.end());
+    std::sort(sortedNodes.begin(), sortedNodes.end());
+
+    for (NodeNum nodeId : sortedNodes) {
+        char nodeName[64];
+        getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
+
+        const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
+        if (!edges || edges->empty()) {
+            LOG_INFO("  └── %s: (isolated)", nodeName);
+            continue;
+        }
+
+        LOG_INFO("  ├── %s: connected to %d nodes", nodeName, edges->size());
+
+        // Sort edges by ETX for consistent output
+        std::vector<Edge> sortedEdges = *edges;
+        std::sort(sortedEdges.begin(), sortedEdges.end(),
+                 [](const Edge& a, const Edge& b) { return a.etx < b.etx; });
+
+        for (size_t i = 0; i < sortedEdges.size(); i++) {
+            const Edge& edge = sortedEdges[i];
+            char neighborName[64];
+            getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
+
+            const char* quality;
+            if (edge.etx < 2.0f) quality = "excellent";
+            else if (edge.etx < 4.0f) quality = "good";
+            else if (edge.etx < 8.0f) quality = "fair";
+            else quality = "poor";
+
+            const char* treeChar = (i == sortedEdges.size() - 1) ? "└──" : "├──";
+            LOG_INFO("      %s %s: %s link (ETX=%.1f, %u sec ago)",
+                    treeChar, neighborName, quality, edge.etx,
+                    (getTime() - edge.lastUpdate));
+        }
+    }
+
+    LOG_DEBUG("SignalRouting: Topology logging complete");
 }
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -592,10 +661,14 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
             LOG_INFO("SignalRouting: New neighbor %s detected", neighborName);
             // Flash green for new neighbor
             flashRgbLed(0, 255, 0, 300, true);
+            // Log topology for new connections
+            logNetworkTopology();
         } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
             LOG_INFO("SignalRouting: Significant ETX change for %s", neighborName);
             // Flash blue for signal quality change
             flashRgbLed(0, 0, 255, 300, true);
+            // Log topology for significant link quality changes
+            logNetworkTopology();
         }
 
         // Trigger early broadcast if we haven't sent recently (rate limit: 60s)
