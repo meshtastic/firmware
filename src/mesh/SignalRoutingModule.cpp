@@ -180,7 +180,9 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
             routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
         }
     } else {
-        LOG_INFO("SignalRouting: No direct neighbors to broadcast from %s (waiting for direct packets)", ourName);
+        LOG_DEBUG("SignalRouting: No direct neighbors to broadcast from %s (waiting for direct packets)", ourName);
+        // Still update lastBroadcast to prevent immediate retry
+        lastBroadcast = millis();
     }
 }
 
