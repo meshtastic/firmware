@@ -101,7 +101,7 @@ private:
     /**
      * Check if a node is signal-based routing capable
      */
-    bool isSignalBasedCapable(NodeNum nodeId);
+    bool isSignalBasedCapable(NodeNum nodeId) const;
 
     /**
      * Calculate percentage of signal-based capable nodes
