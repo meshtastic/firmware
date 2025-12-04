@@ -606,7 +606,7 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
               SPECULATIVE_RETRANSMIT_TIMEOUT_MS);
 }
 
-bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId)
+bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) const
 {
     if (nodeId == nodeDB->getNodeNum()) {
         return isActiveRoutingRole();
@@ -962,11 +962,22 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
         return false;
     }
 
-    if (routingGraph->getNodeCount() < MIN_CAPABLE_NODES) {
-        return false;
+    // Check if we have direct SR-capable neighbors for intelligent broadcast routing
+    const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (!edges || edges->empty()) {
+        return false; // No direct neighbors at all
     }
 
-    return getSignalBasedCapablePercentage() >= MIN_CAPABLE_RATIO;
+    // Count how many direct neighbors are SR-capable
+    size_t capableNeighbors = 0;
+    for (const Edge& edge : *edges) {
+        if (isSignalBasedCapable(edge.to) || isLegacyRouter(edge.to)) {
+            capableNeighbors++;
+        }
+    }
+
+    // Need at least 1 direct SR-capable neighbor for meaningful broadcast routing
+    return capableNeighbors >= 1;
 }
 
 bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
@@ -975,15 +986,8 @@ bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
         return false;
     }
 
-    if (routingGraph->getNodeCount() < 2) {
-        return false;
-    }
-
-    float ratio = getSignalBasedCapablePercentage();
-    if (ratio < (MIN_CAPABLE_RATIO / 2.0f)) {
-        return false;
-    }
-
+    // For unicast, we mainly care that we know about the destination
+    // The actual next-hop capability is checked in shouldUseSignalBasedRouting
     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(destination);
     if (!node || node->last_heard == 0) {
         return false;
