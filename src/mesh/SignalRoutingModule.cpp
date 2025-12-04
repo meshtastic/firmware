@@ -369,7 +369,7 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            LOG_INFO("[SR]   +- %s: %s link (ETX=%.1f, %u sec ago)",
+            LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %u sec ago)",
                     neighborName, quality, edge.etx,
                     (getTime() - edge.lastUpdate));
         }
