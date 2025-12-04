@@ -74,5 +74,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+#ifdef USE_EXTERNAL_FLASH
 void check_fat12();
 void format_fat12();
+#endif

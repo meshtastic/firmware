@@ -11,6 +11,7 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "configuration.h"
+#ifdef USE_EXTERNAL_FLASH
 #if defined(EXTERNAL_FLASH_USE_QSPI)
 Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
 #endif
@@ -19,7 +20,7 @@ Adafruit_SPIFlash flash(&flashTransport);
 FatVolume fatfs;
 bool flashInitialized = false;
 bool fatfsMounted = false;
-
+#endif
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
@@ -45,9 +46,10 @@ SPIClass SPI_HSPI(HSPI);
  * @param to The path of the destination file.
  * @return true if the file was successfully copied, false otherwise.
  */
-
+#ifdef USE_EXTERNAL_FLASH
 void format_fat12(void)
 {
+    concurrency::LockGuard g(spiLock);
 // Working buffer for f_mkfs.
 #ifdef __AVR__
     uint8_t workbuf[512];
@@ -94,6 +96,7 @@ void format_fat12(void)
 
 void check_fat12(void)
 {
+    concurrency::LockGuard g(spiLock);
     // Check new filesystem
     if (!fatfs.begin(&flash)) {
         LOG_ERROR("Error, failed to mount newly formatted filesystem!");
@@ -101,6 +104,7 @@ void check_fat12(void)
             delay(1);
     }
 }
+#endif
 
 bool copyFile(const char *from, const char *to)
 {

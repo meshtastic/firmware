@@ -17,16 +17,6 @@
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "sleep.h"
-#include "SdFat_Adafruit_Fork.h"
-#include <SPI.h>
-#include <Adafruit_SPIFlash.h>
-extern FatVolume fatfs;
-extern bool flashInitialized;
-extern bool fatfsMounted;
-#if defined(EXTERNAL_FLASH_USE_QSPI)
-extern Adafruit_FlashTransport_QSPI flashTransport;
-#endif
-extern Adafruit_SPIFlash flash;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"

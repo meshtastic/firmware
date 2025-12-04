@@ -1748,7 +1748,7 @@ bool NodeDB::saveToDisk(int saveWhat)
         }
         LOG_INFO("Filesystem mounted!");
         fatfsMounted = true;
-#elif
+#else
         spiLock->lock();
         FSCom.format();
         spiLock->unlock();
@@ -2398,6 +2398,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 #endif
 }
 
+#ifdef USE_EXTERNAL_FLASH
 extern "C" {
 
 DSTATUS disk_status(BYTE pdrv)
@@ -2461,3 +2462,4 @@ DRESULT disk_ioctl(BYTE pdrv, /* Physical drive nmuber (0..) */
     }
 }
 }
+#endif
