@@ -4,6 +4,7 @@
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Graph;
