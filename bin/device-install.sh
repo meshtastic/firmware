@@ -219,9 +219,9 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
     $ESPTOOL_CMD erase-flash
     $ESPTOOL_CMD write-flash $FIRMWARE_OFFSET "${FILENAME}"
     echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
-    $ESPTOOL_CMD write_flash $OTA_OFFSET "${OTAFILE}"
+    $ESPTOOL_CMD write-flash $OTA_OFFSET "${OTAFILE}"
     echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
-    $ESPTOOL_CMD write_flash $OFFSET "${SPIFFSFILE}"
+    $ESPTOOL_CMD write-flash $OFFSET "${SPIFFSFILE}"
 
 else
     show_help
