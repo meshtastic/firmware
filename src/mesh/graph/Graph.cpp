@@ -296,6 +296,7 @@ float Graph::getWeightedCost(const Edge& edge, uint32_t currentTime) {
 }
 
 const std::vector<Edge>* Graph::getEdgesFrom(NodeNum node) const {
+    LOG_DEBUG("[Graph] Getting edges from node %08x", node);
     auto it = adjacencyList.find(node);
     if (it != adjacencyList.end()) {
         return &it->second;
