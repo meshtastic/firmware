@@ -75,51 +75,46 @@ void OnScreenKeyboardModule::handleInput(const InputEvent &event)
     if (!keyboard)
         return;
 
-    // Auto-timeout check handled in draw() to centralize state transitions.
-    switch (event.inputEvent) {
-    case INPUT_BROKER_UP: {
-        if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1)
-            keyboard->moveCursorLeft();
-        else
-            keyboard->moveCursorUp();
-        break;
-    }
-    case INPUT_BROKER_DOWN: {
-        if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1)
-            keyboard->moveCursorRight();
-        else
-            keyboard->moveCursorDown();
-        break;
-    }
-    case INPUT_BROKER_LEFT:
-        keyboard->moveCursorLeft();
-        break;
-    case INPUT_BROKER_RIGHT:
-        keyboard->moveCursorRight();
-        break;
-    case INPUT_BROKER_UP_LONG:
-        keyboard->moveCursorUp();
-        break;
-    case INPUT_BROKER_DOWN_LONG:
-        keyboard->moveCursorDown();
-        break;
-    case INPUT_BROKER_ALT_PRESS:
-        keyboard->moveCursorLeft();
-        break;
-    case INPUT_BROKER_USER_PRESS:
-        keyboard->moveCursorRight();
-        break;
-    case INPUT_BROKER_SELECT:
-        keyboard->handlePress();
-        break;
-    case INPUT_BROKER_SELECT_LONG:
-        keyboard->handleLongPress();
-        break;
-    case INPUT_BROKER_CANCEL:
+    if (processVirtualKeyboardInput(event, keyboard))
+        return;
+
+    if (event.inputEvent == INPUT_BROKER_CANCEL)
         onCancel();
-        break;
+}
+
+bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event, VirtualKeyboard *targetKeyboard)
+{
+    if (!targetKeyboard)
+        return false;
+
+    switch (event.inputEvent) {
+    case INPUT_BROKER_UP:
+    case INPUT_BROKER_UP_LONG:
+        targetKeyboard->moveCursorUp();
+        return true;
+    case INPUT_BROKER_DOWN:
+    case INPUT_BROKER_DOWN_LONG:
+        if (::rotaryEncoderInterruptImpl1 != nullptr || ::upDownInterruptImpl1 != nullptr)
+            targetKeyboard->moveCursorRight();
+        else
+            targetKeyboard->moveCursorDown();
+        return true;
+    case INPUT_BROKER_LEFT:
+    case INPUT_BROKER_ALT_PRESS:
+        targetKeyboard->moveCursorLeft();
+        return true;
+    case INPUT_BROKER_RIGHT:
+    case INPUT_BROKER_USER_PRESS:
+        targetKeyboard->moveCursorRight();
+        return true;
+    case INPUT_BROKER_SELECT:
+        targetKeyboard->handlePress();
+        return true;
+    case INPUT_BROKER_SELECT_LONG:
+        targetKeyboard->handleLongPress();
+        return true;
     default:
-        break;
+        return false;
     }
 }
 

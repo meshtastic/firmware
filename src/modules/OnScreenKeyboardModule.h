@@ -22,6 +22,7 @@ class OnScreenKeyboardModule
     void stop(bool callEmptyCallback);
 
     void handleInput(const InputEvent &event);
+    static bool processVirtualKeyboardInput(const InputEvent &event, VirtualKeyboard *keyboard);
     bool draw(OLEDDisplay *display);
 
     void showPopup(const char *title, const char *content, uint32_t durationMs);
