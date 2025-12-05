@@ -196,6 +196,8 @@ private:
     static constexpr size_t MAX_CAPABILITY_RECORDS = 24;
     static constexpr size_t MAX_RELAY_IDENTITY_ENTRIES = 16;
     static constexpr size_t MAX_SPECULATIVE_RETRANSMITS = 4;
+    static constexpr size_t MAX_GATEWAY_RELATIONS = 24;
+    static constexpr size_t MAX_GATEWAY_DOWNSTREAM = 8;
 
     struct CapabilityRecordEntry {
         NodeNum nodeId = 0;
@@ -214,11 +216,30 @@ private:
 
     SpeculativeRetransmitEntry speculativeRetransmits[MAX_SPECULATIVE_RETRANSMITS];
     uint8_t speculativeRetransmitCount = 0;
+
+    struct GatewayRelation {
+        NodeNum gateway = 0;
+        NodeNum downstream = 0;
+        uint32_t lastSeen = 0;
+    };
+    GatewayRelation gatewayRelations[MAX_GATEWAY_RELATIONS];
+    uint8_t gatewayRelationCount = 0;
+
+    struct GatewayDownstreamSet {
+        NodeNum gateway = 0;
+        NodeNum downstream[MAX_GATEWAY_DOWNSTREAM];
+        uint8_t count = 0;
+        uint32_t lastSeen = 0;
+    };
+    GatewayDownstreamSet gatewayDownstream[MAX_GATEWAY_RELATIONS];
+    uint8_t gatewayDownstreamCount = 0;
 #else
     // Full mode: dynamic hash maps
     std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
     std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
     std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
+    std::unordered_map<NodeNum, NodeNum> downstreamGateway; // downstream -> gateway
+    std::unordered_map<NodeNum, std::unordered_set<NodeNum>> gatewayDownstream; // gateway -> downstream set
 #endif
 
     void trackNodeCapability(NodeNum nodeId, CapabilityStatus status);
@@ -234,6 +255,9 @@ private:
     void processSpeculativeRetransmits(uint32_t nowMs);
     void cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId);
     static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
+    void recordGatewayRelation(NodeNum gateway, NodeNum downstream);
+    NodeNum getGatewayFor(NodeNum downstream) const;
+    size_t getGatewayDownstreamCount(NodeNum gateway) const;
     bool isActiveRoutingRole() const;
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;
