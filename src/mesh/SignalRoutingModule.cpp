@@ -462,6 +462,27 @@ void SignalRoutingModule::logNetworkTopology()
     if (!routingGraph) return;
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
+    auto appendGatewayDownstreams = [&](NodeNum gateway, std::vector<NodeNum> &out) {
+        uint32_t now = getTime();
+        for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+            const GatewayDownstreamSet &set = gatewayDownstream[i];
+            if (set.gateway != gateway) continue;
+            if ((now - set.lastSeen) > CAPABILITY_TTL_SECS) return;
+            for (uint8_t j = 0; j < set.count; j++) {
+                out.push_back(set.downstream[j]);
+            }
+            return;
+        }
+    };
+#else
+    auto appendGatewayDownstreams = [&](NodeNum gateway, std::vector<NodeNum> &out) {
+        auto it = gatewayDownstream.find(gateway);
+        if (it == gatewayDownstream.end()) return;
+        out.insert(out.end(), it->second.begin(), it->second.end());
+    };
+#endif
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
     NodeNum nodeBuf[GRAPH_LITE_MAX_NODES];
     size_t nodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
     if (nodeCount == 0) {
@@ -497,7 +518,32 @@ void SignalRoutingModule::logNetworkTopology()
             continue;
         }
 
-        LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->edgeCount);
+        std::vector<NodeNum> downstreams;
+        appendGatewayDownstreams(nodeId, downstreams);
+
+        if (downstreams.empty()) {
+            LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->edgeCount);
+        } else {
+            std::sort(downstreams.begin(), downstreams.end());
+            downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
+            char buf[128];
+            size_t pos = 0;
+            size_t maxList = std::min<size_t>(downstreams.size(), 4);
+            for (size_t i = 0; i < maxList; i++) {
+                char dn[32];
+                getNodeDisplayName(downstreams[i], dn, sizeof(dn));
+                int written = snprintf(buf + pos, sizeof(buf) - pos, (i == 0) ? "%s" : ", %s", dn);
+                if (written < 0 || (size_t)written >= (sizeof(buf) - pos)) {
+                    buf[sizeof(buf) - 1] = '\0';
+                    break;
+                }
+                pos += static_cast<size_t>(written);
+            }
+            if (downstreams.size() > maxList && pos < sizeof(buf) - 6) {
+                snprintf(buf + pos, sizeof(buf) - pos, ", +%zu", downstreams.size() - maxList);
+            }
+            LOG_INFO("[SR] +- %s: connected to %d nodes (gateway for: %s)", nodeName, edges->edgeCount, buf);
+        }
 
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
             const EdgeLite& edge = edges->edges[i];
@@ -532,7 +578,32 @@ void SignalRoutingModule::logNetworkTopology()
             continue;
         }
 
-        LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->size());
+        std::vector<NodeNum> downstreams;
+        appendGatewayDownstreams(nodeId, downstreams);
+
+        if (downstreams.empty()) {
+            LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->size());
+        } else {
+            std::sort(downstreams.begin(), downstreams.end());
+            downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
+            char buf[128];
+            size_t pos = 0;
+            size_t maxList = std::min<size_t>(downstreams.size(), 4);
+            for (size_t i = 0; i < maxList; i++) {
+                char dn[32];
+                getNodeDisplayName(downstreams[i], dn, sizeof(dn));
+                int written = snprintf(buf + pos, sizeof(buf) - pos, (i == 0) ? "%s" : ", %s", dn);
+                if (written < 0 || (size_t)written >= (sizeof(buf) - pos)) {
+                    buf[sizeof(buf) - 1] = '\0';
+                    break;
+                }
+                pos += static_cast<size_t>(written);
+            }
+            if (downstreams.size() > maxList && pos < sizeof(buf) - 6) {
+                snprintf(buf + pos, sizeof(buf) - pos, ", +%zu", downstreams.size() - maxList);
+            }
+            LOG_INFO("[SR] +- %s: connected to %d nodes (gateway for: %s)", nodeName, edges->size(), buf);
+        }
 
         // Sort edges by ETX for consistent output
         std::vector<Edge> sortedEdges = *edges;
@@ -764,14 +835,9 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     LOG_DEBUG("[SR] Destination %s (SR-capable=%d, legacy-router=%d)",
              destName, destCapable, destLegacy);
 
-    if (!destCapable && !destLegacy) {
-        LOG_DEBUG("[SR] Destination not SR-capable and not legacy router - fallback to flood");
-        return false;
-    }
-
     NodeNum nextHop = getNextHop(p->to);
     if (nextHop == 0) {
-        LOG_DEBUG("[SR] No route found to destination");
+        LOG_DEBUG("[SR] No route found to destination (including gateway/fallback search)");
         return false;
     }
 
@@ -915,7 +981,6 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
         LOG_DEBUG("[SR] Route to %s via %s (cost: %.2f)",
                  destName, nextHopName, routeCost);
 
-        // Log route quality indicators
         if (routeCost > 10.0f) {
             LOG_WARN("[SR] High-cost route to %s (%.2f) - poor link quality expected",
                     destName, routeCost);
@@ -924,8 +989,71 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
         return route.nextHop;
     }
 
+    // Fallback 1: if we know a gateway for this destination, and we have a direct link to it, forward there
+    NodeNum gatewayForDest = getGatewayFor(destination);
+    if (gatewayForDest != 0 && nodeDB) {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (myEdges) {
+            for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                if (myEdges->edges[i].to == gatewayForDest) {
+                    char gwName[64];
+                    getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
+                    LOG_DEBUG("[SR] No direct route to %s, but forwarding to gateway %s", destName, gwName);
+                    return gatewayForDest;
+                }
+            }
+        }
+#else
+        auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (edges) {
+            for (const Edge& e : *edges) {
+                if (e.to == gatewayForDest) {
+                    char gwName[64];
+                    getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
+                    LOG_DEBUG("[SR] No direct route to %s, but forwarding to gateway %s", destName, gwName);
+                    return gatewayForDest;
+                }
+            }
+        }
+#endif
+    }
+
+    // Fallback 2: opportunistic forward like broadcast — pick best direct neighbor (lowest ETX) to move the packet
+    NodeNum bestNeighbor = 0;
+    float bestEtx = 1e9f;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (myEdges) {
+        for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+            float etx = myEdges->edges[i].getEtx();
+            if (etx < bestEtx) {
+                bestEtx = etx;
+                bestNeighbor = myEdges->edges[i].to;
+            }
+        }
+    }
+#else
+    auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (edges) {
+        for (const Edge& e : *edges) {
+            if (e.etx < bestEtx) {
+                bestEtx = e.etx;
+                bestNeighbor = e.to;
+            }
+        }
+    }
+#endif
+
+    if (bestNeighbor != 0) {
+        char nhName[64];
+        getNodeDisplayName(bestNeighbor, nhName, sizeof(nhName));
+        LOG_DEBUG("[SR] No route to %s; forwarding opportunistically via %s (ETX=%.2f)", destName, nhName, bestEtx);
+        return bestNeighbor;
+    }
+
     LOG_DEBUG("[SR] No route found to %s", destName);
-    return 0; // No route found
+    return 0;
 }
 
 void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance)
