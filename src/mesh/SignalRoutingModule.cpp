@@ -332,13 +332,16 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     LOG_DEBUG("[SR] Pre-processing %d neighbors from %s for relay decision",
               info.neighbors_count, senderName);
 
-    // Add edges from the sender to each of their neighbors
+    // Add edges from each neighbor TO the sender
+    // The RSSI/SNR describes how well the sender hears the neighbor,
+    // which characterizes the neighbor→sender transmission quality
     for (pb_size_t i = 0; i < info.neighbors_count; i++) {
         const meshtastic_NeighborLink& neighbor = info.neighbors[i];
         trackNodeCapability(neighbor.node_id,
                             neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
         float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
-        routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
+        // Edge direction: neighbor → sender (the direction of the transmission that produced the RSSI)
+        routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance);
     }
 }
 
@@ -374,7 +377,9 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     // Flash cyan for network topology update
     flashRgbLed(0, 255, 255, 150, true);
 
-    // Add edges from the sender to each of their neighbors
+    // Add edges from each neighbor TO the sender
+    // The RSSI/SNR describes how well the sender hears the neighbor,
+    // which characterizes the neighbor→sender transmission quality
     // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
     for (pb_size_t i = 0; i < p->neighbors_count; i++) {
         const meshtastic_NeighborLink& neighbor = p->neighbors[i];
@@ -388,8 +393,8 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         // Calculate ETX from the received RSSI/SNR
         float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
 
-        // Add edge: sender -> neighbor with variance for route cost calculation
-        int edgeChange = routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance);
+        // Add edge: neighbor -> sender (the direction of the transmission that produced the RSSI)
+        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance);
 
         // Log topology if this is a new edge or significant change
         if (edgeChange == Graph::EDGE_NEW || edgeChange == Graph::EDGE_SIGNIFICANT_CHANGE) {
@@ -528,7 +533,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
         }
 
-        updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000);
+        // Note: rx_time is already Unix epoch seconds from getValidTime()
+        updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
         LOG_DEBUG("[SR] Direct neighbor %s detected (RSSI=%d, SNR=%.1f)",
                  senderName, mp.rx_rssi, mp.rx_snr);
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
@@ -548,7 +554,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
             // If we have signal data to the relayer, we can update that edge
             if (hasSignalData) {
-                updateNeighborInfo(inferredRelayer, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000);
+                updateNeighborInfo(inferredRelayer, mp.rx_rssi, mp.rx_snr, mp.rx_time);
             }
 
             // Record transmission for contention window tracking
@@ -785,11 +791,24 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
 
 void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance)
 {
-    if (!routingGraph) return;
+    if (!routingGraph || !nodeDB) return;
 
-    // Calculate ETX and update the graph
+    NodeNum myNode = nodeDB->getNodeNum();
+
+    // Calculate ETX from the received signal quality
+    // The RSSI/SNR describes how well we received from nodeId,
+    // which characterizes the nodeId→us transmission quality
     float etx = Graph::calculateETX(rssi, snr);
-    int changeType = routingGraph->updateEdge(nodeDB->getNodeNum(), nodeId, etx, lastRxTime, variance);
+
+    // Store edge: nodeId → us (the direction of the transmission we measured)
+    // This is used for routing decisions when traffic needs to reach us
+    int changeType = routingGraph->updateEdge(nodeId, myNode, etx, lastRxTime, variance);
+
+    // Also store reverse edge: us → nodeId (assuming approximately symmetric link)
+    // This is needed for buildSignalRoutingInfo() to report our outgoing capabilities
+    // Note: This assumption may not be perfectly accurate for asymmetric links,
+    // but it's the best estimate we have for our own transmissions
+    routingGraph->updateEdge(myNode, nodeId, etx, lastRxTime, variance);
 
     // If significant change, consider sending an update sooner
     if (changeType != Graph::EDGE_NO_CHANGE) {
@@ -1060,7 +1079,7 @@ void SignalRoutingModule::handlePositionPacket(const meshtastic_MeshPacket &mp, 
         }
 
         if (variance > 0) {
-            updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time / 1000, variance);
+            updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time, variance);
         }
     }
 }
