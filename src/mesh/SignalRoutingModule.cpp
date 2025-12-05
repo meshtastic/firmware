@@ -1,5 +1,9 @@
 #include "SignalRoutingModule.h"
+#ifdef SIGNAL_ROUTING_LITE_MODE
+#include "graph/GraphLite.h"
+#else
 #include "graph/Graph.h"
+#endif
 #include "MeshService.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
@@ -53,30 +57,36 @@ SignalRoutingModule::SignalRoutingModule()
 
 #ifdef ARCH_ESP32
     // ESP32 RAM guard for variants without PSRAM (e.g., ESP32-C3)
-    // These chips have limited SRAM (~400KB total) with WiFi/BLE consuming ~60-80KB
-    // Graph + std::unordered_map containers need ~30KB+ and cause heap fragmentation
-    // During runtime, Dijkstra and relay algorithms create temporary unordered_sets
-    // which fragment memory further - need significant headroom
     {
         uint32_t freeHeap = memGet.getFreeHeap();
         uint32_t freePsram = memGet.getFreePsram();
 
-        // If no PSRAM and less than 150KB free heap, disable signal routing
-        // This threshold accounts for:
-        // - Graph structure itself (~10-20KB depending on network size)
-        // - Runtime allocations for Dijkstra, relay decisions (~10-20KB temporary)
-        // - Heap fragmentation overhead on ESP32 (~20-30%)
-        // - Safety margin for other subsystems
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        // Lite mode uses fixed arrays (~2KB total), only need 20KB headroom
+        if (freePsram == 0 && freeHeap < 20 * 1024) {
+            LOG_WARN("[SR] Insufficient RAM on ESP32 (%u bytes free), disabling signal-based routing", freeHeap);
+            routingGraph = nullptr;
+            disable();
+            return;
+        }
+        LOG_INFO("[SR] Using lite mode for memory-constrained device (%u bytes free)", freeHeap);
+#else
+        // Full mode needs ~30KB+ and causes heap fragmentation - need 150KB headroom
         if (freePsram == 0 && freeHeap < 150 * 1024) {
             LOG_WARN("[SR] Insufficient RAM on ESP32 without PSRAM (%u bytes free), disabling signal-based routing", freeHeap);
             routingGraph = nullptr;
             disable();
             return;
         }
+#endif
     }
 #endif
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    routingGraph = new GraphLite();
+#else
     routingGraph = new Graph();
+#endif
     if (!routingGraph) {
         LOG_WARN("[SR] Failed to allocate Graph, disabling signal-based routing");
         disable();
@@ -168,6 +178,20 @@ int32_t SignalRoutingModule::runOnce()
     }
 
     uint32_t timeToSpeculative = timeToBroadcast;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    if (speculativeRetransmitCount > 0) {
+        uint32_t soonest = timeToBroadcast;
+        for (uint8_t i = 0; i < speculativeRetransmitCount; i++) {
+            if (speculativeRetransmits[i].expiryMs > nowMs) {
+                soonest = std::min(soonest, speculativeRetransmits[i].expiryMs - nowMs);
+            } else {
+                soonest = 0;
+                break;
+            }
+        }
+        timeToSpeculative = soonest;
+    }
+#else
     if (!speculativeRetransmits.empty()) {
         uint32_t soonest = timeToBroadcast;
         for (const auto& entry : speculativeRetransmits) {
@@ -180,6 +204,7 @@ int32_t SignalRoutingModule::runOnce()
         }
         timeToSpeculative = soonest;
     }
+#endif
 
     uint32_t timeToLed = UINT32_MAX;
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
@@ -239,14 +264,34 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     info.routing_version = SIGNAL_ROUTING_VERSION;
     info.neighbors_count = 0;
 
-    if (!routingGraph) return;
+    if (!routingGraph || !nodeDB) return;
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (!nodeEdges || nodeEdges->edgeCount == 0) {
+        return;
+    }
+
+    size_t count = std::min(static_cast<size_t>(nodeEdges->edgeCount), static_cast<size_t>(MAX_SIGNAL_ROUTING_NEIGHBORS));
+    info.neighbors_count = count;
+
+    for (size_t i = 0; i < count; i++) {
+        const EdgeLite& edge = nodeEdges->edges[i];
+        meshtastic_NeighborLink& neighbor = info.neighbors[i];
+
+        neighbor.node_id = edge.to;
+        neighbor.last_rx_time = nodeEdges->lastFullUpdate;
+        neighbor.position_variance = edge.variance * 12; // Scale back
+        neighbor.signal_based_capable = isSignalBasedCapable(edge.to);
+
+        GraphLite::etxToSignal(edge.getEtx(), neighbor.rssi, neighbor.snr);
+    }
+#else
     const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (!edges || edges->empty()) {
         return;
     }
 
-    // Copy up to MAX_SIGNAL_ROUTING_NEIGHBORS
     size_t count = std::min(edges->size(), static_cast<size_t>(MAX_SIGNAL_ROUTING_NEIGHBORS));
     info.neighbors_count = count;
 
@@ -259,9 +304,9 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         neighbor.position_variance = edge.variance;
         neighbor.signal_based_capable = isSignalBasedCapable(edge.to);
 
-        // Convert ETX back to approximate RSSI/SNR
         Graph::etxToSignal(edge.etx, neighbor.rssi, neighbor.snr);
     }
+#endif
 }
 
 void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPacket *p)
@@ -671,7 +716,11 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         currentTime = getTime();
     }
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    bool shouldRelay = routingGraph->shouldRelaySimple(myNode, sourceNode, heardFrom, currentTime);
+#else
     bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
+#endif
 
     char myName[64], sourceName[64], heardFromName[64];
     getNodeDisplayName(myNode, myName, sizeof(myName));
@@ -706,19 +755,25 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    RouteLite route = routingGraph->calculateRoute(destination, currentTime);
+    float routeCost = route.getCost();
+#else
     Route route = routingGraph->calculateRoute(destination, currentTime);
+    float routeCost = route.cost;
+#endif
 
     if (route.nextHop != 0) {
         char nextHopName[64];
         getNodeDisplayName(route.nextHop, nextHopName, sizeof(nextHopName));
 
         LOG_DEBUG("[SR] Route to %s via %s (cost: %.2f)",
-                 destName, nextHopName, route.cost);
+                 destName, nextHopName, routeCost);
 
         // Log route quality indicators
-        if (route.cost > 10.0f) {
+        if (routeCost > 10.0f) {
             LOG_WARN("[SR] High-cost route to %s (%.2f) - poor link quality expected",
-                    destName, route.cost);
+                    destName, routeCost);
         }
 
         return route.nextHop;
@@ -782,6 +837,31 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
     }
 
     uint64_t key = makeSpeculativeKey(p->from, p->id);
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Check if already exists
+    for (uint8_t i = 0; i < speculativeRetransmitCount; i++) {
+        if (speculativeRetransmits[i].key == key) {
+            return;
+        }
+    }
+
+    if (speculativeRetransmitCount >= MAX_SPECULATIVE_RETRANSMITS) {
+        return; // No room
+    }
+
+    meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
+    if (!copy) {
+        return;
+    }
+
+    SpeculativeRetransmitEntry &entry = speculativeRetransmits[speculativeRetransmitCount++];
+    entry.key = key;
+    entry.origin = p->from;
+    entry.packetId = p->id;
+    entry.expiryMs = millis() + SPECULATIVE_RETRANSMIT_TIMEOUT_MS;
+    entry.packetCopy = copy;
+#else
     if (speculativeRetransmits.find(key) != speculativeRetransmits.end()) {
         return;
     }
@@ -798,6 +878,7 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
     entry.expiryMs = millis() + SPECULATIVE_RETRANSMIT_TIMEOUT_MS;
     entry.packetCopy = copy;
     speculativeRetransmits[key] = entry;
+#endif
 
     LOG_DEBUG("[SR] Speculative retransmit armed for packet %08x (expires in %ums)", p->id,
               SPECULATIVE_RETRANSMIT_TIMEOUT_MS);
@@ -1102,6 +1183,28 @@ void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus s
     }
 
     uint32_t now = getTime();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Lite mode: linear search in fixed array
+    for (uint8_t i = 0; i < capabilityRecordCount; i++) {
+        if (capabilityRecords[i].nodeId == nodeId) {
+            capabilityRecords[i].record.lastUpdated = now;
+            if (status == CapabilityStatus::Capable) {
+                capabilityRecords[i].record.status = CapabilityStatus::Capable;
+            } else if (status == CapabilityStatus::Legacy) {
+                capabilityRecords[i].record.status = CapabilityStatus::Legacy;
+            }
+            return;
+        }
+    }
+    // Add new entry
+    if (capabilityRecordCount < MAX_CAPABILITY_RECORDS) {
+        capabilityRecords[capabilityRecordCount].nodeId = nodeId;
+        capabilityRecords[capabilityRecordCount].record.lastUpdated = now;
+        capabilityRecords[capabilityRecordCount].record.status = status;
+        capabilityRecordCount++;
+    }
+#else
     auto &record = capabilityRecords[nodeId];
     record.lastUpdated = now;
 
@@ -1112,10 +1215,24 @@ void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus s
     } else if (record.status == CapabilityStatus::Unknown) {
         record.status = CapabilityStatus::Unknown;
     }
+#endif
 }
 
 void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
 {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Lite mode: remove stale entries by swapping with last
+    for (uint8_t i = 0; i < capabilityRecordCount;) {
+        if ((nowSecs - capabilityRecords[i].record.lastUpdated) > CAPABILITY_TTL_SECS) {
+            if (i < capabilityRecordCount - 1) {
+                capabilityRecords[i] = capabilityRecords[capabilityRecordCount - 1];
+            }
+            capabilityRecordCount--;
+        } else {
+            i++;
+        }
+    }
+#else
     for (auto it = capabilityRecords.begin(); it != capabilityRecords.end();) {
         if ((nowSecs - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
             it = capabilityRecords.erase(it);
@@ -1123,21 +1240,36 @@ void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
             ++it;
         }
     }
+#endif
 }
 
 SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(NodeNum nodeId) const
 {
+    uint32_t now = getTime();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Lite mode: linear search
+    for (uint8_t i = 0; i < capabilityRecordCount; i++) {
+        if (capabilityRecords[i].nodeId == nodeId) {
+            if ((now - capabilityRecords[i].record.lastUpdated) > CAPABILITY_TTL_SECS) {
+                return CapabilityStatus::Unknown;
+            }
+            return capabilityRecords[i].record.status;
+        }
+    }
+    return CapabilityStatus::Unknown;
+#else
     auto it = capabilityRecords.find(nodeId);
     if (it == capabilityRecords.end()) {
         return CapabilityStatus::Unknown;
     }
 
-    uint32_t now = getTime();
     if ((now - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
         return CapabilityStatus::Unknown;
     }
 
     return it->second.status;
+#endif
 }
 
 bool SignalRoutingModule::isLegacyRouter(NodeNum nodeId) const
@@ -1172,6 +1304,25 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
 
     // Check if we have direct SR-capable neighbors for intelligent broadcast routing
     LOG_DEBUG("[SR] Checking direct neighbors");
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (!nodeEdges || nodeEdges->edgeCount == 0) {
+        LOG_DEBUG("[SR] No edges found, returning false");
+        return false;
+    }
+
+    size_t capableNeighbors = 0;
+    for (uint8_t i = 0; i < nodeEdges->edgeCount; i++) {
+        NodeNum to = nodeEdges->edges[i].to;
+        CapabilityStatus status = getCapabilityStatus(to);
+        if (status == CapabilityStatus::Capable || status == CapabilityStatus::Unknown) {
+            capableNeighbors++;
+        } else if (isLegacyRouter(to)) {
+            capableNeighbors++;
+        }
+    }
+#else
     const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (!edges) {
         LOG_DEBUG("[SR] No edges returned, graph corrupted - disabling SR");
@@ -1193,6 +1344,7 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
             capableNeighbors++;
         }
     }
+#endif
 
     // Need at least 1 direct neighbor that could be SR-capable for meaningful broadcast routing
     return capableNeighbors >= 1;
@@ -1222,6 +1374,48 @@ void SignalRoutingModule::rememberRelayIdentity(NodeNum nodeId, uint8_t relayId)
     }
 
     uint32_t nowMs = millis();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Find or create bucket for this relayId
+    RelayIdentityCacheEntry *bucket = nullptr;
+    for (uint8_t i = 0; i < relayIdentityCacheCount; i++) {
+        if (relayIdentityCache[i].relayId == relayId) {
+            bucket = &relayIdentityCache[i];
+            break;
+        }
+    }
+    if (!bucket && relayIdentityCacheCount < MAX_RELAY_IDENTITY_ENTRIES) {
+        bucket = &relayIdentityCache[relayIdentityCacheCount++];
+        bucket->relayId = relayId;
+        bucket->entryCount = 0;
+    }
+    if (!bucket) return;
+
+    // Prune stale entries in bucket
+    for (uint8_t i = 0; i < bucket->entryCount;) {
+        if ((nowMs - bucket->entries[i].lastHeardMs) > RELAY_ID_CACHE_TTL_MS) {
+            if (i < bucket->entryCount - 1) {
+                bucket->entries[i] = bucket->entries[bucket->entryCount - 1];
+            }
+            bucket->entryCount--;
+        } else {
+            i++;
+        }
+    }
+
+    // Update existing or add new
+    for (uint8_t i = 0; i < bucket->entryCount; i++) {
+        if (bucket->entries[i].nodeId == nodeId) {
+            bucket->entries[i].lastHeardMs = nowMs;
+            return;
+        }
+    }
+    if (bucket->entryCount < 4) {
+        bucket->entries[bucket->entryCount].nodeId = nodeId;
+        bucket->entries[bucket->entryCount].lastHeardMs = nowMs;
+        bucket->entryCount++;
+    }
+#else
     auto &bucket = relayIdentityCache[relayId];
     bucket.erase(std::remove_if(bucket.begin(), bucket.end(),
                                 [nowMs](const RelayIdentityEntry &entry) {
@@ -1240,10 +1434,36 @@ void SignalRoutingModule::rememberRelayIdentity(NodeNum nodeId, uint8_t relayId)
     entry.nodeId = nodeId;
     entry.lastHeardMs = nowMs;
     bucket.push_back(entry);
+#endif
 }
 
 void SignalRoutingModule::pruneRelayIdentityCache(uint32_t nowMs)
 {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t b = 0; b < relayIdentityCacheCount;) {
+        RelayIdentityCacheEntry *bucket = &relayIdentityCache[b];
+        // Prune entries
+        for (uint8_t i = 0; i < bucket->entryCount;) {
+            if ((nowMs - bucket->entries[i].lastHeardMs) > RELAY_ID_CACHE_TTL_MS) {
+                if (i < bucket->entryCount - 1) {
+                    bucket->entries[i] = bucket->entries[bucket->entryCount - 1];
+                }
+                bucket->entryCount--;
+            } else {
+                i++;
+            }
+        }
+        // Remove empty buckets
+        if (bucket->entryCount == 0) {
+            if (b < relayIdentityCacheCount - 1) {
+                relayIdentityCache[b] = relayIdentityCache[relayIdentityCacheCount - 1];
+            }
+            relayIdentityCacheCount--;
+        } else {
+            b++;
+        }
+    }
+#else
     for (auto it = relayIdentityCache.begin(); it != relayIdentityCache.end();) {
         auto &bucket = it->second;
         bucket.erase(std::remove_if(bucket.begin(), bucket.end(),
@@ -1257,18 +1477,37 @@ void SignalRoutingModule::pruneRelayIdentityCache(uint32_t nowMs)
             ++it;
         }
     }
+#endif
 }
 
 NodeNum SignalRoutingModule::resolveRelayIdentity(uint8_t relayId) const
 {
+    uint32_t nowMs = millis();
+    NodeNum bestNode = 0;
+    uint32_t newest = 0;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t b = 0; b < relayIdentityCacheCount; b++) {
+        if (relayIdentityCache[b].relayId == relayId) {
+            const RelayIdentityCacheEntry *bucket = &relayIdentityCache[b];
+            for (uint8_t i = 0; i < bucket->entryCount; i++) {
+                if ((nowMs - bucket->entries[i].lastHeardMs) > RELAY_ID_CACHE_TTL_MS) {
+                    continue;
+                }
+                if (bucket->entries[i].lastHeardMs >= newest) {
+                    newest = bucket->entries[i].lastHeardMs;
+                    bestNode = bucket->entries[i].nodeId;
+                }
+            }
+            break;
+        }
+    }
+#else
     auto it = relayIdentityCache.find(relayId);
     if (it == relayIdentityCache.end()) {
         return 0;
     }
 
-    uint32_t nowMs = millis();
-    NodeNum bestNode = 0;
-    uint32_t newest = 0;
     for (const auto &entry : it->second) {
         if ((nowMs - entry.lastHeardMs) > RELAY_ID_CACHE_TTL_MS) {
             continue;
@@ -1278,6 +1517,8 @@ NodeNum SignalRoutingModule::resolveRelayIdentity(uint8_t relayId) const
             bestNode = entry.nodeId;
         }
     }
+#endif
+
     return bestNode;
 }
 
@@ -1300,13 +1541,24 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
         return resolved;
     }
 
-    if (routingGraph) {
+    if (routingGraph && nodeDB) {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        const NodeEdgesLite *myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (myEdges) {
+            for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                if ((myEdges->edges[i].to & 0xFF) == p->relay_node) {
+                    return myEdges->edges[i].to;
+                }
+            }
+        }
+#else
         auto neighbors = routingGraph->getDirectNeighbors(nodeDB->getNodeNum());
         for (NodeNum neighbor : neighbors) {
             if ((neighbor & 0xFF) == p->relay_node) {
                 return neighbor;
             }
         }
+#endif
     }
 
     return sourceNode;
@@ -1314,6 +1566,24 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
 
 void SignalRoutingModule::processSpeculativeRetransmits(uint32_t nowMs)
 {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t i = 0; i < speculativeRetransmitCount;) {
+        if (nowMs >= speculativeRetransmits[i].expiryMs) {
+            if (speculativeRetransmits[i].packetCopy) {
+                LOG_INFO("[SR] Speculative retransmit for packet %08x", speculativeRetransmits[i].packetId);
+                service->sendToMesh(speculativeRetransmits[i].packetCopy);
+                speculativeRetransmits[i].packetCopy = nullptr;
+            }
+            // Remove by swapping with last
+            if (i < speculativeRetransmitCount - 1) {
+                speculativeRetransmits[i] = speculativeRetransmits[speculativeRetransmitCount - 1];
+            }
+            speculativeRetransmitCount--;
+        } else {
+            i++;
+        }
+    }
+#else
     for (auto it = speculativeRetransmits.begin(); it != speculativeRetransmits.end();) {
         if (nowMs >= it->second.expiryMs) {
             if (it->second.packetCopy) {
@@ -1326,11 +1596,27 @@ void SignalRoutingModule::processSpeculativeRetransmits(uint32_t nowMs)
             ++it;
         }
     }
+#endif
 }
 
 void SignalRoutingModule::cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId)
 {
     uint64_t key = makeSpeculativeKey(origin, packetId);
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t i = 0; i < speculativeRetransmitCount; i++) {
+        if (speculativeRetransmits[i].key == key) {
+            if (speculativeRetransmits[i].packetCopy) {
+                packetPool.release(speculativeRetransmits[i].packetCopy);
+            }
+            if (i < speculativeRetransmitCount - 1) {
+                speculativeRetransmits[i] = speculativeRetransmits[speculativeRetransmitCount - 1];
+            }
+            speculativeRetransmitCount--;
+            return;
+        }
+    }
+#else
     auto it = speculativeRetransmits.find(key);
     if (it == speculativeRetransmits.end()) {
         return;
@@ -1340,6 +1626,7 @@ void SignalRoutingModule::cancelSpeculativeRetransmit(NodeNum origin, uint32_t p
         packetPool.release(it->second.packetCopy);
     }
     speculativeRetransmits.erase(it);
+#endif
 }
 
 uint64_t SignalRoutingModule::makeSpeculativeKey(NodeNum origin, uint32_t packetId)
