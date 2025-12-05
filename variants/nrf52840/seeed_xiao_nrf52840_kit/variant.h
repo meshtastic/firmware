@@ -17,6 +17,36 @@
 extern "C" {
 #endif // __cplusplus
 
+/*
+Xiao pin assignments
+
+| Pin   | Default  | I2C  | BTB  | BLE-L |     | Pin   | Default | I2C  | BTB  | BLE-L |
+| ----- | -------- | ---- | ---- | ----- | --- | ----- | ------- | ---- | ---- | ----- |
+|       |          |      |      |       |     |       |         |      |      |       |
+| D0    |          | UBTN | DIO1 | CS    |     | 5v    |         |      |      |       |
+| D1    | DIO1     | DIO1 | Busy | DIO1  |     | GND   |         |      |      |       |
+| D2    | NRST     | NRST | NRST | Busy  |     | 3v3   |         |      |      |       |
+| D3    | Busy     | Busy | CS   | NRST  |     | D10   | MOSI    | MOSI | MOSI | MOSI  |
+| D4    | CS       | CS   | RXEN | SDA   |     | D9    | MISO    | MISO | MISO | MISO  |
+| D5    | RXEN     | RXEN |      | SCL   |     | D8    | SCK     | SCK  | SCK  | SCK   |
+| D6    | G_TX     | SDA  | G_TX |       |     | D7    | G_RX    | SCL  | G_RX | RXEN  |
+|       |          |      |      |       |     |       |         |      |      |       |
+|       | End      |      |      |       |     |       |         |      |      |       |
+| NFC1/ | SDA      | G_TX | SDA  | G_TX  |     | NFC2/ | SCL     | G_RX | SCL  | G_RX  |
+| D30   |          |      |      |       |     | D31   |         |      |      |       |
+|       |          |      |      |       |     |       |         |      |      |       |
+|       | Internal |      |      |       |     |       |         |      |      |       |
+| D16   | SCL1     | SCL1 | SCL1 | SCL1  |     |       |         |      |      |       |
+| D17   | SDA1     | SDA1 | SDA1 | SDA1  |     |       |         |      |      |       |
+
+The default column shows the pin assignments for the Wio-SX1262 for XIAO (standalone SKU 113010003 or nRF52840 kit SKU 102010710).
+The I2C column shows an alternative pin assignment using I2C on D0/D1
+The BTB column shows the pin assignment for the Wio-SX1262 for XIAO - 30-pin board-to-board connector version from the ESP32S3
+kit. The BLE-L column shows the pin assignment for the DIY xiao_ble which predates the offical kit, and which is retained for
+legacy users. Note that the in addition to the difference between the default and the I2C pinouts in placing the pins on NFC or
+D6/D7, the user button is activated on D0. The button conflicts with the official GNSS module, so caution is advised.
+*/
+
 #define PINS_COUNT (33)
 #define NUM_DIGITAL_PINS (33)
 #define NUM_ANALOG_INPUTS (8)
@@ -96,7 +126,7 @@ static const uint8_t A5 = PIN_A5;
  */
 #define USE_SX1262
 
-#ifdef XIAO_BLE_LEGACY_PINOUT
+#if defined(XIAO_BLE_LEGACY_PINOUT)
 // Legacy xiao_ble variant pinout for third-party SX126x modules e.g. EBYTE E22
 #define SX126X_CS D0
 #define SX126X_DIO1 D1
@@ -114,6 +144,7 @@ static const uint8_t A5 = PIN_A5;
 #define SX126X_RXEN D4
 #else
 // Wio-SX1262 for XIAO (standalone SKU 113010003 or nRF52840 kit SKU 102010710)
+// Same for both default and I2C pinouts
 // https://files.seeedstudio.com/products/SenseCAP/Wio_SX1262/Wio-SX1262%20for%20XIAO%20V1.0_SCH.pdf
 #define SX126X_CS D4
 #define SX126X_DIO1 D1
@@ -145,19 +176,22 @@ static const uint8_t SCK = PIN_SPI_SCK;
 /*
  * GPS
  */
-// GPS L76K
-#ifdef GPS_L76K
+// Default GPS L76K
+#if defined(SEEED_XIAO_NRF_DEFAULT) || defined(SEEED_XIAO_WIO_BTB)
+#define GPS_L76K
 #define PIN_GPS_TX D6
 #define PIN_GPS_RX D7
+#define PIN_GPS_STANDBY D0
+// I2C and BLE-Legacy put them on the NFC pins
+#else
+#define PIN_GPS_TX (D30)
+#define PIN_GPS_RX (D31)
+#endif
+
 #define HAS_GPS 1
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_TX PIN_GPS_TX
 #define PIN_SERIAL1_RX PIN_GPS_RX
-#define PIN_GPS_STANDBY D0
-#else
-#define PIN_SERIAL1_RX (-1)
-#define PIN_SERIAL1_TX (-1)
-#endif
 
 /*
  * Battery
@@ -177,21 +211,24 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * Keep this section after potentially conflicting pin definitions
  */
 #define I2C_NO_RESCAN // I2C is a bit finicky, don't scan too much
-#define WIRE_INTERFACES_COUNT 1
+#define WIRE_INTERFACES_COUNT 2
 
 #if defined(XIAO_BLE_LEGACY_PINOUT)
 // Used for I2C by DIY xiao_ble variant
 #define PIN_WIRE_SDA D4
 #define PIN_WIRE_SCL D5
-#elif !defined(GPS_L76K)
+#elif defined(SEEED_XIAO_NRF_DEFAULT) || defined(SEEED_XIAO_WIO_BTB)
+#define PIN_WIRE_SDA D30
+#define PIN_WIRE_SCL D31
+#else
 // If D6 and D7 are free, I2C is probably the most versatile assignment
 #define PIN_WIRE_SDA D6
 #define PIN_WIRE_SCL D7
-#else
-// Internal LSM6DS3TR on XIAO nRF52840 Series
-#define PIN_WIRE_SDA (17)
-#define PIN_WIRE_SCL (16)
 #endif
+
+// Internal LSM6DS3TR on XIAO nRF52840 Series - put it on wire1
+#define PIN_WIRE1_SDA (17)
+#define PIN_WIRE1_SCL (16)
 
 static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
@@ -205,7 +242,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  * - SX1262X CS on XIAO BLE legacy pinout
  */
 
-#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_LEGACY_PINOUT)
+#if !defined(GPS_L76K) && !defined(SEEED_XIAO_NRF_DEFAULT) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_LEGACY_PINOUT)
 #define BUTTON_PIN D0
 #endif
 
