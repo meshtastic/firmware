@@ -107,7 +107,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
 
         edge->setEtx(etx);
         edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
-        edge->variance = static_cast<uint8_t>(std::min(variance / 12u, 255u)); // Scale variance
+        edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12); // Scale variance
 
         return (change > ETX_CHANGE_THRESHOLD) ? EDGE_SIGNIFICANT_CHANGE : EDGE_NO_CHANGE;
     }
@@ -118,7 +118,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge->to = to;
         edge->setEtx(etx);
         edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
-        edge->variance = static_cast<uint8_t>(std::min(variance / 12u, 255u));
+        edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
         return EDGE_NEW;
     }
 
@@ -138,7 +138,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge->to = to;
         edge->setEtx(etx);
         edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
-        edge->variance = static_cast<uint8_t>(std::min(variance / 12u, 255u));
+        edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
         return EDGE_SIGNIFICANT_CHANGE;
     }
 
@@ -347,7 +347,9 @@ void GraphLite::recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32
         relayStateCount++;
     } else {
         // Replace oldest
-        relayStates[0] = {nodeId, packetId, static_cast<uint16_t>(currentTime & 0xFFFF)};
+        relayStates[0].nodeId = nodeId;
+        relayStates[0].packetId = packetId;
+        relayStates[0].timestampLo = static_cast<uint16_t>(currentTime & 0xFFFF);
     }
 }
 
