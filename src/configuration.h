@@ -37,6 +37,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "variant.h"
 
 // -----------------------------------------------------------------------------
+// Display feature overrides
+// -----------------------------------------------------------------------------
+
+// Allow build environments to opt-in explicitly to the E-Ink UI stack while
+// keeping headless targets slim by default. Existing variants that already
+// define USE_EINK continue to work without additional flags.
+#ifndef MESHTASTIC_USE_EINK_UI
+#ifdef USE_EINK
+#define MESHTASTIC_USE_EINK_UI 1
+#else
+#define MESHTASTIC_USE_EINK_UI 0
+#endif
+#endif
+
+#if MESHTASTIC_USE_EINK_UI
+#ifndef USE_EINK
+#define USE_EINK
+#endif
+#else
+#undef USE_EINK
+#endif
+
+// -----------------------------------------------------------------------------
 // Version
 // -----------------------------------------------------------------------------
 
@@ -250,8 +273,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A
+#define CST328_ADDR 0x1A // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
+#define CST226SE_ADDR_ALT 0x5A
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -369,6 +393,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
+#endif
+#ifndef USE_TFTDISPLAY
+#define USE_TFTDISPLAY 0
 #endif
 
 #ifndef HW_VENDOR

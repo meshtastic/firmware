@@ -36,6 +36,7 @@
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
 #define SCREEN_TRANSITION_FRAMERATE 5
+#define USE_TFTDISPLAY 1
 
 #define HAS_TOUCHSCREEN 1
 #define USE_XPT2046 1
