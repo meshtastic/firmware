@@ -3,11 +3,25 @@
 #include "concurrency/OSThread.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+
+// Enable lite mode for memory-constrained devices (ESP32-C3, etc.)
+// This uses fixed-size arrays instead of std::unordered_map for ~10KB savings
+// Trade-off: O(n) lookups, limited to GRAPH_LITE_MAX_NODES nodes
+#if defined(ARCH_ESP32) && !defined(HAS_PSRAM) && !defined(SIGNAL_ROUTING_LITE_MODE)
+#define SIGNAL_ROUTING_LITE_MODE 1
+#endif
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+// Lite mode: minimal includes, fixed-size containers
+#include <vector>
+class GraphLite;
+#else
+// Full mode: dynamic containers
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
 class Graph;
+#endif
 
 // Routing protocol version for compatibility checking
 #define SIGNAL_ROUTING_VERSION 1
@@ -61,7 +75,11 @@ public:
     /**
      * Get the routing graph (for external access)
      */
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    GraphLite* getGraph() { return routingGraph; }
+#else
     Graph* getGraph() { return routingGraph; }
+#endif
 
     /**
      * Pre-process a SignalRoutingInfo packet to update graph BEFORE relay decision
@@ -83,7 +101,11 @@ protected:
     virtual int32_t runOnce() override;
 
 private:
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    GraphLite *routingGraph;
+#else
     Graph *routingGraph;
+#endif
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
     static constexpr uint32_t HEARTBEAT_FLASH_MS = 60;
@@ -169,9 +191,35 @@ private:
         meshtastic_MeshPacket *packetCopy = nullptr;
     };
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Lite mode: fixed-size arrays instead of hash maps
+    static constexpr size_t MAX_CAPABILITY_RECORDS = 24;
+    static constexpr size_t MAX_RELAY_IDENTITY_ENTRIES = 16;
+    static constexpr size_t MAX_SPECULATIVE_RETRANSMITS = 4;
+
+    struct CapabilityRecordEntry {
+        NodeNum nodeId = 0;
+        CapabilityRecord record;
+    };
+    CapabilityRecordEntry capabilityRecords[MAX_CAPABILITY_RECORDS];
+    uint8_t capabilityRecordCount = 0;
+
+    struct RelayIdentityCacheEntry {
+        uint8_t relayId = 0;
+        RelayIdentityEntry entries[4]; // Max 4 nodes per relay ID
+        uint8_t entryCount = 0;
+    };
+    RelayIdentityCacheEntry relayIdentityCache[MAX_RELAY_IDENTITY_ENTRIES];
+    uint8_t relayIdentityCacheCount = 0;
+
+    SpeculativeRetransmitEntry speculativeRetransmits[MAX_SPECULATIVE_RETRANSMITS];
+    uint8_t speculativeRetransmitCount = 0;
+#else
+    // Full mode: dynamic hash maps
     std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
     std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
     std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
+#endif
 
     void trackNodeCapability(NodeNum nodeId, CapabilityStatus status);
     void pruneCapabilityCache(uint32_t nowSecs);
