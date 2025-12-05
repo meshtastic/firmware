@@ -34,11 +34,13 @@ static void getNodeDisplayName(NodeNum nodeId, char *buf, size_t bufSize) {
 // Helper to compute age in seconds; returns -1 if unknown/invalid
 static int32_t computeAgeSecs(uint32_t last, uint32_t now)
 {
+    static constexpr uint32_t MAX_AGE_DISPLAY_SEC = 30 * 24 * 60 * 60; // 30 days
     if (!last) return -1;
     // Guard against bogus future timestamps (e.g., legacy nodes that send 0/invalid)
     if (last > now + 86400) return -1;
     int32_t age = static_cast<int32_t>(now - last);
     if (age < 0) age = 0;
+    if (static_cast<uint32_t>(age) > MAX_AGE_DISPLAY_SEC) return -1;
     return age;
 }
 
@@ -350,7 +352,12 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         const meshtastic_NeighborLink& neighbor = info.neighbors[i];
         trackNodeCapability(neighbor.node_id,
                             neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
-        float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
+        float etx =
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            GraphLite::calculateETX(neighbor.rssi, neighbor.snr);
+#else
+            Graph::calculateETX(neighbor.rssi, neighbor.snr);
+#endif
         // Edge direction: neighbor → sender (the direction of the transmission that produced the RSSI)
         routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance);
     }
@@ -402,13 +409,18 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
                             neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
 
         // Calculate ETX from the received RSSI/SNR
-        float etx = Graph::calculateETX(neighbor.rssi, neighbor.snr);
+        float etx =
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            GraphLite::calculateETX(neighbor.rssi, neighbor.snr);
+#else
+            Graph::calculateETX(neighbor.rssi, neighbor.snr);
+#endif
 
         // Add edge: neighbor -> sender (the direction of the transmission that produced the RSSI)
         int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance);
 
         // Log topology if this is a new edge or significant change
-        if (edgeChange == Graph::EDGE_NEW || edgeChange == Graph::EDGE_SIGNIFICANT_CHANGE) {
+        if (edgeChange == routingGraph->EDGE_NEW || edgeChange == routingGraph->EDGE_SIGNIFICANT_CHANGE) {
             logNetworkTopology();
         }
 
@@ -449,17 +461,27 @@ void SignalRoutingModule::logNetworkTopology()
 {
     if (!routingGraph) return;
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    NodeNum nodeBuf[GRAPH_LITE_MAX_NODES];
+    size_t nodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
+    if (nodeCount == 0) {
+        LOG_INFO("[SR] Network Topology: No nodes in graph yet");
+        return;
+    }
+    LOG_INFO("[SR] Network Topology: %d nodes total", nodeCount);
+    std::vector<NodeNum> sortedNodes(nodeBuf, nodeBuf + nodeCount);
+    std::sort(sortedNodes.begin(), sortedNodes.end());
+#else
     auto allNodes = routingGraph->getAllNodes();
     if (allNodes.empty()) {
         LOG_INFO("[SR] Network Topology: No nodes in graph yet");
         return;
     }
-
     LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
-
     // Sort nodes for consistent output
     std::vector<NodeNum> sortedNodes(allNodes.begin(), allNodes.end());
     std::sort(sortedNodes.begin(), sortedNodes.end());
+#endif
 
     for (NodeNum nodeId : sortedNodes) {
         char nodeName[64];
@@ -580,7 +602,12 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         char senderName[64];
         getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
-        float etx = Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
+        float etx =
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            GraphLite::calculateETX(mp.rx_rssi, mp.rx_snr);
+#else
+            Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
+#endif
         LOG_INFO("[SR] Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
@@ -681,10 +708,13 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         LOG_DEBUG("[SR] Calculating neighborCount");
         size_t neighborCount = 0;
         if (routingGraph && nodeDB) {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (edges) neighborCount = edges->edgeCount;
+#else
             auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) {
-                neighborCount = edges->size();
-            }
+            if (edges) neighborCount = edges->size();
+#endif
         }
         LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% capable)",
                  healthy ? "HEALTHY - SR active" : "UNHEALTHY - flooding only",
@@ -692,6 +722,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
         if (!healthy && neighborCount > 0) {
             LOG_INFO("[SR] SR not activated despite having neighbors - checking capability status");
+#ifndef SIGNAL_ROUTING_LITE_MODE
             if (routingGraph) {
                 const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
                 if (edges) {
@@ -705,6 +736,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
                     }
                 }
             }
+#endif
         }
         return healthy;
     }
@@ -905,7 +937,12 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
     // Calculate ETX from the received signal quality
     // The RSSI/SNR describes how well we received from nodeId,
     // which characterizes the nodeId→us transmission quality
-    float etx = Graph::calculateETX(rssi, snr);
+    float etx =
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        GraphLite::calculateETX(rssi, snr);
+#else
+        Graph::calculateETX(rssi, snr);
+#endif
 
     // Store edge: nodeId → us (the direction of the transmission we measured)
     // This is used for routing decisions when traffic needs to reach us
@@ -918,18 +955,18 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
     routingGraph->updateEdge(myNode, nodeId, etx, lastRxTime, variance);
 
     // If significant change, consider sending an update sooner
-    if (changeType != Graph::EDGE_NO_CHANGE) {
+    if (changeType != routingGraph->EDGE_NO_CHANGE) {
         char neighborName[64];
         getNodeDisplayName(nodeId, neighborName, sizeof(neighborName));
 
-        if (changeType == Graph::EDGE_NEW) {
+        if (changeType == routingGraph->EDGE_NEW) {
             LOG_INFO("[SR] New neighbor %s detected", neighborName);
             // Flash green for new neighbor
             flashRgbLed(0, 255, 0, 300, true);
             // Log topology for new connections
             LOG_INFO("[SR] Topology changed: new neighbor %s", neighborName);
             logNetworkTopology();
-        } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
+        } else if (changeType == routingGraph->EDGE_SIGNIFICANT_CHANGE) {
             LOG_INFO("[SR] Topology changed: ETX change for %s", neighborName);
             // Flash blue for signal quality change
             flashRgbLed(0, 0, 255, 300, true);
@@ -1048,8 +1085,8 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
         }
     }
 
-    float percentage = static_cast<float>(capable) / static_cast<float>(total);
-    LOG_DEBUG("[SR] Capability calculation: %d/%d = %.1f%%", capable, total, percentage * 100.0f);
+    float percentage = (static_cast<float>(capable) * 100.0f) / static_cast<float>(total);
+    LOG_DEBUG("[SR] Capability calculation: %d/%d = %.1f%%", capable, total, percentage);
     return percentage;
 }
 
