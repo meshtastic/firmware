@@ -39,11 +39,12 @@ Xiao pin assignments
 | D16   | SCL1     | SCL1 | SCL1 | SCL1  |     |       |         |      |      |       |
 | D17   | SDA1     | SDA1 | SDA1 | SDA1  |     |       |         |      |      |       |
 
-The default column shows the pin assignments for the Wio-SX1262 for XIAO (standalone SKU 113010003 or nRF52840 kit SKU 102010710).
-The I2C column shows an alternative pin assignment using I2C on D0/D1
-The BTB column shows the pin assignment for the Wio-SX1262 for XIAO - 30-pin board-to-board connector version from the ESP32S3
-kit. The BLE-L column shows the pin assignment for the DIY xiao_ble which predates the offical kit, and which is retained for
-legacy users. Note that the in addition to the difference between the default and the I2C pinouts in placing the pins on NFC or
+The default column shows the pin assignments for the Wio-SX1262 for XIAO
+(standalone SKU 113010003 or nRF52840 kit SKU 102010710).
+The I2C column shows an alternative pin assignment using I2C on D6/D7 in place of the GNSS.
+The BTB column shows the pin assignment for the Wio-SX1262 -30-pin board-to-board connector version from the ESP32S3 kit.
+The BLE-L column shows the pin assignment for the original DIY xiao_ble, and which is retained for legacy users.
+Note that the in addition to the difference between the default and the I2C pinouts in placing the pins on NFC or
 D6/D7, the user button is activated on D0. The button conflicts with the official GNSS module, so caution is advised.
 */
 
