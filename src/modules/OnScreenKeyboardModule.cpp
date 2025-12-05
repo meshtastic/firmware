@@ -94,10 +94,7 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
         return true;
     case INPUT_BROKER_DOWN:
     case INPUT_BROKER_DOWN_LONG:
-        if (::rotaryEncoderInterruptImpl1 != nullptr || ::upDownInterruptImpl1 != nullptr)
-            targetKeyboard->moveCursorRight();
-        else
-            targetKeyboard->moveCursorDown();
+        targetKeyboard->moveCursorDown();
         return true;
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_ALT_PRESS:
