@@ -1118,12 +1118,9 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
 
     // Check if we have direct SR-capable neighbors for intelligent broadcast routing
     LOG_DEBUG("[SR] Checking direct neighbors");
-    const std::vector<Edge>* edges = nullptr;
-    try {
-        edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-        LOG_DEBUG("[SR] Got edges pointer: %p", edges);
-    } catch (...) {
-        LOG_WARN("[SR] Exception getting edges, graph corrupted - disabling SR");
+    const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (!edges) {
+        LOG_DEBUG("[SR] No edges returned, graph corrupted - disabling SR");
         return false;
     }
     if (!edges || edges->empty()) {
@@ -1134,18 +1131,13 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
     // Count how many direct neighbors are SR-capable or potentially capable (unknown status)
     LOG_DEBUG("[SR] Counting capable neighbors");
     size_t capableNeighbors = 0;
-    try {
-        for (const Edge& edge : *edges) {
-            CapabilityStatus status = getCapabilityStatus(edge.to);
-            if (status == CapabilityStatus::Capable || status == CapabilityStatus::Unknown) {
-                capableNeighbors++;
-            } else if (isLegacyRouter(edge.to)) {
-                capableNeighbors++;
-            }
+    for (const Edge& edge : *edges) {
+        CapabilityStatus status = getCapabilityStatus(edge.to);
+        if (status == CapabilityStatus::Capable || status == CapabilityStatus::Unknown) {
+            capableNeighbors++;
+        } else if (isLegacyRouter(edge.to)) {
+            capableNeighbors++;
         }
-    } catch (...) {
-        LOG_WARN("[SR] Exception counting neighbors, graph data corrupted - disabling SR");
-        return false;
     }
 
     // Need at least 1 direct neighbor that could be SR-capable for meaningful broadcast routing
