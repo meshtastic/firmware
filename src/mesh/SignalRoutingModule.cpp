@@ -31,6 +31,17 @@ static void getNodeDisplayName(NodeNum nodeId, char *buf, size_t bufSize) {
     }
 }
 
+// Helper to compute age in seconds; returns -1 if unknown/invalid
+static int32_t computeAgeSecs(uint32_t last, uint32_t now)
+{
+    if (!last) return -1;
+    // Guard against bogus future timestamps (e.g., legacy nodes that send 0/invalid)
+    if (last > now + 86400) return -1;
+    int32_t age = static_cast<int32_t>(now - last);
+    if (age < 0) age = 0;
+    return age;
+}
+
 SignalRoutingModule::SignalRoutingModule()
     : ProtobufModule("SignalRouting", meshtastic_PortNum_SIGNAL_ROUTING_APP, &meshtastic_SignalRoutingInfo_msg),
       concurrency::OSThread("SignalRouting")
@@ -408,11 +419,19 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         else if (etx < 8.0f) quality = "fair";
         else quality = "poor";
 
-        LOG_INFO("  ├── %s: %s link (%s, ETX=%.1f, %u sec ago)",
+        int32_t age = computeAgeSecs(neighbor.last_rx_time, getTime());
+        char ageBuf[16];
+        if (age < 0) {
+            snprintf(ageBuf, sizeof(ageBuf), "-");
+        } else {
+            snprintf(ageBuf, sizeof(ageBuf), "%d", age);
+        }
+
+        LOG_INFO("  ├── %s: %s link (%s, ETX=%.1f, %s sec ago)",
                  neighborName,
                  neighbor.signal_based_capable ? "SR-node" : "legacy",
                  quality, etx,
-                 (getTime() - neighbor.last_rx_time));
+                 ageBuf);
     }
 
     // Log network topology summary
@@ -446,6 +465,42 @@ void SignalRoutingModule::logNetworkTopology()
         char nodeName[64];
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeId);
+        if (!edges || edges->edgeCount == 0) {
+            CapabilityStatus status = getCapabilityStatus(nodeId);
+            const char* statusStr = (status == CapabilityStatus::Capable) ? "SR-capable" :
+                                   (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
+            LOG_INFO("[SR] +- %s: no neighbors (%s)", nodeName, statusStr);
+            continue;
+        }
+
+        LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->edgeCount);
+
+        for (uint8_t i = 0; i < edges->edgeCount; i++) {
+            const EdgeLite& edge = edges->edges[i];
+            char neighborName[64];
+            getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
+
+            float etx = edge.getEtx();
+            const char* quality;
+            if (etx < 2.0f) quality = "excellent";
+            else if (etx < 4.0f) quality = "good";
+            else if (etx < 8.0f) quality = "fair";
+            else quality = "poor";
+
+            int32_t age = computeAgeSecs(edges->lastFullUpdate, getTime());
+            char ageBuf[16];
+            if (age < 0) {
+                snprintf(ageBuf, sizeof(ageBuf), "-");
+            } else {
+                snprintf(ageBuf, sizeof(ageBuf), "%d", age);
+            }
+
+            LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %s sec ago)",
+                    neighborName, quality, etx, ageBuf);
+        }
+#else
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
             CapabilityStatus status = getCapabilityStatus(nodeId);
@@ -473,10 +528,18 @@ void SignalRoutingModule::logNetworkTopology()
             else if (edge.etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %u sec ago)",
-                    neighborName, quality, edge.etx,
-                    (getTime() - edge.lastUpdate));
+            int32_t age = computeAgeSecs(edge.lastUpdate, getTime());
+            char ageBuf[16];
+            if (age < 0) {
+                snprintf(ageBuf, sizeof(ageBuf), "-");
+            } else {
+                snprintf(ageBuf, sizeof(ageBuf), "%d", age);
+            }
+
+            LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %s sec ago)",
+                    neighborName, quality, edge.etx, ageBuf);
         }
+#endif
     }
 
     LOG_DEBUG("[SR] Topology logging complete");
@@ -551,6 +614,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             // Track that both the original sender and relayer are active
             trackNodeCapability(mp.from, CapabilityStatus::Unknown);
             trackNodeCapability(inferredRelayer, CapabilityStatus::Unknown);
+
+            // Record gateway relationship: inferredRelayer is gateway for mp.from
+            recordGatewayRelation(inferredRelayer, mp.from);
 
             // If we have signal data to the relayer, we can update that edge
             if (hasSignalData) {
@@ -677,6 +743,37 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
+    // Gateway preference: if we know the destination is behind a gateway we can reach directly, prefer that
+    NodeNum gatewayForDest = getGatewayFor(p->to);
+    if (gatewayForDest && gatewayForDest != nextHop) {
+        bool directToGateway = false;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (edges) {
+            for (uint8_t i = 0; i < edges->edgeCount; i++) {
+                if (edges->edges[i].to == gatewayForDest) {
+                    directToGateway = true;
+                    break;
+                }
+            }
+        }
+#else
+        const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (edges) {
+            for (const Edge& e : *edges) {
+                if (e.to == gatewayForDest) {
+                    directToGateway = true;
+                    break;
+                }
+            }
+        }
+#endif
+        if (directToGateway) {
+            LOG_INFO("[SR] Gateway preference: using gateway %08x to reach %08x (was %08x)", gatewayForDest, p->to, nextHop);
+            nextHop = gatewayForDest;
+        }
+    }
+
     char nextHopName[64];
     getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
 
@@ -717,6 +814,11 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
+    // Gateway awareness: if we consistently hear source via a gateway neighbor, bias to relay
+    NodeNum gatewayForSource = getGatewayFor(sourceNode);
+    bool gatewayPath = (gatewayForSource != 0 && gatewayForSource == heardFrom && heardFrom != sourceNode);
+    size_t downstreamCount = gatewayPath ? getGatewayDownstreamCount(gatewayForSource) : 0;
+
     uint32_t currentTime = getValidTime(RTCQualityFromNet);
     if (!currentTime) {
         currentTime = getTime();
@@ -727,6 +829,11 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 #else
     bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
 #endif
+
+    if (!shouldRelay && gatewayPath) {
+        LOG_INFO("[SR] Gateway path via %08x for %08x (downstream=%zu) -> force relay", heardFrom, sourceNode, downstreamCount);
+        shouldRelay = true;
+    }
 
     char myName[64], sourceName[64], heardFromName[64];
     getNodeDisplayName(myNode, myName, sizeof(myName));
@@ -1539,6 +1646,103 @@ NodeNum SignalRoutingModule::resolveRelayIdentity(uint8_t relayId) const
 #endif
 
     return bestNode;
+}
+
+// Record gateway/downstream relationship inferred from relayed packets
+void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstream)
+{
+    if (gateway == 0 || downstream == 0 || gateway == downstream) return;
+
+    uint32_t now = getTime();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    bool found = false;
+    for (uint8_t i = 0; i < gatewayRelationCount; i++) {
+        if (gatewayRelations[i].downstream == downstream) {
+            gatewayRelations[i].gateway = gateway;
+            gatewayRelations[i].lastSeen = now;
+            found = true;
+            break;
+        }
+    }
+    if (!found && gatewayRelationCount < MAX_GATEWAY_RELATIONS) {
+        gatewayRelations[gatewayRelationCount].gateway = gateway;
+        gatewayRelations[gatewayRelationCount].downstream = downstream;
+        gatewayRelations[gatewayRelationCount].lastSeen = now;
+        gatewayRelationCount++;
+    }
+
+    GatewayDownstreamSet *set = nullptr;
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+        if (gatewayDownstream[i].gateway == gateway) {
+            set = &gatewayDownstream[i];
+            break;
+        }
+    }
+    if (!set && gatewayDownstreamCount < MAX_GATEWAY_RELATIONS) {
+        set = &gatewayDownstream[gatewayDownstreamCount++];
+        set->gateway = gateway;
+        set->count = 0;
+        set->lastSeen = now;
+    }
+    if (set) {
+        set->lastSeen = now;
+        bool present = false;
+        for (uint8_t i = 0; i < set->count; i++) {
+            if (set->downstream[i] == downstream) {
+                present = true;
+                break;
+            }
+        }
+        if (!present && set->count < MAX_GATEWAY_DOWNSTREAM) {
+            set->downstream[set->count++] = downstream;
+        }
+    }
+#else
+    downstreamGateway[downstream] = gateway;
+    gatewayDownstream[gateway].insert(downstream);
+#endif
+
+    LOG_DEBUG("[SR] Gateway inference: %08x is gateway for %08x", gateway, downstream);
+}
+
+NodeNum SignalRoutingModule::getGatewayFor(NodeNum downstream) const
+{
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    uint32_t now = getTime();
+    for (uint8_t i = 0; i < gatewayRelationCount; i++) {
+        if (gatewayRelations[i].downstream == downstream) {
+            if ((now - gatewayRelations[i].lastSeen) < CAPABILITY_TTL_SECS) {
+                return gatewayRelations[i].gateway;
+            }
+        }
+    }
+    return 0;
+#else
+    auto it = downstreamGateway.find(downstream);
+    if (it == downstreamGateway.end()) return 0;
+    return it->second;
+#endif
+}
+
+size_t SignalRoutingModule::getGatewayDownstreamCount(NodeNum gateway) const
+{
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    uint32_t now = getTime();
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+        if (gatewayDownstream[i].gateway == gateway) {
+            if ((now - gatewayDownstream[i].lastSeen) > CAPABILITY_TTL_SECS) {
+                return 0;
+            }
+            return gatewayDownstream[i].count;
+        }
+    }
+    return 0;
+#else
+    auto it = gatewayDownstream.find(gateway);
+    if (it == gatewayDownstream.end()) return 0;
+    return it->second.size();
+#endif
 }
 
 NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, NodeNum sourceNode) const
