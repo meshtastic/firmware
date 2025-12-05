@@ -59,6 +59,12 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 // Clear Message Line Cache from Message Renderer
 void clearMessageCache();
 
+void scrollUp();
+void scrollDown();
+
+// Determines if a line is a header line
+bool isHeader(const std::string &line);
+
 } // namespace MessageRenderer
 } // namespace graphics
 #endif

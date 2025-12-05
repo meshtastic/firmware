@@ -1503,7 +1503,20 @@ int Screen::handleInputEvent(const InputEvent *event)
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
+    if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
 
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::MessageRenderer::scrollUp();
+            setFastFramerate(); // match existing behavior
+            return 0;
+        }
+
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::MessageRenderer::scrollDown();
+            setFastFramerate();
+            return 0;
+        }
+    }
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {

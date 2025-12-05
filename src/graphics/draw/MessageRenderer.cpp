@@ -34,6 +34,7 @@ namespace MessageRenderer
 
 static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
+static bool manualScrolling = false;
 
 // UTF-8 skip helper
 static inline size_t utf8CharLen(uint8_t c)
@@ -71,6 +72,41 @@ std::string normalizeEmoji(const std::string &s)
         i += len;
     }
     return out;
+}
+
+// Scroll state (file scope so we can reset on new message)
+float scrollY = 0.0f;
+uint32_t lastTime = 0;
+uint32_t scrollStartDelay = 0;
+uint32_t pauseStart = 0;
+bool waitingToReset = false;
+bool scrollStarted = false;
+static bool didReset = false;
+
+void scrollUp()
+{
+    manualScrolling = true;
+    scrollY -= 12;
+    if (scrollY < 0)
+        scrollY = 0;
+}
+
+void scrollDown()
+{
+    manualScrolling = true;
+
+    int totalHeight = 0;
+    for (int h : cachedHeights)
+        totalHeight += h;
+
+    int visibleHeight = screen->getHeight() - (FONT_HEIGHT_SMALL * 2);
+    int maxScroll = totalHeight - visibleHeight;
+    if (maxScroll < 0)
+        maxScroll = 0;
+
+    scrollY += 12;
+    if (scrollY > maxScroll)
+        scrollY = maxScroll;
 }
 
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
@@ -117,7 +153,6 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     int lineHeight = std::max(fontHeight, maxIconHeight);
     int baselineOffset = (lineHeight - fontHeight) / 2;
     int fontY = y + baselineOffset;
-    int fontMidline = fontY + fontHeight / 2;
 
     // Step 3: Render line in segments
     size_t i = 0;
@@ -191,15 +226,6 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     }
 }
 
-// Scroll state (file scope so we can reset on new message)
-float scrollY = 0.0f;
-uint32_t lastTime = 0;
-uint32_t scrollStartDelay = 0;
-uint32_t pauseStart = 0;
-bool waitingToReset = false;
-bool scrollStarted = false;
-static bool didReset = false; // <-- add here
-
 // Reset scroll state when new messages arrive
 void resetScrollState()
 {
@@ -208,7 +234,7 @@ void resetScrollState()
     waitingToReset = false;
     scrollStartDelay = millis();
     lastTime = millis();
-
+    manualScrolling = false;
     didReset = false;
 }
 
@@ -353,6 +379,22 @@ static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &
         }
     }
     return totalWidth;
+}
+
+static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int totalHeight, int scrollOffset, int startY)
+{
+    if (totalHeight <= visibleHeight)
+        return; // no scrollbar needed
+
+    int scrollbarX = display->getWidth() - 2;
+    int scrollbarHeight = visibleHeight;
+    int thumbHeight = std::max(6, (scrollbarHeight * visibleHeight) / totalHeight);
+    int maxScroll = std::max(1, totalHeight - visibleHeight);
+    int thumbY = startY + (scrollbarHeight - thumbHeight) * scrollOffset / maxScroll;
+
+    for (int i = 0; i < thumbHeight; i++) {
+        display->setPixel(scrollbarX, thumbY + i);
+    }
 }
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -594,7 +636,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (!scrollStarted && now - scrollStartDelay > 2000)
         scrollStarted = true;
 
-    if (totalHeight > usableScrollHeight) {
+    if (!manualScrolling && totalHeight > usableScrollHeight) {
         if (scrollStarted) {
             if (!waitingToReset) {
                 scrollY += delta * scrollSpeed;
@@ -610,7 +652,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 scrollStartDelay = lastTime;
             }
         }
-    } else {
+    } else if (!manualScrolling) {
+        // Only reset when autoscroll is disabled AND user isn't manually scrolling
         scrollY = 0;
     }
 #else
@@ -618,11 +661,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     scrollY = 0.0f;
     waitingToReset = false;
     scrollStarted = false;
-    lastTime = millis(); // keep timebase sane
+    lastTime = millis();
 #endif
 
-    int scrollOffset = static_cast<int>(scrollY);
-    int yOffset = -scrollOffset + getTextPositions(display)[1];
+    int finalScroll = (int)scrollY;
+    int yOffset = -finalScroll + getTextPositions(display)[1];
 
     // Render visible lines
     for (size_t i = 0; i < cachedLines.size(); ++i) {
@@ -632,9 +675,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
             if (isHeader[i]) {
-                // Render header
+
                 int w = display->getStringWidth(cachedLines[i].c_str());
-                int headerX = isMine[i] ? (SCREEN_WIDTH - w - 2) : x;
+
+                // Render header
+                constexpr int SCROLLBAR_WIDTH = 3;
+
+                int headerX;
+                if (isMine[i]) {
+                    // push header left to avoid overlap with scrollbar
+                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH) - w - 2;
+                } else {
+                    headerX = x;
+                }
                 display->drawString(headerX, lineY, cachedLines[i].c_str());
 
                 // Draw ACK/NACK mark for our own messages
@@ -664,7 +717,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
                     int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
-                    int rightX = SCREEN_WIDTH - renderedWidth - 2; // -2 for slight padding from the edge
+                    constexpr int SCROLLBAR_WIDTH = 3;
+                    int rightX = SCREEN_WIDTH - renderedWidth - SCROLLBAR_WIDTH - 2;
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
                     drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
@@ -672,7 +726,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         }
     }
+    int totalContentHeight = totalHeight;
+    int visibleHeight = usableHeight;
 
+    // Draw scrollbar
+    drawMessageScrollbar(display, visibleHeight, totalContentHeight, finalScroll, getTextPositions(display)[1]);
     graphics::drawCommonHeader(display, x, y, titleStr);
     graphics::drawCommonFooter(display, x, y);
 }
