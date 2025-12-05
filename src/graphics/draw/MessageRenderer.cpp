@@ -653,7 +653,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         }
     } else if (!manualScrolling) {
-        // Only reset when autoscroll is disabled AND user isn't manually scrolling
         scrollY = 0;
     }
 #else

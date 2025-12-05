@@ -1503,6 +1503,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
+    // UP/DOWN in message screen scrolls through message threads
     if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
 
         if (event->inputEvent == INPUT_BROKER_UP) {
