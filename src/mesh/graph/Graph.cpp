@@ -17,7 +17,7 @@ bool Graph::hasMemoryForNewNode() const {
 int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance) {
     // Check if this is a new node
     bool isNewNode = (adjacencyList.find(from) == adjacencyList.end());
-    NodeNum myNode = nodeDB->getNodeNum();
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
 
     if (isNewNode && !hasMemoryForNewNode()) {
         // Graph is full - find the least connected node to potentially evict
@@ -156,7 +156,11 @@ Route Graph::calculateRoute(NodeNum destination, uint32_t currentTime) {
     }
 
     // Calculate new route
-    Route route = dijkstra(nodeDB->getNodeNum(), destination, currentTime);
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    if (myNode == 0) {
+        return Route(destination, 0, std::numeric_limits<float>::infinity(), currentTime);
+    }
+    Route route = dijkstra(myNode, destination, currentTime);
 
     // Cache the result
     if (route.nextHop != 0) {

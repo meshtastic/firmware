@@ -15,6 +15,10 @@ SignalRoutingModule *signalRoutingModule;
 
 // Helper to get node display name for logging
 static void getNodeDisplayName(NodeNum nodeId, char *buf, size_t bufSize) {
+    if (!nodeDB) {
+        snprintf(buf, bufSize, "(%08x)", nodeId);
+        return;
+    }
     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeId);
     if (node && node->has_user && node->user.long_name[0]) {
         snprintf(buf, bufSize, "%s (%s, %08x)", node->user.long_name, node->user.short_name, nodeId);
@@ -47,7 +51,46 @@ SignalRoutingModule::SignalRoutingModule()
     }
 #endif
 
+#ifdef ARCH_ESP32
+    // ESP32 RAM guard for variants without PSRAM (e.g., ESP32-C3)
+    // These chips have limited SRAM (~400KB total) with WiFi/BLE consuming ~60-80KB
+    // Graph + std::unordered_map containers need ~30KB+ and cause heap fragmentation
+    // During runtime, Dijkstra and relay algorithms create temporary unordered_sets
+    // which fragment memory further - need significant headroom
+    {
+        uint32_t freeHeap = memGet.getFreeHeap();
+        uint32_t freePsram = memGet.getFreePsram();
+
+        // If no PSRAM and less than 150KB free heap, disable signal routing
+        // This threshold accounts for:
+        // - Graph structure itself (~10-20KB depending on network size)
+        // - Runtime allocations for Dijkstra, relay decisions (~10-20KB temporary)
+        // - Heap fragmentation overhead on ESP32 (~20-30%)
+        // - Safety margin for other subsystems
+        if (freePsram == 0 && freeHeap < 150 * 1024) {
+            LOG_WARN("[SR] Insufficient RAM on ESP32 without PSRAM (%u bytes free), disabling signal-based routing", freeHeap);
+            routingGraph = nullptr;
+            disable();
+            return;
+        }
+    }
+#endif
+
     routingGraph = new Graph();
+    if (!routingGraph) {
+        LOG_WARN("[SR] Failed to allocate Graph, disabling signal-based routing");
+        disable();
+        return;
+    }
+
+    if (!nodeDB) {
+        LOG_WARN("[SR] NodeDB not available, disabling signal-based routing");
+        delete routingGraph;
+        routingGraph = nullptr;
+        disable();
+        return;
+    }
+
     trackNodeCapability(nodeDB->getNodeNum(), CapabilityStatus::Capable);
     uint32_t nowMs = millis();
     lastHeartbeatTime = nowMs;
@@ -497,13 +540,14 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p)
 {
-    if (!p || !signalBasedRoutingEnabled || !routingGraph) {
-        LOG_DEBUG("[SR] SR disabled or unavailable (enabled=%d, graph=%p)",
-                 signalBasedRoutingEnabled, routingGraph);
+    if (!p || !signalBasedRoutingEnabled || !routingGraph || !nodeDB) {
+        LOG_DEBUG("[SR] SR disabled or unavailable (enabled=%d, graph=%p, nodeDB=%p)",
+                 signalBasedRoutingEnabled, routingGraph, nodeDB);
         return false;
     }
 
-    char destName[64], senderName[64];
+    // Use smaller buffers to reduce stack pressure on memory-constrained devices
+    char destName[40], senderName[40];
     getNodeDisplayName(p->to, destName, sizeof(destName));
     getNodeDisplayName(p->from, senderName, sizeof(senderName));
 
@@ -602,7 +646,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
 bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 {
-    if (!routingGraph || !isBroadcast(p->to)) {
+    if (!routingGraph || !nodeDB || !isBroadcast(p->to)) {
         return true;
     }
 
@@ -761,6 +805,9 @@ void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacke
 
 bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) const
 {
+    if (!nodeDB) {
+        return false;
+    }
     if (nodeId == nodeDB->getNodeNum()) {
         return isActiveRoutingRole();
     }
@@ -771,6 +818,10 @@ bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) const
 
 float SignalRoutingModule::getSignalBasedCapablePercentage() const
 {
+    if (!nodeDB) {
+        return 0.0f;
+    }
+
     uint32_t now = getTime();
     size_t total = 1;   // include ourselves
     size_t capable = 1; // we are always capable
@@ -1091,6 +1142,9 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
 
 bool SignalRoutingModule::isLegacyRouter(NodeNum nodeId) const
 {
+    if (!nodeDB) {
+        return false;
+    }
     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeId);
     if (!node || !node->has_user) {
         return false;
@@ -1146,7 +1200,7 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
 
 bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
 {
-    if (!routingGraph) {
+    if (!routingGraph || !nodeDB) {
         return false;
     }
 
