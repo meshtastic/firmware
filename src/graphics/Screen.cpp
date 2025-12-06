@@ -69,7 +69,11 @@ using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
 
+#if USE_TFTDISPLAY
 extern uint16_t TFT_MESH;
+#else
+uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -356,18 +360,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
-#if defined(USE_ST7796)
+#elif defined(USE_ST7796)
 #ifdef ESP_PLATFORM
     dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
                             ST7796_MISO, ST7796_SCK, TFT_SPI_FREQUENCY);
 #else
     dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
-#endif
-#endif
-#if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
-#elif defined(USE_ST7796)
-    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
@@ -381,7 +379,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         LOG_INFO("SSD1306 init success");
     }
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||    \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
@@ -409,6 +407,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     isAUTOOled = true;
+#endif
+
+#if defined(USE_ST7789)
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#elif defined(USE_ST7796)
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
     ui = new OLEDDisplayUi(dispdev);
@@ -656,7 +660,7 @@ void Screen::setup()
 #else
     if (!config.display.flip_screen) {
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
