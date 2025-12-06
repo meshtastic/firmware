@@ -1,4 +1,8 @@
 #include "configuration.h"
+
+// Forward declaration - implementation in src/mesh/generated/DynamicModules.cpp
+void init_dynamic_modules();
+
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
 #include "input/ExpressLRSFiveWay.h"
@@ -9,7 +13,6 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "input/i2cButton.h"
 #include "modules/SystemCommandsModule.h"
-#include "modules/ModuleRegistry.h"
 
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"

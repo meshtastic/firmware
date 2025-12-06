@@ -61,22 +61,43 @@ The plugin's `src/` directory is automatically added to the compiler's include p
 
 ## Module Registration
 
-If your plugin implements a Meshtastic module, you can use the automatic module registration system:
+If your plugin implements a Meshtastic module, use the `#pragma MPM_MODULE` directive in your header file:
 
-1. Include `ModuleRegistry.h` in your module `.cpp` file
-2. Place `MESHTASTIC_REGISTER_MODULE(ModuleClassName)` at the end of your implementation file
-3. Your module will be automatically initialized when the firmware starts
+1. Add `#pragma MPM_MODULE(ClassName)` to your module's header file (`.h`)
+2. Optionally specify a variable name: `#pragma MPM_MODULE(ClassName, variableName)`
+3. If you specify a variable name, declare it as `extern` in your header file
+4. Your module will be automatically initialized when the firmware starts
 
-Example:
+Example (without variable):
 
 ```cpp
-#include "MyModule.h"
-#include "ModuleRegistry.h"
+// MyModule.h
+#pragma once
+#pragma MPM_MODULE(MyModule)
 
-// ... module implementation ...
-
-MESHTASTIC_REGISTER_MODULE(MyModule);
+class MyModule : public SinglePortModule {
+    // ... module definition ...
+};
 ```
+
+Example (with variable - for modules that need to be referenced elsewhere):
+
+```cpp
+// MyModule.h
+#pragma once
+#pragma MPM_MODULE(MyModule, myModule)
+
+#include "SinglePortModule.h"
+
+class MyModule : public SinglePortModule {
+    // ... module definition ...
+};
+
+// Declare the variable as extern so other files can reference it
+extern MyModule *myModule;
+```
+
+The variable will be assigned in the generated `init_dynamic_modules()` function. If you don't need to reference your module from other files, you can omit the variable name and extern declaration.
 
 > **Note**: Module registration is optional. Plugins that don't implement Meshtastic modules (e.g., utility libraries) don't need this.
 

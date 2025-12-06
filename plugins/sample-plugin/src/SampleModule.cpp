@@ -1,13 +1,10 @@
-#include "ModuleRegistry.h"
+#include "SampleModule.h"
 #include "SinglePortModule.h"
+#include "configuration.h"
 
-class MySampleModule : public SinglePortModule
+MySampleModule *sampleModule;
+
+MySampleModule::MySampleModule() : SinglePortModule("my_sample_module", meshtastic_PortNum_REPLY_APP)
 {
-  public:
-    MySampleModule() : SinglePortModule("my_sample_module", meshtastic_PortNum_REPLY_APP) {
-        LOG_INFO("MySampleModule constructor");
-    }
-};
-
-
-MESHTASTIC_REGISTER_MODULE(MySampleModule)
+    LOG_INFO("MySampleModule constructor");
+}
