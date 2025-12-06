@@ -46,6 +46,22 @@ the new node can build its node db)
 
 MeshService *service;
 
+// ESP32 devices without PSRAM don't have enough RAM to run reliably with Wifi
+// and pre-allocated buffers, so allocate them dynamically like before ~2.7.9
+#if !defined(BOARD_HAS_PSRAM) \
+  && defined(ARCH_ESP32) \
+  && !defined(CONFIG_IDF_TARGET_ESP32S2) \
+  && !defined(CONFIG_IDF_TARGET_ESP32S3) \
+  && !defined(CONFIG_IDF_TARGET_ESP32C3) \
+  && !defined(CONFIG_IDF_TARGET_ESP32C6)
+static MemoryDynamic<meshtastic_MqttClientProxyMessage>
+    staticMqttClientProxyMessagePool;
+
+static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+
+static MemoryDynamic<meshtastic_ClientNotification>
+    staticClientNotificationPool;
+#else
 #define MAX_MQTT_PROXY_MESSAGES 16
 static MemoryPool<meshtastic_MqttClientProxyMessage, MAX_MQTT_PROXY_MESSAGES> staticMqttClientProxyMessagePool;
 
@@ -54,6 +70,7 @@ static MemoryPool<meshtastic_QueueStatus, MAX_QUEUE_STATUS> staticQueueStatusPoo
 
 #define MAX_CLIENT_NOTIFICATIONS 4
 static MemoryPool<meshtastic_ClientNotification, MAX_CLIENT_NOTIFICATIONS> staticClientNotificationPool;
+#endif
 
 Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
