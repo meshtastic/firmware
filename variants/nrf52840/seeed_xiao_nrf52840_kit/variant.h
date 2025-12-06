@@ -219,8 +219,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SDA D4
 #define PIN_WIRE_SCL D5
 #elif defined(SEEED_XIAO_NRF_DEFAULT) || defined(SEEED_XIAO_WIO_BTB)
-#define PIN_WIRE_SDA D30
-#define PIN_WIRE_SCL D31
+#define PIN_WIRE_SDA 30
+#define PIN_WIRE_SCL 31
 #else
 // If D6 and D7 are free, I2C is probably the most versatile assignment
 #define PIN_WIRE_SDA D6
