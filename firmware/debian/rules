@@ -1,0 +1,32 @@
+#!/usr/bin/make -f
+# export DH_VERBOSE = 1
+
+# Use the "dh" sequencer
+%:
+	dh $@
+
+# https://docs.platformio.org/en/latest/envvars.html
+PIO_ENV:=\
+	PLATFORMIO_CORE_DIR=pio/core \
+	PLATFORMIO_LIBDEPS_DIR=pio/libdeps \
+	PLATFORMIO_PACKAGES_DIR=pio/packages
+
+# Raspbian armhf builds should be compatible with armv6-hardfloat
+# https://www.valvers.com/open-software/raspberry-pi/bare-metal-programming-in-c-part-1/#rpi1-compiler-flags
+ifneq (,$(findstring Raspbian,$(shell lsb_release -is)))
+ifeq ($(DEB_BUILD_ARCH),armhf)
+PIO_ENV+=\
+	PLATFORMIO_BUILD_FLAGS="-mfloat-abi=hard -mfpu=vfp -march=armv6zk"
+endif
+endif
+
+override_dh_auto_build:
+	# Extract tarballs within source deb
+	tar -xf pio.tar
+	mkdir -p web && tar -xf web.tar -C web
+	gunzip web/ -r
+	# Build with platformio
+	$(PIO_ENV) platformio run -e native-tft
+	# Move the binary and default config to the correct name
+	mv .pio/build/native-tft/program .pio/build/native-tft/meshtasticd
+	cp bin/config-dist.yaml bin/config.yaml

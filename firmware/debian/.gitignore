@@ -1,0 +1,6 @@
+.debhelper
+debhelper-build-stamp
+meshtasticd
+files
+meshtasticd.substvars
+meshtasticd.postrm.debhelper

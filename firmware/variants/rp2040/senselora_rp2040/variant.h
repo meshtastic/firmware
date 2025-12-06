@@ -1,0 +1,28 @@
+#define ARDUINO_ARCH_AVR
+
+#define USE_SSD1306
+
+#define BUTTON_PIN 2
+#define BUTTON_NEED_PULLUP
+
+#define LED_PIN PIN_LED
+#define ledOff(pin) pinMode(pin, INPUT)
+
+#undef BATTERY_PIN
+#define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
+
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_CS
+
+#define USE_RF95
+#define LORA_SCK PIN_SPI0_SCK
+#define LORA_MISO PIN_SPI0_MISO
+#define LORA_MOSI PIN_SPI0_MOSI
+#define LORA_CS PIN_SPI0_SS
+
+#define LORA_DIO0 21
+#define LORA_DIO1 22
+#define LORA_DIO2 RADIOLIB_NC
+#define LORA_RESET 20

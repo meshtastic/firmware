@@ -1,0 +1,91 @@
+; pico usb sniffer lite - original working version
+; Based on pico-usb-sniffer-lite by Alex Taradov & David Reguera Garcia aka Dreg
+
+; SPDX-License-Identifier: BSD-3-Clause
+; Copyright (c) 2022, Alex Taradov <alex@taradov.com>. All rights reserved.
+; Copyright (c) [2025] by David Reguera Garcia aka Dreg
+
+; ---- TEMPLATE AREA ---------------------------------------------------------------------
+
+.program usb_low_speed_template
+    wait 1 pin 1             ; Wait until the bus goes idle
+    wait 0 pin 1             ; Wait for the SOP
+
+.program usb_full_speed_template  
+    wait 1 pin 0             ; Wait until the bus goes idle
+    wait 0 pin 0             ; Wait for the SOP
+
+; ---- PIO0 AREA ---------------------------------------------------------------------
+
+.program tar_pio0
+.wrap_target
+idle:
+    mov x, !null             ; 00 Initialize the bit counter to its maximum value (0xffffffff)
+    nop                      ; 01 Wait until the bus goes idle (replaced by template)
+    nop                      ; 02 Wait for the SOP (replaced by template)
+start0:
+    nop [1]                  ; 03 Skip to the middle of the bit
+read0:
+    jmp x-- pio0_label_4     ; 04 Decrement the bit counter
+pio0_label_4:
+    in pins, 1               ; 05 Sample D+
+    mov osr, ::pins          ; 06 Sample D+ and D- (bit reverse)
+    out y, 2                 ; 07
+    jmp !y eop               ; 08 If both are 0, then it is an EOP
+    nop [3]                  ; 09 Skip to the middle of the bit
+    jmp pin read0            ; 10 If D- is high, then D+ is low, read 0
+read1:
+    jmp x-- pio0_label_6     ; 11 Decrement the bit counter
+pio0_label_6:
+    in pins, 1               ; 12 Sample D+
+    mov osr, ::pins          ; 13 Sample D+ and D- (bit reverse)
+    out y, 2                 ; 14
+    jmp !y eop               ; 15 If both are 0, then it is an EOP
+    jmp pin start0           ; 16 Look for a low to high transition on
+    jmp pin start0           ; 17 D- to adjust the sample point location
+    jmp pin start0           ; 18
+    jmp pin start0           ; 19
+    jmp read1                ; 20
+eop:
+    push noblock             ; 21 Transfer the last data
+    mov isr, x               ; 22 Transfer the bit count
+    push noblock             ; 23
+poll_reset:
+    set x, 31                ; 24
+poll_loop:
+    mov osr, ::pins          ; 25 Sample D+ and D- (bit reverse)
+    out y, 2                 ; 26
+    jmp y-- idle             ; 27 If either is not zero, back to idle
+    jmp x-- poll_loop        ; 28
+    mov isr, !null           ; 29 ISR is filled with 0xffffffff
+    push noblock             ; 30
+.wrap
+    wait 1 pin 2             ; 31 Entry point, wait for a START signal from the PIO1
+
+; ---- PIO1 AREA ---------------------------------------------------------------------
+
+.program tar_pio1
+    set pindirs, 1           ; Set the START output
+    set pins, 0              ; Set the START output LOW
+.wrap_target
+    nop [31]                 ; 00 Wait for the PIO0 to start
+    nop [31]                 ; 01
+    nop [31]                 ; 02
+    nop [31]                 ; 03
+wait_se0:
+    mov osr, ::pins          ; 04 (bit reverse)
+    out y, 2                 ; 05
+    jmp y-- wait_se0         ; 06
+    mov osr, ::pins          ; 07 (bit reverse)
+    out y, 2                 ; 08
+    jmp y-- wait_se0         ; 09
+    mov osr, ::pins          ; 10 (bit reverse)
+    out y, 2                 ; 11
+    jmp y-- wait_se0         ; 12
+    mov osr, ::pins          ; 13 (bit reverse)
+    out y, 2                 ; 14
+    jmp y-- wait_se0         ; 15
+    set pins, 1              ; 16 Set the START output HIGH
+infinite_loop:
+    jmp infinite_loop        ; 17
+.wrap

@@ -1,0 +1,17 @@
+[Unit]
+Description=Meshtastic Native Daemon
+After=network-online.target
+StartLimitInterval=200
+StartLimitBurst=5
+
+[Service]
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+User=meshtasticd
+Group=meshtasticd
+Type=simple
+ExecStart=/usr/bin/meshtasticd
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

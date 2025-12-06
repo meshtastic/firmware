@@ -1,0 +1,37 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32s3_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": [
+      "-DBOARD_HAS_PSRAM",
+      "-DLILYGO_TBEAM_S3_CORE",
+      "-DARDUINO_USB_CDC_ON_BOOT=1",
+      "-DARDUINO_USB_MODE=0",
+      "-DARDUINO_RUNNING_CORE=1",
+      "-DARDUINO_EVENT_RUNNING_CORE=1"
+    ],
+    "f_cpu": "240000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "dio",
+    "hwids": [["0x303A", "0x1001"]],
+    "mcu": "esp32s3",
+    "variant": "tbeam-s3-core"
+  },
+  "connectivity": ["wifi"],
+  "debug": {
+    "openocd_target": "esp32s3.cfg"
+  },
+  "frameworks": ["arduino"],
+  "name": "LilyGo TBeam-S3-Core",
+  "upload": {
+    "flash_size": "8MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 8388608,
+    "require_upload_port": true,
+    "speed": 921600
+  },
+  "url": "http://www.lilygo.cn/",
+  "vendor": "LilyGo"
+}

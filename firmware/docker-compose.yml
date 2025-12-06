@@ -1,0 +1,26 @@
+# USB-Based Meshtastic container-node!
+
+# Copy .env.example to .env and set the USB_DEVICE and CONFIG_PATH variables
+
+services:
+  meshtastic-node:
+    build: .
+    container_name: meshtasticd
+
+    # Pass USB device through to the container
+    devices:
+      - "${USB_DEVICE}"
+
+    # Mount local config file and named volume for data persistence
+    volumes:
+      - "${CONFIG_PATH}:/etc/meshtasticd/config.yaml:ro"
+      - meshtastic_data:/var/lib/meshtasticd
+
+    # Forward the container’s port 4403 to the host
+    ports:
+      - 4403:4403
+
+    restart: unless-stopped
+
+volumes:
+  meshtastic_data:

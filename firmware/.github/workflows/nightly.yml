@@ -1,0 +1,39 @@
+name: Nightly
+on:
+  schedule:
+    - cron: 0 8 * * 1-5
+  workflow_dispatch: {}
+
+permissions: read-all
+
+jobs:
+  trunk_check:
+    if: github.repository == 'meshtastic/firmware'
+    name: Trunk Check and Upload
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Trunk Check
+        uses: trunk-io/trunk-action@v1
+        with:
+          trunk-token: ${{ secrets.TRUNK_TOKEN }}
+
+  trunk_upgrade:
+    if: github.repository == 'meshtastic/firmware'
+    # See: https://github.com/trunk-io/trunk-action/blob/v1/readme.md#automatic-upgrades
+    name: Trunk Upgrade (PR)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # For trunk to create PRs
+      pull-requests: write # For trunk to create PRs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Trunk Upgrade
+        uses: trunk-io/trunk-action/upgrade@v1
+        with:
+          base: master

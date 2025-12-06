@@ -1,0 +1,46 @@
+name: New Board
+description: Request us to support new hardware
+title: "[Board]: "
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for requesting a new board, this will not gurantee that we will support it, but will be on our radar.
+
+  - type: dropdown
+    id: soc
+    attributes:
+      label: SOC
+      description: What SOC does your board have?
+      multiple: true
+      options:
+        - NRF52
+        - ESP32
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: lora
+    attributes:
+      label: Lora IC
+      description: What LoRa IC does the board have?
+    validations:
+      required: true
+
+  - type: input
+    id: link
+    attributes:
+      label: Product Link
+      description: Where can we find this product?
+    validations:
+      required: true
+
+  - type: textarea
+    id: body
+    attributes:
+      label: Description
+      description: Please provide any further details you think we may need.
+    validations:
+      required: true

@@ -1,0 +1,21 @@
+---
+Lora:
+## Ebyte E22-900M30S, E22-900M22S with or without external RF switching setup
+## HT-RA62 (Has internal switching, but whatever)
+## Seeed WIO SX1262 (already has TXEN-DIO2 link, but needs RXEN)
+## Will work with any module with or without RF switching, and with TCXO
+  Module: sx1262
+  gpiochip: 1 # subtract 32 from the gpio numbers
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  CS: 16 #pin6 / GPIO48 1C0
+  IRQ: 23  #pin17 / GPIO55 1C7
+  Busy: 22 #pin16 / GPIO54 1C6
+  Reset: 25 #pin13 / GPIO57 1D1
+  RXen: 24 #pin12 / GPIO56 1D0 # Not strictly needed for auto-switching, but why complicate things?
+#  TXen: bridge to DIO2 on E22 module
+  spidev: spidev0.0 #pins are (CS=16, CLK=17, MOSI=18, MISO=19)
+  spiSpeed: 2000000
+  
+General:
+  MACAddressSource: eth0

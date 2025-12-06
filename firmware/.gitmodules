@@ -1,0 +1,6 @@
+[submodule "protobufs"]
+	path = protobufs
+	url = https://github.com/meshtastic/protobufs.git
+[submodule "meshtestic"]
+	path = meshtestic
+	url = https://github.com/meshtastic/meshTestic

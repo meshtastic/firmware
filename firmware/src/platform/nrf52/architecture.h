@@ -1,0 +1,166 @@
+#pragma once
+
+#define ARCH_NRF52
+
+//
+// defaults for NRF52 architecture
+//
+#ifndef HAS_BLUETOOTH
+#define HAS_BLUETOOTH 1
+#endif
+#ifndef HAS_SCREEN
+#define HAS_SCREEN 1
+#endif
+#ifndef HAS_WIRE
+#define HAS_WIRE 1
+#endif
+#ifndef HAS_GPS
+#define HAS_GPS 1
+#endif
+#ifndef HAS_BUTTON
+#define HAS_BUTTON 1
+#endif
+#ifndef HAS_TELEMETRY
+#define HAS_TELEMETRY 1
+#endif
+#ifndef HAS_SENSOR
+#define HAS_SENSOR 1
+#endif
+#ifndef HAS_RADIO
+#define HAS_RADIO 1
+#endif
+#ifndef HAS_CPU_SHUTDOWN
+#define HAS_CPU_SHUTDOWN 1
+#endif
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#define HAS_CUSTOM_CRYPTO_ENGINE 1
+#endif
+
+//
+// set HW_VENDOR
+//
+
+// This string must exactly match the case used in release file names or the android updater won't work
+#ifdef ARDUINO_NRF52840_PCA10056
+#define HW_VENDOR meshtastic_HardwareModel_NRF52840DK
+#elif defined(ARDUINO_NRF52840_PPR)
+#define HW_VENDOR meshtastic_HardwareModel_PPR
+#elif defined(RAK2560)
+#define HW_VENDOR meshtastic_HardwareModel_RAK2560
+#elif defined(WISMESH_TAP)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP
+#elif defined(WISMESH_TAG)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAG
+#elif defined(GAT562_MESH_TRIAL_TRACKER)
+#define HW_VENDOR meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER
+#elif defined(NOMADSTAR_METEOR_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+#elif defined(R1_NEO)
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_R1_NEO
+#elif defined(RAK3401)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3401
+// MAke sure all custom RAK4630 boards are defined before the generic RAK4630
+#elif defined(RAK4630)
+#define HW_VENDOR meshtastic_HardwareModel_RAK4631
+#elif defined(TTGO_T_ECHO)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(T_ECHO_LITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
+#elif defined(ELECROW_ThinkNode_M1)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
+#elif defined(ELECROW_ThinkNode_M3)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M3
+#elif defined(ELECROW_ThinkNode_M6)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M6
+#elif defined(NANO_G2_ULTRA)
+#define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
+#elif defined(CANARYONE)
+#define HW_VENDOR meshtastic_HardwareModel_CANARYONE
+#elif defined(NORDIC_PCA10059)
+#define HW_VENDOR meshtastic_HardwareModel_NRF52840_PCA10059
+#elif defined(TWC_MESH_V4)
+#define HW_VENDOR meshtastic_HardwareModel_TWC_MESH_V4
+#elif defined(NRF52_PROMICRO_DIY)
+#define HW_VENDOR meshtastic_HardwareModel_NRF52_PROMICRO_DIY
+#elif defined(WIO_WM1110)
+#define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
+#elif defined(TRACKER_T1000_E)
+#define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
+#elif defined(ME25LS01_4Y10TD)
+#define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
+#elif defined(MS24SF1)
+#define HW_VENDOR meshtastic_HardwareModel_MS24SF1
+#elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
+#elif defined(HELTEC_T114)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(MESHLINK)
+#define HW_VENDOR meshtastic_HardwareModel_MESHLINK
+#elif defined(SEEED_XIAO_NRF52840_KIT)
+#define HW_VENDOR meshtastic_HardwareModel_XIAO_NRF52_KIT
+#elif defined(SEEED_SOLAR_NODE)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
+#elif defined(HELTEC_MESH_POCKET)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
+#elif defined(SEEED_WIO_TRACKER_L1_EINK)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
+#elif defined(SEEED_WIO_TRACKER_L1)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
+#elif defined(HELTEC_MESH_SOLAR)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
+#elif defined(MUZI_BASE)
+#define HW_VENDOR meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN
+#else
+#define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
+#endif
+
+//
+// Standard definitions for NRF52 targets
+//
+
+#ifdef ARDUINO_NRF52840_PCA10056
+
+// This board uses 0 to be mean LED on
+#undef LED_STATE_ON
+#define LED_STATE_ON 0 // State when LED is lit
+
+#endif
+
+#ifdef _SEEED_XIAO_NRF52840_SENSE_H_
+
+// This board uses 0 to be mean LED on
+#undef LED_STATE_ON
+#define LED_STATE_ON 0 // State when LED is lit
+
+#endif
+
+#ifdef PIN_LED1
+#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#endif
+
+#ifdef PIN_BUTTON1
+#define BUTTON_PIN PIN_BUTTON1
+#endif
+
+#ifdef PIN_BUTTON_TOUCH
+#define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
+#endif
+
+// Always include the SEGGER code on NRF52 - because useful for debugging
+#include "SEGGER_RTT.h"
+
+// The channel we send stdout data to
+#define SEGGER_STDOUT_CH 0
+
+// Debug printing to segger console
+#define SEGGER_MSG(...) SEGGER_RTT_printf(SEGGER_STDOUT_CH, __VA_ARGS__)
+
+// If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
+// use SEGGER for debug output
+#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA)
+// No serial ports on this board - ONLY use segger in memory console
+#define USE_SEGGER
+#endif
+
+// Detect if running in ISR context (ARM Cortex-M4)
+#define xPortInIsrContext() ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0 ? pdFALSE : pdTRUE)

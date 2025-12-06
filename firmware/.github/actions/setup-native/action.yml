@@ -1,0 +1,14 @@
+name: Setup native build
+description: Install libraries needed for building the Native/Portduino build
+
+runs:
+  using: composite
+  steps:
+    - name: Setup base
+      id: base
+      uses: ./.github/actions/setup-base
+
+    - name: Install libs needed for native build
+      shell: bash
+      run: |
+        sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev
