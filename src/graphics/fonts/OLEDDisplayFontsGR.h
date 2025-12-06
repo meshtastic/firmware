@@ -10,7 +10,7 @@
 /**
  * Localization for Greek language containing glyphs for the Greek alphabet.
  * Uses Windows-1253 (CP-1253) encoding for Greek characters.
- * 
+ *
  * Supported characters:
  * - Uppercase Greek: Α-Ω (U+0391 to U+03A9)
  * - Lowercase Greek: α-ω (U+03B1 to U+03C9)
