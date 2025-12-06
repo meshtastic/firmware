@@ -18,20 +18,11 @@ env.Append(BUILD_FLAGS=["-Isrc/modules"])  # type: ignore[name-defined]  # noqa:
 # Scan for plugins and add include paths
 plugins_dir = os.path.join(project_dir, "plugins")
 if os.path.exists(plugins_dir) and os.path.isdir(plugins_dir):
-    plugin_dirs = [
-        d
-        for d in os.listdir(plugins_dir)
-        if os.path.isdir(os.path.join(plugins_dir, d)) and not d.startswith(".")
-    ]
-    
-    for plugin_name in plugin_dirs:
-        plugin_src_path = os.path.join(plugins_dir, plugin_name, "src")
-        if os.path.isdir(plugin_src_path):
-            # Add include path for this plugin
-            include_flag = f"-I{plugin_src_path}"
-            env.Append(BUILD_FLAGS=[include_flag])  # type: ignore[name-defined]  # noqa: F821
-            rel_path = os.path.relpath(plugin_src_path, project_dir)
-            print(f"MPM: Added include path {rel_path}")
+    # Add plugins directory to include path so includes must be explicit like "lobbs/src/plugin.h"
+    include_flag = f"-I{plugins_dir}"
+    env.Append(BUILD_FLAGS=[include_flag])  # type: ignore[name-defined]  # noqa: F821
+    rel_path = os.path.relpath(plugins_dir, project_dir)
+    print(f"MPM: Added include path {rel_path}")
 
 
 # Check if mpm command is available
