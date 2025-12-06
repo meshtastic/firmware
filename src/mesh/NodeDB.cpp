@@ -22,6 +22,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if HAS_SCREEN
+#include "graphics/Screen.h"
+#endif
 #include <ErriezCRC32.h>
 #include <algorithm>
 #include <pb_decode.h>
@@ -50,6 +53,7 @@
 #ifdef ARCH_NRF52
 #include <bluefruit.h>
 #include <utility/bonding.h>
+#include "InternalFileSystem.h"
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
@@ -188,6 +192,128 @@ meshtastic_Position localPosition = meshtastic_Position_init_default;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
 uint32_t error_address = 0;
+
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+#ifndef FILE_O_READ
+#define FILE_O_READ 0
+#endif
+#ifndef FILE_O_WRITE
+#define FILE_O_WRITE 1
+#endif
+namespace
+{
+constexpr const char *kInternalConfigBackupDir = "/backup";
+constexpr const char *kInternalConfigBackupFile = "/backup/config.proto";
+using InternalFsFile = decltype(InternalFS.open(kInternalConfigBackupFile, FILE_O_READ));
+
+void showBackupStatusMessage(const char *message)
+{
+    (void)message;
+    IF_SCREEN(screen->showSimpleBanner(message, 2500));
+}
+
+bool internalFsStreamRead(pb_istream_t *stream, pb_byte_t *buf, size_t count)
+{
+    auto file = static_cast<InternalFsFile *>(stream->state);
+    if (file == nullptr)
+        return false;
+
+    if (buf == nullptr) {
+        while (count-- && file->read() != -1)
+            ;
+        return count == (size_t)-1;
+    }
+
+    size_t bytesRead = file->read(buf, count);
+    if (bytesRead != count)
+        return false;
+
+    if (!file->available())
+        stream->bytes_left = 0;
+
+    return true;
+}
+
+bool internalFsStreamWrite(pb_ostream_t *stream, const pb_byte_t *buf, size_t count)
+{
+    auto file = static_cast<InternalFsFile *>(stream->state);
+    if (file == nullptr)
+        return false;
+
+    size_t written = file->write(buf, count);
+    return written == count;
+}
+
+bool ensureInternalBackupStorageMounted()
+{
+    static bool attemptedMount = false;
+    static bool mounted = false;
+    if (!attemptedMount) {
+        attemptedMount = true;
+        mounted = InternalFS.begin();
+        if (!mounted) {
+            LOG_ERROR("Failed to mount internal flash storage for config backups");
+        }
+    }
+    return mounted;
+}
+
+bool loadConfigFromInternalBackup(meshtastic_LocalConfig &configOut)
+{
+    if (!ensureInternalBackupStorageMounted()) {
+        return false;
+    }
+
+    InternalFsFile file = InternalFS.open(kInternalConfigBackupFile, FILE_O_READ);
+    if (!file) {
+        return false;
+    }
+
+    showBackupStatusMessage("Loading\nconfig backup");
+
+    pb_istream_t stream = {&internalFsStreamRead, &file, meshtastic_LocalConfig_size};
+    bool decoded = pb_decode(&stream, &meshtastic_LocalConfig_msg, &configOut);
+    file.close();
+
+    if (!decoded) {
+        LOG_ERROR("Internal config backup decode failed");
+        return false;
+    }
+
+    LOG_WARN("Loaded config from internal flash backup");
+    return true;
+}
+
+bool saveConfigToInternalBackup(const meshtastic_LocalConfig &config)
+{
+    if (!ensureInternalBackupStorageMounted()) {
+        return false;
+    }
+
+    InternalFS.mkdir(kInternalConfigBackupDir);
+    InternalFsFile file = InternalFS.open(kInternalConfigBackupFile, FILE_O_WRITE);
+    if (!file) {
+        LOG_ERROR("Failed to open internal config backup file for writing");
+        return false;
+    }
+
+    showBackupStatusMessage("Saving\nconfig backup");
+
+    pb_ostream_t stream = {&internalFsStreamWrite, &file, meshtastic_LocalConfig_size};
+    bool encoded = pb_encode(&stream, &meshtastic_LocalConfig_msg, &config);
+    file.flush();
+    file.close();
+
+    if (!encoded) {
+        LOG_ERROR("Internal config backup encode failed");
+        return false;
+    }
+
+    LOG_DEBUG("Updated internal flash config backup (%u bytes)", static_cast<unsigned>(stream.bytes_written));
+    return true;
+}
+}
+#endif
 
 static uint8_t ourMacAddr[6];
 
@@ -1142,51 +1268,6 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
-/*
-#ifdef USE_EXTERNAL_FLASH
-    if (!flashInitialized) {
-        if (!flash.begin()) {
-            LOG_ERROR("Error, failed to initialize flash chip!");
-            return state;
-        }
-        flashInitialized = true;
-    }
-    if (!fatfsMounted) {
-        if (!fatfs.begin(&flash)) {
-            LOG_ERROR("Error, failed to mount filesystem!");
-            // Device does not have a filesystem
-            state = LoadFileResult::NO_FILESYSTEM;
-            LOG_INFO("Formatting filesystem...");
-            format_fat12();
-            if (!fatfs.begin(&flash)) {
-                LOG_ERROR("Error, failed to mount filesystem after format!");
-                return state;
-            }
-        }
-        LOG_INFO("Filesystem mounted!");
-        fatfsMounted = true;
-    }
-
-    File32 f = fatfs.open(filename, FILE_READ);
-    if (f) {
-        LOG_INFO("Load %s", filename);
-        // Clear the destination structure before reading
-        if (fields != &meshtastic_NodeDatabase_msg) { // special case for NodeDB which contains a vector
-            memset(dest_struct, 0, objSize);
-        }
-        pb_istream_t stream = {&nanopb_fatfs_read, &f, f.size(), 0};
-        if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
-            state = LoadFileResult::DECODE_FAILED;
-        } else {
-            LOG_INFO("Loaded %s successfully", filename);
-            state = LoadFileResult::LOAD_SUCCESS;
-        }
-        f.close();
-    } else {
-        LOG_ERROR("Could not open / read %s", filename);
-    }
-*/
 #if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     concurrency::LockGuard g(spiLock);
     #ifdef USE_EXTERNAL_FLASH
@@ -1316,6 +1397,17 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    bool restoredConfigFromBackup = false;
+    if (state != LoadFileResult::LOAD_SUCCESS) {
+        meshtastic_LocalConfig backupConfig = meshtastic_LocalConfig_init_zero;
+        if (loadConfigFromInternalBackup(backupConfig)) {
+            config = backupConfig;
+            state = LoadFileResult::LOAD_SUCCESS;
+            restoredConfigFromBackup = true;
+        }
+    }
+#endif
     if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
@@ -1326,6 +1418,11 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved config version %d", config.version);
         }
     }
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    if (restoredConfigFromBackup) {
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
@@ -1448,81 +1545,6 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
                        bool fullAtomic)
 {
     bool okay = false;
-    /*
-#ifdef USE_EXTERNAL_FLASH
-
-    if (!flashInitialized) {
-        LOG_INFO("Initialize external flash chip...");
-        if (!flash.begin()) {
-            LOG_ERROR("Error, failed to initialize external flash chip!");
-            while (1) {
-                delay(1);
-            }
-        }
-        flashInitialized = true;
-        LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-        check_fat12();
-    }
-
-    if (!fatfsMounted) {
-        if (!fatfs.begin(&flash)) {
-            LOG_ERROR("Error, failed to mount filesystem!");
-            while (1) {
-                delay(1);
-            }
-        }
-        fatfsMounted = true;
-        LOG_INFO("Filesystem mounted!");
-    }
-
-    if (!fatfs.exists("/prefs")) {
-        LOG_INFO("/prefs directory not found, creating...");
-
-        // Use mkdir to create directory (note you should _not_ have a trailing
-        // slash).
-        fatfs.mkdir("/prefs");
-        auto f = fatfs.open("/prefs/" xstr(BUILD_EPOCH), FILE_WRITE);
-        if (f) {
-            f.flush();
-            f.close();
-        }
-        if (!fatfs.exists("/prefs")) {
-            LOG_INFO("Error, failed to create directory!");
-        } else {
-            LOG_INFO("Created directory!");
-        }
-    }
-    // First remove existing file
-    if (fatfs.exists(filename)) {
-        if (!fatfs.remove(filename)) {
-            LOG_ERROR("Error removing existing file %s", filename);
-            return false;
-        }
-    }
-    LOG_INFO("Save %s", filename);
-    File32 f = fatfs.open(filename, FILE_WRITE);
-    if (!f) {
-        LOG_ERROR("Error opening file for writing!");
-        return false;
-    } else {
-        pb_ostream_t stream = {&nanopb_fatfs_write, &f, protoSize, 0};
-        if (!pb_encode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
-            okay = false;
-        } else {
-            okay = true;
-        }
-        f.flush();
-        f.close();
-
-        if (okay) {
-            LOG_INFO("File saved!");
-            LOG_INFO("File closed!");
-        } else {
-            LOG_ERROR("Error: failed to encode or write file");
-        }
-    }
-*/
 #if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     auto f = SafeFile(filename, fullAtomic);
     LOG_INFO("Save %s", filename);
@@ -1602,7 +1624,15 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_bluetooth = true;
         config.has_security = true;
 
-        success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        bool configSaved = saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        success &= configSaved;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (configSaved) {
+            if (!saveConfigToInternalBackup(config)) {
+                LOG_WARN("Failed to update internal flash config backup");
+            }
+        }
+#endif
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -1634,90 +1664,6 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     if (saveWhat & SEGMENT_NODEDATABASE) {
         success &= saveNodeDatabaseToDisk();
     }
-
-    /*
-
-    LOG_INFO("Adafruit SPI Flash FatFs Simple File Printing Example");
-    if (!flash.begin()) {
-        LOG_ERROR("Error, failed to initialize flash chip!");
-        while (1) {
-          delay(1);
-        }
-      }
-
-      LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-      format_fat12();
-      check_fat12();
-      LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
-      if (!fatfs.begin(&flash)) {
-        LOG_ERROR("Error, failed to mount filesystem!");
-        while (1) {
-          delay(1);
-        }
-        }
-        LOG_INFO("Filesystem mounted!");
-        fatfs.remove(FILE_NAME);
-
-        File32 writeFile = fatfs.open(FILE_NAME, FILE_WRITE);
-      if (!writeFile) {
-        LOG_ERROR("Error, failed to create file!");
-
-      }
-      LOG_INFO("File created!");
-       writeFile.write(reinterpret_cast<const uint8_t*>(&config), sizeof(config));
-       writeFile.close();
-       LOG_INFO("File closed!");
-
-       File32 dataFile = fatfs.open(FILE_NAME, FILE_READ);
-       if (dataFile) {
-         LOG_INFO("OPENED FILE");
-         // Read raw binary into the protobuf struct (non-protobuf/raw dump)
-         size_t want = sizeof(meshtastic_LocalConfig);
-         config.version = 0;  // uint32 - ok to clear directly
-         config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;  // using proper enum
-         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-         config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-         strncpy(config.network.ntp_server, "", sizeof(config.network.ntp_server)-1);
-         config.display.screen_on_secs = 0;
-         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;;
-         config.security.private_key.size = 0;
-           LOG_INFO("config.version=%d", config.version);
-           LOG_INFO("device.role=%d", config.device.role);
-           LOG_INFO("lora.region=%d", config.lora.region);
-           LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
-           LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
-           LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
-           LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
-           LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
-
-         int got = dataFile.read(reinterpret_cast<uint8_t*>(&config), want);
-         dataFile.close();
-         if (got == (int)want) {
-           LOG_INFO("Read %u bytes into config", got);
-           // Print useful fields to serial / log
-           LOG_INFO("config.version=%d", config.version);
-           LOG_INFO("device.role=%d", config.device.role);
-           LOG_INFO("lora.region=%d", config.lora.region);
-           LOG_INFO("lora.modem_preset=%d", config.lora.modem_preset);
-           LOG_INFO("network.ntp_server=%s", config.network.ntp_server);
-           LOG_INFO("display.screen_on_secs=%u", config.display.screen_on_secs);
-           LOG_INFO("position.gps_mode=%d", config.position.gps_mode);
-           LOG_INFO("security.private_key.size=%d", config.security.private_key.size);
-           if (config.security.private_key.size > 0) {
-             char hexbuf[65] = {0};
-             size_t n = config.security.private_key.size;
-             if (n > 32) n = 32;
-             for (size_t i = 0; i < n; ++i)
-               sprintf(hexbuf + strlen(hexbuf), "%02x", config.security.private_key.bytes[i]);
-             LOG_INFO("security.private_key=%s", hexbuf);
-           }
-         } else {
-           LOG_ERROR("Error reading file: read %d of %u bytes", got, (unsigned)want);
-         }
-       } else {
-         LOG_ERROR("Error opening file for read");
-       }
-       */
 
     return success;
 }
