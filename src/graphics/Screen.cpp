@@ -1506,16 +1506,20 @@ int Screen::handleInputEvent(const InputEvent *event)
     // UP/DOWN in message screen scrolls through message threads
     if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
 
-        if (messageStore.getMessages().empty()) {
-            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
-        } else {
-            if (event->inputEvent == INPUT_BROKER_UP) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            if (messageStore.getMessages().empty()) {
+                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+            } else {
                 graphics::MessageRenderer::scrollUp();
                 setFastFramerate(); // match existing behavior
                 return 0;
             }
+        }
 
-            if (event->inputEvent == INPUT_BROKER_DOWN) {
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            if (messageStore.getMessages().empty()) {
+                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+            } else {
                 graphics::MessageRenderer::scrollDown();
                 setFastFramerate();
                 return 0;
