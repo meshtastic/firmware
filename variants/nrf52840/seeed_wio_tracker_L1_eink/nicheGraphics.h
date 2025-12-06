@@ -19,7 +19,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
-#include "graphics/niche/Inputs/TwoButton.h"
+#include "graphics/niche/Inputs/TwoButtonExtended.h"
 
 void setupNicheGraphics()
 {
@@ -54,7 +54,12 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
-    inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
+    inkhud->persistence->settings.rotation = 1; // 90 degrees clockwise
+#if HAS_TRACKBALL
+    inkhud->persistence->settings.joystick.enabled = true;            // Device uses a joystick
+    inkhud->persistence->settings.joystick.alignment = 3;             // 270 degrees
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Use joystick instead
+#endif
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
@@ -75,13 +80,27 @@ void setupNicheGraphics()
     //  Buttons
     //  --------------------------
 
-    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
+    Inputs::TwoButtonExtended *buttons = Inputs::TwoButtonExtended::getInstance(); // Shared NicheGraphics component
 
-    // #0: Main User Button
-    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
+    // #0: User Button
+    buttons->setWiring(0, Inputs::TwoButtonExtended::getUserButtonPin());
     buttons->setTiming(0, 75, 500);
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+
+#if HAS_TRACKBALL
+    // #1: Joystick Center
+    buttons->setWiring(1, TB_PRESS);
+    buttons->setTiming(1, 75, 500);
+    buttons->setHandlerShortPress(1, [inkhud]() { inkhud->stickCenterShort(); });
+    buttons->setHandlerLongPress(1, [inkhud]() { inkhud->stickCenterLong(); });
+
+    // Joystick Directions
+    buttons->setJoystickWiring(TB_UP, TB_DOWN, TB_LEFT, TB_RIGHT);
+    buttons->setJoystickDebounce(50);
+    buttons->setJoystickPressHandlers([inkhud]() { inkhud->stickUp(); }, [inkhud]() { inkhud->stickDown(); },
+                                      [inkhud]() { inkhud->stickLeft(); }, [inkhud]() { inkhud->stickRight(); });
+#endif
 
     // Begin handling button events
     buttons->start();

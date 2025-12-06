@@ -153,6 +153,42 @@ void InkHUD::NotificationApplet::onButtonLongPress()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
+void InkHUD::NotificationApplet::onStickCenterShort()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
+void InkHUD::NotificationApplet::onStickCenterLong()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
+void InkHUD::NotificationApplet::onStickUp()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
+void InkHUD::NotificationApplet::onStickDown()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
+void InkHUD::NotificationApplet::onStickLeft()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
+void InkHUD::NotificationApplet::onStickRight()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification
 // Called internally when we first get a "notifiable event", and then again before render,
 // in case autoshow swapped which applet was displayed
