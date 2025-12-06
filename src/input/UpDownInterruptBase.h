@@ -3,6 +3,14 @@
 #include "InputBroker.h"
 #include "mesh/NodeDB.h"
 
+#ifndef UPDOWN_LONG_PRESS_DURATION
+#define UPDOWN_LONG_PRESS_DURATION 300
+#endif
+
+#ifndef UPDOWN_LONG_PRESS_REPEAT_INTERVAL
+#define UPDOWN_LONG_PRESS_REPEAT_INTERVAL 300
+#endif
+
 class UpDownInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
@@ -40,8 +48,8 @@ class UpDownInterruptBase : public Observable<const InputEvent *>, public concur
     uint32_t lastPressLongEventTime = 0;
     uint32_t lastUpLongEventTime = 0;
     uint32_t lastDownLongEventTime = 0;
-    static const uint32_t LONG_PRESS_DURATION = 300;
-    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = 300;
+    static const uint32_t LONG_PRESS_DURATION = UPDOWN_LONG_PRESS_DURATION;
+    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = UPDOWN_LONG_PRESS_REPEAT_INTERVAL;
 
   private:
     uint8_t _pinDown = 0;
