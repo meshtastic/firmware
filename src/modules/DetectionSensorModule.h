@@ -1,12 +1,25 @@
 #pragma once
 #include "SinglePortModule.h"
 
+#if (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)) &&            \
+    !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32H2))
+#define ESP32_WITH_EXT0
+#endif
+
 class DetectionSensorModule : public SinglePortModule, private concurrency::OSThread
 {
   public:
     DetectionSensorModule() : SinglePortModule("detection", meshtastic_PortNum_DETECTION_SENSOR_APP), OSThread("DetectionSensor")
     {
     }
+
+#ifdef ARCH_NRF52
+    boolean shouldLoop();
+    void lpDelay();
+    void lpLoop(uint32_t msecToWake);
+#else
+    bool skipGPIO(int gpio);
+#endif
 
   protected:
     virtual int32_t runOnce() override;
@@ -18,6 +31,8 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     void sendDetectionMessage();
     void sendCurrentStateMessage(bool state);
     bool hasDetectionEvent();
+    boolean getState();
+    void printRtcPins();
 };
 
 extern DetectionSensorModule *detectionSensorModule;
