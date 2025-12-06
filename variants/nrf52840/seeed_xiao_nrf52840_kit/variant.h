@@ -185,8 +185,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_GPS_STANDBY D0
 // I2C and BLE-Legacy put them on the NFC pins
 #else
-#define PIN_GPS_TX (D30)
-#define PIN_GPS_RX (D31)
+#define PIN_GPS_TX (30)
+#define PIN_GPS_RX (31)
 #endif
 
 #define HAS_GPS 1
