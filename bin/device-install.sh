@@ -216,8 +216,8 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
     fi
 
     echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
-    $ESPTOOL_CMD erase-flash
-    $ESPTOOL_CMD write-flash $FIRMWARE_OFFSET "${FILENAME}"
+    $ESPTOOL_CMD erase_flash
+    $ESPTOOL_CMD write_flash $FIRMWARE_OFFSET "${FILENAME}"
     echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
     $ESPTOOL_CMD write_flash $OTA_OFFSET "${OTAFILE}"
     echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
