@@ -71,7 +71,7 @@ SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial
     api_type = TYPE_SERIAL;
 }
 static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172) || defined(EBYTE_E77_MBL)
+#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172) || defined(EBYTE_E77_MBL) || defined(CONFIG_IDF_TARGET_ESP32H2)
 SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial")
 {
     api_type = TYPE_SERIAL;
@@ -175,7 +175,7 @@ int32_t SerialModule::runOnce()
                 // Give it a chance to flush out 💩
                 delay(10);
             }
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32H2)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial1.setRxBufferSize(RX_BUFFER);
                 Serial1.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
@@ -277,7 +277,7 @@ int32_t SerialModule::runOnce()
             }
 #endif
             else {
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32H2)
                 while (Serial1.available()) {
                     serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #else
@@ -538,7 +538,7 @@ void SerialModule::processWXSerial()
 {
 #if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
     !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M3) && !defined(ELECROW_ThinkNode_M5) &&  \
-    !defined(ARCH_STM32WL) && !defined(MUZI_BASE)
+    !defined(ARCH_STM32WL) && !defined(MUZI_BASE) && !defined(CONFIG_IDF_TARGET_ESP32H2)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;

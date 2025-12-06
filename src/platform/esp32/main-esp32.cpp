@@ -169,6 +169,8 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
+// esp_task_wdt_init returns an unknown error, so skip it on ESP32H2
+#ifndef CONFIG_IDF_TARGET_ESP32H2
 #ifdef CONFIG_IDF_TARGET_ESP32C6
     esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
     wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
@@ -181,7 +183,7 @@ void esp32Setup()
 #endif
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
-
+#endif
 #if HAS_32768HZ
     enableSlowCLK();
 #endif
@@ -223,9 +225,10 @@ void cpuDeepSleep(uint32_t msecToWake)
         13,
 #endif
         34, 35, 37};
-
+#ifndef CONFIG_IDF_TARGET_ESP32H2
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
+#endif
 #endif
 
         // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
@@ -258,10 +261,10 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 #endif // #end ESP32S3_WAKE_TYPE
 #endif
-
+#ifdef ESP_PD_DOMAIN_RTC_PERIPH
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-
+#endif
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)
 }
