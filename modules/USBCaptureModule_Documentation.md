@@ -1,9 +1,9 @@
 # USB Capture Module - Complete Documentation
 
-**Version:** 3.0 (Core1 Complete Processing Architecture)
+**Version:** 3.3 (LoRa Transmission + Text Decoding)
 **Platform:** RP2350 (XIAO RP2350-SX1262)
-**Status:** Production Ready
-**Last Updated:** 2025-12-06
+**Status:** Production Ready - Transmission Active
+**Last Updated:** 2025-12-07
 
 ---
 
@@ -39,9 +39,13 @@ The USB Capture Module enables a Meshtastic device (RP2350) to capture USB keybo
 - **PIO-Based Capture**: Hardware-accelerated USB signal processing
 - **HID Keyboard Support**: Full USB HID keyboard protocol support
 - **Low/Full Speed**: Supports both Low Speed (1.5 Mbps) and Full Speed (12 Mbps) USB
-- **LoRa Mesh Transmission**: Auto-transmits captured data over encrypted private channel
+- **LoRa Mesh Transmission**: ✅ ACTIVE - Auto-transmits captured data over encrypted private channel
+- **Text Decoding**: Binary buffers decoded to human-readable text for phone app display
+- **Rate-Limited Transmission**: 6-second intervals prevent mesh flooding
+- **Remote Control**: STATUS, START, STOP, STATS commands via mesh
 - **Delta-Encoded Timestamps**: Efficient buffer format with 70% space savings on Enter keys
-- **Future-Ready**: Architecture prepared for FRAM migration (non-volatile, MB-scale)
+- **Named Constants**: All magic numbers replaced with documented constants
+- **Future-Ready**: Architecture prepared for FRAM + encrypted binary transmission
 
 ### Use Cases
 - Remote keyboard monitoring over LoRa mesh
@@ -1687,6 +1691,71 @@ struct capture_controller_t {
 - Reduced file count from 17 → 12 (-29%)
 - Improved naming clarity
 - Maintained all functionality
+
+---
+
+## Version 3.3 Changes (2025-12-07)
+
+### LoRa Transmission Enabled
+- ✅ **Active transmission** over mesh network
+- Keystroke buffers now broadcast to all nodes on channel 1 ("takeover")
+- AES256 encrypted transmission with 32-byte PSK
+- Auto-fragments large buffers (>237 bytes)
+
+### Text Decoding Implementation
+- **Binary-to-text decoder** added: `decodeBufferToText()`
+- Converts raw PSRAM buffers (with 0xFF delta markers) to human-readable text
+- Output format: `[start→end] keystroke text with\nnewlines`
+- Phone apps can now display captured keystrokes properly
+- TODO added for future FRAM: encrypted binary transmission
+
+### Rate Limiting
+- **6-second minimum interval** between transmissions
+- Prevents mesh flooding (fixes "7 packets in TX queue" issue)
+- Changed from `while` loop (all buffers) to `if` (one buffer per cycle)
+- Logs rate-limit warnings when skipping transmissions
+
+### Remote Command Handling Fixed
+- Commands now execute and respond **immediately** in `handleReceived()`
+- Removed unused `allocReply()` method
+- Commands (STATUS, START, STOP, STATS) work correctly via mesh
+- Responses broadcast back on takeover channel
+
+### Code Quality Improvements
+- **All magic numbers** replaced with named constants:
+  - `MIN_TRANSMIT_INTERVAL_MS = 6000`
+  - `STATS_LOG_INTERVAL_MS = 10000`
+  - `MAX_DECODED_TEXT_SIZE = 600`
+  - `MAX_COMMAND_RESPONSE_SIZE = 200`
+  - `MAX_LINE_BUFFER_SIZE = 128`
+  - `MAX_COMMAND_LENGTH = 32`
+  - `PRINTABLE_CHAR_MIN = 32`
+  - `PRINTABLE_CHAR_MAX = 127`
+  - `CORE1_LAUNCH_DELAY_MS = 100`
+  - `RUNONCE_INTERVAL_MS = 20000`
+- Added comprehensive header documentation
+- All constants documented with inline comments
+
+### Files Changed
+- `src/modules/USBCaptureModule.cpp`:
+  - Added `decodeBufferToText()` function
+  - Enabled `broadcastToPrivateChannel()` calls
+  - Fixed command handling flow
+  - Replaced all magic numbers with constants
+- `src/modules/USBCaptureModule.h`:
+  - Added `psram_buffer.h` include
+  - Defined all configuration constants
+  - Added `decodeBufferToText()` declaration
+  - Removed `allocReply()` declaration
+
+### Testing Results
+- ✅ Keystrokes captured and buffered by Core1
+- ✅ PSRAM buffers read by Core0
+- ✅ Text decoding works correctly
+- ✅ LoRa transmission successful (fragments sent)
+- ✅ Rate limiting prevents mesh flooding
+- ✅ Commands received and executed
+- ⏸️ Phone app display awaiting user confirmation
 
 ---
 

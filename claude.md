@@ -3,7 +3,7 @@
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Repository:** Local fork of https://github.com/meshtastic/firmware
 **Platform:** XIAO RP2350-SX1262
-**Status:** v3.2 - Production Ready (Complete Multi-Core Flash Solution)
+**Status:** v3.3 - Production Ready (LoRa Transmission Active)
 **Last Updated:** 2025-12-07
 
 ---
@@ -109,18 +109,23 @@ upstream/master (Meshtastic official)
 - ✅ Core1 captures keystrokes via PIO
 - ✅ Core1 buffers with delta encoding
 - ✅ Core1 writes to PSRAM on finalization
-- ✅ Core0 reads from PSRAM and logs content
-- ⏸️ Core0 transmission disabled (ready to enable on line 194 of USBCaptureModule.cpp)
+- ✅ Core0 reads from PSRAM and decodes to text
+- ✅ **Core0 transmission ACTIVE** - Broadcasting over LoRa mesh
+- ✅ Rate-limited to 6-second intervals
+- ✅ Remote commands (STATUS, START, STOP, STATS) working
 
 **Log Output:**
 ```
-[Core0] Transmitting buffer: 480 bytes (uptime 27 → 179 seconds)
+[Core0] Transmitting buffer: 6 bytes (uptime 318 → 319 seconds)
 === BUFFER START ===
-Start Time: 27 seconds (uptime since boot)
-Line: hello world
-Enter [time=51 seconds, delta=+24]
-Final Time: 179 seconds (uptime since boot)
+Start Time: 318 seconds (uptime since boot)
+Enter [time=318 seconds, delta=+0]
+Line: tdr
+Final Time: 319 seconds (uptime since boot)
 === BUFFER END ===
+[Core0] Transmitted decoded text (15 bytes)
+Sent fragment 0: 15 bytes to channel 1
+broadcastToPrivateChannel: sent 15 bytes in 1 fragment(s)
 ```
 
 ---
@@ -188,6 +193,71 @@ Final Time: 179 seconds (uptime since boot)
 - ALL Core1 code must be in RAM (including helper functions)
 - Watchdog must be disabled before Core1 exit to allow clean reboots
 - Memory barriers critical for ARM Cortex-M33 dual-core synchronization
+
+### v3.3 - LoRa Transmission + Text Decoding (2025-12-07)
+**Features Implemented:**
+
+1. **LoRa Transmission Enabled:**
+   - Enabled `broadcastToPrivateChannel()` calls (was commented out)
+   - Keystroke buffers now transmit over mesh to all nodes
+   - Channel 1 ("takeover") with AES256 encryption
+   - Auto-fragmentation for buffers >237 bytes
+
+2. **Text Decoding for Phone Apps:**
+   - Added `decodeBufferToText()` function
+   - Converts binary PSRAM buffers to human-readable text
+   - Decodes delta-encoded timestamps (0xFF markers)
+   - Output format: `[start→end] text with\nnewlines`
+   - Phone apps can now display keystrokes properly
+
+3. **Rate Limiting to Prevent Mesh Flooding:**
+   - 6-second minimum interval between transmissions
+   - Changed from `while` loop (all buffers) to `if` (one buffer)
+   - Fixes "7 packets in TX queue" warning
+   - Logs rate-limit warnings when skipping
+
+4. **Remote Command Handling Fixed:**
+   - Commands execute immediately in `handleReceived()`
+   - Removed unused `allocReply()` method
+   - STATUS, START, STOP, STATS commands work via mesh
+   - Responses broadcast back on takeover channel
+
+5. **Code Quality - Magic Numbers Eliminated:**
+   - All hardcoded numbers replaced with named constants
+   - Added configuration constants to header:
+     - `MIN_TRANSMIT_INTERVAL_MS = 6000`
+     - `STATS_LOG_INTERVAL_MS = 10000`
+     - `MAX_DECODED_TEXT_SIZE = 600`
+     - `MAX_COMMAND_RESPONSE_SIZE = 200`
+     - `MAX_LINE_BUFFER_SIZE = 128`
+     - `MAX_COMMAND_LENGTH = 32`
+     - `PRINTABLE_CHAR_MIN/MAX = 32/127`
+     - `CORE1_LAUNCH_DELAY_MS = 100`
+     - `RUNONCE_INTERVAL_MS = 20000`
+   - All constants documented with inline comments
+
+**Files Changed:**
+- `src/modules/USBCaptureModule.cpp`:
+  - Added `decodeBufferToText()` implementation
+  - Enabled transmission with rate limiting
+  - Fixed command handling flow
+  - Replaced all magic numbers with named constants
+- `src/modules/USBCaptureModule.h`:
+  - Added `psram_buffer.h` include
+  - Defined all configuration constants with documentation
+  - Added `decodeBufferToText()` declaration
+  - Removed `allocReply()` declaration
+- `modules/USBCaptureModule_Documentation.md`:
+  - Updated to v3.3
+  - Added comprehensive v3.3 changes section
+  - Updated feature list
+
+**Status:** ✅ LoRa transmission active, text decoding working, awaiting phone app testing
+
+**Future TODO:**
+- FRAM implementation for non-volatile storage
+- Encrypted binary transmission (instead of decoded text)
+- Receiving nodes decrypt and decode locally
 
 ### v3.1 - Phase 1: Bus Arbitration (2025-12-07)
 **Issue:** System froze when saving nodes.proto to LittleFS
@@ -740,9 +810,10 @@ grep -r "psram_buffer" --include="*.cpp"
 | 2.1 | 2025-12-05 | LoRa transmission |
 | 3.0 | 2025-12-06 | Core1 complete processing + PSRAM |
 | 3.1 | 2025-12-07 | Phase 1: Core1 bus arbitration (90% fix) |
-| **3.2** | **2025-12-07** | **Phase 2: Core1 pause mechanism (100% fix)** |
+| 3.2 | 2025-12-07 | Phase 2: Core1 pause mechanism (100% fix) |
+| **3.3** | **2025-12-07** | **LoRa transmission active + text decoding + rate limiting** |
 
-**Current:** v3.2 - Production Ready with Complete Multi-Core Flash Solution
+**Current:** v3.3 - Production Ready (LoRa Transmission Active)
 
 ---
 
