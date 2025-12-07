@@ -15,8 +15,12 @@ char InitKeypad::keys[InitKeypad::ROWS][InitKeypad::COLS] = {
     {'A', '3', '2', '1'}
 };
 
-byte InitKeypad::rowPins[InitKeypad::ROWS] = {48, 47, 33, 34};
-byte InitKeypad::colPins[InitKeypad::COLS] = {26, 21, 20, 19};
+
+byte InitKeypad::rowPins[InitKeypad::ROWS] = {26, 21, 20, 19};
+byte InitKeypad::colPins[InitKeypad::COLS] = {48, 47, 33, 34};
+
+// byte InitKeypad::rowPins[InitKeypad::ROWS] = {48, 47, 33, 34};
+// byte InitKeypad::colPins[InitKeypad::COLS] = {26, 21, 20, 19};
 
 InitKeypad::InitKeypad() 
     : keypad(nullptr), 

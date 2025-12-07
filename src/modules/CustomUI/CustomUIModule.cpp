@@ -15,7 +15,7 @@
 #include "init/InitKeypad.h"
 #include "screens/BaseScreen.h"
 #include "screens/HomeScreen.h"
-#include "screens/NodesListScreen.h"
+#include "screens/list_screens/NodesListScreen.h"
 #include "screens/MessagesScreen.h"
 #include "screens/SnakeGameScreen.h"
 #include "InitialSplashScreen.h"
