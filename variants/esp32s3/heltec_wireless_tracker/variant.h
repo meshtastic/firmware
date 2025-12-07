@@ -27,6 +27,7 @@
 #define TFT_OFFSET_Y -1
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define USE_TFTDISPLAY 1
 
 // pin 3 is Vext on v1.1 - HIGH enables LDO for Vext rail which goes to:
 // GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through 10kR

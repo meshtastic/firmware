@@ -1,4 +1,5 @@
 #include "SystemCommandsModule.h"
+#include "input/InputBroker.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
 #include "graphics/Screen.h"
@@ -22,7 +23,7 @@ SystemCommandsModule::SystemCommandsModule()
 
 int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 {
-    LOG_INFO("Input event %u! kb %u", event->inputEvent, event->kbchar);
+    LOG_INPUT("SystemCommands Input event %u! kb %u", event->inputEvent, event->kbchar);
     // System commands (all others fall through)
     switch (event->kbchar) {
     // Fn key symbols

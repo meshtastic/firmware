@@ -707,7 +707,6 @@ bool Power::setup()
         []() {
             power->setIntervalFromNow(0);
             runASAP = true;
-            BaseType_t higherWake = 0;
         },
         CHANGE);
 #endif
@@ -717,7 +716,6 @@ bool Power::setup()
         []() {
             power->setIntervalFromNow(0);
             runASAP = true;
-            BaseType_t higherWake = 0;
         },
         CHANGE);
 #endif
@@ -777,7 +775,7 @@ void Power::shutdown()
     if (screen) {
 #ifdef T_DECK_PRO
         screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
-#elif USE_EINK
+#elif defined(USE_EINK)
         screen->showSimpleBanner("Shutting Down...", 2250); // dismiss after 3 seconds to avoid the banner on the sleep screen
 #else
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
@@ -1455,7 +1453,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return PPM->getVbusVoltage() > 0; }
+    virtual bool isVbusIn() override { return PPM->isVbusIn(); }
 
     /**
      * return true if the battery is currently charging
