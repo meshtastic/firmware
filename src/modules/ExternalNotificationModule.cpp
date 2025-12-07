@@ -168,7 +168,7 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
             drv.go();
 #endif
         }
@@ -542,6 +542,20 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     (!isBroadcast(mp.to) && isToUs(&mp))) {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     isNagging = true;
+#ifdef T_LORA_PAGER
+                    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
+                       config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
+                        drv.setWaveform(0, 16);   // Long buzzer 100%
+                        drv.setWaveform(1, 0);    // Pause
+                        drv.setWaveform(2, 16);
+                        drv.setWaveform(3, 0);
+                        drv.setWaveform(4, 16);
+                        drv.setWaveform(5, 0);
+                        drv.setWaveform(6, 16);
+                        drv.setWaveform(7, 0);
+                        drv.go();
+                       }
+#endif
                     if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
                         setExternalState(2, true);
                     } else {
