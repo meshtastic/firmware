@@ -3,7 +3,7 @@
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Repository:** Local fork of https://github.com/meshtastic/firmware
 **Platform:** XIAO RP2350-SX1262
-**Status:** v3.2 - Production Ready (Phase 2 - Core1 Pause Mechanism)
+**Status:** v3.2 - Production Ready (Complete Multi-Core Flash Solution)
 **Last Updated:** 2025-12-07
 
 ---
@@ -95,14 +95,15 @@ upstream/master (Meshtastic official)
 
 ### Build Status
 ✅ **SUCCESS** - Compiles cleanly
-- Flash: 55.7% (873,592 / 1,568,768 bytes)
-- RAM: 25.7% (135,000 / 524,288 bytes)
+- Flash: 55.7% (874,240 / 1,568,768 bytes)
+- RAM: 26.2% (137,616 / 524,288 bytes) - Core1 code in RAM (+0.5%)
 
 ### Known Issues
 ✅ **FIXED** - Crash on keystroke (was: LOG_INFO not thread-safe from Core1)
 ✅ **FIXED** - Epoch parsing (was: sscanf without null terminator)
-✅ **FIXED** - LittleFS freeze on save (Phase 1: Core1 bus arbitration)
-✅ **FIXED** - Config save crash (Phase 2: Core1 pause mechanism - COMPLETE SOLUTION)
+✅ **FIXED** - LittleFS freeze on save (was: Core1 executing from flash during Core0 flash write)
+✅ **FIXED** - Config save crash (was: Arduino-Pico FIFO conflict + flash execution)
+✅ **FIXED** - Reboot loop after config (was: Core1 watchdog still armed during reboot)
 
 ### Current Behavior
 - ✅ Core1 captures keystrokes via PIO
@@ -126,35 +127,67 @@ Final Time: 179 seconds (uptime since boot)
 
 ## Recent Development History
 
-### v3.2 - Phase 2: Core1 Pause Mechanism (2025-12-07)
-**Issue:** Device crashes and stays off when making config changes via Meshtastic CLI
+### v3.2 - Complete Multi-Core Flash Solution (2025-12-07)
+**Issues:**
+1. LittleFS freeze when new nodes arrive ("Opening /prefs/nodes.proto")
+2. Config save crash/freeze via Meshtastic CLI
+3. Device stuck with dim red LED after config changes (won't reboot)
 
-**Root Cause:** Phase 1 fix insufficient for large/critical flash operations:
-- Config files 4-10x larger than node database
-- Phase 1 reduced but didn't eliminate bus contention
-- Config corruption during write prevented device boot ("soft brick")
+**Root Causes Discovered (via GitHub research + Sequential thinking):**
 
-**Solution:** Implemented comprehensive Core1 pause mechanism
-- **Files Modified:**
-  - `common.h:176-177` - Added pause/resume control flags
-  - `usb_capture_main.cpp:33-34, 225-240` - Core1 pause handling with watchdog updates
-  - `SafeFile.cpp:6-48, 53-89, 127-177` - Pause Core1 during all filesystem operations
+1. **Arduino-Pico FIFO Conflict:**
+   - Arduino-Pico's `idleOtherCore()` uses intercore FIFO to pause Core1 during flash writes
+   - Our USB Capture ALSO uses multicore FIFO for stop commands
+   - FIFO conflict → Arduino-Pico can't pause Core1 → Core1 runs during flash write
+   - Core1 tries to execute instruction from flash while Core0 writes → CRASH
 
-**How It Works:**
-1. Core0 sets `g_core1_pause_requested = true` before filesystem operation
-2. Core1 sees flag, signals `g_core1_paused = true`, enters wait loop
-3. Core1 updates watchdog during pause (prevents timeout)
-4. Core0 performs filesystem operation (ZERO bus contention guaranteed)
-5. Core0 signals `g_core1_pause_requested = false`
-6. Core1 resumes normal operation
+2. **Flash Execution Problem:**
+   - Core1 code executed from FLASH memory
+   - When Core0 writes to flash (LittleFS), flash enters write mode
+   - Core1 can't fetch next instruction → system freeze
+   - Even our pause mechanism code was in flash!
 
-**Results:**
-- ✅ **100% elimination** of flash bus contention (vs 90% with Phase 1)
-- ✅ Config saves complete successfully without crashes
-- ✅ Device boots reliably after config changes
-- ✅ Watchdog updates during pause (no timeout)
-- ✅ Timeouts prevent indefinite hangs (500ms pause, 100ms resume)
-- ✅ Build: Flash 55.7%, RAM 25.7%
+3. **Watchdog Reboot Loop:**
+   - Core1 watchdog enabled but never disabled on stop
+   - During reboot, Core0 resets but Core1 watchdog still armed
+   - Watchdog fires after 4s during boot → device resets again
+   - Infinite loop → dim red LED, appears stuck
+
+**Complete Solution Implemented:**
+
+**A. RAM Execution (Lines of Defense 1-3):**
+- `common.h:35` - `CORE1_RAM_FUNC` macro for `.time_critical` section
+- `usb_capture_main.cpp:57,133` - Main loop + formatter in RAM
+- `usb_packet_handler.cpp:96,128,153,353` - All packet processing in RAM (4 functions)
+- `keyboard_decoder_core1.cpp:153,162,179,317,327,335,407` - All HID decoding in RAM (7 functions)
+- `pio_manager.c:17,23,30,42,51,148` - All PIO config in RAM (6 functions)
+- **Total: ~15 functions forced to RAM execution**
+
+**B. Memory Barriers (Cache Coherency):**
+- `usb_capture_main.cpp:226,230,236,242` - `__dmb()` in pause handling
+- `SafeFile.cpp:24,30,33,48,54,57,65` - `__dmb()` in pause/resume
+
+**C. Manual Pause Mechanism (Replaces broken idleOtherCore):**
+- `common.h:176-177` - Volatile pause flags
+- `usb_capture_main.cpp:225-245` - Core1 checks and honors pause
+- `SafeFile.cpp:21-72,78-89,127-177` - Core0 pauses Core1 before flash ops
+
+**D. Watchdog Management:**
+- `usb_capture_main.cpp:226` - Disable watchdog on stop signal
+- Prevents reboot loop after config changes
+
+**Results - ALL ISSUES RESOLVED:**
+- ✅ Node database saves complete without freeze
+- ✅ CLI config changes work without crash
+- ✅ Device reboots cleanly after config changes (no dim LED)
+- ✅ USB keyboard capture continues working
+- ✅ Build: Flash 55.7%, RAM 26.2% (+0.5% for RAM execution)
+
+**Key Insights:**
+- Arduino-Pico's automatic Core1 pause doesn't work when using multicore FIFO
+- ALL Core1 code must be in RAM (including helper functions)
+- Watchdog must be disabled before Core1 exit to allow clean reboots
+- Memory barriers critical for ARM Cortex-M33 dual-core synchronization
 
 ### v3.1 - Phase 1: Bus Arbitration (2025-12-07)
 **Issue:** System froze when saving nodes.proto to LittleFS
@@ -507,13 +540,33 @@ Root:
 **Numbers:** 10 bytes → 3 bytes per Enter key (70% savings)
 **Application:** Any sequential timestamp data
 
-### 5. RP2350 Multi-Core Flash Access (v3.1)
-**Lesson:** RP2350 has single shared memory bus for flash XIP + RAM + PIO operations
-**Impact:** Core1 PIO tight loops saturate bus, preventing Core0 flash operations → deadlock
-**Root Cause:** `FSCom.open()` in SafeFile.cpp blocked waiting for flash, Core1 never yielded
-**Solution:** Call `tight_loop_contents()` EVERY iteration in Core1 main loop (not just when idle)
-**Best Practice:** ALL RP2350 Core1 loops MUST include yield points for bus arbitration
-**Evidence:** `usb_capture_main.cpp:218` - moved tight_loop_contents() to always execute
+### 5. RP2350 Multi-Core Flash Access (v3.2 - COMPLETE)
+**Lesson:** Core1 code executing from FLASH crashes when Core0 writes to flash
+**Root Cause Chain:**
+1. Arduino-Pico's `idleOtherCore()` uses intercore FIFO to pause Core1
+2. Our USB Capture uses same FIFO → conflict → pause fails
+3. Core1 continues running, tries to fetch instruction from flash during Core0 write
+4. Flash in write mode → instruction fetch impossible → CRASH
+
+**Solution (3-part):**
+1. **RAM Execution:** Mark ALL Core1 functions with `CORE1_RAM_FUNC` (.time_critical section)
+2. **Memory Barriers:** Add `__dmb()` for ARM Cortex-M33 cache coherency
+3. **Manual Pause:** Implement our own pause mechanism using volatile flags (not FIFO)
+
+**Watchdog Issue:**
+- Core1 watchdog never disabled → reboot loop (dim red LED)
+- Fixed: `watchdog_disable()` when Core1 receives stop signal
+
+**Best Practice:**
+- ALL RP2350 Core1 code MUST execute from RAM when Core0 uses filesystem
+- Disable watchdog before Core1 exit to allow clean reboots
+- Use separate synchronization (flags) if FIFO already in use
+
+**Evidence:**
+- `common.h:35` - CORE1_RAM_FUNC macro
+- ~15 functions marked across 4 files
+- RAM increased 26.2% (was 25.7%)
+- GitHub Issues: #1561, #2485
 
 ---
 
@@ -561,9 +614,14 @@ pio run -e xiao-rp2350-sx1262
 - ❌ NO logging from Core1 (LOG_INFO, printf, etc.)
 - ❌ NO shared mutable state without volatile
 - ❌ NO tight loops without yield points on Core1
+- ❌ NO Core1 code in flash (MUST use CORE1_RAM_FUNC for ALL functions)
+- ❌ NO watchdog without disable on exit
 - ✅ Use queues or PSRAM for Core0↔Core1 data
 - ✅ Lock-free algorithms only (no mutexes)
 - ✅ ALWAYS call `tight_loop_contents()` in Core1 loops (bus arbitration)
+- ✅ Mark ALL Core1 functions with CORE1_RAM_FUNC
+- ✅ Add __dmb() memory barriers for cross-core flag synchronization
+- ✅ Disable watchdog before Core1 exit
 
 **4. Code Style:**
 - Match existing Meshtastic style
@@ -706,9 +764,15 @@ grep -r "psram_buffer" --include="*.cpp"
 
 ---
 
-**Project Status:** Production Ready (v3.2) - Complete Multi-Core Flash Solution
+**Project Status:** Production Ready (v3.2) - VALIDATED on Hardware
 
-**Next Steps:** Hardware testing to validate Phase 2 fix with Meshtastic CLI config changes
+**Hardware Testing Results:** ✅ ALL ISSUES FIXED
+- ✅ Node arrivals work without freeze
+- ✅ CLI config changes work without crash
+- ✅ Device reboots cleanly (no dim LED loop)
+- ✅ USB keyboard capture continues working
+
+**Next Steps:** Optional enhancements (RTC, FRAM, LoRa transmission)
 
 ---
 
