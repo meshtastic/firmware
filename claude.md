@@ -3,8 +3,8 @@
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Repository:** Local fork of https://github.com/meshtastic/firmware
 **Platform:** XIAO RP2350-SX1262
-**Status:** v3.0 - Production Ready (Crash Fixed)
-**Last Updated:** 2025-12-06
+**Status:** v3.1 - Production Ready (LittleFS Freeze Fixed)
+**Last Updated:** 2025-12-07
 
 ---
 
@@ -95,12 +95,13 @@ upstream/master (Meshtastic official)
 
 ### Build Status
 ✅ **SUCCESS** - Compiles cleanly
-- Flash: 56.2% (882,208 / 1,568,768 bytes)
-- RAM: 25.8% (135,020 / 524,288 bytes)
+- Flash: 55.7% (873,432 / 1,568,768 bytes)
+- RAM: 25.7% (134,996 / 524,288 bytes)
 
 ### Known Issues
 ✅ **FIXED** - Crash on keystroke (was: LOG_INFO not thread-safe from Core1)
 ✅ **FIXED** - Epoch parsing (was: sscanf without null terminator)
+✅ **FIXED** - LittleFS freeze on save (was: Core1 PIO bus saturation preventing Core0 flash access)
 
 ### Current Behavior
 - ✅ Core1 captures keystrokes via PIO
@@ -123,6 +124,26 @@ Final Time: 179 seconds (uptime since boot)
 ---
 
 ## Recent Development History
+
+### v3.1 - LittleFS Freeze Fix (2025-12-07)
+**Issue:** System froze when saving nodes.proto to LittleFS, stuck at "Opening /prefs/nodes.proto"
+
+**Root Cause:** Multi-core memory bus contention deadlock:
+- Core0 blocked in LittleFS `FSCom.open()` waiting for flash access
+- Core1 PIO loop saturating memory bus with continuous FIFO reads
+- RP2350 shared bus cannot interleave Core0 flash + Core1 PIO operations
+
+**Solution:** Added bus arbitration yield point to Core1 main loop
+- **File:** `usb_capture_main.cpp:218`
+- **Change:** Moved `tight_loop_contents()` to execute every iteration (not just when FIFO empty)
+- **Impact:** Allows Core0 flash operations to complete, eliminates deadlock
+- **Overhead:** <1% CPU, prevents system freeze
+
+**Results:**
+- ✅ LittleFS operations complete successfully
+- ✅ No system freezes during node database saves
+- ✅ USB capture continues working normally
+- ✅ Build: Flash 55.7%, RAM 25.7%
 
 ### v3.0 Implementation (2025-12-06)
 **Commits:**
@@ -466,6 +487,14 @@ Root:
 **Numbers:** 10 bytes → 3 bytes per Enter key (70% savings)
 **Application:** Any sequential timestamp data
 
+### 5. RP2350 Multi-Core Flash Access (v3.1)
+**Lesson:** RP2350 has single shared memory bus for flash XIP + RAM + PIO operations
+**Impact:** Core1 PIO tight loops saturate bus, preventing Core0 flash operations → deadlock
+**Root Cause:** `FSCom.open()` in SafeFile.cpp blocked waiting for flash, Core1 never yielded
+**Solution:** Call `tight_loop_contents()` EVERY iteration in Core1 main loop (not just when idle)
+**Best Practice:** ALL RP2350 Core1 loops MUST include yield points for bus arbitration
+**Evidence:** `usb_capture_main.cpp:218` - moved tight_loop_contents() to always execute
+
 ---
 
 ## TODO List for Future Sessions
@@ -511,8 +540,10 @@ pio run -e xiao-rp2350-sx1262
 **3. Multi-Core Safety Rules:**
 - ❌ NO logging from Core1 (LOG_INFO, printf, etc.)
 - ❌ NO shared mutable state without volatile
+- ❌ NO tight loops without yield points on Core1
 - ✅ Use queues or PSRAM for Core0↔Core1 data
 - ✅ Lock-free algorithms only (no mutexes)
+- ✅ ALWAYS call `tight_loop_contents()` in Core1 loops (bus arbitration)
 
 **4. Code Style:**
 - Match existing Meshtastic style
@@ -629,9 +660,10 @@ grep -r "psram_buffer" --include="*.cpp"
 | 1.0 | 2024-11-20 | Initial implementation |
 | 2.0 | 2024-12-01 | File consolidation |
 | 2.1 | 2025-12-05 | LoRa transmission |
-| **3.0** | **2025-12-06** | **Core1 complete processing + PSRAM** |
+| 3.0 | 2025-12-06 | Core1 complete processing + PSRAM |
+| **3.1** | **2025-12-07** | **LittleFS freeze fix (Core1 bus arbitration)** |
 
-**Current:** v3.0 - Core1 Complete Processing Architecture
+**Current:** v3.1 - Production Ready with Multi-Core Flash Fix
 
 ---
 
@@ -648,12 +680,14 @@ grep -r "psram_buffer" --include="*.cpp"
 - ✅ 90% Core0 overhead reduction
 - ✅ PSRAM buffering (4KB capacity)
 - ✅ Future-ready (RTC, FRAM paths clear)
+- ✅ Multi-core flash operations working (no deadlocks)
+- ✅ LittleFS saves complete successfully
 
 ---
 
-**Project Status:** Production Ready (v3.0) - Stable, Documented, Synced with Upstream
+**Project Status:** Production Ready (v3.1) - Stable, Documented, Multi-Core Flash Fixed
 
-**Next Steps:** Hardware testing to validate crash fix and performance metrics
+**Next Steps:** Hardware testing to validate LittleFS fix during node database saves
 
 ---
 

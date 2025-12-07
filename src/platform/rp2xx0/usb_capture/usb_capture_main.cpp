@@ -214,6 +214,9 @@ void capture_controller_core1_main_v2(void)
 
         watchdog_update();
 
+        /* Yield for bus arbitration - prevents Core0 flash deadlock */
+        tight_loop_contents();
+
         /* Check if PIO has data (non-blocking) */
         if (pio_sm_is_rx_fifo_empty(pio_config.pio0_instance, pio_config.pio0_sm))
         {
@@ -230,10 +233,7 @@ void capture_controller_core1_main_v2(void)
                 stats_update_core1_idle_time(idle_end - idle_start);
                 empty_fifo_count = 0;
             }
-            else
-            {
-                tight_loop_contents();
-            }
+            /* tight_loop_contents() removed - now called every iteration above */
             continue;
         }
 
