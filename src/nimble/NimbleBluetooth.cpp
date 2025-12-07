@@ -718,14 +718,14 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Restart Advertising
         ble->startAdvertising();
 #else
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    if (!pAdvertising->start(0)) {
-        if (pAdvertising->isAdvertising()) {
-            LOG_DEBUG("BLE advertising already running");
-        } else {
-            LOG_ERROR("BLE failed to restart advertising");
+        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+        if (!pAdvertising->start(0)) {
+            if (pAdvertising->isAdvertising()) {
+                LOG_DEBUG("BLE advertising already running");
+            } else {
+                LOG_ERROR("BLE failed to restart advertising");
+            }
         }
-    }
 #endif
     }
 };
