@@ -20,6 +20,7 @@
  */
 static void pauseCore1(void)
 {
+    LOG_DEBUG("[SafeFile] Requesting Core1 pause...");
     g_core1_pause_requested = true;
     __dmb();  // Data Memory Barrier - ensure write visible to Core1
 
@@ -31,6 +32,12 @@ static void pauseCore1(void)
         tight_loop_contents();
     }
     __dmb();  // Final barrier before proceeding
+
+    if (g_core1_paused) {
+        LOG_DEBUG("[SafeFile] Core1 paused successfully");
+    } else {
+        LOG_WARN("[SafeFile] Core1 pause TIMEOUT after 500ms!");
+    }
 }
 
 /**
@@ -44,6 +51,7 @@ static void pauseCore1(void)
  */
 static void resumeCore1(void)
 {
+    LOG_DEBUG("[SafeFile] Requesting Core1 resume...");
     g_core1_pause_requested = false;
     __dmb();  // Data Memory Barrier - ensure write visible to Core1
 
@@ -55,6 +63,12 @@ static void resumeCore1(void)
         tight_loop_contents();
     }
     __dmb();  // Final barrier
+
+    if (!g_core1_paused) {
+        LOG_DEBUG("[SafeFile] Core1 resumed successfully");
+    } else {
+        LOG_WARN("[SafeFile] Core1 resume TIMEOUT after 100ms!");
+    }
 }
 #endif // XIAO_USB_CAPTURE_ENABLED
 
