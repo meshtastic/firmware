@@ -29,6 +29,10 @@ static volatile bool g_capture_running_v2 = false;
 static keystroke_queue_t *g_keystroke_queue_v2 = NULL;
 static formatted_event_queue_t *g_formatted_queue_v2 = NULL;
 
+/* Multi-core synchronization flags for filesystem operations */
+volatile bool g_core1_pause_requested = false;
+volatile bool g_core1_paused = false;
+
 /* Processing buffer for inline packet decoding */
 #define PROCESSING_BUFFER_SIZE 128
 static uint8_t g_processing_buffer[PROCESSING_BUFFER_SIZE];
@@ -216,6 +220,24 @@ void capture_controller_core1_main_v2(void)
 
         /* Yield for bus arbitration - prevents Core0 flash deadlock */
         tight_loop_contents();
+
+        /* Check for pause request from Core0 (filesystem operations) */
+        if (g_core1_pause_requested)
+        {
+            /* Signal that we're paused */
+            g_core1_paused = true;
+
+            /* Wait for resume signal while updating watchdog */
+            while (g_core1_pause_requested)
+            {
+                tight_loop_contents();
+                watchdog_update();
+            }
+
+            /* Signal that we've resumed */
+            g_core1_paused = false;
+            continue;
+        }
 
         /* Check if PIO has data (non-blocking) */
         if (pio_sm_is_rx_fifo_empty(pio_config.pio0_instance, pio_config.pio0_sm))

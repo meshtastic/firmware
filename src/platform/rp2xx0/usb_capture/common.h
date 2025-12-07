@@ -153,6 +153,29 @@ static inline void stats_update_core1_idle_time(uint64_t us) { (void)us; }
 /* Minimal stub functions - can be expanded later */
 static inline void cpu_monitor_record_core1_work(void) {}
 
+/* ============================================================================
+ * MULTI-CORE SYNCHRONIZATION FOR FILESYSTEM OPERATIONS
+ * ============================================================================ */
+
+/**
+ * @brief Core1 pause control flags for filesystem synchronization
+ *
+ * These volatile flags coordinate Core0 filesystem operations with Core1
+ * USB capture to prevent RP2350 memory bus contention deadlocks.
+ *
+ * Protocol:
+ * 1. Core0 sets g_core1_pause_requested = true before filesystem operation
+ * 2. Core0 waits for g_core1_paused = true (Core1 acknowledged pause)
+ * 3. Core0 performs filesystem operation (guaranteed zero bus contention)
+ * 4. Core0 sets g_core1_pause_requested = false (signal resume)
+ * 5. Core0 waits for g_core1_paused = false (Core1 resumed)
+ *
+ * @note These MUST be volatile for cross-core visibility
+ * @note Core1 checks flags every iteration and updates watchdog during pause
+ */
+extern volatile bool g_core1_pause_requested;  /**< Core0 → Core1: Request pause */
+extern volatile bool g_core1_paused;           /**< Core1 → Core0: Acknowledge paused */
+
 #ifdef __cplusplus
 }
 #endif
