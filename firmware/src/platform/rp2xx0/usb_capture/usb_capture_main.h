@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "keystroke_queue.h"
+#include "formatted_event_queue.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,9 +33,11 @@ void capture_controller_core1_main_v2(void);
  *
  * @param controller Pointer to controller structure
  * @param keystroke_queue Pointer to keystroke queue
+ * @param formatted_queue Pointer to formatted event queue
  */
 void capture_controller_init_v2(capture_controller_t *controller,
-                                keystroke_queue_t *keystroke_queue);
+                                keystroke_queue_t *keystroke_queue,
+                                formatted_event_queue_t *formatted_queue);
 
 /**
  * @brief Set capture speed

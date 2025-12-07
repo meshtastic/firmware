@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "keystroke_queue.h"
+#include "formatted_event_queue.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -21,8 +22,9 @@ extern "C" {
  * @brief Initialize the Core1 keyboard decoder
  *
  * @param queue Pointer to keystroke queue for output
+ * @param formatted_queue Pointer to formatted event queue for output
  */
-void keyboard_decoder_core1_init(keystroke_queue_t *queue);
+void keyboard_decoder_core1_init(keystroke_queue_t *queue, formatted_event_queue_t *formatted_queue);
 
 /**
  * @brief Reset the Core1 keyboard decoder state
