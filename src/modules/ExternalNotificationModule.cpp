@@ -543,8 +543,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     isNagging = true;
 #ifdef T_LORA_PAGER
-                    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
-                        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
+                    if (canBuzz()) {
                         drv.setWaveform(0, 16);   // Long buzzer 100%
                         drv.setWaveform(1, 0);    // Pause
                         drv.setWaveform(2, 16);
