@@ -504,6 +504,11 @@ void setup()
 #ifdef BUTTON_PIN
 #ifdef ARCH_ESP32
 
+#if defined(BOARD_HAS_PSRAM)
+        // use PSRAM for malloc calls
+        heap_caps_malloc_extmem_enable(256);
+#endif
+
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 #ifdef BUTTON_NEED_PULLUP
     pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
