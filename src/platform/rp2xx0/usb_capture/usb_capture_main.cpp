@@ -222,6 +222,8 @@ void capture_controller_core1_main_v2(void)
             uint32_t signal = multicore_fifo_pop_blocking();
             if (signal == 0xDEADBEEF)
             {
+                /* Disable watchdog before exit to prevent reboot loop */
+                watchdog_disable();
                 g_capture_running_v2 = false;
                 break;
             }
