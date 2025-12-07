@@ -554,7 +554,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         drv.setWaveform(6, 16);
                         drv.setWaveform(7, 0);
                         drv.go();
-                       }
+                    }
 #endif
                     if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
                         setExternalState(2, true);
