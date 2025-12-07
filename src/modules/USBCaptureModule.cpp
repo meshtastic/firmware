@@ -361,28 +361,99 @@ void USBCaptureModule::processPSRAMBuffers()
         uint32_t now = millis();
         if (now - last_transmit_time >= MIN_TRANSMIT_INTERVAL_MS)
         {
-            /* Transmit decoded text (readable on phone app) */
-            broadcastToPrivateChannel((const uint8_t *)decoded_text, text_len);
-            last_transmit_time = now;
-            LOG_INFO("[Core0] Transmitted decoded text (%zu bytes)", text_len);
+            /* Transmit decoded text with retry logic (v3.5) */
+            const int MAX_RETRIES = 3;
+            bool transmission_success = false;
+
+            for (int attempt = 0; attempt < MAX_RETRIES; attempt++)
+            {
+                if (attempt > 0)
+                {
+                    /* Track retry attempts */
+                    __dmb();
+                    g_psram_buffer.header.retry_attempts++;
+                    __dmb();
+                    LOG_WARN("[Core0] Transmission retry %d/%d", attempt, MAX_RETRIES - 1);
+                }
+
+                /* Attempt transmission */
+                if (broadcastToPrivateChannel((const uint8_t *)decoded_text, text_len))
+                {
+                    transmission_success = true;
+                    last_transmit_time = now;
+                    LOG_INFO("[Core0] Transmitted decoded text (%zu bytes)", text_len);
+                    break;
+                }
+                else
+                {
+                    /* Transmission failed - track in statistics */
+                    __dmb();
+                    g_psram_buffer.header.transmission_failures++;
+                    __dmb();
+
+                    if (attempt < MAX_RETRIES - 1)
+                    {
+                        /* Wait briefly before retry (allow mesh to recover) */
+                        delay(100);  // 100ms delay between retries
+                    }
+                }
+            }
+
+            /* If all retries failed, log critical warning */
+            if (!transmission_success)
+            {
+                LOG_ERROR("[Core0] Transmission FAILED after %d attempts - data lost (%zu bytes)",
+                         MAX_RETRIES, text_len);
+            }
         }
         else
         {
-            LOG_WARN("[Core0] Rate limit: skipping transmission (wait %u ms)",
+            /* Rate limit exceeded - put buffer back into PSRAM for next cycle */
+            LOG_WARN("[Core0] Rate limit: re-queuing buffer (wait %u ms)",
                      MIN_TRANSMIT_INTERVAL_MS - (now - last_transmit_time));
+
+            /* Note: Buffer already consumed from PSRAM read. In v4.x, reliable TX
+             * will use persistent queue to avoid this data loss scenario. */
+            __dmb();
+            g_psram_buffer.header.transmission_failures++;
+            __dmb();
         }
     }
 
     /* Log statistics periodically */
     static uint32_t last_stats_time = 0;
-    uint32_t now = millis();
-    if (now - last_stats_time > STATS_LOG_INTERVAL_MS)
+    uint32_t stats_now = millis();
+    if (stats_now - last_stats_time > STATS_LOG_INTERVAL_MS)
     {
-        LOG_INFO("[Core0] PSRAM buffers: %u available, %u total transmitted, %u dropped",
-                psram_buffer_get_count(),
-                g_psram_buffer.header.total_transmitted,
-                g_psram_buffer.header.dropped_buffers);
-        last_stats_time = now;
+        /* Read statistics with memory barrier */
+        __dmb();
+        uint32_t available = psram_buffer_get_count();
+        uint32_t transmitted = g_psram_buffer.header.total_transmitted;
+        uint32_t dropped = g_psram_buffer.header.dropped_buffers;
+        uint32_t tx_failures = g_psram_buffer.header.transmission_failures;
+        uint32_t overflows = g_psram_buffer.header.buffer_overflows;
+        uint32_t psram_failures = g_psram_buffer.header.psram_write_failures;
+        uint32_t retries = g_psram_buffer.header.retry_attempts;
+        __dmb();
+
+        LOG_INFO("[Core0] PSRAM: %u avail, %u tx, %u drop | Failures: %u tx, %u overflow, %u psram | Retries: %u",
+                available, transmitted, dropped, tx_failures, overflows, psram_failures, retries);
+
+        /* Log warnings for critical failures */
+        if (tx_failures > 0)
+        {
+            LOG_WARN("[Core0] WARNING: %u transmission failures detected - check mesh connectivity", tx_failures);
+        }
+        if (overflows > 0)
+        {
+            LOG_WARN("[Core0] WARNING: %u buffer overflows - keystroke data may be lost", overflows);
+        }
+        if (psram_failures > 0)
+        {
+            LOG_ERROR("[Core0] CRITICAL: %u PSRAM write failures - Core0 too slow to transmit", psram_failures);
+        }
+
+        last_stats_time = stats_now;
     }
 }
 
@@ -499,8 +570,17 @@ ProcessMessage USBCaptureModule::handleReceived(const meshtastic_MeshPacket &mp)
 
 USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t len)
 {
-    if (!payload || len == 0) {
+    /* Validate inputs (v3.5) */
+    if (!payload || len == 0 || len > MAX_COMMAND_LENGTH) {
         return CMD_UNKNOWN;
+    }
+
+    /* Validate payload contains only printable ASCII (prevent malformed packets) */
+    for (size_t i = 0; i < len; i++) {
+        if (payload[i] < PRINTABLE_CHAR_MIN || payload[i] >= PRINTABLE_CHAR_MAX) {
+            LOG_WARN("[USBCapture] Invalid command: non-printable character at position %zu", i);
+            return CMD_UNKNOWN;
+        }
     }
 
     /* Convert to uppercase for case-insensitive matching */

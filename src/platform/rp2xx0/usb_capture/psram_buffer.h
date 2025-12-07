@@ -43,18 +43,26 @@ extern "C" {
 #define PSRAM_MAGIC 0xC0DE8001      // Magic number for validation
 
 /**
- * Buffer header (32 bytes, shared between cores)
- * Contains metadata for ring buffer management
+ * Buffer header (48 bytes, shared between cores)
+ * Contains metadata for ring buffer management and statistics
+ *
+ * NOTE: Expanded from 32 to 48 bytes to add critical failure tracking
  */
 typedef struct {
-    uint32_t magic;                    // Validation magic number
-    volatile uint32_t write_index;     // Core1 writes (0-7)
-    volatile uint32_t read_index;      // Core0 reads (0-7)
-    volatile uint32_t buffer_count;    // Available buffers for transmission
-    uint32_t total_written;            // Total buffers written by Core1
-    uint32_t total_transmitted;        // Total buffers transmitted by Core0
-    uint32_t dropped_buffers;          // Buffers dropped due to overflow
-    uint32_t reserved;                 // Reserved for future use
+    uint32_t magic;                         // Validation magic number
+    volatile uint32_t write_index;          // Core1 writes (0-7)
+    volatile uint32_t read_index;           // Core0 reads (0-7)
+    volatile uint32_t buffer_count;         // Available buffers for transmission
+    uint32_t total_written;                 // Total buffers written by Core1
+    uint32_t total_transmitted;             // Total buffers transmitted by Core0
+    uint32_t dropped_buffers;               // Buffers dropped due to overflow
+
+    // NEW: Critical failure tracking (v3.5)
+    volatile uint32_t transmission_failures; // LoRa transmission failures
+    volatile uint32_t buffer_overflows;      // Buffer full events (same as dropped_buffers for now)
+    volatile uint32_t psram_write_failures;  // Core1 PSRAM write failures
+    volatile uint32_t retry_attempts;        // Total transmission retry attempts
+    uint32_t reserved;                       // Reserved for future use
 } psram_buffer_header_t;
 
 /**
@@ -72,7 +80,7 @@ typedef struct {
 
 /**
  * Complete PSRAM structure
- * Header + 8 buffer slots = 32 + (8 * 512) = 4128 bytes total
+ * Header + 8 buffer slots = 48 + (8 * 512) = 4144 bytes total (was 4128 in v3.4)
  */
 typedef struct {
     psram_buffer_header_t header;

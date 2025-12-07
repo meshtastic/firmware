@@ -287,12 +287,24 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                         ch, keycode, modifier, capture_timestamp_us);
                     keystroke_queue_push(g_keystroke_queue, &event);
 
-                    /* DEBUG: Add modifier marker to help diagnose shift issues
-                     * Prefix shifted characters with ^ so we can see if shift detection works
-                     * Example: "^A" means shift+a detected and converted to 'A'
-                     * TODO: Remove this debug code after shift is confirmed working */
-                    if (shift_pressed && core1_get_buffer_space() >= 2) {
-                        core1_add_to_buffer('^');  /* Shift marker */
+                    /* Add modifier markers for special key combinations (v3.5)
+                     * Format: <modifiers>character
+                     * Examples: "^C" = Ctrl+C, "~T" = Alt+T, "@A" = GUI+A
+                     * Note: Shift is already handled via character case (A vs a) */
+
+                    bool ctrl_pressed = (modifier & (HID_MODIFIER_LEFT_CTRL | HID_MODIFIER_RIGHT_CTRL)) != 0;
+                    bool alt_pressed = (modifier & (HID_MODIFIER_LEFT_ALT | HID_MODIFIER_RIGHT_ALT)) != 0;
+                    bool gui_pressed = (modifier & (HID_MODIFIER_LEFT_GUI | HID_MODIFIER_RIGHT_GUI)) != 0;
+
+                    /* Add modifier markers if space available */
+                    if (ctrl_pressed && core1_get_buffer_space() >= 2) {
+                        core1_add_to_buffer('^');  /* Ctrl marker */
+                    }
+                    if (alt_pressed && core1_get_buffer_space() >= 2) {
+                        core1_add_to_buffer('~');  /* Alt marker */
+                    }
+                    if (gui_pressed && core1_get_buffer_space() >= 2) {
+                        core1_add_to_buffer('@');  /* GUI/Windows/Command marker */
                     }
 
                     added = core1_add_to_buffer(ch);  /* Add to Core1 buffer */
@@ -388,7 +400,20 @@ static bool core1_add_to_buffer(char c)
     /* Need at least 1 byte for char */
     if (core1_get_buffer_space() < 1)
     {
-        return false;
+        /* Buffer overflow - track in statistics */
+        __dmb();
+        g_psram_buffer.header.buffer_overflows++;
+        __dmb();
+
+        /* Emergency finalization to prevent data loss */
+        core1_finalize_buffer();
+        core1_init_keystroke_buffer();
+
+        /* Retry adding character to fresh buffer */
+        if (core1_get_buffer_space() < 1)
+        {
+            return false;  // Still no space (shouldn't happen)
+        }
     }
 
     g_core1_keystroke_buffer[g_core1_buffer_write_pos++] = c;
@@ -418,7 +443,17 @@ static bool core1_add_enter_to_buffer()
     /* Need 3 bytes: marker + 2-byte delta */
     if (core1_get_buffer_space() < DELTA_TOTAL_SIZE)
     {
-        return false;
+        /* Buffer overflow - track in statistics */
+        __dmb();
+        g_psram_buffer.header.buffer_overflows++;
+        __dmb();
+
+        /* Emergency finalization to prevent data loss */
+        core1_finalize_buffer();
+        core1_init_keystroke_buffer();
+
+        /* Retry with fresh buffer */
+        delta = 0;
     }
 
     /* Write marker byte followed by delta */
@@ -457,11 +492,25 @@ static void core1_finalize_buffer()
     memcpy(psram_buf.data, &g_core1_keystroke_buffer[KEYSTROKE_DATA_START], psram_buf.data_length);
     psram_buf.flags = 0;
 
+    /* Validate buffer integrity before PSRAM write */
+    if (psram_buf.data_length > PSRAM_BUFFER_DATA_SIZE)
+    {
+        /* Buffer corruption detected - truncate and track failure */
+        psram_buf.data_length = PSRAM_BUFFER_DATA_SIZE;
+        __dmb();
+        g_psram_buffer.header.buffer_overflows++;
+        __dmb();
+    }
+
     /* Write to PSRAM for Core0 to transmit */
     if (!psram_buffer_write(&psram_buf))
     {
-        /* Buffer full - Core0 slow to transmit
-         * Cannot log from Core1 safely - Core0 will see dropped_buffers stat */
+        /* PSRAM buffer full - Core0 slow to transmit
+         * Track failure in statistics (dropped_buffers already incremented by psram_buffer_write)
+         * Core0 will see the dropped_buffers counter and can log warnings */
+        __dmb();
+        g_psram_buffer.header.psram_write_failures++;
+        __dmb();
     }
 
     /* Reset for next buffer */
