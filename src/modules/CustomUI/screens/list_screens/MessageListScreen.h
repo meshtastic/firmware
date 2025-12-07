@@ -3,33 +3,28 @@
 #include "BaseListScreen.h"
 #include "../utils/LoRaHelper.h"
 #include <vector>
-#include <String>
 
 /**
- * MessageListScreen - Displays stored messages from Meshtastic system
- * 
+ * Message List Screen - Shows recent mesh messages
  * Features:
- * - Shows messages from devicestate.rx_text_message and toPhoneQueue
- * - Displays sender info (long name or fallback to short name)
- * - Shows "X seconds ago" timestamp formatting
- * - Supports navigation through message list
- * - Future: Will support message viewing and deletion
- * 
- * Message Sources:
- * - Recent text message from devicestate
- * - Pending messages in phone queue
- * - StoreForward history (if module enabled)
+ * - Scrollable list of recent messages  
+ * - Color coding: Green for DMs, Red for channel messages
+ * - Time since received display
+ * - Horizontal scrolling for long messages when selected
+ * - Navigation: [A] Back, [Left/Right] Scroll message
  */
 class MessageListScreen : public BaseListScreen {
 public:
     MessageListScreen();
     virtual ~MessageListScreen();
-    
-    // BaseScreen interface
+
+    // BaseListScreen interface  
     virtual void onEnter() override;
     virtual void onExit() override;
-    
-    // BaseListScreen interface
+    virtual bool handleKeyPress(char key) override;
+
+protected:
+    // BaseListScreen abstract methods
     virtual void drawItem(lgfx::LGFX_Device& tft, int index, int y, bool isSelected) override;
     virtual int getItemCount() override;
     virtual void onItemSelected(int index) override;
@@ -37,35 +32,28 @@ public:
 
 private:
     /**
-     * Internal message structure for display
+     * Refresh the message list from mesh database
      */
-    struct MessageDisplayItem {
-        String text;                    // Message content (truncated if needed)
-        String senderName;              // Formatted sender name 
-        String timeAgo;                 // "X seconds ago" format
-        uint32_t timestamp;             // Original timestamp
-        uint32_t senderNodeId;          // Sender node ID
-        bool isOutgoing;                // True if sent by us
-        
-        MessageDisplayItem() : timestamp(0), senderNodeId(0), isOutgoing(false) {}
-        MessageDisplayItem(const String& txt, const String& sender, const String& time, 
-                          uint32_t ts, uint32_t nodeId, bool outgoing)
-            : text(txt), senderName(sender), timeAgo(time), timestamp(ts), 
-              senderNodeId(nodeId), isOutgoing(outgoing) {}
-    };
+    void refreshMessageList();
     
-    std::vector<MessageDisplayItem> messages;
+    /**
+     * Format time since message for display
+     */
+    String formatTimeSince(uint32_t timestamp);
+
+    // Message data
+    std::vector<MessageInfo> messages;
+    
+    // UI state
+    bool isLoading;         // Currently loading flag
     unsigned long lastRefreshTime;
     
-    // Helper methods
-    void refreshMessageList();
-    void sortMessagesByTime();
-    String formatSenderName(uint32_t nodeId, bool isOutgoing);
-    String formatTimeAgo(uint32_t timestamp);
-    String truncateText(const String& text, int maxLength);
-    
-    // Constants
-    static const int MAX_MESSAGES = 50;           // Maximum messages to display
-    static const int TEXT_PREVIEW_LENGTH = 45;   // Max characters for message preview
-    static const unsigned long REFRESH_INTERVAL = 60000; // Refresh every 60 seconds
+    // Colors
+    static const uint16_t COLOR_BLACK = 0x0000;
+    static const uint16_t COLOR_GREEN = 0x07E0;
+    static const uint16_t COLOR_RED = 0xF800;
+    static const uint16_t COLOR_YELLOW = 0xFFE0;
+    static const uint16_t COLOR_DIM_GREEN = 0x4208;
+    static const uint16_t COLOR_DARK_RED = 0x7800;
+    static const uint16_t COLOR_GRAY = 0x8410;
 };

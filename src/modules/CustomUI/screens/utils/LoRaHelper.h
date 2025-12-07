@@ -33,12 +33,18 @@ struct MessageInfo {
     char senderName[32];        // Formatted sender name
     uint32_t timestamp;         // Message timestamp
     uint32_t senderNodeId;      // Sender node ID
+    uint32_t toNodeId;          // Destination node ID (for DM detection)
+    uint8_t channelIndex;       // Channel index for channel messages
+    char channelName[16];       // Channel name or identifier
     bool isOutgoing;            // True if sent by us
+    bool isDirectMessage;       // True if this is a direct message
     bool isValid;               // True if message data is valid
     
-    MessageInfo() : timestamp(0), senderNodeId(0), isOutgoing(false), isValid(false) {
+    MessageInfo() : timestamp(0), senderNodeId(0), toNodeId(0), channelIndex(0),
+                    isOutgoing(false), isDirectMessage(false), isValid(false) {
         text[0] = '\0';
         senderName[0] = '\0';
+        channelName[0] = '\0';
     }
 };
 
