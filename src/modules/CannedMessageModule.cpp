@@ -1657,7 +1657,7 @@ int32_t CannedMessageModule::runOnce()
             case 0x08: // backspace
                 if (this->freetext.length() > 0) {
                     if (this->cursor > 0) {
-                        // удаляем предыдущий UTF-8 кодовый символ
+                        // Delete the previous UTF-8 character
                         int prev = utf8_prev_index(this->freetext, this->cursor);
                         if (this->cursor == this->freetext.length()) {
                             this->freetext = this->freetext.substring(0, prev);
