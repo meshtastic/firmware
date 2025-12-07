@@ -18,6 +18,7 @@
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 #include "hardware/timer.h"
+#include "hardware/sync.h"  // For memory barriers (multi-core sync)
 #include <string.h>
 #include <stdio.h>
 
@@ -50,7 +51,10 @@ static uint32_t g_raw_packet_buffer[RAW_PACKET_BUFFER_SIZE];
  * @param event Keystroke event to format
  * @param buffer Output buffer for formatted string
  * @param buffer_size Size of output buffer
+ *
+ * @note CORE1_RAM_FUNC forces execution from RAM (required for flash safety)
  */
+CORE1_RAM_FUNC
 static void format_keystroke_core1(const keystroke_event_t *event, char *buffer, size_t buffer_size)
 {
     switch (event->type)
@@ -122,7 +126,14 @@ static void format_keystroke_core1(const keystroke_event_t *event, char *buffer,
  * 3. Processes and decodes packets
  * 4. Pushes keystrokes to queue for Core0
  * 5. Never blocks Core0
+ *
+ * CRITICAL: Uses CORE1_RAM_FUNC to run from RAM, not flash.
+ * This prevents crashes when Core0 writes to flash (filesystem operations).
+ * Arduino-Pico limitation: Core1 crashes if executing from flash during Core0 flash writes.
+ *
+ * @note CORE1_RAM_FUNC = __attribute__((section(".time_critical")))
  */
+CORE1_RAM_FUNC
 void capture_controller_core1_main_v2(void)
 {
     /* Signal Core0 that Core1 has started (via queue status event) */
@@ -222,20 +233,24 @@ void capture_controller_core1_main_v2(void)
         tight_loop_contents();
 
         /* Check for pause request from Core0 (filesystem operations) */
+        __dmb();  // Memory barrier - ensure we see Core0's write
         if (g_core1_pause_requested)
         {
             /* Signal that we're paused */
             g_core1_paused = true;
+            __dmb();  // Memory barrier - ensure write visible to Core0
 
             /* Wait for resume signal while updating watchdog */
             while (g_core1_pause_requested)
             {
+                __dmb();  // Ensure we see Core0's resume signal
                 tight_loop_contents();
                 watchdog_update();
             }
 
             /* Signal that we've resumed */
             g_core1_paused = false;
+            __dmb();  // Memory barrier - ensure write visible to Core0
             continue;
         }
 

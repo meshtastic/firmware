@@ -18,6 +18,23 @@ extern "C" {
 #endif
 
 /* ============================================================================
+ * RAM EXECUTION FOR CORE1 FUNCTIONS
+ * ============================================================================ */
+
+/**
+ * @brief Force function to execute from RAM instead of flash
+ *
+ * CRITICAL: Arduino-Pico limitation states that Core1 code executing from
+ * flash will crash when Core0 writes to flash (filesystem operations).
+ *
+ * Solution: Mark ALL Core1 functions with CORE1_RAM_FUNC to force them into
+ * the .time_critical section, which is copied to RAM at boot.
+ *
+ * Usage: CORE1_RAM_FUNC void my_core1_function() { ... }
+ */
+#define CORE1_RAM_FUNC __attribute__((section(".time_critical")))
+
+/* ============================================================================
  * GPIO PIN DEFINITIONS - RP2350 Pico
  * ============================================================================ */
 /*

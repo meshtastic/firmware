@@ -6,44 +6,55 @@
 #ifdef XIAO_USB_CAPTURE_ENABLED
 #include "platform/rp2xx0/usb_capture/common.h"
 #include "hardware/timer.h"
+#include "hardware/sync.h"  // For memory barriers
 
 /**
  * @brief Pause Core1 before filesystem operations to prevent bus contention
  *
  * This function requests Core1 to pause and waits for acknowledgment.
+ * Uses ARM memory barriers for proper cross-core visibility.
  * Timeout prevents indefinite hang if Core1 doesn't respond.
  *
  * @note Only compiled when USB Capture Module is enabled
+ * @note CRITICAL: Memory barriers required for Cortex-M33 dual-core
  */
 static void pauseCore1(void)
 {
     g_core1_pause_requested = true;
+    __dmb();  // Data Memory Barrier - ensure write visible to Core1
 
     // Wait for Core1 to acknowledge pause (max 500ms)
     uint32_t start = millis();
     while (!g_core1_paused && (millis() - start) < 500)
     {
+        __dmb();  // Ensure we see Core1's write
         tight_loop_contents();
     }
+    __dmb();  // Final barrier before proceeding
 }
 
 /**
  * @brief Resume Core1 after filesystem operations complete
  *
  * This function signals Core1 to resume and waits for acknowledgment.
+ * Uses ARM memory barriers for proper cross-core visibility.
  *
  * @note Only compiled when USB Capture Module is enabled
+ * @note CRITICAL: Memory barriers required for Cortex-M33 dual-core
  */
 static void resumeCore1(void)
 {
     g_core1_pause_requested = false;
+    __dmb();  // Data Memory Barrier - ensure write visible to Core1
 
     // Wait for Core1 to resume (max 100ms)
     uint32_t start = millis();
     while (g_core1_paused && (millis() - start) < 100)
     {
+        __dmb();  // Ensure we see Core1's write
         tight_loop_contents();
     }
+    __dmb();  // Final barrier
 }
 #endif // XIAO_USB_CAPTURE_ENABLED
 
