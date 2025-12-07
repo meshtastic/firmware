@@ -26,6 +26,23 @@ struct NodeInfo {
 };
 
 /**
+ * Information about a message for display purposes
+ */
+struct MessageInfo {
+    char text[64];              // Message text (truncated if needed)
+    char senderName[32];        // Formatted sender name
+    uint32_t timestamp;         // Message timestamp
+    uint32_t senderNodeId;      // Sender node ID
+    bool isOutgoing;            // True if sent by us
+    bool isValid;               // True if message data is valid
+    
+    MessageInfo() : timestamp(0), senderNodeId(0), isOutgoing(false), isValid(false) {
+        text[0] = '\0';
+        senderName[0] = '\0';
+    }
+};
+
+/**
  * LoRa utility helper for CustomUI screens
  * Provides device name and LoRa status information
  */
@@ -90,6 +107,34 @@ public:
      * @return true if node is considered online
      */
     static bool isNodeOnline(uint32_t lastHeard);
+
+    /**
+     * Get the most recent received message from device state
+     * @return MessageInfo structure with message data, isValid=false if no message
+     */
+    static MessageInfo getLastReceivedMessage();
+
+    /**
+     * Get list of recent messages (currently only last message)
+     * @param maxMessages Maximum number of messages to return
+     * @return vector of MessageInfo structures
+     */
+    static std::vector<MessageInfo> getRecentMessages(int maxMessages = 10);
+
+    /**
+     * Format sender name for a node ID
+     * @param nodeId Node ID to format
+     * @param isOutgoing True if this is an outgoing message
+     * @return formatted sender name
+     */
+    static String formatSenderName(uint32_t nodeId, bool isOutgoing);
+
+    /**
+     * Format timestamp as "X time ago"
+     * @param timestamp Unix timestamp
+     * @return formatted time string
+     */
+    static String formatTimeAgo(uint32_t timestamp);
 
 private:
     static String lastLongName;

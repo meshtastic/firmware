@@ -2,8 +2,13 @@
 #include "configuration.h"
 #include "NodeDB.h"
 #include "mesh/MeshService.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include "gps/RTC.h" // for getTime() function
 #include <algorithm>
+
+// External references with safe access patterns
+extern meshtastic_DeviceState devicestate;
+extern MeshService *service;
 
 // Static member initialization
 String LoRaHelper::lastLongName = "";
@@ -173,4 +178,100 @@ bool LoRaHelper::isNodeOnline(uint32_t lastHeard) {
     
     // Consider online if heard within last 2 hours (7200 seconds)
     return elapsed < 7200;
+}
+
+MessageInfo LoRaHelper::getLastReceivedMessage() {
+    MessageInfo info;
+    
+    // Check if devicestate has a valid text message
+    if (!devicestate.has_rx_text_message || 
+        devicestate.rx_text_message.decoded.portnum != meshtastic_PortNum_TEXT_MESSAGE_APP ||
+        devicestate.rx_text_message.decoded.payload.size == 0) {
+        return info; // Returns invalid message
+    }
+    
+    const auto& packet = devicestate.rx_text_message;
+    
+    // Extract message text
+    size_t textLen = std::min((size_t)packet.decoded.payload.size, sizeof(info.text) - 1);
+    memcpy(info.text, packet.decoded.payload.bytes, textLen);
+    info.text[textLen] = '\0';
+    
+    // Set message properties
+    info.timestamp = packet.rx_time;
+    info.senderNodeId = packet.from;
+    info.isOutgoing = (packet.from == 0 || (nodeDB && packet.from == nodeDB->getNodeNum()));
+    info.isValid = true;
+    
+    // Format sender name
+    String senderName = formatSenderName(info.senderNodeId, info.isOutgoing);
+    strncpy(info.senderName, senderName.c_str(), sizeof(info.senderName) - 1);
+    info.senderName[sizeof(info.senderName) - 1] = '\0';
+    
+    return info;
+}
+
+std::vector<MessageInfo> LoRaHelper::getRecentMessages(int maxMessages) {
+    std::vector<MessageInfo> messages;
+    
+    // For now, just return the last received message
+    // Future enhancement: access message history from StoreForward or phone queue
+    MessageInfo lastMsg = getLastReceivedMessage();
+    if (lastMsg.isValid) {
+        messages.push_back(lastMsg);
+    }
+    
+    return messages;
+}
+
+String LoRaHelper::formatSenderName(uint32_t nodeId, bool isOutgoing) {
+    if (isOutgoing) {
+        return "You";
+    }
+    
+    // Look up node in NodeDB
+    if (nodeDB) {
+        const auto* node = nodeDB->getMeshNode(nodeId);
+        if (node && node->has_user) {
+            // Try long name first, fallback to short name
+            if (strlen(node->user.long_name) > 0) {
+                return String(node->user.long_name);
+            } else if (strlen(node->user.short_name) > 0) {
+                return String(node->user.short_name);
+            }
+        }
+    }
+    
+    // Fallback to node ID
+    return String("Node !") + String(nodeId & 0xFF, HEX);
+}
+
+String LoRaHelper::formatTimeAgo(uint32_t timestamp) {
+    if (timestamp == 0) {
+        return "Unknown";
+    }
+    
+    // Get current time
+    uint32_t currentTime = getTime();
+    if (currentTime == 0) {
+        // If no valid RTC time, use millis as approximation
+        currentTime = millis() / 1000;
+    }
+    
+    if (timestamp > currentTime) {
+        // Future timestamp, probably invalid
+        return "Unknown";
+    }
+    
+    uint32_t secondsAgo = currentTime - timestamp;
+    
+    if (secondsAgo < 60) {
+        return String(secondsAgo) + "s ago";
+    } else if (secondsAgo < 3600) {
+        return String(secondsAgo / 60) + "m ago";
+    } else if (secondsAgo < 86400) {
+        return String(secondsAgo / 3600) + "h ago";
+    } else {
+        return String(secondsAgo / 86400) + "d ago";
+    }
 }

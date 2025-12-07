@@ -16,6 +16,7 @@
 #include "screens/BaseScreen.h"
 #include "screens/HomeScreen.h"
 #include "screens/list_screens/NodesListScreen.h"
+#include "screens/list_screens/MessageListScreen.h"
 #include "screens/MessagesScreen.h"
 #include "screens/SnakeGameScreen.h"
 #include "InitialSplashScreen.h"
@@ -41,6 +42,7 @@ CustomUIModule::CustomUIModule()
       currentScreen(nullptr),
       homeScreen(nullptr),
       nodesListScreen(nullptr),
+      messageListScreen(nullptr),
       snakeGameScreen(nullptr),
       isSplashActive(false),
       splashStartTime(0),
@@ -77,6 +79,11 @@ CustomUIModule::~CustomUIModule() {
     if (nodesListScreen) {
         delete nodesListScreen;
         nodesListScreen = nullptr;
+    }
+    
+    if (messageListScreen) {
+        delete messageListScreen;
+        messageListScreen = nullptr;
     }
     
     if (snakeGameScreen) {
@@ -208,6 +215,9 @@ void CustomUIModule::initScreens() {
 
     // Create nodes list screen
     nodesListScreen = new NodesListScreen();
+
+    // Create message list screen
+    messageListScreen = new MessageListScreen();
 
     // Create messages screen
     messagesScreen = new MessagesScreen();
@@ -431,6 +441,13 @@ void CustomUIModule::handleKeyPress(char key) {
         case '7': // Nodes
             if (currentScreen != nodesListScreen) {
                 switchToScreen(nodesListScreen);
+            }
+            break;
+            
+        case 'D':
+        case 'd': // Message List
+            if (currentScreen != messageListScreen) {
+                switchToScreen(messageListScreen);
             }
             break;
 

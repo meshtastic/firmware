@@ -20,6 +20,7 @@ class InitKeypad;
 class BaseScreen;
 class HomeScreen;
 class NodesListScreen;
+class MessageListScreen;
 class SnakeGameScreen;
 
 #include "screens/MessagesScreen.h"
@@ -71,6 +72,7 @@ private:
     BaseScreen* currentScreen;
     HomeScreen* homeScreen;
     NodesListScreen* nodesListScreen;
+    MessageListScreen* messageListScreen;
     MessagesScreen* messagesScreen;
     SnakeGameScreen* snakeGameScreen;
     
