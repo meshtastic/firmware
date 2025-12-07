@@ -685,44 +685,52 @@ Root:
 
 ## TODO List for Future Sessions
 
-### Critical Priority
-- [ ] **Fix shift key detection** - Modifier byte not being captured (debug markers added)
-- [ ] **Test v3.4 bootloop fix** - Verify watchdog disable works on hardware
+**Note:** See `/Users/rstown/.claude/plans/abundant-booping-hedgehog.md` for comprehensive analysis with 26 detailed TODOs
 
-### High Priority - Reliable Transmission System
-- [ ] **Design ACK-based batch transmission protocol**
-  - Server (Heltec V4) acknowledges receipt of each 500-byte batch
-  - Client (XIAO) retries until ACK received
-  - Exponential backoff: 10s, 30s, 60s, 5min intervals
-- [ ] **Implement PSRAM batch queue (FRAM simulation)**
-  - Multiple 500-byte batches stored in PSRAM ring buffer
-  - Delete batch only after server ACK
-  - Handle queue full: delete oldest batch to make room
-- [ ] **Add batch transmission state machine**
-  - States: PENDING, TRANSMITTING, WAITING_ACK, ACKNOWLEDGED, FAILED
-  - Track retry count and last attempt timestamp per batch
-- [ ] **Implement ACK packet handling**
-  - Server sends ACK with batch ID/sequence number
-  - Client marks batch as ACKNOWLEDGED and deletes from queue
-- [ ] **Migrate to FRAM when hardware arrives**
-  - Non-volatile storage for batches (survives power loss)
-  - MB-scale capacity vs current 4KB PSRAM
-  - Same API as PSRAM queue for easy migration
+### 🔴 Critical Priority (Data Loss, Stability)
+1. [ ] **Add memory barriers to PSRAM access** - `buffer_count` increments lack `__dmb()`, potential race condition
+2. [ ] **Fix transmission failure silent drops** - Failed `broadcastToPrivateChannel()` silently discards data
+3. [ ] **Validate buffer operations** - Buffer overflows drop data without warning
+4. [ ] **Test v3.4 watchdog fix** - Verify hardware register disable works on real hardware
 
-### Medium Priority
-- [ ] Add RTC integration for true unix timestamps
-- [ ] Add function key support (F1-F12)
-- [ ] Add arrow key support
-- [ ] Add Ctrl/Alt/GUI modifier combinations
-- [ ] Test PSRAM buffer overflow handling
-- [ ] Monitor buffer statistics in production
+### 🟠 High Priority (Feature Gaps, Crashes)
+5. [ ] **Fix shift key detection** - Modifier byte not being captured (debug markers added in v3.4)
+6. [ ] **Implement full modifier key support** - Ctrl, Alt, GUI currently ignored (only Shift works)
+7. [ ] **Add input validation for commands** - `parseCommand()` doesn't validate before `toupper()`
+8. [ ] **Fix buffer overflow in text decoder** - `decodeBufferToText()` can overflow destination
+9. [ ] **Validate channel configuration** - Hardcoded channel 1 not validated to exist
 
-### Low Priority
-- [ ] Create GitHub fork and push code
-- [ ] Submit PR to Meshtastic upstream
-- [ ] Add unit tests for buffer management
-- [ ] Performance profiling with oscilloscope
-- [ ] Add configuration via Meshtastic CLI
+### 🟡 Medium Priority (Usability, Debugging)
+10. [ ] **Implement RTC integration** - Replace uptime with true unix epoch timestamps
+11. [ ] **Implement key release detection** - Currently only detects presses (multi-tap broken)
+12. [ ] **Implement statistics tracking** - All stats functions are no-ops (empty inline)
+13. [ ] **Add watchdog timeout handler** - Store reset flags, log warnings on boot
+14. [ ] **Make configuration runtime-adjustable** - USB speed, channel, GPIO currently compile-time
+15. [ ] **Add Core1 observability** - Circular buffer for logs (safe from Core1)
+
+### 🟢 Low Priority (Code Quality, Nice-to-Have)
+16. [ ] **Add function key support** - F1-F12, arrows, Page Up/Down, Home/End missing
+17. [ ] **Improve code documentation** - Add @pre/@post/@note for all functions
+18. [ ] **Enable CRC validation** - Currently disabled for performance
+19. [ ] **Add graceful degradation** - Handle Core1 launch failure gracefully
+20. [ ] **Fix string handling** - Mix of C and C++ strings, no null-termination guarantees
+21. [ ] **Build comprehensive test suite** - Unit, integration, stress tests needed
+
+### 🔵 Design Improvements (Architecture, v5.x)
+22. [ ] **Abstract storage backend** - Define interface for PSRAM→FRAM migration
+23. [ ] **Refactor into SRP classes** - Split USBCaptureModule (PSRAMPoller, TextDecoder, etc.)
+24. [ ] **Implement reliable transmission** - ACK-based with retry (already documented for v4.x)
+
+### 🔒 Security (Authentication, Encryption)
+25. [ ] **Add authentication for remote commands** - Currently anyone can START/STOP/STATS
+26. [ ] **Improve encryption options** - Key rotation, PFS, end-to-end encryption
+
+### High Priority - Reliable Transmission System (v4.x)
+- [ ] **Implement PSRAM batch queue** (FRAM simulation for testing)
+- [ ] **Add batch transmission state machine** (PENDING/TRANSMITTING/WAITING_ACK/ACKNOWLEDGED)
+- [ ] **Implement ACK packet handling** from Heltec V4 server
+- [ ] **Add exponential backoff retry** (10s, 30s, 60s, 5min intervals)
+- [ ] **Migrate to FRAM** when hardware arrives (non-volatile, MB-scale capacity)
 
 ---
 

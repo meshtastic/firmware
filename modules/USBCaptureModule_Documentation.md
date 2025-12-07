@@ -1,8 +1,8 @@
 # USB Capture Module - Complete Documentation
 
-**Version:** 3.3 (LoRa Transmission + Text Decoding)
+**Version:** 3.4 (Watchdog Bootloop Fix + Reliable TX Design)
 **Platform:** RP2350 (XIAO RP2350-SX1262)
-**Status:** Production Ready - Transmission Active
+**Status:** Bootloop Fixed - Ready for Testing
 **Last Updated:** 2025-12-07
 
 ---
@@ -1756,6 +1756,209 @@ struct capture_controller_t {
 - ✅ Rate limiting prevents mesh flooding
 - ✅ Commands received and executed
 - ⏸️ Phone app display awaiting user confirmation
+
+---
+
+## Future Enhancement: Reliable Batch Transmission with ACK
+
+**Status:** Planned (v4.x)
+**Goal:** Guaranteed keystroke delivery with server acknowledgment
+
+### Overview
+Enhance current "fire-and-forget" transmission with reliable delivery guarantee using ACK-based confirmation, persistent storage queue, and exponential backoff retry.
+
+### Architecture Changes
+
+```
+Current (v3.4):
+  Core1 → PSRAM Buffer → Core0 → Transmit (once) → Done
+
+Planned (v4.x):
+  Core1 → PSRAM Buffer → Core0 → Batch Queue (PSRAM/FRAM)
+                                     ↓
+                              Transmit with Retry
+                                     ↓
+                              Wait for ACK ← Server (Heltec V4)
+                                     ↓
+                              Delete on ACK
+```
+
+### Key Components
+
+**1. Batch Queue Structure (520 bytes per batch):**
+```cpp
+typedef struct {
+    uint32_t batch_id;           // Unique ID
+    uint16_t sequence_number;    // Monotonic counter
+    uint8_t  retry_count;        // Transmission attempts
+    uint8_t  state;              // PENDING/TRANSMITTING/WAITING_ACK/ACKNOWLEDGED
+    uint32_t created_timestamp;  // When batch created
+    uint32_t last_tx_timestamp;  // Last transmission attempt
+    uint32_t next_retry_time;    // When to retry
+    uint8_t  data[500];          // Keystroke data (existing format)
+} reliable_batch_t;
+```
+
+**2. Exponential Backoff:**
+- Attempt 1: 10 seconds
+- Attempt 2: 30 seconds
+- Attempt 3: 60 seconds
+- Attempt 4+: 5 minutes
+- Max retries: 10 (then mark FAILED for manual review)
+
+**3. ACK Packet (10 bytes):**
+```cpp
+typedef struct {
+    uint8_t  packet_type;        // 0xAC (ACK marker)
+    uint32_t batch_id;           // Which batch acknowledged
+    uint16_t sequence_number;    // Verification
+    uint16_t crc16;              // Integrity check
+} ack_packet_t;
+```
+
+**4. Storage Options:**
+
+**Phase 1 - PSRAM (Testing):**
+- 8 batches × 520 bytes = 4,160 bytes
+- Volatile (lost on reboot)
+- Fast development/testing
+- Same hardware as current
+
+**Phase 2 - FRAM (Production):**
+- 2048 batches × 520 bytes = ~1MB capacity
+- Non-volatile (survives power loss)
+- 10^14 write cycles
+- I2C interface (easy integration)
+- Requires FRAM module (e.g., Adafruit 1895 or larger)
+
+**5. Queue Management:**
+- Add new batch when Core1 completes 500-byte buffer
+- Transmit oldest PENDING batch every 6 seconds
+- On ACK received: mark batch ACKNOWLEDGED, delete from queue
+- If queue full: delete oldest ACKNOWLEDGED batch (or oldest PENDING if none)
+- Track statistics: created, transmitted, acknowledged, dropped
+
+**6. Server Implementation (Heltec V4):**
+```cpp
+void onBatchReceived(const uint8_t *payload, size_t len) {
+    reliable_batch_t *batch = (reliable_batch_t *)payload;
+
+    // Validate and store batch to disk/database
+    saveBatchToDisk(batch);
+
+    // Send ACK back to client
+    ack_packet_t ack = {
+        .packet_type = 0xAC,
+        .batch_id = batch->batch_id,
+        .sequence_number = batch->sequence_number,
+        .crc16 = calculateCRC16(...)
+    };
+
+    broadcastToPrivateChannel((const uint8_t *)&ack, sizeof(ack));
+}
+```
+
+### Implementation Plan
+
+**Phase 1: PSRAM Queue (Development)**
+1. Create `reliable_batch_queue.cpp/h` with PSRAM backend
+2. Add batch state machine and retry logic
+3. Modify `USBCaptureModule::runOnce()` to use batch queue
+4. Add ACK handling in `handleReceived()`
+5. Test with PSRAM (volatile storage)
+
+**Phase 2: FRAM Migration (Production)**
+1. Design abstract `BatchStorage` interface
+2. Implement `PSRAMStorage` and `FRAMStorage` backends
+3. Add I2C FRAM driver (`fram_storage.cpp/h`)
+4. Compile-time selection via `USE_FRAM_STORAGE` flag
+5. Deploy with FRAM hardware
+
+### Benefits
+- **Zero Data Loss**: Keystrokes guaranteed delivered or logged as FAILED
+- **Network Resilience**: Handles temporary mesh outages gracefully
+- **Storage Persistence** (FRAM): Survives reboots and power loss
+- **Mesh Efficiency**: Exponential backoff prevents flooding during outages
+- **Monitoring**: Failed batches logged for investigation
+
+### Migration Path
+1. Keep current `psram_buffer.cpp` for Core1→Core0 communication
+2. Add new `reliable_batch_queue.cpp` for transmission queue
+3. Core0 reads from PSRAM and adds to reliable queue
+4. Core0 transmission loop processes reliable queue with retry
+5. Later: swap PSRAM storage for FRAM (same API)
+
+### Testing Strategy
+- **Unit Tests**: Batch creation, ACK parsing, backoff timing, queue overflow
+- **Integration Tests**: End-to-end delivery, retry behavior, queue persistence
+- **Load Tests**: 100+ batches, network failure scenarios, server slow ACK
+
+### Configuration
+
+```cpp
+// Feature flags
+#define RELIABLE_TX_ENABLED 1           // Enable ACK-based transmission
+#define USE_FRAM_STORAGE 0              // 0=PSRAM, 1=FRAM
+
+// Retry parameters
+#define MAX_RETRIES 10                  // Give up after 10 attempts
+#define RETRY_DELAY_BASE 10             // 10 seconds first retry
+#define RETRY_DELAY_MAX 300             // 5 minutes max delay
+#define ACK_TIMEOUT_MS 30000            // 30 seconds wait for ACK
+
+// Storage capacity
+#define MAX_BATCHES_PSRAM 8             // Testing (4KB)
+#define MAX_BATCHES_FRAM 2048           // Production (~1MB)
+```
+
+### Future Enhancements
+- **Compression**: Reduce 500-byte batches to ~300 bytes (40% savings)
+- **Batch Aggregation**: Combine multiple buffers into larger batches
+- **Priority Queue**: Transmit newest batches first (LIFO mode)
+- **Server Deduplication**: Handle duplicate transmissions gracefully
+
+---
+
+## Known Issues & Technical Debt
+
+**Full analysis:** See `/Users/rstown/.claude/plans/abundant-booping-hedgehog.md` (26 items total)
+
+### 🔴 Critical (Must Fix)
+1. **Memory barriers missing in PSRAM access** - `buffer_count` increments without `__dmb()` (race condition)
+2. **Transmission failures silently drop data** - No retry, no queue, no statistics
+3. **Buffer operations not validated** - Overflow drops data without warning
+
+### 🟠 High Priority (Feature Gaps)
+4. **Shift key detection broken** - Capitals not captured (debug markers added in v3.4)
+5. **Modifier keys ignored** - Ctrl, Alt, GUI read but not transmitted
+6. **No input validation** - Commands processed without bounds/content checking
+7. **Text decoder buffer overflow** - `decodeBufferToText()` can exceed max length
+8. **Channel not validated** - Hardcoded channel 1 assumed to exist
+
+### 🟡 Medium Priority (Robustness)
+9. **No RTC integration** - Using uptime instead of unix epoch
+10. **Key release not detected** - Multi-tap broken (e.g., "hello" → "helo")
+11. **Statistics not implemented** - All stats functions are no-ops
+12. **No watchdog timeout handler** - Resets are silent, logs lost
+13. **Configuration hardcoded** - USB speed, channel, GPIO compile-time only
+14. **Core1 has zero logging** - Cannot debug issues from Core1
+
+### 🟢 Low Priority (Enhancement)
+15. **Function keys missing** - F1-F12, arrows, Page Up/Down not supported
+16. **Documentation incomplete** - Missing @pre/@post/@note annotations
+17. **CRC validation disabled** - Performance vs correctness trade-off
+18. **No graceful degradation** - Core1 launch failure is silent
+19. **String handling inconsistent** - Mix of C and C++ patterns
+20. **No comprehensive tests** - Unit, integration, stress tests missing
+
+### 🔵 Design Improvements (v5.x)
+21. **Storage abstraction missing** - FRAM migration will require refactoring
+22. **Single Responsibility violation** - USBCaptureModule does too much
+23. **Reliable transmission needed** - ACK-based retry planned for v4.x
+
+### 🔒 Security Considerations
+24. **No command authentication** - Any mesh node can START/STOP/STATS
+25. **No key rotation** - Single PSK forever, no PFS
 
 ---
 
