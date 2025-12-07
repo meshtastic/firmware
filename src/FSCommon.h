@@ -22,8 +22,8 @@
 using namespace STM32_LittleFS_Namespace;
 #endif
 
-#if defined(ARCH_RP2040)
-// RP2040
+#if defined(ARCH_RP2040) || defined(ARDUINO_ARCH_RP2040)
+// RP2040 and RP2350 (both use ARDUINO_ARCH_RP2040 in arduino-pico framework)
 #include "LittleFS.h"
 #define FSCom LittleFS
 #define FSBegin() FSCom.begin() // set autoformat

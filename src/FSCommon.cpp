@@ -293,6 +293,13 @@ void fsInit()
         LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
+
+    // Create /prefs directory if it doesn't exist (needed for first boot)
+    if (!FSCom.exists("/prefs")) {
+        LOG_INFO("Creating /prefs directory");
+        FSCom.mkdir("/prefs");
+    }
+
 #if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else
