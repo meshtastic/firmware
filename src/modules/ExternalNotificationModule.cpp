@@ -310,8 +310,7 @@ void ExternalNotificationModule::stopNow()
     rtttl::stop();
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
-    if (audioThread->isPlaying())
-        audioThread->stop();
+    audioThread->stop();
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
