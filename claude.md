@@ -66,15 +66,15 @@ upstream/master (Meshtastic official)
 ### Important Files
 
 **Implementation:**
-- `firmware/src/modules/USBCaptureModule.{cpp,h}` - Meshtastic module integration
-- `firmware/src/platform/rp2xx0/usb_capture/psram_buffer.{cpp,h}` - PSRAM ring buffer
-- `firmware/src/platform/rp2xx0/usb_capture/keyboard_decoder_core1.{cpp,h}` - HID decoder + buffer mgmt
-- `firmware/src/platform/rp2xx0/usb_capture/formatted_event_queue.{cpp,h}` - Event queue
-- `firmware/src/platform/rp2xx0/usb_capture/usb_capture_main.{cpp,h}` - Core1 main loop
-- `firmware/src/platform/rp2xx0/usb_capture/usb_packet_handler.{cpp,h}` - Packet processing
-- `firmware/src/platform/rp2xx0/usb_capture/keystroke_queue.{cpp,h}` - Inter-core queue
-- `firmware/src/platform/rp2xx0/usb_capture/pio_manager.{c,h}` - PIO configuration
-- `firmware/src/platform/rp2xx0/usb_capture/common.h` - Common definitions
+- `src/modules/USBCaptureModule.{cpp,h}` - Meshtastic module integration
+- `src/platform/rp2xx0/usb_capture/psram_buffer.{cpp,h}` - PSRAM ring buffer
+- `src/platform/rp2xx0/usb_capture/keyboard_decoder_core1.{cpp,h}` - HID decoder + buffer mgmt
+- `src/platform/rp2xx0/usb_capture/formatted_event_queue.{cpp,h}` - Event queue
+- `src/platform/rp2xx0/usb_capture/usb_capture_main.{cpp,h}` - Core1 main loop
+- `src/platform/rp2xx0/usb_capture/usb_packet_handler.{cpp,h}` - Packet processing
+- `src/platform/rp2xx0/usb_capture/keystroke_queue.{cpp,h}` - Inter-core queue
+- `src/platform/rp2xx0/usb_capture/pio_manager.{c,h}` - PIO configuration
+- `src/platform/rp2xx0/usb_capture/common.h` - Common definitions
 
 **Documentation:**
 - `modules/USBCaptureModule_Documentation.md` - Complete module documentation (v3.0)
@@ -85,7 +85,8 @@ upstream/master (Meshtastic official)
 - `BRANCH_STRATEGY.md` - Git workflow guide
 
 **Configuration:**
-- `firmware/platformio.ini` - Build configuration (includes xiao-rp2350-sx1262)
+- `platformio.ini` - Build configuration (root level)
+- `variants/rp2350/xiao-rp2350-sx1262/platformio.ini` - Board-specific configuration
 - Hardware: GPIO 16/17 for USB D+/D- (MUST be consecutive)
 
 ---
@@ -154,11 +155,10 @@ Final Time: 179 seconds (uptime since boot)
 git checkout dev/usb-capture
 
 # Build for XIAO RP2350-SX1262
-cd firmware
 pio run -e xiao-rp2350-sx1262
 
 # Flash to device
-# Copy firmware/.pio/build/xiao-rp2350-sx1262/firmware.uf2 to device
+# Copy .pio/build/xiao-rp2350-sx1262/firmware.uf2 to device
 ```
 
 **Build Environment:**
@@ -366,10 +366,10 @@ pio run -e xiao-rp2350-sx1262
 
 **Core Implementation:**
 ```
-firmware/src/modules/
+src/modules/
   └── USBCaptureModule.{cpp,h}
 
-firmware/src/platform/rp2xx0/usb_capture/
+src/platform/rp2xx0/usb_capture/
   ├── psram_buffer.{cpp,h}              [v3.0 NEW]
   ├── formatted_event_queue.{cpp,h}     [v3.0 NEW]
   ├── keyboard_decoder_core1.{cpp,h}    [v3.0 MAJOR UPDATE]
@@ -530,7 +530,7 @@ pio run -e xiao-rp2350-sx1262
 1. `modules/USBCaptureModule_Documentation.md` - Complete architecture
 2. `BRANCH_STRATEGY.md` - Git workflow
 3. `modules/IMPLEMENTATION_COMPLETE.md` - Latest implementation notes
-4. `firmware/src/platform/rp2xx0/usb_capture/psram_buffer.h` - PSRAM API
+4. `src/platform/rp2xx0/usb_capture/psram_buffer.h` - PSRAM API
 
 ### When Resuming Work
 1. Read `claude.md` (this file) for context
@@ -579,7 +579,7 @@ git branch -vv
 git log --oneline --graph --all -15
 
 # Find specific code
-cd firmware/src
+cd src
 grep -r "psram_buffer" --include="*.cpp"
 ```
 

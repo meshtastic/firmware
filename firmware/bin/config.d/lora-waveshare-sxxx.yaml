@@ -1,8 +1,0 @@
-Lora:
-  Module: sx1262  # Waveshare SX126X XXXM
-  DIO2_AS_RF_SWITCH: true
-  CS: 21
-  IRQ: 16
-  Busy: 20
-  Reset: 18
-  SX126X_ANT_SW: 6

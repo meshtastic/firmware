@@ -1,6 +1,0 @@
-var/lib/meshtasticd
-etc/meshtasticd
-etc/meshtasticd/config.d
-etc/meshtasticd/available.d
-usr/share/meshtasticd/web
-etc/meshtasticd/ssl

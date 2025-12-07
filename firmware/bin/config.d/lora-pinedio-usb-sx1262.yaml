@@ -1,5 +1,0 @@
-Lora:
-  Module: sx1262
-  CS: 0 
-  IRQ: 10
-  spidev: ch341

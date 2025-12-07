@@ -1,8 +1,0 @@
-Lora:
-  Module: sx1262
-  IRQ: 10
-  Busy: 12
-#  Reset: 2
-  spidev: spidev2.0
-  DIO2_AS_RF_SWITCH: true
-  DIO3_TCXO_VOLTAGE: true

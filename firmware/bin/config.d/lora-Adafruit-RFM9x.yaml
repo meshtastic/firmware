@@ -1,6 +1,0 @@
-Lora:
-  Module: RF95  # Adafruit RFM9x
-  Reset: 25
-  CS: 7
-  IRQ: 22
-#  Busy: 23
