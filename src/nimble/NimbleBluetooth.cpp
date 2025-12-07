@@ -678,9 +678,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
 #else
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
-    {
-        LOG_INFO("BLE disconnect");
+virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+{
+    LOG_INFO("BLE disconnect");
 #endif
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
@@ -718,14 +718,14 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Restart Advertising
         ble->startAdvertising();
 #else
-        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-        if (!pAdvertising->start(0)) {
-            if (pAdvertising->isAdvertising()) {
-                LOG_DEBUG("BLE advertising already running");
-            } else {
-                LOG_ERROR("BLE failed to restart advertising");
-            }
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    if (!pAdvertising->start(0)) {
+        if (pAdvertising->isAdvertising()) {
+            LOG_DEBUG("BLE advertising already running");
+        } else {
+            LOG_ERROR("BLE failed to restart advertising");
         }
+    }
 #endif
     }
 };
@@ -833,7 +833,6 @@ void NimbleBluetooth::setup()
     } else {
         LOG_WARN("Failed to prefer 2M PHY by default, rc=%d", phyResult);
     }
-#endif
 
     int dataLenResult = ble_gap_write_sugg_def_data_len(kPreferredBleTxOctets, kPreferredBleTxTimeUs);
     if (dataLenResult == 0) {
