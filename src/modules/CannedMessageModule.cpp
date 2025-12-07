@@ -52,6 +52,7 @@ static bool lastDestSet = false;
 
 const char *nextLayout();
 int currentLayout = 0;
+bool showLayoutIndicator = true;
 
 struct KeyboardLayout {
     const char *name;
@@ -1325,8 +1326,10 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // fn+l (switch layout)
     if (event->inputEvent == INPUT_BROKER_LAYOUT_CHANGE) {
         payload = INPUT_BROKER_LAYOUT_CHANGE;
+        showLayoutIndicator = true;
         nextLayout();
         runOnce();
+        screen->forceDisplay(true);
         return true;
     }
 
@@ -1356,6 +1359,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->kbchar >= 32 && event->kbchar <= 126) {
         payload = event->kbchar;
         lastTouchMillis = millis();
+        showLayoutIndicator = false;
         runOnce();
         return true;
     }
@@ -2192,7 +2196,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    int symbolsLeftShift = 0;                   // move symbols counter to left if needed
+    int layoutIndicatorWidth = 0;
     this->displayHeight = display->getHeight(); // Store display height for later use
     char buffer[50];
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -2319,30 +2323,33 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         // --- Draw node/channel header at the top ---
         drawHeader(display, x, y, buffer);
         // --- Keyboard Layout symbol:
-        if (LAYOUT_COUNT > 1) {
-            if (graphics::isHighResolution && display->getWidth() > 250) {
+        if (LAYOUT_COUNT > 1 && showLayoutIndicator) {
+            if (graphics::isHighResolution) {
                 const int hShift = -2; // move locale symbol left by 2 pixels
                 const int hBorder = 2; // add some border thickness left and right
                 display->setColor(WHITE);
                 snprintf(buffer, sizeof(buffer), "%s", getCurrentLayoutName());
-                symbolsLeftShift = display->getStringWidth(buffer);
-                display->fillRect(x + display->getWidth() - symbolsLeftShift + 2 - hBorder + hShift, y + 0,
-                                  symbolsLeftShift + 2 * hBorder - 4, FONT_HEIGHT_SMALL);
-                display->fillRect(x + display->getWidth() - symbolsLeftShift + 1 - hBorder + hShift, y + 0 + 1,
-                                  symbolsLeftShift + 2 * hBorder - 2, FONT_HEIGHT_SMALL - 2);
-                display->fillRect(x + display->getWidth() - symbolsLeftShift - hBorder + hShift, y + 0 + 2,
-                                  symbolsLeftShift + 2 * hBorder, FONT_HEIGHT_SMALL - 4);
+                layoutIndicatorWidth = display->getStringWidth(buffer);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth + 2 - hBorder + hShift,
+                                  display->getHeight() - FONT_HEIGHT_SMALL, layoutIndicatorWidth + 2 * hBorder - 4,
+                                  FONT_HEIGHT_SMALL);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth + 1 - hBorder + hShift,
+                                  display->getHeight() - FONT_HEIGHT_SMALL + 1, layoutIndicatorWidth + 2 * hBorder - 2,
+                                  FONT_HEIGHT_SMALL - 2);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth - hBorder + hShift,
+                                  display->getHeight() - FONT_HEIGHT_SMALL + 2, layoutIndicatorWidth + 2 * hBorder,
+                                  FONT_HEIGHT_SMALL - 4);
                 display->setColor(BLACK);
-                display->drawString(x + display->getWidth() - symbolsLeftShift + hShift, y + 0, buffer);
-                symbolsLeftShift += 2 + 2 * hBorder - hShift;
+                display->drawString(display->getWidth() - layoutIndicatorWidth + hShift, display->getHeight() - FONT_HEIGHT_SMALL,
+                                    buffer);
             } else {
                 display->setColor(WHITE);
                 snprintf(buffer, sizeof(buffer), "%c", getCurrentLayoutName()[0]);
-                symbolsLeftShift = display->getStringWidth(buffer);
-                display->fillRect(x + display->getWidth() - symbolsLeftShift, y + 0, symbolsLeftShift, FONT_HEIGHT_SMALL);
+                layoutIndicatorWidth = display->getStringWidth(buffer);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth, display->getHeight() - FONT_HEIGHT_SMALL,
+                                  layoutIndicatorWidth, FONT_HEIGHT_SMALL);
                 display->setColor(BLACK);
-                display->drawString(x + display->getWidth() - symbolsLeftShift, y + 0, buffer);
-                symbolsLeftShift += 1;
+                display->drawString(display->getWidth() - layoutIndicatorWidth, display->getHeight() - FONT_HEIGHT_SMALL, buffer);
             }
         }
         display->setColor(WHITE);
@@ -2352,7 +2359,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
-            display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - symbolsLeftShift, y + 0, buffer);
+            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
 #if INPUTBROKER_SERIAL_TYPE == 1
