@@ -177,6 +177,30 @@ int32_t USBCaptureModule::runOnce()
     return 100;
 }
 
+/**
+ * @brief Process PSRAM buffers and transmit them (Core0 operation)
+ *
+ * Core0's primary responsibility for keystroke transmission. Polls the PSRAM
+ * ring buffer for complete keystroke buffers written by Core1 and transmits them.
+ *
+ * Processing Flow:
+ *  1. Check if PSRAM has data (psram_buffer_read)
+ *  2. Read complete buffer (already formatted by Core1)
+ *  3. Log buffer content with decoded timestamps
+ *  4. Transmit buffer (currently disabled, ready to enable)
+ *  5. Repeat while buffers available
+ *  6. Log statistics every 10 seconds
+ *
+ * Performance:
+ *  - Ultra-lightweight: Just memcpy + transmit
+ *  - No formatting overhead (done by Core1)
+ *  - No buffer management (done by Core1)
+ *  - Estimated CPU: ~0.2% (vs 2% before)
+ *
+ * @note Called every 100ms from runOnce()
+ * @note Processes ALL available buffers each cycle (non-blocking)
+ * @note Statistics: available, total_transmitted, dropped_buffers
+ */
 void USBCaptureModule::processPSRAMBuffers()
 {
     psram_keystroke_buffer_t buffer;

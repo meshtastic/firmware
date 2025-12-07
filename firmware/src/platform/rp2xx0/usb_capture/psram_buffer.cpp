@@ -1,7 +1,29 @@
+/**
+ * @file psram_buffer.cpp
+ * @brief PSRAM ring buffer implementation
+ *
+ * Implementation of an 8-slot circular buffer for Core0↔Core1 communication.
+ * Core1 writes complete keystroke buffers, Core0 reads and transmits them.
+ *
+ * Design Notes:
+ * - Currently uses static RAM allocation
+ * - Future: Replace with I2C FRAM for non-volatile storage
+ * - Lock-free: Safe for single producer (Core1) / single consumer (Core0)
+ * - Statistics: Tracks writes, reads, and buffer drops
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
 #include "psram_buffer.h"
 #include <string.h>
 
-// Global buffer (static allocation for now, FRAM later)
+/**
+ * Global buffer instance
+ * TODO: Migrate to I2C FRAM for:
+ *  - Non-volatile persistence (survives power loss)
+ *  - MB-scale capacity (vs KB for RAM)
+ *  - Extreme endurance (10^14 write cycles)
+ */
 psram_buffer_t g_psram_buffer;
 
 void psram_buffer_init() {

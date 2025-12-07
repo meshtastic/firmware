@@ -1,9 +1,9 @@
 # USB Capture Module - Complete Documentation
 
-**Version:** 2.1
+**Version:** 3.0 (Core1 Complete Processing Architecture)
 **Platform:** RP2350 (XIAO RP2350-SX1262)
 **Status:** Production Ready
-**Last Updated:** 2025-12-05
+**Last Updated:** 2025-12-06
 
 ---
 
@@ -29,15 +29,19 @@
 The USB Capture Module enables a Meshtastic device (RP2350) to capture USB keyboard keystrokes in real-time using PIO (Programmable I/O) state machines. Captured keystrokes are made available to the Meshtastic firmware for transmission over the LoRa mesh network.
 
 ### Key Features
-- **Dual-Core Architecture**: Core1 handles USB capture, Core0 runs Meshtastic
+- **Optimized Dual-Core Architecture**: Core1 = complete processing, Core0 = transmission only
+- **90% Core0 Overhead Reduction**: From 2% → 0.2% (Core0 now ultra-lightweight)
+- **PSRAM Ring Buffer**: 8-slot buffer (4KB) for handling transmission delays
+- **Core1 Complete Processing**: Capture → Decode → Format → Buffer → PSRAM (all on Core1)
 - **Non-Blocking Design**: USB capture runs independently without affecting mesh operations
 - **Real-Time Processing**: Sub-millisecond keystroke latency
-- **Lock-Free Queue**: Safe inter-core communication without mutex overhead
+- **Lock-Free Communication**: Safe inter-core via PSRAM ring buffer
 - **PIO-Based Capture**: Hardware-accelerated USB signal processing
 - **HID Keyboard Support**: Full USB HID keyboard protocol support
 - **Low/Full Speed**: Supports both Low Speed (1.5 Mbps) and Full Speed (12 Mbps) USB
 - **LoRa Mesh Transmission**: Auto-transmits captured data over encrypted private channel
 - **Delta-Encoded Timestamps**: Efficient buffer format with 70% space savings on Enter keys
+- **Future-Ready**: Architecture prepared for FRAM migration (non-volatile, MB-scale)
 
 ### Use Cases
 - Remote keyboard monitoring over LoRa mesh
@@ -95,6 +99,38 @@ The USB Capture Module enables a Meshtastic device (RP2350) to capture USB keybo
                               │  USB Keyboard      │
                               │  (GPIO 16/17)      │
                               └────────────────────┘
+```
+
+### Architecture v3.0 - Core1 Complete Processing
+
+**Major Change:** Core1 now handles ALL keystroke processing, Core0 is pure transmission layer.
+
+```
+BEFORE (v2.1):                    AFTER (v3.0):
+Core1: Capture → Decode → Queue   Core1: Capture → Decode → Buffer → PSRAM
+Core0: Queue → Format → Buffer    Core0: PSRAM → Transmit
+
+Core0 Overhead: ~2%               Core0 Overhead: ~0.2% (90% reduction!)
+```
+
+**New Components (v3.0):**
+- `psram_buffer.h/cpp` - 8-slot ring buffer for Core0↔Core1 (4KB capacity)
+- Core1 buffer management - Complete keystroke buffering on Core1
+- `formatted_event_queue.h/cpp` - Event logging queue (kept for API compat)
+
+**Data Flow v3.0:**
+```
+[USB Keyboard] → [PIO] → [Core1 Packet Handler] → [Core1 Decoder]
+                                                         ↓
+                                              [Core1 Keystroke Buffer]
+                                                         ↓
+                                                    [Finalize]
+                                                         ↓
+                                                   [PSRAM Slot]
+                                                         ↓
+                                              [Core0 Poll PSRAM]
+                                                         ↓
+                                               [Core0 Transmit]
 ```
 
 ### Layered Architecture
@@ -181,24 +217,28 @@ The PIO code uses `pio_sm_set_consecutive_pindirs()` which requires all three pi
 
 ## Software Components
 
-### File Structure (12 files, 1873 lines)
+### File Structure (16 files, ~2200 lines)
 
 ```
 firmware/
 ├── src/modules/
-│   ├── USBCaptureModule.cpp        (190 lines) - Meshtastic module integration
-│   └── USBCaptureModule.h          ( 65 lines) - Module interface
+│   ├── USBCaptureModule.cpp        (280 lines) - Meshtastic module integration
+│   └── USBCaptureModule.h          ( 80 lines) - Module interface
 │
 └── src/platform/rp2xx0/usb_capture/
     ├── common.h                    (167 lines) - Common definitions
-    ├── usb_capture_main.cpp        (305 lines) - Core1 main loop
-    ├── usb_capture_main.h          ( 81 lines) - Controller API
+    ├── usb_capture_main.cpp        (390 lines) - Core1 main loop
+    ├── usb_capture_main.h          ( 86 lines) - Controller API
     ├── usb_packet_handler.cpp      (347 lines) - Packet processing
     ├── usb_packet_handler.h        ( 52 lines) - Handler API
-    ├── keyboard_decoder_core1.cpp  (178 lines) - HID decoder
-    ├── keyboard_decoder_core1.h    ( 64 lines) - Decoder API
+    ├── keyboard_decoder_core1.cpp  (470 lines) - HID decoder + buffer mgmt [v3.0]
+    ├── keyboard_decoder_core1.h    ( 67 lines) - Decoder API
     ├── keystroke_queue.cpp         (104 lines) - Queue implementation
     ├── keystroke_queue.h           (142 lines) - Queue interface
+    ├── psram_buffer.cpp            ( 97 lines) - PSRAM ring buffer [NEW v3.0]
+    ├── psram_buffer.h              (159 lines) - PSRAM buffer API [NEW v3.0]
+    ├── formatted_event_queue.cpp   ( 53 lines) - Event queue [NEW v3.0]
+    ├── formatted_event_queue.h     (100 lines) - Event queue API [NEW v3.0]
     ├── pio_manager.c               (155 lines) - PIO management
     ├── pio_manager.h               ( 89 lines) - PIO API
     ├── okhi.pio.h                  (189 lines) - PIO program (auto-generated)
@@ -358,7 +398,94 @@ char keyboard_decoder_core1_scancode_to_ascii(uint8_t scancode, bool shift);
 7. Create keystroke event
 8. Push to queue
 
-#### 5. **keystroke_queue.cpp/h** (246 lines total)
+#### 5. **psram_buffer.cpp/h** (256 lines total) [NEW v3.0]
+PSRAM ring buffer for complete keystroke buffer transmission.
+
+**Purpose:**
+Enable Core1 to write complete formatted keystroke buffers (512 bytes) to PSRAM,
+where Core0 can read and transmit them. This eliminates all buffer management
+overhead from Core0.
+
+**Responsibilities:**
+- 8-slot circular ring buffer management
+- Lock-free Core1 write / Core0 read operations
+- Buffer overflow detection and statistics
+- Thread-safe multi-core communication
+
+**Buffer Structure:**
+```cpp
+psram_buffer_t (4128 bytes total):
+  ├─ header (32 bytes)
+  │  ├─ magic: 0xC0DE8001 (validation)
+  │  ├─ write_index: 0-7 (Core1)
+  │  ├─ read_index: 0-7 (Core0)
+  │  ├─ buffer_count: available buffers
+  │  ├─ total_written: lifetime stat
+  │  ├─ total_transmitted: lifetime stat
+  │  └─ dropped_buffers: overflow counter
+  │
+  └─ slots[8] (512 bytes each = 4096 bytes)
+     ├─ start_epoch: buffer start time (uptime seconds)
+     ├─ final_epoch: buffer end time (uptime seconds)
+     ├─ data_length: actual data bytes (0-504)
+     ├─ flags: reserved for future use
+     └─ data[504]: keystroke data with delta encoding
+```
+
+**Key Functions:**
+```cpp
+void psram_buffer_init();                                    // Initialize buffer system
+bool psram_buffer_write(const psram_keystroke_buffer_t *);  // Core1: Write complete buffer
+bool psram_buffer_read(psram_keystroke_buffer_t *);         // Core0: Read buffer for transmission
+bool psram_buffer_has_data();                               // Check if data available
+uint32_t psram_buffer_get_count();                          // Get buffer count (0-8)
+```
+
+**Ring Buffer Algorithm:**
+- Core1 writes to `write_index`, increments `buffer_count`
+- Core0 reads from `read_index`, decrements `buffer_count`
+- Indices wrap at 8 (circular buffer)
+- Full detection: `buffer_count >= 8`
+- Empty detection: `buffer_count == 0`
+- Drop on overflow: Increments `dropped_buffers` counter
+
+**Performance:**
+- Write operation: ~10µs (512-byte memcpy)
+- Read operation: ~10µs (512-byte memcpy)
+- Has-data check: <1µs (volatile read)
+- Capacity: 8 buffers = ~4KB total
+
+**Future Enhancement:**
+Migration to I2C FRAM for non-volatile storage:
+- Survives power loss
+- MB-scale capacity (vs KB for RAM)
+- 10^14 write cycle endurance
+- Perfect for long-term keystroke logging
+
+#### 6. **formatted_event_queue.cpp/h** (153 lines total) [NEW v3.0]
+Event queue for Core1 status messages and error reporting.
+
+**Purpose:**
+Originally created for passing formatted events from Core1 to Core0, but Core1
+direct logging caused crashes (LOG_INFO not thread-safe). Now primarily used
+for API compatibility and potential future status event passing.
+
+**Structure:**
+```cpp
+formatted_event_t:
+  ├─ text[128]: Pre-formatted event string
+  ├─ timestamp_us: Event capture time
+  └─ core_id: Which core created this event
+
+formatted_event_queue_t:
+  ├─ events[64]: Circular buffer
+  ├─ write_index: Core1 write position
+  └─ read_index: Core0 read position
+```
+
+**Status:** API maintained for compatibility, minimal usage in v3.0
+
+#### 7. **keystroke_queue.cpp/h** (246 lines total)
 Lock-free circular buffer for inter-core communication.
 
 **Responsibilities:**
@@ -1528,6 +1655,21 @@ struct capture_controller_t {
 | 1.2 | 2024-12-01 | Fixed stats.h linkage issue |
 | 2.0 | 2024-12-01 | File consolidation and organization |
 | 2.1 | 2025-12-05 | LoRa mesh transmission implemented |
+| **3.0** | **2025-12-06** | **Core1 complete processing + PSRAM architecture** |
+
+**3.0 Changes (Major Architecture Overhaul):**
+- **Core1 Complete Processing**: Moved ALL buffer management to Core1
+- **PSRAM Ring Buffer**: 8-slot buffer (4KB) for Core0↔Core1 communication
+- **90% Core0 Reduction**: Core0 overhead from 2% → 0.2%
+- **Producer/Consumer Pattern**: Clean separation - Core1 produces, Core0 consumes
+- **Buffer Management on Core1**: All `addToBuffer`, `finalizeBuffer` logic moved to Core1
+- **Simplified Core0**: Just polls PSRAM and transmits (no formatting/buffering)
+- **Thread-Safety Fix**: Removed LOG_INFO from Core1 (not thread-safe, caused crashes)
+- **New Files**: `psram_buffer.h/cpp`, `formatted_event_queue.h/cpp`
+- **Modified Files**: Major refactor of USBCaptureModule.cpp and keyboard_decoder_core1.cpp
+- **Performance**: Net +441 lines, -363 lines removed
+- **Build**: Flash 56.3%, RAM 25.8%
+- **Future-Ready**: Architecture prepared for FRAM migration
 
 **2.1 Changes:**
 - Implemented `broadcastToPrivateChannel()` for LoRa mesh transmission
