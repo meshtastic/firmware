@@ -37,7 +37,7 @@
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
-#elif defined(ARCH_STM32WL)
+#elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
 // On STM32 there isn't enough heap left over for the rest of the firmware if we allocate this statically.
 // For now, make it dynamic again.
 #define MAX_PACKETS                                                                                                              \
