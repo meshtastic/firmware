@@ -2454,9 +2454,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         }
                         // If word itself too big, split by character
                         if (wordWidth > maxWidth) {
-                            uint16_t charPos = 0;
+                            unsigned int charPos = 0;
                             while (charPos < word.length()) {
-                                String oneChar = word.substring(charPos, charPos + 1);
+                                int nextPos = utf8_next_index(word, charPos);
+                                String oneChar = word.substring(charPos, nextPos);
                                 int charWidth =
                                     display->getStringWidth(oneChar.c_str(), oneChar.length(), wordContainsUtf8(oneChar));
                                 if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
@@ -2466,7 +2467,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                                 }
                                 currentLine.push_back({false, oneChar});
                                 lineWidth += charWidth;
-                                charPos++;
+                                charPos = nextPos;
                             }
                         } else {
                             currentLine.push_back({false, word});
