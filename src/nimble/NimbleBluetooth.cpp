@@ -678,9 +678,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
 #else
-virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
-{
-    LOG_INFO("BLE disconnect");
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    {
+        LOG_INFO("BLE disconnect");
 #endif
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
