@@ -28,9 +28,16 @@ extern "C" {
  * flash will crash when Core0 writes to flash (filesystem operations).
  *
  * Solution: Mark ALL Core1 functions with CORE1_RAM_FUNC to force them into
- * the .time_critical section, which is copied to RAM at boot.
+ * RAM using Pico SDK's time_critical section.
+ *
+ * This is superior to flash execution because:
+ * - Guaranteed to be copied to RAM at boot
+ * - Core1 can continue running during Core0 flash writes
+ * - Prevents instruction fetch crashes
  *
  * Usage: CORE1_RAM_FUNC void my_core1_function() { ... }
+ *
+ * @note Uses __attribute__((section(".time_critical.FUNCTION_NAME")))
  */
 #define CORE1_RAM_FUNC __attribute__((section(".time_critical")))
 

@@ -14,11 +14,13 @@
 /* Include generated PIO header - this MUST be the generated file */
 #include "okhi.pio.h"
 
+CORE1_RAM_FUNC
 void pio_manager_init(void)
 {
     /* Nothing to initialize currently */
 }
 
+CORE1_RAM_FUNC
 float pio_manager_calculate_clock_divider(bool full_speed)
 {
     float target_frequency_hz = full_speed ? 120000000.0f : 15000000.0f;
@@ -26,6 +28,7 @@ float pio_manager_calculate_clock_divider(bool full_speed)
     return sys_clk_hz / target_frequency_hz;
 }
 
+CORE1_RAM_FUNC
 static void free_all_pio_state_machines(PIO pio)
 {
     for (int sm = 0; sm < 4; sm++)
@@ -37,6 +40,7 @@ static void free_all_pio_state_machines(PIO pio)
     }
 }
 
+CORE1_RAM_FUNC
 void pio_manager_destroy_all(void)
 {
     free_all_pio_state_machines(pio0);
@@ -45,6 +49,7 @@ void pio_manager_destroy_all(void)
     pio_clear_instruction_memory(pio1);
 }
 
+CORE1_RAM_FUNC
 bool pio_manager_configure_capture(pio_config_t *config, bool full_speed)
 {
     /* Create a modifiable copy of the PIO program - CRITICAL */
@@ -141,6 +146,7 @@ bool pio_manager_configure_capture(pio_config_t *config, bool full_speed)
     return true;
 }
 
+CORE1_RAM_FUNC
 void pio_manager_stop_capture(pio_config_t *config)
 {
     if (!config->initialized)

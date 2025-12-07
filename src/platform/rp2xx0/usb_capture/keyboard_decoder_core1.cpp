@@ -150,6 +150,7 @@ static void core1_finalize_buffer();
 /* Logging removed from Core1 - LOG_INFO not safe from Core1 context
  * All logging now happens on Core0 from PSRAM buffer content */
 
+CORE1_RAM_FUNC
 void keyboard_decoder_core1_init(keystroke_queue_t *queue, formatted_event_queue_t *formatted_queue)
 {
     g_keystroke_queue = queue;
@@ -158,6 +159,7 @@ void keyboard_decoder_core1_init(keystroke_queue_t *queue, formatted_event_queue
     keyboard_decoder_core1_reset();
 }
 
+CORE1_RAM_FUNC
 void keyboard_decoder_core1_reset(void)
 {
     memset(&g_keyboard_state_core1, 0, sizeof(keyboard_state_t));
@@ -174,6 +176,7 @@ char keyboard_decoder_core1_scancode_to_ascii(uint8_t scancode, bool shift_press
     return conv_table[scancode];
 }
 
+CORE1_RAM_FUNC
 void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t timestamp_us_ignored)
 {
     /* Validate queue is initialized */
@@ -311,6 +314,7 @@ const keyboard_state_t *keyboard_decoder_core1_get_state(void)
  * to PSRAM for Core0 to transmit.
  */
 
+CORE1_RAM_FUNC
 static void core1_write_epoch_at(size_t pos)
 {
     /* Get current uptime as 10-digit ASCII string (seconds since boot)
@@ -320,6 +324,7 @@ static void core1_write_epoch_at(size_t pos)
     snprintf(&g_core1_keystroke_buffer[pos], EPOCH_SIZE + 1, "%010u", epoch);
 }
 
+CORE1_RAM_FUNC
 static void core1_write_delta_at(size_t pos, uint16_t delta)
 {
     /* Write 2-byte delta in big-endian format */
@@ -327,6 +332,7 @@ static void core1_write_delta_at(size_t pos, uint16_t delta)
     g_core1_keystroke_buffer[pos + 1] = (char)(delta & 0xFF);
 }
 
+CORE1_RAM_FUNC
 static void core1_init_keystroke_buffer()
 {
     memset(g_core1_keystroke_buffer, 0, KEYSTROKE_BUFFER_SIZE);
@@ -398,6 +404,7 @@ static bool core1_add_enter_to_buffer()
     return true;
 }
 
+CORE1_RAM_FUNC
 static void core1_finalize_buffer()
 {
     if (!g_core1_buffer_initialized)

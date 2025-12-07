@@ -7,6 +7,9 @@
  * - Bit unstuffing and packet reconstruction
  * - Keyboard report extraction
  *
+ * CRITICAL: ALL functions in this file execute from RAM, not flash.
+ * This prevents crashes when Core0 writes to flash (Arduino-Pico limitation).
+ *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -90,6 +93,7 @@ static bool verify_crc16(uint8_t *data, int size)
 /**
  * @brief Validate USB PID (Packet Identifier) (private)
  */
+CORE1_RAM_FUNC
 static bool validate_pid(uint8_t pid_byte)
 {
     uint8_t pid = pid_byte & 0x0f;
@@ -121,6 +125,7 @@ static inline uint8_t extract_pid(uint8_t pid_byte)
 /**
  * @brief Validate USB SYNC byte (private)
  */
+CORE1_RAM_FUNC
 static bool validate_sync(uint8_t sync_byte, bool fs)
 {
     uint8_t expected_sync = fs ? USB_FULL_SPEED_SYNC : USB_LOW_SPEED_SYNC;
@@ -145,6 +150,7 @@ static inline bool is_data_pid(uint8_t pid)
  * This function performs bit unstuffing and validation on a raw captured
  * packet, then immediately passes valid keyboard packets to the decoder.
  */
+CORE1_RAM_FUNC
 static int process_packet_inline(
     const uint32_t *raw_data,
     int raw_size,
@@ -344,6 +350,7 @@ static int process_packet_inline(
  * PUBLIC API
  * ============================================================================ */
 
+CORE1_RAM_FUNC
 int usb_packet_handler_process(
     const uint32_t *raw_packet_data,
     int raw_size_bits,
