@@ -238,21 +238,31 @@ void capture_controller_core1_main_v2(void)
         __dmb();  // Memory barrier - ensure we see Core0's write
         if (g_core1_pause_requested)
         {
+            /* Disable watchdog during pause - file operations may take > 4 seconds
+             * Use direct register access since SDK watchdog_disable() may not work
+             * reliably on RP2040/RP2350 (clear ENABLE bit at 0x40058000 + bit 30) */
+            volatile uint32_t *watchdog_ctrl = (volatile uint32_t *)0x40058000;
+            *watchdog_ctrl &= ~(1 << 30);
+
             /* Signal that we're paused */
             g_core1_paused = true;
             __dmb();  // Memory barrier - ensure write visible to Core0
 
-            /* Wait for resume signal while updating watchdog */
+            /* Wait for resume signal WITHOUT updating watchdog
+             * This allows Core0 filesystem operations to take as long as needed
+             * without triggering watchdog reset */
             while (g_core1_pause_requested)
             {
                 __dmb();  // Ensure we see Core0's resume signal
                 tight_loop_contents();
-                watchdog_update();
             }
 
             /* Signal that we've resumed */
             g_core1_paused = false;
             __dmb();  // Memory barrier - ensure write visible to Core0
+
+            /* Re-enable watchdog after resume */
+            watchdog_enable(4000, true);
             continue;
         }
 

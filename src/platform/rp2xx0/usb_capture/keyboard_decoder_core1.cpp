@@ -38,9 +38,25 @@ static const char hid_to_ascii_shift[128] = {
     '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
     '\n', 0, '\b', '\t', ' ', '_', '+', '{', '}', '|', 0, ':', '"', '~', '<', '>', '?'};
 
-/* HID keyboard modifier bits */
+/* HID keyboard modifier bits - USB HID 1.11 Specification
+ * Byte 0 of keyboard boot protocol report:
+ * Bit 0: Left Control
+ * Bit 1: Left Shift
+ * Bit 2: Left Alt
+ * Bit 3: Left GUI (Windows/Command key)
+ * Bit 4: Right Control
+ * Bit 5: Right Shift
+ * Bit 6: Right Alt
+ * Bit 7: Right GUI
+ */
+#define HID_MODIFIER_LEFT_CTRL (1 << 0)
 #define HID_MODIFIER_LEFT_SHIFT (1 << 1)
+#define HID_MODIFIER_LEFT_ALT (1 << 2)
+#define HID_MODIFIER_LEFT_GUI (1 << 3)
+#define HID_MODIFIER_RIGHT_CTRL (1 << 4)
 #define HID_MODIFIER_RIGHT_SHIFT (1 << 5)
+#define HID_MODIFIER_RIGHT_ALT (1 << 6)
+#define HID_MODIFIER_RIGHT_GUI (1 << 7)
 #define HID_MODIFIER_SHIFT_MASK (HID_MODIFIER_LEFT_SHIFT | HID_MODIFIER_RIGHT_SHIFT)
 
 /* Special HID scancodes */
@@ -270,6 +286,15 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                     event = keystroke_event_create_char(
                         ch, keycode, modifier, capture_timestamp_us);
                     keystroke_queue_push(g_keystroke_queue, &event);
+
+                    /* DEBUG: Add modifier marker to help diagnose shift issues
+                     * Prefix shifted characters with ^ so we can see if shift detection works
+                     * Example: "^A" means shift+a detected and converted to 'A'
+                     * TODO: Remove this debug code after shift is confirmed working */
+                    if (shift_pressed && core1_get_buffer_space() >= 2) {
+                        core1_add_to_buffer('^');  /* Shift marker */
+                    }
+
                     added = core1_add_to_buffer(ch);  /* Add to Core1 buffer */
                 }
             }

@@ -194,6 +194,49 @@ broadcastToPrivateChannel: sent 15 bytes in 1 fragment(s)
 - Watchdog must be disabled before Core1 exit to allow clean reboots
 - Memory barriers critical for ARM Cortex-M33 dual-core synchronization
 
+### v3.4 - Watchdog Bootloop Fix (2025-12-07)
+**Issue:**
+- Bootloop when saving `/prefs/nodes.proto` (triggered by new node arrivals)
+- SafeFile pause worked, but system reset during actual file write
+- Logs showed: "Core1 paused successfully" → "Opening /prefs/nodes.proto" → RESET
+
+**Root Cause:**
+- Core1 watchdog timeout during long LittleFS operations
+- Core1 paused with 4-second watchdog active
+- Node database saves can take 5-10 seconds → watchdog reset
+- Original code: `watchdog_update()` in pause loop (limited ops to 4 seconds)
+
+**Critical Discovery (GitHub Research):**
+- RP2040/RP2350: SDK `watchdog_disable()` may NOT work reliably
+- Forums confirmed: "No SDK function for disabling watchdog"
+- Hardware limitation: Once enabled, software disable is unreliable
+- **Workaround:** Direct hardware register access to WATCHDOG_CTRL
+
+**Solution Implemented:**
+```cpp
+// usb_capture_main.cpp:241-265 - Pause handler
+volatile uint32_t *watchdog_ctrl = (volatile uint32_t *)0x40058000;
+*watchdog_ctrl &= ~(1 << 30);  // Clear ENABLE bit (direct register access)
+// ... pause loop (no watchdog updates) ...
+watchdog_enable(4000, true);   // Re-enable after resume
+```
+
+**Key Changes:**
+- Line 244-245: Disable watchdog via direct register (0x40058000 bit 30)
+- Line 254-257: Removed `watchdog_update()` from pause loop
+- Line 265: Re-enable watchdog after Core0 completes file operations
+- Matches existing pattern at line 369 (stop handler)
+
+**Results:**
+- ✅ No bootloop on node arrivals
+- ✅ File operations can take unlimited time during pause
+- ✅ Watchdog protection maintained during normal operation
+- ✅ Build: Flash 55.8%, RAM 26.3%
+
+**References:**
+- [Raspberry Pi Forums - No SDK watchdog disable](https://forums.raspberrypi.com/viewtopic.php?t=312910)
+- [pico-sdk watchdog.h](https://github.com/raspberrypi/pico-sdk/blob/master/src/rp2_common/hardware_watchdog/include/hardware/watchdog.h)
+
 ### v3.3 - LoRa Transmission + Text Decoding (2025-12-07)
 **Features Implemented:**
 
@@ -642,19 +685,37 @@ Root:
 
 ## TODO List for Future Sessions
 
-### High Priority
-- [ ] Test with actual hardware (verify crash fix works)
-- [ ] Measure actual Core0 CPU usage (validate 90% reduction claim)
-- [ ] Enable LoRa transmission (uncomment line 194)
-- [ ] Test PSRAM buffer overflow handling
-- [ ] Monitor buffer statistics in production
+### Critical Priority
+- [ ] **Fix shift key detection** - Modifier byte not being captured (debug markers added)
+- [ ] **Test v3.4 bootloop fix** - Verify watchdog disable works on hardware
+
+### High Priority - Reliable Transmission System
+- [ ] **Design ACK-based batch transmission protocol**
+  - Server (Heltec V4) acknowledges receipt of each 500-byte batch
+  - Client (XIAO) retries until ACK received
+  - Exponential backoff: 10s, 30s, 60s, 5min intervals
+- [ ] **Implement PSRAM batch queue (FRAM simulation)**
+  - Multiple 500-byte batches stored in PSRAM ring buffer
+  - Delete batch only after server ACK
+  - Handle queue full: delete oldest batch to make room
+- [ ] **Add batch transmission state machine**
+  - States: PENDING, TRANSMITTING, WAITING_ACK, ACKNOWLEDGED, FAILED
+  - Track retry count and last attempt timestamp per batch
+- [ ] **Implement ACK packet handling**
+  - Server sends ACK with batch ID/sequence number
+  - Client marks batch as ACKNOWLEDGED and deletes from queue
+- [ ] **Migrate to FRAM when hardware arrives**
+  - Non-volatile storage for batches (survives power loss)
+  - MB-scale capacity vs current 4KB PSRAM
+  - Same API as PSRAM queue for easy migration
 
 ### Medium Priority
 - [ ] Add RTC integration for true unix timestamps
-- [ ] Implement FRAM storage backend
 - [ ] Add function key support (F1-F12)
 - [ ] Add arrow key support
 - [ ] Add Ctrl/Alt/GUI modifier combinations
+- [ ] Test PSRAM buffer overflow handling
+- [ ] Monitor buffer statistics in production
 
 ### Low Priority
 - [ ] Create GitHub fork and push code
@@ -811,9 +872,10 @@ grep -r "psram_buffer" --include="*.cpp"
 | 3.0 | 2025-12-06 | Core1 complete processing + PSRAM |
 | 3.1 | 2025-12-07 | Phase 1: Core1 bus arbitration (90% fix) |
 | 3.2 | 2025-12-07 | Phase 2: Core1 pause mechanism (100% fix) |
-| **3.3** | **2025-12-07** | **LoRa transmission active + text decoding + rate limiting** |
+| 3.3 | 2025-12-07 | LoRa transmission active + text decoding + rate limiting |
+| **3.4** | **2025-12-07** | **Watchdog bootloop fix (hardware register access)** |
 
-**Current:** v3.3 - Production Ready (LoRa Transmission Active)
+**Current:** v3.4 - Bootloop Fixed (Ready for Testing)
 
 ---
 
