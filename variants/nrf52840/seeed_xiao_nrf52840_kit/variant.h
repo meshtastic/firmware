@@ -28,7 +28,7 @@ Xiao pin assignments
 | D2    | NRST     | NRST | NRST | Busy  |     | 3v3   |         |      |      |       |
 | D3    | Busy     | Busy | CS   | NRST  |     | D10   | MOSI    | MOSI | MOSI | MOSI  |
 | D4    | CS       | CS   | RXEN | SDA   |     | D9    | MISO    | MISO | MISO | MISO  |
-| D5    | RXEN     | RXEN |      | SCL   |     | D8    | SCK     | SCK  | SCK  | SCK   |
+| D5    | RXEN     | RXEN |      | SCL   |     | D8    | SCK     | SCK  | SCK  | SCK   |
 | D6    | G_TX     | SDA  | G_TX |       |     | D7    | G_RX    | SCL  | G_RX | RXEN  |
 |       |          |      |      |       |     |       |         |      |      |       |
 |       | End      |      |      |       |     |       |         |      |      |       |
