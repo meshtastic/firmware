@@ -64,6 +64,16 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
+    // negotiate connections params as soon as possible
+
+    ble_gap_conn_params_t newParams;
+    newParams.min_conn_interval = 24;
+    newParams.max_conn_interval = 40;
+    newParams.slave_latency = 5;
+    newParams.conn_sup_timeout = 400;
+
+    sd_ble_gap_conn_param_update(conn_handle, &newParams);
+
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
