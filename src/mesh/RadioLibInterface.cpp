@@ -289,12 +289,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
                         assert(txp);
-                        bool sent = startSend(txp);
-                        if (sent) {
-                            // Packet has been sent, count it toward our TX airtime utilization.
-                            uint32_t xmitMsec = getPacketTime(txp);
-                            airTime->logAirtime(TX_LOG, xmitMsec);
-                        }
+                        startSend(txp);
                         LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
@@ -413,6 +408,10 @@ void RadioLibInterface::completeSending()
     sendingPacket = NULL;
 
     if (p) {
+        // Packet has been sent, count it toward our TX airtime utilization.
+        uint32_t xmitMsec = getPacketTime(p);
+        airTime->logAirtime(TX_LOG, xmitMsec);
+
         txGood++;
         if (!isFromUs(p))
             txRelay++;

@@ -40,7 +40,7 @@ jobs:
       checks: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -50,7 +50,7 @@ jobs:
 
       - name: Download test artifacts
         if: needs.native-tests.result != 'skipped'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}.zip
           merge-multiple: true
