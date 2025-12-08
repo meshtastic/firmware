@@ -1301,7 +1301,7 @@ bool Screen::isFrameHidden(const std::string &frameName) const
     if (frameName == "nodelist")
         return hiddenFrames.nodelist;
 #endif
-#ifdef ed(USE_EINK)
+#ifdef USE_EINK
     if (frameName == "nodelist_lastheard")
         return hiddenFrames.nodelist_lastheard;
     if (frameName == "nodelist_hopsignal")
