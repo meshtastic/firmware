@@ -671,16 +671,17 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         LOG_INFO("BLE conn %u initial MTU %u (target %u)", connHandle, connInfo.getMTU(), kPreferredBleMtu);
         pServer->updateConnParams(connHandle, 6, 12, 0, 200);
-#endif
     }
+#endif
 
+#ifdef NIMBLE_TWO
     virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
 #else
-virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
-{
-    LOG_INFO("BLE disconnect");
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    {
+        LOG_INFO("BLE disconnect");
 #endif
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
@@ -718,14 +719,14 @@ virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
         // Restart Advertising
         ble->startAdvertising();
 #else
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    if (!pAdvertising->start(0)) {
-        if (pAdvertising->isAdvertising()) {
-            LOG_DEBUG("BLE advertising already running");
-        } else {
-            LOG_ERROR("BLE failed to restart advertising");
+        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+        if (!pAdvertising->start(0)) {
+            if (pAdvertising->isAdvertising()) {
+                LOG_DEBUG("BLE advertising already running");
+            } else {
+                LOG_ERROR("BLE failed to restart advertising");
+            }
         }
-    }
 #endif
     }
 };
