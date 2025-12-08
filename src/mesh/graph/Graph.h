@@ -15,9 +15,11 @@ struct Edge {
     uint32_t lastUpdate; // Timestamp of last update
     float stability; // Stability weighting factor (1.0 = stable, lower = less stable)
     uint32_t variance; // Position variance - higher means more mobile/unreliable
+    enum class Source : uint8_t { Mirrored = 0, Reported = 1 };
+    Source source;
 
-    Edge(NodeNum f, NodeNum t, float e, uint32_t timestamp)
-        : from(f), to(t), etx(e), lastUpdate(timestamp), stability(1.0f), variance(0) {}
+    Edge(NodeNum f, NodeNum t, float e, uint32_t timestamp, Source s = Source::Mirrored)
+        : from(f), to(t), etx(e), lastUpdate(timestamp), stability(1.0f), variance(0), source(s) {}
 };
 
 struct Route {
@@ -78,7 +80,8 @@ public:
      * @param variance Position variance (0 = stationary/reliable, higher = mobile/unreliable)
      * @return EDGE_NO_CHANGE, EDGE_NEW, or EDGE_SIGNIFICANT_CHANGE
      */
-    int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0);
+    int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0,
+                   Edge::Source source = Edge::Source::Mirrored);
 
     /**
      * Remove edges that haven't been updated in the last 300 seconds
