@@ -3,7 +3,7 @@
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Repository:** Local fork of https://github.com/meshtastic/firmware
 **Platform:** XIAO RP2350-SX1262
-**Status:** v4.0 - RTC Integration Complete (Real Unix Epoch Timestamps)
+**Status:** v4.1 - Filesystem Timeout Detection (LittleFS Hang Diagnostics)
 **Last Updated:** 2025-12-07
 
 ---
@@ -94,9 +94,9 @@ upstream/master (Meshtastic official)
 ## Current Status
 
 ### Build Status
-✅ **SUCCESS** - Compiles cleanly (v4.0)
-- Flash: 55.9% (876,400 / 1,568,768 bytes)
-- RAM: 26.3% (137,892 / 524,288 bytes)
+✅ **SUCCESS** - Compiles cleanly (v4.1)
+- Flash: 56.0% (878,672 / 1,568,768 bytes)
+- RAM: 26.3% (137,896 / 524,288 bytes)
 - BUILD_EPOCH: 1765083600 (firmware compile timestamp)
 
 ### Known Issues
@@ -105,6 +105,7 @@ upstream/master (Meshtastic official)
 ✅ **FIXED** - LittleFS freeze on save (was: Core1 executing from flash during Core0 flash write)
 ✅ **FIXED** - Config save crash (was: Arduino-Pico FIFO conflict + flash execution)
 ✅ **FIXED** - Reboot loop after config (was: Core1 watchdog still armed during reboot)
+⚠️ **INVESTIGATING** - Potential LittleFS hang during node database saves (v4.1 adds diagnostics)
 
 ### Current Behavior
 - ✅ Core1 captures keystrokes via PIO
@@ -210,6 +211,76 @@ Keystroke buffer:
 **Documentation:**
 - `modules/RTC_INTEGRATION_DESIGN.md` - Complete design document
 - `modules/USBCaptureModule_Documentation.md` - Updated to v4.0
+
+---
+
+### v4.1 - Filesystem Timeout Detection (2025-12-07)
+**Issue:** Potential LittleFS hang during node database saves
+- Logs show: "Core1 paused successfully" → "Opening /prefs/nodes.proto" → (freeze/hang)
+- Similar to v3.4 symptom but watchdog fix was already applied
+- New root cause hypothesis: LittleFS operation itself hanging
+
+**Root Cause Analysis:**
+- Core1 pause mechanism working correctly ✓
+- Watchdog disabled during pause ✓
+- Memory barriers in place ✓
+- **Problem:** No timeout on LittleFS operations themselves
+- If `FSCom.open()` hangs indefinitely, system freezes (can't interrupt blocking call)
+
+**Solution Implemented - Diagnostic Timeout Detection:**
+
+**A. Timeout Infrastructure (SafeFile.cpp:10-53):**
+```cpp
+static volatile uint32_t g_fs_operation_start = 0;
+static constexpr uint32_t FS_OPERATION_TIMEOUT_MS = 10000;  // 10 seconds
+
+startFSOperationTimeout()   // Mark start of FS operation
+checkFSOperationTimeout()   // Returns true if >10s elapsed
+clearFSOperationTimeout()   // Reset tracking
+```
+
+**B. Protected Operations:**
+- `openFile()` - Timeout tracking around `FSCom.open()`, `FSCom.remove()`
+- `close()` - Timeout tracking around:
+  - `f.close()`
+  - `testReadback()` (open, read, close sequence)
+  - `FSCom.remove()` (old file deletion)
+  - `renameFile()` (.tmp → final)
+
+**C. Error Logging:**
+```cpp
+if (checkFSOperationTimeout()) {
+    LOG_ERROR("[SafeFile] Filesystem open() operation hung! File: %s", filename);
+    LOG_ERROR("[SafeFile] FILESYSTEM TIMEOUT after %lu ms! Possible FS corruption.");
+}
+// Core1 ALWAYS resumed regardless of timeout
+clearFSOperationTimeout();
+resumeCore1();
+```
+
+**Build Results:**
+- ✅ Compiles cleanly
+- Flash: 56.0% (878,672 / 1,568,768 bytes) - +2,272 bytes vs v4.0
+- RAM: 26.3% (137,896 / 524,288 bytes) - +4 bytes vs v4.0
+
+**Important Limitations:**
+⚠️ **This is diagnostic, NOT a true timeout:**
+- Cannot interrupt blocking LittleFS calls
+- Logs when operations take >10 seconds (helps identify issues)
+- If operation truly hangs forever, timeout check never reached
+- Primary purpose: Diagnose slow vs hung operations
+
+**Diagnostic Value:**
+If logs show timeout errors, indicates:
+1. **Filesystem corruption** - LittleFS internal structures damaged
+2. **Flash wear** - Bad sectors causing retry loops
+3. **Hardware issue** - Flash controller malfunction
+4. **Resource exhaustion** - LittleFS out of buffers
+
+**Status:** ⏸️ **Awaiting hardware testing** - Need real-world validation
+
+**Files Changed:**
+- `src/SafeFile.cpp` - Added timeout detection (+53 lines)
 
 ---
 
@@ -1052,9 +1123,11 @@ grep -r "psram_buffer" --include="*.cpp"
 | 3.2 | 2025-12-07 | Phase 2: Core1 pause mechanism (100% fix) |
 | 3.3 | 2025-12-07 | LoRa transmission active + text decoding + rate limiting |
 | 3.4 | 2025-12-07 | Watchdog bootloop fix (hardware register access) |
-| **3.5** | **2025-12-07** | **Critical fixes: Memory barriers + retry logic + modifiers** |
+| 3.5 | 2025-12-07 | Critical fixes: Memory barriers + retry logic + modifiers |
+| 4.0 | 2025-12-07 | RTC integration with mesh time sync (real unix epoch) |
+| **4.1** | **2025-12-07** | **Filesystem timeout detection (LittleFS hang diagnostics)** |
 
-**Current:** v3.5 - Critical Fixes Complete (Ready for Testing)
+**Current:** v4.1 - Filesystem Timeout Detection (Awaiting Hardware Testing)
 
 ---
 

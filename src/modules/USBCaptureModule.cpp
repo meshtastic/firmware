@@ -641,6 +641,8 @@ USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t 
         return CMD_STOP;
     } else if (strncmp(cmd, "STATS", 5) == 0) {
         return CMD_STATS;
+    } else if (strncmp(cmd, "DUMP", 4) == 0) {
+        return CMD_DUMP;
     }
 
     return CMD_UNKNOWN;
@@ -663,9 +665,14 @@ size_t USBCaptureModule::executeCommand(USBCaptureCommand cmd, char *response, s
         case CMD_STATS:
             return getStats(response, max_len);
 
+        case CMD_DUMP:
+            /* Trigger comprehensive PSRAM buffer dump to logs */
+            psram_buffer_dump();
+            return snprintf(response, max_len, "PSRAM buffer dump sent to logs");
+
         case CMD_UNKNOWN:
         default:
-            return snprintf(response, max_len, "UNKNOWN COMMAND. Valid: STATUS, START, STOP, STATS");
+            return snprintf(response, max_len, "UNKNOWN COMMAND. Valid: STATUS, START, STOP, STATS, DUMP");
     }
 }
 

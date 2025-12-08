@@ -70,6 +70,7 @@ enum USBCaptureCommand {
     CMD_START,       // "START"  - Start USB capture
     CMD_STOP,        // "STOP"   - Stop USB capture
     CMD_STATS,       // "STATS"  - Get detailed statistics
+    CMD_DUMP         // "DUMP"   - Dump complete PSRAM buffer state (debug)
 };
 
 /**

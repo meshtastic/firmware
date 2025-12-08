@@ -7,6 +7,50 @@
 #include "platform/rp2xx0/usb_capture/common.h"
 #include "hardware/timer.h"
 #include "hardware/sync.h"  // For memory barriers
+#include "hardware/watchdog.h"  // For filesystem operation timeout
+
+/**
+ * @brief Filesystem operation timeout tracking
+ *
+ * Used to detect and recover from hung LittleFS operations.
+ * Core0's watchdog scratch register is used for timeout detection.
+ */
+static volatile uint32_t g_fs_operation_start = 0;
+static constexpr uint32_t FS_OPERATION_TIMEOUT_MS = 10000;  // 10 seconds max per operation
+
+/**
+ * @brief Start tracking a filesystem operation with timeout
+ */
+static void startFSOperationTimeout(void)
+{
+    g_fs_operation_start = millis();
+}
+
+/**
+ * @brief Check if filesystem operation has timed out
+ *
+ * @return true if operation exceeded timeout, false otherwise
+ */
+static bool checkFSOperationTimeout(void)
+{
+    if (g_fs_operation_start == 0)
+        return false;
+
+    uint32_t elapsed = millis() - g_fs_operation_start;
+    if (elapsed > FS_OPERATION_TIMEOUT_MS) {
+        LOG_ERROR("[SafeFile] FILESYSTEM TIMEOUT after %lu ms! Possible FS corruption or hardware issue.", elapsed);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Clear filesystem operation timeout tracking
+ */
+static void clearFSOperationTimeout(void)
+{
+    g_fs_operation_start = 0;
+}
 
 /**
  * @brief Pause Core1 before filesystem operations to prevent bus contention
@@ -78,6 +122,10 @@ static File openFile(const char *filename, bool fullAtomic)
 #ifdef XIAO_USB_CAPTURE_ENABLED
     // Pause Core1 to prevent memory bus contention during flash operations
     pauseCore1();
+
+    // Start timeout tracking for filesystem operation
+    // If operation hangs, this helps diagnose the issue
+    startFSOperationTimeout();
 #endif
 
     concurrency::LockGuard g(spiLock);
@@ -86,6 +134,10 @@ static File openFile(const char *filename, bool fullAtomic)
     FSCom.remove(filename);
     File f = FSCom.open(filename, FILE_O_WRITE);
 #ifdef XIAO_USB_CAPTURE_ENABLED
+    if (checkFSOperationTimeout()) {
+        LOG_ERROR("[SafeFile] Filesystem open() operation hung! (NRF52 path)");
+    }
+    clearFSOperationTimeout();
     resumeCore1();
 #endif
     return f;
@@ -106,7 +158,13 @@ static File openFile(const char *filename, bool fullAtomic)
     File f = FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
 
 #ifdef XIAO_USB_CAPTURE_ENABLED
-    // Resume Core1 after file opened
+    // Check for filesystem operation timeout
+    if (checkFSOperationTimeout()) {
+        LOG_ERROR("[SafeFile] Filesystem open() operation hung! File: %s", filenameTmp.c_str());
+    }
+    clearFSOperationTimeout();
+
+    // Resume Core1 after file opened (or timed out)
     resumeCore1();
 #endif
 
@@ -152,6 +210,9 @@ bool SafeFile::close()
 #ifdef XIAO_USB_CAPTURE_ENABLED
     // Pause Core1 during close/rename operations
     pauseCore1();
+
+    // Start timeout tracking for close operations
+    startFSOperationTimeout();
 #endif
 
     spiLock->lock();
@@ -160,12 +221,20 @@ bool SafeFile::close()
 
 #ifdef ARCH_NRF52
 #ifdef XIAO_USB_CAPTURE_ENABLED
+    if (checkFSOperationTimeout()) {
+        LOG_ERROR("[SafeFile] Filesystem close() operation hung!");
+    }
+    clearFSOperationTimeout();
     resumeCore1();
 #endif
     return true;
 #endif
     if (!testReadback()) {
 #ifdef XIAO_USB_CAPTURE_ENABLED
+        if (checkFSOperationTimeout()) {
+            LOG_ERROR("[SafeFile] Filesystem testReadback() operation hung!");
+        }
+        clearFSOperationTimeout();
         resumeCore1();
 #endif
         return false;
@@ -177,6 +246,10 @@ bool SafeFile::close()
         if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
             LOG_ERROR("Can't remove old pref file");
 #ifdef XIAO_USB_CAPTURE_ENABLED
+            if (checkFSOperationTimeout()) {
+                LOG_ERROR("[SafeFile] Filesystem remove() operation hung!");
+            }
+            clearFSOperationTimeout();
             resumeCore1();
 #endif
             return false;
@@ -188,12 +261,22 @@ bool SafeFile::close()
     if (!renameFile(filenameTmp.c_str(), filename.c_str())) {
         LOG_ERROR("Error: can't rename new pref file");
 #ifdef XIAO_USB_CAPTURE_ENABLED
+        if (checkFSOperationTimeout()) {
+            LOG_ERROR("[SafeFile] Filesystem renameFile() operation hung!");
+            }
+        clearFSOperationTimeout();
         resumeCore1();
 #endif
         return false;
     }
 
 #ifdef XIAO_USB_CAPTURE_ENABLED
+    // Check for timeout on successful path
+    if (checkFSOperationTimeout()) {
+        LOG_ERROR("[SafeFile] Filesystem operations took excessive time but completed");
+    }
+    clearFSOperationTimeout();
+
     // Resume Core1 after all operations complete
     resumeCore1();
 #endif

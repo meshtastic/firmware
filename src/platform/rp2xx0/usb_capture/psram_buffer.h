@@ -160,6 +160,20 @@ bool psram_buffer_read(psram_keystroke_buffer_t *buffer);
  */
 uint32_t psram_buffer_get_count();
 
+/**
+ * @brief Dump complete PSRAM buffer state for debugging
+ *
+ * Outputs comprehensive view of PSRAM buffer:
+ * - Header information (magic, indices, counters, statistics)
+ * - All 8 slots with metadata and data preview
+ * - Raw hex dump of data for detailed inspection
+ *
+ * @note Thread-safe: Read-only operation
+ * @note Performance: May take several seconds due to extensive logging
+ * @note Should only be called from Core0 (uses LOG_INFO)
+ */
+void psram_buffer_dump();
+
 #ifdef __cplusplus
 }
 #endif
