@@ -404,6 +404,25 @@ void doLightSleep(uint32_t sleepMsec)
 #if defined(RESET_OLED)
     gpio_hold_en((gpio_num_t)RESET_OLED);
 #endif
+#if defined(KB_POWERON)
+    gpio_hold_en((gpio_num_t)KB_POWERON);
+#endif
+
+#if defined(TB_PRESS)
+    gpio_hold_en((gpio_num_t)TB_PRESS);
+#endif
+#if defined(TB_UP)
+    gpio_hold_en((gpio_num_t)TB_UP);
+#endif
+#if defined(TB_DOWN)
+    gpio_hold_en((gpio_num_t)TB_DOWN);
+#endif
+#if defined(TB_LEFT)
+    gpio_hold_en((gpio_num_t)TB_LEFT);
+#endif
+#if defined(TB_RIGHT)
+    gpio_hold_en((gpio_num_t)TB_RIGHT);
+#endif
 
 #ifdef ROTARY_PRESS
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
@@ -413,7 +432,7 @@ void doLightSleep(uint32_t sleepMsec)
     gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_LOW_LEVEL);
     assert(res == ESP_OK);
 #endif
-#if defined(INPUTDRIVER_ENCODER_BTN)
+#ifdef INPUTDRIVER_ENCODER_BTN
     res = gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_ENCODER_BTN, GPIO_INTR_LOW_LEVEL);
     assert(res == ESP_OK);
 #endif
@@ -516,17 +535,28 @@ void gpioReset()
         }
     }
 
-    // restore negative-edge interrupt triggers for input pins
+    // disable GPIO wakeup and restore interrupt triggers for extra input pins
+#ifdef ROTARY_PRESS
+    gpio_wakeup_disable((gpio_num_t)ROTARY_PRESS);
+    res = gpio_set_intr_type((gpio_num_t)ROTARY_PRESS, GPIO_INTR_ANYEDGE);
+    assert(res == ESP_OK);
+#endif
+#ifdef KB_INT
+    gpio_wakeup_disable((gpio_num_t)KB_INT);
+#endif
 #ifdef INPUTDRIVER_ENCODER_BTN
+    gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_ENCODER_BTN);
     res = gpio_set_intr_type((gpio_num_t)INPUTDRIVER_ENCODER_BTN, GPIO_INTR_NEGEDGE);
     assert(res == ESP_OK);
 #endif
 #ifdef WAKE_ON_TOUCH
+    gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
     res = gpio_set_intr_type((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_NEGEDGE);
     assert(res == ESP_OK);
 #endif
 #ifdef PMU_IRQ
     if (pmu_found) {
+        gpio_wakeup_disable((gpio_num_t)PMU_IRQ);
         res = gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
         assert(res == ESP_OK);
     }
@@ -545,6 +575,7 @@ void gpioReset()
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
         if (!rtc_gpio_is_valid_gpio(pin)) {
 #endif
+            gpio_wakeup_disable(pin);
             res = gpio_set_intr_type(pin, GPIO_INTR_POSEDGE);
             assert(res == ESP_OK);
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
@@ -569,6 +600,7 @@ void gpioReset()
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
         if (!rtc_gpio_is_valid_gpio(pin)) {
 #endif
+            gpio_wakeup_disable(pin);
             res = gpio_set_intr_type(pin, GPIO_INTR_ANYEDGE);
             assert(res == ESP_OK);
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
@@ -601,6 +633,7 @@ void enableButtonInterrupt()
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
     if (rtc_gpio_is_valid_gpio(pin)) {
         LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by ext1 source", pin);
+
 #ifdef BUTTON_NEED_PULLUP
         res = rtc_gpio_pullup_en(pin);
         assert(res == ESP_OK);
