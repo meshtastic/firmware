@@ -30,7 +30,7 @@ class Graph;
 #define MAX_SIGNAL_ROUTING_NEIGHBORS 10
 
 // Broadcast interval for signal routing info (2 minutes)
-#define SIGNAL_ROUTING_BROADCAST_SECS 30
+#define SIGNAL_ROUTING_BROADCAST_SECS 120
 
 // Speculative retransmit timeout (600ms)
 #define SPECULATIVE_RETRANSMIT_TIMEOUT_MS 600
