@@ -155,7 +155,7 @@ void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 // Called to trigger a banner with custom message and duration
 void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 {
-#if defined(USE_EINK)
+#ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     // Store the message and set the expiration timestamp
@@ -179,7 +179,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 // Called to trigger a banner with custom message and duration
 void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback)
 {
-#if defined(USE_EINK)
+#ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     nodeDB->pause_sort(true);
@@ -202,7 +202,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
                               std::function<void(uint32_t)> bannerCallback)
 {
-#if defined(USE_EINK)
+#ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     // Store the message and set the expiration timestamp
@@ -428,7 +428,7 @@ Screen::~Screen()
  */
 void Screen::doDeepSleep()
 {
-#if defined(USE_EINK)
+#ifdef USE_EINK
     setOn(false, graphics::UIRenderer::drawDeepSleepFrame);
 #else
     // Without E-Ink display:
@@ -503,7 +503,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             runASAP = true;
         } else {
             powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
-#if defined(USE_EINK)
+#ifdef USE_EINK
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
 #endif
@@ -735,7 +735,7 @@ void Screen::setOn(bool on, FrameCallback einkScreensaver)
 void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
-#if defined(USE_EINK)
+#ifdef USE_EINK
     // If requested, make sure queued commands are run, and UI has rendered a new frame
     if (forceUiUpdate) {
         // Force a display refresh, in addition to the UI update
@@ -863,7 +863,7 @@ int32_t Screen::runOnce()
             showingNormalScreen = false;
             NotificationRenderer::pauseBanner = true;
             alertFrames[0] = alertFrame;
-#if defined(USE_EINK)
+#ifdef USE_EINK
             EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
             EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
             handleSetOn(true); // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
@@ -950,7 +950,7 @@ void Screen::setSSLFrames()
     }
 }
 
-#if defined(USE_EINK)
+#ifdef USE_EINK
 /// Determine which screensaver frame to use, then set the FrameCallback
 void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 {
@@ -1061,7 +1061,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
 
-#if !defined(USE_EINK)
+#ifndef USE_EINK
     if (!hiddenFrames.nodelist) {
         fsi.positions.nodelist = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
@@ -1070,7 +1070,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
 // Show detailed node views only on E-Ink builds
-#if defined(USE_EINK)
+#ifdef USE_EINK
     if (!hiddenFrames.nodelist_lastheard) {
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
@@ -1257,12 +1257,12 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 
 void Screen::toggleFrameVisibility(const std::string &frameName)
 {
-#if !defined(USE_EINK)
+#ifndef USE_EINK
     if (frameName == "nodelist") {
         hiddenFrames.nodelist = !hiddenFrames.nodelist;
     }
 #endif
-#if defined(USE_EINK)
+#ifdef USE_EINK
     if (frameName == "nodelist_lastheard") {
         hiddenFrames.nodelist_lastheard = !hiddenFrames.nodelist_lastheard;
     }
@@ -1297,11 +1297,11 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
 
 bool Screen::isFrameHidden(const std::string &frameName) const
 {
-#if !defined(USE_EINK)
+#ifndef USE_EINK
     if (frameName == "nodelist")
         return hiddenFrames.nodelist;
 #endif
-#if defined(USE_EINK)
+#ifdef ed(USE_EINK)
     if (frameName == "nodelist_lastheard")
         return hiddenFrames.nodelist_lastheard;
     if (frameName == "nodelist_hopsignal")
@@ -1627,8 +1627,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         return 0;
     }
 
-#if defined(USE_EINK) // the screen is the last input handler, so if an event makes it here, we can assume it
-                      // will prompt a screen draw.
+#ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
     EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
     handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)

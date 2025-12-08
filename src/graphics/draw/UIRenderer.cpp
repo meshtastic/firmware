@@ -836,7 +836,7 @@ bool UIRenderer::haveGlyphs(const char *str)
     return have;
 }
 
-#if defined(USE_EINK)
+#ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 void UIRenderer::drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {

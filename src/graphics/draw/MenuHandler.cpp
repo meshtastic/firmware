@@ -1491,11 +1491,11 @@ void menuHandler::FrameToggles_menu()
     // Track last selected index (not enum value!)
     static int lastSelectedIndex = 0;
 
-#if !defined(USE_EINK)
+#ifndef USE_EINK
     optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
     optionsEnumArray[options++] = nodelist;
 #endif
-#if defined(USE_EINK)
+#ifdef USE_EINK
     optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
     optionsEnumArray[options++] = nodelist_lastheard;
     optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";

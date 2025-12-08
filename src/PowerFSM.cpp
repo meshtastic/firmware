@@ -353,7 +353,7 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
-#if defined(USE_EINK)
+#ifdef USE_EINK
     // Allow E-Ink devices to suppress the screensaver, if screen timeout set to 0
     if (config.display.screen_on_secs > 0)
 #endif

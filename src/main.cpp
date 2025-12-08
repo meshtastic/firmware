@@ -163,10 +163,6 @@ void setupNicheGraphics();
 SPIClass SPI1(HSPI);
 #endif
 
-#ifdef T5_S3_EPAPER_PRO
-extern void lateInitVariant_T5S3Pro(void);
-#endif
-
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};

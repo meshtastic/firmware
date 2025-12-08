@@ -72,7 +72,7 @@ class UIRenderer
     static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
-#if defined(USE_EINK)
+#ifdef USE_EINK
     /// Used on eink displays while in deep sleep
     static void drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
