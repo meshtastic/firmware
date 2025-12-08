@@ -74,10 +74,10 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     // Log packet size and data fields
     LOG_DEBUG("POSITION node=%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
-              "time=%d",
+              "time=%d loc_src=%d",
               getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
-              p.time);
+              p.time, p.location_source);
 
     if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
         bool force = false;
@@ -123,12 +123,16 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
+    LOG_INFO("trySetRtc: time=%u, isLocal=%d, location_source=%d, forceUpdate=%d",
+             p.time, isLocal, p.location_source, forceUpdate);
+
     if (hasQualityTimesource() && !isLocal) {
-        LOG_DEBUG("Ignore time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day");
+        LOG_INFO("Ignore time from mesh - already have quality time source");
         return;
     }
     if (!isLocal && p.location_source < meshtastic_Position_LocSource_LOC_INTERNAL) {
-        LOG_DEBUG("Ignore time from mesh because it has a unknown or manual source");
+        LOG_INFO("Ignore time from mesh - location_source=%d (need >=%d for LOC_INTERNAL)",
+                 p.location_source, meshtastic_Position_LocSource_LOC_INTERNAL);
         return;
     }
     struct timeval tv;

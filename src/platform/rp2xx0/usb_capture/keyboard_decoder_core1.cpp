@@ -19,6 +19,7 @@
 #include "formatted_event_queue.h"  /* For API compatibility (formatted_queue_t parameter) */
 #include "psram_buffer.h"
 #include "pico/time.h"  /* For time_us_64() */
+#include "gps/RTC.h"    /* For getValidTime(), getRTCQuality() - v4.0 RTC integration */
 #include <string.h>
 #include <stdio.h>
 #include <Arduino.h>
@@ -352,12 +353,62 @@ const keyboard_state_t *keyboard_decoder_core1_get_state(void)
  */
 
 CORE1_RAM_FUNC
+/**
+ * @brief Get current epoch timestamp with three-tier fallback system
+ *
+ * Priority 1: RTC with quality >= FromNet (mesh-synced, NTP, or GPS)
+ * Priority 2: BUILD_EPOCH + uptime (pseudo-absolute time)
+ * Priority 3: Uptime only (v3.5 fallback behavior)
+ *
+ * @return Unix epoch timestamp (or uptime if RTC unavailable)
+ *
+ * Examples:
+ * - With GPS: Returns 1733250000 (real unix epoch)
+ * - With mesh sync: Returns 1733250000 (mesh-synced time)
+ * - Without RTC, with BUILD_EPOCH: Returns 1765083600 + 10s = 1765083610
+ * - Without RTC, without BUILD_EPOCH: Returns 10 (uptime fallback)
+ */
+CORE1_RAM_FUNC
+static uint32_t core1_get_current_epoch()
+{
+    /* Priority 1: Try RTC with quality >= FromNet (mesh-synced or better)
+     * This gives us real unix epoch time if:
+     * - GPS is available (RTCQualityGPS)
+     * - NTP sync from phone app (RTCQualityNTP)
+     * - Time synced from another mesh node (RTCQualityFromNet)
+     */
+    uint32_t rtc_time = getValidTime(RTCQualityFromNet, false);
+    if (rtc_time > 0) {
+        return rtc_time;  /* Real unix epoch from RTC system */
+    }
+
+#ifdef BUILD_EPOCH
+    /* Priority 2: BUILD_EPOCH + uptime
+     * Provides pseudo-absolute time based on firmware build date
+     * Example: BUILD_EPOCH = 1765083600 (build time)
+     *          uptime = 10 seconds
+     *          result = 1765083610 (rough absolute time)
+     *
+     * Benefits:
+     * - Better than pure uptime (maintains rough absolute time)
+     * - Timestamps survive across reboots in relative sense
+     * - Can correlate with build date for debugging
+     */
+    uint32_t uptime_secs = (uint32_t)(millis() / 1000);
+    return BUILD_EPOCH + uptime_secs;
+#else
+    /* Priority 3: Fallback to uptime only (v3.5 behavior)
+     * Used when BUILD_EPOCH not defined (old build system)
+     * Delta encoding still works correctly with relative timestamps
+     */
+    return (uint32_t)(millis() / 1000);
+#endif
+}
+
 static void core1_write_epoch_at(size_t pos)
 {
-    /* Get current uptime as 10-digit ASCII string (seconds since boot)
-     * Note: This is uptime, not unix epoch. For true unix time, an RTC would be needed.
-     * The delta encoding still works correctly with relative timestamps. */
-    uint32_t epoch = (uint32_t)(millis() / 1000);
+    /* Get current epoch using hybrid RTC/BUILD_EPOCH/uptime fallback system (v4.0) */
+    uint32_t epoch = core1_get_current_epoch();
     snprintf(&g_core1_keystroke_buffer[pos], EPOCH_SIZE + 1, "%010u", epoch);
 }
 
@@ -375,8 +426,8 @@ static void core1_init_keystroke_buffer()
     memset(g_core1_keystroke_buffer, 0, KEYSTROKE_BUFFER_SIZE);
     g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
 
-    /* Store start epoch for delta calculations */
-    g_core1_buffer_start_epoch = (uint32_t)(millis() / 1000);
+    /* Store start epoch for delta calculations (v4.0: RTC/BUILD_EPOCH/uptime) */
+    g_core1_buffer_start_epoch = core1_get_current_epoch();
 
     /* Write start epoch at position 0 */
     core1_write_epoch_at(0);
@@ -427,8 +478,8 @@ static bool core1_add_enter_to_buffer()
         core1_init_keystroke_buffer();
     }
 
-    /* Calculate delta from buffer start */
-    uint32_t current_epoch = (uint32_t)(millis() / 1000);
+    /* Calculate delta from buffer start (v4.0: uses RTC/BUILD_EPOCH/uptime fallback) */
+    uint32_t current_epoch = core1_get_current_epoch();
     uint32_t delta = current_epoch - g_core1_buffer_start_epoch;
 
     /* If delta exceeds safe limit, force finalization and start fresh */

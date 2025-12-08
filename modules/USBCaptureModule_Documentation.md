@@ -1,8 +1,8 @@
 # USB Capture Module - Complete Documentation
 
-**Version:** 3.5 (Critical Fixes: Data Integrity + Modifier Keys)
+**Version:** 4.0 (RTC Integration with Mesh Time Sync)
 **Platform:** RP2350 (XIAO RP2350-SX1262)
-**Status:** Critical Fixes Complete - Ready for Testing
+**Status:** Production Ready - Validated on Hardware
 **Last Updated:** 2025-12-07
 
 ---
@@ -43,10 +43,13 @@ The USB Capture Module enables a Meshtastic device (RP2350) to capture USB keybo
 - **Text Decoding**: Binary buffers decoded to human-readable text for phone app display
 - **Rate-Limited Transmission**: 6-second intervals prevent mesh flooding
 - **Remote Control**: STATUS, START, STOP, STATS commands via mesh with input validation
-- **Full Modifier Support**: ✅ NEW - Captures Ctrl, Alt, GUI key combinations
-- **Transmission Retry**: ✅ NEW - 3 attempts with 100ms delays, 90% data loss reduction
-- **Comprehensive Statistics**: ✅ NEW - Tracks all failures (TX, overflow, PSRAM, retries)
-- **Memory Barriers**: ✅ NEW - ARM Cortex-M33 cache coherency guaranteed
+- **RTC Integration**: ✅ v4.0 - Real unix epoch timestamps with mesh time sync
+- **Three-Tier Time Fallback**: RTC → BUILD_EPOCH → uptime (graceful degradation)
+- **Mesh Time Sync**: Automatic synchronization from GPS-equipped nodes (RTCQualityFromNet)
+- **Full Modifier Support**: Captures Ctrl, Alt, GUI key combinations
+- **Transmission Retry**: 3 attempts with 100ms delays, 90% data loss reduction
+- **Comprehensive Statistics**: Tracks all failures (TX, overflow, PSRAM, retries)
+- **Memory Barriers**: ARM Cortex-M33 cache coherency guaranteed
 - **Delta-Encoded Timestamps**: Efficient buffer format with 70% space savings on Enter keys
 - **Named Constants**: All magic numbers replaced with documented constants
 - **Future-Ready**: Architecture prepared for FRAM + encrypted binary transmission
@@ -56,6 +59,88 @@ The USB Capture Module enables a Meshtastic device (RP2350) to capture USB keybo
 - Wireless keyboard data transmission
 - Secure typing capture for mesh networks
 - Field data entry relay systems
+
+---
+
+## RTC Integration (v4.0)
+
+### Three-Tier Time Fallback System
+
+The module uses a sophisticated timestamp acquisition system that automatically upgrades time quality:
+
+```
+Priority 1: Meshtastic RTC (Quality >= FromNet)
+    ↓ GPS-synced mesh time, NTP from phone, or GPS module
+Priority 2: BUILD_EPOCH + uptime
+    ↓ Firmware compile timestamp + device runtime
+Priority 3: Uptime only
+    ↓ Seconds since boot (v3.5 fallback)
+```
+
+### Time Source Quality Levels
+
+| Quality | Name | Source | Accuracy | Example |
+|---------|------|--------|----------|---------|
+| 4 | GPS | GPS satellite lock | ±1 second | Onboard GPS module |
+| 3 | NTP | Phone app time sync | ±1 second | Connected to Meshtastic app |
+| 2 | **Net** | **Mesh node with GPS** | **±2 seconds** | **Heltec V4 sync** |
+| 1 | Device | Onboard RTC chip | Variable | RTC battery-backed chip |
+| 0 | None | BUILD_EPOCH + uptime | ±build time | Standalone device |
+
+### Automatic Time Synchronization
+
+**Mesh Sync Example (Heltec V4 → XIAO RP2350):**
+
+```
+Boot (T=0s):
+  Quality: None(0)
+  Timestamp: BUILD_EPOCH + 0 = 1765083600
+  Log: "Time: BUILD_EPOCH+uptime=1765083600 (None quality=0)"
+
+Heltec V4 Position Received (T=60s):
+  Heltec has GPS lock, sends position with time=1765155260
+  XIAO receives, validates location_source=LOC_INTERNAL
+  RTC updated: quality=None(0) → Net(2)
+
+After Sync (T=70s):
+  Quality: Net(2)
+  Timestamp: 1765155270 (real unix epoch from mesh)
+  Log: "Time: RTC=1765155270 (Net quality=2) | uptime=70"
+
+Keystroke Buffer:
+  Start Time: 1765155270 (unix epoch from Net)
+  All subsequent keystrokes use GPS-synced time
+```
+
+### Implementation Details
+
+**Core1 Function (`core1_get_current_epoch()`):**
+```cpp
+// Try Meshtastic RTC first
+uint32_t rtc_time = getValidTime(RTCQualityFromNet, false);
+if (rtc_time > 0) return rtc_time;
+
+// Fallback to BUILD_EPOCH + uptime
+#ifdef BUILD_EPOCH
+    return BUILD_EPOCH + (millis() / 1000);
+#else
+    return (millis() / 1000);  // Final fallback
+#endif
+```
+
+**Used By:**
+- `core1_init_keystroke_buffer()` - Sets buffer start epoch
+- `core1_add_enter_to_buffer()` - Calculates delta from start
+- `core1_write_epoch_at()` - Writes epoch to buffer positions
+
+### Benefits
+
+- ✅ **Real unix epoch** when mesh-synced (forensic accuracy)
+- ✅ **BUILD_EPOCH fallback** better than pure uptime (rough absolute time)
+- ✅ **Graceful degradation** works standalone or on mesh
+- ✅ **No breaking changes** - buffer format unchanged
+- ✅ **Automatic upgrade** when GPS node joins mesh
+- ✅ **Full visibility** via statistics logs every 20 seconds
 
 ---
 
@@ -433,8 +518,8 @@ psram_buffer_t (4128 bytes total):
   │  └─ dropped_buffers: overflow counter
   │
   └─ slots[8] (512 bytes each = 4096 bytes)
-     ├─ start_epoch: buffer start time (uptime seconds)
-     ├─ final_epoch: buffer end time (uptime seconds)
+     ├─ start_epoch: buffer start time (v4.0: RTC/BUILD_EPOCH/uptime)
+     ├─ final_epoch: buffer end time (v4.0: RTC/BUILD_EPOCH/uptime)
      ├─ data_length: actual data bytes (0-504)
      ├─ flags: reserved for future use
      └─ data[504]: keystroke data with delta encoding
@@ -1303,6 +1388,35 @@ INFO | Keystroke: CHAR 'g' (scancode=0x0a, mod=0x00)
 ---
 
 ## Future Enhancements
+
+### v4.0: RTC Integration (Priority 1)
+**Status:** ✅ COMPLETE - Validated on Hardware (2025-12-07)
+
+**Implemented:**
+- ✅ Three-tier fallback system (RTC → BUILD_EPOCH → uptime)
+- ✅ Mesh time synchronization from GPS-equipped nodes (RTCQualityFromNet)
+- ✅ Automatic quality upgrade monitoring (None → Net → GPS)
+- ✅ Enhanced statistics logging with time source and quality display
+- ✅ BUILD_EPOCH fallback for standalone operation
+- ✅ Real unix epoch timestamps when mesh-synced
+
+**Hardware Validation:**
+- ✅ BUILD_EPOCH fallback: 1765083600 + uptime during boot
+- ✅ Mesh sync from Heltec V4: Quality upgraded None(0) → Net(2)
+- ✅ Real timestamps: 1765155817 (unix epoch) vs 1765083872 (BUILD_EPOCH)
+- ✅ Delta encoding: Working correctly with RTC time (+18s for Enter)
+- ✅ Time progression: 1:1 correlation with uptime verified
+
+**Files Modified:**
+- `keyboard_decoder_core1.cpp` - Added `core1_get_current_epoch()` with RTC/BUILD_EPOCH/uptime fallback
+- `USBCaptureModule.cpp` - Enhanced logging with time source and RTC quality display
+- `PositionModule.cpp` - Added location_source logging for debugging
+
+**Benefits:**
+- Real forensic timestamps when connected to GPS-equipped mesh nodes
+- Better absolute time reference with BUILD_EPOCH fallback
+- Automatic synchronization without configuration
+- Full backwards compatibility
 
 ### Phase 5: Mesh Transmission (Priority 1)
 **Status:** ✅ COMPLETE (v2.1 - 2025-12-05)

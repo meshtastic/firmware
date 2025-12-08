@@ -79,6 +79,7 @@
 #include "../platform/rp2xx0/usb_capture/psram_buffer.h"
 #include "configuration.h"
 #include "pico/multicore.h"
+#include "gps/RTC.h"  /* For getRTCQuality(), RtcName() - v4.0 RTC logging */
 #include <Arduino.h>
 #include <cstring>
 
@@ -273,12 +274,27 @@ void USBCaptureModule::processPSRAMBuffers()
     /* Process only ONE buffer per call to avoid flooding */
     if (psram_buffer_read(&buffer))
     {
-        LOG_INFO("[Core0] Transmitting buffer: %u bytes (uptime %u → %u seconds)",
+        /* Get RTC quality for logging (v4.0) */
+        RTCQuality rtc_quality = getRTCQuality();
+        const char *time_source = RtcName(rtc_quality);
+
+        LOG_INFO("[Core0] Transmitting buffer: %u bytes (epoch %u → %u)",
                 buffer.data_length, buffer.start_epoch, buffer.final_epoch);
+        LOG_INFO("[Core0] Time source: %s (quality=%d)", time_source, rtc_quality);
 
         /* Log buffer content for debugging */
         LOG_INFO("=== BUFFER START ===");
-        LOG_INFO("Start Time: %u seconds (uptime since boot)", buffer.start_epoch);
+        if (rtc_quality >= RTCQualityFromNet) {
+            LOG_INFO("Start Time: %u (unix epoch from %s)", buffer.start_epoch, time_source);
+        } else {
+#ifdef BUILD_EPOCH
+            LOG_INFO("Start Time: %u (BUILD_EPOCH + uptime: %u + %u)",
+                    buffer.start_epoch, (uint32_t)BUILD_EPOCH,
+                    buffer.start_epoch - (uint32_t)BUILD_EPOCH);
+#else
+            LOG_INFO("Start Time: %u seconds (uptime since boot)", buffer.start_epoch);
+#endif
+        }
 
         /* Log data in chunks to avoid line length issues */
         char line_buffer[MAX_LINE_BUFFER_SIZE];
@@ -436,8 +452,32 @@ void USBCaptureModule::processPSRAMBuffers()
         uint32_t retries = g_psram_buffer.header.retry_attempts;
         __dmb();
 
+        /* Get current RTC quality and time for monitoring (v4.0) */
+        RTCQuality current_quality = getRTCQuality();
+        uint32_t meshtastic_time = getTime(false);  // Meshtastic RTC system time
+        uint32_t uptime = (uint32_t)(millis() / 1000);
+        const char *quality_name = RtcName(current_quality);
+
+        /* Calculate what Core1 is actually using for timestamps */
+        uint32_t core1_time;
+        const char *time_source_desc;
+        if (current_quality >= RTCQualityFromNet) {
+            core1_time = meshtastic_time;
+            time_source_desc = "RTC";
+        } else {
+#ifdef BUILD_EPOCH
+            core1_time = BUILD_EPOCH + uptime;
+            time_source_desc = "BUILD_EPOCH+uptime";
+#else
+            core1_time = uptime;
+            time_source_desc = "uptime";
+#endif
+        }
+
         LOG_INFO("[Core0] PSRAM: %u avail, %u tx, %u drop | Failures: %u tx, %u overflow, %u psram | Retries: %u",
                 available, transmitted, dropped, tx_failures, overflows, psram_failures, retries);
+        LOG_INFO("[Core0] Time: %s=%u (%s quality=%d) | uptime=%u",
+                time_source_desc, core1_time, quality_name, current_quality, uptime);
 
         /* Log warnings for critical failures */
         if (tx_failures > 0)
@@ -446,7 +486,7 @@ void USBCaptureModule::processPSRAMBuffers()
         }
         if (overflows > 0)
         {
-            LOG_WARN("[Core0] WARNING: %u buffer overflows - keystroke data may be lost", overflows);
+            LOG_WARN("[Core0] INFO: %u buffer overflows (emergency finalized - data preserved)", overflows);
         }
         if (psram_failures > 0)
         {

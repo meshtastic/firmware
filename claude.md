@@ -3,7 +3,7 @@
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Repository:** Local fork of https://github.com/meshtastic/firmware
 **Platform:** XIAO RP2350-SX1262
-**Status:** v3.5 - Critical Fixes Complete (Data Integrity + Modifier Keys)
+**Status:** v4.0 - RTC Integration Complete (Real Unix Epoch Timestamps)
 **Last Updated:** 2025-12-07
 
 ---
@@ -94,9 +94,10 @@ upstream/master (Meshtastic official)
 ## Current Status
 
 ### Build Status
-✅ **SUCCESS** - Compiles cleanly
-- Flash: 55.7% (874,240 / 1,568,768 bytes)
-- RAM: 26.2% (137,616 / 524,288 bytes) - Core1 code in RAM (+0.5%)
+✅ **SUCCESS** - Compiles cleanly (v4.0)
+- Flash: 55.9% (876,400 / 1,568,768 bytes)
+- RAM: 26.3% (137,892 / 524,288 bytes)
+- BUILD_EPOCH: 1765083600 (firmware compile timestamp)
 
 ### Known Issues
 ✅ **FIXED** - Crash on keystroke (was: LOG_INFO not thread-safe from Core1)
@@ -113,24 +114,104 @@ upstream/master (Meshtastic official)
 - ✅ **Core0 transmission ACTIVE** - Broadcasting over LoRa mesh
 - ✅ Rate-limited to 6-second intervals
 - ✅ Remote commands (STATUS, START, STOP, STATS) working
+- ✅ **RTC Integration ACTIVE** - Real unix epoch timestamps from mesh sync
 
-**Log Output:**
+**Log Output (v4.0 with RTC sync):**
 ```
-[Core0] Transmitting buffer: 6 bytes (uptime 318 → 319 seconds)
+[Core0] Transmitting buffer: 46 bytes (epoch 1765155817 → 1765155836)
+[Core0] Time source: Net (quality=2)
 === BUFFER START ===
-Start Time: 318 seconds (uptime since boot)
-Enter [time=318 seconds, delta=+0]
-Line: tdr
-Final Time: 319 seconds (uptime since boot)
+Start Time: 1765155817 (unix epoch from Net)
+Line: how are you donb tjskjbfdsgsfhope tdiuhgdf
+Enter [time=1765155835 seconds, delta=+18]
+Line: d
+Final Time: 1765155836 seconds (uptime since boot)
 === BUFFER END ===
-[Core0] Transmitted decoded text (15 bytes)
-Sent fragment 0: 15 bytes to channel 1
-broadcastToPrivateChannel: sent 15 bytes in 1 fragment(s)
+Sent fragment 0: 64 bytes to channel 1
+broadcastToPrivateChannel: sent 64 bytes in 1 fragment(s)
+[Core0] Transmitted decoded text (64 bytes)
+```
+
+**Statistics Output (every 20 seconds):**
+```
+[Core0] PSRAM: 0 avail, 2 tx, 0 drop | Failures: 0 tx, 0 overflow, 0 psram | Retries: 0
+[Core0] Time: RTC=1765155823 (Net quality=2) | uptime=202
 ```
 
 ---
 
 ## Recent Development History
+
+### v4.0 - RTC Integration (2025-12-07)
+**Feature:** Replace uptime timestamps with real unix epoch timestamps
+
+**Implementation:** Three-Tier Fallback System
+```cpp
+Priority 1: RTC (RTCQualityFromNet or better) → Real unix epoch
+Priority 2: BUILD_EPOCH + uptime → Pseudo-absolute time
+Priority 3: Uptime only → v3.5 fallback behavior
+```
+
+**Changes:**
+1. **New Function - `core1_get_current_epoch()`:**
+   - `keyboard_decoder_core1.cpp:372-406`
+   - Checks `getValidTime(RTCQualityFromNet)` for mesh-synced time
+   - Falls back to `BUILD_EPOCH + uptime` if RTC unavailable
+   - Final fallback to uptime (v3.5 behavior)
+
+2. **Updated Functions:**
+   - `core1_init_keystroke_buffer()` - Uses RTC for start epoch
+   - `core1_add_enter_to_buffer()` - Uses RTC for delta calculation
+   - `core1_write_epoch_at()` - Calls new function for all epoch writes
+
+3. **Enhanced Logging - Core0:**
+   - `USBCaptureModule.cpp:277-297`
+   - Shows RTC quality: "Time source: GPS (quality=4)"
+   - Distinguishes between real epoch vs BUILD_EPOCH+uptime vs uptime
+   - Helps debug time synchronization issues
+
+**Build Results:**
+- ✅ Compiles cleanly
+- Flash: 55.9% (876,400 / 1,568,768 bytes) - +2,160 bytes vs v3.5
+- RAM: 26.3% (137,892 / 524,288 bytes) - No change
+
+**Status:** ✅ **VALIDATED on hardware** - Mesh time sync working perfectly
+
+**Hardware Test Results (2025-12-07):**
+- ✅ **Boot Test:** BUILD_EPOCH fallback active (1765083600 + uptime)
+- ✅ **Mesh Sync Test:** Heltec V4 GPS → RTCQualityFromNet upgrade confirmed
+- ✅ **Quality Transition:** None(0) → Net(2) observed in logs
+- ✅ **Timestamp Accuracy:** Real unix epoch (1765155817) vs BUILD_EPOCH
+- ✅ **Delta Encoding:** Working with RTC time (+18s for Enter key)
+- ✅ **Time Progression:** 1:1 correlation with uptime verified
+- ✅ **Keystroke Transmission:** 46-byte buffer with RTC timestamps transmitted
+
+**Observed Behavior:**
+```
+Initial boot (quality=None):
+  Time: BUILD_EPOCH+uptime=1765083872 (None quality=0)
+
+After Heltec V4 sync (quality=Net):
+  Time: RTC=1765155823 (Net quality=2) | uptime=202
+
+Keystroke buffer:
+  Start Time: 1765155817 (unix epoch from Net)
+  Enter [time=1765155835, delta=+18]
+  Final Time: 1765155836
+```
+
+**Benefits Confirmed:**
+- ✅ Real unix epoch timestamps from mesh-synced Heltec V4 GPS
+- ✅ BUILD_EPOCH fallback working during boot (before sync)
+- ✅ Automatic quality upgrade visible in statistics logs
+- ✅ No breaking changes - graceful degradation working
+- ✅ Enhanced diagnostics showing time source and quality
+
+**Documentation:**
+- `modules/RTC_INTEGRATION_DESIGN.md` - Complete design document
+- `modules/USBCaptureModule_Documentation.md` - Updated to v4.0
+
+---
 
 ### v3.2 - Complete Multi-Core Flash Solution (2025-12-07)
 **Issues:**
