@@ -295,6 +295,7 @@ bool GraphLite::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum he
 
     const NodeEdgesLite *myEdges = findNode(myNode);
     const NodeEdgesLite *sourceEdges = findNode(sourceNode);
+    const NodeEdgesLite *relayEdges = (heardFrom == sourceNode) ? nullptr : findNode(heardFrom);
 
     if (!myEdges || myEdges->edgeCount == 0) {
         return false; // We have no neighbors, no point relaying
@@ -308,11 +309,20 @@ bool GraphLite::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum he
             continue; // They already have the packet
         }
 
-        // Check if source has direct connection to this neighbor
+        // Check if source or relayer has direct connection to this neighbor
         bool sourceHasIt = false;
         if (sourceEdges) {
             for (uint8_t j = 0; j < sourceEdges->edgeCount; j++) {
                 if (sourceEdges->edges[j].to == neighbor) {
+                    sourceHasIt = true;
+                    break;
+                }
+            }
+        }
+
+        if (relayEdges && !sourceHasIt) {
+            for (uint8_t j = 0; j < relayEdges->edgeCount; j++) {
+                if (relayEdges->edges[j].to == neighbor) {
                     sourceHasIt = true;
                     break;
                 }

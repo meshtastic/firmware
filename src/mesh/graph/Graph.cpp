@@ -445,6 +445,25 @@ bool Graph::shouldRelay(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, u
         }
     }
 
+    // If the upstream relayer already reaches everyone we can reach, do not relay.
+    {
+        std::unordered_set<NodeNum> emptyCovered;
+        auto myCoverage = getCoverageIfRelays(myNode, emptyCovered);
+        if (heardFrom != 0) {
+            auto relayerCoverage = getCoverageIfRelays(heardFrom, emptyCovered);
+            bool redundant = !myCoverage.empty();
+            for (NodeNum n : myCoverage) {
+                if (relayerCoverage.find(n) == relayerCoverage.end()) {
+                    redundant = false;
+                    break;
+                }
+            }
+            if (redundant) {
+                return false;
+            }
+        }
+    }
+
     // Get all nodes that heard this packet (source's neighbors + relayer's neighbors)
     // These are the candidates who could relay
     std::unordered_set<NodeNum> candidates;
