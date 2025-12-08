@@ -1122,8 +1122,7 @@ int32_t CannedMessageModule::runOnce()
         // Clean up virtual keyboard if needed when going inactive
         if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr) {
             LOG_INFO("Performing delayed virtual keyboard cleanup");
-            delete graphics::NotificationRenderer::virtualKeyboard;
-            graphics::NotificationRenderer::virtualKeyboard = nullptr;
+            graphics::OnScreenKeyboardModule::instance().stop(false);
         }
 
         return INT32_MAX;
@@ -1139,9 +1138,7 @@ int32_t CannedMessageModule::runOnce()
             // Clean up virtual keyboard after sending
             if (graphics::NotificationRenderer::virtualKeyboard) {
                 LOG_INFO("Cleaning up virtual keyboard after message send");
-                delete graphics::NotificationRenderer::virtualKeyboard;
-                graphics::NotificationRenderer::virtualKeyboard = nullptr;
-                graphics::NotificationRenderer::textInputCallback = nullptr;
+                graphics::OnScreenKeyboardModule::instance().stop(false);
                 graphics::NotificationRenderer::resetBanner();
             }
 
@@ -1194,9 +1191,7 @@ int32_t CannedMessageModule::runOnce()
         // Clean up virtual keyboard if it exists during timeout
         if (graphics::NotificationRenderer::virtualKeyboard) {
             LOG_INFO("Cleaning up virtual keyboard due to module timeout");
-            delete graphics::NotificationRenderer::virtualKeyboard;
-            graphics::NotificationRenderer::virtualKeyboard = nullptr;
-            graphics::NotificationRenderer::textInputCallback = nullptr;
+            graphics::OnScreenKeyboardModule::instance().stop(false);
             graphics::NotificationRenderer::resetBanner();
         }
 
