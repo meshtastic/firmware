@@ -44,7 +44,7 @@ using namespace STM32_LittleFS_Namespace;
 #if defined(USE_EXTERNAL_FLASH)
 // nRF52 version with external flash
 #include "SdFat_Adafruit_Fork.h"
-#include "ff.h"
+#include "mesh/fatfs_ff.h"
 #include "diskio.h"
 #include <Adafruit_SPIFlash.h>
 #include <SPI.h>
@@ -75,6 +75,6 @@ void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
 #ifdef USE_EXTERNAL_FLASH
-void check_fat12();
-void format_fat12();
+bool check_fat12();
+bool format_fat12();
 #endif

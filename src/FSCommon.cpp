@@ -21,6 +21,9 @@ FatVolume fatfs;
 bool flashInitialized = false;
 bool fatfsMounted = false;
 #endif
+// External flash is only present on a subset of nRF52 boards, but when enabled we share
+// this single FatFs instance across the entire firmware so every helper touches the same
+// QSPI-backed block device via the Adafruit SPIFlash shim above.
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
@@ -47,14 +50,17 @@ SPIClass SPI_HSPI(HSPI);
  * @return true if the file was successfully copied, false otherwise.
  */
 #ifdef USE_EXTERNAL_FLASH
-void format_fat12(void)
+bool format_fat12(void)
 {
-    concurrency::LockGuard g(spiLock);
-// Working buffer for f_mkfs.
+    spiLock->lock();
+    // This is an emergency formatter that rewrites the external flash with a clean FAT12
+    // volume so the higher level preference code can start dropping files immediately
+
+    // Working buffer for f_mkfs lives in static storage to avoid stack blowups on small RTOS tasks
 #ifdef __AVR__
-    uint8_t workbuf[512];
+    static uint8_t workbuf[512];
 #else
-    uint8_t workbuf[4096];
+    static uint8_t workbuf[4096];
 #endif
 
     // Elm Cham's fatfs objects
@@ -64,16 +70,16 @@ void format_fat12(void)
     FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
     if (r != FR_OK) {
         LOG_ERROR("Error, f_mkfs failed");
-        while (1)
-            delay(1);
+        spiLock->unlock();
+        return false;
     }
 
     // mount to set disk label
     r = f_mount(&elmchamFatfs, "0:", 1);
     if (r != FR_OK) {
         LOG_ERROR("Error, f_mount failed");
-        while (1)
-            delay(1);
+        spiLock->unlock();
+        return false;
     }
 
     // Setting label
@@ -81,8 +87,8 @@ void format_fat12(void)
     r = f_setlabel(DISK_LABEL);
     if (r != FR_OK) {
         LOG_ERROR("Error, f_setlabel failed");
-        while (1)
-            delay(1);
+        spiLock->unlock();
+        return false;
     }
 
     // unmount
@@ -92,17 +98,23 @@ void format_fat12(void)
     flash.syncBlocks();
 
     LOG_INFO("Formatted flash!");
+    spiLock->unlock();
+    return true;
 }
 
-void check_fat12(void)
+bool check_fat12(void)
 {
-    concurrency::LockGuard g(spiLock);
+    spiLock->lock();
+    // After formatting (or on first boot) make sure the freshly created filesystem actually
+    // mounts against the shared FatVolume instance before the rest of the stack uses it.
     // Check new filesystem
     if (!fatfs.begin(&flash)) {
         LOG_ERROR("Error, failed to mount newly formatted filesystem!");
-        while (1)
-            delay(1);
+        spiLock->unlock();
+        return false;
     }
+    spiLock->unlock();
+    return true;
 }
 #endif
 
@@ -111,6 +123,8 @@ bool copyFile(const char *from, const char *to)
 #ifdef USE_EXTERNAL_FLASH
     // take SPI Lock
     concurrency::LockGuard g(spiLock);
+    // External flash path uses the lightweight FatFile API because SdFat works directly
+    // on the FatVolume we own above; this avoids instantiating the Arduino FS shim here.
     unsigned char cbuffer[16];
 
     FatFile f1;
@@ -176,6 +190,8 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #ifdef USE_EXTERNAL_FLASH
 // take SPI Lock
     spiLock->lock();
+    // FatVolume::rename manipulates directory entries in place which is much faster than
+    // copy/remove when the QSPI flash already exposes FAT semantics.
     bool result = fatfs.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
@@ -323,6 +339,8 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                 if (del) {
                     LOG_DEBUG("Remove %s", path);
                     file.close();
+                    // FatVolume::rmdir is the only recursive delete we have, so walk depth
+                    // first and remove directories once their contents have been handled.
                     fatfs.rmdir(path);
                     continue;
                 }
@@ -332,6 +350,8 @@ void listDir(const char *dirname, uint8_t levels, bool del)
             if (del) {
                 LOG_DEBUG("Delete %s", path);
                 file.close();
+                // FatVolume::remove issues the low level FAT delete, ensuring we do not
+                // leave orphaned clusters on the external flash.
                 fatfs.remove(path);
                 continue;
             } else {
@@ -488,15 +508,16 @@ void fsInit()
         flashInitialized = true;
     }
     LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-    // format_fat12();
-    check_fat12();
+    //format_fat12();
+    if (!check_fat12()) {
+        LOG_ERROR("check_fat12 failed during fsInit");
+        return;
+    }
     // LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
     if (!fatfsMounted) {
         if (!fatfs.begin(&flash)) {
             LOG_ERROR("Error, failed to mount filesystem!");
-            while (1) {
-                delay(1);
-            }
+            return;
         }
         fatfsMounted = true;
         LOG_INFO("Filesystem mounted!");
