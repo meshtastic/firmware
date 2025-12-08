@@ -283,7 +283,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #ifdef UNPHONE
     unphone.rgb(red, green, blue);
 #endif
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
     if (on) {
         drv.go();
     } else {
@@ -320,7 +320,7 @@ void ExternalNotificationModule::stopNow()
         externalTurnedOn[i] = 0;
     }
     setIntervalFromNow(0);
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
     drv.stop();
 #endif
 
