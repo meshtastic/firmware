@@ -696,6 +696,16 @@ void enableLoraInterrupt()
     gpio_hold_en((gpio_num_t)LORA_RESET);
 #endif
 
+#if defined(USE_GC1109_PA)
+    gpio_set_level((gpio_num_t)LORA_PA_POWER, 1);
+    gpio_set_level((gpio_num_t)LORA_PA_EN, 1);
+    gpio_set_level((gpio_num_t)LORA_PA_TX_EN, 0);
+
+    gpio_hold_en((gpio_num_t)LORA_PA_POWER);
+    gpio_hold_en((gpio_num_t)LORA_PA_EN);
+    gpio_hold_en((gpio_num_t)LORA_PA_TX_EN);
+#endif
+
 #if SOC_PM_SUPPORT_EXT_WAKEUP
     if (rtc_gpio_is_valid_gpio(pin)) {
         LOG_DEBUG("Setup radio interrupt (GPIO%02d) with wakeup by ext0 source", pin);
