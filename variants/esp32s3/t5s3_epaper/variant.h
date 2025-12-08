@@ -4,6 +4,9 @@
 #define EPD_WIDTH 960
 #define EPD_HEIGHT 540
 
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+#define USE_VIRTUAL_KEYBOARD 1
+
 #if defined(T5_S3_EPAPER_PRO_V1)
 #define BOARD_BL_EN 40
 #else
@@ -37,10 +40,12 @@
 #define GPS_TX_PIN 43
 #endif
 
-#define BUTTON_PIN 0
 #if defined(T5_S3_EPAPER_PRO_V1)
-#define PIN_BUTTON2 48
+#define BUTTON_PIN 48
+#define PIN_BUTTON2 0
 #define ALT_BUTTON_PIN PIN_BUTTON2
+#else
+#define BUTTON_PIN 0
 #endif
 
 // SD card
