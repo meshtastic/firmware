@@ -62,10 +62,6 @@ class PowerFSMEventProcessor
 
 extern Fsm powerFSM;
 extern State stateON, statePOWER, stateSERIAL, stateDARK;
-extern PowerFSMEventProcessor powerFSMEventProcessor;
-#if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
-extern CallbackObserver<PowerFSMEventProcessor, const InputEvent *> powerFsmInputObserver;
-#endif
 
 void PowerFSM_setup();
 #endif

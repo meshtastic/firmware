@@ -248,6 +248,21 @@ static void bootEnter()
     LOG_POWERFSM("State: bootEnter");
 }
 
+PowerFSMEventProcessor powerFSMEventProcessor;
+
+#if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
+CallbackObserver<PowerFSMEventProcessor, const InputEvent *> powerFsmInputObserver =
+    CallbackObserver<PowerFSMEventProcessor, const InputEvent *>(&powerFSMEventProcessor,
+                                                                 &PowerFSMEventProcessor::handleInputEvent);
+int PowerFSMEventProcessor::handleInputEvent(const InputEvent *event)
+{
+    if (!INPUT_BROKER_IS_LONG_PRESS(event->inputEvent)) {
+        powerFSM.trigger(EVENT_INPUT);
+    }
+    return 0;
+}
+#endif
+
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLowBattSDS(lowBattSDSEnter, NULL, NULL, "SDS");
@@ -406,21 +421,5 @@ void PowerFSM_setup()
     if (inputBroker)        // put our callback in the inputObserver list
         powerFsmInputObserver.observe(inputBroker);
 #endif
-}
-#endif
-
-PowerFSMEventProcessor powerFSMEventProcessor;
-
-#if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
-CallbackObserver<PowerFSMEventProcessor, const InputEvent *> powerFsmInputObserver =
-    CallbackObserver<PowerFSMEventProcessor, const InputEvent *>(&powerFSMEventProcessor,
-                                                                 &PowerFSMEventProcessor::handleInputEvent);
-
-int PowerFSMEventProcessor::handleInputEvent(const InputEvent *event)
-{
-    if (!INPUT_BROKER_IS_LONG_PRESS(event->inputEvent)) {
-        powerFSM.trigger(EVENT_INPUT);
-    }
-    return 0;
 }
 #endif
