@@ -28,7 +28,7 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 
 # ##### PRODUCTION BUILD #############
 
-FROM alpine:3.22
+FROM alpine:3.23
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Alpine Meshtastic daemon" \
       org.opencontainers.image.url="https://meshtastic.org" \
