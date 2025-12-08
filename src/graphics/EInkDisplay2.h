@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_EINK
+#if defined(USE_EINK) && !defined(USE_EINK_PARALLELDISPLAY)
 
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>

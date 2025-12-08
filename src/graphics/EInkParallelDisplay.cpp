@@ -1,8 +1,7 @@
 #include "EInkParallelDisplay.h"
 
-#ifdef USE_EPD
+#ifdef USE_EINK_PARALLELDISPLAY
 
-#include "SPILock.h"
 #include "Wire.h"
 #include "variant.h"
 #include <Arduino.h>

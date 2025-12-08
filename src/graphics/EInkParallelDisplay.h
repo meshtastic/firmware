@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 
-#ifdef USE_EPD
+#ifdef USE_EINK_PARALLELDISPLAY
 #include <OLEDDisplay.h>
 
 #include <atomic>

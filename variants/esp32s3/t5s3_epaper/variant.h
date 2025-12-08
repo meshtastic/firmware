@@ -1,6 +1,5 @@
 
 // Display (E-Ink) ED047TC1 - 8bit parallel
-#define USE_EPD
 #define EPD_WIDTH 960
 #define EPD_HEIGHT 540
 
