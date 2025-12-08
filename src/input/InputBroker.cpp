@@ -1,5 +1,4 @@
 #include "InputBroker.h"
-#include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "modules/ExternalNotificationModule.h"
 
@@ -49,10 +48,6 @@ void InputBroker::processInputEventQueue()
 
 int InputBroker::handleInputEvent(const InputEvent *event)
 {
-    if (!INPUT_BROKER_IS_LONG_PRESS(event->inputEvent)) {
-        powerFSM.trigger(EVENT_INPUT);
-    }
-
     this->notifyObservers(event);
     return 0;
 }
