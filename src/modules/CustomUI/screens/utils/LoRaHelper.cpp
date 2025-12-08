@@ -1,4 +1,5 @@
 #include "LoRaHelper.h"
+#include "DataStore.h"
 #include "configuration.h"
 #include "NodeDB.h"
 #include "mesh/MeshService.h"
@@ -182,6 +183,13 @@ bool LoRaHelper::isNodeOnline(uint32_t lastHeard) {
 }
 
 MessageInfo LoRaHelper::getLastReceivedMessage() {
+    // Try to get the latest message from DataStore first
+    MessageInfo storeMessage = DataStore::getInstance().getLatestMessage();
+    if (storeMessage.isValid) {
+        return storeMessage;
+    }
+    
+    // Fallback to device state if no stored messages
     MessageInfo info;
     
     // Check if devicestate has a valid text message
@@ -232,18 +240,16 @@ MessageInfo LoRaHelper::getLastReceivedMessage() {
 }
 
 std::vector<MessageInfo> LoRaHelper::getRecentMessages(int maxMessages) {
-    std::vector<MessageInfo> messages;
+    // Get messages from DataStore
+    std::vector<MessageInfo> messages = DataStore::getInstance().getRecentMessages(maxMessages);
     
-    // Get the last received message from device state
-    MessageInfo lastMsg = getLastReceivedMessage();
-    if (lastMsg.isValid) {
-        messages.push_back(lastMsg);
-    }
+    LOG_DEBUG("🔧 LORAHELPER: Retrieved %d messages from DataStore", messages.size());
     
-    // TODO: For now, add some mock messages for testing the UI
-    // In production, this would access message history from StoreForward or phone queue
-    if (messages.size() < maxMessages) {
-        // Create some mock messages for testing
+    // If we have no real messages, add a few mock messages for testing the UI
+    // This can be removed in production once message flow is established
+    if (messages.empty()) {
+        LOG_DEBUG("🔧 LORAHELPER: No stored messages, creating mock data for UI testing");
+        
         uint32_t currentTime = getTime();
         if (currentTime == 0) currentTime = millis() / 1000;
         

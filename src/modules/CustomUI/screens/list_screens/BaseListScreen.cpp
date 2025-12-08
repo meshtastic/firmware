@@ -161,9 +161,13 @@ void BaseListScreen::scrollUp() {
     if (selectedIndex > 0) {
         // Check if we're at the first visible item and need to scroll to previous page
         if (selectedIndex == scrollOffset && scrollOffset > 0) {
-            // Page up: move to previous page and select last item
-            scrollOffset = std::max(0, scrollOffset - maxVisibleItems);
-            selectedIndex = std::min(scrollOffset + maxVisibleItems - 1, getItemCount() - 1);
+            // Page up: move to the previous item before current page
+            selectedIndex--;
+            
+            // Calculate new scroll offset to show the selected item
+            // Position it as the last visible item on the previous page
+            scrollOffset = std::max(0, selectedIndex - maxVisibleItems + 1);
+            
             needsListRedraw = true;
             LOG_INFO("🔧 BaseListScreen: Page up - scrollOffset: %d, selectedIndex: %d", scrollOffset, selectedIndex);
         } else {
@@ -181,9 +185,16 @@ void BaseListScreen::scrollDown() {
         // Check if we're at the last visible item and need to scroll to next page
         if (selectedIndex == scrollOffset + maxVisibleItems - 1 && 
             selectedIndex < itemCount - 1) {
-            // Page down: move to next page and select first item
-            scrollOffset = std::min(scrollOffset + maxVisibleItems, itemCount - maxVisibleItems);
-            selectedIndex = scrollOffset;
+            // Page down: move to the next item after current page
+            selectedIndex++;
+            scrollOffset = selectedIndex;
+            
+            // Ensure we don't scroll past the end
+            int maxOffset = std::max(0, itemCount - maxVisibleItems);
+            if (scrollOffset > maxOffset) {
+                scrollOffset = maxOffset;
+            }
+            
             needsListRedraw = true;
             LOG_INFO("🔧 BaseListScreen: Page down - scrollOffset: %d, selectedIndex: %d", scrollOffset, selectedIndex);
         } else {

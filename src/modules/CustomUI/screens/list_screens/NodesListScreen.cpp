@@ -122,7 +122,7 @@ void NodesListScreen::refreshNodesList() {
     isLoading = true;
     
     // Get nodes from LoRa helper
-    std::vector<NodeInfo> newNodes = LoRaHelper::getNodesList(15, true);
+    std::vector<NodeInfo> newNodes = LoRaHelper::getNodesList(25, true);
     
     // Only update if data actually changed
     bool dataChanged = (newNodes.size() != nodes.size());

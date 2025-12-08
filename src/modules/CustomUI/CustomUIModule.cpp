@@ -20,6 +20,8 @@
 #include "screens/MessagesScreen.h"
 #include "screens/SnakeGameScreen.h"
 #include "InitialSplashScreen.h"
+#include "screens/utils/DataStore.h"
+#include "screens/utils/LoRaHelper.h"
 #include "sleep.h"
 #include <LovyanGFX.hpp>
 #include <Arduino.h>
@@ -303,6 +305,7 @@ ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
         if (payload.size > 0 && payload.bytes != nullptr) {
             text = String(reinterpret_cast<const char *>(payload.bytes), payload.size);
         }
+        
         // Try to get sender long name from NodeDB
         String sender;
         if (nodeDB) {
@@ -319,10 +322,50 @@ ProcessMessage CustomUIModule::handleReceived(const meshtastic_MeshPacket &mp) {
             snprintf(senderBuf, sizeof(senderBuf), "%08X", mp.from);
             sender = String(senderBuf);
         }
-        unsigned long timestamp = millis();
-        if (messagesScreen && text.length() > 0) {
-            messagesScreen->addMessage(text, sender, timestamp);
-            switchToScreen(static_cast<BaseScreen*>(messagesScreen));
+        
+        // Create MessageInfo and store in DataStore
+        if (text.length() > 0) {
+            MessageInfo messageInfo;
+            
+            // Copy message text (truncate if too long)
+            size_t textLen = std::min((size_t)text.length(), sizeof(messageInfo.text) - 1);
+            memcpy(messageInfo.text, text.c_str(), textLen);
+            messageInfo.text[textLen] = '\0';
+            
+            // Copy sender name
+            strncpy(messageInfo.senderName, sender.c_str(), sizeof(messageInfo.senderName) - 1);
+            messageInfo.senderName[sizeof(messageInfo.senderName) - 1] = '\0';
+            
+            // Set message properties
+            messageInfo.timestamp = mp.rx_time > 0 ? mp.rx_time : (millis() / 1000);
+            messageInfo.senderNodeId = mp.from;
+            messageInfo.toNodeId = mp.to;
+            messageInfo.channelIndex = mp.channel;
+            messageInfo.isOutgoing = (nodeDB && mp.from == nodeDB->getNodeNum());
+            
+            // Determine if this is a direct message
+            messageInfo.isDirectMessage = (nodeDB && mp.to == nodeDB->getNodeNum() && mp.to != NODENUM_BROADCAST);
+            
+            // Format channel name
+            if (messageInfo.isDirectMessage) {
+                strcpy(messageInfo.channelName, "DM");
+            } else if (messageInfo.channelIndex == 0) {
+                strcpy(messageInfo.channelName, "Primary");
+            } else {
+                snprintf(messageInfo.channelName, sizeof(messageInfo.channelName), "CH%d", messageInfo.channelIndex);
+            }
+            
+            messageInfo.isValid = true;
+            
+            // Store message in DataStore
+            DataStore::getInstance().addMessage(messageInfo);
+            
+            // Show message on MessagesScreen
+            if (messagesScreen) {
+                unsigned long timestamp = millis();
+                messagesScreen->addMessage(text, sender, timestamp);
+                switchToScreen(static_cast<BaseScreen*>(messagesScreen));
+            }
         }
     }
     return ProcessMessage::CONTINUE;
