@@ -14,7 +14,7 @@ bool Graph::hasMemoryForNewNode() const {
     return freeHeap > (MIN_FREE_HEAP_FOR_GRAPH + estimatedMemory);
 }
 
-int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance) {
+int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance, Edge::Source source) {
     // Check if this is a new node
     bool isNewNode = (adjacencyList.find(from) == adjacencyList.end());
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
@@ -78,6 +78,11 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
         [to](const Edge& e) { return e.to == to; });
 
     if (it != edges.end()) {
+        // If we already have a reported edge, don't overwrite with a mirrored guess
+        if (it->source == Edge::Source::Reported && source == Edge::Source::Mirrored) {
+            return EDGE_NO_CHANGE;
+        }
+
         // Check for significant change
         float oldEtx = it->etx;
         float change = std::abs(etx - oldEtx) / oldEtx;
@@ -86,6 +91,7 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
         it->etx = etx;
         it->lastUpdate = timestamp;
         it->variance = variance;
+        it->source = source;
 
         return (change > ETX_CHANGE_THRESHOLD) ? EDGE_SIGNIFICANT_CHANGE : EDGE_NO_CHANGE;
     } else {
@@ -101,6 +107,7 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
                 worstIt->etx = etx;
                 worstIt->lastUpdate = timestamp;
                 worstIt->variance = variance;
+                worstIt->source = source;
                 return EDGE_SIGNIFICANT_CHANGE;
             }
             // New edge is worse than all existing, don't add
@@ -108,7 +115,7 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
         }
 
         // Add new edge
-        Edge newEdge(from, to, etx, timestamp);
+        Edge newEdge(from, to, etx, timestamp, source);
         newEdge.variance = variance;
         edges.push_back(newEdge);
         return EDGE_NEW;

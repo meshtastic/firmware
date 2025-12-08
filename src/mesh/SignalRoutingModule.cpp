@@ -305,11 +305,39 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         return;
     }
 
-    size_t count = std::min(edges->size(), static_cast<size_t>(MAX_SIGNAL_ROUTING_NEIGHBORS));
-    info.neighbors_count = count;
+    // Prefer edges with reported quality (peer perspective), then fall back to mirrored estimates
+    std::vector<const Edge*> reported;
+    std::vector<const Edge*> mirrored;
+    reported.reserve(edges->size());
+    mirrored.reserve(edges->size());
+    for (const Edge& e : *edges) {
+        if (e.source == Edge::Source::Reported) {
+            reported.push_back(&e);
+        } else {
+            mirrored.push_back(&e);
+        }
+    }
+    auto sortByEtx = [](const Edge* a, const Edge* b) { return a->etx < b->etx; };
+    std::sort(reported.begin(), reported.end(), sortByEtx);
+    std::sort(mirrored.begin(), mirrored.end(), sortByEtx);
 
-    for (size_t i = 0; i < count; i++) {
-        const Edge& edge = (*edges)[i];
+    std::vector<const Edge*> selected;
+    selected.reserve(edges->size());
+    for (auto* e : reported) {
+        selected.push_back(e);
+        if (selected.size() >= MAX_SIGNAL_ROUTING_NEIGHBORS) break;
+    }
+    if (selected.size() < MAX_SIGNAL_ROUTING_NEIGHBORS) {
+        for (auto* e : mirrored) {
+            selected.push_back(e);
+            if (selected.size() >= MAX_SIGNAL_ROUTING_NEIGHBORS) break;
+        }
+    }
+
+    info.neighbors_count = selected.size();
+
+    for (size_t i = 0; i < selected.size(); i++) {
+        const Edge& edge = *selected[i];
         meshtastic_NeighborLink& neighbor = info.neighbors[i];
 
         neighbor.node_id = edge.to;
@@ -359,7 +387,8 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
             Graph::calculateETX(neighbor.rssi, neighbor.snr);
 #endif
         // Edge direction: neighbor → sender (the direction of the transmission that produced the RSSI)
-        routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance);
+        routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance,
+                                 Edge::Source::Reported);
     }
 }
 
@@ -417,7 +446,8 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 #endif
 
         // Add edge: neighbor -> sender (the direction of the transmission that produced the RSSI)
-        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance);
+        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance,
+                                                  Edge::Source::Reported);
 
         // Log topology if this is a new edge or significant change
         if (edgeChange == routingGraph->EDGE_NEW || edgeChange == routingGraph->EDGE_SIGNIFICANT_CHANGE) {
@@ -1074,13 +1104,11 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
 
     // Store edge: nodeId → us (the direction of the transmission we measured)
     // This is used for routing decisions when traffic needs to reach us
-    int changeType = routingGraph->updateEdge(nodeId, myNode, etx, lastRxTime, variance);
+    int changeType = routingGraph->updateEdge(nodeId, myNode, etx, lastRxTime, variance, Edge::Source::Reported);
 
-    // Also store reverse edge: us → nodeId (assuming approximately symmetric link)
-    // This is needed for buildSignalRoutingInfo() to report our outgoing capabilities
-    // Note: This assumption may not be perfectly accurate for asymmetric links,
-    // but it's the best estimate we have for our own transmissions
-    routingGraph->updateEdge(myNode, nodeId, etx, lastRxTime, variance);
+    // Also store reverse edge: us → nodeId (assuming approximately symmetric link) if we don't yet have a better
+    // (reported) estimate of how nodeId hears us. This serves as a fallback until we receive their SR info.
+    routingGraph->updateEdge(myNode, nodeId, etx, lastRxTime, variance, Edge::Source::Mirrored);
 
     // If significant change, consider sending an update sooner
     if (changeType != routingGraph->EDGE_NO_CHANGE) {
