@@ -147,12 +147,12 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 // GPS L76K
 #ifdef GPS_L76K
-#define PIN_GPS_RX D6
-#define PIN_GPS_TX D7
+#define PIN_GPS_TX D6
+#define PIN_GPS_RX D7
 #define HAS_GPS 1
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_TX PIN_GPS_TX
+#define PIN_SERIAL1_RX PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
 #else
 #define PIN_SERIAL1_RX (-1)

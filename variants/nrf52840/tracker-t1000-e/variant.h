@@ -22,7 +22,9 @@
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
-#define USE_LFXO // Board uses 32khz crystal for LF
+//#define USE_LFXO // Board uses 32khz crystal for LF
+
+#define USE_LFRC 
 
 /*----------------------------------------------------------------------------
  *        Headers
@@ -141,6 +143,8 @@ extern "C" {
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+
+#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
 
 // Buzzer
 #define BUZZER_EN_PIN (32 + 5) // P1.05, always high
