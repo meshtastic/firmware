@@ -64,6 +64,16 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
+    // negotiate connections params as soon as possible
+
+    ble_gap_conn_params_t newParams;
+    newParams.min_conn_interval = 24;
+    newParams.max_conn_interval = 40;
+    newParams.slave_latency = 5;
+    newParams.conn_sup_timeout = 400;
+
+    sd_ble_gap_conn_param_update(conn_handle, &newParams);
+
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
@@ -119,7 +129,7 @@ void startAdv(void)
     Bluefruit.Advertising.addService(meshBleService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
-     * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
+     * - Interval:  fast mode = 20 ms, slow mode = 417,5 ms
      * - Timeout for fast mode is 30 seconds
      * - Start(timeout) with timeout = 0 will advertise forever (until connected)
      *
@@ -127,7 +137,7 @@ void startAdv(void)
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
@@ -272,6 +282,24 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+
+    // Set slave latency to 5 to conserve power
+    // Despite name this does not impact data transfer
+    // https://docs.silabs.com/bluetooth/2.13/bluetooth-general-system-and-performance/optimizing-current-consumption-in-bluetooth-low-energy-devices
+    
+    Bluefruit.Periph.setConnSlaveLatency(5);
+
+    // TODO: Adafruit defaul min, max interval seems to be (20,30) [in 1.25 ms units] -> (25.00, 31.25) milliseconds
+    // so using formula Interval Max * (Slave Latency + 1) ≤ 2 seconds
+    // max slave latency we can use is 30 (max available in BLE)
+    // and even double max inteval (see apple doc linked above for formulas)
+    // See Periph.SetConnInterval method
+
+    // Tweak this later for even more power savings once those changes are confirmed to work well.
+    // Changing min, max interval may slow BLE transfer a bit - bumping slave latency will most likely not.
+
+
+
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
@@ -300,7 +328,7 @@ void NRF52Bluetooth::setup()
 void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }
