@@ -90,7 +90,8 @@ const EdgeLite *GraphLite::findEdge(const NodeEdgesLite *node, NodeNum to) const
     return nullptr;
 }
 
-int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance)
+int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance,
+                          EdgeLite::Source source)
 {
     NodeEdgesLite *node = findOrCreateNode(from);
     if (!node) {
@@ -101,6 +102,11 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
 
     EdgeLite *edge = findEdge(node, to);
     if (edge) {
+        // If we already have a reported edge, don't overwrite with a mirrored guess
+        if (edge->source == EdgeLite::Source::Reported && source == EdgeLite::Source::Mirrored) {
+            return EDGE_NO_CHANGE;
+        }
+
         // Update existing edge
         float oldEtx = edge->getEtx();
         float change = std::abs(etx - oldEtx) / oldEtx;
@@ -108,6 +114,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge->setEtx(etx);
         edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12); // Scale variance
+        edge->source = source;
 
         return (change > ETX_CHANGE_THRESHOLD) ? EDGE_SIGNIFICANT_CHANGE : EDGE_NO_CHANGE;
     }
@@ -119,6 +126,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge->setEtx(etx);
         edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
+        edge->source = source;
         return EDGE_NEW;
     }
 
@@ -139,6 +147,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge->setEtx(etx);
         edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
+        edge->source = source;
         return EDGE_SIGNIFICANT_CHANGE;
     }
 
