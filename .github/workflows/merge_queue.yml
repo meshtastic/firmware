@@ -188,8 +188,8 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
@@ -303,8 +303,8 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
