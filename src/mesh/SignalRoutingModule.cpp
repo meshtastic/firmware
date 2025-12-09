@@ -417,9 +417,14 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 #ifdef SIGNAL_ROUTING_LITE_MODE
         routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance,
                                  EdgeLite::Source::Reported);
+        // Also mirror: sender's view of this neighbor for others to consume
+        routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+                                 EdgeLite::Source::Mirrored);
 #else
         routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance,
                                  Edge::Source::Reported);
+        routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+                                 Edge::Source::Mirrored);
 #endif
     }
 }
@@ -481,9 +486,13 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 #ifdef SIGNAL_ROUTING_LITE_MODE
         int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance,
                                                   EdgeLite::Source::Reported);
+        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+                                 EdgeLite::Source::Mirrored);
 #else
         int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance,
                                                   Edge::Source::Reported);
+        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+                                 Edge::Source::Mirrored);
 #endif
 
         // Log topology if this is a new edge or significant change
