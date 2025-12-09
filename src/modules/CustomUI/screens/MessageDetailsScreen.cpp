@@ -205,8 +205,8 @@ void MessageDetailsScreen::wrapTextToLines() {
 }
 
 void MessageDetailsScreen::calculateVisibleLines() {
-    maxVisibleLines = TEXT_AREA_HEIGHT / LINE_HEIGHT;
-    LOG_INFO("📱 MessageDetailsScreen: Max visible lines: %d", maxVisibleLines);
+    maxVisibleLines = 5; // Fixed 5 lines per page for page-based scrolling
+    LOG_INFO("📱 MessageDetailsScreen: Max visible lines per page: %d", maxVisibleLines);
 }
 
 void MessageDetailsScreen::drawSenderSection(lgfx::LGFX_Device& tft) {
@@ -237,16 +237,16 @@ void MessageDetailsScreen::drawTextSection(lgfx::LGFX_Device& tft) {
     // Clear text area (avoid clearing sender area)
     tft.fillRect(0, textY, getContentWidth(), TEXT_AREA_HEIGHT, COLOR_BLACK);
     
-    // Draw visible lines
+    // Draw visible lines for current page
     tft.setTextColor(COLOR_WHITE, COLOR_BLACK);
     tft.setTextSize(2);
     
-    int y = textY;
-    int endLine = std::min(scrollOffset + maxVisibleLines, totalLines);
+    int y = textY + 5; // Small top padding
+    int currentPage = scrollOffset;
+    int startLine = currentPage * maxVisibleLines;
+    int endLine = std::min(startLine + maxVisibleLines, totalLines);
     
-    for (int i = scrollOffset; i < endLine; i++) {
-        if (y + LINE_HEIGHT > textY + TEXT_AREA_HEIGHT) break;
-        
+    for (int i = startLine; i < endLine; i++) {
         tft.setCursor(TEXT_MARGIN, y);
         tft.print(textLines[i]);
         y += LINE_HEIGHT;
@@ -254,21 +254,20 @@ void MessageDetailsScreen::drawTextSection(lgfx::LGFX_Device& tft) {
     
     tft.setTextSize(1);
     
-    // Draw scroll indicator on the right edge, away from text
-    if (totalLines > maxVisibleLines) {
-        int indicatorX = getContentWidth() - 18;  // Move further right
-        int indicatorHeight = TEXT_AREA_HEIGHT;
-        int barHeight = std::max(10, (maxVisibleLines * indicatorHeight) / totalLines);
-        int barY = textY + (scrollOffset * (indicatorHeight - barHeight)) / std::max(1, totalLines - maxVisibleLines);
+    // Draw page indicator instead of scrollbar
+    // if (totalLines > maxVisibleLines) {
+    //     int totalPages = (totalLines + maxVisibleLines - 1) / maxVisibleLines;
+    //     int currentPageNum = currentPage + 1;
         
-        // Background track
-        tft.fillRect(indicatorX, textY, 12, indicatorHeight, COLOR_GRAY);
-        // Active scroll bar
-        tft.fillRect(indicatorX + 2, barY, 8, barHeight, COLOR_WHITE);
-    }
+    //     // Page indicator on the right
+    //     String pageInfo = "Page " + String(currentPageNum) + "/" + String(totalPages);
+    //     tft.setTextColor(COLOR_GRAY, COLOR_BLACK);
+    //     tft.setCursor(getContentWidth() - 80, textY + TEXT_AREA_HEIGHT - 15);
+    //     tft.print(pageInfo);
+    // }
     
-    LOG_INFO("📱 MessageDetailsScreen: Drew text section, offset=%d, lines=%d-%d", 
-             scrollOffset, scrollOffset, endLine-1);
+    LOG_INFO("📱 MessageDetailsScreen: Drew page %d, lines %d-%d of %d", 
+             currentPage + 1, startLine + 1, endLine, totalLines);
 }
 
 void MessageDetailsScreen::drawTimestampSection(lgfx::LGFX_Device& tft) {
@@ -293,14 +292,13 @@ void MessageDetailsScreen::drawTimestampSection(lgfx::LGFX_Device& tft) {
     tft.setCursor(10, timestampY + 5);
     tft.print(timebuf);
     
-    // Show scroll position if scrollable
+    // Show page position if multiple pages
     if (totalLines > maxVisibleLines) {
-        String scrollInfo = String(scrollOffset + 1) + "-" + 
-                           String(std::min(scrollOffset + maxVisibleLines, totalLines)) + 
-                           "/" + String(totalLines);
+        int totalPages = (totalLines + maxVisibleLines - 1) / maxVisibleLines;
+        String pageInfo = String(scrollOffset + 1) + "/" + String(totalPages) + " pages";
         
         tft.setCursor(getContentWidth() - 80, timestampY + 5);
-        tft.print(scrollInfo);
+        tft.print(pageInfo);
     }
     
     LOG_INFO("📱 MessageDetailsScreen: Drew timestamp section");
@@ -308,25 +306,26 @@ void MessageDetailsScreen::drawTimestampSection(lgfx::LGFX_Device& tft) {
 
 void MessageDetailsScreen::scrollUp() {
     if (scrollOffset > 0) {
-        scrollOffset--;
+        scrollOffset--; // Move to previous page
         contentDirty = true;
-        footerDirty = true; // For scroll position indicator
-        headerDirty = true; // Keep sender visible
+        footerDirty = true;
+        headerDirty = true;
         updateNavigationHints();
         forceRedraw();
-        LOG_INFO("📱 MessageDetailsScreen: Scrolled up to offset %d", scrollOffset);
+        LOG_INFO("📱 MessageDetailsScreen: Scrolled to page %d", scrollOffset + 1);
     }
 }
 
 void MessageDetailsScreen::scrollDown() {
-    if (scrollOffset < totalLines - maxVisibleLines && totalLines > maxVisibleLines) {
-        scrollOffset++;
+    int totalPages = (totalLines + maxVisibleLines - 1) / maxVisibleLines;
+    if (scrollOffset < totalPages - 1) {
+        scrollOffset++; // Move to next page
         contentDirty = true;
-        footerDirty = true; // For scroll position indicator
-        headerDirty = true; // Keep sender visible
+        footerDirty = true;
+        headerDirty = true;
         updateNavigationHints();
         forceRedraw();
-        LOG_INFO("📱 MessageDetailsScreen: Scrolled down to offset %d", scrollOffset);
+        LOG_INFO("📱 MessageDetailsScreen: Scrolled to page %d", scrollOffset + 1);
     }
 }
 
@@ -336,13 +335,15 @@ void MessageDetailsScreen::updateNavigationHints() {
     // Always show back button
     navHints.push_back(NavHint('A', "Back"));
     
-    // Show scroll hints only if message is scrollable
+    // Show page navigation hints only if message has multiple pages
     if (hasValidMessage() && totalLines > maxVisibleLines) {
+        int totalPages = (totalLines + maxVisibleLines - 1) / maxVisibleLines;
+        
         if (scrollOffset > 0) {
-            navHints.push_back(NavHint('2', "↑"));
+            navHints.push_back(NavHint('2', "PgUp"));
         }
-        if (scrollOffset < totalLines - maxVisibleLines) {
-            navHints.push_back(NavHint('8', "↓"));
+        if (scrollOffset < totalPages - 1) {
+            navHints.push_back(NavHint('8', "PgDn"));
         }
     }
 }

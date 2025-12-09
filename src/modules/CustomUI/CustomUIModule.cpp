@@ -603,17 +603,20 @@ void CustomUIModule::wakeDisplay() {
     // Update activity time
     updateLastActivity();
     
-    // Force complete screen refresh
+    // Force complete screen refresh with proper state restoration
     if (currentScreen) {
         // Clear screen first
         tft->fillScreen(0x0000);
         
-        // Force full redraw
+        // Re-enter screen to refresh data and reset state
+        currentScreen->onEnter();
+        
+        // Force full redraw and render immediately
         currentScreen->forceRedraw();
         currentScreen->draw(*tft);
     }
     
-    LOG_INFO("🔧 CUSTOM UI: Display awakened and screen refreshed");
+    LOG_INFO("🔧 CUSTOM UI: Display awakened, screen state restored and refreshed");
 }
 
 void CustomUIModule::updateLastActivity() {
