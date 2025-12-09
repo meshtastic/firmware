@@ -21,6 +21,7 @@ class BaseScreen;
 class HomeScreen;
 class NodesListScreen;
 class MessageListScreen;
+class MessageDetailsScreen;
 class SnakeGameScreen;
 
 #include "screens/MessagesScreen.h"
@@ -73,6 +74,7 @@ private:
     HomeScreen* homeScreen;
     NodesListScreen* nodesListScreen;
     MessageListScreen* messageListScreen;
+    MessageDetailsScreen* messageDetailsScreen;
     MessagesScreen* messagesScreen;
     SnakeGameScreen* snakeGameScreen;
     

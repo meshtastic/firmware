@@ -12,7 +12,7 @@ MessageListScreen::MessageListScreen() : BaseListScreen("Messages", 20) {
     // Set navigation hints
     std::vector<NavHint> hints;
     hints.push_back(NavHint('A', "Back"));
-    hints.push_back(NavHint('1', "Select"));
+    hints.push_back(NavHint('1', "Details"));
     setNavigationHints(hints);
     
     isLoading = false;
@@ -100,6 +100,11 @@ bool MessageListScreen::handleKeyPress(char key) {
     }
     
     switch (key) {
+        case '1':
+            LOG_INFO("💬 MessageListScreen: Details button pressed");
+            // Don't handle '1' here, let CustomUIModule handle navigation
+            return false;
+            
         case 'A':
         case 'a':
             LOG_INFO("💬 MessageListScreen: Back button pressed");
@@ -156,11 +161,8 @@ void MessageListScreen::refreshMessageList() {
 }
 
 void MessageListScreen::onItemSelected(int index) {
-    if (index >= 0 && index < static_cast<int>(messages.size())) {
-        LOG_INFO("💬 MessageListScreen: Selected message from: %s", 
-            messages[index].senderName);
-        // TODO: Implement message detail view
-    }
+    // Selection is now handled by CustomUIModule navigation logic
+    LOG_INFO("💬 MessageListScreen: Item %d selected", index);
 }
 
 int MessageListScreen::getItemCount() {
@@ -228,6 +230,26 @@ void MessageListScreen::drawItem(lgfx::LGFX_Device& tft, int index, int y, bool 
     tft.setTextColor(msgColor, bgColor);
     tft.setCursor(160, y + 7);
     tft.print(messageText);
+}
+
+MessageInfo MessageListScreen::getSelectedMessage() const {
+    int currentSelection = getSelectedIndex();
+    LOG_INFO("💬 MessageListScreen: getSelectedMessage - selection: %d, total messages: %d", 
+             currentSelection, static_cast<int>(messages.size()));
+    
+    if (currentSelection >= 0 && currentSelection < static_cast<int>(messages.size()) && !messages.empty()) {
+        LOG_INFO("💬 MessageListScreen: Returning valid message from: %s", messages[currentSelection].senderName);
+        return messages[currentSelection];
+    }
+    LOG_INFO("💬 MessageListScreen: Returning invalid MessageInfo");
+    return MessageInfo(); // Return invalid MessageInfo
+}
+
+bool MessageListScreen::hasValidSelection() const {
+    int currentSelection = getSelectedIndex();
+    return currentSelection >= 0 && 
+           currentSelection < static_cast<int>(messages.size()) && 
+           !messages.empty();
 }
 
 String MessageListScreen::formatTimeSince(uint32_t timestamp) {

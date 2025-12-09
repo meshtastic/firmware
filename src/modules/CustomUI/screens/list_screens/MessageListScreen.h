@@ -23,6 +23,18 @@ public:
     virtual void onExit() override;
     virtual bool handleKeyPress(char key) override;
 
+    /**
+     * Get the currently selected message for detail view
+     * @return MessageInfo object, or invalid MessageInfo if no selection
+     */
+    MessageInfo getSelectedMessage() const;
+    
+    /**
+     * Check if there is a valid message selection
+     * @return true if a message is selected and valid
+     */
+    bool hasValidSelection() const;
+
 protected:
     // BaseListScreen abstract methods
     virtual void drawItem(lgfx::LGFX_Device& tft, int index, int y, bool isSelected) override;

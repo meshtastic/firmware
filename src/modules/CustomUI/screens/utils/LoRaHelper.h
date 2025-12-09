@@ -29,7 +29,7 @@ struct NodeInfo {
  * Information about a message for display purposes
  */
 struct MessageInfo {
-    char text[64];              // Message text (truncated if needed)
+    char text[200];             // Message text (increased from 64 to 200 bytes)
     char senderName[32];        // Formatted sender name
     uint32_t timestamp;         // Message timestamp
     uint32_t senderNodeId;      // Sender node ID

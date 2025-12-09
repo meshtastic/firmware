@@ -17,6 +17,7 @@
 #include "screens/HomeScreen.h"
 #include "screens/list_screens/NodesListScreen.h"
 #include "screens/list_screens/MessageListScreen.h"
+#include "screens/MessageDetailsScreen.h"
 #include "screens/MessagesScreen.h"
 #include "screens/SnakeGameScreen.h"
 #include "InitialSplashScreen.h"
@@ -45,6 +46,7 @@ CustomUIModule::CustomUIModule()
       homeScreen(nullptr),
       nodesListScreen(nullptr),
       messageListScreen(nullptr),
+      messageDetailsScreen(nullptr),
       snakeGameScreen(nullptr),
       isSplashActive(false),
       splashStartTime(0),
@@ -86,6 +88,11 @@ CustomUIModule::~CustomUIModule() {
     if (messageListScreen) {
         delete messageListScreen;
         messageListScreen = nullptr;
+    }
+    
+    if (messageDetailsScreen) {
+        delete messageDetailsScreen;
+        messageDetailsScreen = nullptr;
     }
     
     if (snakeGameScreen) {
@@ -220,6 +227,9 @@ void CustomUIModule::initScreens() {
 
     // Create message list screen
     messageListScreen = new MessageListScreen();
+
+    // Create message details screen
+    messageDetailsScreen = new MessageDetailsScreen();
 
     // Create messages screen
     messagesScreen = new MessagesScreen();
@@ -469,7 +479,20 @@ void CustomUIModule::handleKeyPress(char key) {
 
     // Handle global navigation keys
     switch (key) {
-        case '1': // Home
+        case '1': // Select/Details for MessageListScreen, or Home for others
+            if (currentScreen == messageListScreen) {
+                // Navigate to message details if valid selection
+                if (messageListScreen->hasValidSelection()) {
+                    MessageInfo selectedMsg = messageListScreen->getSelectedMessage();
+                    messageDetailsScreen->setMessage(selectedMsg);
+                    switchToScreen(messageDetailsScreen);
+                    LOG_INFO("🔧 CUSTOM UI: Navigated to MessageDetailsScreen");
+                    return;
+                } else {
+                    LOG_INFO("🔧 CUSTOM UI: No valid message selected");
+                }
+            }
+            // For all other screens, go to home
             if (currentScreen != homeScreen) {
                 switchToScreen(homeScreen);
             }
@@ -496,11 +519,18 @@ void CustomUIModule::handleKeyPress(char key) {
 
         case 'A':
         case 'a': // Back/Prev/Home button
-            if (currentScreen == messagesScreen) {
+            if (currentScreen == messageDetailsScreen) {
+                // Navigate back to message list screen
+                switchToScreen(messageListScreen);
+                LOG_INFO("🔧 CUSTOM UI: Navigated back to MessageListScreen");
+            } else if (currentScreen == messagesScreen) {
                 // If at end of buffer or no messages, go home
                 if (!messagesScreen->hasMessages() || messagesScreen->handleKeyPress(key) == false) {
                     switchToScreen(homeScreen);
                 }
+            } else if (currentScreen == messageListScreen) {
+                // Back from message list goes to home
+                switchToScreen(homeScreen);
             } else if (currentScreen != homeScreen) {
                 switchToScreen(homeScreen);
             }
