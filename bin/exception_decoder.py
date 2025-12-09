@@ -16,7 +16,7 @@ Meshtastic notes:
 To use, copy the "Backtrace: 0x...." line to a file, e.g., backtrace.txt, then run:
 $ bin/exception_decoder.py backtrace.txt
 For a platform other than ESP32, use the -p option, e.g.:
-$ bin/exception_decoder.py -p ESP32S3 backtrace.txt
+$ bin/exception_decoder.py -p ESP32S3 backtarce.txt
 To specify a specific .elf file, use the -e option, e.g.:
 $ bin/exception_decoder.py -e firmware.elf backtrace.txt
 """
@@ -75,7 +75,7 @@ TOOLS = {
 }
 
 BACKTRACE_REGEX = re.compile(
-    r"(?:\s+(0x40[0-2](?:\d|[a-f]|[A-F]){5}):0x(?:\d|[a-f]|[A-F]){8})\b"
+    r"\b(0x4[0-9a-fA-F]{7,8}):0x[0-9a-fA-F]{8}\b"
 )
 EXCEPTION_REGEX = re.compile("^Exception \\((?P<exc>[0-9]*)\\):$")
 COUNTER_REGEX = re.compile(
@@ -89,7 +89,7 @@ POINTER_REGEX = re.compile(
 STACK_BEGIN = ">>>stack>>>"
 STACK_END = "<<<stack<<<"
 STACK_REGEX = re.compile(
-    "^(?P<off>[0-9a-f]+):\W+(?P<c1>[0-9a-f]+) (?P<c2>[0-9a-f]+) (?P<c3>[0-9a-f]+) (?P<c4>[0-9a-f]+)(\W.*)?$"
+    r"^(?P<off>[0-9a-f]+):\W+(?P<c1>[0-9a-f]+) (?P<c2>[0-9a-f]+) (?P<c3>[0-9a-f]+) (?P<c4>[0-9a-f]+)(\W.*)?$"
 )
 
 StackLine = namedtuple("StackLine", ["offset", "content"])
@@ -223,7 +223,7 @@ class AddressResolver(object):
             if match is None:
                 if last is not None and line.startswith("(inlined by)"):
                     line = line[12:].strip()
-                    self._address_map[last] += "\n  \-> inlined by: " + line
+                    self._address_map[last] += "\n  \\-> inlined by: " + line
                 continue
 
             if match.group("result") == "?? ??:0":
@@ -340,7 +340,7 @@ def parse_args():
         default="~/.platformio/packages/toolchain-",
     )
     parser.add_argument(
-        "-e", "--elf", help="path to elf file", default=".pio/build/tbeam/firmware.elf"
+        "-e", "--elf", help="path to elf file", default=".pio/build/tlora-pager/firmware.elf"
     )
     parser.add_argument(
         "-f", "--full", help="Print full stack dump", action="store_true"
