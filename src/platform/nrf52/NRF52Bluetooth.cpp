@@ -65,12 +65,16 @@ void onConnect(uint16_t conn_handle)
     LOG_INFO("BLE Connected to %s", central_name);
 
     // negotiate connections params as soon as possible
+    // some phones and laptops seem to ignore GAP preferred settings and treat slave latency as connection disruption
+    // such devices can not connect to the node. This is fixed by forcing parameter negotiation at the start of communication
 
     ble_gap_conn_params_t newParams;
-    newParams.min_conn_interval = 24;
-    newParams.max_conn_interval = 40;
+    memset(&newParams, 0, sizeof(newParams));
+
+    newParams.min_conn_interval = 24; // in 1.25 ms units = 30 ms
+    newParams.max_conn_interval = 40; // in 1.25 ms units = 50 ms
     newParams.slave_latency = 5;
-    newParams.conn_sup_timeout = 400;
+    newParams.conn_sup_timeout = 400; // in 10 ms units, timeout 4s
 
     sd_ble_gap_conn_param_update(conn_handle, &newParams);
 
@@ -286,17 +290,16 @@ void NRF52Bluetooth::setup()
     // Set slave latency to 5 to conserve power
     // Despite name this does not impact data transfer
     // https://docs.silabs.com/bluetooth/2.13/bluetooth-general-system-and-performance/optimizing-current-consumption-in-bluetooth-low-energy-devices
+
+    // Attention! Same values - latency and intervals (if added here) must also be negotiated inside onConnect method. See comments there.
     
     Bluefruit.Periph.setConnSlaveLatency(5);
 
-    // TODO: Adafruit defaul min, max interval seems to be (20,30) [in 1.25 ms units] -> (25.00, 31.25) milliseconds
-    // so using formula Interval Max * (Slave Latency + 1) ≤ 2 seconds
-    // max slave latency we can use is 30 (max available in BLE)
-    // and even double max inteval (see apple doc linked above for formulas)
-    // See Periph.SetConnInterval method
+    // min, max connection intervals are negotiated in onConnect as (24,40) [in 1.25 ms units] -> (30, 50) milliseconds.
 
-    // Tweak this later for even more power savings once those changes are confirmed to work well.
-    // Changing min, max interval may slow BLE transfer a bit - bumping slave latency will most likely not.
+    // BLE settings must be so Interval Max * (Slave Latency + 1) ≤ supervision_timeout (some sources says that half the timeout, verify)
+    // so technically we can easily to up to slave latency 30, but this is not recommended as BLE is having some timing issues
+    // on such long delays. AFAIK we can work up safely up to slave_latency = 10 in the future and even tweak max interval to 100 ms to save more power.
 
 
 
