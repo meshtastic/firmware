@@ -60,7 +60,7 @@ void NodesListScreen::onExit() {
     LOG_INFO("📡 NodesListScreen: Vector memory deallocated, state reset");
 }
 
-void NodesListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
+bool NodesListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
     // Refresh nodes list periodically or on first load
     unsigned long now = millis();
     if (lastRefreshTime == 0 || (now - lastRefreshTime > 10000)) { // Refresh every 10 seconds (reduced frequency)
@@ -69,16 +69,18 @@ void NodesListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
     }
     
     if (isLoading) {
-        // BaseListScreen will handle clearing - just show loading message
+        // Clear content area and show loading message
+        tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
         tft.setTextColor(COLOR_YELLOW, COLOR_BLACK);
         tft.setTextSize(1);
         tft.setCursor(10, getContentY() + 20);
         tft.print("Loading mesh nodes...");
-        return;
+        return true; // We handled the drawing
     }
     
     if (nodes.empty()) {
-        // BaseListScreen will handle clearing - just show no nodes message
+        // Clear content area and show no nodes message
+        tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
         tft.setTextColor(COLOR_DARK_RED, COLOR_BLACK);
         tft.setTextSize(1);
         tft.setCursor(10, getContentY() + 20);
@@ -87,8 +89,10 @@ void NodesListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
         tft.setTextColor(COLOR_DIM_GREEN, COLOR_BLACK);
         tft.setCursor(10, getContentY() + 40);
         tft.print("Press [#] to refresh");
-        return;
+        return true; // We handled the drawing
     }
+    
+    return false; // Let BaseListScreen handle normal list drawing
 }
 
 bool NodesListScreen::handleKeyPress(char key) {

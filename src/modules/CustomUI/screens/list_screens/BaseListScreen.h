@@ -59,8 +59,10 @@ protected:
     /**
      * Called before drawing list items (optional override)
      * Useful for refreshing data, showing loading states, etc.
+     * @param tft Display device
+     * @return true if derived class handled all drawing (skip normal list drawing), false to proceed with normal list
      */
-    virtual void onBeforeDrawItems(lgfx::LGFX_Device& tft) {}
+    virtual bool onBeforeDrawItems(lgfx::LGFX_Device& tft) { return false; }
 
     // List navigation
     void scrollUp();

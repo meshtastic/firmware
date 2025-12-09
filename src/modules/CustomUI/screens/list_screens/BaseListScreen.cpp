@@ -59,13 +59,19 @@ void BaseListScreen::onExit() {
 
 void BaseListScreen::onDraw(lgfx::LGFX_Device& tft) {
     // Let derived class prepare data or show loading states
-    onBeforeDrawItems(tft);
+    // If derived class returns true, it handled all drawing - skip normal list drawing
+    bool derivedHandledDrawing = onBeforeDrawItems(tft);
+    if (derivedHandledDrawing) {
+        needsListRedraw = false;
+        needsScrollUpdate = false;
+        return;
+    }
     
     int itemCount = getItemCount();
     
     // Handle empty list case
     if (itemCount == 0) {
-        // Clear list area
+        // Clear list area only if derived class didn't handle the drawing
         tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
         needsListRedraw = false;
         needsScrollUpdate = false;

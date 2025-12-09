@@ -242,74 +242,7 @@ MessageInfo LoRaHelper::getLastReceivedMessage() {
 std::vector<MessageInfo> LoRaHelper::getRecentMessages(int maxMessages) {
     // Get messages from DataStore
     std::vector<MessageInfo> messages = DataStore::getInstance().getRecentMessages(maxMessages);
-    
-    LOG_DEBUG("🔧 LORAHELPER: Retrieved %d messages from DataStore", messages.size());
-    
-    // If we have no real messages, add a few mock messages for testing the UI
-    // This can be removed in production once message flow is established
-    if (messages.empty()) {
-        LOG_DEBUG("🔧 LORAHELPER: No stored messages, creating mock data for UI testing");
         
-        uint32_t currentTime = getTime();
-        if (currentTime == 0) currentTime = millis() / 1000;
-        
-        // Mock DM
-        MessageInfo mockDM;
-        strcpy(mockDM.text, "Hey, are you there? This is a test direct message to see scrolling");
-        strcpy(mockDM.senderName, "Alice");
-        strcpy(mockDM.channelName, "DM");
-        mockDM.timestamp = currentTime - 300; // 5 minutes ago
-        mockDM.senderNodeId = 0x12345678;
-        mockDM.toNodeId = (nodeDB ? nodeDB->getNodeNum() : 0);
-        mockDM.channelIndex = 0;
-        mockDM.isOutgoing = false;
-        mockDM.isDirectMessage = true;
-        mockDM.isValid = true;
-        messages.push_back(mockDM);
-        
-        // Mock Channel message
-        MessageInfo mockChannel;
-        strcpy(mockChannel.text, "Anyone seen the weather report? It's looking pretty cloudy today");
-        strcpy(mockChannel.senderName, "Bob");
-        strcpy(mockChannel.channelName, "Primary");
-        mockChannel.timestamp = currentTime - 600; // 10 minutes ago
-        mockChannel.senderNodeId = 0x87654321;
-        mockChannel.toNodeId = NODENUM_BROADCAST;
-        mockChannel.channelIndex = 0;
-        mockChannel.isOutgoing = false;
-        mockChannel.isDirectMessage = false;
-        mockChannel.isValid = true;
-        messages.push_back(mockChannel);
-        
-        // Mock outgoing message
-        MessageInfo mockOutgoing;
-        strcpy(mockOutgoing.text, "Roger that, I'll check it out. Thanks for the heads up!");
-        strcpy(mockOutgoing.senderName, "You");
-        strcpy(mockOutgoing.channelName, "Primary");
-        mockOutgoing.timestamp = currentTime - 900; // 15 minutes ago
-        mockOutgoing.senderNodeId = (nodeDB ? nodeDB->getNodeNum() : 0);
-        mockOutgoing.toNodeId = NODENUM_BROADCAST;
-        mockOutgoing.channelIndex = 0;
-        mockOutgoing.isOutgoing = true;
-        mockOutgoing.isDirectMessage = false;
-        mockOutgoing.isValid = true;
-        messages.push_back(mockOutgoing);
-        
-        // Mock old DM
-        MessageInfo mockOldDM;
-        strcpy(mockOldDM.text, "Short msg");
-        strcpy(mockOldDM.senderName, "Charlie");
-        strcpy(mockOldDM.channelName, "DM");
-        mockOldDM.timestamp = currentTime - 1800; // 30 minutes ago
-        mockOldDM.senderNodeId = 0xABCDEF12;
-        mockOldDM.toNodeId = (nodeDB ? nodeDB->getNodeNum() : 0);
-        mockOldDM.channelIndex = 0;
-        mockOldDM.isOutgoing = false;
-        mockOldDM.isDirectMessage = true;
-        mockOldDM.isValid = true;
-        messages.push_back(mockOldDM);
-    }
-    
     return messages;
 }
 

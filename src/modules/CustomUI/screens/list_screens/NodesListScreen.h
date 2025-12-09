@@ -28,7 +28,7 @@ protected:
     virtual void drawItem(lgfx::LGFX_Device& tft, int index, int y, bool isSelected) override;
     virtual int getItemCount() override;
     virtual void onItemSelected(int index) override;
-    virtual void onBeforeDrawItems(lgfx::LGFX_Device& tft) override;
+    virtual bool onBeforeDrawItems(lgfx::LGFX_Device& tft) override;
 
 private:
     /**

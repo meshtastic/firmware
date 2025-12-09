@@ -60,7 +60,7 @@ void MessageListScreen::onExit() {
     LOG_INFO("💬 MessageListScreen: Vector memory deallocated, state reset");
 }
 
-void MessageListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
+bool MessageListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
     // Refresh message list periodically or on first load
     unsigned long now = millis();
     if (lastRefreshTime == 0 || (now - lastRefreshTime > 10000)) { // Refresh every 10 seconds
@@ -69,16 +69,18 @@ void MessageListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
     }
     
     if (isLoading) {
-        // BaseListScreen will handle clearing - just show loading message
+        // Clear content area and show loading message
+        tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
         tft.setTextColor(COLOR_YELLOW, COLOR_BLACK);
         tft.setTextSize(1);
         tft.setCursor(10, getContentY() + 20);
         tft.print("Loading messages...");
-        return;
+        return true; // We handled the drawing
     }
     
     if (messages.empty()) {
-        // BaseListScreen will handle clearing - just show no messages message
+        // Clear content area and show no messages message
+        tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
         tft.setTextColor(COLOR_DARK_RED, COLOR_BLACK);
         tft.setTextSize(1);
         tft.setCursor(10, getContentY() + 20);
@@ -87,8 +89,10 @@ void MessageListScreen::onBeforeDrawItems(lgfx::LGFX_Device& tft) {
         tft.setTextColor(COLOR_DIM_GREEN, COLOR_BLACK);
         tft.setCursor(10, getContentY() + 40);
         tft.print("Messages will appear here");
-        return;
+        return true; // We handled the drawing
     }
+    
+    return false; // Let BaseListScreen handle normal list drawing
 }
 
 bool MessageListScreen::handleKeyPress(char key) {
@@ -198,9 +202,9 @@ void MessageListScreen::drawItem(lgfx::LGFX_Device& tft, int index, int y, bool 
     // Create display name with channel info
     String displayName;
     if (msg.isDirectMessage) {
-        displayName = "DM: " + String(msg.senderName);
+        displayName = String(msg.senderName) +"[DM]";
     } else {
-        displayName = "#" + String(msg.channelName) + " " + String(msg.senderName);
+        displayName = String(msg.senderName)+"["+String(msg.channelName)+"]";
     }
     
     // Truncate if too long
