@@ -10,13 +10,12 @@ Default function body does usually nothing.
 
 */
 
-
 // Initialize HAL layer. Call it as early as possible during device boot
 // do not overwrite it as it's not declared with "weak" attribute.
 void powerHAL_init();
 
 // platform specific init code if needed to be run early on boot
-void powerHAL_platformInit(); 
+void powerHAL_platformInit();
 
 // Return true is current battery level is safe for device operation (for example flash writes).
 // This should be reported by power failure comparator (NRF52) or similar circuits on other platforms.
@@ -25,4 +24,3 @@ bool powerHAL_isPowerLevelSafe();
 
 // return if USB voltage is connected
 bool powerHAL_isVBUSConnected();
-

@@ -23,11 +23,20 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "power.h"
+#include <power/PowerHAL.h>
 
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
+#endif
+
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD
+#define SAFE_VDD_VOLTAGE_THRESHOLD 2.7
+#endif
+
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HIST
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HOST 0.2
 #endif
 
 // Weak empty variant initialization function.
@@ -59,34 +68,51 @@ bool powerHAL_isVBUSConnected()
 bool powerHAL_isPowerLevelSafe()
 {
 
-    // TODO: DEBUGGING ONLY, DO NOT MERGE TO PROD
-    return false;
+    uint16_t threshhold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
 
-    if (NRF_POWER->EVENTS_POFWARN)
-        return false;
     return true;
 }
 
 void powerHAL_platformInit()
 {
 
-    // POF protection prevents flash memory writes when VDD voltage is 2.7V or less to avoid memory corruption
-    // In this setting voltage is checked both against VDD and VDDH so particular board
-    // wiring does not matter.
-    // It must be set to value greater than 2.5V because 2.5V is minimum voltage that can be supplied at VDDH
-    // and it borders at cutoff voltage for li-ion battery protectors.
-    // Originally it was set at 2.4V and it did cause a lot of flash memory corruptions when battery was around 2.5-2.6V
+    // Enable POF power failure comparator. It will prevent writing to NVMC flash when supply voltage is too low.
+    // Set to 2.4V as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node behaviour on its
+    // own.
 
-    // Many NRF52 boards have decent LDO which goes down to 2V
-    // In the future - boards with crappy LDO can be set to prevent memory corruption at higher voltage - like 3V
-    // using custom variant definition. Remember that above 2.8V you need to monitor VDDH voltage threshold using different
-    // registers
+    // @phaseloop note: during my tests - setting threshold to 2.7V would still trigger POFWARN only at 2.5V fed to VDDH (??).
+    // According to datasheet, below 2.8V setting both VDD and VDDH level are covered by this register. So feeding 2.5V to VDDH
+    // would result at 2.2V at VDD (because LDO voltage drop) which is even weirder. Anyway we don't rely much on POFWARN.
 
-    // SoftDevice is only enabled by Adafruit Bluetooth library (Bluefruit) and there is no good way to change it or integrate
-    // with it. This is started at boot before bluetooth so we use raw registers instead of sd_power*
+    // POFWARN is pretty useless for node power management because it triggers only once and clearing this event will not
+    // re-trigger it again until voltage rises to safe level and drops again. So we will use SAADC routed to VDD to read safely
+    // voltage.
 
     NRF_POWER->POFCON =
-        ((POWER_POFCON_THRESHOLD_V27 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+        ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+
+    // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in varian definition file
+#ifdef VBAT_AR_INTERNAL
+    analogReference(VBAT_AR_INTERNAL);
+#else
+    analogReference(AR_INTERNAL); // 3.6V
+#endif
+}
+
+// get VDD voltage (in millivolts)
+uint16_t getVDDVoltage()
+{
+    // some variants use AREF_VOLTAGE as 3.0
+    // but this is fine as we usually hunt for VDD values less than 3V
+    // otherwise either set here the reference for each measure and make sure
+    // same is done for battery reading (which long term should be implemented here as HAL function)
+
+    // we use the same values as regular battery read so there is no conflict on SAADC
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+
+    uint16_t vddADCRead = analogReadVDD();
+    float voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
+    return voltage;
 }
 
 bool loopCanSleep()
@@ -116,38 +142,6 @@ void getMacAddr(uint8_t *dmac)
     dmac[1] = src[4];
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
-
-static void initBrownout()
-{
-    auto vccthresh = POWER_POFCON_THRESHOLD_V24;
-
-    auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
-    assert(err_code == NRF_SUCCESS);
-
-    err_code = sd_power_pof_threshold_set(vccthresh);
-    assert(err_code == NRF_SUCCESS);
-
-    pofcon_configured = true;
-
-    // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
-}
-
-bool isPowerLevelSafe()
-{
-
-    return false;
-
-    if (!pofcon_configured) {
-        initBrownout();
-    }
-
-    if (NRF_POWER->EVENTS_POFWARN)
-        return false;
-    return true;
-}
-
-// This is a public global so that the debugger can set it to false automatically from our gdbinit
-bool useSoftDevice = true; // Set to false for easier debugging
 
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
@@ -253,8 +247,15 @@ extern "C" void lfs_assert(const char *reason)
     // TODO: this will/can crash CPU if bluetooth stack is not compiled in or bluetooth is not initialized
     // (regardless if enabled or disabled) - as there is no live SoftDevice stack
     // implement "safe" functions detecting softdevice stack state and using proper method to set registers
-    if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
-        NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+
+    // do not set GPREGRET if POFWARN is triggered because it means lfs_assert reports flash undervoltage protection
+    // and not data corruption. Reboot is fine as boot procedure will wait until power level is safe again
+
+    if (powerHAL_isPowerLevelSafe()) {
+        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
+              sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
+            NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+        }
     }
 
     // TODO: this should not be done when SoftDevice is enabled as device will not boot back on soft reset

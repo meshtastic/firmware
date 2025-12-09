@@ -5,12 +5,12 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "power/PowerHAL.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
+#include "power/PowerHAL.h"
 
 #include "FSCommon.h"
 #include "Led.h"
@@ -289,7 +289,6 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void lateInitVariant() __attribute__((weak));
 void lateInitVariant() {}
 
-
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
 // For example NRF52 will prevent any flash writes in that case automatically
@@ -301,36 +300,34 @@ void lateInitVariant() {}
 
 // wait until power level is safe to continue booting (to avoid bootloops)
 // blink user led in 3 flashes sequence to indicate what is happening
-void waitUntilPowerLevelSafe(){
+void waitUntilPowerLevelSafe()
+{
 
     // TODO: do not use delay but RTC/IRQ whatever so we don't burn
     // energy which is already scarce
 
-    #ifdef LED_PIN
-        pinMode(LED_PIN, OUTPUT);
-    #endif
+#ifdef LED_PIN
+    pinMode(LED_PIN, OUTPUT);
+#endif
 
-    while(powerHAL_isPowerLevelSafe() == false){
+    while (powerHAL_isPowerLevelSafe() == false) {
 
-        #ifdef LED_PIN
+#ifdef LED_PIN
 
         // 3x: blink for 500 ms, pause for 500 ms
 
-        for(int i=0;i<3;i++){
-             digitalWrite(LED_PIN, LED_STATE_ON);
-             delay(300);
-             digitalWrite(LED_PIN, LED_STATE_OFF);
-             delay(300);
+        for (int i = 0; i < 3; i++) {
+            digitalWrite(LED_PIN, LED_STATE_ON);
+            delay(300);
+            digitalWrite(LED_PIN, LED_STATE_OFF);
+            delay(300);
         }
-        #endif
+#endif
 
         // sleep for 2s
         delay(2000);
-
     }
-
 }
-
 
 /**
  * Print info as a structured log message (for automated log processing)

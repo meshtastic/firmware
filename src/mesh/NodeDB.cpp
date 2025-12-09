@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <power/PowerHAL.h>
 #include <vector>
 
 #ifdef ARCH_ESP32
@@ -1384,6 +1385,14 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
+        return false;
+    }
+
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
@@ -1410,6 +1419,14 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
 bool NodeDB::saveChannelsToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveChannelsToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1420,6 +1437,14 @@ bool NodeDB::saveChannelsToDisk()
 
 bool NodeDB::saveDeviceStateToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveDeviceStateToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1432,6 +1457,14 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveNodeDatabaseToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1444,6 +1477,14 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
+        return false;
+    }
+
     bool success = true;
 #ifdef FSCom
     spiLock->lock();
@@ -1499,6 +1540,14 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 bool NodeDB::saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveToDisk() on unsafe device power level.");
+        return false;
+    }
+
     bool success = saveToDiskNoRetry(saveWhat);
 
     if (!success) {
