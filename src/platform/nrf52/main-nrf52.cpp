@@ -17,6 +17,7 @@
 #include <memory.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
+#include <power/PowerHAL.h>
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "error.h"
@@ -56,9 +57,6 @@ bool powerHAL_isVBUSConnected() {
 }
 
 bool powerHAL_isPowerLevelSafe() {
-    
-    // TODO: DEBUGGING ONLY, DO NOT MERGE TO PROD
-    return false;
     
     if(NRF_POWER->EVENTS_POFWARN)
         return false;
@@ -222,8 +220,14 @@ extern "C" void lfs_assert(const char *reason)
     // TODO: this will/can crash CPU if bluetooth stack is not compiled in or bluetooth is not initialized
     // (regardless if enabled or disabled) - as there is no live SoftDevice stack
     // implement "safe" functions detecting softdevice stack state and using proper method to set registers
-    if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
-        NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+
+    // do not set GPREGRET if POFWARN is triggered because it means lfs_assert reports flash undervoltage protection
+    // and not data corruption. Reboot is fine as boot procedure will wait until power level is safe again
+
+    if(powerHAL_isPowerLevelSafe()){
+        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
+            NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+        }
     }
 
     // TODO: this should not be done when SoftDevice is enabled as device will not boot back on soft reset
