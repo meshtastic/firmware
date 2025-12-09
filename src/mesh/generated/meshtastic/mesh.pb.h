@@ -237,8 +237,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_ETH_ELITE = 91,
     /* Heltec HRI-3621 industrial probe */
     meshtastic_HardwareModel_HELTEC_SENSOR_HUB = 92,
-    /* Reserved Fried Chicken ID for future use */
-    meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN = 93,
+    /* Muzi Works Muzi-Base device */
+    meshtastic_HardwareModel_MUZI_BASE = 93,
     /* Heltec Magnetic Power Bank with Meshtastic compatible */
     meshtastic_HardwareModel_HELTEC_MESH_POCKET = 94,
     /* Seeed Solar Node */
