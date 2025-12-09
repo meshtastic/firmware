@@ -30,12 +30,15 @@
 #endif
 
 struct EdgeLite {
+    enum class Source : uint8_t { Mirrored = 0, Reported = 1 };
+
     NodeNum to;
     uint16_t etxFixed;     // ETX * 100 (fixed-point, range 1.00-655.35)
     uint16_t lastUpdateLo; // Lower 16 bits of timestamp (wraps every ~65s)
     uint8_t variance;      // Position variance (0-255, scaled)
+    Source source;
 
-    EdgeLite() : to(0), etxFixed(100), lastUpdateLo(0), variance(0) {}
+    EdgeLite() : to(0), etxFixed(100), lastUpdateLo(0), variance(0), source(Source::Mirrored) {}
 
     float getEtx() const { return etxFixed / 100.0f; }
     void setEtx(float etx) { etxFixed = static_cast<uint16_t>(etx * 100.0f); }
@@ -85,7 +88,8 @@ class GraphLite {
     /**
      * Add or update an edge in the graph
      */
-    int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0);
+    int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0,
+                   EdgeLite::Source source = EdgeLite::Source::Mirrored);
 
     /**
      * Remove edges that haven't been updated recently
