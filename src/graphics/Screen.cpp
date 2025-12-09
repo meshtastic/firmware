@@ -1656,6 +1656,26 @@ int Screen::handleInputEvent(const InputEvent *event)
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
+#if defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2
+            bool handledEncoderScroll = false;
+            const bool isTextMessageFrame = (framesetInfo.positions.textMessage != 255 &&
+                                             this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
+                                             !messageStore.getMessages().empty());
+            if (isTextMessageFrame) {
+                if (event->inputEvent == INPUT_BROKER_UP_LONG) {
+                    graphics::MessageRenderer::nudgeScroll(-1);
+                    handledEncoderScroll = true;
+                } else if (event->inputEvent == INPUT_BROKER_DOWN_LONG) {
+                    graphics::MessageRenderer::nudgeScroll(1);
+                    handledEncoderScroll = true;
+                }
+            }
+
+            if (handledEncoderScroll) {
+                setFastFramerate();
+                return 0;
+            }
+#endif
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
