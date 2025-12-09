@@ -5,6 +5,7 @@
 #include "OLEDDisplayUi.h"
 #include "graphics/emotes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // for meshtastic_MeshPacket
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,9 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 
 // Reset scroll state when new messages arrive
 void resetScrollState();
+
+// Manual scroll control for encoder-style inputs
+void nudgeScroll(int8_t direction);
 
 // Helper to auto-select the correct thread mode from a message
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet);

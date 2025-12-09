@@ -238,6 +238,48 @@ void resetScrollState()
     didReset = false;
 }
 
+void nudgeScroll(int8_t direction)
+{
+    if (direction == 0)
+        return;
+
+    if (cachedHeights.empty()) {
+        scrollY = 0.0f;
+        return;
+    }
+
+    OLEDDisplay *display = (screen != nullptr) ? screen->getDisplayDevice() : nullptr;
+    const int displayHeight = display ? display->getHeight() : 64;
+    const int navHeight = FONT_HEIGHT_SMALL;
+    const int usableHeight = std::max(0, displayHeight - navHeight);
+
+    int totalHeight = 0;
+    for (int h : cachedHeights)
+        totalHeight += h;
+
+    if (totalHeight <= usableHeight) {
+        scrollY = 0.0f;
+        return;
+    }
+
+    const int scrollStop = std::max(0, totalHeight - usableHeight + cachedHeights.back());
+    const int step = std::max(FONT_HEIGHT_SMALL, usableHeight / 3);
+
+    float newScroll = scrollY + static_cast<float>(direction) * static_cast<float>(step);
+    if (newScroll < 0.0f)
+        newScroll = 0.0f;
+    if (newScroll > scrollStop)
+        newScroll = static_cast<float>(scrollStop);
+
+    if (newScroll != scrollY) {
+        scrollY = newScroll;
+        waitingToReset = false;
+        scrollStarted = false;
+        scrollStartDelay = millis();
+        lastTime = millis();
+    }
+}
+
 // Fully free cached message data from heap
 void clearMessageCache()
 {
