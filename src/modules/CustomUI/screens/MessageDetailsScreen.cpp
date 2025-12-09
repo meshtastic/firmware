@@ -233,7 +233,6 @@ void MessageDetailsScreen::drawTextSection(lgfx::LGFX_Device& tft) {
     // Calculate text area position
     int textY = getContentY() + SENDER_HEIGHT + 5;
     const int TEXT_MARGIN = 10;
-    const int SCROLLBAR_WIDTH = 20;
     
     // Clear text area (avoid clearing sender area)
     tft.fillRect(0, textY, getContentWidth(), TEXT_AREA_HEIGHT, COLOR_BLACK);
