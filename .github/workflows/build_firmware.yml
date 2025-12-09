@@ -18,7 +18,8 @@ permissions: read-all
 jobs:
   pio-build:
     name: build-${{ inputs.platform }}
-    runs-on: ubuntu-24.04
+    # Use 'arctastic' self-hosted runner pool when building in the main repo
+    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
