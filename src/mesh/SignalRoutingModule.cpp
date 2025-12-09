@@ -1189,7 +1189,7 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
         // Trigger early broadcast if we haven't sent recently (rate limit: 60s)
         uint32_t now = millis();
         if (now - lastBroadcast > 60 * 1000) {
-            setIntervalFromNow(5 * 1000); // Send update in 5 seconds
+            setIntervalFromNow(EARLY_BROADCAST_DELAY_MS); // Send update soon (configurable)
         }
     }
 }
