@@ -988,10 +988,10 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
-    // Gateway awareness: if we consistently hear source via a gateway neighbor, bias to relay
+    // Gateway awareness: only force relay if WE are the recorded gateway for the source
     NodeNum gatewayForSource = getGatewayFor(sourceNode);
-    bool gatewayPath = (gatewayForSource != 0 && gatewayForSource == heardFrom && heardFrom != sourceNode);
-    size_t downstreamCount = gatewayPath ? getGatewayDownstreamCount(gatewayForSource) : 0;
+    bool weAreGateway = (gatewayForSource != 0 && gatewayForSource == myNode);
+    size_t downstreamCount = weAreGateway ? getGatewayDownstreamCount(myNode) : 0;
 
     uint32_t currentTime = getValidTime(RTCQualityFromNet);
     if (!currentTime) {
@@ -1004,8 +1004,8 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
 #endif
 
-    if (!shouldRelay && gatewayPath) {
-        LOG_INFO("[SR] Gateway path via %08x for %08x (downstream=%zu) -> force relay", heardFrom, sourceNode, downstreamCount);
+    if (!shouldRelay && weAreGateway) {
+        LOG_INFO("[SR] We are gateway for %08x (downstream=%zu) -> force relay", sourceNode, downstreamCount);
         shouldRelay = true;
     }
 
