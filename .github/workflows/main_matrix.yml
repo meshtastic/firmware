@@ -280,9 +280,9 @@ jobs:
 
       - name: Generate Release manifest
         run: |
-          jq -n --arg ver "${{ needs.version.outputs.long }}" --arg targets "${{ toJson(needs.setup.outputs.all) }}" '{
+          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets ${{ toJson(needs.setup.outputs.all) }} '{
             "version": $ver,
-            "targets": ($targets | fromjson)
+            "targets": $targets
           }' > firmware-${{ needs.version.outputs.long }}.json
 
       - name: Save Release manifest artifact
