@@ -61,17 +61,11 @@ extern "C" {
 /*
  * Buttons
  */
-#define PIN_BUTTON2 (32 + 10)
+#define PIN_BUTTON1 (32 + 10)
+#define PIN_BUTTON2 (32 + 7)
 #define ALT_BUTTON_PIN PIN_BUTTON2
 #define ALT_BUTTON_ACTIVE_LOW true
 #define ALT_BUTTON_ACTIVE_PULLUP true
-#define PIN_BUTTON1 (32 + 7)
-
-// #define PIN_BUTTON1 (0 + 11)
-// #define PIN_BUTTON1 (32 + 7)
-
-// #define BUTTON_CLICK_MS 400
-// #define BUTTON_TOUCH_MS 200
 
 /*
  * Analog pins
