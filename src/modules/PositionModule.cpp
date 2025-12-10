@@ -45,8 +45,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
-    // If inbound message is a replay (or spoof!) of our own messages, we shouldn't process
-    // (why use second-hand sources for our own data?)
+    const auto transport = mp.transport_mechanism;
+    if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
+                                    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API)) {
+        LOG_WARN("Ignoring packet supposedly from us over external transport");
+        return true;
+    }
 
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
