@@ -1099,9 +1099,9 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             TFT_MESH_b = 255;
         } else if (selected == 10) {
             LOG_INFO("Setting color to Ice");
-            TFT_MESH_r = 182;
-            TFT_MESH_g = 212;
-            TFT_MESH_b = 221;
+            TFT_MESH_r = 173;
+            TFT_MESH_g = 216;
+            TFT_MESH_b = 230;
         } else if (selected == 11) {
             LOG_INFO("Setting color to Pink");
             TFT_MESH_r = 255;
