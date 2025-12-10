@@ -980,7 +980,9 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         return true;
     }
 
-    if (p->decoded.portnum == meshtastic_PortNum_SIGNAL_ROUTING_APP) {
+    // Only access decoded fields if packet is actually decoded
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        p->decoded.portnum == meshtastic_PortNum_SIGNAL_ROUTING_APP) {
         preProcessSignalRoutingPacket(p);
     }
 
