@@ -837,6 +837,11 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
+    // If the packet wasn't decrypted, still consider SR but note we are routing opaque payload.
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        LOG_INFO("[SR] Packet not decoded (hash/PSK mismatch) - routing header only");
+    }
+
     // Use smaller buffers to reduce stack pressure on memory-constrained devices
     char destName[40], senderName[40];
     getNodeDisplayName(p->to, destName, sizeof(destName));
@@ -1570,7 +1575,11 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
         LOG_DEBUG("[SR] Routing reply from %s for %u hops", senderName, routing.route_reply.route_back_count);
         break;
     case meshtastic_Routing_error_reason_tag:
-        LOG_WARN("[SR] Routing error from %s reason=%u", senderName, routing.error_reason);
+        if (routing.error_reason == meshtastic_Routing_Error_NONE) {
+            LOG_DEBUG("[SR] Routing status from %s (no error)", senderName);
+        } else {
+            LOG_WARN("[SR] Routing error from %s reason=%u", senderName, routing.error_reason);
+        }
         break;
     default:
         LOG_DEBUG("[SR] Routing control variant %u from %s", routing.which_variant, senderName);
