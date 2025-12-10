@@ -64,6 +64,10 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
+    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+    // This is done onConnect too because we suspect in some cases onDisconnect callback may be missing
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
     // negotiate connections params as soon as possible
     // some phones and laptops seem to ignore GAP preferred settings and treat slave latency as connection disruption
     // such devices can not connect to the node. This is fixed by forcing parameter negotiation at the start of communication
@@ -76,7 +80,12 @@ void onConnect(uint16_t conn_handle)
     newParams.slave_latency = 5;
     newParams.conn_sup_timeout = 400; // in 10 ms units, timeout 4s
 
-    sd_ble_gap_conn_param_update(conn_handle, &newParams);
+    int ret = sd_ble_gap_conn_param_update(conn_handle, &newParams);
+
+    if(ret != NRF_SUCCESS){
+        LOG_INFO("BLE connection parameter negotiation failed. Error code: %x", ret);
+
+    }
 
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
@@ -293,7 +302,7 @@ void NRF52Bluetooth::setup()
 
     // Attention! Same values - latency and intervals (if added here) must also be negotiated inside onConnect method. See comments there.
     
-    Bluefruit.Periph.setConnSlaveLatency(5);
+  //  Bluefruit.Periph.setConnSlaveLatency(5);
 
     // min, max connection intervals are negotiated in onConnect as (24,40) [in 1.25 ms units] -> (30, 50) milliseconds.
 
