@@ -75,10 +75,10 @@ void onConnect(uint16_t conn_handle)
     ble_gap_conn_params_t newParams;
     memset(&newParams, 0, sizeof(newParams));
 
-    newParams.min_conn_interval = 24; // in 1.25 ms units = 30 ms
+    newParams.min_conn_interval = 12; // in 1.25 ms units = 15 ms
     newParams.max_conn_interval = 40; // in 1.25 ms units = 50 ms
     newParams.slave_latency = 5;
-    newParams.conn_sup_timeout = 400; // in 10 ms units, timeout 4s
+    newParams.conn_sup_timeout = 600; // in 10 ms units, timeout 6s
 
     int ret = sd_ble_gap_conn_param_update(conn_handle, &newParams);
 
