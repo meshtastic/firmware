@@ -1041,12 +1041,13 @@ void menuHandler::switchToMUIMenu()
 
 void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 {
-    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
-                                         "Pink", "White"};
+    static const char *optionsArray[] = {
+        "Back",  "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Blue", "Teal", "Cyan", "Ice", "Pink",
+        "White", "Gray"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Select Screen Color";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 10;
+    bannerOptions.optionsCount = 14;
     bannerOptions.bannerCallback = [display](int selected) -> void {
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
     HAS_TFT || defined(HACKADAY_COMMUNICATOR)
@@ -1082,20 +1083,40 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             TFT_MESH_g = 153;
             TFT_MESH_b = 255;
         } else if (selected == 7) {
-            LOG_INFO("Setting color to Teal");
-            TFT_MESH_r = 64;
-            TFT_MESH_g = 224;
-            TFT_MESH_b = 208;
+            LOG_INFO("Setting color to Blue");
+            TFT_MESH_r = 0;
+            TFT_MESH_g = 0;
+            TFT_MESH_b = 255;
         } else if (selected == 8) {
+            LOG_INFO("Setting color to Teal");
+            TFT_MESH_r = 16;
+            TFT_MESH_g = 102;
+            TFT_MESH_b = 102;
+        } else if (selected == 9) {
+            LOG_INFO("Setting color to Cyan");
+            TFT_MESH_r = 0;
+            TFT_MESH_g = 255;
+            TFT_MESH_b = 255;
+        } else if (selected == 10) {
+            LOG_INFO("Setting color to Ice");
+            TFT_MESH_r = 182;
+            TFT_MESH_g = 212;
+            TFT_MESH_b = 221;
+        } else if (selected == 11) {
             LOG_INFO("Setting color to Pink");
             TFT_MESH_r = 255;
             TFT_MESH_g = 105;
             TFT_MESH_b = 180;
-        } else if (selected == 9) {
+        } else if (selected == 12) {
             LOG_INFO("Setting color to White");
             TFT_MESH_r = 255;
             TFT_MESH_g = 255;
             TFT_MESH_b = 255;
+        } else if (selected == 13) {
+            LOG_INFO("Setting color to Gray");
+            TFT_MESH_r = 128;
+            TFT_MESH_g = 128;
+            TFT_MESH_b = 128;
         } else {
             menuQueue = system_base_menu;
             screen->runNow();
