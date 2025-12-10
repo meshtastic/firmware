@@ -18,11 +18,12 @@ permissions: read-all
 jobs:
   pio-build:
     name: build-${{ inputs.platform }}
-    runs-on: ubuntu-24.04
+    # Use 'arctastic' self-hosted runner pool when building in the main repo
+    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           ref: ${{github.event.pull_request.head.ref}}
@@ -55,15 +56,29 @@ jobs:
           ota_firmware_source: ${{ steps.ota_dir.outputs.src || '' }}
           ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
 
+      - name: Echo manifest from release/firmware-*.mt.json to job summary
+        if: ${{ always() }}
+        env:
+          PIO_ENV: ${{ inputs.pio_env }}
+        run: |
+          echo "## Manifest: \`$PIO_ENV\`" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat release/firmware-*.mt.json >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v5
         id: upload
         with:
-          name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}.zip
+          name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
           overwrite: true
           path: |
+            release/*.mt.json
             release/*.bin
             release/*.elf
             release/*.uf2
             release/*.hex
-            release/*-ota.zip
+            release/*.zip
+            release/device-*.sh
+            release/device-*.bat
