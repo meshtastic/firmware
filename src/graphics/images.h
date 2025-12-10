@@ -28,7 +28,7 @@ const uint8_t bluetoothConnectedIcon[36] PROGMEM = {0xfe, 0x01, 0xff, 0x03, 0x03
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) ||             \
-     ARCH_PORTDUINO) &&                                                                                                          \
+     defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR) || ARCH_PORTDUINO) &&                                                 \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 const uint8_t imgQuestionL1[] PROGMEM = {0xff, 0x01, 0x01, 0x32, 0x7b, 0x49, 0x49, 0x6f, 0x26, 0x01, 0x01, 0xff};
 const uint8_t imgQuestionL2[] PROGMEM = {0x0f, 0x08, 0x08, 0x08, 0x06, 0x0f, 0x0f, 0x06, 0x08, 0x08, 0x08, 0x0f};
@@ -359,6 +359,10 @@ const uint8_t chirpy_hirez[] = {
 #define chirpy_small_image_width 8
 #define chirpy_small_image_height 8
 const uint8_t chirpy_small[] = {0x7f, 0x41, 0x55, 0x55, 0x55, 0x55, 0x41, 0x7f};
+
+#define connection_icon_width 7
+#define connection_icon_height 5
+const uint8_t connection_icon[] = {0x36, 0x41, 0x5D, 0x41, 0x36};
 
 #ifdef M5STACK_UNITC6L
 #include "img/icon_small.xbm"

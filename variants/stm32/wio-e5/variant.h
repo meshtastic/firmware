@@ -15,7 +15,7 @@ Do not expect a working Meshtastic device with this target.
 #define USE_STM32WLx
 
 #define LED_PIN PB5
-#define LED_STATE_ON 1
+#define LED_STATE_ON 0
 
 #define WIO_E5
 
