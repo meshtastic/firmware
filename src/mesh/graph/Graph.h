@@ -232,6 +232,13 @@ public:
     bool shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
                            uint32_t currentTime, uint32_t packetId) const;
 
+    /**
+     * Conservative version of shouldRelayEnhanced that defers to stock gateways
+     * @return true if we should relay, false otherwise
+     */
+    bool shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
+                           uint32_t currentTime, uint32_t packetId) const;
+
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;
     std::unordered_map<NodeNum, Route> routeCache;

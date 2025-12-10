@@ -770,3 +770,124 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
     LOG_DEBUG("Graph: No relay condition met - NOT relaying");
     return false;  // Don't relay
 }
+
+bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
+                                          uint32_t currentTime, uint32_t packetId) const {
+    LOG_DEBUG("Graph: === CONSERVATIVE Relay decision for node %08x, source %08x, heard from %08x, packet %08x ===",
+              myNode, sourceNode, heardFrom, packetId);
+
+    // Build set of nodes that have already "covered" (source + anyone who relayed)
+    std::unordered_set<NodeNum> alreadyCovered;
+    alreadyCovered.insert(sourceNode);
+
+    // Add all nodes that the source can reach directly
+    auto sourceNeighbors = getDirectNeighbors(sourceNode);
+    for (NodeNum n : sourceNeighbors) {
+        alreadyCovered.insert(n);
+    }
+
+    // If we heard from a relayer (not the source), add their coverage too
+    if (heardFrom != sourceNode) {
+        alreadyCovered.insert(heardFrom);
+        auto relayerNeighbors = getDirectNeighbors(heardFrom);
+        for (NodeNum n : relayerNeighbors) {
+            alreadyCovered.insert(n);
+        }
+    }
+
+    LOG_DEBUG("Graph: Already covered: %zu nodes", alreadyCovered.size());
+
+    // Get all nodes that heard this packet (source's neighbors + relayer's neighbors)
+    std::unordered_set<NodeNum> candidates;
+    for (NodeNum n : sourceNeighbors) {
+        candidates.insert(n);
+    }
+    if (heardFrom != sourceNode) {
+        auto relayerNeighbors = getDirectNeighbors(heardFrom);
+        for (NodeNum n : relayerNeighbors) {
+            candidates.insert(n);
+        }
+    }
+
+    LOG_DEBUG("Graph: Potential candidates: %zu nodes", candidates.size());
+
+    // Get all relay candidates with their tiers
+    auto relayCandidates = findAllRelayCandidates(alreadyCovered, candidates, currentTime, packetId);
+
+    if (relayCandidates.empty()) {
+        LOG_DEBUG("Graph: No relay candidates found - not relaying");
+        return false;  // No one can provide additional coverage
+    }
+
+    // Find candidates in tier 0 (primary relays)
+    std::vector<NodeNum> primaryRelays;
+    for (const auto& candidate : relayCandidates) {
+        if (candidate.tier == 0) {
+            primaryRelays.push_back(candidate.nodeId);
+        }
+    }
+
+    LOG_DEBUG("Graph: Found %zu primary relays", primaryRelays.size());
+
+    // Check if we're a primary relay
+    bool isPrimaryRelay = std::find(primaryRelays.begin(), primaryRelays.end(), myNode) != primaryRelays.end();
+    if (isPrimaryRelay) {
+        LOG_DEBUG("Graph: WE ARE PRIMARY RELAY - conservative mode allows primary relays");
+        // In conservative mode, we still allow primary relays but check if the coverage
+        // justifies competing with stock gateways
+        auto myCoverage = getCoverageIfRelays(myNode, alreadyCovered);
+        auto maxOtherCoverage = size_t{0};
+        for (const auto& candidate : relayCandidates) {
+            if (candidate.nodeId != myNode) {
+                auto theirCoverage = getCoverageIfRelays(candidate.nodeId, alreadyCovered);
+                maxOtherCoverage = std::max(maxOtherCoverage, theirCoverage.size());
+            }
+        }
+
+        // Only suppress primary relay if another relay covers 80% of what we cover
+        if (maxOtherCoverage * 5 >= myCoverage.size() * 4 && myCoverage.size() < 3) {
+            LOG_DEBUG("Graph: Primary relay suppressed - another relay covers most of our nodes");
+            return false;
+        } else {
+            LOG_DEBUG("Graph: Primary relay proceeding - we provide unique coverage");
+            return true;
+        }
+    }
+
+    // In conservative mode, allow backup relaying but be more selective
+    LOG_DEBUG("Graph: Conservative mode - checking backup relay status");
+
+    // Check if any primary relays have transmitted
+    bool primaryRelayHasTransmitted = false;
+    for (NodeNum primary : primaryRelays) {
+        if (hasNodeTransmitted(primary, packetId, currentTime)) {
+            primaryRelayHasTransmitted = true;
+            LOG_DEBUG("Graph: Primary relay %08x has transmitted", primary);
+            break;
+        }
+    }
+
+    if (!primaryRelayHasTransmitted) {
+        // Check if we're a backup relay (tier 1) and should transmit
+        for (const auto& candidate : relayCandidates) {
+            if (candidate.tier == 1 && candidate.nodeId == myNode) {
+                LOG_DEBUG("Graph: WE ARE BACKUP RELAY (tier 1) - TRANSMITTING");
+                return true;  // We're the backup relay
+            }
+        }
+    }
+
+    // Final check: provide unique coverage that justifies relaying
+    auto myCoverage = getCoverageIfRelays(myNode, alreadyCovered);
+    if (!myCoverage.empty()) {
+        LOG_DEBUG("Graph: We can cover %zu additional nodes", myCoverage.size());
+        // In conservative mode, require at least 2 unique nodes to justify relaying
+        if (myCoverage.size() >= 2) {
+            LOG_DEBUG("Graph: We provide sufficient unique coverage (%zu nodes) - TRANSMITTING", myCoverage.size());
+            return true;
+        }
+    }
+
+    LOG_DEBUG("Graph: Conservative relay conditions not met - NOT relaying");
+    return false;
+}

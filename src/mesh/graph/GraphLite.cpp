@@ -347,6 +347,57 @@ bool GraphLite::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum he
     return uniqueNeighbors > 0;
 }
 
+bool GraphLite::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const
+{
+    // Conservative relay decision for mixed networks with stock gateways:
+    // Be more selective about relaying to avoid competing with stock gateways
+
+    const NodeEdgesLite *myEdges = findNode(myNode);
+    const NodeEdgesLite *sourceEdges = findNode(sourceNode);
+    const NodeEdgesLite *relayEdges = (heardFrom == sourceNode) ? nullptr : findNode(heardFrom);
+
+    if (!myEdges || myEdges->edgeCount == 0) {
+        return false; // We have no neighbors, no point relaying
+    }
+
+    // Count SR neighbors we have that the source doesn't have direct connection to
+    uint8_t uniqueSrNeighbors = 0;
+    for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+        NodeNum neighbor = myEdges->edges[i].to;
+        if (neighbor == sourceNode || neighbor == heardFrom) {
+            continue; // They already have the packet
+        }
+
+        // Check if source or relayer has direct connection to this neighbor
+        bool sourceHasIt = false;
+        if (sourceEdges) {
+            for (uint8_t j = 0; j < sourceEdges->edgeCount; j++) {
+                if (sourceEdges->edges[j].to == neighbor) {
+                    sourceHasIt = true;
+                    break;
+                }
+            }
+        }
+
+        if (relayEdges && !sourceHasIt) {
+            for (uint8_t j = 0; j < relayEdges->edgeCount; j++) {
+                if (relayEdges->edges[j].to == neighbor) {
+                    sourceHasIt = true;
+                    break;
+                }
+            }
+        }
+
+        if (!sourceHasIt) {
+            uniqueSrNeighbors++;
+        }
+    }
+
+    // Conservative logic: Require at least 2 unique SR neighbors before relaying
+    // This reduces redundant relaying while still ensuring branch connectivity
+    return uniqueSrNeighbors >= 2;
+}
+
 void GraphLite::recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32_t currentTime)
 {
     // Find existing entry
