@@ -243,8 +243,7 @@ class NodeDB
         return retVal;
     }
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
-        removeNodeByNum(NodeNum nodeNum);
+    void resetNodes(bool keepFavorites = false), removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
