@@ -137,6 +137,16 @@ class GraphLite {
     bool hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) const;
 
     /**
+     * Simplified relay decision for constrained devices
+     */
+    bool shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
+
+    /**
+     * Conservative relay decision that defers to stock gateways
+     */
+    bool shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
+
+    /**
      * Get count of nodes in graph
      */
     size_t getNodeCount() const { return nodeCount; }
