@@ -127,6 +127,11 @@ class GraphLite {
     bool shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
 
     /**
+     * Conservative relay decision that defers to stock gateways
+     */
+    bool shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
+
+    /**
      * Record that a node has transmitted
      */
     void recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32_t currentTime);
@@ -135,16 +140,6 @@ class GraphLite {
      * Check if a node has transmitted recently
      */
     bool hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) const;
-
-    /**
-     * Simplified relay decision for constrained devices
-     */
-    bool shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
-
-    /**
-     * Conservative relay decision that defers to stock gateways
-     */
-    bool shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
 
     /**
      * Get count of nodes in graph
