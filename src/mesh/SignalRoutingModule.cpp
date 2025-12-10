@@ -1000,10 +1000,68 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         currentTime = getTime();
     }
 
+    // Check for stock gateway nodes that can be heard directly
+    // If we have stock nodes that could serve as gateways, be conservative with SR relaying
+    bool hasStockGateways = false;
+    bool heardFromStockGateway = false;
+    if (routingGraph && nodeDB) {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        // In lite mode, check capability records for legacy nodes
+        for (uint8_t i = 0; i < capabilityRecordCount; i++) {
+            if (capabilityRecords[i].record.status == CapabilityStatus::Legacy) {
+                hasStockGateways = true;
+                if (capabilityRecords[i].nodeId == heardFrom) {
+                    heardFromStockGateway = true;
+                }
+            }
+        }
+#else
+        // In full mode, check capability status of nodes we've heard from recently
+        for (const auto& pair : capabilityRecords) {
+            if (pair.second.status == CapabilityStatus::Legacy) {
+                hasStockGateways = true;
+                if (pair.first == heardFrom) {
+                    heardFromStockGateway = true;
+                }
+            }
+        }
+#endif
+    }
+
+    // Key insight: If packet comes from a stock gateway, we MUST relay it within the branch
+    // to ensure all local nodes receive packets from outside the branch
+    bool mustRelayForBranchCoverage = heardFromStockGateway;
+
+    if (heardFromStockGateway) {
+        LOG_DEBUG("[SR] Packet from stock gateway %08x - prioritizing branch distribution", heardFrom);
+    }
+
 #ifdef SIGNAL_ROUTING_LITE_MODE
     bool shouldRelay = routingGraph->shouldRelaySimple(myNode, sourceNode, heardFrom, currentTime);
+
+    // Apply conservative logic only when NOT required for branch coverage
+    if (shouldRelay && hasStockGateways && !mustRelayForBranchCoverage) {
+        LOG_DEBUG("[SR] Applying conservative relay logic (stock gateways present, not from gateway)");
+        shouldRelay = routingGraph->shouldRelaySimpleConservative(myNode, sourceNode, heardFrom, currentTime);
+        if (!shouldRelay) {
+            LOG_DEBUG("[SR] Suppressed SR relay - stock gateway can handle external transmission");
+        } else {
+            LOG_DEBUG("[SR] SR relay proceeding despite conservative logic");
+        }
+    }
 #else
     bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
+
+    // Apply conservative logic only when NOT required for branch coverage
+    if (shouldRelay && hasStockGateways && !mustRelayForBranchCoverage) {
+        LOG_DEBUG("[SR] Applying conservative relay logic (stock gateways present, not from gateway)");
+        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, currentTime, p->id);
+        if (!shouldRelay) {
+            LOG_DEBUG("[SR] Suppressed SR relay - stock gateway provides better external coverage");
+        } else {
+            LOG_DEBUG("[SR] SR relay proceeding despite conservative logic");
+        }
+    }
 #endif
 
     if (!shouldRelay && weAreGateway) {
