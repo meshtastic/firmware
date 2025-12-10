@@ -2,7 +2,7 @@
 #include "meshUtils.h"
 
 #include "configuration.h"
-#if defined(M5STACK_UNITC6L)
+#if defined(M5STACK_UNITC6L) || defined(ARDUINO_NESSO_N1)
 
 #include "MeshService.h"
 #include "RadioLibInterface.h"
