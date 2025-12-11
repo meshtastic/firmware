@@ -177,19 +177,17 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R
 
-      - name: Move files up
-        run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
-
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v5
         with:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: |
+            ./firmware-*.mt.json
             ./firmware-*.bin
             ./firmware-*.uf2
             ./firmware-*.hex
-            ./firmware-*-ota.zip
+            ./firmware-*.zip
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
@@ -209,8 +207,8 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
@@ -218,7 +216,7 @@ jobs:
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v5
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: ./*.elf
           retention-days: 30
@@ -236,6 +234,7 @@ jobs:
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
+      - setup
       - version
       - gather-artifacts
       - build-debian-src
@@ -243,11 +242,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: 3.x
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -284,10 +278,25 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -lR
 
-      - name: Add Linux sources to GtiHub Release
+      - name: Generate Release manifest
+        run: |
+          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets ${{ toJson(needs.setup.outputs.all) }} '{
+            "version": $ver,
+            "targets": $targets
+          }' > firmware-${{ needs.version.outputs.long }}.json
+
+      - name: Save Release manifest artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: manifest-${{ needs.version.outputs.long }}
+          overwrite: true
+          path: firmware-${{ needs.version.outputs.long }}.json
+
+      - name: Add sources to GitHub Release
         # Only run when targeting master branch with workflow_dispatch
         if: ${{ github.ref_name == 'master' }}
         run: |
+          gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
           gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
           gh release upload v${{ needs.version.outputs.long }} ./output/platformio-deps-native-tft-${{ needs.version.outputs.long }}.zip
         env:
@@ -329,15 +338,15 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
 
       - uses: actions/download-artifact@v6
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./elfs
 
@@ -373,10 +382,17 @@ jobs:
         with:
           python-version: 3.x
 
-      - uses: actions/download-artifact@v6
+      - name: Get firmware artifacts
+        uses: actions/download-artifact@v6
         with:
           pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
           merge-multiple: true
+          path: ./publish
+
+      - name: Get manifest artifact
+        uses: actions/download-artifact@v6
+        with:
+          pattern: manifest-${{ needs.version.outputs.long }}
           path: ./publish
 
       - name: Publish firmware to meshtastic.github.io
