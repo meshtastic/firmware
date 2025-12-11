@@ -59,6 +59,24 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
  */
 const keyboard_state_t *keyboard_decoder_core1_get_state(void);
 
+/**
+ * @brief Inject test text into Core1's keystroke buffer
+ *
+ * This function allows testing the USB capture module without requiring
+ * a physical keyboard. Text is injected directly into Core1's buffer
+ * as if it came from keyboard input, then finalized and written to PSRAM.
+ *
+ * @param text Pointer to null-terminated ASCII text to inject
+ * @param len Length of text (excluding null terminator)
+ * @return true if injection successful, false if buffer full
+ *
+ * @note This function is SAFE to call from Core0 - uses memory barriers
+ * @note Newlines ('\n') are converted to Enter key encoding (delta marker)
+ * @note Text is immediately finalized and written to PSRAM after injection
+ * @note Maximum text length is limited by PSRAM_BUFFER_DATA_SIZE (500 bytes)
+ */
+void keyboard_decoder_core1_inject_text(const char *text, size_t len);
+
 
 #ifdef __cplusplus
 }

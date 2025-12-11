@@ -160,3 +160,30 @@ void pio_manager_stop_capture(pio_config_t *config)
 
     config->initialized = false;
 }
+
+CORE1_RAM_FUNC
+void pio_manager_pause_capture(pio_config_t *config)
+{
+    if (!config->initialized)
+    {
+        return;
+    }
+
+    /* Disable PIO state machines to stop USB capture
+     * This prevents memory bus contention during filesystem operations */
+    pio_sm_set_enabled(config->pio0_instance, config->pio0_sm, false);
+    pio_sm_set_enabled(config->pio1_instance, config->pio1_sm, false);
+}
+
+CORE1_RAM_FUNC
+void pio_manager_resume_capture(pio_config_t *config)
+{
+    if (!config->initialized)
+    {
+        return;
+    }
+
+    /* Re-enable PIO state machines to resume USB capture */
+    pio_sm_set_enabled(config->pio0_instance, config->pio0_sm, true);
+    pio_sm_set_enabled(config->pio1_instance, config->pio1_sm, true);
+}

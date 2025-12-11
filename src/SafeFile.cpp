@@ -7,63 +7,44 @@
 #include "platform/rp2xx0/usb_capture/common.h"
 #include "hardware/timer.h"
 #include "hardware/sync.h"  // For memory barriers
-#include "hardware/watchdog.h"  // For filesystem operation timeout
+#include "pico/multicore.h" // For FIFO operations
 
-/**
- * @brief Filesystem operation timeout tracking
- *
- * Used to detect and recover from hung LittleFS operations.
- * Core0's watchdog scratch register is used for timeout detection.
- */
-static volatile uint32_t g_fs_operation_start = 0;
-static constexpr uint32_t FS_OPERATION_TIMEOUT_MS = 10000;  // 10 seconds max per operation
+// ========== RECOVERY METHOD SELECTION ==========
+// Toggle between recovery methods by uncommenting ONE of these:
+#define USE_FIFO_RECOVERY        // Experimental: Send LOCKOUT_MAGIC_END via FIFO
+// #define USE_NUCLEAR_OPTION       // Recommended: Stop/restart Core1 completely
+// ===============================================
+//
+// TO SWITCH METHODS:
+// 1. Comment out current method (add // before #define)
+// 2. Uncomment desired method (remove // from #define)
+// 3. Rebuild and flash
+// ===============================================
 
-/**
- * @brief Start tracking a filesystem operation with timeout
- */
-static void startFSOperationTimeout(void)
-{
-    g_fs_operation_start = millis();
-}
-
-/**
- * @brief Check if filesystem operation has timed out
- *
- * @return true if operation exceeded timeout, false otherwise
- */
-static bool checkFSOperationTimeout(void)
-{
-    if (g_fs_operation_start == 0)
-        return false;
-
-    uint32_t elapsed = millis() - g_fs_operation_start;
-    if (elapsed > FS_OPERATION_TIMEOUT_MS) {
-        LOG_ERROR("[SafeFile] FILESYSTEM TIMEOUT after %lu ms! Possible FS corruption or hardware issue.", elapsed);
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief Clear filesystem operation timeout tracking
- */
-static void clearFSOperationTimeout(void)
-{
-    g_fs_operation_start = 0;
-}
+// LOCKOUT_MAGIC_END constant from pico-sdk (for FIFO recovery)
+#define LOCKOUT_MAGIC_START 0x73a8831eu
+#define LOCKOUT_MAGIC_END (~LOCKOUT_MAGIC_START)
 
 /**
  * @brief Pause Core1 before filesystem operations to prevent bus contention
  *
- * This function requests Core1 to pause and waits for acknowledgment.
- * Uses ARM memory barriers for proper cross-core visibility.
- * Timeout prevents indefinite hang if Core1 doesn't respond.
+ * Uses voluntary pause mechanism where Core1 checks a flag and pauses itself.
+ * This avoids deadlocks from rp2040.idleOtherCore() when Core1 is blocked on FIFO.
+ *
+ * IMPORTANT: If Core1 hasn't started yet (during boot), skip the pause.
  *
  * @note Only compiled when USB Capture Module is enabled
- * @note CRITICAL: Memory barriers required for Cortex-M33 dual-core
+ * @note Core1 voluntarily pauses when it sees g_core1_pause_requested
  */
 static void pauseCore1(void)
 {
+    // Check if Core1 has actually started - if not, skip pause
+    __dmb();  // Memory barrier - ensure we see Core1's write
+    if (!g_core1_running) {
+        LOG_DEBUG("[SafeFile] Core1 not running yet, skipping pause");
+        return;
+    }
+
     LOG_DEBUG("[SafeFile] Requesting Core1 pause...");
     g_core1_pause_requested = true;
     __dmb();  // Data Memory Barrier - ensure write visible to Core1
@@ -87,14 +68,22 @@ static void pauseCore1(void)
 /**
  * @brief Resume Core1 after filesystem operations complete
  *
- * This function signals Core1 to resume and waits for acknowledgment.
- * Uses ARM memory barriers for proper cross-core visibility.
+ * Uses voluntary resume mechanism where Core1 sees flag cleared and resumes.
+ *
+ * IMPORTANT: If Core1 wasn't paused (not running), skip the resume.
  *
  * @note Only compiled when USB Capture Module is enabled
- * @note CRITICAL: Memory barriers required for Cortex-M33 dual-core
+ * @note Core1 voluntarily resumes when it sees g_core1_pause_requested cleared
  */
 static void resumeCore1(void)
 {
+    // If Core1 not running, pauseCore1() skipped the pause, so skip resume too
+    __dmb();  // Memory barrier - ensure we see Core1's write
+    if (!g_core1_running) {
+        LOG_DEBUG("[SafeFile] Core1 not running yet, skipping resume");
+        return;
+    }
+
     LOG_DEBUG("[SafeFile] Requesting Core1 resume...");
     g_core1_pause_requested = false;
     __dmb();  // Data Memory Barrier - ensure write visible to Core1
@@ -114,34 +103,167 @@ static void resumeCore1(void)
         LOG_WARN("[SafeFile] Core1 resume TIMEOUT after 100ms!");
     }
 }
+
+#ifdef USE_FIFO_RECOVERY
+/**
+ * @brief Attempt to recover Core1 from stuck lockout state
+ *
+ * Sends LOCKOUT_MAGIC_END via FIFO to unblock Core1 if it's stuck waiting
+ * for the end signal from a timed-out flash_safe_execute() call.
+ *
+ * @note This is EXPERIMENTAL on RP2350 due to FIFO IRQ conflicts (Issue #2222)
+ * @note See: https://github.com/raspberrypi/pico-sdk/issues/2454
+ */
+static void recoverStuckLockout(void)
+{
+    LOG_DEBUG("[SafeFile] FIFO Recovery: Checking for stuck lockout state...");
+
+    uint32_t interrupts = save_and_disable_interrupts();
+
+    // Check if FIFO is ready to write
+    if (multicore_fifo_wready()) {
+        LOG_DEBUG("[SafeFile] FIFO Recovery: Sending LOCKOUT_MAGIC_END (0x%08x)", LOCKOUT_MAGIC_END);
+
+        // Clear any stale FIFO data first
+        while (multicore_fifo_rvalid()) {
+            uint32_t discard = multicore_fifo_pop_blocking();
+            LOG_DEBUG("[SafeFile] FIFO Recovery: Discarded stale FIFO data: 0x%08x", discard);
+        }
+
+        // Send LOCKOUT_MAGIC_END to unblock Core1
+        multicore_fifo_push_blocking(LOCKOUT_MAGIC_END);
+
+        // Wait for acknowledgment with timeout (100ms)
+        uint32_t start_us = time_us_32();
+        bool got_ack = false;
+
+        while ((time_us_32() - start_us) < 100000) {
+            if (multicore_fifo_rvalid()) {
+                uint32_t response = multicore_fifo_pop_blocking();
+                LOG_DEBUG("[SafeFile] FIFO Recovery: Got response: 0x%08x", response);
+
+                if (response == LOCKOUT_MAGIC_END) {
+                    got_ack = true;
+                    LOG_INFO("[SafeFile] FIFO Recovery: SUCCESS - Core1 acknowledged unlock");
+                    break;
+                }
+            }
+            tight_loop_contents();
+        }
+
+        if (!got_ack) {
+            LOG_WARN("[SafeFile] FIFO Recovery: TIMEOUT - No acknowledgment from Core1");
+            LOG_WARN("[SafeFile] FIFO Recovery: This may indicate RP2350 FIFO IRQ conflict (Issue #2222)");
+        }
+    } else {
+        LOG_WARN("[SafeFile] FIFO Recovery: FIFO not writable - cannot send recovery signal");
+    }
+
+    restore_interrupts(interrupts);
+}
+#endif // USE_FIFO_RECOVERY
+
+#ifdef USE_NUCLEAR_OPTION
+/**
+ * @brief Nuclear option: Completely stop and restart Core1
+ *
+ * This avoids the broken SDK lockout mechanism on RP2350 by completely
+ * stopping Core1 before filesystem operations and restarting it after.
+ *
+ * @note Recommended approach for RP2350 until SDK 2.3.0 fixes FIFO lockout
+ * @note PSRAM buffer persists in RAM, so no data loss
+ * @note Adds ~100ms delay per filesystem operation
+ */
+static void nuclearResetCore1(void)
+{
+    LOG_DEBUG("[SafeFile] Nuclear: Stopping Core1 completely...");
+
+    // Completely stop Core1
+    multicore_reset_core1();
+    g_core1_running = false;
+
+    // Give it a moment to fully stop
+    busy_wait_us(1000);
+
+    LOG_DEBUG("[SafeFile] Nuclear: Core1 stopped");
+}
+
+static void nuclearRestartCore1(void)
+{
+    if (g_core1_running) {
+        LOG_DEBUG("[SafeFile] Nuclear: Core1 already running, skipping restart");
+        return;
+    }
+
+    LOG_DEBUG("[SafeFile] Nuclear: Restarting Core1...");
+
+    // Need to declare the Core1 main function
+    extern void usb_capture_core1_main(void);
+
+    // Restart Core1 from scratch
+    multicore_launch_core1(usb_capture_core1_main, NULL);
+
+    // Wait for Core1 to signal it's running (max 500ms)
+    uint32_t start = millis();
+    while (!g_core1_running && (millis() - start) < 500) {
+        __dmb();
+        tight_loop_contents();
+    }
+
+    if (g_core1_running) {
+        LOG_INFO("[SafeFile] Nuclear: Core1 restarted successfully");
+    } else {
+        LOG_ERROR("[SafeFile] Nuclear: Core1 restart TIMEOUT!");
+    }
+}
+#endif // USE_NUCLEAR_OPTION
+
 #endif // XIAO_USB_CAPTURE_ENABLED
 
 // Only way to work on both esp32 and nrf52
 static File openFile(const char *filename, bool fullAtomic)
 {
 #ifdef XIAO_USB_CAPTURE_ENABLED
-    // Pause Core1 to prevent memory bus contention during flash operations
-    pauseCore1();
-
-    // Start timeout tracking for filesystem operation
-    // If operation hangs, this helps diagnose the issue
-    startFSOperationTimeout();
+    #ifdef USE_NUCLEAR_OPTION
+        // Nuclear option: Stop Core1 completely before filesystem ops
+        nuclearResetCore1();
+    #else
+        // Standard pause mechanism (used with FIFO recovery)
+        pauseCore1();
+    #endif
 #endif
 
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
-#ifdef ARCH_NRF52
+
+#if defined(ARCH_NRF52) || defined(XIAO_USB_CAPTURE_ENABLED)
+    // Simple write path for NRF52 and USB Capture (no atomic .tmp files)
+    LOG_DEBUG("[SafeFile] About to remove file: %s", filename);
     FSCom.remove(filename);
+    LOG_DEBUG("[SafeFile] File removed, about to open: %s", filename);
     File f = FSCom.open(filename, FILE_O_WRITE);
+    LOG_DEBUG("[SafeFile] File opened successfully");
+
 #ifdef XIAO_USB_CAPTURE_ENABLED
-    if (checkFSOperationTimeout()) {
-        LOG_ERROR("[SafeFile] Filesystem open() operation hung! (NRF52 path)");
-    }
-    clearFSOperationTimeout();
-    resumeCore1();
+    #ifdef USE_FIFO_RECOVERY
+        // EXPERIMENTAL: Try to recover from any stuck lockout state
+        LOG_DEBUG("[SafeFile] Attempting FIFO recovery...");
+        recoverStuckLockout();
+        LOG_DEBUG("[SafeFile] About to resume Core1...");
+        resumeCore1();
+    #endif
+
+    #ifdef USE_NUCLEAR_OPTION
+        // Restart Core1 after filesystem operations complete
+        LOG_DEBUG("[SafeFile] About to restart Core1...");
+        nuclearRestartCore1();
+    #endif
+
+    LOG_DEBUG("[SafeFile] Core1 management complete, returning file handle");
 #endif
     return f;
-#endif
+#else
+    // Atomic write path for other platforms (ESP32, etc.)
     if (!fullAtomic) {
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
     }
@@ -149,26 +271,10 @@ static File openFile(const char *filename, bool fullAtomic)
     String filenameTmp = filename;
     filenameTmp += ".tmp";
 
-    // FIXME: If we are doing a full atomic write, we may need to remove the old tmp file now
-    // if (fullAtomic) {
-    //     FSCom.remove(filename);
-    // }
-
     // clear any previous LFS errors
     File f = FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
-
-#ifdef XIAO_USB_CAPTURE_ENABLED
-    // Check for filesystem operation timeout
-    if (checkFSOperationTimeout()) {
-        LOG_ERROR("[SafeFile] Filesystem open() operation hung! File: %s", filenameTmp.c_str());
-    }
-    clearFSOperationTimeout();
-
-    // Resume Core1 after file opened (or timed out)
-    resumeCore1();
-#endif
-
     return f;
+#endif
 }
 
 SafeFile::SafeFile(const char *_filename, bool fullAtomic)
@@ -210,33 +316,21 @@ bool SafeFile::close()
 #ifdef XIAO_USB_CAPTURE_ENABLED
     // Pause Core1 during close/rename operations
     pauseCore1();
-
-    // Start timeout tracking for close operations
-    startFSOperationTimeout();
 #endif
 
     spiLock->lock();
     f.close();
     spiLock->unlock();
 
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52) || defined(XIAO_USB_CAPTURE_ENABLED)
+    // Simple write path - no atomic verification (NRF52 and USB Capture)
 #ifdef XIAO_USB_CAPTURE_ENABLED
-    if (checkFSOperationTimeout()) {
-        LOG_ERROR("[SafeFile] Filesystem close() operation hung!");
-    }
-    clearFSOperationTimeout();
     resumeCore1();
 #endif
     return true;
-#endif
+#else
+    // Atomic write path for other platforms (ESP32, etc.)
     if (!testReadback()) {
-#ifdef XIAO_USB_CAPTURE_ENABLED
-        if (checkFSOperationTimeout()) {
-            LOG_ERROR("[SafeFile] Filesystem testReadback() operation hung!");
-        }
-        clearFSOperationTimeout();
-        resumeCore1();
-#endif
         return false;
     }
 
@@ -245,13 +339,6 @@ bool SafeFile::close()
         // brief window of risk here ;-)
         if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
             LOG_ERROR("Can't remove old pref file");
-#ifdef XIAO_USB_CAPTURE_ENABLED
-            if (checkFSOperationTimeout()) {
-                LOG_ERROR("[SafeFile] Filesystem remove() operation hung!");
-            }
-            clearFSOperationTimeout();
-            resumeCore1();
-#endif
             return false;
         }
     }
@@ -260,28 +347,11 @@ bool SafeFile::close()
     filenameTmp += ".tmp";
     if (!renameFile(filenameTmp.c_str(), filename.c_str())) {
         LOG_ERROR("Error: can't rename new pref file");
-#ifdef XIAO_USB_CAPTURE_ENABLED
-        if (checkFSOperationTimeout()) {
-            LOG_ERROR("[SafeFile] Filesystem renameFile() operation hung!");
-            }
-        clearFSOperationTimeout();
-        resumeCore1();
-#endif
         return false;
     }
 
-#ifdef XIAO_USB_CAPTURE_ENABLED
-    // Check for timeout on successful path
-    if (checkFSOperationTimeout()) {
-        LOG_ERROR("[SafeFile] Filesystem operations took excessive time but completed");
-    }
-    clearFSOperationTimeout();
-
-    // Resume Core1 after all operations complete
-    resumeCore1();
-#endif
-
     return true;
+#endif
 }
 
 /// Read our (closed) tempfile back in and compare the hash

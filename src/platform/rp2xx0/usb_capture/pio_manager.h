@@ -82,6 +82,25 @@ void pio_manager_destroy_all(void);
  */
 float pio_manager_calculate_clock_divider(bool full_speed);
 
+/**
+ * @brief Pause PIO state machines to prevent bus contention
+ *
+ * Disables both PIO state machines to stop USB capture during
+ * filesystem operations. This prevents memory bus conflicts.
+ *
+ * @param config Pointer to PIO configuration structure
+ */
+void pio_manager_pause_capture(pio_config_t *config);
+
+/**
+ * @brief Resume PIO state machines after filesystem operations
+ *
+ * Re-enables both PIO state machines to resume USB capture.
+ *
+ * @param config Pointer to PIO configuration structure
+ */
+void pio_manager_resume_capture(pio_config_t *config);
+
 
 #ifdef __cplusplus
 }

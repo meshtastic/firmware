@@ -77,9 +77,11 @@
 
 #include "../platform/rp2xx0/usb_capture/usb_capture_main.h"
 #include "../platform/rp2xx0/usb_capture/psram_buffer.h"
+#include "../platform/rp2xx0/usb_capture/keyboard_decoder_core1.h"  /* For keyboard_decoder_core1_inject_text() */
 #include "configuration.h"
 #include "pico/multicore.h"
 #include "gps/RTC.h"  /* For getRTCQuality(), RtcName() - v4.0 RTC logging */
+#include "NodeDB.h"  /* For owner global (node name and role) */
 #include <Arduino.h>
 #include <cstring>
 
@@ -105,11 +107,16 @@ USBCaptureModule::USBCaptureModule()
     formatted_queue = &g_formatted_queue;
     core1_started = false;
     capture_enabled = true;  // Enabled by default
+    /* Client identification now uses owner.long_name and owner.role (no local storage) */
 }
 
 bool USBCaptureModule::init()
 {
     LOG_INFO("[Core%u] USB Capture Module initializing...", get_core_num());
+
+    /* Log node identity (from Meshtastic owner config) */
+    const char *role_str = (owner.role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) ? "HIDDEN" : "CLIENT";
+    LOG_INFO("[USBCapture] Node: %s | Role: %s", owner.long_name, role_str);
 
     /* Initialize keystroke queue */
     keystroke_queue_init(keystroke_queue);
@@ -196,6 +203,13 @@ size_t USBCaptureModule::decodeBufferToText(const psram_keystroke_buffer_t *buff
                                             char *output, size_t max_len)
 {
     size_t out_pos = 0;
+
+    /* Add node name prefix UNLESS role is CLIENT_HIDDEN */
+    if (owner.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
+        owner.long_name[0] != '\0') {
+        out_pos += snprintf(output + out_pos, max_len - out_pos,
+                           "[%s] ", owner.long_name);
+    }
 
     /* Add header with timestamp */
     out_pos += snprintf(output + out_pos, max_len - out_pos,
@@ -595,17 +609,35 @@ ProcessMessage USBCaptureModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     LOG_INFO("[USBCapture] Received command from node 0x%08x on takeover channel", mp.from);
 
-    /* Execute command and send reply immediately */
+    /* Execute command */
     char response[MAX_COMMAND_RESPONSE_SIZE];
-    size_t len = executeCommand(cmd, response, sizeof(response));
+    size_t len = executeCommand(cmd, mp.decoded.payload.bytes, mp.decoded.payload.size,
+                                response, sizeof(response));
 
-    /* Send response back to sender on takeover channel */
+    /* Create response packet using module framework (reliable unicast) */
     if (len > 0) {
-        broadcastToPrivateChannel((const uint8_t *)response, len);
-        LOG_INFO("[USBCapture] Sent reply: %.*s", (int)len, response);
+        myReply = router->allocForSending();
+        if (myReply) {
+            myReply->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+            myReply->decoded.payload.size = len;
+            memcpy(myReply->decoded.payload.bytes, response, len);
+
+            LOG_INFO("[USBCapture] Response prepared: %zu bytes → node 0x%08x", len, mp.from);
+            LOG_INFO("[USBCapture] Reply: %.*s", (int)len, response);
+
+            /* Framework will automatically:
+             * - Call setReplyTo(myReply, mp) to set proper routing
+             * - Set to=mp.from (unicast to sender, not broadcast)
+             * - Set channel, hop_limit, want_ack properly
+             * - Link request_id = mp.id
+             * - Send via service->sendToMesh() with RELIABLE priority
+             */
+        } else {
+            LOG_ERROR("[USBCapture] Failed to allocate response packet");
+        }
     }
 
-    return ProcessMessage::STOP;
+    return ProcessMessage::STOP;  /* Trigger framework to send myReply */
 }
 
 USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t len)
@@ -643,12 +675,15 @@ USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t 
         return CMD_STATS;
     } else if (strncmp(cmd, "DUMP", 4) == 0) {
         return CMD_DUMP;
+    } else if (strncmp(cmd, "TEST", 4) == 0) {
+        return CMD_TEST;
     }
 
     return CMD_UNKNOWN;
 }
 
-size_t USBCaptureModule::executeCommand(USBCaptureCommand cmd, char *response, size_t max_len)
+size_t USBCaptureModule::executeCommand(USBCaptureCommand cmd, const uint8_t *payload, size_t payload_len,
+                                        char *response, size_t max_len)
 {
     switch (cmd) {
         case CMD_STATUS:
@@ -670,18 +705,95 @@ size_t USBCaptureModule::executeCommand(USBCaptureCommand cmd, char *response, s
             psram_buffer_dump();
             return snprintf(response, max_len, "PSRAM buffer dump sent to logs");
 
+        case CMD_TEST:
+        {
+            /* Extract test text after "TEST " prefix
+             * Format: "TEST hello world" -> inject "hello world"
+             */
+            const char *cmd_prefix = "TEST ";
+            size_t prefix_len = 5;  // Length of "TEST "
+
+            /* Find start of test text (skip case-insensitive "TEST " prefix) */
+            const char *text_start = NULL;
+            size_t text_len = 0;
+
+            /* Case-insensitive search for "TEST " prefix */
+            if (payload_len > prefix_len)
+            {
+                /* Check if payload starts with "TEST " (case-insensitive) */
+                bool prefix_match = true;
+                for (size_t i = 0; i < prefix_len - 1; i++)  // -1 to exclude the space for now
+                {
+                    char c = toupper(payload[i]);
+                    if (c != cmd_prefix[i])
+                    {
+                        prefix_match = false;
+                        break;
+                    }
+                }
+
+                /* If prefix matches and there's a space or we're at the text */
+                if (prefix_match)
+                {
+                    /* Skip "TEST" and any whitespace */
+                    size_t offset = 4;  // Length of "TEST"
+                    while (offset < payload_len && (payload[offset] == ' ' || payload[offset] == '\t'))
+                    {
+                        offset++;
+                    }
+
+                    /* Remaining text is what we inject */
+                    if (offset < payload_len)
+                    {
+                        text_start = (const char *)&payload[offset];
+                        text_len = payload_len - offset;
+                    }
+                }
+            }
+
+            /* Inject text if we found any */
+            if (text_start && text_len > 0)
+            {
+                /* Validate payload size */
+                if (text_len > MAX_TEST_PAYLOAD_SIZE) {
+                    return snprintf(response, max_len, "TEST: Payload too large (%zu bytes, max %d)",
+                                   text_len, MAX_TEST_PAYLOAD_SIZE);
+                }
+
+                /* Call Core1's injection function */
+                keyboard_decoder_core1_inject_text(text_start, text_len);
+
+                return snprintf(response, max_len, "TEST: Injected %zu bytes", text_len);
+            }
+            else
+            {
+                return snprintf(response, max_len, "TEST: No text provided. Usage: TEST <text>");
+            }
+        }
+
         case CMD_UNKNOWN:
         default:
-            return snprintf(response, max_len, "UNKNOWN COMMAND. Valid: STATUS, START, STOP, STATS, DUMP");
+            return snprintf(response, max_len, "UNKNOWN. Valid: STATUS, START, STOP, STATS, DUMP, TEST");
     }
 }
 
 size_t USBCaptureModule::getStatus(char *response, size_t max_len)
 {
+    /* Determine role name for display */
+    const char *role_name = "UNKNOWN";
+    if (owner.role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        role_name = "HIDDEN";
+    } else if (owner.role == meshtastic_Config_DeviceConfig_Role_CLIENT) {
+        role_name = "CLIENT";
+    } else if (owner.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
+        role_name = "ROUTER";
+    }
+
     return snprintf(response, max_len,
-        "USB Capture: %s | Core1: %s | Buffers: %u",
-        capture_enabled ? "ENABLED" : "DISABLED",
-        core1_started ? "RUNNING" : "STOPPED",
+        "Node: %s | Role: %s | Capture: %s | Buffers: %u",
+        owner.long_name,
+        role_name,
+        capture_enabled ? "ON" : "OFF",
         psram_buffer_get_count()
     );
 }

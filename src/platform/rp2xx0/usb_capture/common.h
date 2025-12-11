@@ -194,11 +194,15 @@ static inline void cpu_monitor_record_core1_work(void) {}
  * 4. Core0 sets g_core1_pause_requested = false (signal resume)
  * 5. Core0 waits for g_core1_paused = false (Core1 resumed)
  *
+ * IMPORTANT: Core1 checks these flags voluntarily in its main loop.
+ * This avoids deadlocks from rp2040.idleOtherCore() when Core1 is blocked.
+ *
  * @note These MUST be volatile for cross-core visibility
- * @note Core1 checks flags every iteration and updates watchdog during pause
+ * @note Core1 has NO watchdog, so pause can take as long as needed
  */
 extern volatile bool g_core1_pause_requested;  /**< Core0 → Core1: Request pause */
 extern volatile bool g_core1_paused;           /**< Core1 → Core0: Acknowledge paused */
+extern volatile bool g_core1_running;          /**< Core1 → Core0: Core1 has started and entered main loop */
 
 #ifdef __cplusplus
 }

@@ -33,6 +33,7 @@ static formatted_event_queue_t *g_formatted_queue_v2 = NULL;
 /* Multi-core synchronization flags for filesystem operations */
 volatile bool g_core1_pause_requested = false;
 volatile bool g_core1_paused = false;
+volatile bool g_core1_running = false;
 
 /* Processing buffer for inline packet decoding */
 #define PROCESSING_BUFFER_SIZE 128
@@ -136,6 +137,11 @@ static void format_keystroke_core1(const keystroke_event_t *event, char *buffer,
 CORE1_RAM_FUNC
 void capture_controller_core1_main_v2(void)
 {
+    /* CRITICAL: Initialize lockout victim so flash_safe_execute() can pause Core1
+     * Without this, flash operations will hang waiting for Core1 to respond
+     * See: https://github.com/micropython/micropython/issues/16619 */
+    multicore_lockout_victim_init();
+
     /* Signal Core0 that Core1 has started (via queue status event) */
     if (g_keystroke_queue_v2)
     {
@@ -187,9 +193,6 @@ void capture_controller_core1_main_v2(void)
         keyboard_decoder_core1_init(g_keystroke_queue_v2, g_formatted_queue_v2);
     }
 
-    /* Enable watchdog */
-    watchdog_enable(4000, true);
-
     /* Signal ready to capture */
     if (g_keystroke_queue_v2)
     {
@@ -213,24 +216,13 @@ void capture_controller_core1_main_v2(void)
     /* Mark as running */
     g_capture_running_v2 = true;
 
+    /* Signal to Core0 that Core1 has entered main loop and is ready */
+    g_core1_running = true;
+    __dmb();  // Memory barrier - ensure visible to Core0
+
     /* Main capture and processing loop */
     while (g_capture_running_v2)
     {
-        /* Check for stop command from Core0 (non-blocking check) */
-        if (multicore_fifo_rvalid())
-        {
-            uint32_t signal = multicore_fifo_pop_blocking();
-            if (signal == 0xDEADBEEF)
-            {
-                /* Disable watchdog before exit to prevent reboot loop */
-                watchdog_disable();
-                g_capture_running_v2 = false;
-                break;
-            }
-        }
-
-        watchdog_update();
-
         /* Yield for bus arbitration - prevents Core0 flash deadlock */
         tight_loop_contents();
 
@@ -238,19 +230,19 @@ void capture_controller_core1_main_v2(void)
         __dmb();  // Memory barrier - ensure we see Core0's write
         if (g_core1_pause_requested)
         {
-            /* Disable watchdog during pause - file operations may take > 4 seconds
-             * Use direct register access since SDK watchdog_disable() may not work
-             * reliably on RP2040/RP2350 (clear ENABLE bit at 0x40058000 + bit 30) */
-            volatile uint32_t *watchdog_ctrl = (volatile uint32_t *)0x40058000;
-            *watchdog_ctrl &= ~(1 << 30);
+            /* Stop PIO hardware to prevent bus contention during flash writes */
+            pio_manager_pause_capture(&pio_config);
+
+            /* CRITICAL: Disable interrupts to prevent hardware conflicts
+             * PIO interrupts or other IRQs could fire during flash writes
+             * causing bus contention or hardware deadlock */
+            uint32_t irq_status = save_and_disable_interrupts();
 
             /* Signal that we're paused */
             g_core1_paused = true;
             __dmb();  // Memory barrier - ensure write visible to Core0
 
-            /* Wait for resume signal WITHOUT updating watchdog
-             * This allows Core0 filesystem operations to take as long as needed
-             * without triggering watchdog reset */
+            /* Wait for resume signal (no watchdog, so can wait indefinitely) */
             while (g_core1_pause_requested)
             {
                 __dmb();  // Ensure we see Core0's resume signal
@@ -261,8 +253,11 @@ void capture_controller_core1_main_v2(void)
             g_core1_paused = false;
             __dmb();  // Memory barrier - ensure write visible to Core0
 
-            /* Re-enable watchdog after resume */
-            watchdog_enable(4000, true);
+            /* Re-enable interrupts */
+            restore_interrupts(irq_status);
+
+            /* Resume PIO hardware to continue USB capture */
+            pio_manager_resume_capture(&pio_config);
             continue;
         }
 
@@ -368,15 +363,9 @@ void capture_controller_core1_main_v2(void)
     /* Cleanup */
     pio_manager_stop_capture(&pio_config);
 
-    /* Disable watchdog */
-    volatile uint32_t *watchdog_ctrl = (volatile uint32_t *)0x40058000;
-    *watchdog_ctrl &= ~(1 << 30);
-
-    /* Signal completion to Core0 (if it's listening) */
-    if (multicore_fifo_wready())
-    {
-        multicore_fifo_push_blocking(0x69696969);
-    }
+    /* Mark as stopped */
+    g_core1_running = false;
+    __dmb();  // Ensure visible to Core0
 }
 
 /* Controller interface functions */
@@ -421,11 +410,8 @@ void capture_controller_stop_v2(capture_controller_t *controller)
 {
     g_capture_running_v2 = false;
     controller->running = false;
-    /* Send stop signal to Core1 (non-blocking) */
-    if (multicore_fifo_wready())
-    {
-        multicore_fifo_push_blocking(0xDEADBEEF);
-    }
+    // Core1 will see g_capture_running_v2 = false and exit its loop
+    // No FIFO needed - avoids conflict with flash_safe_execute()
 }
 
 }

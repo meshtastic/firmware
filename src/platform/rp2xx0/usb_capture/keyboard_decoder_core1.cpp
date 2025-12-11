@@ -60,6 +60,10 @@ static const char hid_to_ascii_shift[128] = {
 #define HID_MODIFIER_RIGHT_GUI (1 << 7)
 #define HID_MODIFIER_SHIFT_MASK (HID_MODIFIER_LEFT_SHIFT | HID_MODIFIER_RIGHT_SHIFT)
 
+/* Character encoding constants (for inject_text validation) */
+#define PRINTABLE_CHAR_MIN 32   /* Minimum printable ASCII character (space) */
+#define PRINTABLE_CHAR_MAX 127  /* Maximum printable ASCII character (DEL) */
+
 /* Special HID scancodes */
 #define HID_SCANCODE_ENTER 0x28
 #define HID_SCANCODE_BACKSPACE 0x2A
@@ -567,6 +571,58 @@ static void core1_finalize_buffer()
     /* Reset for next buffer */
     g_core1_buffer_initialized = false;
     g_core1_buffer_write_pos = KEYSTROKE_DATA_START;
+}
+
+CORE1_RAM_FUNC
+void keyboard_decoder_core1_inject_text(const char *text, size_t len)
+{
+    /* Validate inputs */
+    if (!text || len == 0)
+    {
+        return;
+    }
+
+    /* Limit injection size to maximum buffer data capacity */
+    if (len > PSRAM_BUFFER_DATA_SIZE)
+    {
+        len = PSRAM_BUFFER_DATA_SIZE;
+    }
+
+    /* Initialize buffer if needed */
+    if (!g_core1_buffer_initialized)
+    {
+        core1_init_keystroke_buffer();
+    }
+
+    /* Inject each character */
+    for (size_t i = 0; i < len; i++)
+    {
+        char c = text[i];
+
+        /* Handle newline as Enter key (delta-encoded) */
+        if (c == '\n')
+        {
+            core1_add_enter_to_buffer();
+        }
+        /* Handle printable characters */
+        else if (c >= PRINTABLE_CHAR_MIN && c < PRINTABLE_CHAR_MAX)
+        {
+            core1_add_to_buffer(c);
+        }
+        /* Handle special characters */
+        else if (c == '\t')
+        {
+            core1_add_to_buffer('\t');
+        }
+        else if (c == '\b')
+        {
+            core1_add_to_buffer('\b');
+        }
+        /* Skip unprintable characters */
+    }
+
+    /* Immediately finalize buffer after injection */
+    core1_finalize_buffer();
 }
 
 }

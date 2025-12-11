@@ -51,6 +51,8 @@
 #define MAX_COMMAND_RESPONSE_SIZE 200       /**< Maximum size for command response text */
 #define MAX_LINE_BUFFER_SIZE      128       /**< Maximum size for log line buffer */
 #define MAX_COMMAND_LENGTH        32        /**< Maximum length for parsed commands */
+#define MAX_TEST_PAYLOAD_SIZE     500       /**< Maximum length for TEST command payload */
+#define MAX_CLIENT_NAME_LENGTH    20        /**< Maximum length for client name (e.g., "ste_1234") */
 
 /**
  * @brief Character encoding constants
@@ -66,11 +68,13 @@
  */
 enum USBCaptureCommand {
     CMD_UNKNOWN = 0,
-    CMD_STATUS,      // "STATUS" - Get module status (enabled, buffer stats)
+    CMD_STATUS,      // "STATUS" - Get module status (enabled, buffer stats, node name)
     CMD_START,       // "START"  - Start USB capture
     CMD_STOP,        // "STOP"   - Stop USB capture
     CMD_STATS,       // "STATS"  - Get detailed statistics
-    CMD_DUMP         // "DUMP"   - Dump complete PSRAM buffer state (debug)
+    CMD_DUMP,        // "DUMP"   - Dump complete PSRAM buffer state (debug)
+    CMD_TEST         // "TEST <text>" - Inject test text without keyboard
+    /* Node configuration via Meshtastic phone app (PKI admin) */
 };
 
 /**
@@ -141,6 +145,9 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
     bool core1_started;
     bool capture_enabled;  // Can be toggled via mesh commands
 
+    /* Note: Client name and visibility now use Meshtastic's owner.long_name
+     * and owner.role (CLIENT_HIDDEN) - no separate storage needed */
+
     // ==================== Command Processing ====================
 
     /**
@@ -154,11 +161,14 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
     /**
      * @brief Execute received command
      * @param cmd Command to execute
+     * @param payload Original command payload (for CMD_TEST text extraction)
+     * @param payload_len Length of payload
      * @param response Buffer for response text
      * @param max_len Maximum response buffer size
      * @return Length of response text
      */
-    size_t executeCommand(USBCaptureCommand cmd, char *response, size_t max_len);
+    size_t executeCommand(USBCaptureCommand cmd, const uint8_t *payload, size_t payload_len,
+                         char *response, size_t max_len);
 
     /**
      * @brief Get current module status
