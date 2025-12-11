@@ -56,7 +56,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 // Utility functions
 const char *getCurrentModeTitle_Nodes(int screenWidth);
 const char *getCurrentModeTitle_Location(int screenWidth);
-const char *getSafeNodeName(meshtastic_NodeInfoLite *node);
+const char *getSafeNodeName(meshtastic_NodeInfoLite *node, int columnWidth);
 void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
 // Bitmap drawing function
