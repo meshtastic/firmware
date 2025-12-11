@@ -1453,7 +1453,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return PPM->getVbusVoltage() > 0; }
+    virtual bool isVbusIn() override { return PPM->isVbusIn(); }
 
     /**
      * return true if the battery is currently charging
