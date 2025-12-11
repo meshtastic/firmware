@@ -80,8 +80,6 @@ class MeshModule
     static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
-    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                       uint8_t hopLimit = 0);
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
     virtual bool isRequestingFocus();                          // Checked by screen, when regenerating frameset
@@ -171,6 +169,9 @@ class MeshModule
      */
     virtual bool wantUIFrame() { return false; }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
+
+    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                       uint8_t hopLimit = 0);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);
