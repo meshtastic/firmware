@@ -31,6 +31,9 @@ class RotaryEncoderImpl final : public InputPollable
     RotaryEncoder *rotary;
 
   private:
+#ifdef ARCH_ESP32
+    bool isFirstInit;
+#endif
     void detachRotaryEncoderInterrupts();
     void attachRotaryEncoderInterrupts();
 
