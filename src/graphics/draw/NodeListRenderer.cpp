@@ -54,7 +54,7 @@ static int scrollIndex = 0;
 // Utility Functions
 // =============================
 
-const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
+const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth)
 {
     static char nodeName[25]; // single static buffer we return
     nodeName[0] = '\0';
@@ -82,7 +82,7 @@ const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
 
     // 4) Width-based truncation + ellipsis (long-name mode only)
     if (config.display.use_long_node_name && display) {
-        int availWidth = (SCREEN_WIDTH / 2) - 65;
+        int availWidth = columnWidth - (isHighResolution ? 65 : 38);
         if (availWidth < 0)
             availWidth = 0;
 
@@ -181,7 +181,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int timeOffset = (isHighResolution) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
 
-    const char *nodeName = getSafeNodeName(display, node);
+    const char *nodeName = getSafeNodeName(display, node, columnWidth);
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
@@ -226,7 +226,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     int barsXOffset = columnWidth - barsOffset;
 
-    const char *nodeName = getSafeNodeName(display, node);
+    const char *nodeName = getSafeNodeName(display, node, columnWidth);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -270,7 +270,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int nameMaxWidth = columnWidth - (isHighResolution ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
-    const char *nodeName = getSafeNodeName(display, node);
+    const char *nodeName = getSafeNodeName(display, node, columnWidth);
     char distStr[10] = "";
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -362,7 +362,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     // Adjust max text width depending on column and screen width
     int nameMaxWidth = columnWidth - (isHighResolution ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
-    const char *nodeName = getSafeNodeName(display, node);
+    const char *nodeName = getSafeNodeName(display, node, columnWidth);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -440,17 +440,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         locationScreen = true;
     else if (strcmp(title, "Distance") == 0)
         locationScreen = true;
-#if defined(M5STACK_UNITC6L)
-    int columnWidth = display->getWidth();
-#elif defined(T_LORA_PAGER)
-    int columnWidth = display->getWidth() / 3;
-    if (config.display.use_long_node_name) {
-        columnWidth = display->getWidth() / 2;
-    }
-#else
-    int columnWidth = display->getWidth() / 2;
-#endif
-
     display->clear();
 
     // Draw the battery/time header
@@ -459,10 +448,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Space below header
     y += COMMON_HEADER_HEIGHT;
 
-    int totalEntries = nodeDB->getNumMeshNodes();
-    int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
-    int numskipped = 0;
-    int visibleNodeRows = totalRowsAvailable;
 #if defined(M5STACK_UNITC6L)
     int totalColumns = 1;
 #elif defined(T_LORA_PAGER)
@@ -472,7 +457,17 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     }
 #else
     int totalColumns = 2;
+    if (config.display.use_long_node_name) {
+        totalColumns = 1;
+    }
 #endif
+
+    int columnWidth = display->getWidth() / totalColumns;
+
+    int totalEntries = nodeDB->getNumMeshNodes();
+    int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
+    int numskipped = 0;
+    int visibleNodeRows = totalRowsAvailable;
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
     if (nodeDB->getMeshNodeByIndex(startIndex)->num == nodeDB->getNodeNum()) {
         startIndex++; // skip own node

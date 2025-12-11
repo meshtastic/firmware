@@ -1126,10 +1126,8 @@ void menuHandler::nodeListMenu()
     optionsEnumArray[options++] = Verify;
 #endif
 
-#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Show Long/Short Name";
     optionsEnumArray[options++] = NodeNameLength;
-#endif
     optionsArray[options] = "Reset NodeDB";
     optionsEnumArray[options++] = Reset;
 
