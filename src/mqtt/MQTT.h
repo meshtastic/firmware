@@ -104,6 +104,7 @@ class MQTT : private concurrency::OSThread
     std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
     std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages
+    std::string gpioTopic = "/2/gpio/"; // msh/2/gpio/NODEID/control or /status
 
     // For map reporting (only applies when enabled)
     const uint32_t default_map_position_precision = 14; // defaults to max. offset of ~1459m
@@ -133,6 +134,13 @@ class MQTT : private concurrency::OSThread
 
     // Check if we should report unencrypted information about our node for consumption by a map
     void perhapsReportToMap();
+
+    // Handle GPIO control messages received from MQTT
+    void onGpioReceive(char *topic, byte *payload, size_t length);
+
+  public:
+    // Publish GPIO status to MQTT
+    void publishGpioStatus(uint64_t gpio_mask, uint64_t gpio_value);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }

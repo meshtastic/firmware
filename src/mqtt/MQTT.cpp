@@ -374,6 +374,15 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         return;
     }
 
+    // Check if this is a GPIO control message
+#if !defined(ARCH_NRF52) || defined(NRF52_USE_JSON)
+    if (moduleConfig.mqtt.json_enabled && moduleConfig.remote_hardware.enabled &&
+        strncmp(topic, gpioTopic.c_str(), gpioTopic.length()) == 0) {
+        onGpioReceive(topic, payload, length);
+        return;
+    }
+#endif
+
     // check if this is a json payload message by comparing the topic start
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
@@ -420,11 +429,13 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
+            gpioTopic = moduleConfig.mqtt.root + gpioTopic;
             isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
         } else {
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
+            gpioTopic = "msh" + gpioTopic;
             isConfiguredForDefaultRootTopic = true;
         }
 
@@ -583,6 +594,16 @@ void MQTT::sendSubscriptions()
         std::string topic = cryptTopic + "PKI/+";
         LOG_INFO("Subscribe to %s", topic.c_str());
         pubSub.subscribe(topic.c_str(), 1);
+    }
+#endif
+
+    // Subscribe to GPIO control topic if RemoteHardware is enabled
+#if !defined(ARCH_NRF52) || defined(NRF52_USE_JSON)
+    if (moduleConfig.remote_hardware.enabled && moduleConfig.mqtt.json_enabled) {
+        std::string nodeId = nodeDB->getNodeId();
+        std::string gpioControlTopic = gpioTopic + nodeId + "/control";
+        LOG_INFO("Subscribe to GPIO control topic %s", gpioControlTopic.c_str());
+        pubSub.subscribe(gpioControlTopic.c_str(), 1);
     }
 #endif
 #endif
@@ -903,3 +924,137 @@ void MQTT::perhapsReportToMap()
     // Update the last report time
     last_report_to_map = millis();
 }
+
+#if !defined(ARCH_NRF52) || defined(NRF52_USE_JSON)
+void MQTT::onGpioReceive(char *topic, byte *payload, size_t length)
+{
+    // Parse the JSON payload for GPIO control
+    char payloadStr[length + 1];
+    memcpy(payloadStr, payload, length);
+    payloadStr[length] = 0; // null terminated string
+
+    LOG_INFO("Received GPIO control message: %s", payloadStr);
+
+    std::unique_ptr<JSONValue> json_value(JSON::Parse(payloadStr));
+    if (json_value == nullptr) {
+        LOG_ERROR("Invalid JSON in GPIO control message");
+        return;
+    }
+
+    JSONObject json = json_value->AsObject();
+
+    // Check for simple pin control format: {"pin": N, "value": V}
+    if (json.find("pin") != json.end() && json["pin"]->IsNumber()) {
+        uint8_t pin = (uint8_t)json["pin"]->AsNumber();
+        uint64_t pinMask = 1ULL << pin;
+
+        // Check for "command": "read"
+        if (json.find("command") != json.end() && json["command"]->IsString() &&
+            json["command"]->AsString() == "read") {
+            LOG_INFO("GPIO MQTT: Read pin %d", pin);
+            // Create and send a read request through the mesh
+            meshtastic_HardwareMessage r = meshtastic_HardwareMessage_init_default;
+            r.type = meshtastic_HardwareMessage_Type_READ_GPIOS;
+            r.gpio_mask = pinMask;
+
+            // Handle locally - set pin as input and read
+            pinMode(pin, INPUT_PULLUP);
+            uint64_t value = digitalRead(pin) ? pinMask : 0;
+            publishGpioStatus(pinMask, value);
+            return;
+        }
+
+        // Check for write: {"pin": N, "value": V}
+        if (json.find("value") != json.end() && json["value"]->IsNumber()) {
+            uint8_t value = (uint8_t)json["value"]->AsNumber();
+            LOG_INFO("GPIO MQTT: Write pin %d = %d", pin, value);
+
+            // Handle locally
+            pinMode(pin, OUTPUT);
+            digitalWrite(pin, value ? HIGH : LOW);
+
+            // Publish status
+            publishGpioStatus(pinMask, value ? pinMask : 0);
+            return;
+        }
+    }
+
+    // Check for advanced format with command
+    if (json.find("command") != json.end() && json["command"]->IsString()) {
+        std::string command = json["command"]->AsString();
+        uint64_t gpio_mask = 0;
+        uint64_t gpio_value = 0;
+
+        if (json.find("gpio_mask") != json.end() && json["gpio_mask"]->IsNumber()) {
+            gpio_mask = (uint64_t)json["gpio_mask"]->AsNumber();
+        }
+        if (json.find("gpio_value") != json.end() && json["gpio_value"]->IsNumber()) {
+            gpio_value = (uint64_t)json["gpio_value"]->AsNumber();
+        }
+
+        if (command == "write" && gpio_mask != 0) {
+            LOG_INFO("GPIO MQTT: Write mask 0x%llx value 0x%llx", gpio_mask, gpio_value);
+            // Set pins as output and write values
+            for (uint8_t i = 0; i < 64; i++) {
+                uint64_t m = 1ULL << i;
+                if (gpio_mask & m) {
+                    pinMode(i, OUTPUT);
+                    digitalWrite(i, (gpio_value & m) ? HIGH : LOW);
+                }
+            }
+            publishGpioStatus(gpio_mask, gpio_value);
+        } else if (command == "read" && gpio_mask != 0) {
+            LOG_INFO("GPIO MQTT: Read mask 0x%llx", gpio_mask);
+            uint64_t result = 0;
+            for (uint8_t i = 0; i < 64; i++) {
+                uint64_t m = 1ULL << i;
+                if (gpio_mask & m) {
+                    pinMode(i, INPUT_PULLUP);
+                    if (digitalRead(i)) {
+                        result |= m;
+                    }
+                }
+            }
+            publishGpioStatus(gpio_mask, result);
+        } else if (command == "watch" && gpio_mask != 0) {
+            LOG_INFO("GPIO MQTT: Watch mask 0x%llx", gpio_mask);
+            // TODO: Implement watch functionality via RemoteHardwareModule
+            publishGpioStatus(gpio_mask, 0);
+        } else {
+            LOG_WARN("GPIO MQTT: Unknown command '%s'", command.c_str());
+        }
+    }
+}
+
+void MQTT::publishGpioStatus(uint64_t gpio_mask, uint64_t gpio_value)
+{
+    if (!moduleConfig.mqtt.enabled || !moduleConfig.mqtt.json_enabled)
+        return;
+
+    if (!moduleConfig.mqtt.proxy_to_client_enabled && !isConnectedDirectly())
+        return;
+
+    std::string nodeId = nodeDB->getNodeId();
+    std::string statusTopic = gpioTopic + nodeId + "/status";
+
+    // Create JSON status message
+    char jsonBuf[256];
+    snprintf(jsonBuf, sizeof(jsonBuf),
+             "{\"type\":\"gpio_status\",\"gpio_mask\":%llu,\"gpio_value\":%llu,\"timestamp\":%lu,\"node_id\":\"%s\"}",
+             (unsigned long long)gpio_mask, (unsigned long long)gpio_value, millis(), nodeId.c_str());
+
+    LOG_INFO("MQTT Publish GPIO status to %s: %s", statusTopic.c_str(), jsonBuf);
+    publish(statusTopic.c_str(), jsonBuf, false);
+}
+#else
+void MQTT::onGpioReceive(char *topic, byte *payload, size_t length)
+{
+    // JSON not supported on this platform
+    LOG_WARN("GPIO MQTT control not supported on this platform");
+}
+
+void MQTT::publishGpioStatus(uint64_t gpio_mask, uint64_t gpio_value)
+{
+    // JSON not supported on this platform
+}
+#endif

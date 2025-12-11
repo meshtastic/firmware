@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "mqtt/MQTT.h"
 #include <Throttle.h>
 
 #define NUM_GPIOS 64
@@ -91,6 +92,10 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
                 }
             }
 
+            // Publish GPIO status to MQTT
+            if (mqtt)
+                mqtt->publishGpioStatus(p.gpio_mask, p.gpio_value);
+
             break;
         }
 
@@ -105,6 +110,11 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             meshtastic_MeshPacket *p2 = allocDataProtobuf(r);
             setReplyTo(p2, req);
             myReply = p2;
+
+            // Publish GPIO status to MQTT
+            if (mqtt)
+                mqtt->publishGpioStatus(p.gpio_mask, res);
+
             break;
         }
 
@@ -150,6 +160,10 @@ int32_t RemoteHardwareModule::runOnce()
                 r.gpio_value = curVal;
                 meshtastic_MeshPacket *p = allocDataProtobuf(r);
                 service->sendToMesh(p);
+
+                // Publish GPIO status to MQTT
+                if (mqtt)
+                    mqtt->publishGpioStatus(watchGpios, curVal);
             }
         }
     } else {
