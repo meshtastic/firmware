@@ -64,29 +64,6 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
-    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
-    // This is done onConnect too because we suspect in some cases onDisconnect callback may be missing
-    memset(lastToRadio, 0, sizeof(lastToRadio));
-
-    // negotiate connections params as soon as possible
-    // some phones and laptops seem to ignore GAP preferred settings and treat slave latency as connection disruption
-    // such devices can not connect to the node. This is fixed by forcing parameter negotiation at the start of communication
-
-    ble_gap_conn_params_t newParams;
-    memset(&newParams, 0, sizeof(newParams));
-
-    newParams.min_conn_interval = 12; // in 1.25 ms units = 15 ms
-    newParams.max_conn_interval = 40; // in 1.25 ms units = 50 ms
-    newParams.slave_latency = 5;
-    newParams.conn_sup_timeout = 600; // in 10 ms units, timeout 6s
-
-    int ret = sd_ble_gap_conn_param_update(conn_handle, &newParams);
-
-    if(ret != NRF_SUCCESS){
-        LOG_INFO("BLE connection parameter negotiation failed. Error code: %x", ret);
-
-    }
-
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
@@ -296,21 +273,10 @@ void NRF52Bluetooth::setup()
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
-    // Set slave latency to 5 to conserve power
-    // Despite name this does not impact data transfer
-    // https://docs.silabs.com/bluetooth/2.13/bluetooth-general-system-and-performance/optimizing-current-consumption-in-bluetooth-low-energy-devices
-
-    // Attention! Same values - latency and intervals (if added here) must also be negotiated inside onConnect method. See comments there.
-    
-  //  Bluefruit.Periph.setConnSlaveLatency(5);
-
-    // min, max connection intervals are negotiated in onConnect as (24,40) [in 1.25 ms units] -> (30, 50) milliseconds.
-
-    // BLE settings must be so Interval Max * (Slave Latency + 1) ≤ supervision_timeout (some sources says that half the timeout, verify)
-    // so technically we can easily to up to slave latency 30, but this is not recommended as BLE is having some timing issues
-    // on such long delays. AFAIK we can work up safely up to slave_latency = 10 in the future and even tweak max interval to 100 ms to save more power.
-
-
+  
+    Bluefruit.Periph.setConnSlaveLatency(0);
+    // 1.25 ms units - so min, max is 15, 100 ms range.
+    Bluefruit.Periph.setConnInterval(12, 80);
 
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
