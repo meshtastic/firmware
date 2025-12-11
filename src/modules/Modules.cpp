@@ -217,7 +217,7 @@ void setupModules()
     }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR && portduino_config.i2cdev != "") {
         seesawRotary = new SeesawRotary("SeesawRotary");
         if (!seesawRotary->init()) {
             delete seesawRotary;
