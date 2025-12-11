@@ -62,9 +62,9 @@ typedef void* StaticSemaphore_t;
 
 // Include real FreeRTOS defs above
 
-#else
+#elif !defined(__PLAT_RP2350__)
 
-// Include placeholder fake FreeRTOS defs
+// Include placeholder fake FreeRTOS defs (for non-FreeRTOS, non-RP2350 platforms)
 
 #include <Arduino.h>
 
@@ -81,4 +81,4 @@ typedef uint32_t BaseType_t;
 
 enum eNotifyAction { eNoAction, eSetValueWithoutOverwrite, eSetValueWithOverwrite };
 
-#endif
+#endif // HAS_FREE_RTOS or !__PLAT_RP2350__
