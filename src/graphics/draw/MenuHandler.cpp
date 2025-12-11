@@ -734,20 +734,33 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, enumEnd };
-#if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset Node"};
-#else
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Key Verification", "Reset NodeDB"};
+    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Add Favorite";
+    optionsEnumArray[options++] = Favorite;
+    optionsArray[options] = "Trace Route";
+    optionsEnumArray[options++] = TraceRoute;
+
+#if !defined(M5STACK_UNITC6L)
+    optionsArray[options] = "Key Verification";
+    optionsEnumArray[options++] = Verify;
 #endif
+
+#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
+    optionsArray[options] = "Show Long/Short Name";
+    optionsEnumArray[options++] = NodeNameLength;
+#endif
+    optionsArray[options] = "Reset NodeDB";
+    optionsEnumArray[options++] = Reset;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.optionsCount = 3;
-#else
-    bannerOptions.optionsCount = 5;
-#endif
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -760,6 +773,9 @@ void menuHandler::nodeListMenu()
             screen->runNow();
         } else if (selected == TraceRoute) {
             menuQueue = trace_route_menu;
+            screen->runNow();
+        } else if (selected == NodeNameLength) {
+            menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
         }
     };
@@ -1374,15 +1390,10 @@ void menuHandler::screenOptionsMenu()
     hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, NodeNameLength, Brightness, ScreenColor, FrameToggles, DisplayUnits };
+    enum optionsNumbers { Back, Brightness, ScreenColor, FrameToggles, DisplayUnits };
     static const char *optionsArray[5] = {"Back"};
     static int optionsEnumArray[5] = {Back};
     int options = 1;
-
-#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
-    optionsArray[options] = "Show Long/Short Name";
-    optionsEnumArray[options++] = NodeNameLength;
-#endif
 
     // Only show brightness for B&W displays
     if (hasSupportBrightness) {
@@ -1414,9 +1425,6 @@ void menuHandler::screenOptionsMenu()
             screen->runNow();
         } else if (selected == ScreenColor) {
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-            screen->runNow();
-        } else if (selected == NodeNameLength) {
-            menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
         } else if (selected == FrameToggles) {
             menuHandler::menuQueue = menuHandler::FrameToggles;
@@ -1513,7 +1521,8 @@ void menuHandler::FrameToggles_menu()
 {
     enum optionsNumbers {
         Finish,
-        nodelist,
+        nodelist_nodes,
+        nodelist_location,
         nodelist_lastheard,
         nodelist_hopsignal,
         nodelist_distance,
@@ -1534,20 +1543,25 @@ void menuHandler::FrameToggles_menu()
     static int lastSelectedIndex = 0;
 
 #ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
-    optionsEnumArray[options++] = nodelist;
-#endif
-#ifdef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node List" : "Hide Node List";
+    optionsEnumArray[options++] = nodelist_nodes;
+#else
     optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
     optionsEnumArray[options++] = nodelist_lastheard;
     optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";
     optionsEnumArray[options++] = nodelist_hopsignal;
+#endif
+
+#if HAS_GPS
+#ifndef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_location") ? "Show Node Location List" : "Hide Node Location List";
+    optionsEnumArray[options++] = nodelist_location;
+#else
     optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
     optionsEnumArray[options++] = nodelist_distance;
-#endif
-#if HAS_GPS
-    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show Bearings" : "Hide Bearings";
+    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show NL - Bearings" : "Hide NL - Bearings";
     optionsEnumArray[options++] = nodelist_bearings;
+#endif
 
     optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
     optionsEnumArray[options++] = gps;
@@ -1586,8 +1600,12 @@ void menuHandler::FrameToggles_menu()
 
         if (selected == Finish) {
             screen->setFrames(Screen::FOCUS_DEFAULT);
-        } else if (selected == nodelist) {
-            screen->toggleFrameVisibility("nodelist");
+        } else if (selected == nodelist_nodes) {
+            screen->toggleFrameVisibility("nodelist_nodes");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_location) {
+            screen->toggleFrameVisibility("nodelist_location");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == nodelist_lastheard) {

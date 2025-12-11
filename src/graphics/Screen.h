@@ -684,7 +684,8 @@ class Screen : public concurrency::OSThread
         bool home = false;
         bool clock = false;
 #ifndef USE_EINK
-        bool nodelist = false;
+        bool nodelist_nodes = false;
+        bool nodelist_location = false;
 #endif
 #ifdef USE_EINK
         bool nodelist_lastheard = false;
@@ -692,7 +693,9 @@ class Screen : public concurrency::OSThread
         bool nodelist_distance = false;
 #endif
 #if HAS_GPS
+#ifdef USE_EINK
         bool nodelist_bearings = false;
+#endif
         bool gps = false;
 #endif
         bool lora = false;

@@ -1043,10 +1043,15 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
-    if (!hiddenFrames.nodelist) {
+    if (!hiddenFrames.nodelist_nodes) {
         fsi.positions.nodelist = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Nodes;
         indicatorIcons.push_back(icon_nodes);
+    }
+    if (!hiddenFrames.nodelist_location) {
+        fsi.positions.nodelist = numframes;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Location;
+        indicatorIcons.push_back(icon_list);
     }
 #endif
 
@@ -1069,11 +1074,13 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 #if HAS_GPS
+#ifdef USE_EINK
     if (!hiddenFrames.nodelist_bearings) {
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
         indicatorIcons.push_back(icon_list);
     }
+#endif
     if (!hiddenFrames.gps) {
         fsi.positions.gps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
@@ -1239,8 +1246,11 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 void Screen::toggleFrameVisibility(const std::string &frameName)
 {
 #ifndef USE_EINK
-    if (frameName == "nodelist") {
-        hiddenFrames.nodelist = !hiddenFrames.nodelist;
+    if (frameName == "nodelist_nodes") {
+        hiddenFrames.nodelist_nodes = !hiddenFrames.nodelist_nodes;
+    }
+    if (frameName == "nodelist_location") {
+        hiddenFrames.nodelist_location = !hiddenFrames.nodelist_location;
     }
 #endif
 #ifdef USE_EINK
@@ -1255,9 +1265,11 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     }
 #endif
 #if HAS_GPS
+#ifdef USE_EINK
     if (frameName == "nodelist_bearings") {
         hiddenFrames.nodelist_bearings = !hiddenFrames.nodelist_bearings;
     }
+#endif
     if (frameName == "gps") {
         hiddenFrames.gps = !hiddenFrames.gps;
     }
@@ -1279,8 +1291,10 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
 bool Screen::isFrameHidden(const std::string &frameName) const
 {
 #ifndef USE_EINK
-    if (frameName == "nodelist")
-        return hiddenFrames.nodelist;
+    if (frameName == "nodelist_nodes")
+        return hiddenFrames.nodelist_nodes;
+    if (frameName == "nodelist_location")
+        return hiddenFrames.nodelist_location;
 #endif
 #ifdef USE_EINK
     if (frameName == "nodelist_lastheard")
@@ -1291,8 +1305,10 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.nodelist_distance;
 #endif
 #if HAS_GPS
+#ifdef USE_EINK
     if (frameName == "nodelist_bearings")
         return hiddenFrames.nodelist_bearings;
+#endif
     if (frameName == "gps")
         return hiddenFrames.gps;
 #endif
