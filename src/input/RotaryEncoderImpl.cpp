@@ -3,6 +3,9 @@
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+#ifdef ARCH_ESP32
+#include "sleep.h"
+#endif
 
 #define ORIGIN_NAME "RotaryEncoder"
 
@@ -11,6 +14,20 @@ RotaryEncoderImpl *rotaryEncoderImpl;
 RotaryEncoderImpl::RotaryEncoderImpl()
 {
     rotary = nullptr;
+}
+
+RotaryEncoderImpl::~RotaryEncoderImpl()
+{
+    LOG_DEBUG("RotaryEncoderImpl destructor");
+    if (interruptInstance == this) {
+        interruptInstance = nullptr;
+    }
+
+    detachRotaryEncoderInterrupts();
+    if (rotary != nullptr) {
+        delete rotary;
+        rotary = nullptr;
+    }
 }
 
 bool RotaryEncoderImpl::init()
@@ -25,15 +42,19 @@ bool RotaryEncoderImpl::init()
     eventCcw = static_cast<input_broker_event>(moduleConfig.canned_message.inputbroker_event_ccw);
     eventPressed = static_cast<input_broker_event>(moduleConfig.canned_message.inputbroker_event_press);
 
-    rotary = new RotaryEncoder(moduleConfig.canned_message.inputbroker_pin_a, moduleConfig.canned_message.inputbroker_pin_b,
-                               moduleConfig.canned_message.inputbroker_pin_press);
-    rotary->resetButton();
+    if (rotary == nullptr) {
+        rotary = new RotaryEncoder(moduleConfig.canned_message.inputbroker_pin_a, moduleConfig.canned_message.inputbroker_pin_b,
+                                   moduleConfig.canned_message.inputbroker_pin_press);
+    }
 
-    interruptInstance = this;
-    auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
-    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
-    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
-    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
+    attachRotaryEncoderInterrupts();
+
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
 
     LOG_INFO("RotaryEncoder initialized pins(%d, %d, %d), events(%d, %d, %d)", moduleConfig.canned_message.inputbroker_pin_a,
              moduleConfig.canned_message.inputbroker_pin_b, moduleConfig.canned_message.inputbroker_pin_press, eventCw, eventCcw,
@@ -70,6 +91,41 @@ void RotaryEncoderImpl::pollOnce()
         break;
     }
 }
+
+void RotaryEncoderImpl::detachRotaryEncoderInterrupts()
+{
+    LOG_DEBUG("RotaryEncoderImpl detach button interrupts");
+    detachInterrupt(moduleConfig.canned_message.inputbroker_pin_a);
+    detachInterrupt(moduleConfig.canned_message.inputbroker_pin_b);
+    detachInterrupt(moduleConfig.canned_message.inputbroker_pin_press);
+}
+
+void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
+{
+    LOG_DEBUG("RotaryEncoderImpl attach button interrupts");
+    rotary->resetButton();
+
+    interruptInstance = this;
+    auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
+    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
+    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
+    attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
+}
+
+#ifdef ARCH_ESP32
+
+int RotaryEncoderImpl::beforeLightSleep(void *unused)
+{
+    detachRotaryEncoderInterrupts();
+    return 0; // Indicates success return;
+}
+
+int RotaryEncoderImpl::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachRotaryEncoderInterrupts();
+    return 0; // Indicates success return;
+}
+#endif
 
 RotaryEncoderImpl *RotaryEncoderImpl::interruptInstance;
 
