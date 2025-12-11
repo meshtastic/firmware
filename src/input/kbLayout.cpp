@@ -425,6 +425,7 @@ static const char *mapCzech(char key)
 
 // Build layouts array
 static KeyboardLayout layouts[] = {
+    {"En", mapEnglish},
 #ifdef OLED_RU
     {"Ru", mapRussian},
 #endif
@@ -437,7 +438,6 @@ static KeyboardLayout layouts[] = {
 #ifdef OLED_CS
     {"Cs", mapCzech},
 #endif
-    {"En", mapEnglish},
 };
 
 static int currentLayout = 0;
