@@ -55,7 +55,7 @@ static int scrollIndex = 0;
 
 const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node)
 {
-    static char nodeName[25]; // single static buffer we return
+    static char nodeName[16]; // single static buffer we return
     nodeName[0] = '\0';
 
     auto writeFallbackId = [&] {
