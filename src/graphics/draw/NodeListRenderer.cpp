@@ -493,19 +493,23 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Space below header
     y += COMMON_HEADER_HEIGHT;
 
-#if defined(M5STACK_UNITC6L)
-    int totalColumns = 1;
-#elif defined(T_LORA_PAGER)
-    int totalColumns = 3;
+    int totalColumns = 1; // Default to 1 column
+
     if (config.display.use_long_node_name) {
-        totalColumns = 2;
+        if (SCREEN_WIDTH <= 240) {
+            totalColumns = 1;
+        } else if (SCREEN_WIDTH > 240) {
+            totalColumns = 2;
+        }
+    } else {
+        if (SCREEN_WIDTH <= 64) {
+            totalColumns = 1;
+        } else if (SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) {
+            totalColumns = 2;
+        } else {
+            totalColumns = 3;
+        }
     }
-#else
-    int totalColumns = 2;
-    if (config.display.use_long_node_name) {
-        totalColumns = 1;
-    }
-#endif
 
     int columnWidth = display->getWidth() / totalColumns;
 
@@ -520,7 +524,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     for (int i = 0; i < totalEntries; i++) {
         auto *n = nodeDB->getMeshNodeByIndex(i);
 
-        if (!n) continue;
+        if (!n)
+            continue;
         if (n->num == nodeDB->getNodeNum())
             continue;
         if (locationScreen && !n->has_position)
@@ -597,11 +602,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         display->setTextAlignment(TEXT_ALIGN_LEFT);
 
         // Box padding
-        int padding = 3;
+        int padding = 2;
         int textW = display->getStringWidth(buf);
         int textH = FONT_HEIGHT_SMALL;
-        int w = textW + padding * 2;
-        int h = textH + padding * 2;
+        int boxWidth = textW + padding * 3;
+        int boxHeight = textH + padding * 2;
 
         // Center of usable screen area:
         int headerHeight = FONT_HEIGHT_SMALL - 1;
@@ -612,19 +617,27 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         int usableHeight = usableBottom - usableTop;
 
         // Center point inside usable area
-        int px = (display->getWidth() - w) / 2;
-        int py = usableTop + (usableHeight - h) / 2;
+        int boxLeft = (display->getWidth() - boxWidth) / 2;
+        int boxTop = usableTop + (usableHeight - boxHeight) / 2;
 
-        // Background
+        // Draw Box
         display->setColor(BLACK);
-        display->fillRect(px, py, w, h);
-
-        // Border
+        display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+        display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
+        display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+        display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
+        display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
         display->setColor(WHITE);
-        display->drawRect(px, py, w, h);
+        display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+        display->setColor(BLACK);
+        display->fillRect(boxLeft, boxTop, 1, 1);
+        display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
+        display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
+        display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
+        display->setColor(WHITE);
 
         // Text
-        display->drawString(px + padding, py + padding, buf);
+        display->drawString(boxLeft + padding, boxTop + padding, buf);
     }
 }
 

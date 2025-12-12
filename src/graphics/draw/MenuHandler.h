@@ -19,6 +19,7 @@ class menuHandler
         clock_face_picker,
         clock_menu,
         position_base_menu,
+        node_base_menu,
         gps_toggle_menu,
         gps_format_menu,
         compass_point_north_menu,
