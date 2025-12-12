@@ -500,30 +500,40 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
     int numskipped = 0;
     int visibleNodeRows = totalRowsAvailable;
-    int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    if (nodeDB->getMeshNodeByIndex(startIndex)->num == nodeDB->getNodeNum()) {
-        startIndex++; // skip own node
-    }
-    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
 
+    // Build filtered + ordered list
+    std::vector<int> drawList;
+    drawList.reserve(totalEntries);
+    for (int i = 0; i < totalEntries; i++) {
+        auto *n = nodeDB->getMeshNodeByIndex(i);
+
+        if (!n) continue;
+        if (n->num == nodeDB->getNodeNum())
+            continue;
+        if (locationScreen && !n->has_position)
+            continue;
+
+        drawList.push_back(n->num);
+    }
+    totalEntries = drawList.size();
+    int startIndex = scrollIndex * visibleNodeRows * totalColumns;
+    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
     int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
     int shownCount = 0;
     int rowCount = 0;
 
-    for (int i = startIndex; i < endIndex; ++i) {
-        if (locationScreen && !nodeDB->getMeshNodeByIndex(i)->has_position) {
-            numskipped++;
-            continue;
-        }
+    for (int idx = startIndex; idx < endIndex; idx++) {
+        uint32_t nodeNum = drawList[idx];
+        auto *node = nodeDB->getMeshNode(nodeNum);
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
-        renderer(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth);
 
-        if (extras) {
-            extras(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth, heading, lat, lon);
-        }
+        renderer(display, node, xPos, yPos, columnWidth);
+
+        if (extras)
+            extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
 
         lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
