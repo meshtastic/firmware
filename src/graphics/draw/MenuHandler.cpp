@@ -1175,7 +1175,7 @@ void menuHandler::nodeNameLengthMenu()
             LOG_INFO("Setting names to short");
             config.display.use_long_node_name = false;
         } else if (selected == Back) {
-            menuQueue = screen_options_menu;
+            menuQueue = node_base_menu;
             screen->runNow();
         }
     };
@@ -1203,6 +1203,9 @@ void menuHandler::resetNodeDBMenu()
             LOG_INFO("Initiate node-db reset but keeping favorites");
             nodeDB->resetNodes(1);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 0) {
+            menuQueue = node_base_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -2075,6 +2078,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case position_base_menu:
         positionBaseMenu();
+        break;
+    case node_base_menu:
+        nodeListMenu();
         break;
 #if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
