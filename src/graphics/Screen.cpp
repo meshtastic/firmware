@@ -1659,6 +1659,26 @@ int Screen::handleInputEvent(const InputEvent *event)
             }
         }
     }
+    // UP/DOWN in node list screens scrolls through node pages
+    if (ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_nodes ||
+        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
+        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
+        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
+        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings)
+    {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::NodeListRenderer::scrollUp();
+            setFastFramerate();
+            return 0;
+        }
+
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::NodeListRenderer::scrollDown();
+            setFastFramerate();
+            return 0;
+        }
+    }
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {

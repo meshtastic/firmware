@@ -51,6 +51,38 @@ static ListMode_Location currentMode_Location = MODE_DISTANCE;
 static int scrollIndex = 0;
 
 // =============================
+// Scrolling Logic
+// =============================
+void scrollUp()
+{
+    if (scrollIndex > 0)
+        scrollIndex--;
+}
+
+void scrollDown()
+{
+    int totalEntries = nodeDB->getNumMeshNodes();
+
+    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
+    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+
+    int screenHeight = screen->getHeight();
+    int visibleRows = (screenHeight - COMMON_HEADER_HEIGHT) / rowYOffset;
+
+    int totalColumns = 2;
+#if defined(T_LORA_PAGER)
+    totalColumns = 3;
+#endif
+    if (config.display.use_long_node_name)
+        totalColumns = 1;
+
+    int maxScroll = std::max(0, (totalEntries - 1) / (visibleRows * totalColumns));
+
+    if (scrollIndex < maxScroll)
+        scrollIndex++;
+}
+
+// =============================
 // Utility Functions
 // =============================
 
