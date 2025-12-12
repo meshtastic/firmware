@@ -55,7 +55,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
     static char printBuf[512];
 #else
-    static char printBuf[160];
+    static char printBuf[320];  // Increased from 160 to 320 for longer log messages
 #endif
 
 #ifdef ARCH_PORTDUINO
