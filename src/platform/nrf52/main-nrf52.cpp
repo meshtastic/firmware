@@ -337,7 +337,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 
 #ifdef TTGO_T_ECHO
-    // To power off the T-Echo, the display must be set 
+    // To power off the T-Echo, the display must be set
     // as an input pin; otherwise, there will be leakage current.
     pinMode(PIN_EINK_CS, INPUT);
     pinMode(PIN_EINK_DC, INPUT);
