@@ -24,8 +24,7 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 
     virtual size_t write(uint8_t c) override
     {
-        if (c == '\n') // prefix any newlines with carriage return
-            RedirectablePrint::write('\r');
+        // Use Unix-style line endings (LF only, not CRLF)
         return RedirectablePrint::write(c);
     }
 
