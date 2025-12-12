@@ -2,98 +2,77 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
-from os.path import join
+from os.path import join, basename, isfile
 import subprocess
 import json
 import re
-import time
 from datetime import datetime
 
 from readprops import readProps
 
 Import("env")
 platform = env.PioPlatform()
+progname = env.get("PROGNAME")
+lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
 
-
-def esp32_create_combined_bin(source, target, env):
-    # this sub is borrowed from ESPEasy build toolchain. It's licensed under GPL V3
-    # https://github.com/letscontrolit/ESPEasy/blob/mega/tools/pio/post_esp32.py
-    print("Generating combined binary for serial flashing")
-
-    app_offset = 0x10000
-
-    new_file_name = env.subst("$BUILD_DIR/${PROGNAME}.factory.bin")
-    sections = env.subst(env.get("FLASH_EXTRA_IMAGES"))
-    firmware_name = env.subst("$BUILD_DIR/${PROGNAME}.bin")
-    chip = env.get("BOARD_MCU")
-    flash_size = env.BoardConfig().get("upload.flash_size")
-    flash_freq = env.BoardConfig().get("build.f_flash", "40m")
-    flash_freq = flash_freq.replace("000000L", "m")
-    flash_mode = env.BoardConfig().get("build.flash_mode", "dio")
-    memory_type = env.BoardConfig().get("build.arduino.memory_type", "qio_qspi")
-    if flash_mode == "qio" or flash_mode == "qout":
-        flash_mode = "dio"
-    if memory_type == "opi_opi" or memory_type == "opi_qspi":
-        flash_mode = "dout"
-    cmd = [
-        "--chip",
-        chip,
-        "merge_bin",
-        "-o",
-        new_file_name,
-        "--flash_mode",
-        flash_mode,
-        "--flash_freq",
-        flash_freq,
-        "--flash_size",
-        flash_size,
+def manifest_gather(source, target, env):
+    out = []
+    check_paths = [
+        progname,
+        f"{progname}.elf",
+        f"{progname}.bin",
+        f"{progname}.factory.bin",
+        f"{progname}.hex",
+        f"{progname}.merged.hex",
+        f"{progname}.uf2",
+        f"{progname}.factory.uf2",
+        f"{progname}.zip",
+        lfsbin
     ]
+    for p in check_paths:
+        f = env.File(env.subst(f"$BUILD_DIR/{p}"))
+        if f.exists():
+            d = {
+                "name": p,
+                "md5": f.get_content_hash(), # Returns MD5 hash
+                "bytes": f.get_size() # Returns file size in bytes
+            }
+            out.append(d)
+            print(d)
+    manifest_write(out, env)
 
-    print("    Offset | File")
-    for section in sections:
-        sect_adr, sect_file = section.split(" ", 1)
-        print(f" -  {sect_adr} | {sect_file}")
-        cmd += [sect_adr, sect_file]
+def manifest_write(files, env):
+    manifest = {
+        "version": verObj["long"],
+        "build_epoch": build_epoch,
+        "board": env.get("PIOENV"),
+        "mcu": env.get("BOARD_MCU"),
+        "repo": repo_owner,
+        "files": files,
+        "part": None,
+        "has_mui": False,
+        "has_inkhud": False,
+    }
+    # Get partition table (generated in esp32_pre.py) if it exists
+    if env.get("custom_mtjson_part"):
+        # custom_mtjson_part is a JSON string, convert it back to a dict
+        pj = json.loads(env.get("custom_mtjson_part"))
+        manifest["part"] = pj
+    # Enable has_mui for TFT builds
+    if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
+        manifest["has_mui"] = True
+    if "MESHTASTIC_INCLUDE_INKHUD" in env.get("CPPDEFINES", []):
+        manifest["has_inkhud"] = True
 
-    print(f" - {hex(app_offset)} | {firmware_name}")
-    cmd += [hex(app_offset), firmware_name]
-
-    print("Using esptool.py arguments: %s" % " ".join(cmd))
-
-    esptool.main(cmd)
-
-
-if platform.name == "espressif32":
-    sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
-    import esptool
-
-    env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
-
-    esp32_kind = env.GetProjectOption("custom_esp32_kind")
-    if esp32_kind == "esp32":
-        # Free up some IRAM by removing auxiliary SPI flash chip drivers.
-        # Wrapped stub symbols are defined in src/platform/esp32/iram-quirk.c.
-        env.Append(
-            LINKFLAGS=[
-                "-Wl,--wrap=esp_flash_chip_gd",
-                "-Wl,--wrap=esp_flash_chip_issi",
-                "-Wl,--wrap=esp_flash_chip_winbond",
-            ]
-        )
-    else:
-        # For newer ESP32 targets, using newlib nano works better.
-        env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
-
-if platform.name == "nordicnrf52":
-    env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
-                      env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py \"$BUILD_DIR/firmware.hex\" -c -f 0xADA52840 -o \"$BUILD_DIR/firmware.uf2\"",
-                                        "Generating UF2 file"))
+    # Write the manifest to the build directory
+    with open(env.subst("$BUILD_DIR/${PROGNAME}.mt.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
 
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
+print(f"Using meshtastic platformio-custom.py, firmware version {verObj['long']} on {env.get('PIOENV')}")
 
 # get repository owner if git is installed
 try:
@@ -139,10 +118,10 @@ flags = [
         "-DBUILD_EPOCH=" + str(build_epoch),
     ] + pref_flags
 
-print ("Using flags:")
+print("Using flags:")
 for flag in flags:
     print(flag)
-    
+
 projenv.Append(
     CCFLAGS=flags,
 )
@@ -180,4 +159,22 @@ def load_boot_logo(source, target, env):
 
 # Load the boot logo on TFT builds
 if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
-    env.AddPreAction('$BUILD_DIR/littlefs.bin', load_boot_logo)
+    env.AddPreAction(f"$BUILD_DIR/{lfsbin}", load_boot_logo)
+
+mtjson_deps = ["buildprog"]
+if platform.name == "espressif32":
+    # Build littlefs image as part of mtjson target
+    # Equivalent to `pio run -t buildfs`
+    target_lfs = env.DataToBin(
+        join("$BUILD_DIR", "${ESP32_FS_IMAGE_NAME}"), "$PROJECT_DATA_DIR"
+    )
+    mtjson_deps.append(target_lfs)
+
+env.AddCustomTarget(
+    name="mtjson",
+    dependencies=mtjson_deps,
+    actions=[manifest_gather],
+    title="Meshtastic Manifest",
+    description="Generating Meshtastic manifest JSON + Checksums",
+    always_build=False,
+)

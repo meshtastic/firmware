@@ -16,6 +16,7 @@ struct ToneDuration {
 };
 
 // Some common frequencies.
+#define NOTE_SILENT 1
 #define NOTE_C3 131
 #define NOTE_CS3 139
 #define NOTE_D3 147
@@ -29,11 +30,16 @@ struct ToneDuration {
 #define NOTE_AS3 233
 #define NOTE_B3 247
 #define NOTE_CS4 277
+#define NOTE_B4 494
+#define NOTE_F5 698
+#define NOTE_G6 1568
+#define NOTE_E7 2637
 
+const int DURATION_1_16 = 62;  // 1/16 note
 const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
 const int DURATION_1_2 = 500;  // 1/2 note
-const int DURATION_3_4 = 750;  // 1/4 note
+const int DURATION_3_4 = 750;  // 3/4 note
 const int DURATION_1_1 = 1000; // 1/1 note
 
 void playTones(const ToneDuration *tone_durations, int size)
@@ -71,13 +77,24 @@ void playLongBeep()
 
 void playGPSEnableBeep()
 {
+#if defined(R1_NEO) || defined(MUZI_BASE)
+    ToneDuration melody[] = {
+        {NOTE_F5, DURATION_1_2}, {NOTE_G6, DURATION_1_8}, {NOTE_E7, DURATION_1_4}, {NOTE_SILENT, DURATION_1_2}};
+#else
     ToneDuration melody[] = {{NOTE_C3, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_CS4, DURATION_1_4}};
+#endif
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
 void playGPSDisableBeep()
 {
+#if defined(R1_NEO) || defined(MUZI_BASE)
+    ToneDuration melody[] = {{NOTE_B4, DURATION_1_16}, {NOTE_B4, DURATION_1_16},   {NOTE_SILENT, DURATION_1_8},
+                             {NOTE_F3, DURATION_1_16}, {NOTE_F3, DURATION_1_16},   {NOTE_SILENT, DURATION_1_8},
+                             {NOTE_C3, DURATION_1_1},  {NOTE_SILENT, DURATION_1_1}};
+#else
     ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_C3, DURATION_1_4}};
+#endif
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 

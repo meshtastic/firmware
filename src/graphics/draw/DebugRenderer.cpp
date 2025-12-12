@@ -532,7 +532,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     const int labelX = x;
     int barsOffset = (isHighResolution) ? 24 : 0;
 #ifdef USE_EINK
+#ifndef T_DECK_PRO
     barsOffset -= 12;
+#endif
 #endif
 #if defined(M5STACK_UNITC6L)
     const int barX = x + 45 + barsOffset;
@@ -574,7 +576,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 #endif
         // Value string
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(SCREEN_WIDTH - 2, getTextPositions(display)[line], combinedStr);
+        display->drawString(SCREEN_WIDTH, getTextPositions(display)[line], combinedStr);
     };
 
     // === Memory values ===

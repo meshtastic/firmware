@@ -5,7 +5,8 @@ set -e
 VERSION=$(bin/buildinfo.py long)
 SHORT_VERSION=$(bin/buildinfo.py short)
 
-OUTDIR=release/
+BUILDDIR=.pio/build/$1
+OUTDIR=release
 
 rm -f $OUTDIR/firmware*
 rm -r $OUTDIR/* || true
@@ -14,40 +15,37 @@ rm -r $OUTDIR/* || true
 platformio pkg install -e $1
 
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
-rm -f .pio/build/$1/firmware.*
+rm -f $BUILDDIR/firmware*
 
 # The shell vars the build tool expects to find
 export APP_VERSION=$VERSION
 
 basename=firmware-$1-$VERSION
 
-pio run --environment $1 # -v
-SRCELF=.pio/build/$1/firmware.elf
-cp $SRCELF $OUTDIR/$basename.elf
+pio run --environment $1 -t mtjson # -v
 
-echo "Generating NRF52 dfu file"
-DFUPKG=.pio/build/$1/firmware.zip
-cp $DFUPKG $OUTDIR/$basename-ota.zip
+cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
 
-echo "Generating NRF52 uf2 file"
-SRCHEX=.pio/build/$1/firmware.hex
+echo "Copying NRF52 dfu (OTA) file"
+cp $BUILDDIR/$basename.zip $OUTDIR/$basename.zip
 
-# if WM1110 target, merge hex with softdevice 7.3.0
+echo "Copying NRF52 UF2 file"
+cp $BUILDDIR/$basename.uf2 $OUTDIR/$basename.uf2
+cp bin/*.uf2 $OUTDIR/
+
+SRCHEX=$BUILDDIR/$basename.hex
+
+# if WM1110 target, copy the merged.hex
 if (echo $1 | grep -q "wio-sdk-wm1110"); then
-	echo "Merging with softdevice"
-	bin/mergehex -m bin/s140_nrf52_7.3.0_softdevice.hex $SRCHEX -o .pio/build/$1/$basename.hex
-	SRCHEX=.pio/build/$1/$basename.hex
-	bin/uf2conv.py $SRCHEX -c -o $OUTDIR/$basename.uf2 -f 0xADA52840
-	cp $SRCHEX $OUTDIR
-	cp bin/*.uf2 $OUTDIR
-else
-	bin/uf2conv.py $SRCHEX -c -o $OUTDIR/$basename.uf2 -f 0xADA52840
-	cp bin/device-install.* $OUTDIR
-	cp bin/device-update.* $OUTDIR
-	cp bin/*.uf2 $OUTDIR
+	echo "Copying .merged.hex file"
+	SRCHEX=$BUILDDIR/$basename.merged.hex
+	cp $SRCHEX $OUTDIR/
 fi
 
 if (echo $1 | grep -q "rak4631"); then
-	echo "Copying hex file"
-	cp .pio/build/$1/firmware.hex $OUTDIR/$basename.hex
+	echo "Copying .hex file"
+	cp $SRCHEX $OUTDIR/
 fi
+
+echo "Copying manifest"
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
