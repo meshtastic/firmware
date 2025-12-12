@@ -77,16 +77,21 @@ jobs:
       fail-fast: false
       matrix:
         check: ${{ fromJson(needs.setup.outputs.check) }}
-
-    runs-on: ubuntu-latest
+    # Use 'arctastic' self-hosted runner pool when checking in the main repo
+    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
     if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
       - uses: actions/checkout@v6
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
       - name: Check ${{ matrix.check.board }}
-        run: bin/check-all.sh ${{ matrix.check.board }}
+        uses: meshtastic/gh-action-firmware@main
+        with:
+          pio_platform: ${{ matrix.check.platform }}
+          pio_env: ${{ matrix.check.board }}
+          pio_target: check
 
   build:
     needs: [setup, version]
