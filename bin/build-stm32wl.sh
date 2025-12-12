@@ -22,15 +22,12 @@ export APP_VERSION=$VERSION
 
 basename=firmware-$1-$VERSION
 
-pio run --environment $1 # -v
+pio run --environment $1 -t mtjson # -v
 
 cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
 
 echo "Copying STM32 bin file"
 cp $BUILDDIR/$basename.bin $OUTDIR/$basename.bin
 
-# Generate the manifest file
-echo "Generating Meshtastic manifest"
-TIMEFORMAT="Generated manifest in %E seconds"
-time pio run --environment $1 -t mtjson --silent --disable-auto-clean
+echo "Copying manifest"
 cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
