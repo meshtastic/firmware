@@ -18,6 +18,13 @@
 #include "PortduinoGlue.h"
 #endif
 
+#define FUNCTION_START(FUNCTION_NAME)                                                                                            \
+    if (fakeMutex)                                                                                                               \
+        LOG_ERROR("Concurrency violation in " FUNCTION_NAME);                                                                    \
+    fakeMutex = true;
+
+#define FUNCTION_END fakeMutex = false;
+
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
 // E3B0C442 is the blank hash
 static const uint8_t LOW_ENTROPY_HASHES[][32] = {
@@ -110,19 +117,6 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
-enum LoadFileResult {
-    // Successfully opened the file
-    LOAD_SUCCESS = 1,
-    // File does not exist
-    NOT_FOUND = 2,
-    // Device does not have a filesystem
-    NO_FILESYSTEM = 3,
-    // File exists, but could not decode protobufs
-    DECODE_FAILED = 4,
-    // File exists, but open failed for some reason
-    OTHER_FAILURE = 5
-};
-
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
 
 class NodeDB
@@ -135,7 +129,6 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
@@ -151,17 +144,26 @@ class NodeDB
     /// write to flash
     /// @return true if the save was successful
     bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
-                                   SEGMENT_NODEDATABASE);
+                                   SEGMENT_NODEDATABASE)
+    {
+        FUNCTION_START("saveToDisk");
+        auto retVal = _saveToDisk(saveWhat);
+        FUNCTION_END;
+        return retVal;
+    }
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
      * b) the client set factory_reset
      *
-     * @param factory_reset if true, reset all settings to factory defaults
      * @param is_fresh_install set to true after a fresh install, to trigger NodeInfo/Position requests
-     * @return true if the config was completely reset, in that case, we should send it back to the client
      */
-    void resetRadioConfig(bool is_fresh_install = false);
+    void resetRadioConfig(bool is_fresh_install = false)
+    {
+        FUNCTION_START("resetRadioConfig");
+        _resetRadioConfig(is_fresh_install);
+        FUNCTION_END;
+    }
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -208,7 +210,13 @@ class NodeDB
     std::string getNodeId() const;
 
     // @return last byte of a NodeNum, 0xFF if it ended at 0x00
-    uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }
+    uint8_t getLastByteOfNodeNum(NodeNum num)
+    {
+        FUNCTION_START("getLastByteOfNodeNum");
+        auto retVal = (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF);
+        FUNCTION_END;
+        return retVal;
+    }
 
     /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
     // bool handleWantNodeNum(NodeNum n);
@@ -227,79 +235,104 @@ class NodeDB
     /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
      * @param localOnly if true, ignore nodes heard via MQTT
      */
-    size_t getNumOnlineMeshNodes(bool localOnly = false);
+    size_t getNumOnlineMeshNodes(bool localOnly = false)
+    {
+        FUNCTION_START("getNumOnlineMeshNodes");
+        auto retVal = _getNumOnlineMeshNodes(localOnly);
+        FUNCTION_END;
+        return retVal;
+    }
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
-        removeNodeByNum(NodeNum nodeNum);
+    void resetNodes(bool keepFavorites = false), removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
-    LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
-                             void *dest_struct);
-    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
-                   bool fullAtomic = true);
-
-    void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
+    void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
+    {
+        FUNCTION_START("installRoleDefaults");
+        _installRoleDefaults(role);
+        FUNCTION_END;
+    }
 
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
 
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
-        assert(x < numMeshNodes);
-        return &meshNodes->at(x);
+        FUNCTION_START("getMeshNodeByIndex");
+        meshtastic_NodeInfoLite *retValue = nullptr;
+        if (x < numMeshNodes)
+            retValue = &meshNodes->at(x);
+        FUNCTION_END;
+        return retValue;
     }
 
-    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
-    size_t getNumMeshNodes() { return numMeshNodes; }
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n)
+    {
+        FUNCTION_START("getMeshNode");
+        auto retVal = _getMeshNode(n);
+        FUNCTION_END;
+        return retVal;
+    }
+
+    size_t getNumMeshNodes()
+    {
+        FUNCTION_START("getNumMeshNodes");
+        auto retVal = numMeshNodes;
+        FUNCTION_END;
+        return retVal;
+    }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
 
-    size_t getMaxNodesAllocatedSize()
+    // returns true if the maximum number of nodes is reached or we are running low on memory
+    bool isFull()
     {
-        meshtastic_NodeDatabase emptyNodeDatabase;
-        emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
-        size_t nodeDatabaseSize;
-        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+        FUNCTION_START("isFull");
+        auto retVal = _isFull();
+        FUNCTION_END;
+        return retVal;
     }
 
-    // returns true if the maximum number of nodes is reached or we are running low on memory
-    bool isFull();
-
-    void clearLocalPosition();
+    void clearLocalPosition()
+    {
+        FUNCTION_START("clearLocalPosition");
+        _clearLocalPosition();
+        FUNCTION_END;
+    }
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
-        if (timeOnly) {
-            LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
-            localPosition.time = position.time;
-            localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
-            return;
-        }
-        LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
-                  position.time, position.timestamp);
-        localPosition = position;
+        FUNCTION_START("setLocalPosition");
+        _setLocalPosition(position, timeOnly);
+        FUNCTION_END;
     }
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
-
-#if !defined(MESHTASTIC_EXCLUDE_PKI)
-    bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
-#endif
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
-    /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
     {
-        // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
-        newStatus.notifyObservers(&status);
+        FUNCTION_START("notifyObservers");
+        _notifyObservers(forceUpdate);
+        FUNCTION_END;
     }
 
   private:
+    bool fakeMutex = false;
+
+    /// Notify observers of changes to the DB
+    void _notifyObservers(bool forceUpdate = false)
+    {
+        // Notify observers of the current node state
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(_getNumOnlineMeshNodes(), numMeshNodes, forceUpdate);
+        newStatus.notifyObservers(&status);
+    }
+
+    std::vector<meshtastic_NodeInfoLite> *meshNodes;
+
     bool duplicateWarned = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
@@ -333,6 +366,51 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+
+    void initConfigIntervals(), initModuleConfigIntervals();
+
+    size_t getMaxNodesAllocatedSize()
+    {
+        meshtastic_NodeDatabase emptyNodeDatabase;
+        emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
+        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+    }
+
+    bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+
+    // wrapped private functions:
+
+    bool _saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                    SEGMENT_NODEDATABASE);
+    void _resetRadioConfig(bool is_fresh_install = false);
+
+    /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
+     * @param localOnly if true, ignore nodes heard via MQTT
+     */
+    size_t _getNumOnlineMeshNodes(bool localOnly = false);
+
+    void _installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
+
+    meshtastic_NodeInfoLite *_getMeshNode(NodeNum n);
+
+    bool _isFull();
+
+    void _clearLocalPosition();
+
+    void _setLocalPosition(meshtastic_Position position, bool timeOnly = false)
+    {
+        if (timeOnly) {
+            LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
+            localPosition.time = position.time;
+            localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
+            return;
+        }
+        LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
+                  position.time, position.timestamp);
+        localPosition = position;
+    }
 };
 
 extern NodeDB *nodeDB;

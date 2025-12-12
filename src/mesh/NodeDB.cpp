@@ -15,7 +15,6 @@
 #include "RTC.h"
 #include "Router.h"
 #include "SPILock.h"
-#include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
@@ -314,7 +313,7 @@ NodeDB::NodeDB()
     LOG_DEBUG("Number of Device Reboots: %d", myNodeInfo.reboot_count);
 #endif
 
-    resetRadioConfig(); // If bogus settings got saved, then fix them
+    _resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
     // Uncomment below to always enable UDP broadcasts
@@ -425,13 +424,13 @@ NodeDB::NodeDB()
         config.has_position = true;
         info->has_position = true;
         info->position = TypeConversions::ConvertToPositionLite(fixedGPS);
-        nodeDB->setLocalPosition(fixedGPS);
+        nodeDB->_setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
 #endif
     }
 #endif
     sortMeshDB();
-    saveToDisk(saveWhat);
+    _saveToDisk(saveWhat);
 }
 
 /**
@@ -460,7 +459,7 @@ bool isBroadcast(uint32_t dest)
     return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
 
-void NodeDB::resetRadioConfig(bool is_fresh_install)
+void NodeDB::_resetRadioConfig(bool is_fresh_install)
 {
     if (is_fresh_install) {
         radioGeneration++;
@@ -480,6 +479,7 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
+    FUNCTION_START("factoryReset");
     LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
     spiLock->lock();
@@ -498,7 +498,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     installDefaultModuleConfig();
     installDefaultChannels();
     // third, write everything to disk
-    saveToDisk();
+    _saveToDisk();
     if (eraseBleBonds) {
         LOG_INFO("Erase BLE bonds");
 #ifdef ARCH_ESP32
@@ -513,6 +513,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         Bluefruit.Central.clearBonds();
 #endif
     }
+    FUNCTION_END;
     return true;
 }
 
@@ -649,7 +650,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
-    resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
+    _resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
@@ -746,7 +747,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Apply role-specific defaults when role is set via user preferences
-    installRoleDefaults(config.device.role);
+    _installRoleDefaults(config.device.role);
 #endif
 
     initConfigIntervals();
@@ -908,7 +909,7 @@ void NodeDB::installDefaultModuleConfig()
     initModuleConfigIntervals();
 }
 
-void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
+void NodeDB::_installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
 {
     if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         initConfigIntervals();
@@ -994,6 +995,7 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes(bool keepFavorites)
 {
+    FUNCTION_START("resetNodes");
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
@@ -1017,10 +1019,12 @@ void NodeDB::resetNodes(bool keepFavorites)
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
+    FUNCTION_END;
 }
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
+    FUNCTION_START("removeNodeByNum");
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).num != nodeNum)
@@ -1033,16 +1037,17 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
               meshtastic_NodeInfoLite());
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
+    FUNCTION_END;
 }
 
-void NodeDB::clearLocalPosition()
+void NodeDB::_clearLocalPosition()
 {
-    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeInfoLite *node = _getMeshNode(nodeDB->getNodeNum());
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
     node->position.altitude = 0;
     node->position.time = 0;
-    setLocalPosition(meshtastic_Position_init_default);
+    _setLocalPosition(meshtastic_Position_init_default);
 }
 
 void NodeDB::cleanupMeshDB()
@@ -1118,7 +1123,7 @@ void NodeDB::pickNewNodeNum()
     }
 
     meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+    while (((found = _getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
@@ -1130,39 +1135,6 @@ void NodeDB::pickNewNodeNum()
     LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
-}
-
-/** Load a protobuf from a file, return LoadFileResult */
-LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
-                                 void *dest_struct)
-{
-    LoadFileResult state = LoadFileResult::OTHER_FAILURE;
-#ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-
-    auto f = FSCom.open(filename, FILE_O_READ);
-
-    if (f) {
-        LOG_INFO("Load %s", filename);
-        pb_istream_t stream = {&readcb, &f, protoSize};
-        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
-            memset(dest_struct, 0, objSize);
-        if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
-            state = LoadFileResult::DECODE_FAILED;
-        } else {
-            LOG_INFO("Loaded %s successfully", filename);
-            state = LoadFileResult::LOAD_SUCCESS;
-        }
-        f.close();
-    } else {
-        LOG_ERROR("Could not open / read %s", filename);
-    }
-#else
-    LOG_ERROR("ERROR: Filesystem not implemented");
-    state = LoadFileResult::NO_FILESYSTEM;
-#endif
-    return state;
 }
 
 void NodeDB::loadFromDisk()
@@ -1264,7 +1236,7 @@ void NodeDB::loadFromDisk()
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
-        saveToDisk(SEGMENT_CONFIG);
+        _saveToDisk(SEGMENT_CONFIG);
     }
 
     // Make sure we load hard coded admin keys even when the configuration file has none.
@@ -1315,7 +1287,7 @@ void NodeDB::loadFromDisk()
     if (numAdminKeys > 0) {
         LOG_INFO("Saving %d hard coded admin keys.", numAdminKeys);
         config.security.admin_key_count = numAdminKeys;
-        saveToDisk(SEGMENT_CONFIG);
+        _saveToDisk(SEGMENT_CONFIG);
     }
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
@@ -1367,7 +1339,7 @@ void NodeDB::loadFromDisk()
         if (moduleConfig.paxcounter.paxcounter_update_interval == 900)
             moduleConfig.paxcounter.paxcounter_update_interval = 0;
 
-        saveToDisk(SEGMENT_MODULECONFIG);
+        _saveToDisk(SEGMENT_MODULECONFIG);
     }
 #if ARCH_PORTDUINO
     // set any config overrides
@@ -1376,34 +1348,6 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
-}
-
-/** Save a protobuf from a file, return true for success */
-bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
-                       bool fullAtomic)
-{
-    bool okay = false;
-#ifdef FSCom
-    auto f = SafeFile(filename, fullAtomic);
-
-    LOG_INFO("Save %s", filename);
-    pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
-
-    if (!pb_encode(&stream, fields, dest_struct)) {
-        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
-    } else {
-        okay = true;
-    }
-
-    bool writeSucceeded = f.close();
-
-    if (!okay || !writeSucceeded) {
-        LOG_ERROR("Can't write prefs!");
-    }
-#else
-    LOG_ERROR("ERROR: Filesystem not implemented");
-#endif
-    return okay;
 }
 
 bool NodeDB::saveChannelsToDisk()
@@ -1494,7 +1438,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     return success;
 }
 
-bool NodeDB::saveToDisk(int saveWhat)
+bool NodeDB::_saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
     bool success = saveToDiskNoRetry(saveWhat);
@@ -1518,10 +1462,12 @@ bool NodeDB::saveToDisk(int saveWhat)
 
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
+    FUNCTION_START("readNextMeshNode");
+    meshtastic_NodeInfoLite *retVal = nullptr;
     if (readIndex < numMeshNodes)
-        return &meshNodes->at(readIndex++);
-    else
-        return NULL;
+        retVal = &meshNodes->at(readIndex++);
+    FUNCTION_END;
+    return retVal;
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -1549,7 +1495,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
-size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
+size_t NodeDB::_getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
@@ -1571,8 +1517,10 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
  */
 void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSource src)
 {
+    FUNCTION_START("updatePosition");
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
+        FUNCTION_END;
         return;
     }
 
@@ -1581,7 +1529,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d", p.timestamp, p.time, p.latitude_i, p.longitude_i,
                  p.altitude);
 
-        setLocalPosition(p);
+        _setLocalPosition(p);
         info->position = TypeConversions::ConvertToPositionLite(p);
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
@@ -1608,7 +1556,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     }
     info->has_position = true;
     updateGUIforNode = info;
-    notifyObservers(true); // Force an update whether or not our node counts have changed
+    _notifyObservers(true); // Force an update whether or not our node counts have changed
+    FUNCTION_END;
 }
 
 /** Update telemetry info for this node based on received metrics
@@ -1616,9 +1565,11 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
  */
 void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src)
 {
+    FUNCTION_START("updatePosition");
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     // Environment metrics should never go to NodeDb but we'll safegaurd anyway
     if (!info || t.which_variant != meshtastic_Telemetry_device_metrics_tag) {
+        FUNCTION_END;
         return;
     }
 
@@ -1631,7 +1582,8 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     info->device_metrics = t.variant.device_metrics;
     info->has_device_metrics = true;
     updateGUIforNode = info;
-    notifyObservers(true); // Force an update whether or not our node counts have changed
+    _notifyObservers(true); // Force an update whether or not our node counts have changed
+    FUNCTION_END;
 }
 
 /**
@@ -1639,8 +1591,10 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
  */
 void NodeDB::addFromContact(meshtastic_SharedContact contact)
 {
+    FUNCTION_START("addFromContact");
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
     if (!info || !contact.has_user) {
+        FUNCTION_END;
         return;
     }
     // If the local node has this node marked as manually verified
@@ -1649,6 +1603,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     if ((info->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && !contact.manually_verified) {
         if (contact.user.public_key.size != info->user.public_key.size ||
             memcmp(contact.user.public_key.bytes, info->user.public_key.bytes, info->user.public_key.size) != 0) {
+            FUNCTION_END;
             return;
         }
     }
@@ -1692,22 +1647,26 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
         sortMeshDB();
-        notifyObservers(true); // Force an update whether or not our node counts have changed
+        _notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
+    FUNCTION_END;
 }
 
 /** Update user info and channel for this node based on received user data
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
 {
+    FUNCTION_START("updateUser");
+
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
+        FUNCTION_END;
         return false;
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
+    if (p.public_key.size == 32 && nodeId != getNodeNum()) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
@@ -1724,6 +1683,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                 sprintf(cn->message, warning, p.long_name);
                 service->sendClientNotification(cn);
             }
+            FUNCTION_END;
             return false;
         }
     }
@@ -1731,6 +1691,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // if the key doesn't match, don't update nodeDB at all.
         if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, info->user.public_key.bytes, 32) != 0)) {
             LOG_WARN("Public Key mismatch, dropping NodeInfo");
+            FUNCTION_END;
             return false;
         }
         LOG_INFO("Public Key set for node, not updating!");
@@ -1758,19 +1719,19 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     if (changed) {
         updateGUIforNode = info;
-        notifyObservers(true); // Force an update whether or not our node counts have changed
+        _notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
 
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
-            saveToDisk(SEGMENT_NODEDATABASE);
+            _saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
         } else {
             LOG_DEBUG("Defer NodeDB saveToDisk for now");
         }
     }
-
+    FUNCTION_END;
     return changed;
 }
 
@@ -1778,107 +1739,121 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
+    FUNCTION_START("updateFrom");
     if (mp.from == getNodeNum()) {
         LOG_DEBUG("Ignore update from self");
-        return;
-    }
-    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
+    } else if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
-        if (!info) {
-            return;
+        if (info) {
+            if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
+                info->last_heard = mp.rx_time;
+
+            if (mp.rx_snr)
+                info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+
+            info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
+
+            // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
+            if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
+                info->has_hops_away = true;
+                info->hops_away = mp.hop_start - mp.hop_limit;
+            }
+            sortMeshDB();
         }
-
-        if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
-            info->last_heard = mp.rx_time;
-
-        if (mp.rx_snr)
-            info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
-
-        info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
-
-        // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
-        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
-            info->has_hops_away = true;
-            info->hops_away = mp.hop_start - mp.hop_limit;
-        }
-        sortMeshDB();
     }
+    FUNCTION_END;
 }
 
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    FUNCTION_START("set_favorite");
+    meshtastic_NodeInfoLite *lite = _getMeshNode(nodeId);
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
+    FUNCTION_END;
 }
 
+// returns true if nodeId is_favorite; false if not or not found
 bool NodeDB::isFavorite(uint32_t nodeId)
 {
-    // returns true if nodeId is_favorite; false if not or not found
-
+    FUNCTION_START("set_favorite");
     // NODENUM_BROADCAST will never be in the DB
-    if (nodeId == NODENUM_BROADCAST)
+    if (nodeId == NODENUM_BROADCAST) {
+        FUNCTION_END;
         return false;
+    }
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeInfoLite *lite = _getMeshNode(nodeId);
 
     if (lite) {
+        FUNCTION_END;
         return lite->is_favorite;
     }
+    FUNCTION_END;
     return false;
 }
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
 {
+    FUNCTION_START("isFromOrToFavoritedNode");
     // This method is logically equivalent to:
     //   return isFavorite(p.from) || isFavorite(p.to);
     // but is more efficient by:
     //   1. doing only one pass through the database, instead of two
     //   2. exiting early when a favorite is found, or if both from and to have been seen
 
-    if (p.to == NODENUM_BROADCAST)
-        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
-
     meshtastic_NodeInfoLite *lite = NULL;
 
     bool seenFrom = false;
     bool seenTo = false;
 
+    if (p.to == NODENUM_BROADCAST)
+        seenTo = true;
+
     for (int i = 0; i < numMeshNodes; i++) {
         lite = &meshNodes->at(i);
 
-        if (lite->num == p.from) {
-            if (lite->is_favorite)
+        if (!seenFrom && lite->num == p.from) {
+            if (lite->is_favorite) {
+                FUNCTION_END;
                 return true;
+            }
 
             seenFrom = true;
         }
 
-        if (lite->num == p.to) {
-            if (lite->is_favorite)
+        if (!seenTo && lite->num == p.to) {
+            if (lite->is_favorite) {
+                FUNCTION_END;
                 return true;
+            }
 
             seenTo = true;
         }
 
-        if (seenFrom && seenTo)
+        if (seenFrom && seenTo) {
+            FUNCTION_END;
             return false; // we've seen both, and neither is a favorite, so we can stop searching early
+        }
 
         // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
         // all favorited nodes first.
     }
-
+    FUNCTION_END;
     return false;
 }
 
 void NodeDB::pause_sort(bool paused)
 {
+    // Including the mutex macro for completeness, but it's possible it isn't appropriate here
+    FUNCTION_START("pause_sort");
     sortingIsPaused = paused;
+    FUNCTION_END;
 }
 
 void NodeDB::sortMeshDB()
@@ -1913,10 +1888,13 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    FUNCTION_START("getMeshNodeChannel");
+    const meshtastic_NodeInfoLite *info = _getMeshNode(n);
     if (!info) {
+        FUNCTION_END;
         return 0; // defaults to PRIMARY
     }
+    FUNCTION_END;
     return info->channel;
 }
 
@@ -1929,7 +1907,7 @@ std::string NodeDB::getNodeId() const
 
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
-meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
+meshtastic_NodeInfoLite *NodeDB::_getMeshNode(NodeNum n)
 {
     for (int i = 0; i < numMeshNodes; i++)
         if (meshNodes->at(i).num == n)
@@ -1939,7 +1917,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 }
 
 // returns true if the maximum number of nodes is reached or we are running low on memory
-bool NodeDB::isFull()
+bool NodeDB::_isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
@@ -1947,7 +1925,7 @@ bool NodeDB::isFull()
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(n);
+    meshtastic_NodeInfoLite *lite = _getMeshNode(n);
 
     if (!lite) {
         if (isFull()) {
@@ -2002,18 +1980,25 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 /// valid lat/lon
 bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 {
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+    FUNCTION_START("hasValidPosition");
+    auto retVal = n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+    FUNCTION_END;
+    return retVal;
 }
 
 /// If we have a node / user and they report is_licensed = true
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
+    FUNCTION_START("getLicenseStatus");
+    meshtastic_NodeInfoLite *info = _getMeshNode(nodeNum);
     if (!info || !info->has_user) {
+        FUNCTION_END;
         return UserLicenseStatus::NotKnown;
     }
-    return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+    auto retVal = info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+    FUNCTION_END;
+    return retVal;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
@@ -2035,6 +2020,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
+    FUNCTION_START("backupPreferences");
     bool success = false;
     lastBackupAttempt = millis();
 #ifdef FSCom
@@ -2068,11 +2054,13 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
         // TODO: After more mainline SD card support
     }
 #endif
+    FUNCTION_END;
     return success;
 }
 
 bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location, int restoreWhat)
 {
+    FUNCTION_START("backupPreferences");
     bool success = false;
 #ifdef FSCom
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
@@ -2080,6 +2068,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
         if (!FSCom.exists(backupFileName)) {
             spiLock->unlock();
             LOG_WARN("Could not restore. No backup file found");
+            FUNCTION_END;
             return false;
         } else {
             spiLock->unlock();
@@ -2105,7 +2094,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                 LOG_DEBUG("Restored channels");
             }
 
-            success = saveToDisk(restoreWhat);
+            success = _saveToDisk(restoreWhat);
             if (success) {
                 LOG_INFO("Restored preferences from backup");
             } else {
@@ -2117,6 +2106,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
     } else if (location == meshtastic_AdminMessage_BackupLocation_SD) {
         // TODO: After more mainline SD card support
     }
+    FUNCTION_END;
     return success;
 #endif
 }
