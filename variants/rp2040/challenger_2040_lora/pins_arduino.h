@@ -45,8 +45,6 @@
 #define SPI_HOWMANY (2u)
 #define WIRE_HOWMANY (1u)
 
-#define LED_BUILTIN PIN_LED
-
 static const uint8_t D0 = (16u);
 static const uint8_t D1 = (17u);
 static const uint8_t D2 = (20u);
