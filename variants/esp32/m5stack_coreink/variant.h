@@ -93,7 +93,7 @@
 #define PIN_EINK_MOSI 23 // EPD_MOSI
 
 #define BATTERY_PIN 35
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_7
 // https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/schematic/Core/m5paper/M5_PAPER_SCH.pdf
 // https://github.com/m5stack/M5Core-Ink/blob/master/examples/Basics/FactoryTest/FactoryTest.ino#L58
 //  VBAT
