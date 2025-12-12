@@ -1787,7 +1787,7 @@ void menuHandler::screenOptionsMenu()
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
-    optionsArray[options] = "Frame Visibility Toggle";
+    optionsArray[options] = "Frame Visibility";
     optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Display Units";
@@ -1922,7 +1922,7 @@ void menuHandler::FrameToggles_menu()
     static int lastSelectedIndex = 0;
 
 #ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node List" : "Hide Node List";
+    optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node Lists" : "Hide Node Lists";
     optionsEnumArray[options++] = nodelist_nodes;
 #else
     optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
@@ -1933,7 +1933,7 @@ void menuHandler::FrameToggles_menu()
 
 #if HAS_GPS
 #ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist_location") ? "Show Node Location List" : "Hide Node Location List";
+    optionsArray[options] = screen->isFrameHidden("nodelist_location") ? "Show Position Lists" : "Hide Position Lists";
     optionsEnumArray[options++] = nodelist_location;
 #else
     optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
