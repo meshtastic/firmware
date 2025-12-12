@@ -1665,8 +1665,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
         ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
         ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
-        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings)
-    {
+        ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
         if (event->inputEvent == INPUT_BROKER_UP) {
             graphics::NodeListRenderer::scrollUp();
             setFastFramerate();
