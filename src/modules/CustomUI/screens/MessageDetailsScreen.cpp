@@ -92,6 +92,10 @@ bool MessageDetailsScreen::handleKeyPress(char key) {
             // Back button - always goes back to MessageListScreen
             return false; // Let UI module handle screen switch
             
+        case '1':
+            // Reply button - let UI module handle navigation to T9 input
+            return false; // Let UI module handle screen switch
+            
         case '2':
             // Scroll up (up arrow)
             scrollUp();
@@ -135,6 +139,10 @@ void MessageDetailsScreen::setMessage(const MessageInfo& msgInfo) {
 
 bool MessageDetailsScreen::hasValidMessage() const {
     return messageSet && currentMessage.isValid;
+}
+
+const MessageInfo& MessageDetailsScreen::getCurrentMessage() const {
+    return currentMessage;
 }
 
 void MessageDetailsScreen::wrapTextToLines() {
@@ -332,8 +340,10 @@ void MessageDetailsScreen::scrollDown() {
 void MessageDetailsScreen::updateNavigationHints() {
     navHints.clear();
     
-    // Always show back button
-    navHints.push_back(NavHint('A', "Back"));
+    // Show reply button if message is valid
+    if (hasValidMessage()) {
+        navHints.push_back(NavHint('1', "Reply"));
+    }
     
     // Show page navigation hints only if message has multiple pages
     if (hasValidMessage() && totalLines > maxVisibleLines) {
@@ -346,6 +356,9 @@ void MessageDetailsScreen::updateNavigationHints() {
             navHints.push_back(NavHint('8', "PgDn"));
         }
     }
+
+    // Always show back button
+    navHints.push_back(NavHint('A', "Back"));
 }
 
 void MessageDetailsScreen::clearContent() {

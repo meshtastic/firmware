@@ -20,6 +20,7 @@
 #include "screens/MessageDetailsScreen.h"
 #include "screens/MessagesScreen.h"
 #include "screens/SnakeGameScreen.h"
+#include "screens/T9InputScreen.h"
 #include "InitialSplashScreen.h"
 #include "screens/utils/DataStore.h"
 #include "screens/utils/LoRaHelper.h"
@@ -48,6 +49,7 @@ CustomUIModule::CustomUIModule()
       messageListScreen(nullptr),
       messageDetailsScreen(nullptr),
       snakeGameScreen(nullptr),
+      t9InputScreen(nullptr),
       isSplashActive(false),
       splashStartTime(0),
       loadingProgress(0),
@@ -98,6 +100,11 @@ CustomUIModule::~CustomUIModule() {
     if (snakeGameScreen) {
         delete snakeGameScreen;
         snakeGameScreen = nullptr;
+    }
+    
+    if (t9InputScreen) {
+        delete t9InputScreen;
+        t9InputScreen = nullptr;
     }
     
     // Cleanup all initializers
@@ -236,6 +243,12 @@ void CustomUIModule::initScreens() {
     
     // Create snake game screen
     snakeGameScreen = new SnakeGameScreen();
+
+    // Create T9 input screen
+    t9InputScreen = new T9InputScreen();
+    t9InputScreen->setConfirmCallback([this](const String& text) {
+        this->onT9InputConfirm(text);
+    });
 
     // Screens are ready but don't switch yet - animation will handle transition
 
@@ -479,7 +492,7 @@ void CustomUIModule::handleKeyPress(char key) {
 
     // Handle global navigation keys
     switch (key) {
-        case '1': // Select/Details for MessageListScreen, or Home for others
+        case '1': // Select/Details for MessageListScreen, Reply for MessageDetailsScreen, or Home for others
             if (currentScreen == messageListScreen) {
                 // Navigate to message details if valid selection
                 if (messageListScreen->hasValidSelection()) {
@@ -490,6 +503,20 @@ void CustomUIModule::handleKeyPress(char key) {
                     return;
                 } else {
                     LOG_INFO("🔧 CUSTOM UI: No valid message selected");
+                }
+            } else if (currentScreen == messageDetailsScreen) {
+                // Reply button - navigate to T9 input for reply
+                if (messageDetailsScreen->hasValidMessage()) {
+                    LOG_INFO("🔧 CUSTOM UI: Starting reply to message");
+                    
+                    // Clear any existing text in T9 input
+                    t9InputScreen->clearInput();
+                    
+                    // Navigate to T9 input screen
+                    switchToScreen(t9InputScreen);
+                    return;
+                } else {
+                    LOG_INFO("🔧 CUSTOM UI: No valid message to reply to");
                 }
             }
             // For all other screens, go to home
@@ -523,6 +550,10 @@ void CustomUIModule::handleKeyPress(char key) {
                 // Navigate back to message list screen
                 switchToScreen(messageListScreen);
                 LOG_INFO("🔧 CUSTOM UI: Navigated back to MessageListScreen");
+            } else if (currentScreen == t9InputScreen) {
+                // Navigate back to message details screen
+                switchToScreen(messageDetailsScreen);
+                LOG_INFO("🔧 CUSTOM UI: Navigated back to MessageDetailsScreen from T9 input");
             } else if (currentScreen == messagesScreen) {
                 // If at end of buffer or no messages, go home
                 if (!messagesScreen->hasMessages() || messagesScreen->handleKeyPress(key) == false) {
@@ -535,22 +566,6 @@ void CustomUIModule::handleKeyPress(char key) {
                 switchToScreen(homeScreen);
             }
             break;
-
-        case '*': {
-            // Simple memory cleanup
-            ESP.getMinFreeHeap();
-            delay(50);
-            break;
-        }
-
-        case '#': {
-            // Basic memory status
-            size_t totalHeap = ESP.getHeapSize();
-            size_t freeHeap = ESP.getFreeHeap();
-            LOG_INFO("🔧 Memory: %.1f%% used, %zu KB free", 
-                (float)(totalHeap - freeHeap) * 100.0 / totalHeap, freeHeap/1024);
-            break;
-        }
 
         default:
             break;
@@ -661,6 +676,71 @@ int CustomUIModule::onDeepSleep(void *unused) {
     
     LOG_INFO("🔧 CUSTOM UI: Deep sleep cleanup completed");
     return 0; // Allow deep sleep to proceed
+}
+
+// ========== Message Sending ==========
+void CustomUIModule::sendReplyMessage(const String& messageText, uint32_t toNodeId, uint8_t channelIndex) {
+    LOG_INFO("🔧 CUSTOM UI: Sending reply message: '%s' to node %08X on channel %d", 
+             messageText.c_str(), toNodeId, channelIndex);
+    
+    if (messageText.length() == 0) {
+        LOG_INFO("🔧 CUSTOM UI: Cannot send empty message");
+        return;
+    }
+    
+    // Use LoRaHelper to send the message
+    bool success = LoRaHelper::sendMessage(messageText, toNodeId, channelIndex);
+    
+    if (success) {
+        LOG_INFO("🔧 CUSTOM UI: ✅ Message sent successfully");
+        
+        // Update activity time
+        updateLastActivity();
+    } else {
+        LOG_ERROR("🔧 CUSTOM UI: ❌ Failed to send message");
+    }
+}
+
+void CustomUIModule::onT9InputConfirm(const String& text) {
+    LOG_INFO("🔧 CUSTOM UI: T9 input confirmed with text: '%s'", text.c_str());
+    
+    // Get the current message from MessageDetailsScreen for reply context
+    if (messageDetailsScreen && messageDetailsScreen->hasValidMessage()) {
+        const MessageInfo& currentMsg = messageDetailsScreen->getCurrentMessage();
+        
+        LOG_INFO("🔧 CUSTOM UI: Sending reply to message from node %08X", currentMsg.senderNodeId);
+        
+        // Determine reply destination based on message type
+        uint32_t replyToNode;
+        uint8_t replyChannel;
+        
+        if (currentMsg.isDirectMessage) {
+            // Reply to direct message - send back to sender as DM
+            replyToNode = currentMsg.senderNodeId;
+            replyChannel = 0; // DMs use primary channel
+            LOG_INFO("🔧 CUSTOM UI: Replying to DM from %s", currentMsg.senderName);
+        } else {
+            // Reply to channel message - send to same channel
+            replyToNode = UINT32_MAX; // Broadcast to channel
+            replyChannel = currentMsg.channelIndex;
+            LOG_INFO("🔧 CUSTOM UI: Replying to channel message on channel %d", replyChannel);
+        }
+        
+        sendReplyMessage(text, replyToNode, replyChannel);
+        
+        // Navigate back to message list after sending
+        if (messageListScreen) {
+            switchToScreen(messageListScreen);
+            LOG_INFO("🔧 CUSTOM UI: Navigated back to MessageListScreen after reply");
+        }
+    } else {
+        LOG_ERROR("🔧 CUSTOM UI: No message context for reply");
+        
+        // Navigate back anyway
+        if (messageListScreen) {
+            switchToScreen(messageListScreen);
+        }
+    }
 }
 
 #endif

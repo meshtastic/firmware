@@ -142,6 +142,15 @@ public:
      */
     static String formatTimeAgo(uint32_t timestamp);
 
+    /**
+     * Send a text message via LoRa mesh
+     * @param messageText Text to send
+     * @param toNodeId Destination node ID (UINT32_MAX for broadcast)
+     * @param channelIndex Channel to send on (0 = primary)
+     * @return true if message was sent successfully, false otherwise
+     */
+    static bool sendMessage(const String& messageText, uint32_t toNodeId = UINT32_MAX, uint8_t channelIndex = 0);
+
 private:
     static String lastLongName;
     static String lastShortName;

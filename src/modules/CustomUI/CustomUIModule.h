@@ -23,6 +23,7 @@ class NodesListScreen;
 class MessageListScreen;
 class MessageDetailsScreen;
 class SnakeGameScreen;
+class T9InputScreen;
 
 #include "screens/MessagesScreen.h"
 /**
@@ -77,6 +78,7 @@ private:
     MessageDetailsScreen* messageDetailsScreen;
     MessagesScreen* messagesScreen;
     SnakeGameScreen* snakeGameScreen;
+    T9InputScreen* t9InputScreen;
     
     // Splash screen animation state
     bool isSplashActive;
@@ -114,6 +116,12 @@ private:
     // Input handling
     void checkKeypadInput();
     void handleKeyPress(char key);
+    
+    // Message sending
+    void sendReplyMessage(const String& messageText, uint32_t toNodeId, uint8_t channelIndex = 0);
+    
+    // T9 Input callback
+    void onT9InputConfirm(const String& text);
 };
 
 // Global setup function

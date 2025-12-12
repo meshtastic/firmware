@@ -34,6 +34,12 @@ public:
      * @return true if message is loaded and valid
      */
     bool hasValidMessage() const;
+    
+    /**
+     * Get the current message info for reply purposes
+     * @return current MessageInfo object
+     */
+    const MessageInfo& getCurrentMessage() const;
 
 private:
     // Scrolling and layout constants

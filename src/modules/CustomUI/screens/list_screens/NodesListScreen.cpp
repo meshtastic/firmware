@@ -11,8 +11,8 @@
 NodesListScreen::NodesListScreen() : BaseListScreen("Mesh Nodes", 20) {
     // Set navigation hints
     std::vector<NavHint> hints;
-    hints.push_back(NavHint('A', "Back"));
     hints.push_back(NavHint('1', "Select"));
+    hints.push_back(NavHint('A', "Back"));
     setNavigationHints(hints);
     
     isLoading = false;

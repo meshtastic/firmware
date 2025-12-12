@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "mesh/MeshService.h"
 #include "mesh/MeshTypes.h"
+#include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "gps/RTC.h" // for getTime() function
 #include <algorithm>
@@ -11,6 +12,7 @@
 // External references with safe access patterns
 extern meshtastic_DeviceState devicestate;
 extern MeshService *service;
+extern Router *router;
 
 // Static member initialization
 String LoRaHelper::lastLongName = "";
@@ -296,4 +298,42 @@ String LoRaHelper::formatTimeAgo(uint32_t timestamp) {
     } else {
         return String(secondsAgo / 86400) + "d ago";
     }
+}
+
+bool LoRaHelper::sendMessage(const String& messageText, uint32_t toNodeId, uint8_t channelIndex) {
+    if (messageText.length() == 0) {
+        return false; // Cannot send empty message
+    }
+    
+    if (!service || !router) {
+        return false; // MeshService or Router not available
+    }
+    
+    // Create text message packet using Router
+    auto packet = router->allocForSending();
+    if (!packet) {
+        return false; // Failed to allocate packet
+    }
+    
+    // Set up the packet for TEXT_MESSAGE_APP
+    packet->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    packet->to = toNodeId;
+    packet->channel = channelIndex;
+    packet->want_ack = false; // Text messages typically don't need acks
+    
+    // Set message content
+    const char* messageStr = messageText.c_str();
+    size_t messageLen = strlen(messageStr);
+    
+    if (messageLen > sizeof(packet->decoded.payload.bytes)) {
+        messageLen = sizeof(packet->decoded.payload.bytes);
+    }
+    
+    packet->decoded.payload.size = messageLen;
+    memcpy(packet->decoded.payload.bytes, messageStr, messageLen);
+    
+    // Send via mesh service
+    service->sendToMesh(packet);
+    
+    return true;
 }
