@@ -49,6 +49,15 @@ void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *
 static ListMode_Node currentMode_Nodes = MODE_LAST_HEARD;
 static ListMode_Location currentMode_Location = MODE_DISTANCE;
 static int scrollIndex = 0;
+// Popup overlay state
+static uint32_t popupTime = 0;
+static int popupTotal = 0;
+static int popupStart = 0;
+static int popupEnd = 0;
+static int popupPage = 1;
+static int popupMaxPage = 1;
+
+static const uint32_t POPUP_DURATION_MS = 1000; // 1 second visible
 
 // =============================
 // Scrolling Logic
@@ -57,6 +66,8 @@ void scrollUp()
 {
     if (scrollIndex > 0)
         scrollIndex--;
+
+    popupTime = millis(); // show popup
 }
 
 void scrollDown()
@@ -80,6 +91,8 @@ void scrollDown()
 
     if (scrollIndex < maxScroll)
         scrollIndex++;
+
+    popupTime = millis();
 }
 
 // =============================
@@ -565,6 +578,54 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     const int scrollStartY = y + 3;
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
     graphics::drawCommonFooter(display, x, y);
+
+    // Scroll Popup Overlay
+    if (millis() - popupTime < POPUP_DURATION_MS) {
+        popupTotal = totalEntries;
+
+        int perPage = visibleNodeRows * totalColumns;
+
+        popupStart = startIndex + 1;
+        popupEnd = std::min(startIndex + perPage, totalEntries);
+
+        popupPage = (scrollIndex + 1);
+        popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
+
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);
+
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+        // Box padding
+        int padding = 3;
+        int textW = display->getStringWidth(buf);
+        int textH = FONT_HEIGHT_SMALL;
+        int w = textW + padding * 2;
+        int h = textH + padding * 2;
+
+        // Center of usable screen area:
+        int headerHeight = FONT_HEIGHT_SMALL - 1;
+        int footerHeight = FONT_HEIGHT_SMALL + 2;
+
+        int usableTop = headerHeight;
+        int usableBottom = display->getHeight() - footerHeight;
+        int usableHeight = usableBottom - usableTop;
+
+        // Center point inside usable area
+        int px = (display->getWidth() - w) / 2;
+        int py = usableTop + (usableHeight - h) / 2;
+
+        // Background
+        display->setColor(BLACK);
+        display->fillRect(px, py, w, h);
+
+        // Border
+        display->setColor(WHITE);
+        display->drawRect(px, py, w, h);
+
+        // Text
+        display->drawString(px + padding, py + padding, buf);
+    }
 }
 
 // =============================
