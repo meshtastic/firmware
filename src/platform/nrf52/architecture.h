@@ -109,7 +109,7 @@
 #elif defined(HELTEC_MESH_SOLAR)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
 #elif defined(MUZI_BASE)
-#define HW_VENDOR meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
