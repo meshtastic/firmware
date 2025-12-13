@@ -218,6 +218,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // === Header Construction ===
+    char metricsStr[64];
+    // Logic from Android app
+    int hopsAway = (mp.hop_start == 0 || mp.hop_limit > mp.hop_start) ? -1 : mp.hop_start - mp.hop_limit;
+    if(hopsAway == 0) {
+        snprintf(metricsStr, sizeof(metricsStr), "S: %.2fdB R: %ddBm", mp.rx_snr, mp.rx_rssi);
+    } else {
+        snprintf(metricsStr, sizeof(metricsStr), "H:%d S:%.2fdB R:%ddBm", hopsAway, mp.rx_snr, mp.rx_rssi);
+    }
+
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     char headerStr[80];
     const char *sender = "???";
@@ -353,7 +362,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         LOG_INFO("Onscreen message scroll cache key needs updating: cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
 
         // Cache miss - regenerate lines and heights
-        cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
+        cachedLines = generateLines(display, headerStr, metricsStr, messageBuf, textWidth);
         cachedHeights = calculateLineHeights(cachedLines, emotes);
         cachedKey = currentKey;
     } else {
@@ -427,10 +436,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     graphics::drawCommonFooter(display, x, y);
 }
 
-std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
+std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *metricsStr, const char *messageBuf, int textWidth)
 {
     std::vector<std::string> lines;
     lines.push_back(std::string(headerStr)); // Header line is always first
+    lines.push_back(std::string(metricsStr));
 
     std::string line, word;
     for (int i = 0; messageBuf[i]; ++i) {
