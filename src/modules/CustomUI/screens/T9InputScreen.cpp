@@ -28,7 +28,7 @@ const int T9InputScreen::T9_LENGTHS[10] = {
 T9InputScreen::T9InputScreen() 
     : BaseScreen("T9 Input"), currentKey('\0'), currentKeyPresses(0), 
       lastKeyTime(0), hasCurrentChar(false), inputDirty(true), 
-      charPreviewDirty(true) {
+      charPreviewDirty(true), headerDirty(true), fullRedrawNeeded(true) {
     
     updateNavigationHints();
     LOG_INFO("📱 T9InputScreen: Initialized with T9 character mapping");
@@ -47,9 +47,11 @@ void T9InputScreen::onEnter() {
     lastKeyTime = 0;
     hasCurrentChar = false;
     
-    // Mark everything for redraw
+    // Mark everything for redraw on first entry
     inputDirty = true;
     charPreviewDirty = true;
+    headerDirty = true;
+    fullRedrawNeeded = true;
     
     updateNavigationHints();
     forceRedraw();
@@ -67,19 +69,46 @@ void T9InputScreen::onExit() {
     // onConfirm = nullptr;
 }
 
+bool T9InputScreen::needsUpdate() const {
+    // Return true if any region needs updating or if building a character with timeout pending
+    bool hasUpdates = fullRedrawNeeded || headerDirty || inputDirty || charPreviewDirty;
+    bool hasTimeoutPending = hasCurrentChar && (millis() - lastKeyTime < CHAR_TIMEOUT);
+    bool baseNeedsUpdate = BaseScreen::needsUpdate();
+    
+    return hasUpdates || hasTimeoutPending || baseNeedsUpdate;
+}
+
 void T9InputScreen::onDraw(lgfx::LGFX_Device& tft) {
     // Check for character timeout
     if (hasCurrentChar && (millis() - lastKeyTime > CHAR_TIMEOUT)) {
         processCharacterTimeout();
     }
     
-    // Draw input area
+    // Handle full redraw (only on screen entry/major state changes)
+    if (fullRedrawNeeded) {
+        // Clear entire content area
+        tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
+        
+        // Mark all regions dirty for complete redraw
+        headerDirty = true;
+        inputDirty = true;
+        charPreviewDirty = true;
+        fullRedrawNeeded = false;
+    }
+    
+    // Draw header area if dirty
+    if (headerDirty) {
+        drawHeaderArea(tft);
+        headerDirty = false;
+    }
+    
+    // Draw input area if dirty
     if (inputDirty) {
         drawInputArea(tft);
         inputDirty = false;
     }
     
-    // Draw character preview
+    // Draw character preview if dirty
     if (charPreviewDirty) {
         drawCharacterPreview(tft);
         charPreviewDirty = false;
@@ -123,8 +152,8 @@ bool T9InputScreen::handleKeyPress(char key) {
                 hasCurrentChar = false;
                 currentKey = '\0';
                 currentKeyPresses = 0;
-                inputDirty = true;
-                forceRedraw(); // Need this for screen update
+                inputDirty = true; // Update display to remove preview char
+                charPreviewDirty = true;
             } else if (inputText.length() > 0) {
                 // Remove last character from input
                 backspace();
@@ -166,7 +195,6 @@ void T9InputScreen::clearInput() {
     inputDirty = true;
     charPreviewDirty = true;
     updateNavigationHints();
-    forceRedraw(); // Force immediate visual update
     
     LOG_INFO("📱 T9InputScreen: Input cleared");
 }
@@ -188,8 +216,7 @@ void T9InputScreen::processCharacterTimeout() {
     if (hasCurrentChar) {
         acceptCurrentCharacter();
         LOG_INFO("📱 T9InputScreen: Character timeout - accepted character");
-        // Force immediate visual update after timeout
-        forceRedraw();
+        // acceptCurrentCharacter() already sets dirty flags
     }
 }
 
@@ -218,7 +245,6 @@ void T9InputScreen::addCharacter(char ch) {
         inputText += ch;
         inputDirty = true;
         updateNavigationHints();
-        forceRedraw(); // Force immediate visual update
         LOG_INFO("📱 T9InputScreen: Added character: '%c', text now: '%s'", ch, inputText.c_str());
     }
 }
@@ -228,7 +254,6 @@ void T9InputScreen::backspace() {
         inputText.remove(inputText.length() - 1);
         inputDirty = true;
         updateNavigationHints();
-        forceRedraw(); // Need this for screen update
         LOG_INFO("📱 T9InputScreen: Backspace, text now: '%s'", inputText.c_str());
     }
 }
@@ -259,10 +284,9 @@ void T9InputScreen::handleT9Key(char key) {
     
     lastKeyTime = currentTime;
     
-    // Force immediate visual update for responsive feedback
-    inputDirty = true;
+    // Mark regions that need updating during cycling
+    inputDirty = true; // Update input area to show current character
     charPreviewDirty = true;
-    forceRedraw();
 }
 
 void T9InputScreen::acceptCurrentCharacter() {
@@ -276,10 +300,9 @@ void T9InputScreen::acceptCurrentCharacter() {
         currentKey = '\0';
         currentKeyPresses = 0;
         
-        // Force redraw of both areas when character is committed
+        // Mark both areas dirty when character is committed
         inputDirty = true;
         charPreviewDirty = true;
-        forceRedraw();
         
         LOG_INFO("📱 T9InputScreen: Accepted character");
     }
@@ -292,21 +315,35 @@ void T9InputScreen::updateNavigationHints() {
     navHints.push_back(NavHint('A', "Cancel"));
 }
 
-void T9InputScreen::drawInputArea(lgfx::LGFX_Device& tft) {
+void T9InputScreen::drawHeaderArea(lgfx::LGFX_Device& tft) {
     int inputY = getContentY() + 5;
     
-    // Clear input area
-    tft.fillRect(0, inputY, getContentWidth(), INPUT_AREA_HEIGHT, COLOR_BLACK);
+    // Clear header area only - use proper header height
+    clearRegion(tft, 0, inputY, getContentWidth(), HEADER_HEIGHT);
     
     // Draw input label
     tft.setTextColor(COLOR_GREEN, COLOR_BLACK);
-    tft.setTextSize(1);
+    tft.setTextSize(2);
     tft.setCursor(TEXT_MARGIN, inputY + 5);
     tft.print("Message:");
     
-    // Draw input text with wrapping
+    LOG_INFO("📱 T9InputScreen: Drew header area");
+}
+
+void T9InputScreen::clearRegion(lgfx::LGFX_Device& tft, int x, int y, int width, int height) {
+    tft.fillRect(x, y, width, height, COLOR_BLACK);
+}
+
+void T9InputScreen::drawInputArea(lgfx::LGFX_Device& tft) {
+    int headerY = getContentY() + 5;
+    int inputY = headerY + HEADER_HEIGHT + 5; // Start below header with 5px gap
+    
+    // Clear only input text area (below header with gap)
+    clearRegion(tft, 0, inputY, getContentWidth(), INPUT_AREA_HEIGHT - HEADER_HEIGHT - 5);
+    
+    // Draw input text with wrapping (no label - header draws that)
     tft.setTextColor(COLOR_BLUE, COLOR_BLACK);
-    tft.setTextSize(1);
+    tft.setTextSize(2);
     
     // Show committed text + current character being typed
     String displayText = inputText;
@@ -320,17 +357,17 @@ void T9InputScreen::drawInputArea(lgfx::LGFX_Device& tft) {
     }
     
     // Draw text with wrapping
-    drawWrappedText(tft, displayText, TEXT_MARGIN, inputY + 20, 
-                    getContentWidth() - TEXT_MARGIN * 2, INPUT_AREA_HEIGHT - 25, 1);
+    drawWrappedText(tft, displayText, TEXT_MARGIN, inputY, 
+                    getContentWidth() - TEXT_MARGIN * 2, INPUT_AREA_HEIGHT - HEADER_HEIGHT - 10, 2);
     
     LOG_INFO("📱 T9InputScreen: Drew input area");
 }
 
 void T9InputScreen::drawCharacterPreview(lgfx::LGFX_Device& tft) {
-    int previewY = getContentY() + INPUT_AREA_HEIGHT + 10;
+    int previewY = getContentY() + INPUT_AREA_HEIGHT + 15;
     
-    // Clear character preview area
-    tft.fillRect(0, previewY, getContentWidth(), CHAR_PREVIEW_HEIGHT, COLOR_BLACK);
+    // Clear character preview area only
+    clearRegion(tft, 0, previewY, getContentWidth(), CHAR_PREVIEW_HEIGHT);
     
     // No character hints displayed - clean interface
     
