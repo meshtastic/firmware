@@ -17,6 +17,7 @@
 #include <memory.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
+#include <power/PowerHAL.h>
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "error.h"
@@ -38,11 +39,52 @@ void variant_shutdown() {}
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
+// This is a public global so that the debugger can set it to false automatically from our gdbinit
+// @phaseloop comment: most part of codebase, including filesystem flash driver depend on softdevice
+// methods so disabling it may actually crash thing. Proceed with caution.
+
+bool useSoftDevice = true; // Set to false for easier debugging
+
 static inline void debugger_break(void)
 {
     __asm volatile("bkpt #0x01\n\t"
                    "mov pc, lr\n\t");
 }
+
+// PowerHAL NRF52 specific function implementations
+bool powerHAL_isVBUSConnected() { 
+     return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
+}
+
+bool powerHAL_isPowerLevelSafe() {
+    
+    if(NRF_POWER->EVENTS_POFWARN)
+        return false;
+    return true;
+}
+
+ void powerHAL_platformInit(){
+
+
+    // POF protection prevents flash memory writes when VDD voltage is 2.7V or less to avoid memory corruption
+    // In this setting voltage is checked both against VDD and VDDH so particular board
+    // wiring does not matter.
+    // It must be set to value greater than 2.5V because 2.5V is minimum voltage that can be supplied at VDDH
+    // and it borders at cutoff voltage for li-ion battery protectors.
+    // Originally it was set at 2.4V and it did cause a lot of flash memory corruptions when battery was around 2.5-2.6V
+
+    // Many NRF52 boards have decent LDO which goes down to 2V
+    // In the future - boards with crappy LDO can be set to prevent memory corruption at higher voltage - like 3V
+    // using custom variant definition. Remember that above 2.8V you need to monitor VDDH voltage threshold using different
+    // registers
+
+    // SoftDevice is only enabled by Adafruit Bluetooth library (Bluefruit) and there is no good way to change it or integrate with it.
+    // This is started at boot before bluetooth so we use raw registers instead of sd_power*
+
+    NRF_POWER->POFCON = ((POWER_POFCON_THRESHOLD_V27 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+
+ }
+
 
 bool loopCanSleep()
 {
@@ -72,21 +114,6 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
-static void initBrownout()
-{
-    auto vccthresh = POWER_POFCON_THRESHOLD_V24;
-
-    auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
-    assert(err_code == NRF_SUCCESS);
-
-    err_code = sd_power_pof_threshold_set(vccthresh);
-    assert(err_code == NRF_SUCCESS);
-
-    // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
-}
-
-// This is a public global so that the debugger can set it to false automatically from our gdbinit
-bool useSoftDevice = true; // Set to false for easier debugging
 
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
@@ -106,7 +133,6 @@ void setBluetoothEnable(bool enable)
         if (!initialized) {
             nrf52Bluetooth = new NRF52Bluetooth();
             nrf52Bluetooth->startDisabled();
-            initBrownout();
             initialized = true;
         }
         return;
@@ -120,9 +146,6 @@ void setBluetoothEnable(bool enable)
             LOG_DEBUG("Init NRF52 Bluetooth");
             nrf52Bluetooth = new NRF52Bluetooth();
             nrf52Bluetooth->setup();
-
-            // We delay brownout init until after BLE because BLE starts soft device
-            initBrownout();
         }
         // Already setup, apparently
         else
@@ -192,9 +215,24 @@ extern "C" void lfs_assert(const char *reason)
     delay(500); // Give the serial port a bit of time to output that last message.
     // Try setting GPREGRET with the SoftDevice first. If that fails (perhaps because the SD hasn't been initialize yet) then set
     // NRF_POWER->GPREGRET directly.
-    if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
-        NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+
+
+    // TODO: this will/can crash CPU if bluetooth stack is not compiled in or bluetooth is not initialized
+    // (regardless if enabled or disabled) - as there is no live SoftDevice stack
+    // implement "safe" functions detecting softdevice stack state and using proper method to set registers
+
+    // do not set GPREGRET if POFWARN is triggered because it means lfs_assert reports flash undervoltage protection
+    // and not data corruption. Reboot is fine as boot procedure will wait until power level is safe again
+
+    if(powerHAL_isPowerLevelSafe()){
+        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
+            NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+        }
     }
+
+    // TODO: this should not be done when SoftDevice is enabled as device will not boot back on soft reset
+    // as some data is retained in RAM which will prevent re-enabling bluetooth stack
+    // Google what Nordic has to say about NVIC_* + SoftDevice
     NVIC_SystemReset();
 }
 
