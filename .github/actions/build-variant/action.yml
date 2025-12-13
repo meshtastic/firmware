@@ -100,7 +100,7 @@ runs:
       id: version
 
     - name: Store binaries as an artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}
         overwrite: true
