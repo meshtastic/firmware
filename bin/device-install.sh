@@ -83,8 +83,8 @@ while [ $# -gt 0 ]; do
 done
 
 if [[ $BPS_RESET == true ]]; then
-	$ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
-	exit 0
+    $ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
+    exit 0
 fi
 
 [ -z "$FILENAME" ] && [ -n "$1" ] && {
