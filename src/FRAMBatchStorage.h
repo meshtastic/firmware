@@ -242,6 +242,16 @@ class FRAMBatchStorage
     bool hasSpaceFor(uint16_t size);
 
     /**
+     * @brief Delete the oldest batch (internal version without lock)
+     *
+     * IMPORTANT: Caller must already hold spiLock - this method does not acquire it
+     * Used by writeBatch for auto-cleanup when FRAM is full.
+     *
+     * @return true if batch was deleted successfully
+     */
+    bool deleteOldestBatchInternal();
+
+    /**
      * @brief Write data to FRAM with address wrapping
      *
      * Caller must hold spiLock

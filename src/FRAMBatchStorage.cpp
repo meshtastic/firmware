@@ -69,8 +69,18 @@ bool FRAMBatchStorage::writeBatch(const uint8_t *data, uint16_t length)
     // Calculate total size needed (batch header + data)
     uint16_t totalSize = BATCH_HEADER_SIZE + length;
 
+    // Auto-cleanup: delete oldest batches if not enough space
+    while (!hasSpaceFor(totalSize) && batchCount > 0) {
+        LOG_INFO("FRAM: Auto-deleting oldest batch to make room");
+        if (!deleteOldestBatchInternal()) {
+            LOG_ERROR("FRAM: Failed to auto-delete batch");
+            return false;
+        }
+    }
+
+    // Final check after cleanup
     if (!hasSpaceFor(totalSize)) {
-        LOG_WARN("FRAM: Not enough space for batch (need %d bytes)", totalSize);
+        LOG_WARN("FRAM: Not enough space for batch even after cleanup (need %d bytes)", totalSize);
         return false;
     }
 
@@ -408,6 +418,33 @@ bool FRAMBatchStorage::hasSpaceFor(uint16_t size)
 
     // Leave some margin to avoid head catching up to tail
     return available > (size + BATCH_HEADER_SIZE);
+}
+
+bool FRAMBatchStorage::deleteOldestBatchInternal()
+{
+    // Internal version - caller must already hold spiLock
+    if (batchCount == 0) {
+        return false;
+    }
+
+    // Read batch header to get size
+    uint8_t batchHeader[BATCH_HEADER_SIZE];
+    readWithWrap(tailPtr, batchHeader, BATCH_HEADER_SIZE);
+
+    uint16_t batchSize = batchHeader[0] | (batchHeader[1] << 8);
+
+    // Mark as deleted
+    uint8_t deleteStatus = BATCH_STATUS_DELETED;
+    uint32_t statusAddr = wrapAddress(tailPtr + 2);
+    fram.write(statusAddr, &deleteStatus, 1);
+
+    // Move tail pointer past this batch
+    uint32_t totalSize = BATCH_HEADER_SIZE + batchSize;
+    tailPtr = wrapAddress(tailPtr + totalSize);
+    batchCount--;
+
+    // Note: Header will be persisted by the caller after all operations complete
+    return true;
 }
 
 uint32_t FRAMBatchStorage::writeWithWrap(uint32_t addr, const uint8_t *data, uint16_t length)
