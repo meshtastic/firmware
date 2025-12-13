@@ -69,7 +69,7 @@ done
 shift "$((OPTIND-1))"
 
 if [ "$CHANGE_MODE" = true ]; then
-	$ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
+    $ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
     exit 0
 fi
 
