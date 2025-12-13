@@ -31,6 +31,12 @@ class NotificationApplet : public SystemApplet
     void onBackground() override;
     void onButtonShortPress() override;
     void onButtonLongPress() override;
+    void onStickCenterShort() override;
+    void onStickCenterLong() override;
+    void onStickUp() override;
+    void onStickDown() override;
+    void onStickLeft() override;
+    void onStickRight() override;
 
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 
