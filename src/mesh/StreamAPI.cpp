@@ -155,12 +155,12 @@ int32_t StreamAPI::readStream()
 
                         // If we didn't just fail the packet and we now have the right # of bytes, parse it
                         handleToRadio(rxBuf + HEADER_LEN, len);
+                        // we had bytes available this time, so assume we might have them next time also
+                        lastRxMsec = millis();
                     }
             }
         }
 
-        // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = millis();
         return 0;
     }
 }
@@ -171,6 +171,8 @@ int32_t StreamAPI::readStream()
 void StreamAPI::emitTxBuffer(size_t len)
 {
     if (len != 0) {
+        powerFSM.trigger(EVENT_WAKE_TIMER);
+
         txBuf[0] = START1;
         txBuf[1] = START2;
         txBuf[2] = (len >> 8) & 0xff;
