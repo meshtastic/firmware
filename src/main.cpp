@@ -432,7 +432,6 @@ void setup()
 
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
-        LOG_WARN("Setting time");
         ourQuality = RTCQualityNTP;
     }
 
