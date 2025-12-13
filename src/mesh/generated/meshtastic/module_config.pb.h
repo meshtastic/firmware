@@ -174,12 +174,12 @@ typedef struct _meshtastic_ModuleConfig_DetectionSensorConfig {
     bool enabled;
     /* Interval in seconds of how often we can send a message to the mesh when a
  trigger event is detected */
-    uint32_t minimum_broadcast_secs;
+    uint32_t message_rate_limit;
     /* Interval in seconds of how often we should send a message to the mesh
  with the current state regardless of trigger events When set to 0, only
  trigger events will be broadcasted Works as a sort of status heartbeat
  for peace of mind */
-    uint32_t state_broadcast_secs;
+    uint32_t state_broadcast_interval;
     /* Send ASCII bell with alert message
  Useful for triggering ext. notification on bell */
     bool send_bell;
@@ -738,8 +738,8 @@ X(a, STATIC,   SINGULAR, BOOL,     transmit_over_lora,   3)
 
 #define meshtastic_ModuleConfig_DetectionSensorConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
-X(a, STATIC,   SINGULAR, UINT32,   minimum_broadcast_secs,   2) \
-X(a, STATIC,   SINGULAR, UINT32,   state_broadcast_secs,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   message_rate_limit,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   state_broadcast_interval,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     send_bell,         4) \
 X(a, STATIC,   SINGULAR, STRING,   name,              5) \
 X(a, STATIC,   SINGULAR, UINT32,   monitor_pin,       6) \
