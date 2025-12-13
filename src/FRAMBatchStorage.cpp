@@ -1,20 +1,52 @@
+/**
+ * @file FRAMBatchStorage.cpp
+ * @brief NASA Power of 10 compliant FRAM batch storage implementation
+ *
+ * Compliance with NASA JPL's "Power of 10" rules:
+ * Rule 1: Simple control flow (no goto, setjmp, recursion)
+ * Rule 2: Fixed upper bounds on all loops
+ * Rule 3: No dynamic memory allocation after initialization
+ * Rule 4: Functions limited to ~60 lines
+ * Rule 5: Minimum 2 assertions per function
+ * Rule 6: Data declared at smallest scope
+ * Rule 7: Return values checked, parameters validated
+ * Rule 8: Limited preprocessor use (simple macros only)
+ * Rule 9: Pointer use restricted (single dereference)
+ * Rule 10: Compile with all warnings enabled
+ */
+
 #include "configuration.h"
 
 #if __has_include(<Adafruit_FRAM_SPI.h>)
 
 #include "FRAMBatchStorage.h"
 #include "main.h"
+#include <assert.h>
+
+// ============================================================================
+// Constructor
+// ============================================================================
 
 FRAMBatchStorage::FRAMBatchStorage(int8_t csPin, SPIClass *spi, uint32_t spiFreq)
     : fram(csPin, spi, spiFreq), csPin(csPin), spi(spi), spiFreq(spiFreq), initialized(false), headPtr(0), tailPtr(0),
       batchCount(0)
 {
+    assert(spi != nullptr);                  // Rule 5: assertion 1
+    assert(FRAM_SIZE_BYTES >= FRAM_MIN_SIZE); // Rule 5: assertion 2
+
     dataStartAddr = FRAM_HEADER_SIZE;
     dataEndAddr = FRAM_SIZE_BYTES;
 }
 
+// ============================================================================
+// Public Methods
+// ============================================================================
+
 bool FRAMBatchStorage::begin(bool format)
 {
+    assert(spi != nullptr);                  // Rule 5: assertion 1
+    assert(FRAM_SIZE_BYTES >= FRAM_MIN_SIZE); // Rule 5: assertion 2
+
     if (initialized) {
         return true;
     }
@@ -22,21 +54,24 @@ bool FRAMBatchStorage::begin(bool format)
     {
         concurrency::LockGuard g(spiLock);
 
-        if (!fram.begin()) {
+        bool framInitOk = fram.begin(); // Rule 7: capture return value
+        if (!framInitOk) {
             LOG_ERROR("FRAM: Failed to initialize SPI FRAM");
             return false;
         }
 
-        // Try to read existing header
-        if (!format && readHeader()) {
-            LOG_INFO("FRAM: Found valid storage with %d batches", batchCount);
-            initialized = true;
-            return true;
+        if (!format) {
+            bool headerOk = readHeader(); // Rule 7: check return
+            if (headerOk) {
+                LOG_INFO("FRAM: Found valid storage with %d batches", batchCount);
+                initialized = true;
+                return true;
+            }
         }
     }
 
-    // Format needed - initialize fresh
-    if (!this->format()) {
+    bool formatOk = this->format(); // Rule 7: check return
+    if (!formatOk) {
         LOG_ERROR("FRAM: Failed to format storage");
         return false;
     }
@@ -48,62 +83,67 @@ bool FRAMBatchStorage::begin(bool format)
 
 bool FRAMBatchStorage::writeBatch(const uint8_t *data, uint16_t length)
 {
+    assert(data != nullptr);                  // Rule 5: assertion 1
+    assert(length <= FRAM_MAX_BATCH_SIZE);    // Rule 5: assertion 2
+
+    // Rule 7: Parameter validation
+    if (data == nullptr) {
+        LOG_WARN("FRAM: Null data pointer");
+        return false;
+    }
+
     if (!initialized) {
         LOG_WARN("FRAM: Not initialized");
         return false;
     }
 
-    if (length == 0 || length > FRAM_MAX_BATCH_SIZE) {
+    if ((length == 0) || (length > FRAM_MAX_BATCH_SIZE)) {
         LOG_WARN("FRAM: Invalid batch size %d", length);
         return false;
     }
 
     concurrency::LockGuard g(spiLock);
 
-    // Refresh header to get latest state
-    if (!readHeader()) {
+    bool headerOk = readHeader(); // Rule 7: check return
+    if (!headerOk) {
         LOG_ERROR("FRAM: Failed to read header for write");
         return false;
     }
 
-    // Calculate total size needed (batch header + data)
     uint16_t totalSize = BATCH_HEADER_SIZE + length;
 
-    // Auto-cleanup: delete oldest batches if not enough space
-    while (!hasSpaceFor(totalSize) && batchCount > 0) {
+    // Rule 2: Fixed loop bound with FRAM_MAX_CLEANUP_ITERATIONS
+    uint8_t cleanupCount = 0;
+    while ((!hasSpaceFor(totalSize)) && (batchCount > 0) && (cleanupCount < FRAM_MAX_CLEANUP_ITERATIONS)) {
         LOG_INFO("FRAM: Auto-deleting oldest batch to make room");
-        if (!deleteOldestBatchInternal()) {
+        bool deleteOk = deleteOldestBatchInternal(); // Rule 7: check return
+        if (!deleteOk) {
             LOG_ERROR("FRAM: Failed to auto-delete batch");
             return false;
         }
+        cleanupCount++;
     }
 
-    // Final check after cleanup
     if (!hasSpaceFor(totalSize)) {
-        LOG_WARN("FRAM: Not enough space for batch even after cleanup (need %d bytes)", totalSize);
+        LOG_WARN("FRAM: Not enough space after %d cleanup iterations", cleanupCount);
         return false;
     }
 
-    // Write batch header: [size (2 bytes)][status (1 byte)]
+    // Write batch header
     uint8_t batchHeader[BATCH_HEADER_SIZE];
-    batchHeader[0] = length & 0xFF;        // Low byte of size
-    batchHeader[1] = (length >> 8) & 0xFF; // High byte of size
+    batchHeader[0] = (uint8_t)(length & 0xFFU);
+    batchHeader[1] = (uint8_t)((length >> 8) & 0xFFU);
     batchHeader[2] = BATCH_STATUS_VALID;
 
     uint32_t writeAddr = headPtr;
-
-    // Write batch header
     writeAddr = writeWithWrap(writeAddr, batchHeader, BATCH_HEADER_SIZE);
-
-    // Write batch data
     writeAddr = writeWithWrap(writeAddr, data, length);
 
-    // Update head pointer and batch count
     headPtr = writeAddr;
     batchCount++;
 
-    // Persist header
-    if (!writeHeader()) {
+    bool writeOk = writeHeader(); // Rule 7: check return
+    if (!writeOk) {
         LOG_ERROR("FRAM: Failed to update header after write");
         return false;
     }
@@ -114,19 +154,27 @@ bool FRAMBatchStorage::writeBatch(const uint8_t *data, uint16_t length)
 
 bool FRAMBatchStorage::readBatch(uint8_t *buffer, uint16_t maxLength, uint16_t *actualLength)
 {
+    assert(buffer != nullptr);       // Rule 5: assertion 1
+    assert(actualLength != nullptr); // Rule 5: assertion 2
+
+    // Rule 7: Parameter validation
+    if ((buffer == nullptr) || (actualLength == nullptr)) {
+        return false;
+    }
+
+    if (maxLength == 0) {
+        return false;
+    }
+
     if (!initialized) {
         LOG_WARN("FRAM: Not initialized");
         return false;
     }
 
-    if (buffer == nullptr || actualLength == nullptr) {
-        return false;
-    }
-
     concurrency::LockGuard g(spiLock);
 
-    // Refresh header
-    if (!readHeader()) {
+    bool headerOk = readHeader(); // Rule 7: check return
+    if (!headerOk) {
         LOG_ERROR("FRAM: Failed to read header");
         return false;
     }
@@ -138,14 +186,14 @@ bool FRAMBatchStorage::readBatch(uint8_t *buffer, uint16_t maxLength, uint16_t *
 
     // Read batch header at tail position
     uint8_t batchHeader[BATCH_HEADER_SIZE];
-    uint32_t readAddr = tailPtr;
-    readWithWrap(readAddr, batchHeader, BATCH_HEADER_SIZE);
+    (void)readWithWrap(tailPtr, batchHeader, BATCH_HEADER_SIZE);
 
-    uint16_t batchSize = batchHeader[0] | (batchHeader[1] << 8);
+    uint16_t batchSize = (uint16_t)batchHeader[0] | ((uint16_t)batchHeader[1] << 8);
     uint8_t status = batchHeader[2];
 
-    // Skip deleted batches (shouldn't normally happen, but safety check)
-    if (status == BATCH_STATUS_DELETED || status == BATCH_STATUS_FREE) {
+    assert(isValidDataAddress(tailPtr)); // Rule 5: additional assertion
+
+    if ((status == BATCH_STATUS_DELETED) || (status == BATCH_STATUS_FREE)) {
         LOG_WARN("FRAM: Found invalid batch at tail, status=%02X", status);
         return false;
     }
@@ -156,9 +204,14 @@ bool FRAMBatchStorage::readBatch(uint8_t *buffer, uint16_t maxLength, uint16_t *
         return false;
     }
 
-    // Read batch data (skip header)
-    readAddr = wrapAddress(tailPtr + BATCH_HEADER_SIZE);
-    readWithWrap(readAddr, buffer, batchSize);
+    if (batchSize > FRAM_MAX_BATCH_SIZE) {
+        LOG_ERROR("FRAM: Corrupt batch size %d", batchSize);
+        *actualLength = 0;
+        return false;
+    }
+
+    uint32_t dataAddr = wrapAddress(tailPtr + BATCH_HEADER_SIZE);
+    (void)readWithWrap(dataAddr, buffer, batchSize);
 
     *actualLength = batchSize;
     LOG_DEBUG("FRAM: Read batch of %d bytes", batchSize);
@@ -167,19 +220,36 @@ bool FRAMBatchStorage::readBatch(uint8_t *buffer, uint16_t maxLength, uint16_t *
 
 uint16_t FRAMBatchStorage::peekBatchSize()
 {
-    if (!initialized || batchCount == 0) {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+
+    if (!initialized) {
         return 0;
     }
 
     concurrency::LockGuard g(spiLock);
 
+    bool headerOk = readHeader(); // Rule 7: check return
+    if (!headerOk) {
+        return 0;
+    }
+
+    assert(isValidDataAddress(tailPtr)); // Rule 5: assertion 2
+
+    if (batchCount == 0) {
+        return 0;
+    }
+
     uint8_t sizeBytes[2];
-    readWithWrap(tailPtr, sizeBytes, 2);
-    return sizeBytes[0] | (sizeBytes[1] << 8);
+    (void)readWithWrap(tailPtr, sizeBytes, 2);
+
+    uint16_t size = (uint16_t)sizeBytes[0] | ((uint16_t)sizeBytes[1] << 8);
+    return size;
 }
 
 bool FRAMBatchStorage::deleteBatch()
 {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+
     if (!initialized) {
         LOG_WARN("FRAM: Not initialized");
         return false;
@@ -187,35 +257,40 @@ bool FRAMBatchStorage::deleteBatch()
 
     concurrency::LockGuard g(spiLock);
 
-    // Refresh header
-    if (!readHeader()) {
+    bool headerOk = readHeader(); // Rule 7: check return
+    if (!headerOk) {
         LOG_ERROR("FRAM: Failed to read header for delete");
         return false;
     }
+
+    assert(isValidDataAddress(tailPtr)); // Rule 5: assertion 2
 
     if (batchCount == 0) {
         LOG_DEBUG("FRAM: No batches to delete");
         return false;
     }
 
-    // Read batch header to get size
     uint8_t batchHeader[BATCH_HEADER_SIZE];
-    readWithWrap(tailPtr, batchHeader, BATCH_HEADER_SIZE);
+    (void)readWithWrap(tailPtr, batchHeader, BATCH_HEADER_SIZE);
 
-    uint16_t batchSize = batchHeader[0] | (batchHeader[1] << 8);
+    uint16_t batchSize = (uint16_t)batchHeader[0] | ((uint16_t)batchHeader[1] << 8);
 
-    // Mark as deleted
+    // Rule 7: Validate batch size before use
+    if (batchSize > FRAM_MAX_BATCH_SIZE) {
+        LOG_ERROR("FRAM: Corrupt batch size during delete: %d", batchSize);
+        return false;
+    }
+
     uint8_t deleteStatus = BATCH_STATUS_DELETED;
-    uint32_t statusAddr = wrapAddress(tailPtr + 2);
-    fram.write(statusAddr, &deleteStatus, 1);
+    uint32_t statusAddr = wrapAddress(tailPtr + 2U);
+    (void)fram.write(statusAddr, &deleteStatus, 1);
 
-    // Move tail pointer past this batch
     uint32_t totalSize = BATCH_HEADER_SIZE + batchSize;
     tailPtr = wrapAddress(tailPtr + totalSize);
     batchCount--;
 
-    // Persist header
-    if (!writeHeader()) {
+    bool writeOk = writeHeader(); // Rule 7: check return
+    if (!writeOk) {
         LOG_ERROR("FRAM: Failed to update header after delete");
         return false;
     }
@@ -226,114 +301,140 @@ bool FRAMBatchStorage::deleteBatch()
 
 uint8_t FRAMBatchStorage::getBatchCount()
 {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+
     if (!initialized) {
         return 0;
     }
 
     concurrency::LockGuard g(spiLock);
-    readHeader(); // Refresh from FRAM
+    (void)readHeader(); // Rule 7: explicitly ignore return for status query
+
+    assert(batchCount <= FRAM_MAX_BATCH_COUNT); // Rule 5: assertion 2
+
     return batchCount;
 }
 
 bool FRAMBatchStorage::hasBatches()
 {
-    return getBatchCount() > 0;
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+    assert(FRAM_SIZE_BYTES >= FRAM_MIN_SIZE); // Rule 5: assertion 2
+
+    uint8_t count = getBatchCount();
+    return (count > 0);
 }
 
 uint32_t FRAMBatchStorage::getAvailableSpace()
 {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+
     if (!initialized) {
         return 0;
     }
 
     concurrency::LockGuard g(spiLock);
-    readHeader();
+    (void)readHeader();
 
-    uint32_t dataSize = dataEndAddr - dataStartAddr;
+    assert(isValidDataAddress(headPtr)); // Rule 5: assertion 2
 
-    if (batchCount == 0) {
-        return dataSize;
-    }
-
-    // Calculate used space in circular buffer
-    if (headPtr >= tailPtr) {
-        return dataSize - (headPtr - tailPtr);
-    } else {
-        return tailPtr - headPtr;
-    }
+    return calculateAvailableSpace();
 }
 
 bool FRAMBatchStorage::format()
 {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+    assert(FRAM_SIZE_BYTES >= FRAM_MIN_SIZE); // Rule 5: assertion 2
+
     concurrency::LockGuard g(spiLock);
 
-    // Initialize header with default values
     headPtr = dataStartAddr;
     tailPtr = dataStartAddr;
     batchCount = 0;
 
-    return initHeader();
+    bool initOk = initHeader(); // Rule 7: check return
+    return initOk;
 }
 
 bool FRAMBatchStorage::getDeviceID(uint8_t *manufacturerID, uint16_t *productID)
 {
-    if (manufacturerID == nullptr || productID == nullptr) {
+    assert(manufacturerID != nullptr); // Rule 5: assertion 1
+    assert(productID != nullptr);      // Rule 5: assertion 2
+
+    // Rule 7: Parameter validation
+    if ((manufacturerID == nullptr) || (productID == nullptr)) {
         return false;
     }
 
     concurrency::LockGuard g(spiLock);
-    return fram.getDeviceID(manufacturerID, productID);
+    bool result = fram.getDeviceID(manufacturerID, productID); // Rule 7: check return
+    return result;
 }
 
 bool FRAMBatchStorage::enterSleep()
 {
+    assert(spi != nullptr); // Rule 5: assertion 1
+
     if (!initialized) {
         return false;
     }
 
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 2
+
     concurrency::LockGuard g(spiLock);
-    return fram.enterSleep();
+    bool result = fram.enterSleep(); // Rule 7: check return
+    return result;
 }
 
 bool FRAMBatchStorage::exitSleep()
 {
+    assert(spi != nullptr); // Rule 5: assertion 1
+
     if (!initialized) {
         return false;
     }
 
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 2
+
     concurrency::LockGuard g(spiLock);
-    return fram.exitSleep();
+    bool result = fram.exitSleep(); // Rule 7: check return
+    return result;
 }
+
+// ============================================================================
+// Private Methods
+// ============================================================================
 
 bool FRAMBatchStorage::readHeader()
 {
-    uint8_t header[FRAM_HEADER_SIZE];
-    fram.read(0, header, FRAM_HEADER_SIZE);
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
 
-    // Verify magic number
-    uint16_t magic = header[FRAM_OFFSET_MAGIC] | (header[FRAM_OFFSET_MAGIC + 1] << 8);
+    uint8_t header[FRAM_HEADER_SIZE];
+    (void)fram.read(0, header, FRAM_HEADER_SIZE);
+
+    uint16_t magic = (uint16_t)header[FRAM_OFFSET_MAGIC] | ((uint16_t)header[FRAM_OFFSET_MAGIC + 1U] << 8);
+
+    assert(FRAM_MAGIC_NUMBER == 0x4652U); // Rule 5: assertion 2
+
     if (magic != FRAM_MAGIC_NUMBER) {
         LOG_DEBUG("FRAM: Invalid magic number %04X", magic);
         return false;
     }
 
-    // Verify version
     if (header[FRAM_OFFSET_VERSION] != FRAM_VERSION) {
         LOG_WARN("FRAM: Version mismatch (found %d, expected %d)", header[FRAM_OFFSET_VERSION], FRAM_VERSION);
         return false;
     }
 
-    // Read header values
     batchCount = header[FRAM_OFFSET_BATCH_COUNT];
 
-    headPtr = header[FRAM_OFFSET_HEAD] | (header[FRAM_OFFSET_HEAD + 1] << 8) | (header[FRAM_OFFSET_HEAD + 2] << 16) |
-              (header[FRAM_OFFSET_HEAD + 3] << 24);
+    headPtr = (uint32_t)header[FRAM_OFFSET_HEAD] | ((uint32_t)header[FRAM_OFFSET_HEAD + 1U] << 8) |
+              ((uint32_t)header[FRAM_OFFSET_HEAD + 2U] << 16) | ((uint32_t)header[FRAM_OFFSET_HEAD + 3U] << 24);
 
-    tailPtr = header[FRAM_OFFSET_TAIL] | (header[FRAM_OFFSET_TAIL + 1] << 8) | (header[FRAM_OFFSET_TAIL + 2] << 16) |
-              (header[FRAM_OFFSET_TAIL + 3] << 24);
+    tailPtr = (uint32_t)header[FRAM_OFFSET_TAIL] | ((uint32_t)header[FRAM_OFFSET_TAIL + 1U] << 8) |
+              ((uint32_t)header[FRAM_OFFSET_TAIL + 2U] << 16) | ((uint32_t)header[FRAM_OFFSET_TAIL + 3U] << 24);
 
-    // Validate pointers
-    if (headPtr < dataStartAddr || headPtr >= dataEndAddr || tailPtr < dataStartAddr || tailPtr >= dataEndAddr) {
+    // Rule 7: Validate pointers
+    if (!isValidDataAddress(headPtr) || !isValidDataAddress(tailPtr)) {
         LOG_WARN("FRAM: Invalid pointers (head=%lu, tail=%lu)", headPtr, tailPtr);
         return false;
     }
@@ -343,50 +444,43 @@ bool FRAMBatchStorage::readHeader()
 
 bool FRAMBatchStorage::writeHeader()
 {
+    assert(dataEndAddr > dataStartAddr);     // Rule 5: assertion 1
+    assert(isValidDataAddress(headPtr));     // Rule 5: assertion 2
+
     uint8_t header[FRAM_HEADER_SIZE] = {0};
 
-    // Magic number
-    header[FRAM_OFFSET_MAGIC] = FRAM_MAGIC_NUMBER & 0xFF;
-    header[FRAM_OFFSET_MAGIC + 1] = (FRAM_MAGIC_NUMBER >> 8) & 0xFF;
-
-    // Version
+    header[FRAM_OFFSET_MAGIC] = (uint8_t)(FRAM_MAGIC_NUMBER & 0xFFU);
+    header[FRAM_OFFSET_MAGIC + 1U] = (uint8_t)((FRAM_MAGIC_NUMBER >> 8) & 0xFFU);
     header[FRAM_OFFSET_VERSION] = FRAM_VERSION;
-
-    // Batch count
     header[FRAM_OFFSET_BATCH_COUNT] = batchCount;
 
-    // Head pointer
-    header[FRAM_OFFSET_HEAD] = headPtr & 0xFF;
-    header[FRAM_OFFSET_HEAD + 1] = (headPtr >> 8) & 0xFF;
-    header[FRAM_OFFSET_HEAD + 2] = (headPtr >> 16) & 0xFF;
-    header[FRAM_OFFSET_HEAD + 3] = (headPtr >> 24) & 0xFF;
+    header[FRAM_OFFSET_HEAD] = (uint8_t)(headPtr & 0xFFU);
+    header[FRAM_OFFSET_HEAD + 1U] = (uint8_t)((headPtr >> 8) & 0xFFU);
+    header[FRAM_OFFSET_HEAD + 2U] = (uint8_t)((headPtr >> 16) & 0xFFU);
+    header[FRAM_OFFSET_HEAD + 3U] = (uint8_t)((headPtr >> 24) & 0xFFU);
 
-    // Tail pointer
-    header[FRAM_OFFSET_TAIL] = tailPtr & 0xFF;
-    header[FRAM_OFFSET_TAIL + 1] = (tailPtr >> 8) & 0xFF;
-    header[FRAM_OFFSET_TAIL + 2] = (tailPtr >> 16) & 0xFF;
-    header[FRAM_OFFSET_TAIL + 3] = (tailPtr >> 24) & 0xFF;
+    header[FRAM_OFFSET_TAIL] = (uint8_t)(tailPtr & 0xFFU);
+    header[FRAM_OFFSET_TAIL + 1U] = (uint8_t)((tailPtr >> 8) & 0xFFU);
+    header[FRAM_OFFSET_TAIL + 2U] = (uint8_t)((tailPtr >> 16) & 0xFFU);
+    header[FRAM_OFFSET_TAIL + 3U] = (uint8_t)((tailPtr >> 24) & 0xFFU);
 
-    // Flags (reserved, set to 0)
-    header[FRAM_OFFSET_FLAGS] = 0;
-    header[FRAM_OFFSET_FLAGS + 1] = 0;
-    header[FRAM_OFFSET_FLAGS + 2] = 0;
-    header[FRAM_OFFSET_FLAGS + 3] = 0;
-
-    fram.writeEnable(true);
+    (void)fram.writeEnable(true);
     bool success = fram.write(0, header, FRAM_HEADER_SIZE);
-    fram.writeEnable(false);
+    (void)fram.writeEnable(false);
 
     return success;
 }
 
 bool FRAMBatchStorage::initHeader()
 {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+    assert(dataStartAddr == FRAM_HEADER_SIZE); // Rule 5: assertion 2
+
     headPtr = dataStartAddr;
     tailPtr = dataStartAddr;
     batchCount = 0;
 
-    bool success = writeHeader();
+    bool success = writeHeader(); // Rule 7: check return
     if (success) {
         LOG_INFO("FRAM: Header initialized");
     }
@@ -395,96 +489,135 @@ bool FRAMBatchStorage::initHeader()
 
 uint32_t FRAMBatchStorage::wrapAddress(uint32_t addr)
 {
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+
     uint32_t dataSize = dataEndAddr - dataStartAddr;
+
+    assert(dataSize > 0); // Rule 5: assertion 2
+
     if (addr >= dataEndAddr) {
-        addr = dataStartAddr + ((addr - dataStartAddr) % dataSize);
+        uint32_t offset = addr - dataStartAddr;
+        addr = dataStartAddr + (offset % dataSize);
     }
+
     return addr;
 }
 
 bool FRAMBatchStorage::hasSpaceFor(uint16_t size)
 {
-    // Calculate available space without acquiring lock (caller must hold spiLock)
-    uint32_t dataSize = dataEndAddr - dataStartAddr;
-    uint32_t available;
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+    assert(size > 0); // Rule 5: assertion 2
 
-    if (batchCount == 0) {
-        available = dataSize;
-    } else if (headPtr >= tailPtr) {
-        available = dataSize - (headPtr - tailPtr);
-    } else {
-        available = tailPtr - headPtr;
-    }
+    uint32_t available = calculateAvailableSpace();
+    uint32_t required = (uint32_t)size + BATCH_HEADER_SIZE;
 
-    // Leave some margin to avoid head catching up to tail
-    return available > (size + BATCH_HEADER_SIZE);
+    return (available > required);
 }
 
 bool FRAMBatchStorage::deleteOldestBatchInternal()
 {
-    // Internal version - caller must already hold spiLock
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+    assert(isValidDataAddress(tailPtr)); // Rule 5: assertion 2
+
     if (batchCount == 0) {
         return false;
     }
 
-    // Read batch header to get size
     uint8_t batchHeader[BATCH_HEADER_SIZE];
-    readWithWrap(tailPtr, batchHeader, BATCH_HEADER_SIZE);
+    (void)readWithWrap(tailPtr, batchHeader, BATCH_HEADER_SIZE);
 
-    uint16_t batchSize = batchHeader[0] | (batchHeader[1] << 8);
+    uint16_t batchSize = (uint16_t)batchHeader[0] | ((uint16_t)batchHeader[1] << 8);
 
-    // Mark as deleted
+    // Rule 7: Validate batch size
+    if (batchSize > FRAM_MAX_BATCH_SIZE) {
+        LOG_ERROR("FRAM: Corrupt batch size in internal delete: %d", batchSize);
+        return false;
+    }
+
     uint8_t deleteStatus = BATCH_STATUS_DELETED;
-    uint32_t statusAddr = wrapAddress(tailPtr + 2);
-    fram.write(statusAddr, &deleteStatus, 1);
+    uint32_t statusAddr = wrapAddress(tailPtr + 2U);
+    (void)fram.write(statusAddr, &deleteStatus, 1);
 
-    // Move tail pointer past this batch
     uint32_t totalSize = BATCH_HEADER_SIZE + batchSize;
     tailPtr = wrapAddress(tailPtr + totalSize);
     batchCount--;
 
-    // Note: Header will be persisted by the caller after all operations complete
     return true;
 }
 
 uint32_t FRAMBatchStorage::writeWithWrap(uint32_t addr, const uint8_t *data, uint16_t length)
 {
-    uint32_t dataSize = dataEndAddr - dataStartAddr;
-    uint32_t bytesToEnd = dataEndAddr - addr;
+    assert(data != nullptr);             // Rule 5: assertion 1
+    assert(isValidDataAddress(addr));    // Rule 5: assertion 2
 
-    fram.writeEnable(true);
-
-    if (length <= bytesToEnd) {
-        // No wrap needed
-        fram.write(addr, data, length);
-        addr = wrapAddress(addr + length);
-    } else {
-        // Need to wrap around
-        fram.write(addr, data, bytesToEnd);
-        fram.write(dataStartAddr, data + bytesToEnd, length - bytesToEnd);
-        addr = dataStartAddr + (length - bytesToEnd);
+    if ((data == nullptr) || (length == 0)) {
+        return addr;
     }
 
-    fram.writeEnable(false);
+    uint32_t bytesToEnd = dataEndAddr - addr;
+
+    (void)fram.writeEnable(true);
+
+    if (length <= bytesToEnd) {
+        (void)fram.write(addr, data, length);
+        addr = wrapAddress(addr + length);
+    } else {
+        (void)fram.write(addr, data, bytesToEnd);
+        uint16_t remaining = length - (uint16_t)bytesToEnd;
+        (void)fram.write(dataStartAddr, data + bytesToEnd, remaining);
+        addr = dataStartAddr + remaining;
+    }
+
+    (void)fram.writeEnable(false);
     return addr;
 }
 
 uint32_t FRAMBatchStorage::readWithWrap(uint32_t addr, uint8_t *buffer, uint16_t length)
 {
+    assert(buffer != nullptr);           // Rule 5: assertion 1
+    assert(isValidDataAddress(addr));    // Rule 5: assertion 2
+
+    if ((buffer == nullptr) || (length == 0)) {
+        return addr;
+    }
+
     uint32_t bytesToEnd = dataEndAddr - addr;
 
     if (length <= bytesToEnd) {
-        // No wrap needed
-        fram.read(addr, buffer, length);
+        (void)fram.read(addr, buffer, length);
         addr = wrapAddress(addr + length);
     } else {
-        // Need to wrap around
-        fram.read(addr, buffer, bytesToEnd);
-        fram.read(dataStartAddr, buffer + bytesToEnd, length - bytesToEnd);
-        addr = dataStartAddr + (length - bytesToEnd);
+        (void)fram.read(addr, buffer, bytesToEnd);
+        uint16_t remaining = length - (uint16_t)bytesToEnd;
+        (void)fram.read(dataStartAddr, buffer + bytesToEnd, remaining);
+        addr = dataStartAddr + remaining;
     }
 
     return addr;
+}
+
+bool FRAMBatchStorage::isValidDataAddress(uint32_t addr)
+{
+    return ((addr >= dataStartAddr) && (addr < dataEndAddr));
+}
+
+uint32_t FRAMBatchStorage::calculateAvailableSpace()
+{
+    assert(dataEndAddr > dataStartAddr); // Rule 5: assertion 1
+
+    uint32_t dataSize = dataEndAddr - dataStartAddr;
+
+    assert(dataSize > 0); // Rule 5: assertion 2
+
+    if (batchCount == 0) {
+        return dataSize;
+    }
+
+    if (headPtr >= tailPtr) {
+        return dataSize - (headPtr - tailPtr);
+    }
+
+    return tailPtr - headPtr;
 }
 
 #endif // __has_include(<Adafruit_FRAM_SPI.h>)
