@@ -27,10 +27,15 @@ const int T9InputScreen::T9_LENGTHS[10] = {
 
 T9InputScreen::T9InputScreen() 
     : BaseScreen("T9 Input"), currentKey('\0'), currentKeyPresses(0), 
-      lastKeyTime(0), hasCurrentChar(false), inputDirty(true), 
-      charPreviewDirty(true), headerDirty(true), fullRedrawNeeded(true) {
+      lastKeyTime(0), hasCurrentChar(false), inputTextDirty(true), 
+      labelDirty(true) {
     
-    updateNavigationHints();
+    // Set navigation hints using BaseScreen system
+    std::vector<NavHint> hints;
+    hints.push_back(NavHint('*', "Del"));
+    hints.push_back(NavHint('#', "Send"));
+    hints.push_back(NavHint('A', "Cancel"));
+    setNavigationHints(hints);
     LOG_INFO("📱 T9InputScreen: Initialized with T9 character mapping");
 }
 
@@ -47,13 +52,11 @@ void T9InputScreen::onEnter() {
     lastKeyTime = 0;
     hasCurrentChar = false;
     
-    // Mark everything for redraw on first entry
-    inputDirty = true;
-    charPreviewDirty = true;
-    headerDirty = true;
-    fullRedrawNeeded = true;
+    // Mark content areas for redraw
+    inputTextDirty = true;
+    labelDirty = true;
     
-    updateNavigationHints();
+    // Force full screen redraw including BaseScreen's header/footer
     forceRedraw();
 }
 
@@ -70,12 +73,11 @@ void T9InputScreen::onExit() {
 }
 
 bool T9InputScreen::needsUpdate() const {
-    // Return true if any region needs updating or if building a character with timeout pending
-    bool hasUpdates = fullRedrawNeeded || headerDirty || inputDirty || charPreviewDirty;
+    // Return true if content areas need updating or if building a character with timeout pending
+    bool hasContentUpdates = labelDirty || inputTextDirty;
     bool hasTimeoutPending = hasCurrentChar && (millis() - lastKeyTime < CHAR_TIMEOUT);
-    bool baseNeedsUpdate = BaseScreen::needsUpdate();
     
-    return hasUpdates || hasTimeoutPending || baseNeedsUpdate;
+    return hasContentUpdates || hasTimeoutPending || BaseScreen::needsUpdate();
 }
 
 void T9InputScreen::onDraw(lgfx::LGFX_Device& tft) {
@@ -84,34 +86,16 @@ void T9InputScreen::onDraw(lgfx::LGFX_Device& tft) {
         processCharacterTimeout();
     }
     
-    // Handle full redraw (only on screen entry/major state changes)
-    if (fullRedrawNeeded) {
-        // Clear entire content area
-        tft.fillRect(0, getContentY(), getContentWidth(), getContentHeight(), COLOR_BLACK);
-        
-        // Mark all regions dirty for complete redraw
-        headerDirty = true;
-        inputDirty = true;
-        charPreviewDirty = true;
-        fullRedrawNeeded = false;
+    // Draw label if dirty
+    if (labelDirty) {
+        drawMessageLabel(tft);
+        labelDirty = false;
     }
     
-    // Draw header area if dirty
-    if (headerDirty) {
-        drawHeaderArea(tft);
-        headerDirty = false;
-    }
-    
-    // Draw input area if dirty
-    if (inputDirty) {
+    // Draw input text if dirty
+    if (inputTextDirty) {
         drawInputArea(tft);
-        inputDirty = false;
-    }
-    
-    // Draw character preview if dirty
-    if (charPreviewDirty) {
-        drawCharacterPreview(tft);
-        charPreviewDirty = false;
+        inputTextDirty = false;
     }
 }
 
@@ -152,8 +136,7 @@ bool T9InputScreen::handleKeyPress(char key) {
                 hasCurrentChar = false;
                 currentKey = '\0';
                 currentKeyPresses = 0;
-                inputDirty = true; // Update display to remove preview char
-                charPreviewDirty = true;
+                inputTextDirty = true; // Update display to remove preview char
             } else if (inputText.length() > 0) {
                 // Remove last character from input
                 backspace();
@@ -192,9 +175,7 @@ void T9InputScreen::clearInput() {
     lastKeyTime = 0;
     hasCurrentChar = false;
     
-    inputDirty = true;
-    charPreviewDirty = true;
-    updateNavigationHints();
+    inputTextDirty = true;
     
     LOG_INFO("📱 T9InputScreen: Input cleared");
 }
@@ -202,8 +183,7 @@ void T9InputScreen::clearInput() {
 void T9InputScreen::setInitialText(const String& text) {
     if (text.length() <= MAX_INPUT_LENGTH) {
         inputText = text;
-        inputDirty = true;
-        updateNavigationHints();
+        inputTextDirty = true;
         LOG_INFO("📱 T9InputScreen: Initial text set: '%s'", text.c_str());
     }
 }
@@ -243,8 +223,7 @@ char T9InputScreen::getT9Character(char key, int presses) {
 void T9InputScreen::addCharacter(char ch) {
     if (inputText.length() < MAX_INPUT_LENGTH && ch != '\0') {
         inputText += ch;
-        inputDirty = true;
-        updateNavigationHints();
+        inputTextDirty = true;
         LOG_INFO("📱 T9InputScreen: Added character: '%c', text now: '%s'", ch, inputText.c_str());
     }
 }
@@ -252,8 +231,7 @@ void T9InputScreen::addCharacter(char ch) {
 void T9InputScreen::backspace() {
     if (inputText.length() > 0) {
         inputText.remove(inputText.length() - 1);
-        inputDirty = true;
-        updateNavigationHints();
+        inputTextDirty = true;
         LOG_INFO("📱 T9InputScreen: Backspace, text now: '%s'", inputText.c_str());
     }
 }
@@ -284,9 +262,8 @@ void T9InputScreen::handleT9Key(char key) {
     
     lastKeyTime = currentTime;
     
-    // Mark regions that need updating during cycling
-    inputDirty = true; // Update input area to show current character
-    charPreviewDirty = true;
+    // Mark input area for update to show current character being built
+    inputTextDirty = true;
 }
 
 void T9InputScreen::acceptCurrentCharacter() {
@@ -300,48 +277,35 @@ void T9InputScreen::acceptCurrentCharacter() {
         currentKey = '\0';
         currentKeyPresses = 0;
         
-        // Mark both areas dirty when character is committed
-        inputDirty = true;
-        charPreviewDirty = true;
+        // Input area already marked dirty by addCharacter
         
         LOG_INFO("📱 T9InputScreen: Accepted character");
     }
 }
 
-void T9InputScreen::updateNavigationHints() {
-    navHints.clear();
-    navHints.push_back(NavHint('*', "Del"));
-    navHints.push_back(NavHint('#', "Send"));
-    navHints.push_back(NavHint('A', "Cancel"));
-}
-
-void T9InputScreen::drawHeaderArea(lgfx::LGFX_Device& tft) {
-    int inputY = getContentY() + 5;
+void T9InputScreen::drawMessageLabel(lgfx::LGFX_Device& tft) {
+    // Clear label area in content
+    int labelY = getContentY() + 5;
+    tft.fillRect(0, labelY, getContentWidth(), 25, COLOR_BLACK);
     
-    // Clear header area only - use proper header height
-    clearRegion(tft, 0, inputY, getContentWidth(), HEADER_HEIGHT);
-    
-    // Draw input label
+    // Draw "Message:" label
     tft.setTextColor(COLOR_GREEN, COLOR_BLACK);
     tft.setTextSize(2);
-    tft.setCursor(TEXT_MARGIN, inputY + 5);
+    tft.setCursor(TEXT_MARGIN, labelY + 5);
     tft.print("Message:");
     
-    LOG_INFO("📱 T9InputScreen: Drew header area");
-}
-
-void T9InputScreen::clearRegion(lgfx::LGFX_Device& tft, int x, int y, int width, int height) {
-    tft.fillRect(x, y, width, height, COLOR_BLACK);
+    LOG_INFO("📱 T9InputScreen: Drew message label");
 }
 
 void T9InputScreen::drawInputArea(lgfx::LGFX_Device& tft) {
-    int headerY = getContentY() + 5;
-    int inputY = headerY + HEADER_HEIGHT + 5; // Start below header with 5px gap
+    // Use BaseScreen's content area
+    int textY = getContentY() + 35; // Below "Message:" label
+    int textAreaHeight = getContentHeight() - 40; // Leave space for label
     
-    // Clear only input text area (below header with gap)
-    clearRegion(tft, 0, inputY, getContentWidth(), INPUT_AREA_HEIGHT - HEADER_HEIGHT - 5);
+    // Clear input text area
+    tft.fillRect(0, textY, getContentWidth(), textAreaHeight, COLOR_BLACK);
     
-    // Draw input text with wrapping (no label - header draws that)
+    // Draw input text with current character being built
     tft.setTextColor(COLOR_BLUE, COLOR_BLACK);
     tft.setTextSize(2);
     
@@ -357,21 +321,10 @@ void T9InputScreen::drawInputArea(lgfx::LGFX_Device& tft) {
     }
     
     // Draw text with wrapping
-    drawWrappedText(tft, displayText, TEXT_MARGIN, inputY, 
-                    getContentWidth() - TEXT_MARGIN * 2, INPUT_AREA_HEIGHT - HEADER_HEIGHT - 10, 2);
+    drawWrappedText(tft, displayText, TEXT_MARGIN, textY, 
+                    getContentWidth() - TEXT_MARGIN * 2, textAreaHeight - 10, 2);
     
     LOG_INFO("📱 T9InputScreen: Drew input area");
-}
-
-void T9InputScreen::drawCharacterPreview(lgfx::LGFX_Device& tft) {
-    int previewY = getContentY() + INPUT_AREA_HEIGHT + 15;
-    
-    // Clear character preview area only
-    clearRegion(tft, 0, previewY, getContentWidth(), CHAR_PREVIEW_HEIGHT);
-    
-    // No character hints displayed - clean interface
-    
-    LOG_INFO("📱 T9InputScreen: Drew character preview");
 }
 
 int T9InputScreen::drawWrappedText(lgfx::LGFX_Device& tft, const String& text, int x, int y, 

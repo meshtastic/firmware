@@ -60,11 +60,8 @@ private:
     static const unsigned long CHAR_TIMEOUT = 1000;  // 1 second to accept character
     static const int MAX_INPUT_LENGTH = 150;          // Maximum message length
     
-    // Layout constants
-    static const int INPUT_AREA_HEIGHT = 80;         // Height for input display (increased)
-    static const int CHAR_PREVIEW_HEIGHT = 30;       // Height for current character preview
+    // Content area layout (using BaseScreen's content area)
     static const int TEXT_MARGIN = 10;               // Left margin for text
-    static const int HEADER_HEIGHT = 35;             // Height for Message: label (new)
     
     // Input state
     String inputText;                    // Current input text
@@ -76,11 +73,9 @@ private:
     // Callback
     ConfirmCallback onConfirm;
     
-    // Display state - dirty rectangle optimization
-    bool inputDirty;                     // Input area needs redraw
-    bool charPreviewDirty;               // Character preview needs redraw
-    bool headerDirty;                    // Header/label area needs redraw
-    bool fullRedrawNeeded;               // Full screen redraw needed
+    // Display state - content area dirty tracking only
+    bool inputTextDirty;                 // Input text area needs redraw
+    bool labelDirty;                     // "Message:" label needs redraw
     
     /**
      * Process character timeout - accept current character and add to input
@@ -118,29 +113,14 @@ private:
     void acceptCurrentCharacter();
     
     /**
-     * Update navigation hints based on current state
+     * Draw the "Message:" label in content area
      */
-    void updateNavigationHints();
+    void drawMessageLabel(lgfx::LGFX_Device& tft);
     
     /**
      * Draw the input text area
      */
     void drawInputArea(lgfx::LGFX_Device& tft);
-    
-    /**
-     * Draw current character preview (what's being typed)
-     */
-    void drawCharacterPreview(lgfx::LGFX_Device& tft);
-    
-    /**
-     * Draw the header/label area ("Message:")
-     */
-    void drawHeaderArea(lgfx::LGFX_Device& tft);
-    
-    /**
-     * Clear specific region without affecting others
-     */
-    void clearRegion(lgfx::LGFX_Device& tft, int x, int y, int width, int height);
     
     /**
      * Draw text with word wrapping in specified area
