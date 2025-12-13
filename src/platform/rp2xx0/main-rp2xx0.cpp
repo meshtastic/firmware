@@ -1,3 +1,4 @@
+#include "HardwareRNG.h"
 #include "configuration.h"
 #include "hardware/xosc.h"
 #include <hardware/clocks.h>
@@ -98,10 +99,10 @@ void getMacAddr(uint8_t *dmac)
 
 void rp2040Setup()
 {
-    /* Sets a random seed to make sure we get different random numbers on each boot.
-       Taken from CPU cycle counter and ROSC oscillator, so should be pretty random.
-    */
-    randomSeed(rp2040.hwrand32());
+    /* Sets a random seed to make sure we get different random numbers on each boot. */
+    uint32_t seed = rp2040.hwrand32();
+    HardwareRNG::seed(seed);
+    randomSeed(seed);
 
 #ifdef RP2040_SLOW_CLOCK
     uint f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
