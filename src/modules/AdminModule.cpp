@@ -1449,8 +1449,6 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
     LOG_INFO("Injecting input event from admin: source=%s, event=%u, char=%c(%u), touch=(%u,%u)", event.source, event.inputEvent,
              (event.kbchar >= 32 && event.kbchar <= 126) ? event.kbchar : '?', event.kbchar, event.touchX, event.touchY);
 
-    // Wake the device if asleep
-    powerFSM.trigger(EVENT_INPUT);
 #if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
     // Inject the event through InputBroker
     if (inputBroker) {
