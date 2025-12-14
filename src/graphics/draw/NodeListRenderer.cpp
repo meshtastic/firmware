@@ -72,26 +72,7 @@ void scrollUp()
 
 void scrollDown()
 {
-    int totalEntries = nodeDB->getNumMeshNodes();
-
-    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
-    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
-
-    int screenHeight = screen->getHeight();
-    int visibleRows = (screenHeight - COMMON_HEADER_HEIGHT) / rowYOffset;
-
-    int totalColumns = 2;
-#if defined(T_LORA_PAGER)
-    totalColumns = 3;
-#endif
-    if (config.display.use_long_node_name)
-        totalColumns = 1;
-
-    int maxScroll = std::max(0, (totalEntries - 1) / (visibleRows * totalColumns));
-
-    if (scrollIndex < maxScroll)
-        scrollIndex++;
-
+    scrollIndex++;
     popupTime = millis();
 }
 
@@ -209,7 +190,8 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     int scrollbarX = display->getWidth() - 2;
     int scrollbarHeight = display->getHeight() - scrollStartY - 10;
     int thumbHeight = std::max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
-    int maxScroll = calculateMaxScroll(totalEntries, visibleNodeRows);
+    int perPage = visibleNodeRows * columns;
+    int maxScroll = std::max(0, (totalEntries - 1) / perPage);
     int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) / std::max(1, maxScroll);
 
     for (int i = 0; i < thumbHeight; i++) {
@@ -534,6 +516,15 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         drawList.push_back(n->num);
     }
     totalEntries = drawList.size();
+    int perPage = visibleNodeRows * totalColumns;
+
+    int maxScroll = 0;
+    if (perPage > 0) {
+        maxScroll = std::max(0, (totalEntries - 1) / perPage);
+    }
+
+    if (scrollIndex > maxScroll)
+        scrollIndex = maxScroll;
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
     int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
     int yOffset = 0;
@@ -581,7 +572,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
 #endif
     const int scrollStartY = y + 3;
-    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, totalColumns, scrollStartY);
     graphics::drawCommonFooter(display, x, y);
 
     // Scroll Popup Overlay
