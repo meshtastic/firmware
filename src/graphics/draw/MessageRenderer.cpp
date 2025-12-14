@@ -479,7 +479,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
-    const int textWidth = SCREEN_WIDTH;
+    constexpr int LEFT_MARGIN = 2;
+    constexpr int RIGHT_MARGIN = 2;
+    constexpr int SCROLLBAR_WIDTH = 3;
+
+    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN;
+
+    const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
 
     // Title string depending on mode
     static char titleBuf[32];
@@ -647,7 +653,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         const char *msgText = MessageStore::getText(m);
 
-        std::vector<std::string> wrapped = generateLines(display, "", msgText, textWidth);
+        int wrapWidth = mine ? rightTextWidth : leftTextWidth;
+        std::vector<std::string> wrapped = generateLines(display, "", msgText, wrapWidth);
         for (auto &ln : wrapped) {
             allLines.push_back(ln);
             isMine.push_back(mine);
@@ -718,14 +725,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (isHeader[i]) {
 
                 int w = display->getStringWidth(cachedLines[i].c_str());
-
-                // Render header
-                constexpr int SCROLLBAR_WIDTH = 3;
-
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
-                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH) - w - 2;
+                    headerX = SCREEN_WIDTH - w - SCROLLBAR_WIDTH - RIGHT_MARGIN;
+                    if (headerX < LEFT_MARGIN)
+                        headerX = LEFT_MARGIN;
                 } else {
                     headerX = x;
                 }
@@ -758,8 +763,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
                     int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
-                    constexpr int SCROLLBAR_WIDTH = 3;
-                    int rightX = SCREEN_WIDTH - renderedWidth - SCROLLBAR_WIDTH - 2;
+                    int rightX = SCREEN_WIDTH - renderedWidth - SCROLLBAR_WIDTH - RIGHT_MARGIN;
+                    if (rightX < LEFT_MARGIN)
+                        rightX = LEFT_MARGIN;
+
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
                     drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
