@@ -76,7 +76,7 @@ runs:
         done
 
     - name: PlatformIO ${{ inputs.arch }} download cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.platformio/.cache
         key: pio-cache-${{ inputs.arch }}-${{ hashFiles('.github/actions/**', '**.ini') }}
