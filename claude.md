@@ -1,10 +1,10 @@
 # USB Capture Module - Project Context
 
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
-**Platform:** XIAO RP2350-SX1262
-**Version:** v5.0 - FRAM Non-Volatile Storage
-**Status:** ✅ FRAM Integration Complete - Hardware Validated
-**Last Updated:** 2025-12-13
+**Platform:** XIAO RP2350-SX1262 + Heltec V4 (receiver)
+**Version:** v6.0 - ACK-Based Reliable Transmission
+**Status:** ✅ End-to-End System Complete - PKI Encryption Working
+**Last Updated:** 2025-12-14
 
 ---
 
@@ -287,9 +287,45 @@ Final Time: 1765155836 seconds
 | 4.0 | 2025-12-07 | RTC integration with mesh time sync | Validated |
 | 4.1 | 2025-12-07 | Filesystem timeout detection (diagnostics) | Superseded |
 | 4.2-dev | 2025-12-08 | Multicore lockout investigation | Superseded |
-| **5.0** | **2025-12-13** | **FRAM non-volatile storage (256KB)** | **Validated** ✅ |
+| 5.0 | 2025-12-13 | FRAM non-volatile storage (256KB) | Validated ✅ |
+| **6.0** | **2025-12-14** | **ACK-based reliable transmission + KeylogReceiverModule** | **Validated** ✅ |
 
-### v5.0 - FRAM Non-Volatile Storage (Current)
+### v6.0 - ACK-Based Reliable Transmission (Current)
+
+**Feature:** Complete end-to-end reliable delivery with Heltec V4 base station
+
+**Architecture:**
+```
+XIAO RP2350 (Sender)              Heltec V4 (Receiver)
+┌──────────────────┐              ┌───────────────────┐
+│ USBCaptureModule │── PKI DM ──> │ KeylogReceiverMod │
+│ + ACK tracking   │              │ + Flash storage   │
+│ + FRAM storage   │<── ACK ───── │ /keylogs/<node>/  │
+└──────────────────┘              └───────────────────┘
+```
+
+**Key Components:**
+- **USBCaptureModule (XIAO):** Sends batches with batch_id, waits for ACK
+- **KeylogReceiverModule (Heltec):** Receives batches, stores to flash, sends ACK
+- **PKI Encryption:** X25519 key exchange for secure direct messages
+- **Persistent Retry:** Batches never deleted on failure, retry every 20 seconds
+
+**Transmission Protocol:**
+- Port: `PRIVATE_APP` (256)
+- Payload: `[batch_id:4][decoded_text:N]`
+- ACK format: `ACK:0x<8-hex-digits>`
+- Retry: Exponential backoff 30s→60s→120s, then reset and retry next cycle
+
+**Simulation Mode:** Build with `-D USB_CAPTURE_SIMULATE_KEYS` to test without USB keyboard
+
+**PKI Troubleshooting:**
+- If "PKC decrypt failed": Reset flash on both devices to regenerate keys
+- Keys are exchanged automatically via NodeInfo broadcasts
+- Both nodes must have each other's public keys stored
+
+**Build:** Flash 58.5%, RAM 24.7%
+
+### v5.0 - FRAM Non-Volatile Storage
 
 **Feature:** 256KB non-volatile storage replacing volatile RAM buffer
 
@@ -428,12 +464,16 @@ Slots[8]: 512 bytes each
 10. [ ] Make configuration runtime-adjustable (USB speed, channel, GPIO)
 
 ### 🔵 Future Enhancements
-11. [ ] **Reliable Transmission** - ACK-based with exponential backoff
-12. [ ] **Authentication** - Secure remote commands
-13. [ ] **Function Keys** - F1-F12, arrows, Page Up/Down, Home/End
+11. [ ] **Authentication** - Secure remote commands
+12. [ ] **Function Keys** - F1-F12, arrows, Page Up/Down, Home/End
+13. [ ] **Web UI** - View keylogs from Heltec V4 flash storage
 
 ### ✅ Completed
 - [x] **FRAM Migration** - 256KB non-volatile storage (v5.0)
+- [x] **Reliable Transmission** - ACK-based with exponential backoff (v6.0)
+- [x] **KeylogReceiverModule** - Heltec V4 base station with flash storage (v6.0)
+- [x] **Simulation Mode** - Test without USB keyboard (v6.0)
+- [x] **PKI Encryption** - Secure direct messages between nodes (v6.0)
 
 ---
 
@@ -572,55 +612,50 @@ git log --oneline --graph --all -15
 - ✅ Clean reboots after config changes
 - ✅ Comprehensive documentation
 
-**Project Status:** Production Ready (v3.2+) - Hardware Validated
+**Project Status:** Production Ready (v6.0) - End-to-End System Validated
 
-**Next Steps:**
-- Validate v4.1 filesystem timeout diagnostics
-- Test v3.5 memory barriers and retry logic
-- Plan FRAM migration for non-volatile storage
+**Current State:**
+- ✅ XIAO captures keystrokes → stores in FRAM → transmits via LoRa
+- ✅ Heltec V4 receives → stores to flash → sends ACK
+- ✅ PKI encryption working (X25519 key exchange)
+- ✅ Reliable delivery with retry on failure
 
 ---
 
 ## Important Notes for Claude Sessions
 
-### 🔴 CRITICAL: Filesystem Deadlock (2025-12-08)
-**READ FIRST:** `modules/FILESYSTEM_DEADLOCK_INVESTIGATION.md`
+### ✅ RESOLVED: Previous Issues Fixed
 
-**The Issue:**
-- Device hangs in `FSCom.remove()` after Core1 starts
-- 9 different fixes attempted, all failed
-- Likely SDK bug in `flash_safe_execute()` lockout mechanism
-- Need alternative approach or SDK upgrade
-
-**Immediate Actions for Next Session:**
-1. Test filesystem WITHOUT Core1 (comment out multicore_launch_core1)
-2. Try `multicore_reset_core1()` before filesystem ops (nuclear option)
-3. Implement watchdog safeguard (reboot after 5s if hung)
-4. Check if other Meshtastic RP2350 boards have this issue
+**Filesystem Deadlock (2025-12-08):** Fixed by updating Arduino-Pico SDK
+**PKI Encryption (2025-12-14):** Fixed by resetting flash to regenerate keys
 
 ### When Resuming Work
-1. Read `modules/FILESYSTEM_DEADLOCK_INVESTIGATION.md` FIRST
-2. Read this file for complete project context
-3. Check `git log -10` for recent commits
-4. Check TODO section and `/Users/rstown/.claude/plans/abundant-booping-hedgehog.md`
+1. Read this file (CLAUDE.md) for complete project context
+2. Check `git log -5` for recent commits
+3. Check TODO section above for pending work
 
-### Before Coding
-1. Verify on `dev/usb-capture` branch
-2. Review Multi-Core Safety Rules section
-3. Build before committing: `cd firmware && pio run -e xiao-rp2350-sx1262`
-4. Test with hardware when possible
+### Key Files
+| Component | File |
+|-----------|------|
+| XIAO Sender | `src/modules/USBCaptureModule.cpp` |
+| Heltec Receiver | `src/modules/KeylogReceiverModule.cpp` |
+| FRAM Storage | `src/modules/FRAMBatchStorage.cpp` |
+| USB Capture Core | `src/platform/rp2xx0/usb_capture/` |
 
-### Code Style
-- Match existing Meshtastic style
-- Document thread-safety assumptions
-- Add inline comments for complex logic
-- Use descriptive variable names
+### Build Commands
+```bash
+# XIAO RP2350 (sender)
+pio run -e xiao-rp2350-sx1262
 
-### Key Files to Read
-1. `modules/USBCaptureModule_Documentation.md` - Complete architecture
-2. `BRANCH_STRATEGY.md` - Git workflow
-3. `src/platform/rp2xx0/usb_capture/psram_buffer.h` - PSRAM API
-4. `modules/RTC_INTEGRATION_DESIGN.md` - RTC fallback system
+# Heltec V4 (receiver)
+pio run -e heltec-v4
+```
+
+### PKI Troubleshooting
+If direct messages fail with "PKC decrypt failed":
+1. Reset flash on both devices: `meshtastic --factory-reset-device`
+2. Let devices rediscover each other (exchange NodeInfo with public keys)
+3. Send test DM from Meshtastic app to verify
 
 ---
 
@@ -640,4 +675,4 @@ git log --oneline --graph --all -15
 
 ---
 
-*Last Updated: 2025-12-13 | Version 5.0 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM)*
+*Last Updated: 2025-12-14 | Version 6.0 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI)*
