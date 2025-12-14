@@ -59,7 +59,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
 
-    std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
+    std::vector<MenuItem> items;               // MenuItems for the current page. Filled by ShowPage
+    std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages
 
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only

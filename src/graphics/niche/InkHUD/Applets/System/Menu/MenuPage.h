@@ -20,11 +20,13 @@ enum MenuPage : uint8_t {
     SEND,
     CANNEDMESSAGE_RECIPIENT, // Select destination for a canned message
     OPTIONS,
+    NODE_CONFIG,
+    NODE_CONFIG_LORA,
     APPLETS,
     AUTOSHOW,
     RECENTS, // Select length of "recentlyActiveSeconds"
     REGION,
-    EXIT,    // Dismiss the menu applet
+    EXIT, // Dismiss the menu applet
 };
 
 } // namespace NicheGraphics::InkHUD

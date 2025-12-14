@@ -4,11 +4,15 @@
 
 #include "RTC.h"
 
+#include "DisplayFormatters.h"
 #include "MeshService.h"
 #include "Router.h"
 #include "airtime.h"
 #include "main.h"
+#include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "power.h"
+#include <RadioLibInterface.h>
+#include <target_specific.h>
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -434,6 +438,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 {
     items.clear();
     items.shrink_to_fit();
+    nodeConfigLabels.clear();
 
     switch (page) {
     case ROOT:
@@ -444,6 +449,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Send", MenuPage::SEND));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
+        items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -506,6 +512,40 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case RECENTS:
         populateRecentsPage();
         break;
+
+    case NODE_CONFIG:
+        items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_LORA: {
+
+        // Region
+        const char *region = myRegion ? myRegion->name : "Unset";
+        nodeConfigLabels.emplace_back("Region: " + std::string(region));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::REGION));
+
+        // Role
+        const char *role = DisplayFormatters::getDeviceRole(config.device.role);
+        nodeConfigLabels.emplace_back("Role: " + std::string(role));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_LORA));
+
+        // Preset
+        const char *preset =
+            DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+        nodeConfigLabels.emplace_back("Preset: " + std::string(preset));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_LORA));
+
+        // Frequency
+        char freqBuf[32];
+        float freq = RadioLibInterface::instance->getFreq();
+        snprintf(freqBuf, sizeof(freqBuf), "Freq: %.3f MHz", freq);
+        nodeConfigLabels.emplace_back(freqBuf);
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_LORA));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
 
     case REGION:
         items.push_back(MenuItem("Exit", MenuPage::EXIT));

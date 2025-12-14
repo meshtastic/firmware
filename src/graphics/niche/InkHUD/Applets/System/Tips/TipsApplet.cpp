@@ -100,9 +100,8 @@ void InkHUD::TipsApplet::onRender()
         setFont(fontSmall);
         int16_t cursorY = h + fontSmall.lineHeight();
 
-        const char *body =
-            "Before removing power, please shut down from InkHUD menu, or a client app.\n\n"
-            "This ensures data is saved.";
+        const char *body = "Before removing power, please shut down from InkHUD menu, or a client app.\n\n"
+                           "This ensures data is saved.";
 
         uint16_t bodyH = getWrappedTextHeight(0, width(), body);
         printWrapped(0, cursorY, width(), body);
@@ -121,9 +120,8 @@ void InkHUD::TipsApplet::onRender()
         setFont(fontSmall);
         int16_t cursorY = h + fontSmall.lineHeight();
 
-        const char *body =
-            "Configure & control display with the InkHUD menu. "
-            "Optional features, layout, rotation, and more.";
+        const char *body = "Configure & control display with the InkHUD menu. "
+                           "Optional features, layout, rotation, and more.";
 
         uint16_t bodyH = getWrappedTextHeight(0, width(), body);
         printWrapped(0, cursorY, width(), body);
@@ -165,9 +163,8 @@ void InkHUD::TipsApplet::onRender()
         setFont(fontSmall);
         int16_t cursorY = h + fontSmall.lineHeight();
 
-        const char *body =
-            "To rotate the display, use the InkHUD menu. "
-            "Long-press the user button > Options > Rotate.";
+        const char *body = "To rotate the display, use the InkHUD menu. "
+                           "Long-press the user button > Options > Rotate.";
 
         uint16_t bh = getWrappedTextHeight(0, width(), body);
         printWrapped(0, cursorY, width(), body);
