@@ -296,22 +296,23 @@ void MessageStore::clearAllMessages()
 template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deque, Predicate pred, bool fromBack = false)
 {
     if (fromBack) {
-        // Iterate from the back and erase the first match from the end
-        for (auto it = deque.rbegin(); it != deque.rend(); ++it) {
+        // Iterate from the back and erase all matches from the end
+        for (auto it = deque.rbegin(); it != deque.rend();) {
             if (pred(*it)) {
-                deque.erase(std::next(it).base());
-                break;
+                it = std::deque<StoredMessage>::reverse_iterator(deque.erase(std::next(it).base()));
+            } else {
+                ++it;
             }
         }
     } else {
-        // Manual forward search to avoid std::find_if
-        auto it = deque.begin();
-        for (; it != deque.end(); ++it) {
-            if (pred(*it))
-                break;
+        // Manual forward search to erase all matches
+        for (auto it = deque.begin(); it != deque.end();) {
+            if (pred(*it)) {
+                it = deque.erase(it);
+            } else {
+                ++it;
+            }
         }
-        if (it != deque.end())
-            deque.erase(it);
     }
 }
 
