@@ -24,6 +24,11 @@
 #include "../platform/rp2xx0/usb_capture/psram_buffer.h"
 #include "../platform/rp2xx0/usb_capture/common.h"
 #include "concurrency/OSThread.h"
+
+#ifdef HAS_FRAM_STORAGE
+#include "FRAMBatchStorage.h"
+extern FRAMBatchStorage *framStorage;
+#endif
 /**
  * @brief Keystroke buffer configuration constants
  */

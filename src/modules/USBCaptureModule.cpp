@@ -95,6 +95,10 @@
 
 USBCaptureModule *usbCaptureModule;
 
+#ifdef HAS_FRAM_STORAGE
+FRAMBatchStorage *framStorage = nullptr;
+#endif
+
 /* Global queues for inter-core communication */
 static keystroke_queue_t g_keystroke_queue;
 static formatted_event_queue_t g_formatted_queue;
@@ -124,8 +128,30 @@ bool USBCaptureModule::init()
     /* Initialize formatted event queue */
     formatted_queue_init(formatted_queue);
 
-    /* Initialize PSRAM buffer for Core0 ← Core1 communication */
+#ifdef HAS_FRAM_STORAGE
+    /* Initialize FRAM storage for non-volatile keystroke batches */
+    LOG_INFO("[USBCapture] Initializing FRAM storage on SPI0, CS=GPIO%d", FRAM_CS_PIN);
+    framStorage = new FRAMBatchStorage(FRAM_CS_PIN, &SPI, FRAM_SPI_FREQ);
+
+    if (!framStorage->begin()) {
+        LOG_ERROR("[USBCapture] FRAM: Failed to initialize - falling back to RAM buffer");
+        delete framStorage;
+        framStorage = nullptr;
+        /* Initialize RAM buffer as fallback */
+        psram_buffer_init();
+    } else {
+        /* FRAM initialized successfully */
+        uint8_t manufacturerID = 0;
+        uint16_t productID = 0;
+        framStorage->getDeviceID(&manufacturerID, &productID);
+        LOG_INFO("[USBCapture] FRAM: Initialized (Mfr=0x%02X, Prod=0x%04X)", manufacturerID, productID);
+        LOG_INFO("[USBCapture] FRAM: %u batches pending, %lu bytes free",
+                 framStorage->getBatchCount(), framStorage->getAvailableSpace());
+    }
+#else
+    /* No FRAM - use RAM buffer */
     psram_buffer_init();
+#endif
 
     /* Initialize capture controller */
     capture_controller_init_v2(&controller, keystroke_queue, formatted_queue);
@@ -279,14 +305,52 @@ void USBCaptureModule::processPSRAMBuffers()
 {
     psram_keystroke_buffer_t buffer;
     static uint32_t last_transmit_time = 0;
+    bool have_data = false;
 
     /* Skip processing if capture is disabled */
     if (!capture_enabled) {
         return;
     }
 
+#ifdef HAS_FRAM_STORAGE
+    /* Try to read from FRAM storage if available */
+    if (framStorage != nullptr && framStorage->isInitialized()) {
+        uint8_t fram_batch[FRAM_MAX_BATCH_SIZE];
+        uint16_t actualLength = 0;
+
+        if (framStorage->readBatch(fram_batch, sizeof(fram_batch), &actualLength)) {
+            /* Unpack FRAM batch format into psram_keystroke_buffer_t
+             * FRAM format: [start_epoch:4][final_epoch:4][data_length:2][flags:2][data:N]
+             * Total header: 12 bytes + data */
+            if (actualLength >= 12) {
+                memcpy(&buffer.start_epoch, &fram_batch[0], 4);
+                memcpy(&buffer.final_epoch, &fram_batch[4], 4);
+                memcpy(&buffer.data_length, &fram_batch[8], 2);
+                memcpy(&buffer.flags, &fram_batch[10], 2);
+
+                /* Copy keystroke data */
+                uint16_t data_len = actualLength - 12;
+                if (data_len > PSRAM_BUFFER_DATA_SIZE) {
+                    data_len = PSRAM_BUFFER_DATA_SIZE;  /* Truncate if too large */
+                }
+                memcpy(buffer.data, &fram_batch[12], data_len);
+                buffer.data_length = data_len;
+
+                have_data = true;
+            }
+            /* Note: We'll delete the batch after successful transmission */
+        }
+    } else {
+        /* Fall back to RAM buffer */
+        have_data = psram_buffer_read(&buffer);
+    }
+#else
+    /* No FRAM - use RAM buffer */
+    have_data = psram_buffer_read(&buffer);
+#endif
+
     /* Process only ONE buffer per call to avoid flooding */
-    if (psram_buffer_read(&buffer))
+    if (have_data)
     {
         /* Get RTC quality for logging (v4.0) */
         RTCQuality rtc_quality = getRTCQuality();
@@ -412,6 +476,15 @@ void USBCaptureModule::processPSRAMBuffers()
                     transmission_success = true;
                     last_transmit_time = now;
                     LOG_INFO("[Core0] Transmitted decoded text (%zu bytes)", text_len);
+
+#ifdef HAS_FRAM_STORAGE
+                    /* Delete batch from FRAM after successful transmission */
+                    if (framStorage != nullptr && framStorage->isInitialized()) {
+                        if (!framStorage->deleteBatch()) {
+                            LOG_WARN("[Core0] FRAM: Failed to delete batch after transmission");
+                        }
+                    }
+#endif
                     break;
                 }
                 else
@@ -455,16 +528,41 @@ void USBCaptureModule::processPSRAMBuffers()
     uint32_t stats_now = millis();
     if (stats_now - last_stats_time > STATS_LOG_INTERVAL_MS)
     {
-        /* Read statistics with memory barrier */
-        __dmb();
-        uint32_t available = psram_buffer_get_count();
-        uint32_t transmitted = g_psram_buffer.header.total_transmitted;
-        uint32_t dropped = g_psram_buffer.header.dropped_buffers;
-        uint32_t tx_failures = g_psram_buffer.header.transmission_failures;
-        uint32_t overflows = g_psram_buffer.header.buffer_overflows;
-        uint32_t psram_failures = g_psram_buffer.header.psram_write_failures;
-        uint32_t retries = g_psram_buffer.header.retry_attempts;
-        __dmb();
+        /* Declare statistics variables outside ifdef for use in warnings */
+        uint32_t tx_failures = 0;
+        uint32_t overflows = 0;
+        uint32_t psram_failures = 0;
+
+#ifdef HAS_FRAM_STORAGE
+        /* Use FRAM statistics if available */
+        if (framStorage != nullptr && framStorage->isInitialized()) {
+            uint8_t available = framStorage->getBatchCount();
+            uint32_t free_space = framStorage->getAvailableSpace();
+            LOG_INFO("[Core0] FRAM: %u batches pending, %lu bytes free", available, free_space);
+
+            /* Get failure stats from RAM buffer header even when using FRAM */
+            __dmb();
+            tx_failures = g_psram_buffer.header.transmission_failures;
+            overflows = g_psram_buffer.header.buffer_overflows;
+            psram_failures = g_psram_buffer.header.psram_write_failures;
+            __dmb();
+        } else
+#endif
+        {
+            /* Read RAM buffer statistics with memory barrier */
+            __dmb();
+            uint32_t available = psram_buffer_get_count();
+            uint32_t transmitted = g_psram_buffer.header.total_transmitted;
+            uint32_t dropped = g_psram_buffer.header.dropped_buffers;
+            tx_failures = g_psram_buffer.header.transmission_failures;
+            overflows = g_psram_buffer.header.buffer_overflows;
+            psram_failures = g_psram_buffer.header.psram_write_failures;
+            uint32_t retries = g_psram_buffer.header.retry_attempts;
+            __dmb();
+
+            LOG_INFO("[Core0] PSRAM: %u avail, %u tx, %u drop | Failures: %u tx, %u overflow, %u psram | Retries: %u",
+                    available, transmitted, dropped, tx_failures, overflows, psram_failures, retries);
+        }
 
         /* Get current RTC quality and time for monitoring (v4.0) */
         RTCQuality current_quality = getRTCQuality();
@@ -488,8 +586,6 @@ void USBCaptureModule::processPSRAMBuffers()
 #endif
         }
 
-        LOG_INFO("[Core0] PSRAM: %u avail, %u tx, %u drop | Failures: %u tx, %u overflow, %u psram | Retries: %u",
-                available, transmitted, dropped, tx_failures, overflows, psram_failures, retries);
         LOG_INFO("[Core0] Time: %s=%u (%s quality=%d) | uptime=%u",
                 time_source_desc, core1_time, quality_name, current_quality, uptime);
 

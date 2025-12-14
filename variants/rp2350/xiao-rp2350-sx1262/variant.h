@@ -57,6 +57,22 @@
 // D3  (GPIO5)  → SX1262 BUSY
 // D4  (GPIO6)  → SX1262 CS (Chip Select)
 // D5  (GPIO7)  → SX1262 RXEN (RF Switch)
+// D6  (GPIO1)  → FRAM CS (Chip Select) - USB Capture storage
 // D8  (GPIO2)  → SPI SCK
 // D9  (GPIO4)  → SPI MISO
 // D10 (GPIO3)  → SPI MOSI
+
+// ============================================================================
+// FRAM Configuration (shares SPI0 with LoRa)
+// ============================================================================
+// SPI FRAM for non-volatile keystroke batch storage
+// Connected to same SPI bus as LoRa radio, different chip select
+
+#ifdef HAS_FRAM_STORAGE
+#define FRAM_CS D6               // GPIO1 - FRAM Chip Select
+#define FRAM_SPI_FREQ 20000000   // 20MHz (FRAM supports up to 40MHz)
+// FRAM uses same SPI instance as LoRa (SPI0):
+// SCK:  GPIO2 (D8)
+// MISO: GPIO4 (D9)
+// MOSI: GPIO3 (D10)
+#endif

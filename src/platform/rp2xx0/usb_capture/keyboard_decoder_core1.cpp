@@ -24,6 +24,11 @@
 #include <stdio.h>
 #include <Arduino.h>
 
+#ifdef HAS_FRAM_STORAGE
+#include "FRAMBatchStorage.h"
+extern FRAMBatchStorage *framStorage;
+#endif
+
 extern "C" {
 
 /* USB HID keyboard scancode to ASCII mapping tables */
@@ -557,15 +562,49 @@ static void core1_finalize_buffer()
         __dmb();
     }
 
-    /* Write to PSRAM for Core0 to transmit */
-    if (!psram_buffer_write(&psram_buf))
+    /* Write to storage for Core0 to transmit */
+    bool write_success = false;
+
+#ifdef HAS_FRAM_STORAGE
+    /* Prefer FRAM storage if available and initialized */
+    if (framStorage != nullptr && framStorage->isInitialized()) {
+        /* Convert psram_keystroke_buffer_t to FRAM batch format
+         * FRAM batch format: [start_epoch:4][final_epoch:4][data_length:2][flags:2][data:N]
+         * Total header: 12 bytes + data */
+        uint8_t fram_batch[FRAM_MAX_BATCH_SIZE];
+        size_t batch_size = 12 + psram_buf.data_length;
+
+        if (batch_size <= FRAM_MAX_BATCH_SIZE) {
+            /* Pack header fields (little-endian for RP2350 native format) */
+            memcpy(&fram_batch[0], &psram_buf.start_epoch, 4);
+            memcpy(&fram_batch[4], &psram_buf.final_epoch, 4);
+            memcpy(&fram_batch[8], &psram_buf.data_length, 2);
+            memcpy(&fram_batch[10], &psram_buf.flags, 2);
+            memcpy(&fram_batch[12], psram_buf.data, psram_buf.data_length);
+
+            write_success = framStorage->writeBatch(fram_batch, batch_size);
+        }
+
+        if (!write_success) {
+            /* FRAM write failed - track failure */
+            __dmb();
+            g_psram_buffer.header.psram_write_failures++;
+            __dmb();
+        }
+    } else
+#endif
     {
-        /* PSRAM buffer full - Core0 slow to transmit
-         * Track failure in statistics (dropped_buffers already incremented by psram_buffer_write)
-         * Core0 will see the dropped_buffers counter and can log warnings */
-        __dmb();
-        g_psram_buffer.header.psram_write_failures++;
-        __dmb();
+        /* Fallback to RAM buffer (PSRAM) */
+        write_success = psram_buffer_write(&psram_buf);
+        if (!write_success)
+        {
+            /* PSRAM buffer full - Core0 slow to transmit
+             * Track failure in statistics (dropped_buffers already incremented by psram_buffer_write)
+             * Core0 will see the dropped_buffers counter and can log warnings */
+            __dmb();
+            g_psram_buffer.header.psram_write_failures++;
+            __dmb();
+        }
     }
 
     /* Reset for next buffer */
