@@ -66,6 +66,9 @@ class InkHUD
     void rotate();
     void toggleBatteryIcon();
 
+    // Used by TipsApplet to force menu to start on Region selection
+    bool forceRegionMenu = false;
+
     // Updating the display
     // - called by various InkHUD components
 

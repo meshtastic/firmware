@@ -30,6 +30,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onRender() override;
 
     void show(Tile *t); // Open the menu, onto a user tile
+    void setStartPage(MenuPage page);
 
   protected:
     Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
@@ -51,6 +52,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void sendText(NodeNum dest, ChannelIndex channel, const char *message); // Send a text message to mesh
     void freeCannedMessageResources();                                      // Clear MenuApplet's canned message processing data
 
+    MenuPage startPageOverride = MenuPage::ROOT;
     MenuPage currentPage = MenuPage::ROOT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)

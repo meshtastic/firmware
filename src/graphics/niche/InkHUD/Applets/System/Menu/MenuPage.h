@@ -23,6 +23,7 @@ enum MenuPage : uint8_t {
     APPLETS,
     AUTOSHOW,
     RECENTS, // Select length of "recentlyActiveSeconds"
+    REGION,
     EXIT,    // Dismiss the menu applet
 };
 

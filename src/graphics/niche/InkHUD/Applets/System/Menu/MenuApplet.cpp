@@ -45,8 +45,15 @@ void InkHUD::MenuApplet::onForeground()
     // We do need this before we render, but we can optimize by just calculating it once now
     systemInfoPanelHeight = getSystemInfoPanelHeight();
 
-    // Display initial menu page
-    showPage(MenuPage::ROOT);
+    // Force Region page ONLY when explicitly requested (one-shot)
+    if (inkhud->forceRegionMenu) {
+
+        inkhud->forceRegionMenu = false; // consume one-shot flag
+        showPage(MenuPage::REGION);
+
+    } else {
+        showPage(MenuPage::ROOT);
+    }
 
     // If device has a backlight which isn't controlled by aux button:
     // backlight on always when menu opens.
@@ -137,6 +144,55 @@ int32_t InkHUD::MenuApplet::runOnce()
     // Timer should disable after firing
     // This is redundant, as onBackground() will also disable
     return OSThread::disable();
+}
+
+static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
+{
+    if (config.lora.region == region)
+        return;
+
+    config.lora.region = region;
+
+    auto changes = SEGMENT_CONFIG;
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (!owner.is_licensed) {
+        bool keygenSuccess = false;
+
+        if (config.security.private_key.size == 32) {
+            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            }
+        } else {
+            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+            keygenSuccess = true;
+        }
+
+        if (keygenSuccess) {
+            config.security.public_key.size = 32;
+            config.security.private_key.size = 32;
+            owner.public_key.size = 32;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        }
+    }
+#endif
+
+    config.lora.tx_enabled = true;
+
+    initRegion();
+
+    if (myRegion && myRegion->dutyCycle < 100) {
+        config.lora.ignore_mqtt = true;
+    }
+
+    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        changes |= SEGMENT_MODULECONFIG;
+    }
+
+    service->reloadConfig(changes);
+
+    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
 // Perform action for a menu item, then change page
@@ -260,6 +316,109 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + 2000;
         break;
 
+    case SET_REGION_US:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+        break;
+
+    case SET_REGION_EU_868:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+        break;
+
+    case SET_REGION_EU_433:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_433);
+        break;
+
+    case SET_REGION_CN:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_CN);
+        break;
+
+    case SET_REGION_JP:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+        break;
+
+    case SET_REGION_ANZ:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ANZ);
+        break;
+    case SET_REGION_KR:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_KR);
+        break;
+
+    case SET_REGION_TW:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_TW);
+        break;
+
+    case SET_REGION_RU:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_RU);
+        break;
+
+    case SET_REGION_IN:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_IN);
+        break;
+
+    case SET_REGION_NZ_865:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_NZ_865);
+        break;
+
+    case SET_REGION_TH:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_TH);
+        break;
+
+    case SET_REGION_LORA_24:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+        break;
+
+    case SET_REGION_UA_433:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_UA_433);
+        break;
+
+    case SET_REGION_UA_868:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_UA_868);
+        break;
+
+    case SET_REGION_MY_433:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_MY_433);
+        break;
+
+    case SET_REGION_MY_919:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_MY_919);
+        break;
+
+    case SET_REGION_SG_923:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_SG_923);
+        break;
+
+    case SET_REGION_PH_433:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_PH_433);
+        break;
+
+    case SET_REGION_PH_868:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_PH_868);
+        break;
+
+    case SET_REGION_PH_915:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_PH_915);
+        break;
+
+    case SET_REGION_ANZ_433:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ANZ_433);
+        break;
+
+    case SET_REGION_KZ_433:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_KZ_433);
+        break;
+
+    case SET_REGION_KZ_863:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_KZ_863);
+        break;
+
+    case SET_REGION_NP_865:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_NP_865);
+        break;
+
+    case SET_REGION_BR_902:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_BR_902);
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -346,6 +505,37 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case RECENTS:
         populateRecentsPage();
+        break;
+
+    case REGION:
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        items.push_back(MenuItem("US", MenuAction::SET_REGION_US, MenuPage::EXIT));
+        items.push_back(MenuItem("EU 868", MenuAction::SET_REGION_EU_868, MenuPage::EXIT));
+        items.push_back(MenuItem("EU 433", MenuAction::SET_REGION_EU_433, MenuPage::EXIT));
+        items.push_back(MenuItem("CN", MenuAction::SET_REGION_CN, MenuPage::EXIT));
+        items.push_back(MenuItem("JP", MenuAction::SET_REGION_JP, MenuPage::EXIT));
+        items.push_back(MenuItem("ANZ", MenuAction::SET_REGION_ANZ, MenuPage::EXIT));
+        items.push_back(MenuItem("KR", MenuAction::SET_REGION_KR, MenuPage::EXIT));
+        items.push_back(MenuItem("TW", MenuAction::SET_REGION_TW, MenuPage::EXIT));
+        items.push_back(MenuItem("RU", MenuAction::SET_REGION_RU, MenuPage::EXIT));
+        items.push_back(MenuItem("IN", MenuAction::SET_REGION_IN, MenuPage::EXIT));
+        items.push_back(MenuItem("NZ 865", MenuAction::SET_REGION_NZ_865, MenuPage::EXIT));
+        items.push_back(MenuItem("TH", MenuAction::SET_REGION_TH, MenuPage::EXIT));
+        items.push_back(MenuItem("LoRa 2.4", MenuAction::SET_REGION_LORA_24, MenuPage::EXIT));
+        items.push_back(MenuItem("UA 433", MenuAction::SET_REGION_UA_433, MenuPage::EXIT));
+        items.push_back(MenuItem("UA 868", MenuAction::SET_REGION_UA_868, MenuPage::EXIT));
+        items.push_back(MenuItem("MY 433", MenuAction::SET_REGION_MY_433, MenuPage::EXIT));
+        items.push_back(MenuItem("MY 919", MenuAction::SET_REGION_MY_919, MenuPage::EXIT));
+        items.push_back(MenuItem("SG 923", MenuAction::SET_REGION_SG_923, MenuPage::EXIT));
+        items.push_back(MenuItem("PH 433", MenuAction::SET_REGION_PH_433, MenuPage::EXIT));
+        items.push_back(MenuItem("PH 868", MenuAction::SET_REGION_PH_868, MenuPage::EXIT));
+        items.push_back(MenuItem("PH 915", MenuAction::SET_REGION_PH_915, MenuPage::EXIT));
+        items.push_back(MenuItem("ANZ 433", MenuAction::SET_REGION_ANZ_433, MenuPage::EXIT));
+        items.push_back(MenuItem("KZ 433", MenuAction::SET_REGION_KZ_433, MenuPage::EXIT));
+        items.push_back(MenuItem("KZ 863", MenuAction::SET_REGION_KZ_863, MenuPage::EXIT));
+        items.push_back(MenuItem("NP 865", MenuAction::SET_REGION_NP_865, MenuPage::EXIT));
+        items.push_back(MenuItem("BR 902", MenuAction::SET_REGION_BR_902, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case EXIT:
