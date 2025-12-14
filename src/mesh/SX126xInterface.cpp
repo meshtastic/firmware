@@ -62,6 +62,11 @@ template <typename T> bool SX126xInterface<T>::init()
     digitalWrite(LORA_PA_TX_EN, LOW);
 #endif
 
+#ifdef RF95_FAN_EN
+    pinMode(RF95_FAN_EN, OUTPUT);
+    digitalWrite(RF95_FAN_EN, HIGH);
+#endif
+
 #if ARCH_PORTDUINO
     tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
@@ -85,6 +90,13 @@ template <typename T> bool SX126xInterface<T>::init()
         power = -9;
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+
+#ifdef SX126X_PA_RAMP_US
+    // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
+    if (res == RADIOLIB_ERR_NONE) {
+        lora.setPaRampTime(SX126X_PA_RAMP_US);
+    }
+#endif
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
