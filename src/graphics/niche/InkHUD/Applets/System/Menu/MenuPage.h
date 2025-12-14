@@ -23,6 +23,7 @@ enum MenuPage : uint8_t {
     NODE_CONFIG,
     NODE_CONFIG_LORA,
     NODE_CONFIG_ROLE,
+    NODE_CONFIG_PRESET,
     APPLETS,
     AUTOSHOW,
     RECENTS, // Select length of "recentlyActiveSeconds"

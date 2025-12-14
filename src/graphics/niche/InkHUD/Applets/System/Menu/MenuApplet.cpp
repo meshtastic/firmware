@@ -213,6 +213,20 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
+static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    if (config.lora.modem_preset == preset)
+        return;
+
+    config.lora.use_preset = true;
+    config.lora.modem_preset = preset;
+
+    nodeDB->saveToDisk(SEGMENT_CONFIG);
+    service->reloadConfig(SEGMENT_CONFIG);
+
+    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+}
+
 // Perform action for a menu item, then change page
 // Behaviors for MenuActions are defined here
 void InkHUD::MenuApplet::execute(MenuItem item)
@@ -455,6 +469,38 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_REPEATER);
         break;
 
+    // Presets
+    case SET_PRESET_LONG_SLOW:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+        break;
+
+    case SET_PRESET_LONG_MODERATE:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE);
+        break;
+
+    case SET_PRESET_LONG_FAST:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+        break;
+
+    case SET_PRESET_MEDIUM_SLOW:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW);
+        break;
+
+    case SET_PRESET_MEDIUM_FAST:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+        break;
+
+    case SET_PRESET_SHORT_SLOW:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW);
+        break;
+
+    case SET_PRESET_SHORT_FAST:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST);
+        break;
+
+    case SET_PRESET_SHORT_TURBO:
+        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+        break;
     default:
         LOG_WARN("Action not implemented");
     }
@@ -566,7 +612,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         const char *preset =
             DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
         nodeConfigLabels.emplace_back("Preset: " + std::string(preset));
-        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_LORA));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_PRESET));
 
         // Frequency
         char freqBuf[32];
@@ -616,6 +662,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));
         items.push_back(MenuItem("Router", MenuAction::SET_ROLE_ROUTER, MenuPage::EXIT));
         items.push_back(MenuItem("Repeater", MenuAction::SET_ROLE_REPEATER, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::NODE_CONFIG_LORA));
+        break;
+    }
+
+    case NODE_CONFIG_PRESET: {
+
+        items.push_back(MenuItem("Long Slow", MenuAction::SET_PRESET_LONG_SLOW, MenuPage::EXIT));
+        items.push_back(MenuItem("Long Moderate", MenuAction::SET_PRESET_LONG_MODERATE, MenuPage::EXIT));
+        items.push_back(MenuItem("Long Fast", MenuAction::SET_PRESET_LONG_FAST, MenuPage::EXIT));
+        items.push_back(MenuItem("Medium Slow", MenuAction::SET_PRESET_MEDIUM_SLOW, MenuPage::EXIT));
+        items.push_back(MenuItem("Medium Fast", MenuAction::SET_PRESET_MEDIUM_FAST, MenuPage::EXIT));
+        items.push_back(MenuItem("Short Slow", MenuAction::SET_PRESET_SHORT_SLOW, MenuPage::EXIT));
+        items.push_back(MenuItem("Short Fast", MenuAction::SET_PRESET_SHORT_FAST, MenuPage::EXIT));
+        items.push_back(MenuItem("Short Turbo", MenuAction::SET_PRESET_SHORT_TURBO, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::NODE_CONFIG_LORA));
         break;
     }
