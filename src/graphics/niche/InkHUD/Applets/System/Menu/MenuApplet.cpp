@@ -227,6 +227,20 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
+static void applyTimezone(const char *tz)
+{
+    if (!tz || strcmp(config.device.tzdef, tz) == 0)
+        return;
+
+    strncpy(config.device.tzdef, tz, sizeof(config.device.tzdef));
+    config.device.tzdef[sizeof(config.device.tzdef) - 1] = '\0';
+
+    setenv("TZ", config.device.tzdef, 1);
+
+    nodeDB->saveToDisk(SEGMENT_CONFIG);
+    service->reloadConfig(SEGMENT_CONFIG);
+}
+
 // Perform action for a menu item, then change page
 // Behaviors for MenuActions are defined here
 void InkHUD::MenuApplet::execute(MenuItem item)
@@ -239,6 +253,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     // Also handles exit
     case NO_ACTION:
         break;
+
+    case BACK:
+        showPage(item.nextPage);
+        return;
 
     case NEXT_TILE:
         inkhud->nextTile();
@@ -501,6 +519,80 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case SET_PRESET_SHORT_TURBO:
         applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
         break;
+
+    // Timezones
+    case SET_TZ_US_HAWAII:
+        applyTimezone("HST10");
+        break;
+
+    case SET_TZ_US_ALASKA:
+        applyTimezone("AKST9AKDT,M3.2.0,M11.1.0");
+        break;
+
+    case SET_TZ_US_PACIFIC:
+        applyTimezone("PST8PDT,M3.2.0,M11.1.0");
+        break;
+
+    case SET_TZ_US_ARIZONA:
+        applyTimezone("MST7");
+        break;
+
+    case SET_TZ_US_MOUNTAIN:
+        applyTimezone("MST7MDT,M3.2.0,M11.1.0");
+        break;
+
+    case SET_TZ_US_CENTRAL:
+        applyTimezone("CST6CDT,M3.2.0,M11.1.0");
+        break;
+
+    case SET_TZ_US_EASTERN:
+        applyTimezone("EST5EDT,M3.2.0,M11.1.0");
+        break;
+
+    case SET_TZ_BR_BRAZILIA:
+        applyTimezone("BRT3");
+        break;
+
+    case SET_TZ_UTC:
+        applyTimezone("UTC0");
+        break;
+
+    case SET_TZ_EU_WESTERN:
+        applyTimezone("GMT0BST,M3.5.0/1,M10.5.0");
+        break;
+
+    case SET_TZ_EU_CENTRAL:
+        applyTimezone("CET-1CEST,M3.5.0,M10.5.0/3");
+        break;
+
+    case SET_TZ_EU_EASTERN:
+        applyTimezone("EET-2EEST,M3.5.0/3,M10.5.0/4");
+        break;
+
+    case SET_TZ_ASIA_KOLKATA:
+        applyTimezone("IST-5:30");
+        break;
+
+    case SET_TZ_ASIA_HONG_KONG:
+        applyTimezone("HKT-8");
+        break;
+
+    case SET_TZ_AU_AWST:
+        applyTimezone("AWST-8");
+        break;
+
+    case SET_TZ_AU_ACST:
+        applyTimezone("ACST-9:30ACDT,M10.1.0,M4.1.0/3");
+        break;
+
+    case SET_TZ_AU_AEST:
+        applyTimezone("AEST-10AEDT,M10.1.0,M4.1.0/3");
+        break;
+
+    case SET_TZ_PACIFIC_NZ:
+        applyTimezone("NZST-12NZDT,M9.5.0,M4.1.0/3");
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -592,29 +684,44 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case NODE_CONFIG:
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
+        items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
+    case NODE_CONFIG_DEVICE: {
+
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
+        const char *role = DisplayFormatters::getDeviceRole(config.device.role);
+        nodeConfigLabels.emplace_back("Role: " + std::string(role));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_DEVICE_ROLE));
+
+        const char *tz = config.device.tzdef;
+        if (!tz || strlen(tz) == 0)
+            tz = "Unset";
+
+        nodeConfigLabels.emplace_back("Timezone: " + std::string(tz));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::TIMEZONE));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
     case NODE_CONFIG_LORA: {
 
-        // Region
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
         const char *region = myRegion ? myRegion->name : "Unset";
         nodeConfigLabels.emplace_back("Region: " + std::string(region));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::REGION));
 
-        // Role
-        const char *role = DisplayFormatters::getDeviceRole(config.device.role);
-        nodeConfigLabels.emplace_back("Role: " + std::string(role));
-        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_ROLE));
-
-        // Preset
         const char *preset =
             DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
         nodeConfigLabels.emplace_back("Preset: " + std::string(preset));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_PRESET));
 
-        // Frequency
         char freqBuf[32];
         float freq = RadioLibInterface::instance->getFreq();
         snprintf(freqBuf, sizeof(freqBuf), "Freq: %.3f MHz", freq);
@@ -625,8 +732,41 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
     }
 
-    case REGION:
+    case NODE_CONFIG_DEVICE_ROLE: {
+
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("Client", MenuAction::SET_ROLE_CLIENT, MenuPage::EXIT));
+        items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));
+        items.push_back(MenuItem("Router", MenuAction::SET_ROLE_ROUTER, MenuPage::EXIT));
+        items.push_back(MenuItem("Repeater", MenuAction::SET_ROLE_REPEATER, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case TIMEZONE:
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Hawaii", SET_TZ_US_HAWAII, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Alaska", SET_TZ_US_ALASKA, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Pacific", SET_TZ_US_PACIFIC, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Arizona", SET_TZ_US_ARIZONA, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Mountain", SET_TZ_US_MOUNTAIN, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Central", SET_TZ_US_CENTRAL, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Eastern", SET_TZ_US_EASTERN, MenuPage::EXIT));
+        items.push_back(MenuItem("BR/Brasilia", SET_TZ_BR_BRAZILIA, MenuPage::EXIT));
+        items.push_back(MenuItem("UTC", SET_TZ_UTC, MenuPage::EXIT));
+        items.push_back(MenuItem("EU/Western", SET_TZ_EU_WESTERN, MenuPage::EXIT));
+        items.push_back(MenuItem("EU/Central", SET_TZ_EU_CENTRAL, MenuPage::EXIT));
+        items.push_back(MenuItem("EU/Eastern", SET_TZ_EU_EASTERN, MenuPage::EXIT));
+        items.push_back(MenuItem("Asia/Kolkata", SET_TZ_ASIA_KOLKATA, MenuPage::EXIT));
+        items.push_back(MenuItem("Asia/Hong Kong", SET_TZ_ASIA_HONG_KONG, MenuPage::EXIT));
+        items.push_back(MenuItem("AU/AWST", SET_TZ_AU_AWST, MenuPage::EXIT));
+        items.push_back(MenuItem("AU/ACST", SET_TZ_AU_ACST, MenuPage::EXIT));
+        items.push_back(MenuItem("AU/AEST", SET_TZ_AU_AEST, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case REGION:
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_LORA));
         items.push_back(MenuItem("US", MenuAction::SET_REGION_US, MenuPage::EXIT));
         items.push_back(MenuItem("EU 868", MenuAction::SET_REGION_EU_868, MenuPage::EXIT));
         items.push_back(MenuItem("EU 433", MenuAction::SET_REGION_EU_433, MenuPage::EXIT));
@@ -656,19 +796,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
-    case NODE_CONFIG_ROLE: {
-
-        items.push_back(MenuItem("Client", MenuAction::SET_ROLE_CLIENT, MenuPage::EXIT));
-        items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));
-        items.push_back(MenuItem("Router", MenuAction::SET_ROLE_ROUTER, MenuPage::EXIT));
-        items.push_back(MenuItem("Repeater", MenuAction::SET_ROLE_REPEATER, MenuPage::EXIT));
-        items.push_back(MenuItem("Exit", MenuPage::NODE_CONFIG_LORA));
-        break;
-    }
-
     case NODE_CONFIG_PRESET: {
-
-        items.push_back(MenuItem("Long Slow", MenuAction::SET_PRESET_LONG_SLOW, MenuPage::EXIT));
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_LORA));
         items.push_back(MenuItem("Long Moderate", MenuAction::SET_PRESET_LONG_MODERATE, MenuPage::EXIT));
         items.push_back(MenuItem("Long Fast", MenuAction::SET_PRESET_LONG_FAST, MenuPage::EXIT));
         items.push_back(MenuItem("Medium Slow", MenuAction::SET_PRESET_MEDIUM_SLOW, MenuPage::EXIT));
@@ -676,8 +805,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Short Slow", MenuAction::SET_PRESET_SHORT_SLOW, MenuPage::EXIT));
         items.push_back(MenuItem("Short Fast", MenuAction::SET_PRESET_SHORT_FAST, MenuPage::EXIT));
         items.push_back(MenuItem("Short Turbo", MenuAction::SET_PRESET_SHORT_TURBO, MenuPage::EXIT));
-        items.push_back(MenuItem("Exit", MenuPage::NODE_CONFIG_LORA));
-        break;
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break; // explicit: do NOT fall through to EXIT
     }
 
     case EXIT:
