@@ -199,6 +199,20 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
+static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    if (config.device.role == role)
+        return;
+
+    config.device.role = role;
+
+    nodeDB->saveToDisk(SEGMENT_CONFIG);
+
+    service->reloadConfig(SEGMENT_CONFIG);
+
+    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+}
+
 // Perform action for a menu item, then change page
 // Behaviors for MenuActions are defined here
 void InkHUD::MenuApplet::execute(MenuItem item)
@@ -320,6 +334,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + 2000;
         break;
 
+    // Regions
     case SET_REGION_US:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
         break;
@@ -421,6 +436,23 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SET_REGION_BR_902:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_BR_902);
+        break;
+
+    // Roles
+    case SET_ROLE_CLIENT:
+        applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT);
+        break;
+
+    case SET_ROLE_CLIENT_MUTE:
+        applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE);
+        break;
+
+    case SET_ROLE_ROUTER:
+        applyDeviceRole(meshtastic_Config_DeviceConfig_Role_ROUTER);
+        break;
+
+    case SET_ROLE_REPEATER:
+        applyDeviceRole(meshtastic_Config_DeviceConfig_Role_REPEATER);
         break;
 
     default:
@@ -528,7 +560,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Role
         const char *role = DisplayFormatters::getDeviceRole(config.device.role);
         nodeConfigLabels.emplace_back("Role: " + std::string(role));
-        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_LORA));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_ROLE));
 
         // Preset
         const char *preset =
@@ -577,6 +609,16 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("BR 902", MenuAction::SET_REGION_BR_902, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
+
+    case NODE_CONFIG_ROLE: {
+
+        items.push_back(MenuItem("Client", MenuAction::SET_ROLE_CLIENT, MenuPage::EXIT));
+        items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));
+        items.push_back(MenuItem("Router", MenuAction::SET_ROLE_ROUTER, MenuPage::EXIT));
+        items.push_back(MenuItem("Repeater", MenuAction::SET_ROLE_REPEATER, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::NODE_CONFIG_LORA));
+        break;
+    }
 
     case EXIT:
         sendToBackground(); // Menu applet dismissed, allow normal behavior to resume

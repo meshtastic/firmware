@@ -62,6 +62,11 @@ enum MenuAction {
     SET_REGION_KZ_863,
     SET_REGION_NP_865,
     SET_REGION_BR_902,
+    // Device Roles
+    SET_ROLE_CLIENT,
+    SET_ROLE_CLIENT_MUTE,
+    SET_ROLE_ROUTER,
+    SET_ROLE_REPEATER,
 };
 
 } // namespace NicheGraphics::InkHUD
