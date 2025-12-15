@@ -9,16 +9,16 @@ plugins:
 lint:
   enabled:
     - checkov@3.2.495
-    - renovate@42.42.2
+    - renovate@42.48.0
     - prettier@3.7.4
-    - trufflehog@3.92.1
+    - trufflehog@3.92.3
     - yamllint@1.37.1
     - bandit@1.9.2
     - trivy@0.68.1
     - taplo@0.10.0
-    - ruff@0.14.8
+    - ruff@0.14.9
     - isort@7.0.0
-    - markdownlint@0.46.0
+    - markdownlint@0.47.0
     - oxipng@10.0.0
     - svgo@4.0.0
     - actionlint@1.7.9
