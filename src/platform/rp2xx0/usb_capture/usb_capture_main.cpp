@@ -35,6 +35,10 @@ volatile bool g_core1_pause_requested = false;
 volatile bool g_core1_paused = false;
 volatile bool g_core1_running = false;
 
+/* SDK lockout magic values for FIFO protocol (from pico-sdk) */
+#define LOCKOUT_MAGIC_START 0x73a8831eu
+#define LOCKOUT_MAGIC_END (~LOCKOUT_MAGIC_START)
+
 /* Processing buffer for inline packet decoding */
 #define PROCESSING_BUFFER_SIZE 128
 static uint8_t g_processing_buffer[PROCESSING_BUFFER_SIZE];
@@ -242,10 +246,59 @@ void capture_controller_core1_main_v2(void)
             g_core1_paused = true;
             __dmb();  // Memory barrier - ensure write visible to Core0
 
-            /* Wait for resume signal (no watchdog, so can wait indefinitely) */
+            /* Wait for resume signal while handling SDK lockout protocol
+             *
+             * CRITICAL: While paused, we must still respond to FIFO messages
+             * from the SDK's flash_safe_execute() lockout mechanism.
+             *
+             * SDK Protocol:
+             *   1. SDK sends LOCKOUT_MAGIC_START → we respond with LOCKOUT_MAGIC_START
+             *   2. SDK does flash operation
+             *   3. SDK sends LOCKOUT_MAGIC_END → we respond with LOCKOUT_MAGIC_END
+             *
+             * Recovery Protocol (from SafeFile.cpp):
+             *   1. FIFO recovery sends LOCKOUT_MAGIC_END → we respond with LOCKOUT_MAGIC_END
+             *
+             * This ensures Core1 never gets stuck in SDK lockout state.
+             */
             while (g_core1_pause_requested)
             {
                 __dmb();  // Ensure we see Core0's resume signal
+
+                /* Check for SDK lockout magic via FIFO (non-blocking) */
+                if (multicore_fifo_rvalid())
+                {
+                    uint32_t cmd = multicore_fifo_pop_blocking();
+
+                    if (cmd == LOCKOUT_MAGIC_START)
+                    {
+                        /* SDK is initiating lockout - acknowledge */
+                        multicore_fifo_push_blocking(LOCKOUT_MAGIC_START);
+
+                        /* Wait for unlock signal */
+                        while (true)
+                        {
+                            if (multicore_fifo_rvalid())
+                            {
+                                uint32_t unlock = multicore_fifo_pop_blocking();
+                                if (unlock == LOCKOUT_MAGIC_END)
+                                {
+                                    /* Acknowledge unlock */
+                                    multicore_fifo_push_blocking(LOCKOUT_MAGIC_END);
+                                    break;
+                                }
+                            }
+                            tight_loop_contents();
+                        }
+                    }
+                    else if (cmd == LOCKOUT_MAGIC_END)
+                    {
+                        /* FIFO recovery attempt - acknowledge immediately */
+                        multicore_fifo_push_blocking(LOCKOUT_MAGIC_END);
+                    }
+                    /* Ignore other FIFO messages (might be stale data) */
+                }
+
                 tight_loop_contents();
             }
 
