@@ -813,9 +813,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case NODE_CONFIG_POWER: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
 
-        const char *psLabel = config.power.is_power_saving ? "Powersave Mode: On" : "Powersave Mode: Off";
+        items.push_back(MenuItem("Powersave", MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT, &config.power.is_power_saving));
 
-        items.push_back(MenuItem(psLabel, MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
@@ -828,7 +827,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem(btLabel, MenuAction::TOGGLE_BLUETOOTH, MenuPage::EXIT));
 
         const char *pairLabel = config.bluetooth.fixed_pin ? "Pair Mode: Fixed" : "Pair Mode: Random";
-        items.push_back(MenuItem(pairLabel, MenuAction::TOGGLE_BLUETOOTH_PAIR_MODE, MenuPage::EXIT));
+        items.push_back(MenuItem(pairLabel, MenuAction::TOGGLE_BLUETOOTH_PAIR_MODE, MenuPage::NODE_CONFIG_BLUETOOTH));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
