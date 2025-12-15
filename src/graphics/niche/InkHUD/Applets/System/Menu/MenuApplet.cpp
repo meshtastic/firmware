@@ -724,6 +724,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case OPTIONS:
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
         // Optional: backlight
         if (settings->optionalMenuItems.backlight)
             items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
@@ -761,17 +762,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case APPLETS:
-        populateAppletPage();
+        populateAppletPage(); // must be first
+        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case AUTOSHOW:
-        populateAutoshowPage();
+        populateAutoshowPage(); // must be first
+        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case RECENTS:
-        populateRecentsPage();
+        populateRecentsPage(); // builds only the options
+        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
         break;
 
     case NODE_CONFIG:
