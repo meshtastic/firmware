@@ -1,5 +1,6 @@
 #include "GraphLite.h"
 #include "configuration.h"
+#include "Graph.h"
 #include <algorithm>
 #include <cmath>
 
@@ -398,6 +399,95 @@ bool GraphLite::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode
     return uniqueSrNeighbors >= 2;
 }
 
+uint32_t GraphLite::getContentionWindowMs()
+{
+    // Use Graph's shared implementation
+    return Graph::getContentionWindowMs();
+}
+
+bool GraphLite::shouldRelayWithContention(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t packetId, uint32_t currentTime) const
+{
+    // Basic contention window logic for SR nodes in constrained environments:
+    // 1. Check if we have unique coverage
+    // 2. If multiple nodes could relay, implement simple coordination
+
+    const NodeEdgesLite *myEdges = findNode(myNode);
+    const NodeEdgesLite *sourceEdges = findNode(sourceNode);
+    const NodeEdgesLite *relayEdges = (heardFrom == sourceNode) ? nullptr : findNode(heardFrom);
+
+    if (!myEdges || myEdges->edgeCount == 0) {
+        return false; // We have no neighbors, no point relaying
+    }
+
+    // Count unique neighbors we can reach that source/relay cannot
+    uint8_t uniqueNeighbors = 0;
+    for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+        NodeNum neighbor = myEdges->edges[i].to;
+        if (neighbor == sourceNode || neighbor == heardFrom) {
+            continue; // They already have the packet
+        }
+
+        // Check if source or relayer has direct connection to this neighbor
+        bool sourceHasIt = false;
+        if (sourceEdges) {
+            for (uint8_t j = 0; j < sourceEdges->edgeCount; j++) {
+                if (sourceEdges->edges[j].to == neighbor) {
+                    sourceHasIt = true;
+                    break;
+                }
+            }
+        }
+
+        if (relayEdges && !sourceHasIt) {
+            for (uint8_t j = 0; j < relayEdges->edgeCount; j++) {
+                if (relayEdges->edges[j].to == neighbor) {
+                    sourceHasIt = true;
+                    break;
+                }
+            }
+        }
+
+        if (!sourceHasIt) {
+            uniqueNeighbors++;
+        }
+    }
+
+    // Determine relay priority: primary (unique coverage) vs backup (redundancy)
+    bool isPrimaryRelay = (uniqueNeighbors > 0);
+
+    // Unified contention window logic for both primary and backup relays
+    uint32_t contentionWindowMs = getContentionWindowMs();
+
+    // Check if any other nodes have already transmitted this packet
+    for (uint8_t i = 0; i < nodeCount && i < GRAPH_LITE_MAX_NODES; i++) {
+        NodeNum otherNode = nodes[i].nodeId;
+        if (otherNode != myNode && otherNode != sourceNode && otherNode != heardFrom) {
+            if (hasNodeTransmitted(otherNode, packetId, currentTime)) {
+                // Another node already transmitted, defer to avoid duplication
+                return false;
+            }
+        }
+    }
+
+    // Calculate transmission timing based on relay priority
+    uint32_t transmitTime;
+    if (isPrimaryRelay) {
+        // Primary relays transmit immediately (with small random stagger)
+        transmitTime = ((myNode + packetId) % 100) * 3;
+    } else {
+        // Backup relays wait for the full contention window
+        transmitTime = contentionWindowMs + ((myNode + packetId) % 200) * 5; // Window + 0-995ms
+    }
+
+    uint32_t timeSincePacketStart = currentTime - packetId;
+    if (timeSincePacketStart < transmitTime) {
+        return false; // Still waiting for transmission time
+    }
+
+    // Time to transmit!
+    return true;
+}
+
 void GraphLite::recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32_t currentTime)
 {
     // Find existing entry
@@ -430,7 +520,7 @@ bool GraphLite::hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t c
     for (uint8_t i = 0; i < relayStateCount; i++) {
         if (relayStates[i].nodeId == nodeId && relayStates[i].packetId == packetId) {
             uint16_t age = currentLo - relayStates[i].timestampLo;
-            return age <= (CONTENTION_WINDOW_MS / 1000 + 1); // Within contention window
+            return age <= (getContentionWindowMs() / 1000 + 1); // Within contention window
         }
     }
     return false;

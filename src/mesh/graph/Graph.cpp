@@ -506,6 +506,27 @@ void Graph::recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32_t c
     LOG_DEBUG("Graph: Recorded transmission from node %08x for packet %08x at time %u", nodeId, packetId, currentTime);
 }
 
+uint32_t Graph::getContentionWindowMs()
+{
+    extern meshtastic_LocalConfig config;
+    switch (config.lora.modem_preset) {
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+        case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
+            return 2000; // 2 seconds for long range
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+            return 1500; // 1.5 seconds for medium range
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+            return 1000; // 1 second for short range
+        default:
+            return 1500; // Default fallback
+    }
+}
+
 bool Graph::hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) const {
     auto it = relayStates.find(nodeId);
     if (it == relayStates.end()) {
@@ -523,9 +544,10 @@ bool Graph::hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t curre
 
     // Check if transmission was within the contention window
     uint32_t timeSinceTx = currentTime - state.lastTxTime;
-    bool hasTransmitted = timeSinceTx <= CONTENTION_WINDOW_MS;
+    uint32_t contentionWindow = const_cast<Graph*>(this)->getContentionWindowMs();
+    bool hasTransmitted = timeSinceTx <= contentionWindow;
     LOG_DEBUG("Graph: Node %08x %s transmitted for packet %08x (%ums ago, window: %ums)",
-              nodeId, hasTransmitted ? "HAS" : "has NOT", packetId, timeSinceTx, CONTENTION_WINDOW_MS);
+              nodeId, hasTransmitted ? "HAS" : "has NOT", packetId, timeSinceTx, contentionWindow);
     return hasTransmitted;
 }
 
