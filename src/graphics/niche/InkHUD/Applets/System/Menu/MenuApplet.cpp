@@ -392,6 +392,16 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 #endif
         break;
 
+    // Display
+    case TOGGLE_DISPLAY_UNITS:
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+            config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_METRIC;
+        else
+            config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL;
+
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
     // Bluetooth
     case TOGGLE_BLUETOOTH:
         config.bluetooth.enabled = !config.bluetooth.enabled;
@@ -752,12 +762,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
-
         invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
         items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
-
-        items.push_back(
-            MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -790,6 +796,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
 #endif
+        items.push_back(MenuItem("Display", MenuPage::NODE_CONFIG_DISPLAY));
         items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -823,6 +830,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
     }
 #endif
+    case NODE_CONFIG_DISPLAY: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
+        items.push_back(MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::NODE_CONFIG_DISPLAY,
+                                 &config.display.use_12h_clock));
+
+        const char *unitsLabel =
+            (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "Units: Imperial" : "Units: Metric";
+
+        items.push_back(MenuItem(unitsLabel, MenuAction::TOGGLE_DISPLAY_UNITS, MenuPage::NODE_CONFIG_DISPLAY));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
 
     case NODE_CONFIG_BLUETOOTH: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
