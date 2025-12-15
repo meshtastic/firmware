@@ -27,6 +27,9 @@
 #endif
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <cstring>
+#include <memory>
+#include <new>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
@@ -269,6 +272,7 @@ bool ensureInternalBackupStorageMounted()
 LoadFileResult loadProtoFromInternal(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                                      void *dest_struct)
 {
+    (void)protoSize;
     // Reads a nanopb payload straight out of the internal filesystem so we can rebuild
     // preferences even if the external FatFs partition was wiped.
     if (!ensureInternalBackupStorageMounted()) {
@@ -280,20 +284,14 @@ LoadFileResult loadProtoFromInternal(const char *filename, size_t protoSize, siz
         return LoadFileResult::OTHER_FAILURE;
     }
 
-    size_t fileSize = file.size();
-    std::vector<uint8_t> buf(fileSize);
-    size_t readBytes = file.read(buf.data(), buf.size());
-    file.close();
-
-    if (readBytes != buf.size()) {
-        return LoadFileResult::OTHER_FAILURE;
-    }
-
-    pb_istream_t stream = pb_istream_from_buffer(buf.data(), buf.size());
+    pb_istream_t stream = {&internalFsStreamRead, &file, static_cast<size_t>(file.size())};
     if (fields != &meshtastic_NodeDatabase_msg)
         memset(dest_struct, 0, objSize);
 
-    if (!pb_decode(&stream, fields, dest_struct)) {
+    bool decoded = pb_decode(&stream, fields, dest_struct);
+    file.close();
+
+    if (!decoded) {
         LOG_ERROR("Internal decode failed for %s: %s", filename, PB_GET_ERROR(&stream));
         return LoadFileResult::DECODE_FAILED;
     }
@@ -303,19 +301,8 @@ LoadFileResult loadProtoFromInternal(const char *filename, size_t protoSize, siz
 
 bool saveProtoToInternal(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *src_struct)
 {
+    (void)protoSize;
     if (!ensureInternalBackupStorageMounted()) {
-        return false;
-    }
-
-    size_t encodedSize = 0;
-    if (!pb_get_encoded_size(&encodedSize, fields, src_struct)) {
-        return false;
-    }
-
-    std::vector<uint8_t> buf(encodedSize);
-    pb_ostream_t stream = pb_ostream_from_buffer(buf.data(), buf.size());
-    if (!pb_encode(&stream, fields, src_struct)) {
-        LOG_ERROR("Internal encode failed for %s: %s", filename, PB_GET_ERROR(&stream));
         return false;
     }
 
@@ -324,85 +311,22 @@ bool saveProtoToInternal(const char *filename, size_t protoSize, const pb_msgdes
     if (!file) {
         return false;
     }
-    size_t written = file.write(buf.data(), buf.size());
-    file.flush();
-    file.close();
-    LOG_INFO("Saved %s to internal flash mirror(%u bytes)", filename, static_cast<unsigned>(written));
-    return written == buf.size();
-}
-
-bool loadPreferencesFromInternalBackup(meshtastic_BackupPreferences &backupOut)
-{
-    if (!ensureInternalBackupStorageMounted()) {
-        return false;
-    }
-
-    InternalFsFile file = InternalFS.open(kInternalConfigBackupFile, FILE_O_READ);
-    if (!file) {
-        return false;
-    }
-
-    showBackupStatusMessage("Loading\nconfig backup");
-
-    size_t fileSize = file.size();
-    LOG_DEBUG("Internal backup size %u bytes", static_cast<unsigned>(fileSize));
-    std::vector<uint8_t> buf(fileSize);
-    size_t readBytes = file.read(buf.data(), buf.size());
-    file.close();
-    if (readBytes != buf.size()) {
-        LOG_ERROR("Internal backup read short: %u/%u bytes", static_cast<unsigned>(readBytes),
-                  static_cast<unsigned>(buf.size()));
-        return false;
-    }
-
-    pb_istream_t stream = pb_istream_from_buffer(buf.data(), buf.size());
-    if (!pb_decode(&stream, &meshtastic_BackupPreferences_msg, &backupOut)) {
-        LOG_ERROR("Internal config backup decode failed: %s", PB_GET_ERROR(&stream));
-        return false;
-    }
-
-    LOG_WARN("Loaded config backup from internal flash");
-    return true;
-}
-
-bool savePreferencesToInternalBackup(const meshtastic_BackupPreferences &backup)
-{
-    if (!ensureInternalBackupStorageMounted()) {
-        return false;
-    }
-
-    InternalFS.mkdir(kInternalConfigBackupDir);
-    InternalFS.remove(kInternalConfigBackupFile); // ensure truncate semantics
-    InternalFsFile file = InternalFS.open(kInternalConfigBackupFile, FILE_O_WRITE);
-    if (!file) {
-        LOG_ERROR("Failed to open internal config backup file for writing");
-        return false;
-    }
-
-    showBackupStatusMessage("Saving\nconfig and updating backup");
 
     pb_ostream_t stream = {&internalFsStreamWrite, &file, (size_t)-1};
-    bool encoded = pb_encode(&stream, &meshtastic_BackupPreferences_msg, &backup);
+    bool encoded = pb_encode(&stream, fields, src_struct);
     file.flush();
     file.close();
 
     if (!encoded) {
-        LOG_ERROR("Internal config backup encode failed");
+        LOG_ERROR("Internal encode failed for %s: %s", filename, PB_GET_ERROR(&stream));
         return false;
     }
 
-    LOG_DEBUG("Updated internal flash config backup (%u bytes)", static_cast<unsigned>(stream.bytes_written));
+    LOG_INFO("Saved %s to internal flash mirror(%u bytes)", filename, static_cast<unsigned>(stream.bytes_written));
     return true;
 }
 }
-#endif
 
-#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
-namespace
-{
-// Allocate persistent buffers to avoid large stack frames when handling backups.
-// Legacy helpers retained for reference
-}
 #endif
 
 static uint8_t ourMacAddr[6];
@@ -1403,6 +1327,16 @@ void NodeDB::loadFromDisk()
     devicestate.version = 0;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
+
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    // If a stale node database remains on internal flash from older builds, drop it so we don't waste space or
+    // accidentally load it. External flash is the source of truth when USE_EXTERNAL_FLASH is set.
+    if (ensureInternalBackupStorageMounted()) {
+        if (InternalFS.exists(nodeDatabaseFileName)) {
+            InternalFS.remove(nodeDatabaseFileName);
+        }
+    }
+#endif
 
 #ifdef ARCH_ESP32
     spiLock->lock();
@@ -2425,20 +2359,25 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 #if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
         showBackupStatusMessage("Saving\nconfig backup");
-        meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        backup.version = DEVICESTATE_CUR_VER;
-        backup.timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
-        backup.has_config = true;
-        backup.config = config;
-        backup.has_module_config = true;
-        backup.module_config = moduleConfig;
-        backup.has_channels = true;
-        backup.channels = channelFile;
-        backup.has_owner = true;
-        backup.owner = owner;
+        std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
+        if (!backup) {
+            LOG_ERROR("Failed to allocate backup container");
+            return false;
+        }
+        memset(backup.get(), 0, sizeof(*backup));
+        backup->version = DEVICESTATE_CUR_VER;
+        backup->timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
+        backup->has_config = true;
+        backup->config = config;
+        backup->has_module_config = true;
+        backup->module_config = moduleConfig;
+        backup->has_channels = true;
+        backup->channels = channelFile;
+        backup->has_owner = true;
+        backup->owner = owner;
 
         size_t backupSize;
-        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, &backup);
+        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, backup.get());
 
         spiLock->lock();
     #ifdef USE_EXTERNAL_FLASH
@@ -2447,7 +2386,7 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
         FSCom.mkdir("/backups");
     #endif
         spiLock->unlock();
-        success = saveProto(backupFileName, backupSize, &meshtastic_BackupPreferences_msg, &backup);
+        success = saveProto(backupFileName, backupSize, &meshtastic_BackupPreferences_msg, backup.get());
 
         if (success) {
             LOG_INFO("Saved backup preferences");
@@ -2484,24 +2423,29 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             spiLock->unlock();
         }
         showBackupStatusMessage("Loading\nconfig backup");
-        meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
+        std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
+        if (!backup) {
+            LOG_ERROR("Failed to allocate backup container");
+            return false;
+        }
+        memset(backup.get(), 0, sizeof(*backup));
         success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
-                            &meshtastic_BackupPreferences_msg, &backup);
+                            &meshtastic_BackupPreferences_msg, backup.get());
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {
-                config = backup.config;
+                config = backup->config;
                 LOG_DEBUG("Restored config");
             }
             if (restoreWhat & SEGMENT_MODULECONFIG) {
-                moduleConfig = backup.module_config;
+                moduleConfig = backup->module_config;
                 LOG_DEBUG("Restored module config");
             }
             if (restoreWhat & SEGMENT_DEVICESTATE) {
-                devicestate.owner = backup.owner;
+                devicestate.owner = backup->owner;
                 LOG_DEBUG("Restored device state");
             }
             if (restoreWhat & SEGMENT_CHANNELS) {
-                channelFile = backup.channels;
+                channelFile = backup->channels;
                 LOG_DEBUG("Restored channels");
             }
 

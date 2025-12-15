@@ -45,8 +45,8 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #if defined(ARCH_STM32WL)
 #define MAX_NUM_NODES 10
 
-#elif defined(USE_EXTERNAL_FLASH)
-#define MAX_NUM_NODES 250
+//#elif defined(USE_EXTERNAL_FLASH)
+//#define MAX_NUM_NODES 80
 
 #elif defined(ARCH_NRF52)
 #define MAX_NUM_NODES 80

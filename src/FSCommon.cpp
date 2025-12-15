@@ -11,6 +11,7 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "configuration.h"
+#include <memory>
 #ifdef USE_EXTERNAL_FLASH
 #if defined(EXTERNAL_FLASH_USE_QSPI)
 Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
@@ -56,18 +57,29 @@ bool format_fat12(void)
     // This is an emergency formatter that rewrites the external flash with a clean FAT12
     // volume so the higher level preference code can start dropping files immediately
 
-    // Working buffer for f_mkfs lives in static storage to avoid stack blowups on small RTOS tasks
+    // Allocate formatting buffer on the heap so it isn't permanently pinned in BSS
 #ifdef __AVR__
-    static uint8_t workbuf[512];
+    std::unique_ptr<uint8_t[]> workbuf(new (std::nothrow) uint8_t[512]);
 #else
-    static uint8_t workbuf[4096];
+    std::unique_ptr<uint8_t[]> workbuf(new (std::nothrow) uint8_t[4096]);
 #endif
+    if (!workbuf) {
+        LOG_ERROR("Error, failed to allocate format buffer");
+        spiLock->unlock();
+        return false;
+    }
 
     // Elm Cham's fatfs objects
     FATFS elmchamFatfs;
 
     // Make filesystem.
-    FRESULT r = f_mkfs("", FM_FAT, 0, workbuf, sizeof(workbuf));
+    FRESULT r = f_mkfs("", FM_FAT, 0, workbuf.get(),
+#ifdef __AVR__
+                       512
+#else
+                       4096
+#endif
+    );
     if (r != FR_OK) {
         LOG_ERROR("Error, f_mkfs failed");
         spiLock->unlock();
