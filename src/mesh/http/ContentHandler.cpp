@@ -990,4 +990,5 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
         delete val;
     }
 }
+
 #endif

@@ -2,7 +2,7 @@
 
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Platform:** XIAO RP2350-SX1262 + Heltec V4 (receiver) + iOS App
-**Version:** v7.10 - I2C Exclusion for GPIO 16/17 USB Compatibility
+**Version:** v7.11.1 - Double Finalization Hotfix (Fixed v7.11 Regression)
 **Status:** ✅ Firmware Complete, iOS Implementation Pending
 **Last Updated:** 2025-12-15
 
@@ -36,7 +36,17 @@
 - ✅ **5 KEYLOG Commands:** LIST, GET, DELETE, STATS, ERASE_ALL (TCP-based, local to Heltec)
 - ✅ **I2C Excluded:** GPIO 16/17 free for USB D+/D- (v7.10) - Saved 10% flash, 2% RAM
 
-### Key Achievement v7.10: I2C Exclusion for USB Compatibility (Current)
+### Key Achievement v7.11.1: Double Finalization Hotfix (Current)
+**Fixed v7.11 regression that caused double finalization on buffer overflow:**
+- **Problem:** v7.11's emergency path returned `false`, caller finalized again (double finalization!)
+- **Symptom:** Caps Lock + one letter = 13-byte batch (worse than original 16-17 bytes)
+- **Root Cause:** Caller had `if (!added) { finalize(); retry; }` but emergency path already finalized
+- **Solution:** Removed redundant finalize call from caller retry logic
+- **Files Modified:** keyboard_decoder_core1.cpp line 345 (removed caller finalize)
+- **Result:** Normal batch sizes (~180 bytes), Caps Lock works correctly, single finalization
+- **Build:** Flash 48.7%, RAM 22.4% (saved 8 bytes from removed call)
+
+### Key Achievement v7.10: I2C Exclusion for USB Compatibility
 **Disabled I2C to prevent GPIO 16/17 conflict with USB bitbanging:**
 - **Problem:** Meshtastic I2C scanning detected GPIO 16/17 as I2C device, conflicting with USB D+/D-
 - **Solution:** `MESHTASTIC_EXCLUDE_I2C 1` + `MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1` in variant.h
@@ -428,9 +438,98 @@ Final Time: 1765155836 seconds
 | 7.8.2 | 2025-12-15 | FIFO recovery fix - Core1 responds to SDK lockout during pause | Validated |
 | 7.8.3 | 2025-12-15 | Timestamp formatting - Human-readable dates in iOS keylog downloads | Validated |
 | 7.9 | 2025-12-15 | TCP-based keylog commands (LIST, GET, DELETE, STATS, ERASE_ALL) - WiFi + Bluetooth | Validated |
-| **7.10** | **2025-12-15** | **I2C exclusion - GPIO 16/17 USB compatibility fix (saved 10% flash, 2% RAM)** | **Current** ✅ |
+| 7.10 | 2025-12-15 | I2C exclusion - GPIO 16/17 USB compatibility fix (saved 10% flash, 2% RAM) | Validated |
+| 7.11 | 2025-12-15 | Buffer contamination fix - Prevents small batches and missing keystrokes | **Regression** ❌ |
+| **7.11.1** | **2025-12-15** | **Double finalization hotfix - Fixed v7.11 regression (Caps Lock issue)** | **Current** ✅ |
 
-### v7.10 - I2C Exclusion for USB Compatibility (Current)
+### v7.11.1 - Double Finalization Hotfix (Current)
+
+**Problem:** v7.11 introduced double finalization bug causing even smaller batches than original issue
+
+**Symptoms:**
+- Caps Lock + one letter = 13-byte batch (12 header + 1 data byte)
+- Worse than original issue (was 16-17 bytes, now 13 bytes)
+- 100% reproducible with Caps Lock
+
+**Root Cause:**
+```cpp
+// v7.11 emergency path:
+if (buffer full) {
+    core1_finalize_buffer();  // ← First finalization
+    return false;
+}
+
+// Caller (BUGGY):
+if (!added) {
+    core1_finalize_buffer();  // ← SECOND finalization!
+    retry...
+}
+```
+
+**Solution:**
+```cpp
+// v7.11.1 caller (Fixed):
+if (!added) {
+    /* add functions already finalized, don't finalize again */
+    retry...  // Just retry without double finalize
+}
+```
+
+**Files Modified:**
+- `src/platform/rp2xx0/usb_capture/keyboard_decoder_core1.cpp` (line 345 removed redundant finalize)
+
+**Result:**
+- ✅ Normal batch sizes (~180 bytes) restored
+- ✅ Caps Lock no longer triggers premature finalization
+- ✅ Eliminated double finalization bug
+- ✅ 8 bytes flash saved (removed redundant call)
+
+**Build:** Flash 48.7%, RAM 22.4%
+
+**Documentation:** `/modules/DOUBLE_FINALIZATION_HOTFIX_v7.11.1.md`
+
+### v7.11 - Buffer Contamination Fix (REGRESSION - Don't Use)
+
+**Problem:** Emergency finalization logic immediately reinitializing buffer, contaminating next batch with orphaned keystrokes
+
+**Symptoms:**
+- Small FRAM batches (16-17 bytes instead of ~180 bytes)
+- Missing keystrokes ("sometimes keys are not captured")
+- Inefficient mesh transmission (many small packets)
+
+**Root Cause:**
+```cpp
+// BEFORE (Broken):
+if (core1_get_buffer_space() < 1) {
+    core1_finalize_buffer();
+    core1_init_keystroke_buffer();  // ❌ Immediate reinit!
+    // Current keystroke added to NEW buffer → contamination
+}
+```
+
+**Solution:**
+```cpp
+// AFTER (Fixed):
+if (core1_get_buffer_space() < 1) {
+    core1_finalize_buffer();
+    return false;  // Let caller retry, next keystroke inits clean buffer
+}
+```
+
+**Files Modified:**
+- `src/platform/rp2xx0/usb_capture/keyboard_decoder_core1.cpp` (lines 493-498, 533-537)
+
+**Result:**
+- ✅ Normal batch sizes (~180 bytes of keystroke data)
+- ✅ No contamination (clean buffer boundaries)
+- ✅ All keystrokes captured reliably
+- ✅ Better transmission efficiency (fewer, larger batches)
+
+**Build:** Flash 48.7%, RAM 22.4% (no change - logic only)
+
+**Documentation:** `/modules/BUFFER_CONTAMINATION_FIX_v7.11.md`
+
+### v7.10 - I2C Exclusion for USB Compatibility
 
 **Problem:** Meshtastic I2C scanning detected GPIO 16/17 as I2C device, conflicting with USB D+/D- bitbanging
 
@@ -1288,4 +1387,4 @@ If direct messages fail with "PKC decrypt failed":
 
 ---
 
-*Last Updated: 2025-12-15 | Version 7.10 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI), v7.0 (Mesh Broadcast), v7.1 (Deduplication), v7.3 (ACK Reception), v7.6 (Randomized TX), v7.8 (iOS App), v7.8.2 (FIFO Fix), v7.10 (I2C Exclusion)*
+*Last Updated: 2025-12-15 | Version 7.11.1 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI), v7.0 (Mesh Broadcast), v7.1 (Deduplication), v7.3 (ACK Reception), v7.6 (Randomized TX), v7.8 (iOS App), v7.8.2 (FIFO Fix), v7.10 (I2C Exclusion), v7.11.1 (Hotfix)*
