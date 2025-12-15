@@ -18,11 +18,11 @@
 
 // Compile-time configuration for constrained devices
 #ifndef GRAPH_LITE_MAX_NODES
-#define GRAPH_LITE_MAX_NODES 16 // Maximum nodes in graph
+#define GRAPH_LITE_MAX_NODES 24 // Maximum nodes in graph
 #endif
 
 #ifndef GRAPH_LITE_MAX_EDGES_PER_NODE
-#define GRAPH_LITE_MAX_EDGES_PER_NODE 6 // Maximum neighbors per node
+#define GRAPH_LITE_MAX_EDGES_PER_NODE 8 // Maximum neighbors per node
 #endif
 
 #ifndef GRAPH_LITE_MAX_RELAY_STATES
@@ -80,7 +80,7 @@ class GraphLite {
     static constexpr int EDGE_SIGNIFICANT_CHANGE = 2;
 
     static constexpr float ETX_CHANGE_THRESHOLD = 0.20f;
-    static constexpr uint32_t CONTENTION_WINDOW_MS = 200;
+    static uint32_t getContentionWindowMs();
     static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 300;
 
     GraphLite();
@@ -130,6 +130,11 @@ class GraphLite {
      * Conservative relay decision that defers to stock gateways
      */
     bool shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
+
+    /**
+     * Relay decision with basic contention window support for SR nodes
+     */
+    bool shouldRelayWithContention(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t packetId, uint32_t currentTime) const;
 
     /**
      * Record that a node has transmitted
