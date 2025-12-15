@@ -366,6 +366,27 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + 2000;
         break;
 
+    // Power
+    case TOGGLE_POWER_SAVE:
+#if defined(ARCH_ESP32)
+        config.power.is_power_saving = !config.power.is_power_saving;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+#endif
+        break;
+
+    // Bluetooth
+    case TOGGLE_BLUETOOTH:
+        config.bluetooth.enabled = !config.bluetooth.enabled;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        break;
+
+    case TOGGLE_BLUETOOTH_PAIR_MODE:
+        config.bluetooth.fixed_pin = !config.bluetooth.fixed_pin;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
     // Regions
     case SET_REGION_US:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
@@ -686,6 +707,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case NODE_CONFIG:
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
         items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
+#if defined(ARCH_ESP32)
+        items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
+#endif
+        items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
         items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -704,6 +729,31 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         nodeConfigLabels.emplace_back("Timezone: " + std::string(tz));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::TIMEZONE));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+#if defined(ARCH_ESP32)
+    case NODE_CONFIG_POWER: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
+        const char *psLabel = config.power.is_power_saving ? "Powersave Mode: On" : "Powersave Mode: Off";
+
+        items.push_back(MenuItem(psLabel, MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+#endif
+
+    case NODE_CONFIG_BLUETOOTH: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
+        const char *btLabel = config.bluetooth.enabled ? "Bluetooth: On" : "Bluetooth: Off";
+        items.push_back(MenuItem(btLabel, MenuAction::TOGGLE_BLUETOOTH, MenuPage::EXIT));
+
+        const char *pairLabel = config.bluetooth.fixed_pin ? "Pair Mode: Fixed" : "Pair Mode: Random";
+        items.push_back(MenuItem(pairLabel, MenuAction::TOGGLE_BLUETOOTH_PAIR_MODE, MenuPage::EXIT));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -806,7 +856,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Short Fast", MenuAction::SET_PRESET_SHORT_FAST, MenuPage::EXIT));
         items.push_back(MenuItem("Short Turbo", MenuAction::SET_PRESET_SHORT_TURBO, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-        break; // explicit: do NOT fall through to EXIT
+        break;
     }
 
     case EXIT:

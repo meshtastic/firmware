@@ -96,6 +96,11 @@ enum MenuAction {
     SET_TZ_AU_ACST,
     SET_TZ_AU_AEST,
     SET_TZ_PACIFIC_NZ,
+    // Power
+    TOGGLE_POWER_SAVE,
+    // Bluetooth
+    TOGGLE_BLUETOOTH,
+    TOGGLE_BLUETOOTH_PAIR_MODE,
 };
 
 } // namespace NicheGraphics::InkHUD
