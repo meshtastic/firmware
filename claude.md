@@ -1,10 +1,10 @@
 # USB Capture Module - Project Context
 
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
-**Platform:** XIAO RP2350-SX1262 + Heltec V4 (receiver)
-**Version:** v7.6 - Randomized TX Interval (Traffic Analysis Resistance)
-**Status:** ✅ Production Ready with Randomized Timing
-**Last Updated:** 2025-12-14
+**Platform:** XIAO RP2350-SX1262 + Heltec V4 (receiver) + iOS App
+**Version:** v7.8.2 - FIFO Recovery Fix for Multicore Flash Operations
+**Status:** ✅ Production Ready with iOS Native App
+**Last Updated:** 2025-12-15
 
 ---
 
@@ -27,6 +27,27 @@
 - ✅ **Command Auth:** Optional auth token for sensitive commands (v7.4)
 - ✅ **Capacity Alerts:** Threshold-based FRAM usage warnings (v7.4)
 - ⚠️ **Commands:** Must be sent on port 490 (not text messages) - use Heltec canned messages
+- ✅ **iOS Command Center:** Native SwiftUI app for remote control (v7.8)
+- ✅ **Command Response Fix:** KeylogReceiver passes text responses to iOS (v7.8.1)
+- ✅ **FIFO Recovery Fix:** Core1 responds to SDK lockout during pause (v7.8.2)
+- ✅ **14 Remote Commands:** STATUS, STATS, START/STOP, FRAM mgmt, TX control, diagnostics
+
+### Key Achievement v7.8.2: FIFO Recovery Fix (Current)
+**Fixed multicore flash freeze by implementing FIFO lockout protocol in Core1 pause handler:**
+- **Problem:** Core1 pause loop didn't respond to SDK `flash_safe_execute()` FIFO messages
+- **Symptom:** "FIFO Recovery: TIMEOUT" warnings, potential SDK lockout state accumulation
+- **Solution:** Core1 now checks FIFO during pause and responds to `LOCKOUT_MAGIC_START/END`
+- **Result:** Proper SDK lockout acknowledgment, prevents flash operation freeze
+- **Files:** `src/platform/rp2xx0/usb_capture/usb_capture_main.cpp` (lines 38-40, 264-303)
+
+### Key Achievement v7.8.1: iOS Command Center with Response Fix
+**Native iOS app for remote control with KeylogReceiver fix for command responses:**
+- **iOS Integration:** CommandCenterView in Meshtastic-Apple app (Settings → Command Center)
+- **14 Remote Commands:** STATUS, STATS, START, STOP, FRAM (CLEAR/STATS/COMPACT), TX control, diagnostics
+- **Beautiful UI:** Color-coded response badges, 4 sections, iOS Settings style
+- **Response Fix:** KeylogReceiverModule now detects text responses and passes to iOS (v7.8.1)
+- **Communication:** iOS → TCP → Heltec → Mesh → XIAO → Response → Heltec → TCP → iOS
+- **Files:** AccessoryManager+USBCapture.swift, CommandCenterView.swift, Notifications+USBCapture.swift
 
 ### Key Achievement v7.6: Randomized TX Interval
 **Traffic analysis resistance through unpredictable transmission timing:**
@@ -368,9 +389,127 @@ Final Time: 1765155836 seconds
 | 7.3 | 2025-12-14 | Port 490 module registration - ACK reception fix | Validated |
 | 7.4 | 2025-12-14 | Enhanced Monitoring & Security (Core1 health, auth, protocol version, capacity alerts) | Validated |
 | 7.5 | 2025-12-14 | Broadcast ACK + RTC batch IDs + Multi-XIAO support | Validated |
-| **7.6** | **2025-12-14** | **Randomized TX interval (40s-4min) for traffic analysis resistance** | **Current** ✅ |
+| 7.6 | 2025-12-14 | Randomized TX interval (40s-4min) for traffic analysis resistance | Validated |
+| 7.7 | 2025-12-14 | Web UI for keylog management (superseded by iOS app) | Superseded |
+| 7.8 | 2025-12-15 | iOS Command Center with 14 remote commands | Validated |
+| 7.8.1 | 2025-12-15 | Command response fix - KeylogReceiver passes text to iOS | Validated |
+| **7.8.2** | **2025-12-15** | **FIFO recovery fix - Core1 responds to SDK lockout during pause** | **Current** ✅ |
 
-### v7.6 - Randomized TX Interval (Current)
+### v7.8.2 - FIFO Recovery Fix (Current)
+
+**Fix:** Core1 pause handler now responds to SDK lockout protocol via FIFO
+
+**Problem Solved:**
+- Core1 pause loop only checked `g_core1_pause_requested` flag, ignored FIFO messages
+- SDK's `flash_safe_execute()` sends `LOCKOUT_MAGIC_START/END` via FIFO to coordinate Core1 pause
+- When Core1 didn't respond, FIFO recovery timeout occurred: "TIMEOUT - No acknowledgment from Core1"
+- SDK lockout state could accumulate, potentially causing flash freeze on repeated operations
+
+**Solution Implemented:**
+```cpp
+// Added SDK lockout magic constants (lines 38-40)
+#define LOCKOUT_MAGIC_START 0x73a8831eu
+#define LOCKOUT_MAGIC_END (~LOCKOUT_MAGIC_START)
+
+// Enhanced pause loop to check FIFO (lines 264-303)
+while (g_core1_pause_requested) {
+    if (multicore_fifo_rvalid()) {
+        uint32_t cmd = multicore_fifo_pop_blocking();
+
+        if (cmd == LOCKOUT_MAGIC_START) {
+            // Full SDK lockout handshake
+            multicore_fifo_push_blocking(LOCKOUT_MAGIC_START);
+            // Wait for LOCKOUT_MAGIC_END and acknowledge
+        }
+        else if (cmd == LOCKOUT_MAGIC_END) {
+            // FIFO recovery - immediate acknowledgment
+            multicore_fifo_push_blocking(LOCKOUT_MAGIC_END);
+        }
+    }
+    tight_loop_contents();
+}
+```
+
+**Result:**
+- ✅ Core1 properly responds to SDK lockout protocol during pause
+- ✅ FIFO recovery succeeds: "SUCCESS - Core1 acknowledged unlock"
+- ✅ No SDK lockout state accumulation
+- ✅ Prevents multicore flash freeze on node database updates
+- ✅ Build: Flash 58.5%, RAM 24.4% (no increase from v7.8.1)
+
+**Files Modified:**
+- `src/platform/rp2xx0/usb_capture/usb_capture_main.cpp` - FIFO protocol implementation
+
+### v7.8.1 - Command Response Fix
+
+**Fix:** KeylogReceiverModule now passes command responses to iOS app
+
+**Problem Solved:**
+- KeylogReceiverModule was intercepting ALL port 490 broadcasts with `ProcessMessage::STOP`
+- Keystroke batches (binary): Correctly processed and stored
+- ACKs (`ACK:0x...`): Correctly passed through with `CONTINUE`
+- Command responses (text): **Incorrectly stopped** - prevented iOS from receiving
+
+**Solution (KeylogReceiverModule.cpp lines 127-149):**
+```cpp
+// Detect text responses (printable ASCII, no protocol magic marker)
+if (mightBeText && !hasProtocolMagic) {
+    LOG_INFO("[KeylogReceiver] Command response detected, passing through to iOS");
+    return ProcessMessage::CONTINUE;  // Forward to iOS via TCP
+}
+```
+
+**Result:**
+- ✅ Binary batches → Processed and stored
+- ✅ Command responses → Forwarded to iOS
+- ✅ ACKs → Forwarded (unchanged)
+
+### v7.8 - iOS Command Center
+
+**Native SwiftUI Command Center with 14 remote commands:**
+
+**Firmware Additions (USBCaptureModule):**
+- 8 new command enums: FRAM_CLEAR, FRAM_STATS, FRAM_COMPACT, SET_INTERVAL, SET_TARGET, FORCE_TX, RESTART_CORE1, CORE1_HEALTH
+- Updated `parseCommand()` to recognize new commands (USBCaptureModule.cpp lines 1440-1457)
+- Implemented command handlers in `executeCommand()` (lines 1553-1676)
+- Broadcast responses on Channel 1, Port 490
+
+**iOS App Integration (Meshtastic-Apple):**
+
+1. **AccessoryManager+USBCapture.swift** (217 lines)
+   - Main function: `sendUSBCaptureCommand(command:parameters:toNode:authToken:)`
+   - 14 convenience functions (sendStatus, sendStart, sendStop, etc.)
+   - Creates MeshPacket with Channel 1, Port 490
+   - Posts notification: `.usbCaptureResponseReceived`
+
+2. **CommandCenterView.swift** (710 lines)
+   - 4 sections: Response Panel, Device, Quick Actions, Advanced
+   - Color-coded response badges (✅ Success, ❌ Error, ⏳ Pending, 💬 Info)
+   - iOS Settings style UI with DisclosureGroups
+   - 10-second timeout detection
+   - JSON auto-formatting
+   - Loading overlay with spinner
+
+3. **Notifications+USBCapture.swift** (15 lines)
+   - Defines: `Foundation.Notification.Name.usbCaptureResponseReceived`
+
+4. **Navigation Integration**
+   - Settings.swift (lines 351-357): NavigationLink to Command Center
+   - Accessible via Settings → Command Center (second menu item)
+
+**Communication Flow:**
+```
+iOS → TCP (4403) → Heltec → Mesh (Ch1, Port 490) → XIAO
+XIAO executes → Broadcasts response → Heltec → TCP → iOS
+```
+
+**Files Modified:**
+- `src/modules/USBCaptureModule.cpp/h` - Command parsing and execution
+- `Meshtastic-Apple/` - 3 new Swift files, 2 modified for integration
+
+**Build:** Flash 58.5%, RAM 24.4% (XIAO), Flash 31.2%, RAM 4.8% (Heltec)
+
+### v7.6 - Randomized TX Interval
 
 **Traffic analysis resistance through unpredictable timing:**
 
@@ -762,9 +901,9 @@ Slots[8]: 512 bytes each
 
 ### 🔵 Future Enhancements
 10. [ ] **Function Keys** - F1-F12, arrows, Page Up/Down, Home/End
-11. [ ] **Web UI** - View keylogs from Heltec V4 flash storage
 
 ### ✅ Completed
+- [x] **Web UI** - Browse/download/delete keylogs via HTTP at /keylogs.html (v7.7)
 - [x] **Core1 Health Monitoring** - Real-time health metrics with stall detection (v7.4)
 - [x] **Protocol Versioning** - Magic marker header for backwards compatibility (v7.4)
 - [x] **Command Authentication** - Optional AUTH:<token>:<command> for sensitive commands (v7.4)
@@ -993,4 +1132,4 @@ If direct messages fail with "PKC decrypt failed":
 
 ---
 
-*Last Updated: 2025-12-14 | Version 7.6 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI), v7.0 (Mesh Broadcast), v7.1 (Deduplication), v7.3 (ACK Reception), v7.6 (Randomized TX)*
+*Last Updated: 2025-12-15 | Version 7.8.2 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI), v7.0 (Mesh Broadcast), v7.1 (Deduplication), v7.3 (ACK Reception), v7.6 (Randomized TX), v7.8 (iOS App), v7.8.2 (FIFO Fix)*
