@@ -339,12 +339,12 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                 }
             }
 
-            /* If buffer is full, finalize and retry */
+            /* If buffer is full, retry in fresh buffer (emergency finalize already called) */
             if (!added)
             {
-                core1_finalize_buffer();
+                /* v7.11: add functions now finalize on overflow, so don't finalize again here */
 
-                /* Retry adding to new buffer */
+                /* Retry adding to new buffer (will auto-init on first add) */
                 if (keycode == HID_SCANCODE_ENTER)
                     core1_add_enter_to_buffer();
                 else if (keycode == HID_SCANCODE_BACKSPACE)
@@ -492,13 +492,9 @@ static bool core1_add_to_buffer(char c)
 
         /* Emergency finalization to prevent data loss */
         core1_finalize_buffer();
-        core1_init_keystroke_buffer();
 
-        /* Retry adding character to fresh buffer */
-        if (core1_get_buffer_space() < 1)
-        {
-            return false;  // Still no space (shouldn't happen)
-        }
+        /* Let next keystroke initialize fresh buffer - don't contaminate with current char */
+        return false;  // Signal buffer was full, caller will retry
     }
 
     g_core1_keystroke_buffer[g_core1_buffer_write_pos++] = c;
@@ -535,10 +531,9 @@ static bool core1_add_enter_to_buffer()
 
         /* Emergency finalization to prevent data loss */
         core1_finalize_buffer();
-        core1_init_keystroke_buffer();
 
-        /* Retry with fresh buffer */
-        delta = 0;
+        /* Let next keystroke initialize fresh buffer - don't contaminate with Enter */
+        return false;  // Signal buffer was full, caller will retry
     }
 
     /* Write marker byte followed by delta */
