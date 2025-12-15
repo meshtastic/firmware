@@ -17,7 +17,8 @@
 #include "common.h"
 #include "keystroke_queue.h"
 #include "formatted_event_queue.h"  /* For API compatibility (formatted_queue_t parameter) */
-#include "psram_buffer.h"
+#include "psram_buffer.h"           /* Still needed for psram_keystroke_buffer_t struct */
+#include "MinimalBatchBuffer.h"     /* v7.0: Minimal 2-slot RAM fallback */
 #include "pico/time.h"  /* For time_us_64() */
 #include "gps/RTC.h"    /* For getValidTime(), getRTCQuality() - v4.0 RTC integration */
 #include <string.h>
@@ -81,6 +82,14 @@ static keyboard_state_t g_keyboard_state_core1;
 static keystroke_queue_t *g_keystroke_queue = NULL;
 
 /* ============================================================================
+ * CORE1 HEALTH MONITORING (REQ-OPS-001)
+ * ============================================================================
+ * Global health metrics updated by Core1, read by Core0 for STATS command.
+ * Defined here because Core1 owns the updates.
+ */
+core1_health_metrics_t g_core1_health = {0, 0, 0, 0, CORE1_STATUS_OK, 0, {0, 0}};
+
+/* ============================================================================
  * CORE1 KEYSTROKE BUFFER MANAGEMENT
  * ============================================================================
  * Core1 now owns the keystroke buffer and all buffer operations.
@@ -104,8 +113,10 @@ static keystroke_queue_t *g_keystroke_queue = NULL;
  *  - Core0: 90% reduction (removed all buffer management)
  */
 
-/* Buffer constants (from USBCaptureModule) */
-#define KEYSTROKE_BUFFER_SIZE 500
+/* Buffer constants - sized to fit single LoRa packet (237 bytes max)
+ * v7.2: Reduced from 500 to 200 to avoid fragmentation
+ * Data area: 200 - 10 - 10 = 180 bytes → ~230 bytes decoded */
+#define KEYSTROKE_BUFFER_SIZE 200
 #define EPOCH_SIZE 10
 #define KEYSTROKE_DATA_START EPOCH_SIZE
 #define KEYSTROKE_DATA_END (KEYSTROKE_BUFFER_SIZE - EPOCH_SIZE)
@@ -214,8 +225,15 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
     /* Validate minimum size for a keyboard report */
     if (size < 10)
     {
+        /* REQ-OPS-001: Track validation errors */
+        __dmb();
+        g_core1_health.error_count++;
+        __dmb();
         return;
     }
+
+    /* REQ-OPS-001: Mark USB as connected (we received a valid-sized report) */
+    g_core1_health.usb_connected = 1;
 
     /* === Enhanced: Capture 64-bit absolute timestamp === */
     uint64_t capture_timestamp_us = time_us_64();
@@ -340,6 +358,13 @@ void keyboard_decoder_core1_process_report(uint8_t *data, int size, uint32_t tim
                         core1_add_to_buffer(ch);
                 }
             }
+
+            /* REQ-OPS-001: Update health metrics on successful keystroke capture */
+            __dmb();
+            g_core1_health.last_capture_time_ms = (uint32_t)(millis());
+            g_core1_health.capture_count++;
+            g_core1_health.status = CORE1_STATUS_OK;
+            __dmb();
         }
     }
 
@@ -530,6 +555,11 @@ static void core1_finalize_buffer()
     if (!g_core1_buffer_initialized)
         return;
 
+    /* REQ-OPS-001: Track buffer finalization count for health monitoring */
+    __dmb();
+    g_core1_health.buffer_finalize_count++;
+    __dmb();
+
     /* Write final epoch at position 490 */
     core1_write_epoch_at(KEYSTROKE_DATA_END);
 
@@ -594,13 +624,27 @@ static void core1_finalize_buffer()
     } else
 #endif
     {
-        /* Fallback to RAM buffer (PSRAM) */
-        write_success = psram_buffer_write(&psram_buf);
+        /* Fallback to MinimalBatchBuffer (v7.0) - 2-slot RAM buffer
+         * Convert psram_keystroke_buffer_t to FRAM batch format for MinimalBatchBuffer
+         * Batch format: [start_epoch:4][final_epoch:4][data_length:2][flags:2][data:N] */
+        uint8_t minimal_batch[MINIMAL_BUFFER_DATA_SIZE];
+        size_t batch_size = 12 + psram_buf.data_length;
+
+        if (batch_size <= MINIMAL_BUFFER_DATA_SIZE) {
+            /* Pack header fields (little-endian for RP2350 native format) */
+            memcpy(&minimal_batch[0], &psram_buf.start_epoch, 4);
+            memcpy(&minimal_batch[4], &psram_buf.final_epoch, 4);
+            memcpy(&minimal_batch[8], &psram_buf.data_length, 2);
+            memcpy(&minimal_batch[10], &psram_buf.flags, 2);
+            memcpy(&minimal_batch[12], psram_buf.data, psram_buf.data_length);
+
+            write_success = minimal_buffer_write(minimal_batch, (uint16_t)batch_size, 0);
+        }
+
         if (!write_success)
         {
-            /* PSRAM buffer full - Core0 slow to transmit
-             * Track failure in statistics (dropped_buffers already incremented by psram_buffer_write)
-             * Core0 will see the dropped_buffers counter and can log warnings */
+            /* MinimalBatchBuffer full (2 slots) - Core0 slow to transmit
+             * Track failure in statistics for logging */
             __dmb();
             g_psram_buffer.header.psram_write_failures++;
             __dmb();

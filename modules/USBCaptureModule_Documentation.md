@@ -1,35 +1,46 @@
 # USB Capture Module - Technical Documentation
 
-**Version:** 5.0 (FRAM Non-Volatile Storage)
-**Platform:** RP2350 (XIAO RP2350-SX1262)
-**Status:** Production Ready - Hardware Validated
-**Last Updated:** 2025-12-13
+**Version:** 7.6 (Randomized TX Interval)
+**Platform:** RP2350 (XIAO RP2350-SX1262) + Heltec V4 (Receiver)
+**Status:** Production Ready - End-to-End with ACK
+**Last Updated:** 2025-12-14
 
 ---
 
 ## Quick Reference
 
 ### Current Status
+- ✅ **End-to-End System:** XIAO captures → FRAM stores → LoRa broadcasts → Mesh → Heltec receives → ACK confirms → FRAM cleared
 - ✅ **Core Architecture:** Dual-core with 90% Core0 overhead reduction (2% → 0.2%)
-- ✅ **Features Active:** USB capture, FRAM storage, LoRa transmission, RTC timestamps
-- ✅ **Storage:** 256KB FRAM non-volatile (Fujitsu MB85RS2MTA) - 62x capacity increase
-- ✅ **Transmission:** Active with 3-attempt retry, 6-second rate limiting
+- ✅ **Storage:** 256KB FRAM non-volatile (primary) + MinimalBatchBuffer 2-slot fallback
+- ✅ **Reliable Transmission:** ACK-based broadcast protocol with mesh routing
+- ✅ **ACK Reception (v7.3):** Module properly registered for port 490 to receive ACKs
+- ✅ **Channel Encryption:** Channel 1 "takeover" with PSK (mesh-wide broadcast)
+- ✅ **Port:** 490 (custom private port) - Module registered for this port
+- ✅ **TX Interval:** Randomized 40s-4min for traffic analysis resistance (v7.6)
+- ✅ **Receiver Module:** KeylogReceiverModule on Heltec V4 with flash storage
+- ✅ **Deduplication (v7.1):** Flash-persistent per-node batch tracking (16 nodes × 16 batches)
 - ✅ **Time Sync:** Real unix epoch from mesh-synced GPS nodes (RTCQualityFromNet)
-- ✅ **Modifiers:** Full support (Ctrl, Alt, GUI, Shift)
-- ✅ **Build:** Flash 58.3%, RAM 24.7% - Production ready
+- ✅ **Build:** Flash 58.5%, RAM 24.4% - Production ready
+- ⚠️ **Commands:** Must be sent on port 490 (not text messages)
 
 ### Key Features
 - **PIO-Based Capture:** Hardware-accelerated USB signal processing
 - **Dual-Core Architecture:** Core1 = complete processing, Core0 = transmission only
 - **FRAM Storage (v5.0):** 256KB non-volatile, 10^13 endurance, survives power loss
-- **RAM Buffer Fallback:** 8-slot buffer (4KB) when FRAM unavailable
+- **ACK-Based Delivery (v6.0→v7.0):** Reliable broadcast transmission with mesh routing
+- **KeylogReceiverModule (v6.0):** Heltec V4 base station with flash storage
+- **Mesh Broadcast (v7.0):** Channel 1 PSK encryption, any node can receive
+- **MinimalBatchBuffer (v7.0):** NASA-compliant 2-slot RAM fallback (replaced 8-slot PSRAM)
+- **Deduplication (v7.1):** Flash-persistent per-node batch tracking with LRU eviction
+- **Randomized Interval (v7.6):** 40s-4min random for traffic analysis resistance
+- **Port 490 (v7.0):** Custom private port in 256-511 range
+- **Canned Messages (v7.0):** STATUS/STATS commands via Heltec V4 LCD
+- **Simulation Mode (v6.0):** Test without USB keyboard using build flag
 - **Lock-Free Communication:** Memory barriers for ARM Cortex-M33 cache coherency
-- **LoRa Mesh Transmission:** Auto-transmits with retry logic and rate limiting
 - **RTC Integration:** Three-tier fallback (RTC → BUILD_EPOCH → uptime)
-- **Text Decoding:** Binary buffers decoded to human-readable text
-- **Remote Control:** STATUS, START, STOP, STATS commands via mesh
 - **Delta-Encoded Timestamps:** 70% space savings on Enter keys
-- **Comprehensive Statistics:** Tracks failures (TX, overflow, storage, retries)
+- **Comprehensive Statistics:** Tracks failures (TX, overflow, storage, retries, duplicates)
 
 ### Hardware Requirements
 - **GPIO Pins:** 16/17/18 (D+, D-, START) - **MUST be consecutive**
@@ -41,17 +52,116 @@
 
 ## Table of Contents
 
-1. [Architecture](#architecture)
-2. [FRAM Storage](#fram-storage)
-3. [Hardware Configuration](#hardware-configuration)
-4. [Software Components](#software-components)
-5. [Data Flow](#data-flow)
-6. [API Reference](#api-reference)
-7. [Configuration](#configuration)
-8. [Performance & Metrics](#performance--metrics)
-9. [Troubleshooting](#troubleshooting)
-10. [Data Structures](#data-structures)
-11. [Version History](#version-history)
+1. [End-to-End System](#end-to-end-system)
+2. [Architecture](#architecture)
+3. [ACK-Based Transmission Protocol](#ack-based-transmission-protocol)
+4. [KeylogReceiverModule](#keylogreceivermodule)
+5. [FRAM Storage](#fram-storage)
+6. [Hardware Configuration](#hardware-configuration)
+7. [Software Components](#software-components)
+8. [Data Flow](#data-flow)
+9. [API Reference](#api-reference)
+10. [Configuration](#configuration)
+11. [Performance & Metrics](#performance--metrics)
+12. [Troubleshooting](#troubleshooting)
+13. [Data Structures](#data-structures)
+14. [Version History](#version-history)
+
+---
+
+## End-to-End System
+
+### System Overview (v7.0)
+
+The USB Capture system uses mesh broadcast with channel-based encryption:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         USB CAPTURE SYSTEM v7.0                             │
+├─────────────────────────────────────┬───────────────────────────────────────┤
+│      XIAO RP2350-SX1262 (Sender)    │      Heltec V4 (Receiver)             │
+│                                     │                                       │
+│  ┌─────────────────────────────┐    │    ┌─────────────────────────────┐    │
+│  │ USB Keyboard → PIO Capture  │    │    │ KeylogReceiverModule        │    │
+│  │      ↓                      │    │    │  - Receives broadcast       │    │
+│  │ HID Decode → Delta Encode   │    │    │  - Extracts batch_id        │    │
+│  │      ↓                      │    │    │  - Stores to flash          │    │
+│  │ FRAM Storage (256KB)        │    │    │  - Sends ACK broadcast      │    │
+│  │      ↓                      │    │    └──────────────┬──────────────┘    │
+│  │ USBCaptureModule            │    │                   │                   │
+│  │  - Read batch from FRAM     │─Broadcast (ch1)───────>│                   │
+│  │  - Generate batch_id        │   Port 490             │                   │
+│  │  - Broadcast to mesh        │<─ACK Broadcast─────────┤                   │
+│  │  - Wait for ACK (5 min)     │    │    ┌──────────────┴──────────────┐    │
+│  │  - Delete on ACK or retry   │    │    │ Flash Storage               │    │
+│  └─────────────────────────────┘    │    │ /keylogs/<node_id>/         │    │
+│                                     │    │   batch_<timestamp>.txt     │    │
+└─────────────────────────────────────┴────└─────────────────────────────┘────┘
+```
+
+### v7.0 Key Changes from v6.0
+
+| Aspect | v6.0 | v7.0 |
+|--------|------|------|
+| **Port** | 256 (PRIVATE_APP) | 490 (custom private) |
+| **Channel** | 0 (primary) + PKI | 1 "takeover" + PSK |
+| **Transmission** | Direct to targetNode | Broadcast to mesh |
+| **TX Interval** | 6 seconds | Random 40s-4min (v7.6) |
+| **RAM Fallback** | PSRAM 8-slot (4KB) | MinimalBatchBuffer 2-slot (1KB) |
+| **Encryption** | PKI (X25519) | Channel PSK |
+
+### Communication Flow
+
+1. **Capture:** XIAO captures keystrokes via PIO hardware
+2. **Storage:** Batches stored in FRAM (non-volatile, survives power loss)
+3. **Transmission:** USBCaptureModule sends batch as PKI-encrypted direct message
+4. **Reception:** KeylogReceiverModule receives and validates
+5. **Storage:** Receiver stores to flash filesystem
+6. **ACK:** Receiver sends acknowledgment back to sender
+7. **Cleanup:** Sender deletes batch from FRAM on ACK receipt
+
+### Channel PSK Encryption (v7.0)
+
+All keylog transmissions use channel-based PSK encryption:
+
+- **Channel:** Index 1 with name "takeover"
+- **Encryption:** AES256 with shared PSK (Pre-Shared Key)
+- **Privacy:** All nodes with matching channel PSK can decrypt
+- **Advantage:** No PKI key exchange needed, works immediately
+
+**Channel Configuration:**
+```bash
+# On XIAO RP2350 (sender):
+meshtastic --ch-set name "takeover" --ch-index 1
+meshtastic --ch-set psk random --ch-index 1
+meshtastic --ch-index 1 --info  # Note the PSK
+
+# On Heltec V4 (receiver):
+meshtastic --ch-set name "takeover" --ch-index 1
+meshtastic --ch-set psk base64:<SAME-PSK-FROM-XIAO> --ch-index 1
+```
+
+**Verification:**
+```bash
+# Both devices should show same channel config:
+meshtastic --ch-index 1 --info
+# Verify: name="takeover", PSK matches
+```
+
+### Simulation Mode
+
+For testing without a physical USB keyboard:
+
+```bash
+# Build with simulation enabled
+pio run -e xiao-rp2350-sx1262 -D USB_CAPTURE_SIMULATE_KEYS
+```
+
+Simulation generates fake keystrokes every 5 seconds, allowing testing of:
+- FRAM write/read operations
+- LoRa transmission
+- ACK reception
+- End-to-end data flow
 
 ---
 
@@ -110,6 +220,19 @@ Storage: Volatile, 8 slots        Storage: Non-volatile, 500+ batches
 Power Loss: Data lost             Power Loss: Data preserved
 ```
 
+**v6.0 Change:** ACK-based reliable transmission with Heltec V4 receiver.
+
+```
+BEFORE (v5.0):                    AFTER (v6.0):
+XIAO: Broadcast → Mesh            XIAO: PKI DM → Heltec V4
+No confirmation                   Wait for ACK → Retry on failure
+Delete after send                 Delete only on ACK receipt
+Lossy delivery                    Reliable delivery
+
+Sender only                       Sender + Receiver (KeylogReceiverModule)
+No encryption                     PKI encryption (X25519 + ChaCha20)
+```
+
 ### RTC Integration (v4.0)
 
 **Three-Tier Time Fallback System:**
@@ -134,6 +257,240 @@ Priority 3: Uptime only
 | 0 | None | BUILD_EPOCH + uptime | ±build time | Standalone device |
 
 **Implementation:** `core1_get_current_epoch()` function in `keyboard_decoder_core1.cpp`
+
+---
+
+## ACK-Based Transmission Protocol
+
+### Overview (v7.0)
+
+The ACK-based protocol ensures reliable delivery of keystroke batches via mesh broadcast.
+
+### Protocol Details
+
+**Message Format:**
+```
+Sender → Mesh Broadcast (port 490, channel 1):
+┌──────────────┬─────────────────────────────┐
+│ batch_id (4B)│ decoded_text (variable)     │
+└──────────────┴─────────────────────────────┘
+
+Receiver → Mesh Broadcast (ACK response, port 490, channel 1):
+┌─────────────────────────────┐
+│ "ACK:0x" + 8 hex digits     │  (e.g., "ACK:0x12345678")
+└─────────────────────────────┘
+```
+
+**v7.0 Broadcast Model:**
+- Sender broadcasts to `NODENUM_BROADCAST` on channel 1
+- Any node with matching PSK can receive
+- First ACK received triggers batch deletion
+- Multi-hop mesh routing enabled automatically
+
+**Batch ID Generation:**
+- 32-bit unique identifier per batch
+- Generated from: `(millis() << 16) | (batch_count & 0xFFFF)`
+- Ensures uniqueness across sessions
+
+### State Machine
+
+```
+┌──────────────────┐
+│  IDLE            │
+│  (no pending)    │
+└────────┬─────────┘
+         │ FRAM has batch
+         ▼
+┌──────────────────┐
+│  SENDING         │───────────────────────┐
+│  (broadcast)     │                       │
+└────────┬─────────┘                       │
+         │ sent ok                         │ send failed
+         ▼                                 │
+┌──────────────────┐                       │
+│  WAITING_ACK     │◄──────────────────────┘
+│  (timeout 30s)   │
+└────────┬─────────┘
+         │                    │
+    ACK received         timeout (no ACK)
+         │                    │
+         ▼                    ▼
+┌──────────────────┐  ┌──────────────────┐
+│  DELETE_BATCH    │  │  RETRY           │
+│  (FRAM cleanup)  │  │  (backoff wait)  │
+└────────┬─────────┘  └────────┬─────────┘
+         │                     │
+         └──────────┬──────────┘
+                    ▼
+            Back to IDLE
+```
+
+### Retry Strategy
+
+**Exponential Backoff:**
+```
+Attempt 1: Wait 30 seconds
+Attempt 2: Wait 60 seconds
+Attempt 3: Wait 120 seconds
+After 3 failures: Reset and retry next cycle (20 seconds)
+```
+
+**Key Behaviors:**
+- Batches are NEVER deleted on transmission failure
+- FRAM persists batches across power cycles
+- Eventually consistent delivery (may take multiple sessions)
+- No data loss even with prolonged network outages
+
+### Configuration
+
+```cpp
+// In USBCaptureModule.cpp:
+static constexpr uint32_t ACK_TIMEOUT_MS = 30000;      // 30 second ACK timeout
+static constexpr uint32_t RETRY_INTERVAL_MS = 20000;   // 20 second retry cycle
+static constexpr uint8_t MAX_RETRY_ATTEMPTS = 3;       // Max retries before reset
+```
+
+---
+
+## KeylogReceiverModule
+
+### Overview (v7.1)
+
+KeylogReceiverModule runs on a Heltec V4 (or any ESP32 Meshtastic device) to receive, store, and acknowledge keystroke batches. Version 7.1 adds flash-persistent deduplication to prevent storing duplicate batches when ACKs are lost in the mesh.
+
+### Features
+
+- **Mesh Broadcast Reception:** Receives channel 1 PSK-encrypted broadcasts on port 490
+- **Batch Validation:** Extracts and validates batch_id from payload
+- **Deduplication (v7.1):** Flash-persistent per-node batch tracking prevents duplicate storage
+- **Flash Storage:** Persists batches to `/keylogs/<sender_node_id>/` directory
+- **ACK Response:** Sends direct message ACK back to confirm receipt (even for duplicates)
+- **Multi-Sender Support:** Organizes storage by sender node ID with LRU eviction (16 nodes max)
+
+### File Storage Structure
+
+```
+/littlefs/
+└── keylogs/
+    ├── .dedup_cache                 (v7.1 - deduplication state, ~1.2KB)
+    └── <sender_node_id>/           (e.g., "12345678")
+        ├── batch_1702345678.txt    (timestamp-named files)
+        ├── batch_1702345890.txt
+        └── ...
+```
+
+### Deduplication System (v7.1)
+
+Prevents duplicate storage when ACKs are lost and sender retransmits.
+
+**Problem:**
+```
+Sender transmits batch 0x12345678 → Receiver stores → ACK lost in mesh
+Sender retransmits batch 0x12345678 → Without dedup: DUPLICATE stored!
+```
+
+**Solution:** Per-node batch ID tracking with LRU eviction
+
+```cpp
+// Data structures in KeylogReceiverModule.h
+#define DEDUP_MAX_NODES        16    // Max sender nodes tracked (LRU eviction)
+#define DEDUP_BATCHES_PER_NODE 16    // Recent batches per node (circular buffer)
+#define DEDUP_CACHE_FILE       "/keylogs/.dedup_cache"
+#define DEDUP_CACHE_MAGIC      0xDEDC
+#define DEDUP_SAVE_INTERVAL_MS 30000 // Debounce flash writes
+
+struct DedupNodeEntry {           // 76 bytes per node
+    NodeNum nodeId;               // 0 = empty slot
+    uint32_t lastAccessTime;      // For LRU eviction
+    uint32_t recentBatchIds[16];  // Circular buffer
+    uint8_t nextIdx, count;       // Buffer management
+};
+
+// Total cache: 8 + (16 × 76) = 1,224 bytes
+```
+
+**Flow:**
+```
+handleReceived()
+    │
+    ▼
+isDuplicateBatch(nodeId, batchId)
+    │
+    ├─ [DUPLICATE] → Skip store → sendAck() → return
+    │
+    └─ [NEW] → storeKeystrokeBatch() → recordReceivedBatch()
+                                            │
+                                            ▼
+                                     saveDedupCacheIfNeeded() (30s debounce)
+                                            │
+                                            ▼
+                                     sendAck()
+```
+
+**Key Behaviors:**
+| Scenario | Behavior |
+|----------|----------|
+| New batch | Store → Record in cache → ACK |
+| Duplicate batch | Skip store → ACK (so sender clears FRAM) |
+| Cache full | LRU eviction (oldest accessed node removed) |
+| Device reboot | Cache loaded from `/keylogs/.dedup_cache` |
+| Flash write | Debounced to every 30 seconds |
+
+**NASA Power of 10 Compliance:**
+- Fixed loop bounds (16 nodes × 16 batches)
+- No dynamic allocation (static cache array)
+- All return values checked
+- Assertions verify assumptions
+
+### Module Configuration
+
+```cpp
+// In KeylogReceiverModule.h:
+#define KEYLOG_STORAGE_DIR "/keylogs"
+#define MAX_KEYLOG_FILES_PER_NODE 100  // Auto-cleanup oldest when exceeded
+```
+
+### Build Configuration
+
+The receiver module is enabled on Heltec V4 builds:
+
+```ini
+# platformio.ini (heltec-v4 environment)
+build_flags =
+    -D KEYLOG_RECEIVER_ENABLED=1
+```
+
+### API Reference
+
+#### KeylogReceiverModule::handleReceivedKeylog()
+```cpp
+void handleReceivedKeylog(const meshtastic_MeshPacket &mp);
+```
+Processes incoming keylog packets, extracts batch_id, stores to flash, sends ACK.
+
+#### KeylogReceiverModule::sendAck()
+```cpp
+bool sendAck(NodeNum dest, uint32_t batch_id);
+```
+Sends ACK response back to sender. Returns `true` on success.
+
+#### KeylogReceiverModule::storeKeylog()
+```cpp
+bool storeKeylog(NodeNum sender, uint32_t batch_id, const char *text, size_t len);
+```
+Writes keylog batch to flash storage. Returns `true` on success.
+
+### Viewing Stored Keylogs
+
+**Via Meshtastic CLI:**
+```bash
+# Connect to Heltec V4 via USB
+meshtastic --port /dev/ttyUSB0 --export-config
+
+# Use ESP32 filesystem tools or custom commands to access /keylogs/
+```
+
+**Future Enhancement:** Web UI for viewing keylogs (planned)
 
 ---
 
@@ -244,10 +601,61 @@ Returns bytes available for new batches.
 ### Boot Log Example
 
 ```
-[USBCapture] Initializing FRAM storage on SPI0, CS=GPIO1
-FRAM: Found valid storage with 0 batches
-[USBCapture] FRAM: Initialized (Mfr=0x04, Prod=0x4803)
-[USBCapture] FRAM: 0 batches pending, 262128 bytes free
+[USBCapture] Init: Starting (Core0)...
+[USBCapture] Init: Node=XIAO Role=CLIENT_HIDDEN
+[USBCapture] FRAM: Init SPI0 CS=GPIO1
+[USBCapture] FRAM: OK Mfr=0x04 Prod=0x4803
+[USBCapture] FRAM: 0 batches, 255KB free
+[USBCapture] Init: Complete (Core1 pending)
+[USBCapture] Init: Launching Core1...
+[USBCapture] Init: Core1 running
+```
+
+### Logging Conventions (v7.4)
+
+The module uses subsystem tags to organize log output and avoid double prefixes. The Meshtastic framework automatically adds `[USBCapture]` to all LOG_* calls.
+
+#### Subsystem Tags
+
+| Tag | Meaning | Example |
+|-----|---------|---------|
+| `Init:` | Initialization | Module startup, Core1 launch |
+| `FRAM:` | FRAM storage | Read/write/delete operations |
+| `Buf:` | Buffer (RAM) | MinimalBatchBuffer operations |
+| `Tx:` | Transmission | Sending data over mesh |
+| `ACK:` | Acknowledgment | ACK received/timeout/retry |
+| `Cmd:` | Command | Remote command handling |
+| `Sim:` | Simulation | Simulation mode messages |
+| `Stats:` | Statistics | Periodic stats output |
+
+#### Log Level Guidelines
+
+| Level | Usage |
+|-------|-------|
+| `LOG_INFO` | Key events: startup, transmission, ACK success |
+| `LOG_DEBUG` | Detailed content: buffer dumps, packet contents |
+| `LOG_WARN` | Recoverable issues: retry, timeout, mismatch |
+| `LOG_ERROR` | Failures: storage errors, transmission failures |
+
+#### Example Output (Normal Operation)
+
+```
+[USBCapture] Tx: Buffer 55 bytes (epoch 25→26)
+[USBCapture] Tx: Decoded 81 bytes
+[USBCapture] Tx: Batch 0x00000001 queued (timeout 60000ms)
+[USBCapture] Stats: FRAM 90 batches 249KB free | uptime 1690s
+[USBCapture] ACK: OK 0x00000001 (2500ms, 0 retries)
+[USBCapture] ACK: Deleted 0x00000001 from FRAM
+```
+
+#### Debug Output (with LOG_DEBUG enabled)
+
+```
+[USBCapture] === BUFFER START ===
+[USBCapture] Start Time: 25 (BUILD_EPOCH + uptime)
+[USBCapture] Line: Hello from XIAO simulation mode!
+[USBCapture] Enter [time=281 seconds, delta=+256]
+[USBCapture] === BUFFER END ===
 ```
 
 ### Fallback Behavior
@@ -307,7 +715,7 @@ FRAM Breakout (MB85RS2MTA):
 
 ## Software Components
 
-### File Structure (18 files, ~2600 lines)
+### File Structure (20 files, ~3000 lines)
 
 ```
 firmware/
@@ -315,8 +723,10 @@ firmware/
 │   ├── FRAMBatchStorage.cpp        (350 lines) - FRAM storage implementation [v5.0]
 │   ├── FRAMBatchStorage.h          (120 lines) - FRAM storage interface [v5.0]
 │   └── modules/
-│       ├── USBCaptureModule.cpp    (350 lines) - Meshtastic module integration
-│       └── USBCaptureModule.h      (100 lines) - Module interface
+│       ├── USBCaptureModule.cpp    (450 lines) - Sender module with ACK tracking [v6.0]
+│       ├── USBCaptureModule.h      (120 lines) - Sender module interface [v6.0]
+│       ├── KeylogReceiverModule.cpp(250 lines) - Receiver module implementation [v6.0]
+│       └── KeylogReceiverModule.h  (80 lines)  - Receiver module interface [v6.0]
 │
 └── src/platform/rp2xx0/usb_capture/
     ├── common.h                    (167 lines) - Common definitions, CORE1_RAM_FUNC macro
@@ -366,12 +776,13 @@ firmware/
 - Buffer management with delta-encoded timestamps
 - FRAM writes when available, RAM buffer fallback
 
-**5. RAM Ring Buffer (Fallback)** (`psram_buffer.cpp/h` - 256 lines)
-- 8-slot circular buffer (4KB capacity)
-- Lock-free producer/consumer with memory barriers
-- Statistics tracking (transmission failures, overflows, retries)
-- Thread-safe Core0↔Core1 communication
+**5. MinimalBatchBuffer (Fallback)** (`MinimalBatchBuffer.cpp/h` - 200 lines) [v7.0]
+- NASA Power of 10 compliant 2-slot buffer (~1KB)
+- Static allocation only (no dynamic memory)
+- 2+ assertions per function
+- Memory barriers for ARM Cortex-M33
 - Used when FRAM unavailable
+- Replaced 8-slot PSRAM buffer (4KB) for simpler fallback
 
 **6. Queue Layer** (`keystroke_queue.cpp/h` - 246 lines)
 - Lock-free circular buffer (64 events)
@@ -385,12 +796,22 @@ firmware/
 - Clock divider calculation
 - Speed-specific program patching
 
-**8. Module Integration** (`USBCaptureModule.cpp/h` - 450 lines)
+**8. Sender Module** (`USBCaptureModule.cpp/h` - 600 lines) [v7.0]
 - Meshtastic lifecycle management
-- FRAM/RAM polling with automatic fallback
-- Text decoding and LoRa mesh transmission with retry
-- FRAM batch deletion after successful transmission
-- Remote command handling (STATUS, START, STOP, STATS)
+- FRAM/MinimalBatchBuffer polling with automatic fallback
+- Mesh broadcast transmission (port 490, channel 1)
+- ACK tracking with randomized 40s-4min intervals (v7.6)
+- FRAM batch deletion only on ACK receipt
+- Remote command handling (STATUS, START, STOP, STATS, DUMP)
+- Simulation mode for testing without USB keyboard
+
+**9. Receiver Module** (`KeylogReceiverModule.cpp/h` - 350 lines) [v7.0]
+- Runs on Heltec V4 (or any ESP32 Meshtastic device)
+- Receives broadcast keylog batches (port 490, channel 1)
+- Extracts batch_id from payload
+- Stores keylogs to flash filesystem
+- Sends ACK broadcast back to mesh
+- Organizes storage by sender node ID
 
 ---
 
@@ -399,6 +820,7 @@ firmware/
 ### Packet Capture Pipeline
 
 ```
+XIAO RP2350 (Sender):
 1. USB Keyboard → GPIO 16/17 (differential signals)
 2. PIO State Machines (PIO0: data, PIO1: sync) → 31-bit FIFO words
 3. Core1 Main Loop → Packet accumulation and boundary detection
@@ -406,9 +828,20 @@ firmware/
 5. Keyboard Decoder → HID report processing, ASCII conversion, modifier detection
 6. Core1 Buffer Manager → Delta-encoded timestamp formatting
 7. FRAM Storage (v5.0) → Core1 writes batch via SPI (with lock)
-   └─ Fallback: RAM Ring Buffer if FRAM unavailable
-8. Core0 Module → Polls FRAM, decodes text, transmits via LoRa, deletes batch
-9. LoRa Mesh Network → Channel 1 "takeover" (AES256 encrypted)
+   └─ Fallback: MinimalBatchBuffer if FRAM unavailable (v7.0)
+8. Core0 Module → Polls FRAM, generates batch_id, decodes text
+9. Mesh Broadcast (v7.0) → Port 490, channel 1 PSK encrypted
+
+Heltec V4 (Receiver):
+10. KeylogReceiverModule → Receives broadcast on port 490, channel 1
+11. Batch Validation → Extracts batch_id from payload header
+12. Flash Storage → Writes to /keylogs/<sender_id>/batch_<timestamp>.txt
+13. ACK Broadcast → Sends "ACK:0x<batch_id>" to mesh
+
+XIAO RP2350 (ACK Handling):
+14. ACK Reception → Validates batch_id matches pending batch
+15. FRAM Cleanup → Deletes batch from FRAM on ACK receipt
+    └─ Retry: If no ACK after 40s-4min (randomized), retransmit (v7.6)
 ```
 
 ### Timing Characteristics
@@ -420,8 +853,12 @@ firmware/
 | Bit unstuffing | ~100 µs | Software processing |
 | HID decoding | ~50 µs | Table lookup |
 | Queue push | <10 µs | Lock-free operation |
-| **Total end-to-end** | **<1 ms** | Real-time capture |
+| **Capture latency** | **<1 ms** | Real-time capture |
 | Core0 poll delay | Up to 100ms | Scheduled polling |
+| FRAM write | ~1 ms | SPI @ 20MHz |
+| LoRa TX → RX | 1-5 seconds | Mesh routing dependent |
+| ACK timeout | 30 seconds | Before retry |
+| **End-to-end delivery** | **2-60 sec** | Including ACK confirmation |
 
 ---
 
@@ -602,26 +1039,54 @@ meshtastic --ch-add takeover
 meshtastic --ch-set psk base64:<your-32-byte-psk-in-base64> --ch-index 1
 ```
 
+### Canned Messages (v7.0)
+
+Use Heltec V4's LCD and buttons to send commands to the XIAO sender.
+
+**Enable Canned Messages on Heltec V4:**
+```bash
+meshtastic --set canned_message.enabled true
+meshtastic --set canned_message.messages "STATUS|STATS"
+```
+
+**Available Commands:**
+
+| Command | Description | Response |
+|---------|-------------|----------|
+| `STATUS` | Get capture status | Running/Stopped, node ID, uptime |
+| `STATS` | Get statistics | TX count, failures, buffer usage |
+| `START` | Start capture | "USB Capture STARTED" |
+| `STOP` | Stop capture | "USB Capture STOPPED" |
+| `DUMP` | Dump buffer info | MinimalBatchBuffer slot usage |
+
+**How to Use:**
+1. On Heltec V4, press UP/DOWN to scroll through canned messages
+2. Select STATUS or STATS
+3. Press SELECT to send
+4. XIAO receives command and responds via mesh
+
+**Note:** Commands are sent as TEXT_MESSAGE_APP packets (separate from keylog data on port 490).
+
 ---
 
 ## Performance & Metrics
 
 ### Memory Usage
 
-**Build Metrics (XIAO RP2350-SX1262):**
+**Build Metrics (XIAO RP2350-SX1262, v7.0):**
 ```
-RAM:   26.3% (137,884 / 524,288 bytes)
-Flash: 55.8% (875,944 / 1,568,768 bytes)
+RAM:   24.9% (130,524 / 524,288 bytes)
+Flash: 58.5% (917,448 / 1,568,768 bytes)
 ```
 
 **USB Capture Overhead:**
 ```
-Core1 Stack:      ~2 KB
-PSRAM Buffer:     4 KB (8 slots × 512 bytes)
-Queue Buffer:     2 KB (64 events × 32 bytes)
-Raw Packet Buf:   1 KB (256 × 4 bytes)
-Processing Buf:   128 bytes
-Total Overhead:   ~9 KB
+Core1 Stack:         ~2 KB
+MinimalBatchBuffer:  ~1 KB (2 slots × 520 bytes)
+Queue Buffer:        2 KB (64 events × 32 bytes)
+Raw Packet Buf:      1 KB (256 × 4 bytes)
+Processing Buf:      128 bytes
+Total Overhead:      ~6 KB
 ```
 
 ### CPU Usage
@@ -834,9 +1299,120 @@ struct keystroke_queue_t {
 | 3.4 | 2025-12-07 | Watchdog bootloop fix (hardware register access) | Validated |
 | 3.5 | 2025-12-07 | Memory barriers + retry logic + modifier keys | Validated |
 | 4.0 | 2025-12-07 | RTC integration with mesh time sync | Validated |
-| **5.0** | **2025-12-13** | **FRAM non-volatile storage (256KB)** | **Validated** ✅ |
+| 5.0 | 2025-12-13 | FRAM non-volatile storage (256KB) | Validated |
+| 6.0 | 2025-12-14 | ACK-based reliable transmission + KeylogReceiverModule | Validated |
+| 7.0 | 2025-12-14 | Mesh broadcast + Channel PSK + MinimalBatchBuffer | Validated |
+| **7.1** | **2025-12-14** | **Receiver-side deduplication with flash persistence** | **Current** ✅ |
 
-### v5.0 - FRAM Non-Volatile Storage (Current)
+### v7.1 - Receiver-Side Deduplication (Current)
+
+**Feature:** Flash-persistent deduplication prevents duplicate storage when ACKs are lost
+
+**Problem Solved:**
+When the XIAO sender transmits a batch but doesn't receive the ACK (lost in mesh), it retransmits. Without deduplication, the same batch would be stored multiple times.
+
+**Solution:** Per-node batch ID tracking with LRU eviction
+
+**Key Components:**
+- **isDuplicateBatch():** Checks if batch was already received from node
+- **recordReceivedBatch():** Adds batch ID to circular buffer
+- **findOrCreateNodeEntry():** LRU eviction when cache full (16 nodes max)
+- **loadDedupCache() / saveDedupCache():** Flash persistence
+
+**Data Structures:**
+```cpp
+DedupNodeEntry {
+    NodeNum nodeId;
+    uint32_t lastAccessTime;          // For LRU eviction
+    uint32_t recentBatchIds[16];      // Circular buffer
+    uint8_t nextIdx, count, padding[2];
+};
+// Cache: 16 nodes × 76 bytes = 1,216 bytes in memory
+// File: /keylogs/.dedup_cache (~1,224 bytes)
+```
+
+**Key Behaviors:**
+| Scenario | Behavior |
+|----------|----------|
+| New batch | Store → Record → ACK |
+| Duplicate | Skip store → ACK (sender clears FRAM) |
+| Cache full | Evict oldest accessed node |
+| Reboot | Load cache from flash |
+
+**Modified Files:**
+- `KeylogReceiverModule.cpp` - Dedup logic in handleReceived(), 6 new methods
+- `KeylogReceiverModule.h` - DedupNodeEntry struct, method declarations, constants
+
+**NASA Power of 10 Compliance:**
+- Fixed loop bounds (16 nodes × 16 batches)
+- No dynamic allocation
+- All return values checked
+- Assertions verify assumptions
+
+**Build:** Flash 58.5%, RAM 24.9% (minimal increase)
+
+### v7.0 - Mesh Broadcast + Channel PSK
+
+**Feature:** Mesh-wide broadcast transmission with channel-based encryption
+
+**Key Changes from v6.0:**
+- **Port 490:** Custom private port (was 256 PRIVATE_APP)
+- **Channel 1:** "takeover" with PSK encryption (was PKI direct messages)
+- **Broadcast:** NODENUM_BROADCAST to mesh (was direct to targetNode)
+- **Randomized Interval (v7.6):** 40s-4min (was 5-min fixed in v7.0, 6s in v6.0)
+- **MinimalBatchBuffer:** NASA-compliant 2-slot fallback (was 8-slot PSRAM)
+
+**New Files:**
+- `src/MinimalBatchBuffer.cpp` - NASA Power of 10 compliant buffer
+- `src/MinimalBatchBuffer.h` - Buffer interface
+
+**Modified Files:**
+- `USBCaptureModule.cpp/h` - Port 490, channel 1, broadcast mode, MinimalBatchBuffer
+- `KeylogReceiverModule.cpp/h` - Port 490, channel 1, broadcast reception
+- `keyboard_decoder_core1.cpp` - MinimalBatchBuffer fallback writes
+- `psram_buffer.cpp` - Simplified to statistics tracking only
+
+**Channel Configuration:**
+```bash
+# Configure channel 1 "takeover" with matching PSK on both devices
+meshtastic --ch-set name "takeover" --ch-index 1
+meshtastic --ch-set psk random --ch-index 1  # On sender
+# Copy PSK to receiver
+```
+
+**Build:** Flash 58.5%, RAM 24.9%
+
+### v6.0 - ACK-Based Reliable Transmission
+
+**Feature:** Complete end-to-end reliable delivery system with Heltec V4 base station
+
+**Key Components:**
+- **USBCaptureModule (XIAO):** Sends batches with batch_id, waits for ACK
+- **KeylogReceiverModule (Heltec):** Receives batches, stores to flash, sends ACK
+- **PKI Encryption:** X25519 key exchange for secure direct messages
+- **Persistent Retry:** Batches never deleted on failure, retry until ACK received
+
+**New Files:**
+- `src/modules/KeylogReceiverModule.cpp` - Receiver module implementation
+- `src/modules/KeylogReceiverModule.h` - Receiver module interface
+
+**Modified Files:**
+- `USBCaptureModule.cpp` - ACK tracking, PKI direct messages, retry logic
+- `USBCaptureModule.h` - State machine for ACK handling
+
+**Transmission Protocol:**
+- Port: `PRIVATE_APP` (256)
+- Payload: `[batch_id:4][decoded_text:N]`
+- ACK format: `ACK:0x<8-hex-digits>`
+- Retry: Exponential backoff 30s→60s→120s, then reset
+
+**Simulation Mode:**
+- Build flag: `-D USB_CAPTURE_SIMULATE_KEYS`
+- Generates fake keystrokes for testing without USB keyboard
+
+**Build:** Flash 58.5%, RAM 24.7%
+
+### v5.0 - FRAM Non-Volatile Storage
 
 **Feature:** 256KB non-volatile storage replacing volatile RAM buffer
 
@@ -989,11 +1565,13 @@ Core1 runs completely independently using:
 
 ## Future Enhancements
 
-### Priority 1: Hardware Testing (v5.0)
-1. Test FRAM write operation (type on USB keyboard, verify batch written)
-2. Test FRAM read and LoRa transmission (verify decoded text broadcast)
-3. Test FRAM persistence (power cycle, verify batches survive)
-4. Test SPI bus contention (simultaneous FRAM + LoRa operations)
+### Priority 1: Web UI for Keylogs
+- **Goal:** View stored keylogs via Heltec V4 web interface
+- **Features:**
+  - Browse keylogs by sender node
+  - Download individual batch files
+  - Clear old keylogs
+- **Implementation:** Extend Meshtastic web server on ESP32
 
 ### Priority 2: RGB LED Status Indicators
 - **Goal:** Visual feedback for FRAM operations
@@ -1001,20 +1579,24 @@ Core1 runs completely independently using:
   - Green flash on FRAM write
   - Blue flash on FRAM read
   - Red flash on FRAM delete
+  - Yellow flash on ACK received
 - **Hardware:** XIAO RP2350 onboard RGB LED
 
-### Priority 3: Reliable Transmission (v6.x)
-- **ACK-based retry:** Exponential backoff (10s, 30s, 60s, 5min)
-- **Batch queue:** PSRAM/FRAM persistent queue
-- **Server acknowledgment:** Heltec V4 receives and confirms
-- **Zero data loss:** Guaranteed delivery or logged as FAILED
-
-### Priority 4: Enhanced Features
+### Priority 3: Enhanced Features
 - Function keys support (F1-F12, arrows, Page Up/Down)
 - Key release detection (multi-tap support)
 - Runtime configuration (USB speed, channel, GPIO)
 - Core1 observability (circular log buffer)
 - Command authentication (secure remote control)
+
+### ✅ Completed: ACK-Based Reliable Transmission (v6.0)
+- **Goal:** Guaranteed delivery with confirmation ✅
+- **Batch tracking:** Unique batch_id per transmission ✅
+- **ACK protocol:** Receiver confirms receipt ✅
+- **Persistent retry:** Exponential backoff until success ✅
+- **Receiver module:** KeylogReceiverModule on Heltec V4 ✅
+- **PKI encryption:** Secure direct messages ✅
+- **Status:** End-to-end validated 2025-12-14
 
 ### ✅ Completed: FRAM Migration (v5.0)
 - **Goal:** Non-volatile storage for keystroke buffers ✅
@@ -1027,26 +1609,29 @@ Core1 runs completely independently using:
 
 ## Known Issues
 
-### 🔴 Critical (v5.0 Testing)
-1. Test FRAM write operation on hardware
-2. Test FRAM read and LoRa transmission
-3. Test FRAM persistence across power cycles
-4. Test SPI bus contention with LoRa
+### 🟢 No Critical Issues (v6.0)
+All major functionality validated and working:
+- ✅ FRAM storage operational
+- ✅ ACK-based transmission working
+- ✅ PKI encryption functional
+- ✅ Receiver module storing keylogs
 
 ### 🟠 High Priority
-5. Add RGB LED status indicators for FRAM operations
-6. Validate SPI timing under heavy load
-7. Test FRAM storage cleanup when full
+1. Add RGB LED status indicators for FRAM/ACK operations
+2. Validate SPI timing under heavy keystroke load
+3. Test multi-sender scenario (multiple XIAO → one Heltec)
+4. Add web UI for viewing keylogs on Heltec
 
 ### 🟡 Medium Priority
-8. Add Core1 observability
-9. Implement key release detection
-10. Make configuration runtime-adjustable
+5. Add Core1 observability (circular log buffer)
+6. Implement key release detection (multi-tap support)
+7. Make configuration runtime-adjustable
+8. Add command authentication
 
 ### 🔵 Future
-11. Reliable transmission with ACK
-12. Command authentication
-13. Function key support
+9. Function key support (F1-F12, arrows)
+10. Mobile app integration for keylogs
+11. Cloud backup option for keylogs
 
 ---
 
@@ -1087,7 +1672,7 @@ else if (keycode == HID_SCANCODE_F1) {
 
 ## Testing
 
-### Verification Status
+### Verification Status (v6.0)
 
 | Test Case | Status | Notes |
 |-----------|--------|-------|
@@ -1096,15 +1681,24 @@ else if (keycode == HID_SCANCODE_F1) {
 | PIO configures | ✅ PASS | Status 0xC3 confirmed |
 | Keystrokes captured | ✅ PASS | Real keystrokes logged |
 | Queue operations | ✅ PASS | Zero drops |
-| Memory usage | ✅ PASS | 26.3% RAM, 55.8% Flash |
+| Memory usage | ✅ PASS | 24.7% RAM, 58.5% Flash |
 | Idle detection | ✅ PASS | CPU drops when no activity |
 | Watchdog | ✅ PASS | Core1 updates properly |
-| LoRa transmission | ✅ PASS | Broadcasts to mesh |
+| FRAM storage | ✅ PASS | Read/write operations validated |
+| FRAM persistence | ✅ PASS | Survives power cycles |
+| LoRa transmission | ✅ PASS | PKI encrypted direct messages |
+| ACK reception | ✅ PASS | Sender receives ACK from receiver |
+| Retry mechanism | ✅ PASS | Exponential backoff working |
+| KeylogReceiverModule | ✅ PASS | Stores keylogs to flash |
+| PKI encryption | ✅ PASS | X25519 key exchange working |
 | RTC time sync | ✅ PASS | Mesh sync from Heltec V4 |
 | Modifier keys | ✅ PASS | Ctrl, Alt, GUI captured |
+| Simulation mode | ✅ PASS | Fake keystrokes generated |
 
 ### Test Hardware
-- **Device:** XIAO RP2350-SX1262
+- **Sender:** XIAO RP2350-SX1262
+- **Receiver:** Heltec WiFi LoRa 32 V4
+- **FRAM:** Adafruit MB85RS2MTA breakout (256KB)
 - **Keyboard:** Standard USB HID keyboard (Low Speed)
 - **Connections:** GPIO 16/17 via short jumper wires
 - **Power:** USB bus powered
@@ -1126,4 +1720,4 @@ else if (keycode == HID_SCANCODE_F1) {
 
 ---
 
-*Last Updated: 2025-12-13 | Version 5.0 | Production Ready | FRAM Hardware Validated*
+*Last Updated: 2025-12-14 | Version 6.0 | Production Ready | End-to-End System Validated*

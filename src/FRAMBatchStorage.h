@@ -56,6 +56,12 @@
 // Maximum cleanup iterations per write (Rule 2: fixed loop bound)
 #define FRAM_MAX_CLEANUP_ITERATIONS 16U
 
+// FRAM Capacity Alerting Thresholds (REQ-OPS-002)
+// Percentage of FRAM used that triggers warnings
+#define FRAM_CAPACITY_WARNING_PCT   75U   // Log warning at 75% full
+#define FRAM_CAPACITY_CRITICAL_PCT  90U   // Log critical at 90% full
+#define FRAM_CAPACITY_FULL_PCT      99U   // Log error at 99% full
+
 // Batch status values
 #define BATCH_STATUS_FREE 0x00U
 #define BATCH_STATUS_VALID 0x01U
@@ -159,6 +165,13 @@ class FRAMBatchStorage
     uint32_t getAvailableSpace();
 
     /**
+     * @brief Get FRAM usage percentage (REQ-OPS-002)
+     *
+     * @return Percentage of FRAM used (0-100)
+     */
+    uint8_t getUsagePercentage();
+
+    /**
      * @brief Format the FRAM storage (erase all data)
      *
      * Thread-safe: Uses SPI lock for mutual exclusion
@@ -173,6 +186,13 @@ class FRAMBatchStorage
      * @return true if FRAM is ready for use
      */
     bool isInitialized() const { return initialized; }
+
+    /**
+     * @brief Get count of batches evicted due to storage full (REQ-STOR-005)
+     *
+     * @return Number of oldest batches evicted to make room for new ones
+     */
+    uint32_t getEvictionCount() const { return evictionCount; }
 
     /**
      * @brief Get FRAM device ID information
@@ -208,6 +228,9 @@ class FRAMBatchStorage
     uint32_t headPtr;
     uint32_t tailPtr;
     uint8_t batchCount;
+
+    // REQ-STOR-005: Eviction statistics (batches deleted to make room)
+    uint32_t evictionCount;
 
     // Storage boundaries (set once at construction)
     uint32_t dataStartAddr;

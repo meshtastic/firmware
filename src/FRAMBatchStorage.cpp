@@ -29,7 +29,7 @@
 
 FRAMBatchStorage::FRAMBatchStorage(int8_t csPin, SPIClass *spi, uint32_t spiFreq)
     : fram(csPin, spi, spiFreq), csPin(csPin), spi(spi), spiFreq(spiFreq), initialized(false), headPtr(0), tailPtr(0),
-      batchCount(0)
+      batchCount(0), evictionCount(0)
 {
     assert(spi != nullptr);                  // Rule 5: assertion 1
     assert(FRAM_SIZE_BYTES >= FRAM_MIN_SIZE); // Rule 5: assertion 2
@@ -113,14 +113,16 @@ bool FRAMBatchStorage::writeBatch(const uint8_t *data, uint16_t length)
     uint16_t totalSize = BATCH_HEADER_SIZE + length;
 
     // Rule 2: Fixed loop bound with FRAM_MAX_CLEANUP_ITERATIONS
+    // REQ-STOR-005: Eviction policy - delete oldest batches when full
     uint8_t cleanupCount = 0;
     while ((!hasSpaceFor(totalSize)) && (batchCount > 0) && (cleanupCount < FRAM_MAX_CLEANUP_ITERATIONS)) {
-        LOG_INFO("FRAM: Auto-deleting oldest batch to make room");
+        LOG_INFO("FRAM: Evicting oldest batch to make room (eviction #%lu)", (unsigned long)(evictionCount + 1));
         bool deleteOk = deleteOldestBatchInternal(); // Rule 7: check return
         if (!deleteOk) {
-            LOG_ERROR("FRAM: Failed to auto-delete batch");
+            LOG_ERROR("FRAM: Failed to evict batch");
             return false;
         }
+        evictionCount++;  // REQ-STOR-005: Track eviction statistics
         cleanupCount++;
     }
 
@@ -338,6 +340,32 @@ uint32_t FRAMBatchStorage::getAvailableSpace()
     assert(isValidDataAddress(headPtr)); // Rule 5: assertion 2
 
     return calculateAvailableSpace();
+}
+
+uint8_t FRAMBatchStorage::getUsagePercentage()
+{
+    /* REQ-OPS-002: Calculate FRAM usage as percentage
+     * NASA Rule 5: Assertions for preconditions */
+    assert(dataEndAddr > dataStartAddr);
+
+    if (!initialized) {
+        return 0;
+    }
+
+    /* Calculate total data capacity and available space */
+    uint32_t totalCapacity = dataEndAddr - dataStartAddr;
+    uint32_t available = getAvailableSpace();
+
+    /* Avoid division by zero */
+    if (totalCapacity == 0) {
+        return 100;  /* No capacity = 100% full */
+    }
+
+    /* Calculate used percentage: (used / total) * 100 */
+    uint32_t used = totalCapacity - available;
+    uint8_t percentage = (uint8_t)((used * 100U) / totalCapacity);
+
+    return percentage;
 }
 
 bool FRAMBatchStorage::format()

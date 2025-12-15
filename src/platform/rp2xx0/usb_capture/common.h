@@ -204,6 +204,55 @@ extern volatile bool g_core1_pause_requested;  /**< Core0 → Core1: Request pau
 extern volatile bool g_core1_paused;           /**< Core1 → Core0: Acknowledge paused */
 extern volatile bool g_core1_running;          /**< Core1 → Core0: Core1 has started and entered main loop */
 
+/* ============================================================================
+ * CORE1 HEALTH MONITORING (REQ-OPS-001)
+ * ============================================================================
+ * Provides observability into Core1 operation for debugging and monitoring.
+ * Core1 updates these atomically, Core0 reads for STATS command output.
+ *
+ * NASA Power of 10 Compliance:
+ * - Fixed size structure (no dynamic allocation)
+ * - All fields are volatile for cross-core visibility
+ * - Status enum has bounded values
+ */
+
+/**
+ * @brief Core1 health status codes
+ */
+typedef enum {
+    CORE1_STATUS_OK = 0,        /**< Normal operation */
+    CORE1_STATUS_STALLED = 1,   /**< USB connected but no captures for >60s */
+    CORE1_STATUS_ERROR = 2,     /**< Decode errors or buffer failures */
+    CORE1_STATUS_STOPPED = 3    /**< Capture disabled */
+} core1_health_status_t;
+
+/**
+ * @brief Core1 health metrics structure
+ *
+ * All fields are volatile for cross-core visibility.
+ * Core1 updates, Core0 reads - no mutex needed for atomic uint32_t reads.
+ */
+typedef struct {
+    volatile uint32_t last_capture_time_ms;   /**< millis() of last keystroke capture */
+    volatile uint32_t capture_count;          /**< Total keystrokes since boot */
+    volatile uint32_t error_count;            /**< HID decode/buffer errors */
+    volatile uint32_t buffer_finalize_count;  /**< Number of buffers finalized */
+    volatile uint8_t  status;                 /**< core1_health_status_t */
+    volatile uint8_t  usb_connected;          /**< 1 if USB device detected */
+    volatile uint8_t  padding[2];             /**< Alignment padding */
+} core1_health_metrics_t;
+
+/**
+ * @brief Global Core1 health metrics (updated by Core1, read by Core0)
+ */
+extern core1_health_metrics_t g_core1_health;
+
+/**
+ * @brief Core1 health check constants
+ */
+#define CORE1_STALL_THRESHOLD_MS  60000   /**< 60 seconds without capture = stalled */
+#define CORE1_HEALTH_UPDATE_INTERVAL_MS 1000  /**< Update health status every 1 second */
+
 #ifdef __cplusplus
 }
 #endif

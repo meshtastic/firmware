@@ -39,7 +39,7 @@ extern "C" {
 #endif
 
 #define PSRAM_BUFFER_SLOTS 8        // Number of buffer slots (circular)
-#define PSRAM_BUFFER_DATA_SIZE 504  // Data size per slot (512 - 8 bytes header)
+#define PSRAM_BUFFER_DATA_SIZE 200  // Data size per slot - fits single LoRa packet (v7.2)
 #define PSRAM_MAGIC 0xC0DE8001      // Magic number for validation
 
 /**
