@@ -22,6 +22,9 @@ enum MenuPage : uint8_t {
     OPTIONS,
     NODE_CONFIG,
     NODE_CONFIG_LORA,
+    NODE_CONFIG_CHANNELS,       // List of channels
+    NODE_CONFIG_CHANNEL_DETAIL, // Per-channel options
+    NODE_CONFIG_CHANNEL_PRECISION,
     NODE_CONFIG_PRESET,
     NODE_CONFIG_DEVICE,
     NODE_CONFIG_DEVICE_ROLE,

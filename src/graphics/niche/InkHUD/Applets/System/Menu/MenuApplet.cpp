@@ -26,6 +26,18 @@ static constexpr uint8_t MENU_TIMEOUT_SEC = 60; // How many seconds before menu 
 // These are offered to users as possible values for settings.recentlyActiveSeconds
 static constexpr uint8_t RECENTS_OPTIONS_MINUTES[] = {2, 5, 10, 30, 60, 120};
 
+struct PositionPrecisionOption {
+    uint8_t value; // proto value
+    const char *metric;
+    const char *imperial;
+};
+
+static constexpr PositionPrecisionOption POSITION_PRECISION_OPTIONS[] = {
+    {32, "Precise", "Precise"}, {19, "50 m", "150 ft"},  {18, "90 m", "300 ft"},   {17, "200 m", "600 ft"},
+    {16, "350 m", "0.2 mi"},    {15, "700 m", "0.5 mi"}, {14, "1.5 km", "0.9 mi"}, {13, "2.9 km", "1.8 mi"},
+    {12, "5.8 km", "3.6 mi"},   {11, "12 km", "7.3 mi"}, {10, "23 km", "15 mi"},
+};
+
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -252,6 +264,11 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     // Open a submenu without performing any action
     // Also handles exit
     case NO_ACTION:
+        if (currentPage == MenuPage::NODE_CONFIG_CHANNELS && item.nextPage == MenuPage::NODE_CONFIG_CHANNEL_DETAIL) {
+
+            // cursor - 1 because index 0 is "Back"
+            selectedChannelIndex = cursor - 1;
+        }
         break;
 
     case BACK:
@@ -614,6 +631,59 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyTimezone("NZST-12NZDT,M9.5.0,M4.1.0/3");
         break;
 
+    // Channels
+    case TOGGLE_CHANNEL_UPLINK: {
+        auto &ch = channels.getByIndex(selectedChannelIndex);
+        ch.settings.uplink_enabled = !ch.settings.uplink_enabled;
+        nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS);
+        break;
+    }
+
+    case TOGGLE_CHANNEL_DOWNLINK: {
+        auto &ch = channels.getByIndex(selectedChannelIndex);
+        ch.settings.downlink_enabled = !ch.settings.downlink_enabled;
+        nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS);
+        break;
+    }
+
+    case TOGGLE_CHANNEL_POSITION: {
+        auto &ch = channels.getByIndex(selectedChannelIndex);
+
+        if (!ch.settings.has_module_settings)
+            ch.settings.has_module_settings = true;
+
+        if (ch.settings.module_settings.position_precision > 0)
+            ch.settings.module_settings.position_precision = 0;
+        else
+            ch.settings.module_settings.position_precision = 13; // default
+
+        nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS);
+        break;
+    }
+
+    case SET_CHANNEL_PRECISION: {
+        auto &ch = channels.getByIndex(selectedChannelIndex);
+
+        if (!ch.settings.has_module_settings)
+            ch.settings.has_module_settings = true;
+
+        // Cursor - 1 because of "Back"
+        uint8_t index = cursor - 1;
+
+        constexpr uint8_t optionCount = sizeof(POSITION_PRECISION_OPTIONS) / sizeof(POSITION_PRECISION_OPTIONS[0]);
+
+        if (index < optionCount) {
+            ch.settings.module_settings.position_precision = POSITION_PRECISION_OPTIONS[index].value;
+        }
+
+        nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS);
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -709,6 +779,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Radio Config Section
         items.push_back(MenuItem::Header("Radio Config"));
         items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
+        items.push_back(MenuItem("Channel", MenuPage::NODE_CONFIG_CHANNELS));
         // Device Config Section
         items.push_back(MenuItem::Header("Device Config"));
         items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
@@ -786,8 +857,104 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
     }
 
-    case NODE_CONFIG_DEVICE_ROLE: {
+    case NODE_CONFIG_CHANNELS: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
 
+        for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+            meshtastic_Channel &ch = channels.getByIndex(i);
+
+            if (!ch.has_settings)
+                continue;
+
+            if (ch.role == meshtastic_Channel_Role_DISABLED)
+                continue;
+
+            std::string label = "#";
+
+            if (ch.role == meshtastic_Channel_Role_PRIMARY) {
+                label += "Primary";
+            } else if (strlen(ch.settings.name) > 0) {
+                label += parse(ch.settings.name);
+            } else {
+                label += "Channel" + to_string(i + 1);
+            }
+
+            nodeConfigLabels.push_back(label);
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
+        }
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_CHANNEL_DETAIL: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_CHANNELS));
+
+        meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
+
+        // Name (read-only)
+        const char *name = strlen(ch.settings.name) > 0 ? ch.settings.name : "Unnamed";
+        nodeConfigLabels.emplace_back("Ch: " + parse(name));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
+
+        // Uplink
+        items.push_back(MenuItem("Uplink", MenuAction::TOGGLE_CHANNEL_UPLINK, MenuPage::NODE_CONFIG_CHANNEL_DETAIL,
+                                 &ch.settings.uplink_enabled));
+
+        items.push_back(MenuItem("Downlink", MenuAction::TOGGLE_CHANNEL_DOWNLINK, MenuPage::NODE_CONFIG_CHANNEL_DETAIL,
+                                 &ch.settings.downlink_enabled));
+
+        // Position
+        channelPositionEnabled = ch.settings.has_module_settings && ch.settings.module_settings.position_precision > 0;
+
+        items.push_back(MenuItem("Position", MenuAction::TOGGLE_CHANNEL_POSITION, MenuPage::NODE_CONFIG_CHANNEL_DETAIL,
+                                 &channelPositionEnabled));
+
+        // Precision
+        if (channelPositionEnabled) {
+
+            std::string precisionLabel = "Unknown";
+
+            for (const auto &opt : POSITION_PRECISION_OPTIONS) {
+                if (opt.value == ch.settings.module_settings.position_precision) {
+                    precisionLabel = (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+                                         ? opt.imperial
+                                         : opt.metric;
+                    break;
+                }
+            }
+            nodeConfigLabels.emplace_back("Precision: " + precisionLabel);
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_CHANNEL_PRECISION));
+        }
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_CHANNEL_PRECISION: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
+        meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
+        if (!ch.settings.has_module_settings || ch.settings.module_settings.position_precision == 0) {
+            items.push_back(MenuItem("Position is Off", MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
+            break;
+        }
+        constexpr uint8_t optionCount = sizeof(POSITION_PRECISION_OPTIONS) / sizeof(POSITION_PRECISION_OPTIONS[0]);
+        for (uint8_t i = 0; i < optionCount; i++) {
+            const auto &opt = POSITION_PRECISION_OPTIONS[i];
+            const char *label =
+                (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? opt.imperial : opt.metric;
+            nodeConfigLabels.emplace_back(label);
+
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_CHANNEL_PRECISION,
+                                     MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_DEVICE_ROLE: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("Client", MenuAction::SET_ROLE_CLIENT, MenuPage::EXIT));
         items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));

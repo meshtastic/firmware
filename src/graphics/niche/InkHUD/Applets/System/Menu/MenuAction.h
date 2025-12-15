@@ -101,6 +101,11 @@ enum MenuAction {
     // Bluetooth
     TOGGLE_BLUETOOTH,
     TOGGLE_BLUETOOTH_PAIR_MODE,
+    // Channel
+    TOGGLE_CHANNEL_UPLINK,
+    TOGGLE_CHANNEL_DOWNLINK,
+    TOGGLE_CHANNEL_POSITION,
+    SET_CHANNEL_PRECISION,
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -61,6 +61,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 
     std::vector<MenuItem> items;               // MenuItems for the current page. Filled by ShowPage
     std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages
+    uint8_t selectedChannelIndex = 0;          // Currently selected LoRa channel (Node Config → Radio → Channel)
+    bool channelPositionEnabled = false;
 
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only
