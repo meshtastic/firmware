@@ -706,12 +706,16 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case NODE_CONFIG:
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
+        // Radio Config Section
+        items.push_back(MenuItem::Header("Radio Config"));
+        items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
+        // Device Config Section
+        items.push_back(MenuItem::Header("Device Config"));
         items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
 #endif
         items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
-        items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -877,6 +881,15 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             cursorShown = false;
     }
 
+    // Ensure cursor never rests on a header
+    if (cursorShown) {
+        while (cursor < items.size() && items.at(cursor).isHeader) {
+            cursor++;
+        }
+        if (cursor >= items.size())
+            cursor = 0;
+    }
+
     // Remember which page we are on now
     currentPage = page;
 }
@@ -939,18 +952,46 @@ void InkHUD::MenuApplet::onRender()
 
     // -- Loop: draw each (visible) menu item --
     for (uint8_t i = firstItem; i <= lastItem; i++) {
-        // Grab the menuItem
-        MenuItem item = items.at(i);
 
-        // Center-line for the text
+        // Grab the menu item
+        MenuItem &item = items.at(i);
+
+        // Vertical center of this slot
         int16_t center = itemT + (itemH / 2);
 
-        // Box, if currently selected
-        if (cursorShown && i == cursor)
-            drawRect(itemL, itemT, itemW, itemH, BLACK);
+        // Header (non-selectable section label)
+        if (item.isHeader) {
+            setFont(fontSmall);
 
-        // Item's text
-        printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
+            // Header text (flush left)
+            printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
+
+            // Subtle underline
+            int16_t underlineY = itemT + itemH - 2;
+            drawLine(itemL + X(padding), underlineY, itemR - X(padding), underlineY, BLACK);
+        } else {
+            // Box, if currently selected
+            if (cursorShown && i == cursor)
+                drawRect(itemL, itemT, itemW, itemH, BLACK);
+
+            // Indented normal item text
+            printAt(itemL + X(padding * 2), center, item.label, LEFT, MIDDLE);
+        }
+
+        // Checkbox, if relevant
+        if (item.checkState) {
+            const uint16_t cbWH = fontSmall.lineHeight();
+            const int16_t cbL = itemR - X(padding) - cbWH;
+            const int16_t cbT = center - (cbWH / 2);
+
+            if (*(item.checkState)) {
+                drawRect(cbL, cbT, cbWH, cbWH, BLACK);
+                drawLine(cbL + 3, center, cbL + (cbWH / 2), center + (cbWH / 2) - 2, BLACK);
+                drawLine(cbL + (cbWH / 2), center + (cbWH / 2) - 2, cbL + cbWH + 2, center - (cbWH / 2) - 2, BLACK);
+            } else {
+                drawRect(cbL, cbT, cbWH, cbWH, BLACK);
+            }
+        }
 
         // Checkbox, if relevant
         if (item.checkState) {
@@ -991,10 +1032,13 @@ void InkHUD::MenuApplet::onButtonShortPress()
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     // Move menu cursor to next entry, then update
-    if (cursorShown)
-        cursor = (cursor + 1) % items.size();
-    else
+    if (!cursorShown) {
         cursorShown = true;
+    } else {
+        do {
+            cursor = (cursor + 1) % items.size();
+        } while (items.at(cursor).isHeader);
+    }
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
