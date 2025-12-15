@@ -3,7 +3,7 @@
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Platform:** XIAO RP2350-SX1262 + Heltec V4 (receiver) + iOS App
 **Version:** v7.11.1 - Double Finalization Hotfix (Fixed v7.11 Regression)
-**Status:** ✅ Firmware Complete, iOS Implementation Pending
+**Status:** ✅ Firmware Complete, iOS Implementation Complete
 **Last Updated:** 2025-12-15
 
 ---
@@ -63,7 +63,7 @@
 - **No Packet Limit:** TCP allows full file content (8KB buffer, no chunking needed)
 - **Implementation:** KeylogReceiverModule.cpp (+502 lines), NASA Power of 10 compliant
 - **Build Impact:** +550 bytes flash (Heltec 31.2%), no RAM change
-- **iOS Pending:** iOS app changes required (replace HTTP API with TCP commands)
+- **iOS Complete:** Full integration with KeylogTCPAPI, auto-detection, async response handling
 
 ### Key Achievement v7.8.3: Timestamp Formatting for iOS Downloads
 **Human-readable timestamps in downloaded keylog files:**
@@ -601,11 +601,15 @@ if (core1_get_buffer_space() < 1) {
 - Heltec RAM: 4.8% (100,440 bytes) - No change
 - Status: ✅ Compiles successfully
 
-**iOS Changes Required (Pending):**
-- Add KEYLOG command functions to AccessoryManager+USBCapture.swift
-- Replace HTTP API calls in KeylogBrowserView.swift with TCP commands
-- Delete KeylogAPI.swift (HTTP client no longer needed)
-- Responses arrive via same notification as USB commands (.usbCaptureResponseReceived)
+**iOS Implementation (Complete):**
+- ✅ KeylogTCPAPI.swift created with async-safe response handling
+- ✅ 5 KEYLOG command functions added to AccessoryManager+USBCapture.swift
+- ✅ KeylogBrowserView.swift updated to use TCP commands
+- ✅ KeylogAPI.swift deleted (HTTP client removed)
+- ✅ Auto-detects connected Heltec (no manual configuration)
+- ✅ Works over WiFi and Bluetooth
+- ✅ Responses via .usbCaptureResponseReceived notification
+- ✅ End-to-end tested and production ready
 
 **Documentation:**
 - Complete implementation guide: `/Users/rstown/Desktop/ste_documents/KEYLOG_TCP_COMMANDS_v7.9.md`
