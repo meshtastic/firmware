@@ -18,7 +18,7 @@
 
 // Compile-time configuration for constrained devices
 #ifndef GRAPH_LITE_MAX_NODES
-#define GRAPH_LITE_MAX_NODES 24 // Maximum nodes in graph
+#define GRAPH_LITE_MAX_NODES 32 // Maximum nodes in graph
 #endif
 
 #ifndef GRAPH_LITE_MAX_EDGES_PER_NODE
