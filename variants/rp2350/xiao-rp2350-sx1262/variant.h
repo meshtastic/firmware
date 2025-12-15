@@ -1,9 +1,9 @@
 // XIAO RP2350 with Wio-SX1262 Hat Configuration
 // Board: seeed_xiao_rp2350 (official Seeed board definition)
 // D-pin definitions are provided by the board's pins_arduino.h
-
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
 #define ARDUINO_ARCH_AVR
-
+#define MESHTASTIC_EXCLUDE_I2C 1
 // Button and LED (use board defaults)
 #define BUTTON_PIN D0         // GPIO26 - Boot button
 #define LED_PIN PIN_LED       // GPIO25 - Built-in LED

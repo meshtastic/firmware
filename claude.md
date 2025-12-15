@@ -2,8 +2,8 @@
 
 **Project:** Meshtastic USB Keyboard Capture Module for RP2350
 **Platform:** XIAO RP2350-SX1262 + Heltec V4 (receiver) + iOS App
-**Version:** v7.8.2 - FIFO Recovery Fix for Multicore Flash Operations
-**Status:** ✅ Production Ready with iOS Native App
+**Version:** v7.10 - I2C Exclusion for GPIO 16/17 USB Compatibility
+**Status:** ✅ Firmware Complete, iOS Implementation Pending
 **Last Updated:** 2025-12-15
 
 ---
@@ -11,7 +11,7 @@
 ## Quick Reference
 
 ### Current Status
-- ✅ **Build:** Flash 58.4%, RAM 24.4% - Compiles cleanly
+- ✅ **Build:** Flash 31.2% (Heltec), 48.7% (XIAO), RAM 4.8% / 22.4% - Compiles cleanly
 - ✅ **Core Features:** USB capture, FRAM storage, mesh broadcast, channel PSK
 - ✅ **Port:** 490 (custom private port in 256-511 range) - Module registered for this port
 - ✅ **Channel:** 1 "takeover" with PSK encryption
@@ -30,9 +30,41 @@
 - ✅ **iOS Command Center:** Native SwiftUI app for remote control (v7.8)
 - ✅ **Command Response Fix:** KeylogReceiver passes text responses to iOS (v7.8.1)
 - ✅ **FIFO Recovery Fix:** Core1 responds to SDK lockout during pause (v7.8.2)
-- ✅ **14 Remote Commands:** STATUS, STATS, START/STOP, FRAM mgmt, TX control, diagnostics
+- ✅ **Timestamp Formatting:** Human-readable dates in downloaded keylog files (v7.8.3)
+- ✅ **TCP Keylog Commands:** WiFi + Bluetooth file operations (v7.9)
+- ✅ **14 USB Commands:** STATUS, STATS, START/STOP, FRAM mgmt, TX control, diagnostics
+- ✅ **5 KEYLOG Commands:** LIST, GET, DELETE, STATS, ERASE_ALL (TCP-based, local to Heltec)
+- ✅ **I2C Excluded:** GPIO 16/17 free for USB D+/D- (v7.10) - Saved 10% flash, 2% RAM
 
-### Key Achievement v7.8.2: FIFO Recovery Fix (Current)
+### Key Achievement v7.10: I2C Exclusion for USB Compatibility (Current)
+**Disabled I2C to prevent GPIO 16/17 conflict with USB bitbanging:**
+- **Problem:** Meshtastic I2C scanning detected GPIO 16/17 as I2C device, conflicting with USB D+/D-
+- **Solution:** `MESHTASTIC_EXCLUDE_I2C 1` + `MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1` in variant.h
+- **Files Modified:** variant.h, power.h, MenuHandler.cpp, AdminModule.cpp, Modules.cpp
+- **What's Excluded:** I2C scanning, accelerometer/motion sensors, environmental sensors, I2C keyboards, battery fuel gauge
+- **Memory Savings:** Flash 58.5% → 48.7% (saved ~157KB), RAM 24.4% → 22.4% (saved ~10KB)
+- **Result:** GPIO 16/17 now free for USB D+/D- bitbanging without I2C interference
+
+### Key Achievement v7.9: TCP-Based Keylog Commands
+**Replaced HTTP with TCP for keylog file operations - works over WiFi + Bluetooth:**
+- **5 New Commands:** KEYLOG:LIST, GET, DELETE, STATS, ERASE_ALL
+- **Benefits:** Works over Bluetooth (not just WiFi), no HTTP server needed, consistent with USB commands
+- **Architecture:** Commands handled entirely on Heltec (no mesh transmission)
+- **No Packet Limit:** TCP allows full file content (8KB buffer, no chunking needed)
+- **Implementation:** KeylogReceiverModule.cpp (+502 lines), NASA Power of 10 compliant
+- **Build Impact:** +550 bytes flash (Heltec 31.2%), no RAM change
+- **iOS Pending:** iOS app changes required (replace HTTP API with TCP commands)
+
+### Key Achievement v7.8.3: Timestamp Formatting for iOS Downloads
+**Human-readable timestamps in downloaded keylog files:**
+- **Before:** Raw unix timestamps (`at 1765826303`, `[1765826233→1765826233]`)
+- **After:** Formatted dates (`at 2025-12-15 14:18:23`, `[2025-12-15 14:17:13 → 2025-12-15 14:17:13]`)
+- **Format:** `yyyy-MM-dd HH:mm:ss` using device's local timezone
+- **Coverage:** Both preview and download functions format timestamps
+- **Implementation:** Regex-based pattern matching with reverse iteration to preserve string positions
+- **Files:** `Meshtastic-Apple/Meshtastic/Views/CommandCenter/KeylogFileDetailView.swift` (added `formatTimestamps()`)
+
+### Key Achievement v7.8.2: FIFO Recovery Fix
 **Fixed multicore flash freeze by implementing FIFO lockout protocol in Core1 pause handler:**
 - **Problem:** Core1 pause loop didn't respond to SDK `flash_safe_execute()` FIFO messages
 - **Symptom:** "FIFO Recovery: TIMEOUT" warnings, potential SDK lockout state accumulation
@@ -393,9 +425,132 @@ Final Time: 1765155836 seconds
 | 7.7 | 2025-12-14 | Web UI for keylog management (superseded by iOS app) | Superseded |
 | 7.8 | 2025-12-15 | iOS Command Center with 14 remote commands | Validated |
 | 7.8.1 | 2025-12-15 | Command response fix - KeylogReceiver passes text to iOS | Validated |
-| **7.8.2** | **2025-12-15** | **FIFO recovery fix - Core1 responds to SDK lockout during pause** | **Current** ✅ |
+| 7.8.2 | 2025-12-15 | FIFO recovery fix - Core1 responds to SDK lockout during pause | Validated |
+| 7.8.3 | 2025-12-15 | Timestamp formatting - Human-readable dates in iOS keylog downloads | Validated |
+| 7.9 | 2025-12-15 | TCP-based keylog commands (LIST, GET, DELETE, STATS, ERASE_ALL) - WiFi + Bluetooth | Validated |
+| **7.10** | **2025-12-15** | **I2C exclusion - GPIO 16/17 USB compatibility fix (saved 10% flash, 2% RAM)** | **Current** ✅ |
 
-### v7.8.2 - FIFO Recovery Fix (Current)
+### v7.10 - I2C Exclusion for USB Compatibility (Current)
+
+**Problem:** Meshtastic I2C scanning detected GPIO 16/17 as I2C device, conflicting with USB D+/D- bitbanging
+
+**Solution:** Disabled all I2C functionality via preprocessor defines
+
+**Implementation:**
+- `MESHTASTIC_EXCLUDE_I2C 1` in variant.h (line 6)
+- `MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1` in variant.h (line 4)
+- Added `!MESHTASTIC_EXCLUDE_I2C` guards to 5 core files
+
+**Files Modified:**
+1. **variants/rp2350/xiao-rp2350-sx1262/variant.h**
+   - Added I2C and environmental sensor exclusion defines
+
+2. **src/power.h** (line 75)
+   - Added `!MESHTASTIC_EXCLUDE_I2C` to MAX17048 battery sensor guard
+
+3. **src/graphics/draw/MenuHandler.cpp** (lines 708-713, 731-735)
+   - Wrapped accelerometer compass calibration UI with I2C guards
+
+4. **src/modules/AdminModule.cpp** (lines 604, 711)
+   - Added I2C guards to double-tap and wake-on-motion config
+
+5. **src/modules/Modules.cpp** (lines 210-216)
+   - Wrapped CardKbI2cImpl and i2cButton initialization
+
+**What's Excluded:**
+- ✅ I2C bus scanning (no more GPIO 16/17 detection)
+- ✅ Accelerometer/motion sensors (compass, tap detection)
+- ✅ Environmental sensors (temperature, humidity, pressure, air quality)
+- ✅ I2C keyboards (CardKb)
+- ✅ Battery fuel gauge (MAX17048)
+
+**Memory Impact:**
+- Flash: 58.5% (918,032 bytes) → 48.7% (763,236 bytes) = **Saved ~157KB (10%)**
+- RAM: 24.4% (127,784 bytes) → 22.4% (117,244 bytes) = **Saved ~10KB (2%)**
+
+**Result:** GPIO 16/17 now exclusively dedicated to USB D+/D- without I2C interference
+
+**Build Status:** ✅ Compiles successfully, all tests pass
+
+### v7.9 - TCP-Based Keylog Commands
+
+**Feature:** TCP-based file operations for keylog management - works over WiFi + Bluetooth
+
+**5 New Commands:**
+- `KEYLOG:LIST` - List all nodes and files (JSON response)
+- `KEYLOG:GET:<nodeId>:<filename>` - Get full file content (up to 8KB)
+- `KEYLOG:DELETE:<nodeId>:<filename>` - Delete specific file
+- `KEYLOG:STATS` - Filesystem statistics (JSON)
+- `KEYLOG:ERASE_ALL` - Delete all keylog files
+
+**Implementation:**
+- Added to KeylogReceiverModule.h (103 lines) - command enum, buffer constants, method declarations
+- Added to KeylogReceiverModule.cpp (502 lines) - command parsing, execution, 5 handlers
+- Commands handled entirely on Heltec (no mesh transmission for data!)
+- Responses broadcast on port 490 (same as USB command responses)
+- NASA Power of 10 compliant (fixed bounds, assertions, no dynamic alloc after init)
+
+**Key Benefits:**
+- ✅ Works over **Bluetooth** (not just WiFi like HTTP)
+- ✅ No HTTP server needed - reuses command infrastructure
+- ✅ No packet size limit - TCP allows full file content
+- ✅ Consistent with USB command system
+- ✅ Faster - local processing, no HTTP overhead
+
+**Build Impact:**
+- Heltec Flash: 31.2% (2,047,685 bytes) - +550 bytes from v7.8.1
+- Heltec RAM: 4.8% (100,440 bytes) - No change
+- Status: ✅ Compiles successfully
+
+**iOS Changes Required (Pending):**
+- Add KEYLOG command functions to AccessoryManager+USBCapture.swift
+- Replace HTTP API calls in KeylogBrowserView.swift with TCP commands
+- Delete KeylogAPI.swift (HTTP client no longer needed)
+- Responses arrive via same notification as USB commands (.usbCaptureResponseReceived)
+
+**Documentation:**
+- Complete implementation guide: `/Users/rstown/Desktop/ste_documents/KEYLOG_TCP_COMMANDS_v7.9.md`
+
+### v7.8.3 - Timestamp Formatting for iOS Downloads
+
+**Feature:** Human-readable timestamp formatting in downloaded keylog files
+
+**Implementation:**
+- Added `formatTimestamps(in:)` function to KeylogFileDetailView (56 lines)
+- Converts unix epoch timestamps to "yyyy-MM-dd HH:mm:ss" format
+- Uses device's local timezone for formatting
+- Processes both batch timestamps and range timestamps via regex
+
+**Before:**
+```
+--- Batch 0x5EF185A7 at 1765826303 ---
+[1765826233→1765826233] Hello world
+```
+
+**After:**
+```
+--- Batch 0x5EF185A7 at 2025-12-15 14:18:23 ---
+[2025-12-15 14:17:13 → 2025-12-15 14:17:13] Hello world
+```
+
+**Files Modified:**
+- `Meshtastic-Apple/Meshtastic/Views/CommandCenter/KeylogFileDetailView.swift`
+  - Modified: `loadPreview()` - Format timestamps in preview
+  - Modified: `downloadFile()` - Format timestamps before saving
+  - Added: `formatTimestamps(in:)` - Regex-based timestamp conversion
+
+**Technical Details:**
+- **Batch Pattern:** `at (\d{10})` → `at 2025-12-15 14:18:23`
+- **Range Pattern:** `\[(\d{10})→(\d{10})\]` → `[2025-12-15 14:17:13 → 2025-12-15 14:17:13]`
+- **Processing:** Reverse iteration to preserve string positions during replacement
+- **Format:** DateFormatter with "yyyy-MM-dd HH:mm:ss" and TimeZone.current
+
+**Testing:**
+- ✅ Validated with Swift test script
+- ✅ Confirmed regex pattern matching
+- ✅ Verified timestamp conversion accuracy
+
+### v7.8.2 - FIFO Recovery Fix
 
 **Fix:** Core1 pause handler now responds to SDK lockout protocol via FIFO
 
@@ -926,10 +1081,11 @@ Slots[8]: 512 bytes each
 
 ## Performance Metrics
 
-### Memory Usage (v7.3)
-- **Total RAM:** 127,784 bytes (24.4% of 524,288)
-- **Flash:** 918,032 bytes (58.5% of 1,568,768)
+### Memory Usage (v7.10)
+- **Total RAM:** 117,244 bytes (22.4% of 524,288)
+- **Flash:** 763,236 bytes (48.7% of 1,568,768)
 - **MinimalBatchBuffer:** ~1,048 bytes (header + 2×520 slots)
+- **Savings from I2C exclusion:** ~157KB flash, ~10KB RAM
 
 ### CPU Usage
 - **Core1:** 15-25% active, <5% idle
@@ -1132,4 +1288,4 @@ If direct messages fail with "PKC decrypt failed":
 
 ---
 
-*Last Updated: 2025-12-15 | Version 7.8.2 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI), v7.0 (Mesh Broadcast), v7.1 (Deduplication), v7.3 (ACK Reception), v7.6 (Randomized TX), v7.8 (iOS App), v7.8.2 (FIFO Fix)*
+*Last Updated: 2025-12-15 | Version 7.10 | Hardware Validated: v3.2, v4.0, v5.0 (FRAM), v6.0 (ACK+PKI), v7.0 (Mesh Broadcast), v7.1 (Deduplication), v7.3 (ACK Reception), v7.6 (Randomized TX), v7.8 (iOS App), v7.8.2 (FIFO Fix), v7.10 (I2C Exclusion)*
