@@ -68,7 +68,7 @@ public:
     static constexpr size_t NODE_OVERHEAD_ESTIMATE = 64;          // Approximate overhead per node in adjacency list
 
     // Relay algorithm constants
-    static constexpr uint32_t CONTENTION_WINDOW_MS = 200;         // 200ms contention window
+    static uint32_t getContentionWindowMs();                      // Dynamic contention window based on LoRa preset
     static constexpr uint32_t RELAY_TIMEOUT_MS = 400;             // 400ms total timeout for relay decision
     static constexpr size_t MAX_RELAY_TIERS = 3;                  // Primary + 2 backup tiers
 
