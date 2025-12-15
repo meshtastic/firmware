@@ -71,42 +71,40 @@ SignalRoutingModule::SignalRoutingModule()
     }
 #endif
 
-#ifdef ARCH_ESP32
-    // ESP32 RAM guard with improved logic
+#ifdef SIGNAL_ROUTING_USE_RUNTIME_DETECTION
+    // Runtime detection mode - unified RAM-based selection for all architectures
     {
         uint32_t freeHeap = memGet.getFreeHeap();
         uint32_t freePsram = memGet.getFreePsram();
         uint32_t totalRam = freeHeap + freePsram;
 
-#ifdef SIGNAL_ROUTING_LITE_MODE
-        // Lite mode: Check if we have enough RAM for basic operation
-        // Lite mode uses fixed arrays (~2KB), needs ~25KB total headroom for safe operation
-        if (totalRam < 25 * 1024) {
-            LOG_WARN("[SR] Insufficient RAM for lite mode (%u bytes total), disabling signal-based routing", totalRam);
+        // Use total available RAM (heap + PSRAM if available)
+        // Prefer full mode if we have enough RAM (150KB+), otherwise try lite mode (25KB+)
+        if (totalRam >= 150 * 1024) {
+            LOG_INFO("[SR] Runtime detection: Using full graph mode (%u bytes total RAM available)", totalRam);
+            routingGraph = new Graph();
+            usingGraphLite = false;
+        } else if (totalRam >= 25 * 1024) {
+            LOG_INFO("[SR] Runtime detection: Using lite mode (%u bytes total RAM available)", totalRam);
+            routingGraph = new GraphLite();
+            usingGraphLite = true;
+        } else {
+            LOG_WARN("[SR] Runtime detection: Insufficient RAM (%u bytes total), disabling signal-based routing", totalRam);
             routingGraph = nullptr;
+            usingGraphLite = false;
             disable();
             return;
         }
-        LOG_INFO("[SR] Using lite mode (%u bytes total RAM available)", totalRam);
-#else
-        // Full mode: More aggressive RAM checking
-        // Full mode needs ~30KB+ for graph structures and causes heap fragmentation
-        // Need substantial headroom to prevent issues
-        if (totalRam < 150 * 1024) {
-            LOG_WARN("[SR] Insufficient RAM for full graph mode (%u bytes total), disabling signal-based routing", totalRam);
-            routingGraph = nullptr;
-            disable();
-            return;
-        }
-        LOG_INFO("[SR] Using full graph mode (%u bytes total RAM available)", totalRam);
-#endif
     }
-#endif
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    routingGraph = new GraphLite();
 #else
-    routingGraph = new Graph();
+    // Compile-time mode selection
+    #ifdef SIGNAL_ROUTING_LITE_MODE
+        LOG_INFO("[SR] Compile-time: Using lite mode");
+        routingGraph = new GraphLite();
+    #else
+        LOG_INFO("[SR] Compile-time: Using full graph mode");
+        routingGraph = new Graph();
+    #endif
 #endif
     if (!routingGraph) {
         LOG_WARN("[SR] Failed to allocate Graph, disabling signal-based routing");
