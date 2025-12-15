@@ -14,6 +14,7 @@
 #include "pb_decode.h"
 #include <Arduino.h>
 #include <algorithm>
+#include <unordered_set>
 
 SignalRoutingModule *signalRoutingModule;
 
@@ -44,6 +45,8 @@ static int32_t computeAgeSecs(uint32_t last, uint32_t now)
     return age;
 }
 
+
+
 SignalRoutingModule::SignalRoutingModule()
     : ProtobufModule("SignalRouting", meshtastic_PortNum_SIGNAL_ROUTING_APP, &meshtastic_SignalRoutingInfo_msg),
       concurrency::OSThread("SignalRouting")
@@ -69,28 +72,33 @@ SignalRoutingModule::SignalRoutingModule()
 #endif
 
 #ifdef ARCH_ESP32
-    // ESP32 RAM guard for variants without PSRAM (e.g., ESP32-C3)
+    // ESP32 RAM guard with improved logic
     {
         uint32_t freeHeap = memGet.getFreeHeap();
         uint32_t freePsram = memGet.getFreePsram();
+        uint32_t totalRam = freeHeap + freePsram;
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        // Lite mode uses fixed arrays (~2KB total), only need 20KB headroom
-        if (freePsram == 0 && freeHeap < 20 * 1024) {
-            LOG_WARN("[SR] Insufficient RAM on ESP32 (%u bytes free), disabling signal-based routing", freeHeap);
+        // Lite mode: Check if we have enough RAM for basic operation
+        // Lite mode uses fixed arrays (~2KB), needs ~25KB total headroom for safe operation
+        if (totalRam < 25 * 1024) {
+            LOG_WARN("[SR] Insufficient RAM for lite mode (%u bytes total), disabling signal-based routing", totalRam);
             routingGraph = nullptr;
             disable();
             return;
         }
-        LOG_INFO("[SR] Using lite mode for memory-constrained device (%u bytes free)", freeHeap);
+        LOG_INFO("[SR] Using lite mode (%u bytes total RAM available)", totalRam);
 #else
-        // Full mode needs ~30KB+ and causes heap fragmentation - need 150KB headroom
-        if (freePsram == 0 && freeHeap < 150 * 1024) {
-            LOG_WARN("[SR] Insufficient RAM on ESP32 without PSRAM (%u bytes free), disabling signal-based routing", freeHeap);
+        // Full mode: More aggressive RAM checking
+        // Full mode needs ~30KB+ for graph structures and causes heap fragmentation
+        // Need substantial headroom to prevent issues
+        if (totalRam < 150 * 1024) {
+            LOG_WARN("[SR] Insufficient RAM for full graph mode (%u bytes total), disabling signal-based routing", totalRam);
             routingGraph = nullptr;
             disable();
             return;
         }
+        LOG_INFO("[SR] Using full graph mode (%u bytes total RAM available)", totalRam);
 #endif
     }
 #endif
@@ -907,7 +915,30 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
              topologyHealthy ? "HEALTHY" : "unhealthy");
 
     if (!topologyHealthy) {
-        LOG_DEBUG("[SR] Insufficient SR-capable nodes for reliable unicast");
+        LOG_DEBUG("[SR] Insufficient SR-capable nodes for reliable unicast - using Graph routing with contention window");
+
+        // Use the Graph's shouldRelay logic which has built-in contention window support
+        // This provides the same redundancy and coordination logic as regular flooding
+        if (routingGraph) {
+            NodeNum myNode = nodeDB->getNodeNum();
+            NodeNum sourceNode = p->from;
+            NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
+
+            uint32_t currentTime = getValidTime(RTCQualityFromNet);
+            if (!currentTime) {
+                currentTime = getTime();
+            }
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            bool shouldRelay = routingGraph->shouldRelayWithContention(myNode, sourceNode, heardFrom, p->id, currentTime);
+#else
+            bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
+#endif
+            LOG_DEBUG("[SR] Graph routing decision: %s", shouldRelay ? "SHOULD relay" : "should NOT relay");
+            return shouldRelay;
+        }
+
+        // No routing graph available, fall back to flooding
         return false;
     }
 
