@@ -76,7 +76,7 @@ runs:
         done
 
     - name: PlatformIO ${{ inputs.arch }} download cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.platformio/.cache
         key: pio-cache-${{ inputs.arch }}-${{ hashFiles('.github/actions/**', '**.ini') }}
@@ -102,7 +102,7 @@ runs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v5
       with:
-        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
