@@ -221,7 +221,6 @@ NullSensor ada4026Sensor;
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
-// Here is where the frequncy is changing
 int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
@@ -320,8 +319,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = pct2075Sensor.runOnce();
             if (ada4026Sensor.hasSensor()) {
                 result = ada4026Sensor.runOnce();
-            } else {
-                LOG_WARN("Soil Moisture Sensor not detected");
             }
 #ifdef HAS_RAKPROT
 
@@ -702,7 +699,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         hasSensor = true;
     }
     if (ada4026Sensor.hasSensor()) {
-        valid = valid && ada4026Sensor.getMetrics(m); // added this for new sensor
+        valid = valid && ada4026Sensor.getMetrics(m);
         hasSensor = true;
     }
 #ifdef HAS_RAKPROT
