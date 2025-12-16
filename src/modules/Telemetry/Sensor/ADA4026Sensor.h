@@ -7,7 +7,7 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_seesaw.h>
 
-class SoilMoistureSensor : public TelemetrySensor
+class ADA4026Sensor : public TelemetrySensor
 {
 private:
     Adafruit_seesaw ss;  // Adafruit seesaw object for the sensor
@@ -16,7 +16,7 @@ protected:
     virtual void setup() override;
 
 public:
-    SoilMoistureSensor();
+    ADA4026Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };

@@ -3,16 +3,16 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_seesaw.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "SoilMoistureSensor.h"
+#include "ADA4026Sensor.h"
 #include "TelemetrySensor.h"
 #include "main.h"
 
-SoilMoistureSensor::SoilMoistureSensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_ADA4026, "SoilMoisture") 
+ADA4026Sensor::ADA4026Sensor()
+    : TelemetrySensor(meshtastic_TelemetrySensorType_ADA4026, "ADA4026") 
 {
 }
 
-int32_t SoilMoistureSensor::runOnce()
+int32_t ADA4026Sensor::runOnce()
 {
     LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
@@ -28,11 +28,11 @@ int32_t SoilMoistureSensor::runOnce()
     return initI2CSensor();
 }
 
-void SoilMoistureSensor::setup()
+void ADA4026Sensor::setup()
 {
 }
 
-bool SoilMoistureSensor::getMetrics(meshtastic_Telemetry *measurement)
+bool ADA4026Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     uint16_t raw_cap = ss.touchRead(0); 
     

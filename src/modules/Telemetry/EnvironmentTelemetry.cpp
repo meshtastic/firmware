@@ -211,10 +211,10 @@ NullSensor tsl2561Sensor;
 //New update to the Telemtry file to ensure it is being recognize
 // Soil Moisture Sensor - using I2CSoilMoistureSensor library
 #if __has_include(<Adafruit_seesaw.h>)
-#include "Sensor/SoilMoistureSensor.h"
-SoilMoistureSensor soilMoistureSensor;
+#include "Sensor/ADA4026Sensor.h"
+ADA4026Sensor ada4026Sensor;
 #else 
-NullSensor soilMoistureSensor;
+NullSensor ada4026Sensor;
 #endif
 
 
@@ -321,8 +321,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = tsl2561Sensor.runOnce();
             if (pct2075Sensor.hasSensor())
                 result = pct2075Sensor.runOnce();
-            if (soilMoistureSensor.hasSensor()) {
-                result = soilMoistureSensor.runOnce();
+            if (ada4026Sensor.hasSensor()) {
+                result = ada4026Sensor.runOnce();
             } else {
                 LOG_WARN("Soil Moisture Sensor not detected");
             }
@@ -703,8 +703,8 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     if (pct2075Sensor.hasSensor()) {
         valid = valid && pct2075Sensor.getMetrics(m);
         hasSensor = true; }
-    if (soilMoistureSensor.hasSensor()){
-        valid = valid && soilMoistureSensor.getMetrics(m);  //added this for new sensor
+    if (ada4026Sensor.hasSensor()){
+        valid = valid && ada4026Sensor.getMetrics(m);  //added this for new sensor
         hasSensor = true;    }
 #ifdef HAS_RAKPROT
     valid = valid && rak9154Sensor.getMetrics(m);
