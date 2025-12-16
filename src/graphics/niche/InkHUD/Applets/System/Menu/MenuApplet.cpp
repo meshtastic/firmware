@@ -244,6 +244,34 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
+static const char *getTimezoneLabelFromValue(const char *tzdef)
+{
+    if (!tzdef || !*tzdef)
+        return "Unset";
+
+    // Must match TIMEZONE menu entries
+    if (strcmp(tzdef, "HST10") == 0) return "US/Hawaii";
+    if (strcmp(tzdef, "AKST9AKDT,M3.2.0,M11.1.0") == 0) return "US/Alaska";
+    if (strcmp(tzdef, "PST8PDT,M3.2.0,M11.1.0") == 0) return "US/Pacific";
+    if (strcmp(tzdef, "MST7") == 0) return "US/Arizona";
+    if (strcmp(tzdef, "MST7MDT,M3.2.0,M11.1.0") == 0) return "US/Mountain";
+    if (strcmp(tzdef, "CST6CDT,M3.2.0,M11.1.0") == 0) return "US/Central";
+    if (strcmp(tzdef, "EST5EDT,M3.2.0,M11.1.0") == 0) return "US/Eastern";
+    if (strcmp(tzdef, "BRT3") == 0) return "BR/Brasilia";
+    if (strcmp(tzdef, "UTC0") == 0) return "UTC";
+    if (strcmp(tzdef, "GMT0BST,M3.5.0/1,M10.5.0") == 0) return "EU/Western";
+    if (strcmp(tzdef, "CET-1CEST,M3.5.0,M10.5.0/3") == 0) return "EU/Central";
+    if (strcmp(tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4") == 0) return "EU/Eastern";
+    if (strcmp(tzdef, "IST-5:30") == 0) return "Asia/Kolkata";
+    if (strcmp(tzdef, "HKT-8") == 0) return "Asia/Hong Kong";
+    if (strcmp(tzdef, "AWST-8") == 0) return "AU/AWST";
+    if (strcmp(tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3") == 0) return "AU/ACST";
+    if (strcmp(tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3") == 0) return "AU/AEST";
+    if (strcmp(tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3") == 0) return "Pacific/NZ";
+
+    return tzdef; // fallback for unknown/custom values
+}
+
 static void applyTimezone(const char *tz)
 {
     if (!tz || strcmp(config.device.tzdef, tz) == 0)
@@ -282,6 +310,9 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case NEXT_TILE:
         inkhud->nextTile();
+        // Unselect menu item after tile change
+        cursorShown = false;
+        cursor = 0;
         break;
 
     case SEND_PING:
@@ -839,11 +870,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         nodeConfigLabels.emplace_back("Role: " + std::string(role));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_DEVICE_ROLE));
 
-        const char *tz = config.device.tzdef;
-        if (!tz || strlen(tz) == 0)
-            tz = "Unset";
-
-        nodeConfigLabels.emplace_back("Timezone: " + std::string(tz));
+        const char *tzLabel = getTimezoneLabelFromValue(config.device.tzdef);
+        nodeConfigLabels.emplace_back("Timezone: " + std::string(tzLabel));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::TIMEZONE));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -1092,23 +1120,23 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case TIMEZONE:
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
-        items.push_back(MenuItem("US/Hawaii", SET_TZ_US_HAWAII, MenuPage::EXIT));
-        items.push_back(MenuItem("US/Alaska", SET_TZ_US_ALASKA, MenuPage::EXIT));
-        items.push_back(MenuItem("US/Pacific", SET_TZ_US_PACIFIC, MenuPage::EXIT));
-        items.push_back(MenuItem("US/Arizona", SET_TZ_US_ARIZONA, MenuPage::EXIT));
-        items.push_back(MenuItem("US/Mountain", SET_TZ_US_MOUNTAIN, MenuPage::EXIT));
-        items.push_back(MenuItem("US/Central", SET_TZ_US_CENTRAL, MenuPage::EXIT));
-        items.push_back(MenuItem("US/Eastern", SET_TZ_US_EASTERN, MenuPage::EXIT));
-        items.push_back(MenuItem("BR/Brasilia", SET_TZ_BR_BRAZILIA, MenuPage::EXIT));
-        items.push_back(MenuItem("UTC", SET_TZ_UTC, MenuPage::EXIT));
-        items.push_back(MenuItem("EU/Western", SET_TZ_EU_WESTERN, MenuPage::EXIT));
-        items.push_back(MenuItem("EU/Central", SET_TZ_EU_CENTRAL, MenuPage::EXIT));
-        items.push_back(MenuItem("EU/Eastern", SET_TZ_EU_EASTERN, MenuPage::EXIT));
-        items.push_back(MenuItem("Asia/Kolkata", SET_TZ_ASIA_KOLKATA, MenuPage::EXIT));
-        items.push_back(MenuItem("Asia/Hong Kong", SET_TZ_ASIA_HONG_KONG, MenuPage::EXIT));
-        items.push_back(MenuItem("AU/AWST", SET_TZ_AU_AWST, MenuPage::EXIT));
-        items.push_back(MenuItem("AU/ACST", SET_TZ_AU_ACST, MenuPage::EXIT));
-        items.push_back(MenuItem("AU/AEST", SET_TZ_AU_AEST, MenuPage::EXIT));
+        items.push_back(MenuItem("US/Hawaii", SET_TZ_US_HAWAII, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Alaska", SET_TZ_US_ALASKA, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Pacific", SET_TZ_US_PACIFIC, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Arizona", SET_TZ_US_ARIZONA, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Mountain", SET_TZ_US_MOUNTAIN, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Central", SET_TZ_US_CENTRAL, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("US/Eastern", SET_TZ_US_EASTERN, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("BR/Brasilia", SET_TZ_BR_BRAZILIA, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("UTC", SET_TZ_UTC, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("EU/Western", SET_TZ_EU_WESTERN, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("EU/Central", SET_TZ_EU_CENTRAL, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("EU/Eastern", SET_TZ_EU_EASTERN, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("Asia/Kolkata", SET_TZ_ASIA_KOLKATA, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("Asia/Hong Kong", SET_TZ_ASIA_HONG_KONG, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("AU/AWST", SET_TZ_AU_AWST, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("AU/ACST", SET_TZ_AU_ACST, MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("AU/AEST", SET_TZ_AU_AEST, MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
