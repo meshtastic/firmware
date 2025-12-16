@@ -379,18 +379,30 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         LOG_INFO("Enabling Bluetooth");
         config.network.wifi_enabled = false;
         config.bluetooth.enabled = true;
-        nodeDB->saveToDisk();
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         rebootAtMsec = millis() + 2000;
         break;
 
-    // Power
-    case TOGGLE_POWER_SAVE:
+        // Power / Network (ESP32-only)
 #if defined(ARCH_ESP32)
+    case TOGGLE_POWER_SAVE:
         config.power.is_power_saving = !config.power.is_power_saving;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-#endif
         break;
+
+    case TOGGLE_WIFI:
+        config.network.wifi_enabled = !config.network.wifi_enabled;
+
+        if (config.network.wifi_enabled) {
+            // Switch behavior: WiFi ON forces Bluetooth OFF
+            config.bluetooth.enabled = false;
+        }
+
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        break;
+#endif
 
     // Display
     case TOGGLE_DISPLAY_UNITS:
@@ -405,6 +417,12 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     // Bluetooth
     case TOGGLE_BLUETOOTH:
         config.bluetooth.enabled = !config.bluetooth.enabled;
+
+        if (config.bluetooth.enabled) {
+            // Switch behavior: Bluetooth ON forces WiFi OFF
+            config.network.wifi_enabled = false;
+        }
+
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
@@ -791,7 +809,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
+        items.push_back(MenuItem("Network", MenuPage::NODE_CONFIG_NETWORK));
 #endif
+
         items.push_back(MenuItem("Display", MenuPage::NODE_CONFIG_DISPLAY));
         items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -836,6 +856,17 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
 
         items.push_back(MenuItem("Powersave", MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT, &config.power.is_power_saving));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_NETWORK: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
+        const char *wifiLabel = config.network.wifi_enabled ? "WiFi: On" : "WiFi: Off";
+
+        items.push_back(MenuItem(wifiLabel, MenuAction::TOGGLE_WIFI, MenuPage::EXIT));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
