@@ -250,24 +250,42 @@ static const char *getTimezoneLabelFromValue(const char *tzdef)
         return "Unset";
 
     // Must match TIMEZONE menu entries
-    if (strcmp(tzdef, "HST10") == 0) return "US/Hawaii";
-    if (strcmp(tzdef, "AKST9AKDT,M3.2.0,M11.1.0") == 0) return "US/Alaska";
-    if (strcmp(tzdef, "PST8PDT,M3.2.0,M11.1.0") == 0) return "US/Pacific";
-    if (strcmp(tzdef, "MST7") == 0) return "US/Arizona";
-    if (strcmp(tzdef, "MST7MDT,M3.2.0,M11.1.0") == 0) return "US/Mountain";
-    if (strcmp(tzdef, "CST6CDT,M3.2.0,M11.1.0") == 0) return "US/Central";
-    if (strcmp(tzdef, "EST5EDT,M3.2.0,M11.1.0") == 0) return "US/Eastern";
-    if (strcmp(tzdef, "BRT3") == 0) return "BR/Brasilia";
-    if (strcmp(tzdef, "UTC0") == 0) return "UTC";
-    if (strcmp(tzdef, "GMT0BST,M3.5.0/1,M10.5.0") == 0) return "EU/Western";
-    if (strcmp(tzdef, "CET-1CEST,M3.5.0,M10.5.0/3") == 0) return "EU/Central";
-    if (strcmp(tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4") == 0) return "EU/Eastern";
-    if (strcmp(tzdef, "IST-5:30") == 0) return "Asia/Kolkata";
-    if (strcmp(tzdef, "HKT-8") == 0) return "Asia/Hong Kong";
-    if (strcmp(tzdef, "AWST-8") == 0) return "AU/AWST";
-    if (strcmp(tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3") == 0) return "AU/ACST";
-    if (strcmp(tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3") == 0) return "AU/AEST";
-    if (strcmp(tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3") == 0) return "Pacific/NZ";
+    if (strcmp(tzdef, "HST10") == 0)
+        return "US/Hawaii";
+    if (strcmp(tzdef, "AKST9AKDT,M3.2.0,M11.1.0") == 0)
+        return "US/Alaska";
+    if (strcmp(tzdef, "PST8PDT,M3.2.0,M11.1.0") == 0)
+        return "US/Pacific";
+    if (strcmp(tzdef, "MST7") == 0)
+        return "US/Arizona";
+    if (strcmp(tzdef, "MST7MDT,M3.2.0,M11.1.0") == 0)
+        return "US/Mountain";
+    if (strcmp(tzdef, "CST6CDT,M3.2.0,M11.1.0") == 0)
+        return "US/Central";
+    if (strcmp(tzdef, "EST5EDT,M3.2.0,M11.1.0") == 0)
+        return "US/Eastern";
+    if (strcmp(tzdef, "BRT3") == 0)
+        return "BR/Brasilia";
+    if (strcmp(tzdef, "UTC0") == 0)
+        return "UTC";
+    if (strcmp(tzdef, "GMT0BST,M3.5.0/1,M10.5.0") == 0)
+        return "EU/Western";
+    if (strcmp(tzdef, "CET-1CEST,M3.5.0,M10.5.0/3") == 0)
+        return "EU/Central";
+    if (strcmp(tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4") == 0)
+        return "EU/Eastern";
+    if (strcmp(tzdef, "IST-5:30") == 0)
+        return "Asia/Kolkata";
+    if (strcmp(tzdef, "HKT-8") == 0)
+        return "Asia/Hong Kong";
+    if (strcmp(tzdef, "AWST-8") == 0)
+        return "AU/AWST";
+    if (strcmp(tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3") == 0)
+        return "AU/ACST";
+    if (strcmp(tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3") == 0)
+        return "AU/AEST";
+    if (strcmp(tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3") == 0)
+        return "Pacific/NZ";
 
     return tzdef; // fallback for unknown/custom values
 }
