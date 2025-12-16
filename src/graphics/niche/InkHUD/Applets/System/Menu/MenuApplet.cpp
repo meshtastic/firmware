@@ -348,12 +348,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         break;
 
-    case SET_RECENTS:
-        // Set value of settings.recentlyActiveSeconds
-        // Uses menu cursor to read RECENTS_OPTIONS_MINUTES array (defined at top of this file)
-        assert(cursor < sizeof(RECENTS_OPTIONS_MINUTES) / sizeof(RECENTS_OPTIONS_MINUTES[0]));
-        settings->recentlyActiveSeconds = RECENTS_OPTIONS_MINUTES[cursor] * 60; // Menu items are in minutes
+    case SET_RECENTS: {
+        // cursor - 1 because index 0 is "Back"
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(RECENTS_OPTIONS_MINUTES) / sizeof(RECENTS_OPTIONS_MINUTES[0]);
+        assert(index < optionCount);
+        settings->recentlyActiveSeconds = RECENTS_OPTIONS_MINUTES[index] * 60;
         break;
+    }
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
@@ -802,6 +804,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case RECENTS:
         populateRecentsPage(); // builds only the options
         items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case NODE_CONFIG:
@@ -1390,7 +1393,8 @@ void InkHUD::MenuApplet::populateRecentsPage()
     // (Defined at top of this file)
     for (uint8_t i = 0; i < optionCount; i++) {
         std::string label = to_string(RECENTS_OPTIONS_MINUTES[i]) + " mins";
-        items.push_back(MenuItem(label.c_str(), MenuAction::SET_RECENTS, MenuPage::EXIT));
+        recentsSelected[i] = (settings->recentlyActiveSeconds == RECENTS_OPTIONS_MINUTES[i] * 60);
+        items.push_back(MenuItem(label.c_str(), MenuAction::SET_RECENTS, MenuPage::OPTIONS, &recentsSelected[i]));
     }
 }
 

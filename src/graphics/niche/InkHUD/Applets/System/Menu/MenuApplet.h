@@ -64,6 +64,10 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     uint8_t selectedChannelIndex = 0;          // Currently selected LoRa channel (Node Config → Radio → Channel)
     bool channelPositionEnabled = false;
 
+    // Recents menu checkbox state (derived from settings.recentlyActiveSeconds)
+    static constexpr uint8_t RECENTS_COUNT = 6;
+    bool recentsSelected[RECENTS_COUNT] = {};
+
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only
     class CannedMessages
