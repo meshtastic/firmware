@@ -198,11 +198,11 @@ void menuHandler::DeviceRolePicker()
 void menuHandler::RadioPresetPicker()
 {
     static const char *optionsArray[] = {
-        "Back", "LongModerate", "LongFast", "MediumSlow", "MediumFast", "ShortSlow", "ShortFast", "ShortTurbo", "LongTurbo",
+        "Back", "LongTurbo", "LongModerate", "LongFast", "MediumSlow", "MediumFast", "ShortSlow", "ShortFast", "ShortTurbo",
     };
     enum optionsNumbers {
         Back = 0,
-        radiopreset_LongSlow = 1,
+        radiopreset_LongTurbo = 1,
         radiopreset_LongModerate = 2,
         radiopreset_LongFast = 3,
         radiopreset_MediumSlow = 4,
@@ -210,7 +210,6 @@ void menuHandler::RadioPresetPicker()
         radiopreset_ShortSlow = 6,
         radiopreset_ShortFast = 7,
         radiopreset_ShortTurbo = 8,
-        radiopreset_LongTurbo = 9
     };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Radio Preset";
