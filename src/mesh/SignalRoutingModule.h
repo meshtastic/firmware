@@ -4,21 +4,13 @@
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 
-// SIGNAL_ROUTING_LITE_MODE can be defined at compile-time via build flags
-// If not defined, runtime RAM detection will be used (150KB+ = full mode, 25KB+ = lite mode)
-// This uses fixed-size arrays instead of std::unordered_map for ~10KB savings
-// Trade-off: O(n) lookups, limited to GRAPH_LITE_MAX_NODES nodes
-#ifndef SIGNAL_ROUTING_LITE_MODE
-// Runtime detection will be used if not compile-time defined
-#define SIGNAL_ROUTING_USE_RUNTIME_DETECTION 1
-#endif
+// SIGNAL_ROUTING_LITE_MODE:
+// = 1: Use GraphLite (lite mode)
+// = 0 or undefined: Use Graph (full mode)
 
-// Include both graph types for runtime selection
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-class Graph;
-class GraphLite;
+// Include graph headers for type definitions
+#include "graph/Graph.h"
+#include "graph/GraphLite.h"
 
 // Routing protocol version for compatibility checking
 #define SIGNAL_ROUTING_VERSION 1
@@ -73,14 +65,10 @@ public:
      * Check if using lite mode
      */
     bool isLiteMode() const {
-        #ifdef SIGNAL_ROUTING_USE_RUNTIME_DETECTION
-            return usingGraphLite;
+        #ifdef SIGNAL_ROUTING_LITE_MODE
+            return SIGNAL_ROUTING_LITE_MODE != 0;
         #else
-            #ifdef SIGNAL_ROUTING_LITE_MODE
-                return true;
-            #else
-                return false;
-            #endif
+            return false;
         #endif
     }
 
@@ -105,16 +93,11 @@ protected:
     virtual int32_t runOnce() override;
 
 private:
-    // Graph type depends on mode (compile-time or runtime detection)
-    #ifdef SIGNAL_ROUTING_USE_RUNTIME_DETECTION
-        void *routingGraph = nullptr;  // Can be Graph or GraphLite
-        bool usingGraphLite = false;   // Track which type was allocated
+    // Graph type depends on SIGNAL_ROUTING_LITE_MODE flag
+    #ifdef SIGNAL_ROUTING_LITE_MODE
+        GraphLite *routingGraph = nullptr;
     #else
-        #ifdef SIGNAL_ROUTING_LITE_MODE
-            GraphLite *routingGraph = nullptr;
-        #else
-            Graph *routingGraph = nullptr;
-        #endif
+        Graph *routingGraph = nullptr;
     #endif
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
@@ -202,16 +185,15 @@ private:
         meshtastic_MeshPacket *packetCopy = nullptr;
     };
 
-    // Data structure sizes depend on mode
-    #ifdef SIGNAL_ROUTING_USE_RUNTIME_DETECTION
-        // Runtime detection: prepare for both lite and full mode structures
+    // Data structures depend on SIGNAL_ROUTING_LITE_MODE
+    #ifdef SIGNAL_ROUTING_LITE_MODE
+        // Lite mode structures: fixed-size arrays
         static constexpr size_t MAX_CAPABILITY_RECORDS = 24;
         static constexpr size_t MAX_RELAY_IDENTITY_ENTRIES = 16;
         static constexpr size_t MAX_SPECULATIVE_RETRANSMITS = 4;
         static constexpr size_t MAX_GATEWAY_RELATIONS = 24;
         static constexpr size_t MAX_GATEWAY_DOWNSTREAM = 8;
 
-        // Lite mode structures
         struct CapabilityRecordEntry {
             NodeNum nodeId = 0;
             CapabilityRecord record;
@@ -246,65 +228,13 @@ private:
         };
         GatewayDownstreamSet gatewayDownstream[MAX_GATEWAY_RELATIONS];
         uint8_t gatewayDownstreamCount = 0;
-
-        // Full mode structures (when runtime detection chooses Graph)
-        std::unordered_map<NodeNum, CapabilityRecord> capabilityRecordsFull;
-        std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCacheFull;
-        std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmitsFull;
-        std::unordered_map<NodeNum, NodeNum> downstreamGateway;
-        std::unordered_map<NodeNum, std::unordered_set<NodeNum>> gatewayDownstreamFull;
     #else
-        // Compile-time mode selection
-        #ifdef SIGNAL_ROUTING_LITE_MODE
-            // Lite mode structures: fixed-size arrays
-            static constexpr size_t MAX_CAPABILITY_RECORDS = 24;
-            static constexpr size_t MAX_RELAY_IDENTITY_ENTRIES = 16;
-            static constexpr size_t MAX_SPECULATIVE_RETRANSMITS = 4;
-            static constexpr size_t MAX_GATEWAY_RELATIONS = 24;
-            static constexpr size_t MAX_GATEWAY_DOWNSTREAM = 8;
-
-            struct CapabilityRecordEntry {
-                NodeNum nodeId = 0;
-                CapabilityRecord record;
-            };
-            CapabilityRecordEntry capabilityRecords[MAX_CAPABILITY_RECORDS];
-            uint8_t capabilityRecordCount = 0;
-
-            struct RelayIdentityCacheEntry {
-                uint8_t relayId = 0;
-                RelayIdentityEntry entries[4]; // Max 4 nodes per relay ID
-                uint8_t entryCount = 0;
-            };
-            RelayIdentityCacheEntry relayIdentityCache[MAX_RELAY_IDENTITY_ENTRIES];
-            uint8_t relayIdentityCacheCount = 0;
-
-            SpeculativeRetransmitEntry speculativeRetransmits[MAX_SPECULATIVE_RETRANSMITS];
-            uint8_t speculativeRetransmitCount = 0;
-
-            struct GatewayRelation {
-                NodeNum gateway = 0;
-                NodeNum downstream = 0;
-                uint32_t lastSeen = 0;
-            };
-            GatewayRelation gatewayRelations[MAX_GATEWAY_RELATIONS];
-            uint8_t gatewayRelationCount = 0;
-
-            struct GatewayDownstreamSet {
-                NodeNum gateway = 0;
-                NodeNum downstream[MAX_GATEWAY_DOWNSTREAM];
-                uint8_t count = 0;
-                uint32_t lastSeen = 0;
-            };
-            GatewayDownstreamSet gatewayDownstream[MAX_GATEWAY_RELATIONS];
-            uint8_t gatewayDownstreamCount = 0;
-        #else
-            // Full mode structures: dynamic hash maps
-            std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
-            std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
-            std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
-            std::unordered_map<NodeNum, NodeNum> downstreamGateway; // downstream -> gateway
-            std::unordered_map<NodeNum, std::unordered_set<NodeNum>> gatewayDownstream; // gateway -> downstream set
-        #endif
+        // Full mode structures: dynamic hash maps
+        std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
+        std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
+        std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
+        std::unordered_map<NodeNum, NodeNum> downstreamGateway; // downstream -> gateway
+        std::unordered_map<NodeNum, std::unordered_set<NodeNum>> gatewayDownstream; // gateway -> downstream set
     #endif
 
     void trackNodeCapability(NodeNum nodeId, CapabilityStatus status);
