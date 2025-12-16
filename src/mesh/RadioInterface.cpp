@@ -518,6 +518,11 @@ void RadioInterface::applyModemConfig()
                 cr = 8;
                 sf = 12;
                 break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_EDGE_FAST_LOW:
+                bw = 62.5;
+                cr = 8;
+                sf = 8;
+                break;
             }
         } else {
             sf = loraConfig.spread_factor;
