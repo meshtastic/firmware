@@ -70,42 +70,15 @@ SignalRoutingModule::SignalRoutingModule()
         return;
     }
 #endif
-
-#ifdef SIGNAL_ROUTING_USE_RUNTIME_DETECTION
-    // Runtime detection mode - unified RAM-based selection for all architectures
-    {
-        uint32_t freeHeap = memGet.getFreeHeap();
-        uint32_t freePsram = memGet.getFreePsram();
-        uint32_t totalRam = freeHeap + freePsram;
-
-        // Use total available RAM (heap + PSRAM if available)
-        // Prefer full mode if we have enough RAM (150KB+), otherwise try lite mode (25KB+)
-        if (totalRam >= 150 * 1024) {
-            LOG_INFO("[SR] Runtime detection: Using full graph mode (%u bytes total RAM available)", totalRam);
-            routingGraph = new Graph();
-            usingGraphLite = false;
-        } else if (totalRam >= 25 * 1024) {
-            LOG_INFO("[SR] Runtime detection: Using lite mode (%u bytes total RAM available)", totalRam);
-            routingGraph = new GraphLite();
-            usingGraphLite = true;
-        } else {
-            LOG_WARN("[SR] Runtime detection: Insufficient RAM (%u bytes total), disabling signal-based routing", totalRam);
-            routingGraph = nullptr;
-            usingGraphLite = false;
-            disable();
-            return;
-        }
-    }
-#else
-    // Compile-time mode selection
-    #ifdef SIGNAL_ROUTING_LITE_MODE
-        LOG_INFO("[SR] Compile-time: Using lite mode");
+    // Simple flag-based selection
+    #if SIGNAL_ROUTING_LITE_MODE == 1
+        LOG_INFO("[SR] Using lite mode (SIGNAL_ROUTING_LITE_MODE=1)");
         routingGraph = new GraphLite();
     #else
-        LOG_INFO("[SR] Compile-time: Using full graph mode");
+        LOG_INFO("[SR] Using full graph mode (SIGNAL_ROUTING_LITE_MODE=0 or undefined)");
         routingGraph = new Graph();
     #endif
-#endif
+
     if (!routingGraph) {
         LOG_WARN("[SR] Failed to allocate Graph, disabling signal-based routing");
         disable();
@@ -502,7 +475,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 #endif
 
         // Log topology if this is a new edge or significant change
-        if (edgeChange == routingGraph->EDGE_NEW || edgeChange == routingGraph->EDGE_SIGNIFICANT_CHANGE) {
+        if (edgeChange == (isLiteMode() ? GraphLite::EDGE_NEW : Graph::EDGE_NEW) || edgeChange == (isLiteMode() ? GraphLite::EDGE_SIGNIFICANT_CHANGE : Graph::EDGE_SIGNIFICANT_CHANGE)) {
             logNetworkTopology();
         }
 
@@ -1273,7 +1246,7 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
             // Log topology for new connections
             LOG_INFO("[SR] Topology changed: new neighbor %s", neighborName);
             logNetworkTopology();
-        } else if (changeType == routingGraph->EDGE_SIGNIFICANT_CHANGE) {
+        } else if (changeType == (isLiteMode() ? GraphLite::EDGE_SIGNIFICANT_CHANGE : Graph::EDGE_SIGNIFICANT_CHANGE)) {
             LOG_INFO("[SR] Topology changed: ETX change for %s", neighborName);
             // Flash blue for signal quality change
             flashRgbLed(0, 0, 255, 300, true);
@@ -2114,7 +2087,7 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
 
     if (routingGraph && nodeDB) {
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        const NodeEdgesLite *myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        const NodeEdgesLite *myEdges = static_cast<GraphLite*>(routingGraph)->getEdgesFrom(nodeDB->getNodeNum());
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                 if ((myEdges->edges[i].to & 0xFF) == p->relay_node) {
