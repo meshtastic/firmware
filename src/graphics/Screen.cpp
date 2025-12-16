@@ -654,7 +654,7 @@ void Screen::setup()
 
     //  Turn on display and trigger first draw
     handleSetOn(true);
-    determineResolution(dispdev->height(), dispdev->width());
+    graphics::currentResolution = graphics::determineScreenResolution(dispdev->height(), dispdev->width());
     ui->update();
 #ifndef USE_EINK
     ui->update(); // Some SSD1306 clones drop the first draw, so run twice

@@ -378,7 +378,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (isHighResolution) ? "LoRa Info" : "LoRa";
+    const char *titleStr = (currentResolution == ScreenResolution::High) ? "LoRa Info" : "LoRa";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -455,12 +455,13 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     char chUtilPercentage[10];
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
-    int chUtil_x = (isHighResolution) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
+    int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
+                                                                 : display->getStringWidth(chUtil) + 5;
     int chUtil_y = getTextPositions(display)[line] + 3;
 
-    int chutil_bar_width = (isHighResolution) ? 100 : 50;
-    int chutil_bar_height = (isHighResolution) ? 12 : 7;
-    int extraoffset = (isHighResolution) ? 6 : 3;
+    int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+    int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
+    int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
     int chutil_percent = airTime->channelUtilizationPercent();
 
     int centerofscreen = SCREEN_WIDTH / 2;
@@ -529,7 +530,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     int line = 1;
     const int barHeight = 6;
     const int labelX = x;
-    int barsOffset = (isHighResolution) ? 24 : 0;
+    int barsOffset = (currentResolution == ScreenResolution::High) ? 24 : 0;
 #ifdef USE_EINK
 #ifndef T_DECK_PRO
     barsOffset -= 12;
@@ -547,7 +548,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         int percent = (used * 100) / total;
 
         char combinedStr[24];
-        if (isHighResolution) {
+        if (currentResolution == ScreenResolution::High) {
             snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%  %u/%uKB", (percent > 80) ? "! " : "", percent, used / 1024,
                      total / 1024);
         } else {
@@ -664,7 +665,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         const char *clientWord = nullptr;
 
         // Determine if narrow or wide screen
-        if (isHighResolution) {
+        if (currentResolution == ScreenResolution::High) {
             clientWord = "Client";
         } else {
             clientWord = "App";
@@ -705,7 +706,7 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     int iconX = SCREEN_WIDTH - chirpy_width - (chirpy_width / 3);
     int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
     int textX_offset = 10;
-    if (isHighResolution) {
+    if (currentResolution == ScreenResolution::High) {
         textX_offset = textX_offset * 4;
         const int scale = 2;
         const int bytesPerRow = (chirpy_width + 7) / 8;

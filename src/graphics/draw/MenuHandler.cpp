@@ -1298,13 +1298,14 @@ void menuHandler::GPSFormatMenu()
 {
 
     static const char *optionsArray[] = {"Back",
-                                         isHighResolution ? "Decimal Degrees" : "DEC",
-                                         isHighResolution ? "Degrees Minutes Seconds" : "DMS",
-                                         isHighResolution ? "Universal Transverse Mercator" : "UTM",
-                                         isHighResolution ? "Military Grid Reference System" : "MGRS",
-                                         isHighResolution ? "Open Location Code" : "OLC",
-                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
-                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
+                                         (currentResolution == ScreenResolution::High) ? "Decimal Degrees" : "DEC",
+                                         (currentResolution == ScreenResolution::High) ? "Degrees Minutes Seconds" : "DMS",
+                                         (currentResolution == ScreenResolution::High) ? "Universal Transverse Mercator" : "UTM",
+                                         (currentResolution == ScreenResolution::High) ? "Military Grid Reference System"
+                                                                                       : "MGRS",
+                                         (currentResolution == ScreenResolution::High) ? "Open Location Code" : "OLC",
+                                         (currentResolution == ScreenResolution::High) ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         (currentResolution == ScreenResolution::High) ? "Maidenhead Locator" : "MLS"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;

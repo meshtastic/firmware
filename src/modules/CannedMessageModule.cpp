@@ -268,7 +268,7 @@ int CannedMessageModule::splitConfiguredMessages()
 }
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
-    if (graphics::isHighResolution) {
+    if (graphics::currentResolution == graphics::ScreenResolution::High) {
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: #%s", channels.getName(this->channel));
         } else {
@@ -1695,8 +1695,9 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     strncpy(entryText, node->user.long_name, sizeof(entryText) - 1);
                     entryText[sizeof(entryText) - 1] = '\0';
                 }
-                int availWidth =
-                    display->getWidth() - (graphics::isHighResolution ? 40 : 20) - ((node && node->is_favorite) ? 10 : 0);
+                int availWidth = display->getWidth() -
+                                 ((graphics::currentResolution == graphics::ScreenResolution::High) ? 40 : 20) -
+                                 ((node && node->is_favorite) ? 10 : 0);
                 if (availWidth < 0)
                     availWidth = 0;
 
@@ -2307,7 +2308,8 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 strncpy(nodeName, src, sizeof(nodeName) - 1);
                 nodeName[sizeof(nodeName) - 1] = '\0';
 
-                int availWidth = display->getWidth() - (graphics::isHighResolution ? 60 : 30);
+                int availWidth =
+                    display->getWidth() - ((graphics::currentResolution == graphics::ScreenResolution::High) ? 60 : 30);
                 if (availWidth < 0)
                     availWidth = 0;
 

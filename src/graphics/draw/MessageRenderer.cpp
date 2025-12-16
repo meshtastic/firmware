@@ -927,7 +927,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             strncpy(longName, node->user.long_name, sizeof(longName) - 1);
             longName[sizeof(longName) - 1] = '\0';
         }
-        int availWidth = display->getWidth() - (isHighResolution ? 40 : 20);
+        int availWidth = display->getWidth() - ((currentResolution == ScreenResolution::High) ? 40 : 20);
         if (availWidth < 0)
             availWidth = 0;
 
