@@ -7,10 +7,7 @@
 #include "TelemetrySensor.h"
 #include "main.h"
 
-ADA4026Sensor::ADA4026Sensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_ADA4026, "ADA4026") 
-{
-}
+ADA4026Sensor::ADA4026Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_ADA4026, "ADA4026") {}
 
 int32_t ADA4026Sensor::runOnce()
 {
@@ -20,23 +17,21 @@ int32_t ADA4026Sensor::runOnce()
     }
 
     uint8_t addr = nodeTelemetrySensorsMap[sensorType].first;
-    
+
     ss.begin(addr);
     ss.pinMode(0, INPUT);
-    
-    status = addr;  // Set status for initI2CSensor
+
+    status = addr; // Set status for initI2CSensor
     return initI2CSensor();
 }
 
-void ADA4026Sensor::setup()
-{
-}
+void ADA4026Sensor::setup() {}
 
 bool ADA4026Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    uint16_t raw_cap = ss.touchRead(0); 
-    
-    float moisture_percent = map(raw_cap, 200, 2000, 0, 100); 
+    uint16_t raw_cap = ss.touchRead(0);
+
+    float moisture_percent = map(raw_cap, 200, 2000, 0, 100);
     moisture_percent = constrain(moisture_percent, 0.0, 100.0);
 
     measurement->variant.environment_metrics.has_soil_moisture = true;

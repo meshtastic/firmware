@@ -9,13 +9,13 @@
 
 class ADA4026Sensor : public TelemetrySensor
 {
-private:
-    Adafruit_seesaw ss;  // Adafruit seesaw object for the sensor
+  private:
+    Adafruit_seesaw ss; // Adafruit seesaw object for the sensor
 
-protected:
+  protected:
     virtual void setup() override;
 
-public:
+  public:
     ADA4026Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
