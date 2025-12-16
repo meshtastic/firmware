@@ -13,6 +13,11 @@
 #include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
+#if defined(ARCH_ESP32) && HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
+#include <WiFi.h>
+#include <esp_wifi.h>
+#endif
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -867,6 +872,52 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         const char *wifiLabel = config.network.wifi_enabled ? "WiFi: On" : "WiFi: Off";
 
         items.push_back(MenuItem(wifiLabel, MenuAction::TOGGLE_WIFI, MenuPage::EXIT));
+
+#if HAS_WIFI && defined(ARCH_ESP32)
+        if (config.network.wifi_enabled) {
+
+            // ---- Status ----
+            if (WiFi.status() == WL_CONNECTED) {
+                nodeConfigLabels.emplace_back("Status: Connected");
+            } else {
+                nodeConfigLabels.emplace_back("Status: Not Connected");
+            }
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
+
+            // ---- Signal ----
+            if (WiFi.status() == WL_CONNECTED) {
+                int rssi = WiFi.RSSI();
+                int quality = constrain(2 * (rssi + 100), 0, 100);
+
+                char sigBuf[32];
+                snprintf(sigBuf, sizeof(sigBuf), "Signal: %d%%", quality);
+                nodeConfigLabels.emplace_back(sigBuf);
+                items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
+
+                char ipBuf[64];
+                snprintf(ipBuf, sizeof(ipBuf), "IP: %s", WiFi.localIP().toString().c_str());
+                nodeConfigLabels.emplace_back(ipBuf);
+                items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
+            }
+
+            // ---- SSID ----
+            if (config.network.wifi_ssid && strlen(config.network.wifi_ssid) > 0) {
+                std::string ssidLabel = "SSID: ";
+                ssidLabel += config.network.wifi_ssid;
+                nodeConfigLabels.emplace_back(ssidLabel);
+                items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
+            }
+
+            // ---- Hostname ----
+            const char *host = WiFi.getHostname();
+            if (host && strlen(host) > 0) {
+                std::string hostLabel = "Host: ";
+                hostLabel += host;
+                nodeConfigLabels.emplace_back(hostLabel);
+                items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
+            }
+        }
+#endif
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
