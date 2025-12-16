@@ -101,7 +101,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SEN5X PM SENSORS */
     meshtastic_TelemetrySensorType_SEN5X = 43,
     /* TSL2561 light sensor */
-    meshtastic_TelemetrySensorType_TSL2561 = 44
+    meshtastic_TelemetrySensorType_TSL2561 = 44,
+    /* Adafruit STEMMA Soil Sensor */
+    meshtastic_TelemetrySensorType_ADA4026 = 45
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -436,8 +438,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_TSL2561
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_TSL2561+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_ADA4026
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_ADA4026+1))
 
 
 

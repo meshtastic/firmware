@@ -8,31 +8,20 @@
 #include "main.h"
 
 SoilMoistureSensor::SoilMoistureSensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_CUSTOM_SENSOR, "SoilMoisture") 
+    : TelemetrySensor(meshtastic_TelemetrySensorType_ADA4026, "SoilMoisture") 
 {
 }
 
 int32_t SoilMoistureSensor::runOnce()
 {
-    // Check if already initialized
-    if (hasSensor()) {
+    LOG_INFO("Init sensor: %s", sensorName);
+    if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-
-    // If scanner found the device, map it to our sensor type
-        nodeTelemetrySensorsMap[sensorType].first = 0x39;
-        LOG_INFO("Mapped Soil Moisture Sensor at 0x%x", 0x39);
-
-    // Now proceed with initialization using the mapped address
-    LOG_INFO("Init SoilMoistureSensor: %s", sensorName);
-    delay(100);
 
     uint8_t addr = nodeTelemetrySensorsMap[sensorType].first;
-    if (!ss.begin(addr)) { 
-        LOG_ERROR("SoilMoistureSensor init failed at 0x%x", addr);
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
+    
+    ss.begin(addr);
     ss.pinMode(0, INPUT);
     
     status = addr;  // Set status for initI2CSensor

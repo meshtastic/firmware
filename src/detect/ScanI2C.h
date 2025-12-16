@@ -83,7 +83,7 @@ class ScanI2C
         BMM150,
         TSL2561,
         DRV2605,
-        SOIL_MOISTURE // Add this line
+        ADA4026 // Add this line
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

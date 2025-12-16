@@ -321,11 +321,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = tsl2561Sensor.runOnce();
             if (pct2075Sensor.hasSensor())
                 result = pct2075Sensor.runOnce();
-            // running soil moisture sensor
-            soilMoistureSensor.runOnce();
-            if (!soilMoistureSensor.hasSensor()) {
+            if (soilMoistureSensor.hasSensor()) {
+                result = soilMoistureSensor.runOnce();
+            } else {
                 LOG_WARN("Soil Moisture Sensor not detected");
-            }   
+            }
 #ifdef HAS_RAKPROT
 
             result = rak9154Sensor.runOnce();
