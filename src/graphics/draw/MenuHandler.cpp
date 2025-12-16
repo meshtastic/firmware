@@ -20,6 +20,8 @@
 #include "modules/KeyVerificationModule.h"
 
 #include "modules/TraceRouteModule.h"
+#include <algorithm>
+#include <array>
 #include <functional>
 #include <utility>
 
@@ -32,20 +34,25 @@ namespace
 {
 
 template <typename T, size_t N, typename Callback>
-BannerOverlayOptions createBannerOptions(const char *message, const MenuOption<T> (&options)[N], Callback &&onSelection)
+BannerOverlayOptions createBannerOptions(const char *message, const MenuOption<T> (&options)[N],
+                                         std::array<const char *, N> &labels, Callback &&onSelection)
 {
-    static const char *labels[N];
     for (size_t i = 0; i < N; ++i) {
         labels[i] = options[i].label;
     }
 
-    auto callback = std::forward<Callback>(onSelection);
+    std::array<MenuOption<T>, N> optionsCopy{};
+    std::copy(std::begin(options), std::end(options), optionsCopy.begin());
+
+    auto callback = std::function<void(const MenuOption<T> &, int)>(std::forward<Callback>(onSelection));
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = message;
-    bannerOptions.optionsArrayPtr = labels;
+    bannerOptions.optionsArrayPtr = labels.data();
     bannerOptions.optionsCount = static_cast<uint8_t>(N);
-    bannerOptions.bannerCallback = [&options, callback](int selected) mutable -> void { callback(options[selected], selected); };
+    bannerOptions.bannerCallback = [optionsCopy, callback](int selected) mutable -> void {
+        callback(optionsCopy[selected], selected);
+    };
     return bannerOptions;
 }
 
@@ -222,8 +229,6 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
-    using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
-
     static const RadioPresetOption presetOptions[] = {
         {"Back", OptionsAction::Back,
          meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST}, // Dummy preset value here to satisfy generics
@@ -237,17 +242,21 @@ void menuHandler::RadioPresetPicker()
         {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
     };
 
-    auto bannerOptions = createBannerOptions("Radio Preset", presetOptions, [](const RadioPresetOption &option, int) -> void {
-        if (option.action == OptionsAction::Back) {
-            menuHandler::menuQueue = menuHandler::lora_Menu;
-            screen->runNow();
-            return;
-        }
+    constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
+    static std::array<const char *, presetCount> presetLabels{};
 
-        config.lora.modem_preset = option.value;
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    });
+    auto bannerOptions =
+        createBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
+            if (option.action == OptionsAction::Back) {
+                menuHandler::menuQueue = menuHandler::lora_Menu;
+                screen->runNow();
+                return;
+            }
+
+            config.lora.modem_preset = option.value;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        });
 
     screen->showOverlayBanner(bannerOptions);
 }

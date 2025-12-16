@@ -108,5 +108,7 @@ template <typename T> struct MenuOption {
     T value;
 };
 
+using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
+
 } // namespace graphics
 #endif
