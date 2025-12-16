@@ -222,6 +222,7 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
+    using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
 
     static const RadioPresetOption presetOptions[] = {
         {"Back", OptionsAction::Back, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
