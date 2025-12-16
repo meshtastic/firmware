@@ -293,7 +293,8 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
 typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Long Range - Fast */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST = 0,
-    /* Long Range - Slow */
+    /* Long Range - Slow
+ Deprecated in 2.7: Unpopular slow preset. */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW = 1,
     /* Very Long Range - Slow
  Deprecated in 2.5: Works only with txco and is unusably slow */
