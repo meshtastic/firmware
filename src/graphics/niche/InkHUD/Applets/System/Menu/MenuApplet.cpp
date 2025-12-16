@@ -742,16 +742,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                      MenuPage::EXIT                                                  // Exit once complete
                                      ));
 
-        // Optional: GPS
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
-            items.push_back(MenuItem("Enable GPS", MenuAction::TOGGLE_GPS, MenuPage::EXIT));
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-            items.push_back(MenuItem("Disable GPS", MenuAction::TOGGLE_GPS, MenuPage::EXIT));
-
-        // Optional: Enable Bluetooth, in case of lost wifi connection
-        if (!config.bluetooth.enabled || config.network.wifi_enabled)
-            items.push_back(MenuItem("Enable Bluetooth", MenuAction::ENABLE_BLUETOOTH, MenuPage::EXIT));
-
+        // Options Toggles
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
         items.push_back(MenuItem("Recents Duration", MenuPage::RECENTS));
@@ -793,6 +784,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Device Config Section
         items.push_back(MenuItem::Header("Device Config"));
         items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
+
+#if !MESHTASTIC_EXCLUDE_GPS
+        items.push_back(MenuItem("Position", MenuPage::NODE_CONFIG_POSITION));
+#endif
+
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
 #endif
@@ -815,6 +811,21 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         nodeConfigLabels.emplace_back("Timezone: " + std::string(tz));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::TIMEZONE));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_POSITION: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+
+#if !MESHTASTIC_EXCLUDE_GPS
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+            items.push_back(MenuItem("Enable GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION));
+        } else {
+            items.push_back(MenuItem("Disable GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION));
+        }
+#endif
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
