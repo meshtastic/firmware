@@ -21,11 +21,36 @@
 
 #include "modules/TraceRouteModule.h"
 #include <functional>
+#include <utility>
 
 extern uint16_t TFT_MESH;
 
 namespace graphics
 {
+
+namespace
+{
+
+template <typename T, size_t N, typename Callback>
+BannerOverlayOptions createBannerOptions(const char *message, const MenuOption<T> (&options)[N], Callback &&onSelection)
+{
+    static const char *labels[N];
+    for (size_t i = 0; i < N; ++i) {
+        labels[i] = options[i].label;
+    }
+
+    auto callback = std::forward<Callback>(onSelection);
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = message;
+    bannerOptions.optionsArrayPtr = labels;
+    bannerOptions.optionsCount = static_cast<uint8_t>(N);
+    bannerOptions.bannerCallback = [&options, callback](int selected) mutable -> void { callback(options[selected], selected); };
+    return bannerOptions;
+}
+
+} // namespace
+
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
@@ -197,49 +222,31 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
-    static const char *optionsArray[] = {
-        "Back", "LongTurbo", "LongModerate", "LongFast", "MediumSlow", "MediumFast", "ShortSlow", "ShortFast", "ShortTurbo",
+
+    static const RadioPresetOption presetOptions[] = {
+        {"Back", OptionsAction::Back, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
+        {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
+        {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
+        {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
+        {"MediumSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW},
+        {"MediumFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST},
+        {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
+        {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
+        {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
     };
-    enum optionsNumbers {
-        Back = 0,
-        radiopreset_LongTurbo = 1,
-        radiopreset_LongModerate = 2,
-        radiopreset_LongFast = 3,
-        radiopreset_MediumSlow = 4,
-        radiopreset_MediumFast = 5,
-        radiopreset_ShortSlow = 6,
-        radiopreset_ShortFast = 7,
-        radiopreset_ShortTurbo = 8,
-    };
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Radio Preset";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 9;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Back) {
+
+    auto bannerOptions = createBannerOptions("Radio Preset", presetOptions, [](const RadioPresetOption &option, int) -> void {
+        if (option.action == OptionsAction::Back) {
             menuHandler::menuQueue = menuHandler::lora_Menu;
             screen->runNow();
             return;
-        } else if (selected == radiopreset_LongTurbo) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
-        } else if (selected == radiopreset_LongModerate) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
-        } else if (selected == radiopreset_LongFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-        } else if (selected == radiopreset_MediumSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
-        } else if (selected == radiopreset_MediumFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-        } else if (selected == radiopreset_ShortSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW;
-        } else if (selected == radiopreset_ShortFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
-        } else if (selected == radiopreset_ShortTurbo) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
         }
+
+        config.lora.modem_preset = option.value;
         service->reloadConfig(SEGMENT_CONFIG);
         rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    };
+    });
+
     screen->showOverlayBanner(bannerOptions);
 }
 

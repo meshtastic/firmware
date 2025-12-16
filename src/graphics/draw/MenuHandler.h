@@ -99,5 +99,16 @@ class menuHandler
     static void BluetoothToggleMenu();
 };
 
+/* Generic Menu Options designations  */
+enum class OptionsAction { Back, Select };
+
+template <typename T> struct MenuOption {
+    const char *label;
+    OptionsAction action;
+    T value;
+};
+
+using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
+
 } // namespace graphics
 #endif
