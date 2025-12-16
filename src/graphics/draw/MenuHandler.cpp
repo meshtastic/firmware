@@ -225,7 +225,8 @@ void menuHandler::RadioPresetPicker()
     using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
 
     static const RadioPresetOption presetOptions[] = {
-        {"Back", OptionsAction::Back, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
+        {"Back", OptionsAction::Back,
+         meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST}, // Dummy preset value here to satisfy generics
         {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
         {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
         {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
