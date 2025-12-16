@@ -540,7 +540,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case 0x39:
+            case ADA4026_ADDR:
                 logFoundDevice("Soil Moisture Sensor", (uint8_t)addr.address);
                 type = ADA4026;
                 break;

@@ -253,6 +253,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define RAK120353_ADDR 0x22
 
 // -----------------------------------------------------------------------------
+// Adafruit Stemma Soil Moisture Sensor (ADA4026)
+// The default I2C address for this sensor is 0x36, but to avoid overlap, solder
+// the two jumpers on the back to change the address to 0x39
+// -----------------------------------------------------------------------------
+#define ADA4026_ADDR 0x39
+// -----------------------------------------------------------------------------
 // BIAS-T Generator
 // -----------------------------------------------------------------------------
 #define TPS65233_ADDR 0x60
