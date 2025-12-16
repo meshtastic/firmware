@@ -5,6 +5,7 @@
 
 #include "LR11x0Interface.h"
 #include "Module.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include "platform/portduino/USBHal.h"
 #include "yaml-cpp/yaml.h"
 
@@ -46,6 +47,8 @@ struct pinMapping {
 };
 
 extern std::ofstream traceFile;
+extern std::ofstream JSONFile;
+
 extern Ch341Hal *ch341Hal;
 int initGPIOPin(int pinNum, std::string gpioChipname, int line);
 bool loadConfig(const char *configPath);
@@ -147,6 +150,9 @@ extern struct portduino_config_struct {
     std::string traceFilename;
     bool ascii_logs = !isatty(1);
     bool ascii_logs_explicit = false;
+
+    std::string JSONFilename;
+    meshtastic_PortNum JSONFilter = (_meshtastic_PortNum)0;
 
     // Webserver
     std::string webserver_root_path = "";
@@ -413,6 +419,29 @@ extern struct portduino_config_struct {
         }
         if (traceFilename != "")
             out << YAML::Key << "TraceFile" << YAML::Value << traceFilename;
+        if (JSONFilename != "") {
+            out << YAML::Key << "JSONFile" << YAML::Value << JSONFilename;
+            if (JSONFilter == meshtastic_PortNum_TEXT_MESSAGE_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "textmessage";
+            else if (JSONFilter == meshtastic_PortNum_TELEMETRY_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "telemetry";
+            else if (JSONFilter == meshtastic_PortNum_NODEINFO_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "nodeinfo";
+            else if (JSONFilter == meshtastic_PortNum_POSITION_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "position";
+            else if (JSONFilter == meshtastic_PortNum_WAYPOINT_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "waypoint";
+            else if (JSONFilter == meshtastic_PortNum_NEIGHBORINFO_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "neighborinfo";
+            else if (JSONFilter == meshtastic_PortNum_TRACEROUTE_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "traceroute";
+            else if (JSONFilter == meshtastic_PortNum_DETECTION_SENSOR_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "detection";
+            else if (JSONFilter == meshtastic_PortNum_PAXCOUNTER_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "paxcounter";
+            else if (JSONFilter == meshtastic_PortNum_REMOTE_HARDWARE_APP)
+                out << YAML::Key << "JSONFilter" << YAML::Value << "remotehardware";
+        }
         if (ascii_logs_explicit) {
             out << YAML::Key << "AsciiLogs" << YAML::Value << ascii_logs;
         }
@@ -444,12 +473,16 @@ extern struct portduino_config_struct {
             switch (configDisplayMode) {
             case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+                break;
             case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+                break;
             case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+                break;
             case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+                break;
             }
 
             out << YAML::EndMap; // Config

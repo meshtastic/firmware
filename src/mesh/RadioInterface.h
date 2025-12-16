@@ -87,9 +87,8 @@ class RadioInterface
     const uint8_t NUM_SYM_CAD = 2;       // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
     const uint8_t NUM_SYM_CAD_24GHZ = 4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
     uint32_t slotTimeMsec = computeSlotTimeMsec();
-    uint16_t preambleLength = 16;      // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    uint32_t preambleTimeMsec = 165;   // calculated on startup, this is the default for LongFast
-    uint32_t maxPacketTimeMsec = 3246; // calculated on startup, this is the default for LongFast
+    uint16_t preambleLength = 16;    // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    uint32_t preambleTimeMsec = 165; // calculated on startup, this is the default for LongFast
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
     const uint8_t CWmin = 3; // minimum CWsize
@@ -202,8 +201,8 @@ class RadioInterface
      *
      * @return num msecs for the packet
      */
-    uint32_t getPacketTime(const meshtastic_MeshPacket *p);
-    uint32_t getPacketTime(uint32_t totalPacketLen);
+    uint32_t getPacketTime(const meshtastic_MeshPacket *p, bool received = false);
+    virtual uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) = 0;
 
     /**
      * Get the channel we saved.

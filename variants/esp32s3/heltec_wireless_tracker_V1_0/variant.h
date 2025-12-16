@@ -27,6 +27,8 @@
 #define VTFT_CTRL 46                  // Heltec Tracker needs this pulled low for TFT
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define FORCE_LOW_RES 1
+#define USE_TFTDISPLAY 1
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define VEXT_ON_VALUE LOW

@@ -37,6 +37,15 @@
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
+#elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
+// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
+// For now, make it dynamic again.
+#define MAX_PACKETS                                                                                                              \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+     2) // max number of packets which can be in flight (either queued from reception or queued for sending)
+
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
 #define MAX_PACKETS_STATIC                                                                                                       \
@@ -470,6 +479,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!");
+#if !(MESHTASTIC_EXCLUDE_PKI)
+                } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+                    LOG_WARN("Rejecting legacy DM");
+                    return DecodeState::DECODE_FAILURE;
+#endif
                 } else {
                     p->decoded = decodedtmp;
                     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -512,6 +526,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #elif ARCH_PORTDUINO
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+        } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
+                JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
+            }
         }
 #endif
         return DecodeState::DECODE_SUCCESS;

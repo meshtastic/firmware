@@ -50,6 +50,7 @@ void consolePrintf(const char *format, ...)
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
 {
+    api_type = TYPE_SERIAL;
     assert(!console);
     console = this;
     canWrite = false; // We don't send packets to our port until it has talked to us first
@@ -86,7 +87,7 @@ int32_t SerialConsole::runOnce()
 #endif
 
     int32_t delay = runOncePart();
-#if defined(SERIAL_HAS_ON_RECEIVE)
+#if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
     return Port.available() ? delay : INT32_MAX;
 #elif defined(IS_USB_SERIAL)
     return HWCDC::isPlugged() ? delay : (1000 * 20);

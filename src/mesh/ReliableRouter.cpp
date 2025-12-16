@@ -76,7 +76,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
        If we don't add this, we will likely retransmit too early.
     */
     for (auto i = pending.begin(); i != pending.end(); i++) {
-        i->second.nextTxMsec += iface->getPacketTime(p);
+        i->second.nextTxMsec += iface->getPacketTime(p, true);
     }
 
     return isBroadcast(p->to) ? FloodingRouter::shouldFilterReceived(p) : NextHopRouter::shouldFilterReceived(p);
@@ -150,7 +150,9 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if (ackId || nakId) {
+        if ((ackId || nakId) &&
+            // Implicit ACKs from MQTT should not stop retransmissions
+            !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
             LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
                 stopRetransmission(p->to, ackId);
