@@ -105,7 +105,15 @@ enum class OptionsAction { Back, Select };
 template <typename T> struct MenuOption {
     const char *label;
     OptionsAction action;
+    bool hasValue;
     T value;
+
+    MenuOption(const char *labelIn, OptionsAction actionIn, T valueIn)
+        : label(labelIn), action(actionIn), hasValue(true), value(valueIn)
+    {
+    }
+
+    MenuOption(const char *labelIn, OptionsAction actionIn) : label(labelIn), action(actionIn), hasValue(false), value() {}
 };
 
 using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;

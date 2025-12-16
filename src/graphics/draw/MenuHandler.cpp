@@ -33,26 +33,23 @@ namespace graphics
 namespace
 {
 
+// Caller must ensure the provided options array outlives the banner callback.
 template <typename T, size_t N, typename Callback>
-BannerOverlayOptions createBannerOptions(const char *message, const MenuOption<T> (&options)[N],
-                                         std::array<const char *, N> &labels, Callback &&onSelection)
+BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOption<T> (&options)[N],
+                                               std::array<const char *, N> &labels, Callback &&onSelection)
 {
     for (size_t i = 0; i < N; ++i) {
         labels[i] = options[i].label;
     }
 
-    std::array<MenuOption<T>, N> optionsCopy{};
-    std::copy(std::begin(options), std::end(options), optionsCopy.begin());
-
+    const MenuOption<T> *optionsPtr = options;
     auto callback = std::function<void(const MenuOption<T> &, int)>(std::forward<Callback>(onSelection));
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = message;
     bannerOptions.optionsArrayPtr = labels.data();
     bannerOptions.optionsCount = static_cast<uint8_t>(N);
-    bannerOptions.bannerCallback = [optionsCopy, callback](int selected) mutable -> void {
-        callback(optionsCopy[selected], selected);
-    };
+    bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
     return bannerOptions;
 }
 
@@ -230,8 +227,7 @@ void menuHandler::DeviceRolePicker()
 void menuHandler::RadioPresetPicker()
 {
     static const RadioPresetOption presetOptions[] = {
-        {"Back", OptionsAction::Back,
-         meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST}, // Dummy preset value here to satisfy generics
+        {"Back", OptionsAction::Back},
         {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
         {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
         {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
@@ -246,10 +242,14 @@ void menuHandler::RadioPresetPicker()
     static std::array<const char *, presetCount> presetLabels{};
 
     auto bannerOptions =
-        createBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
+        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
             if (option.action == OptionsAction::Back) {
                 menuHandler::menuQueue = menuHandler::lora_Menu;
                 screen->runNow();
+                return;
+            }
+
+            if (!option.hasValue) {
                 return;
             }
 
