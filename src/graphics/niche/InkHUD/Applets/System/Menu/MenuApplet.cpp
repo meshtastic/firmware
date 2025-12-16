@@ -320,17 +320,23 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_APPLET:
-        settings->userApplets.active[cursor] = !settings->userApplets.active[cursor];
-        inkhud->updateAppletSelection();
+        if (item.checkState) {
+            *item.checkState = !(*item.checkState);
+            inkhud->updateAppletSelection();
+        }
         break;
 
     case TOGGLE_AUTOSHOW_APPLET:
         // Toggle settings.userApplets.autoshow[] value, via MenuItem::checkState pointer set in populateAutoshowPage()
-        *items.at(cursor).checkState = !(*items.at(cursor).checkState);
+        if (item.checkState) {
+            *item.checkState = !(*item.checkState);
+        }
         break;
 
     case TOGGLE_NOTIFICATIONS:
-        settings->optionalFeatures.notifications = !settings->optionalFeatures.notifications;
+        if (item.checkState) {
+            *item.checkState = !(*item.checkState);
+        }
         break;
 
     case TOGGLE_INVERT_COLOR:
@@ -1185,7 +1191,8 @@ void InkHUD::MenuApplet::onRender()
 
     // Dimensions for the slots where we will draw menuItems
     const float padding = 0.05;
-    const uint16_t itemH = fontSmall.lineHeight() * 2;
+    const uint16_t itemH = fontSmall.lineHeight() * 1.6;
+    const int16_t selectInsetY = 2;
     const int16_t itemW = width() - X(padding) - X(padding);
     const int16_t itemL = X(padding);
     const int16_t itemR = X(1 - padding);
@@ -1256,7 +1263,7 @@ void InkHUD::MenuApplet::onRender()
         } else {
             // Box, if currently selected
             if (cursorShown && i == cursor)
-                drawRect(itemL, itemT, itemW, itemH, BLACK);
+                drawRect(itemL, itemT + selectInsetY, itemW, itemH - (selectInsetY * 2), BLACK);
 
             // Indented normal item text
             printAt(itemL + X(padding * 2), center, item.label, LEFT, MIDDLE);

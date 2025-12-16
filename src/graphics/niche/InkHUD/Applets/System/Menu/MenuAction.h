@@ -106,7 +106,9 @@ enum MenuAction {
     TOGGLE_CHANNEL_DOWNLINK,
     TOGGLE_CHANNEL_POSITION,
     SET_CHANNEL_PRECISION,
+    // Display
     TOGGLE_DISPLAY_UNITS,
+    // Network
     TOGGLE_WIFI,
 };
 
