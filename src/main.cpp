@@ -260,8 +260,15 @@ static int32_t ledBlinker()
 
     ledBlink.set(ledOn);
 
+    // we don't have much control over timing when light-sleeping, so let's ensure we don't keep LED on for too long
+#if MESHTASTIC_EXCLUDE_POWER_FSM
+    bool isSleeping = false;
+#else
+    bool isSleeping = powerFSM.getState() == &stateLS;
+#endif
+
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
+    return (powerStatus->getIsCharging() && !isSleeping) ? 1000 : (ledOn ? 1 : 1000);
 }
 
 uint32_t timeLastPowered = 0;
@@ -1443,10 +1450,14 @@ void setup()
 #endif
 
 #ifndef ARCH_PORTDUINO
-
-        // Initialize Wifi
 #if HAS_WIFI
+    // Initialize Wifi
     initWifi();
+#endif
+
+#if HAS_BLUETOOTH
+    // Enable Bluetooth
+    setBluetoothEnable(true);
 #endif
 
 #if HAS_ETHERNET
@@ -1488,12 +1499,25 @@ void setup()
                                                        1000);
     }
 
+#ifdef ARCH_ESP32
+    if (config.power.is_power_saving) {
+        initLightSleep();
+    }
+#endif
+
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-#if !HAS_TFT
-    setCPUFast(false); // 80MHz is fine for our slow peripherals
+#ifndef ARCH_PORTDUINO
+    auto cpuFast = false;
+#if HAS_TFT
+    cpuFast |= true;
+#endif
+#if HAS_WIFI
+    cpuFast |= !config.power.is_power_saving && isWifiAvailable();
+#endif
+    setCPUFast(cpuFast);
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
