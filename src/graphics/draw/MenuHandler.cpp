@@ -197,8 +197,9 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
-    static const char *optionsArray[] = {"Back",       "LongSlow",  "LongModerate", "LongFast",  "MediumSlow",
-                                         "MediumFast", "ShortSlow", "ShortFast",    "ShortTurbo"};
+    static const char *optionsArray[] = {
+        "Back", "LongModerate", "LongFast", "MediumSlow", "MediumFast", "ShortSlow", "ShortFast", "ShortTurbo", "LongTurbo",
+    };
     enum optionsNumbers {
         Back = 0,
         radiopreset_LongSlow = 1,
@@ -208,7 +209,8 @@ void menuHandler::RadioPresetPicker()
         radiopreset_MediumFast = 5,
         radiopreset_ShortSlow = 6,
         radiopreset_ShortFast = 7,
-        radiopreset_ShortTurbo = 8
+        radiopreset_ShortTurbo = 8,
+        radiopreset_LongTurbo = 9
     };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Radio Preset";
@@ -219,8 +221,8 @@ void menuHandler::RadioPresetPicker()
             menuHandler::menuQueue = menuHandler::lora_Menu;
             screen->runNow();
             return;
-        } else if (selected == radiopreset_LongSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+        } else if (selected == radiopreset_LongTurbo) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
         } else if (selected == radiopreset_LongModerate) {
             config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
         } else if (selected == radiopreset_LongFast) {
