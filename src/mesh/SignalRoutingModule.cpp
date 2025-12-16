@@ -475,7 +475,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 #endif
 
         // Log topology if this is a new edge or significant change
-        if (edgeChange == (isLiteMode() ? GraphLite::EDGE_NEW : Graph::EDGE_NEW) || edgeChange == (isLiteMode() ? GraphLite::EDGE_SIGNIFICANT_CHANGE : Graph::EDGE_SIGNIFICANT_CHANGE)) {
+        if (edgeChange == Graph::EDGE_NEW || edgeChange == Graph::EDGE_SIGNIFICANT_CHANGE) {
             logNetworkTopology();
         }
 
@@ -1235,18 +1235,18 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
                              );
 
     // If significant change, consider sending an update sooner
-    if (changeType != routingGraph->EDGE_NO_CHANGE) {
+    if (changeType != Graph::EDGE_NO_CHANGE) {
         char neighborName[64];
         getNodeDisplayName(nodeId, neighborName, sizeof(neighborName));
 
-        if (changeType == routingGraph->EDGE_NEW) {
+        if (changeType == Graph::EDGE_NEW) {
             LOG_INFO("[SR] New neighbor %s detected", neighborName);
             // Flash green for new neighbor
             flashRgbLed(0, 255, 0, 300, true);
             // Log topology for new connections
             LOG_INFO("[SR] Topology changed: new neighbor %s", neighborName);
             logNetworkTopology();
-        } else if (changeType == (isLiteMode() ? GraphLite::EDGE_SIGNIFICANT_CHANGE : Graph::EDGE_SIGNIFICANT_CHANGE)) {
+        } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
             LOG_INFO("[SR] Topology changed: ETX change for %s", neighborName);
             // Flash blue for signal quality change
             flashRgbLed(0, 0, 255, 300, true);

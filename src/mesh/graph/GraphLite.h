@@ -13,6 +13,7 @@
  */
 
 #include "NodeDB.h"
+#include "Graph.h"  // For shared constants
 #include <cstdint>
 #include <limits>
 
@@ -74,12 +75,6 @@ struct RelayStateLite {
 
 class GraphLite {
   public:
-    // Return values for updateEdge()
-    static constexpr int EDGE_NO_CHANGE = 0;
-    static constexpr int EDGE_NEW = 1;
-    static constexpr int EDGE_SIGNIFICANT_CHANGE = 2;
-
-    static constexpr float ETX_CHANGE_THRESHOLD = 0.20f;
     static uint32_t getContentionWindowMs();
     static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 300;
 
