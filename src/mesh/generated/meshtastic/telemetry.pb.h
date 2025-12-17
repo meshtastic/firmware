@@ -102,8 +102,10 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_SEN5X = 43,
     /* TSL2561 light sensor */
     meshtastic_TelemetrySensorType_TSL2561 = 44,
+    /* Adafruit STEMMA Soil Sensor */
+    meshtastic_TelemetrySensorType_ADA4026 = 45
     /* BH1750 light sensor */
-    meshtastic_TelemetrySensorType_BH1750 = 45
+    meshtastic_TelemetrySensorType_BH1750 = 46
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */

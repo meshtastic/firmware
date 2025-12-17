@@ -138,6 +138,15 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/BH1750Sensor.h"
 #endif
 
+// New update to the Telemtry file to ensure it is being recognize
+//  Soil Moisture Sensor - using I2CSoilMoistureSensor library
+#if __has_include(<Adafruit_seesaw.h>)
+#include "Sensor/ADA4026Sensor.h"
+ADA4026Sensor ada4026Sensor;
+#else
+NullSensor ada4026Sensor;
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -321,8 +330,15 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
-                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-                // sensormap here.
+            if (cgRadSens.hasSensor())
+                result = cgRadSens.runOnce();
+            if (tsl2561Sensor.hasSensor())
+                result = tsl2561Sensor.runOnce();
+            if (pct2075Sensor.hasSensor())
+                result = pct2075Sensor.runOnce();
+            if (ada4026Sensor.hasSensor()) {
+                result = ada4026Sensor.runOnce();
+            }
 #ifdef HAS_RAKPROT
             result = rak9154Sensor.runOnce();
 #endif
@@ -582,6 +598,18 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (max17048Sensor.hasSensor()) {
         valid = valid && max17048Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (cgRadSens.hasSensor()) {
+        valid = valid && cgRadSens.getMetrics(m);
+        hasSensor = true;
+    }
+    if (pct2075Sensor.hasSensor()) {
+        valid = valid && pct2075Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (ada4026Sensor.hasSensor()) {
+        valid = valid && ada4026Sensor.getMetrics(m);
         hasSensor = true;
     }
 #endif
