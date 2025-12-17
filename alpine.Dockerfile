@@ -4,7 +4,6 @@
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
 FROM python:3.14-alpine3.22 AS builder
-ARG PIO_ENV=native
 ENV PIP_ROOT_USER_ACTION=ignore
 
 RUN apk --no-cache add \
@@ -13,8 +12,7 @@ RUN apk --no-cache add \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
         libx11-dev libinput-dev libxkbcommon-dev \
     && rm -rf /var/cache/apk/* \
-    && pip install --no-cache-dir -U platformio \
-    && mkdir /tmp/firmware
+    && pip install --no-cache-dir -U platformio
 
 WORKDIR /tmp/firmware
 COPY . /tmp/firmware
@@ -23,6 +21,7 @@ COPY . /tmp/firmware
 # Add `argp` for musl
 ENV PLATFORMIO_BUILD_FLAGS="-Os -ffunction-sections -fdata-sections -Wl,--gc-sections -largp"
 
+ARG PIO_ENV=native
 RUN bash ./bin/build-native.sh "$PIO_ENV" && \
     cp "/tmp/firmware/release/meshtasticd_linux_$(uname -m)" "/tmp/firmware/release/meshtasticd"
 
@@ -44,7 +43,6 @@ RUN apk --no-cache add \
         shadow libstdc++ libbsd libgpiod yaml-cpp libusb \
         i2c-tools libuv libx11 libinput libxkbcommon \
     && rm -rf /var/cache/apk/* \
-    && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
     && mkdir -p /etc/meshtasticd/ssl
 
