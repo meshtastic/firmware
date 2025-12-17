@@ -965,11 +965,11 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
                 return;
 
             if (longName && longName[0]) {
-#if defined(M5STACK_UNITC6L)
-                strcpy(banner, "New Message");
-#else
-                snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-#endif
+                if (currentResolution == ScreenResolution::UltraLow) {
+                    strcpy(banner, "New Message");
+                } else {
+                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                }
             } else
                 strcpy(banner, "New Message");
         }

@@ -21,10 +21,17 @@ ScreenResolution determineScreenResolution(int16_t screenheight, int16_t screenw
 #ifdef FORCE_LOW_RES
     return ScreenResolution::Low;
 #else
+    // Unit C6L and other ultra low res screens
+    if (screenwidth <= 64 || screenheight <= 48) {
+        return ScreenResolution::UltraLow;
+    }
+
+    // Standard OLED screens
     if (screenwidth > 128 && screenheight <= 64) {
         return ScreenResolution::Low;
     }
 
+    // High Resolutions screens like T114, TDeck, TLora Pager, etc
     if (screenwidth > 128) {
         return ScreenResolution::High;
     }

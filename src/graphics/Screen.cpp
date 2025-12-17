@@ -1539,11 +1539,11 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     screen->showSimpleBanner(banner, 3000);
                 } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
                     if (longName && longName[0]) {
-#if defined(M5STACK_UNITC6L)
-                        strcpy(banner, "New Message");
-#else
-                        snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-#endif
+                        if (currentResolution == ScreenResolution::UltraLow) {
+                            strcpy(banner, "New Message");
+                        } else {
+                            snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                        }
                     } else {
                         strcpy(banner, "New Message");
                     }
@@ -1741,11 +1741,11 @@ int Screen::handleInputEvent(const InputEvent *event)
                     if (!messageStore.getMessages().empty()) {
                         menuHandler::messageResponseMenu();
                     } else {
-#if defined(M5STACK_UNITC6L)
-                        menuHandler::textMessageMenu();
-#else
-                        menuHandler::textMessageBaseMenu();
-#endif
+                        if (currentResolution == ScreenResolution::UltraLow) {
+                            menuHandler::textMessageMenu();
+                        } else {
+                            menuHandler::textMessageBaseMenu();
+                        }
                     }
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&

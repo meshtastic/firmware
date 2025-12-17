@@ -23,7 +23,6 @@ extern graphics::Screen *screen;
 
 #if defined(M5STACK_UNITC6L)
 static uint32_t lastSwitchTime = 0;
-#else
 #endif
 namespace graphics
 {
@@ -564,16 +563,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // This should correct the scrollbar
     totalEntries -= numskipped;
 
-#if !defined(M5STACK_UNITC6L)
-    // Draw column separator
-    if (shownCount > 0) {
-        const int firstNodeY = y + 3;
-        for (int horizontal_offset = 1; horizontal_offset < totalColumns; horizontal_offset++) {
-            drawColumnSeparator(display, columnWidth * horizontal_offset, firstNodeY, lastNodeY);
-        }
-    }
-
-#endif
     const int scrollStartY = y + 3;
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, totalColumns, scrollStartY);
     graphics::drawCommonFooter(display, x, y);

@@ -137,11 +137,10 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "NP_865",
                                          "BR_902"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "LoRa Region";
-#else
     bannerOptions.message = "Set the LoRa region";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "LoRa Region";
+    }
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 27;
@@ -459,11 +458,11 @@ void menuHandler::messageResponseMenu()
 #endif
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Message";
-#else
-    bannerOptions.message = "Message Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Message";
+    } else {
+        bannerOptions.message = "Message Action";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -640,11 +639,11 @@ void menuHandler::deleteMessagesMenu()
         optionsArray[options] = "Delete This Chat";
         optionsEnumArray[options++] = DeleteThis;
     }
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Delete All";
-#else
-    optionsArray[options] = "Delete All Chats";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "Delete All";
+    } else {
+        optionsArray[options] = "Delete All Chats";
+    }
     optionsEnumArray[options++] = DeleteAll;
 
     BannerOverlayOptions bannerOptions;
@@ -865,11 +864,10 @@ void menuHandler::homeBaseMenu()
     optionsEnumArray[options++] = Position;
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Home";
-#else
     bannerOptions.message = "Home Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Home";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -954,21 +952,22 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Display Options";
     optionsEnumArray[options++] = ScreenOptions;
 
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Bluetooth";
-#else
-    optionsArray[options] = "Bluetooth Toggle";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "Bluetooth";
+    } else {
+        optionsArray[options] = "Bluetooth Toggle";
+    }
     optionsEnumArray[options++] = Bluetooth;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     optionsArray[options] = "WiFi Toggle";
     optionsEnumArray[options++] = WiFiToggle;
 #endif
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Power";
-#else
-    optionsArray[options] = "Reboot/Shutdown";
-#endif
+
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "Power";
+    } else {
+        optionsArray[options] = "Reboot/Shutdown";
+    }
     optionsEnumArray[options++] = PowerMenu;
 
     if (test_enabled) {
@@ -977,11 +976,10 @@ void menuHandler::systemBaseMenu()
     }
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "System";
-#else
     bannerOptions.message = "System Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "System";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -1037,11 +1035,11 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "Go To Chat";
         optionsEnumArray[options++] = GoToChat;
     }
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "New Preset";
-#else
-    optionsArray[options] = "New Preset Msg";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "New Preset";
+    } else {
+        optionsArray[options] = "New Preset Msg";
+    }
     optionsEnumArray[options++] = Preset;
 
     if (kb_found) {
@@ -1049,19 +1047,18 @@ void menuHandler::favoriteBaseMenu()
         optionsEnumArray[options++] = Freetext;
     }
 
-#if !defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Trace Route";
-    optionsEnumArray[options++] = TraceRoute;
-#endif
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Trace Route";
+        optionsEnumArray[options++] = TraceRoute;
+    }
     optionsArray[options] = "Remove Favorite";
     optionsEnumArray[options++] = Remove;
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Favorites";
-#else
     bannerOptions.message = "Favorites Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Favorites";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -1140,13 +1137,15 @@ void menuHandler::nodeListMenu()
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
 
-#if !defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Key Verification";
-    optionsEnumArray[options++] = Verify;
-#endif
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Key Verification";
+        optionsEnumArray[options++] = Verify;
+    }
 
-    optionsArray[options] = "Show Long/Short Name";
-    optionsEnumArray[options++] = NodeNameLength;
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Show Long/Short Name";
+        optionsEnumArray[options++] = NodeNameLength;
+    }
     optionsArray[options] = "Reset NodeDB";
     optionsEnumArray[options++] = Reset;
 
@@ -1353,11 +1352,10 @@ void menuHandler::BluetoothToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Bluetooth";
-#else
     bannerOptions.message = "Toggle Bluetooth";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Bluetooth";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1573,11 +1571,10 @@ void menuHandler::rebootMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Reboot";
-#else
     bannerOptions.message = "Reboot Device?";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Reboot";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1598,11 +1595,10 @@ void menuHandler::shutdownMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Shutdown";
-#else
     bannerOptions.message = "Shutdown Device?";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Shutdown";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1619,12 +1615,13 @@ void menuHandler::shutdownMenu()
 
 void menuHandler::addFavoriteMenu()
 {
-#if defined(M5STACK_UNITC6L)
-    screen->showNodePicker("Node Favorite", 30000, [](uint32_t nodenum) -> void {
-#else
-    screen->showNodePicker("Node To Favorite", 30000, [](uint32_t nodenum) -> void {
-
-#endif
+    const char *NODE_PICKER_TITLE;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        NODE_PICKER_TITLE = "Node Favorite";
+    } else {
+        NODE_PICKER_TITLE = "Node To Favorite";
+    }
+    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
         LOG_WARN("Nodenum: %u", nodenum);
         nodeDB->set_favorite(true, nodenum);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1859,11 +1856,10 @@ void menuHandler::powerMenu()
 #endif
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Power";
-#else
     bannerOptions.message = "Reboot / Shutdown";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Power";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;

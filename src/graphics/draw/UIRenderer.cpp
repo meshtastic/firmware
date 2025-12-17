@@ -328,11 +328,12 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     int line = 1; // which slot to use next
     std::string usernameStr;
     // === 1. Long Name (always try to show first) ===
-#if defined(M5STACK_UNITC6L)
-    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.short_name : nullptr;
-#else
-    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
-#endif
+    const char *username;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        username = (node->has_user && node->user.long_name[0]) ? node->user.short_name : nullptr;
+    } else {
+        username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+    }
 
     if (username) {
         usernameStr = sanitizeString(username); // Sanitize the incoming long_name just in case
@@ -566,11 +567,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
-#if defined(M5STACK_UNITC6L)
-    graphics::drawCommonHeader(display, x, y, "Home");
-#else
-    graphics::drawCommonHeader(display, x, y, "");
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        graphics::drawCommonHeader(display, x, y, "Home");
+    } else {
+        graphics::drawCommonHeader(display, x, y, "");
+    }
 
     // === Content below header ===
 
@@ -585,15 +586,15 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     config.display.heading_bold = false;
 
     // Display Region and Channel Utilization
-#if defined(M5STACK_UNITC6L)
-    drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
-#else
-    drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+    } else {
+        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+    }
     char uptimeStr[32] = "";
-#if !defined(M5STACK_UNITC6L)
-    getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
-#endif
+    if (currentResolution != ScreenResolution::UltraLow) {
+        getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
+    }
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
     // === Second Row: Satellites and Voltage ===

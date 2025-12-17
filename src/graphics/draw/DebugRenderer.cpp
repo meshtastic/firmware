@@ -282,13 +282,13 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     std::string uptime = UIRenderer::drawTimeDelta(days, hours, minutes, seconds);
 
     // Line 1 (Still)
-#if !defined(M5STACK_UNITC6L)
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-    if (config.display.heading_bold)
-        display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
+    if (currentResolution != graphics::ScreenResolution::UltraLow) {
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
+        if (config.display.heading_bold)
+            display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
 
-    display->setColor(WHITE);
-#endif
+        display->setColor(WHITE);
+    }
     // Setup string to assemble analogClock string
     std::string analogClock = "";
 
@@ -390,11 +390,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     char shortnameble[35];
     getMacAddr(dmac);
     snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
-#if defined(M5STACK_UNITC6L)
-    snprintf(shortnameble, sizeof(shortnameble), "%s", screen->ourId);
-#else
-    snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", screen->ourId);
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        snprintf(shortnameble, sizeof(shortnameble), "%s", screen->ourId);
+    } else {
+        snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", screen->ourId);
+    }
     int textWidth = display->getStringWidth(shortnameble);
     int nameX = (SCREEN_WIDTH - textWidth);
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
@@ -413,11 +413,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
     if (region != nullptr) {
-#if defined(M5STACK_UNITC6L)
-        snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
-#else
-        snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
-#endif
+        if (currentResolution == ScreenResolution::UltraLow) {
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
+        } else {
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+        }
     }
     textWidth = display->getStringWidth(regionradiopreset);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
@@ -429,17 +429,17 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     float freq = RadioLibInterface::instance->getFreq();
     snprintf(freqStr, sizeof(freqStr), "%.3f", freq);
     if (config.lora.channel_num == 0) {
-#if defined(M5STACK_UNITC6L)
-        snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz", freqStr);
-#else
-        snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %sMHz", freqStr);
-#endif
+        if (currentResolution == ScreenResolution::UltraLow) {
+            snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz", freqStr);
+        } else {
+            snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %sMHz", freqStr);
+        }
     } else {
-#if defined(M5STACK_UNITC6L)
-        snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz (%d)", freqStr, config.lora.channel_num);
-#else
-        snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %sMHz (%d)", freqStr, config.lora.channel_num);
-#endif
+        if (currentResolution == ScreenResolution::UltraLow) {
+            snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz (%d)", freqStr, config.lora.channel_num);
+        } else {
+            snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %sMHz (%d)", freqStr, config.lora.channel_num);
+        }
     }
     size_t len = strlen(frequencyslot);
     if (len >= 4 && strcmp(frequencyslot + len - 4, " (0)") == 0) {
@@ -536,11 +536,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     barsOffset -= 12;
 #endif
 #endif
-#if defined(M5STACK_UNITC6L)
-    const int barX = x + 45 + barsOffset;
-#else
-    const int barX = x + 40 + barsOffset;
-#endif
+    int barX = x + barsOffset;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        barX += 45;
+    } else {
+        barX += 40;
+    }
     auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total, bool isHeap = false) {
         if (total == 0)
             return;
@@ -628,25 +629,33 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     line += 1;
 
     char appversionstr[35];
-    snprintf(appversionstr, sizeof(appversionstr), "Ver: %s", optstr(APP_VERSION));
     char appversionstr_formatted[40];
-    char *lastDot = strrchr(appversionstr, '.');
-#if defined(M5STACK_UNITC6L)
-    if (lastDot != nullptr) {
-        *lastDot = '\0'; // truncate string
+
+    const char *ver = optstr(APP_VERSION);
+    char verbuf[32];
+    strncpy(verbuf, ver, sizeof(verbuf) - 1);
+    verbuf[sizeof(verbuf) - 1] = '\0';
+
+    char *lastDot = strrchr(verbuf, '.');
+
+    if (currentResolution == ScreenResolution::UltraLow) {
+        if (lastDot != nullptr) {
+            *lastDot = '\0';
+        }
+        snprintf(appversionstr, sizeof(appversionstr), "Ver: %s", verbuf);
+    } else {
+        if (lastDot) {
+            size_t prefixLen = (size_t)(lastDot - verbuf);
+            snprintf(appversionstr_formatted, sizeof(appversionstr_formatted), "Ver: %.*s", (int)prefixLen, verbuf);
+            strncat(appversionstr_formatted, " (", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
+            strncat(appversionstr_formatted, lastDot + 1, sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
+            strncat(appversionstr_formatted, ")", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
+            strncpy(appversionstr, appversionstr_formatted, sizeof(appversionstr) - 1);
+            appversionstr[sizeof(appversionstr) - 1] = '\0';
+        } else {
+            snprintf(appversionstr, sizeof(appversionstr), "Ver: %s", verbuf);
+        }
     }
-#else
-    if (lastDot) {
-        size_t prefixLen = lastDot - appversionstr;
-        strncpy(appversionstr_formatted, appversionstr, prefixLen);
-        appversionstr_formatted[prefixLen] = '\0';
-        strncat(appversionstr_formatted, " (", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
-        strncat(appversionstr_formatted, lastDot + 1, sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
-        strncat(appversionstr_formatted, ")", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
-        strncpy(appversionstr, appversionstr_formatted, sizeof(appversionstr) - 1);
-        appversionstr[sizeof(appversionstr) - 1] = '\0';
-    }
-#endif
     int textWidth = display->getStringWidth(appversionstr);
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
 
