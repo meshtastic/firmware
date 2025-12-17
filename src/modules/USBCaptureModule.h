@@ -151,12 +151,22 @@ extern FRAMBatchStorage *framStorage;
  */
 enum USBCaptureCommand {
     CMD_UNKNOWN = 0,
-    CMD_STATUS,      // "STATUS" - Get module status (enabled, buffer stats, node name)
-    CMD_START,       // "START"  - Start USB capture
-    CMD_STOP,        // "STOP"   - Stop USB capture
-    CMD_STATS,       // "STATS"  - Get detailed statistics
-    CMD_DUMP,        // "DUMP"   - Dump complete PSRAM buffer state (debug)
-    CMD_TEST         // "TEST <text>" - Inject test text without keyboard
+    CMD_STATUS,         // "STATUS" - Get module status (enabled, buffer stats, node name)
+    CMD_START,          // "START"  - Start USB capture
+    CMD_STOP,           // "STOP"   - Stop USB capture
+    CMD_STATS,          // "STATS"  - Get detailed statistics
+    CMD_DUMP,           // "DUMP"   - Dump complete PSRAM buffer state (debug)
+    CMD_TEST,           // "TEST <text>" - Inject test text without keyboard
+
+    // Command Center commands (v7.8)
+    CMD_FRAM_CLEAR,     // "FRAM_CLEAR" - Clear all FRAM storage
+    CMD_FRAM_STATS,     // "FRAM_STATS" - Detailed FRAM statistics
+    CMD_FRAM_COMPACT,   // "FRAM_COMPACT" - Trigger FRAM compaction/eviction
+    CMD_SET_INTERVAL,   // "SET_INTERVAL <ms>" - Set TX interval (40000-240000)
+    CMD_SET_TARGET,     // "SET_TARGET <nodeId>" - Set target node ID
+    CMD_FORCE_TX,       // "FORCE_TX" - Force immediate transmission
+    CMD_RESTART_CORE1,  // "RESTART_CORE1" - Restart Core1 processor
+    CMD_CORE1_HEALTH    // "CORE1_HEALTH" - Detailed Core1 health status
     /* Node configuration via Meshtastic phone app (PKI admin) */
 };
 
