@@ -316,7 +316,7 @@ class NodeDB
     void pickNewNodeNum();
 
     /// read our db from flash
-    void loadFromDisk();
+    int loadFromDisk();
 
     /// purge db entries without user info
     void cleanupMeshDB();

@@ -200,7 +200,7 @@ bool copyFile(const char *from, const char *to)
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef USE_EXTERNAL_FLASH
-// take SPI Lock
+    // take SPI Lock
     spiLock->lock();
     // FatVolume::rename manipulates directory entries in place which is much faster than
     // copy/remove when the QSPI flash already exposes FAT semantics.
@@ -511,21 +511,25 @@ void fsInit()
 #ifdef USE_EXTERNAL_FLASH
     if (!flashInitialized) {
         LOG_INFO("Adafruit SPI Flash FatFs initialization!");
+        flashInitialized = true;
         if (!flash.begin()) {
             LOG_ERROR("Error, failed to initialize flash chip!");
-            while (1) {
-                delay(1);
-            }
+            flashInitialized = false;
         }
-        flashInitialized = true;
     }
     LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-    //format_fat12();
+    /*   Uncomment to auto-format on init external flash to test backup restoring functionality from internal flash.
+         If it works correctly, the board should boot normally after this, loosing only the node db but restoring
+         all configuration and preferences from internal flash.
+    if (!format_fat12()) {
+        LOG_ERROR("format_fat12 failed during fsInit");
+        return;
+    }
+    */
     if (!check_fat12()) {
         LOG_ERROR("check_fat12 failed during fsInit");
         return;
     }
-    // LOG_INFO("Flash chip successfully formatted with new empty filesystem!");
     if (!fatfsMounted) {
         if (!fatfs.begin(&flash)) {
             LOG_ERROR("Error, failed to mount filesystem!");
