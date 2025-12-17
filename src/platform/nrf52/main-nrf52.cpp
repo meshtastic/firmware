@@ -31,6 +31,10 @@
 #include "BQ25713.h"
 #endif
 
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD
+    #define SAFE_VDD_VOLTAGE_THRESHOLD 2.7
+#endif
+
 // Weak empty variant initialization function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
@@ -58,30 +62,29 @@ bool powerHAL_isVBUSConnected() {
 
 bool powerHAL_isPowerLevelSafe() {
     
-    if(NRF_POWER->EVENTS_POFWARN)
-        return false;
+    uint16_t vddVoltage = analogReadVDD();
+
+    // some variants use AREF_VOLTAGE as 3.0
+    // but this is fine as we hunt for VDD values less than 3V
+    // otherwise either set here the reference for each measure and make sure
+    // same is done for battery reading (which long term should be implemented here as HAL function)
+
     return true;
 }
 
  void powerHAL_platformInit(){
 
+    // enable POF power failure comparator. It will prevent writing to NVMC flash when supply voltage is too low.
+    // Set to 2.4V as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node behaviour on its own.
 
-    // POF protection prevents flash memory writes when VDD voltage is 2.7V or less to avoid memory corruption
-    // In this setting voltage is checked both against VDD and VDDH so particular board
-    // wiring does not matter.
-    // It must be set to value greater than 2.5V because 2.5V is minimum voltage that can be supplied at VDDH
-    // and it borders at cutoff voltage for li-ion battery protectors.
-    // Originally it was set at 2.4V and it did cause a lot of flash memory corruptions when battery was around 2.5-2.6V
+    // @phaseloop note: during my tests - setting threshold to 2.7V would still trigger POFWARN only at 2.5V fed to VDDH (??). According to datasheet,
+    // below 2.8V setting both VDD and VDDH level are covered by this register. So feeding 2.5V to VDDH would result at 2.2V at VDD (because LDO voltage drop)
+    // which is even weirder. Anyway we don't rely much on POFWARN.
 
-    // Many NRF52 boards have decent LDO which goes down to 2V
-    // In the future - boards with crappy LDO can be set to prevent memory corruption at higher voltage - like 3V
-    // using custom variant definition. Remember that above 2.8V you need to monitor VDDH voltage threshold using different
-    // registers
+    // POFWARN is pretty useless for node power management because it triggers only once and clearing this event will not re-trigger it again
+    // until voltage rises to safe level and drops again. So we will use SAADC routed to VDD to read safely voltage.
 
-    // SoftDevice is only enabled by Adafruit Bluetooth library (Bluefruit) and there is no good way to change it or integrate with it.
-    // This is started at boot before bluetooth so we use raw registers instead of sd_power*
-
-    NRF_POWER->POFCON = ((POWER_POFCON_THRESHOLD_V27 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+    NRF_POWER->POFCON = ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
 
  }
 

@@ -171,21 +171,11 @@ Power *power;
 
 using namespace meshtastic;
 
-#ifndef AREF_VOLTAGE
-#if defined(ARCH_NRF52)
-/*
- * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
- * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
- *
- * External Reference is VDD/4, with an adjustable gain of 1, 2 or 4, meaning
- * VDD/4, VDD/2 or VDD for the ADC levels.
- *
- * Default settings are internal reference with 1/6 gain (GND..3.6V ADC range)
- */
-#define AREF_VOLTAGE 3.6
-#else
+
+// NRF52 has AREF_VOLTAGE defined in architecture.h but
+// make sure it's included
+#if !defined(AREF_VOLTAGE) && defined(ARCH_NRF52) 
 #define AREF_VOLTAGE 3.3
-#endif
 #endif
 
 /**
