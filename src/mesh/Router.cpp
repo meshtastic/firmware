@@ -758,6 +758,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
+    p_encrypted = nullptr;
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
