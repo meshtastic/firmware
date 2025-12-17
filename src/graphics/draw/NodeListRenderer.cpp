@@ -563,6 +563,14 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // This should correct the scrollbar
     totalEntries -= numskipped;
 
+    // Draw column separator
+    if (currentResolution != ScreenResolution::UltraLow && shownCount > 0) {
+        const int firstNodeY = y + 3;
+        for (int horizontal_offset = 1; horizontal_offset < totalColumns; horizontal_offset++) {
+            drawColumnSeparator(display, columnWidth * horizontal_offset, firstNodeY, lastNodeY);
+        }
+    }
+
     const int scrollStartY = y + 3;
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, totalColumns, scrollStartY);
     graphics::drawCommonFooter(display, x, y);
