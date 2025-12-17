@@ -210,7 +210,8 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
         sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
-
+    // Notify UI that changes are being applied
+    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
     service->reloadConfig(changes);
 
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
@@ -227,6 +228,9 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
 
     service->reloadConfig(SEGMENT_CONFIG);
 
+    // Notify UI that changes are being applied
+    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
@@ -240,6 +244,9 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
     service->reloadConfig(SEGMENT_CONFIG);
+
+    // Notify UI that changes are being applied
+    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
@@ -442,6 +449,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         config.network.wifi_enabled = false;
         config.bluetooth.enabled = true;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         rebootAtMsec = millis() + 2000;
         break;
 
@@ -450,6 +458,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_POWER_SAVE:
         config.power.is_power_saving = !config.power.is_power_saving;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
@@ -462,6 +471,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 #endif
@@ -486,6 +496,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 

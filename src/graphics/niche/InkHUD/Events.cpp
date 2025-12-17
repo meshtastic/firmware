@@ -121,6 +121,15 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     return 0; // We agree: deep sleep now
 }
 
+// Display an intermediate screen while configuration changes are applied
+void InkHUD::Events::applyingChanges()
+{
+    // Bring the logo applet forward with a temporary message
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        sa->onApplyingChanges();
+    }
+}
+
 // Callback for rebootObserver
 // Same as shutdown, without drawing the logoApplet
 // Makes sure we don't lose message history / InkHUD config

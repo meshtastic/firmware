@@ -29,6 +29,7 @@ class Events
 
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
+    void applyingChanges();
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot

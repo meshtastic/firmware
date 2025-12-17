@@ -47,6 +47,7 @@ class InkHUD
     void setDriver(Drivers::EInk *driver);
     void setDisplayResilience(uint8_t fastPerFull = 5, float stressMultiplier = 2.0);
     void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false, uint8_t onTile = -1);
+    void notifyApplyingChanges();
 
     void begin();
 
