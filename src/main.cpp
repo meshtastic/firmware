@@ -428,16 +428,28 @@ void setup()
 #endif
 
 #if ARCH_PORTDUINO
+    RTCQuality ourQuality = RTCQualityDevice;
+
+    std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
+    if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    }
+
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityDevice, &tv);
+    perhapsSetRTC(ourQuality, &tv);
 #endif
 
     powerMonInit();
     serialSinceMsec = millis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
+
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    // use PSRAM for malloc calls > 256 bytes
+    heap_caps_malloc_extmem_enable(256);
+#endif
 
 #if defined(DEBUG_MUTE) && defined(DEBUG_PORT)
     DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
