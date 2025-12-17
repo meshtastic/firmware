@@ -53,7 +53,6 @@ void InkHUD::InkHUD::addApplet(const char *name, Applet *a, bool defaultActive, 
     windowManager->addApplet(name, a, defaultActive, defaultAutoshow, onTile);
 }
 
-
 void InkHUD::InkHUD::notifyApplyingChanges()
 {
     if (events) {
