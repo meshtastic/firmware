@@ -32,32 +32,17 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     }
 }
 
-/*
-// Nanopb input callback for FatFs
-bool nanopb_fatfs_read(pb_istream_t *stream, pb_byte_t *buf, size_t count)
-{
-    File32 *file = (File32 *)stream->state;
-    int got = file->read(buf, count);
-    return got == (int)count;
-}
-
-// Nanopb output callback for FatFs
-bool nanopb_fatfs_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count)
-{
-    File32 *file = (File32 *)stream->state;
-    int written = file->write(buf, count);
-    return written == (int)count;
-}
-*/
 /// Read from an Arduino File
+// Edited so that functions that used readcb for internal flash also work for external flash
+// without modifying all those functions to use FatFs directly
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
     bool status = false;
-    #ifdef USE_EXTERNAL_FLASH
-    File32 *file = (File32 *)stream->state; //FILE32 for FatFs
-    #else
+#ifdef USE_EXTERNAL_FLASH
+    File32 *file = (File32 *)stream->state; // FILE32 for FatFs
+#else
     File *file = (File *)stream->state;
-    #endif
+#endif
     if (buf == NULL) {
         while (count-- && file->read() != EOF)
             ;
@@ -73,14 +58,16 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 }
 
 /// Write to an arduino file
+// Edited so that functions that used writecb for internal flash also work for external flash
+// without modifying all those functions to use FatFs directly
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
     spiLock->lock();
-    #ifdef USE_EXTERNAL_FLASH
-    File32 *file = (File32 *)stream->state; //FILE32 for FatFs
-    #else
+#ifdef USE_EXTERNAL_FLASH
+    File32 *file = (File32 *)stream->state; // FILE32 for FatFs
+#else
     auto file = (Print *)stream->state;
-    #endif
+#endif
     // LOG_DEBUG("writing %d bytes to protobuf file", count);
     bool status = file->write(buf, count) == count;
     spiLock->unlock();

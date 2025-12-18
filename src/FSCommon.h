@@ -45,11 +45,11 @@ using namespace STM32_LittleFS_Namespace;
 // nRF52 version with external flash
 #include "SdFat_Adafruit_Fork.h"
 #include "mesh/fatfs_ff.h"
+
 #include "diskio.h"
 #include <Adafruit_SPIFlash.h>
 #include <SPI.h>
 #define DISK_LABEL "EXT FLASH"
-#define EXTERNAL_FLASH_USE_QSPI
 #if defined(EXTERNAL_FLASH_USE_QSPI)
 extern Adafruit_FlashTransport_QSPI flashTransport;
 #endif

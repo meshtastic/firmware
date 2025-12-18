@@ -57,7 +57,11 @@ bool format_fat12(void)
     // This is an emergency formatter that rewrites the external flash with a clean FAT12
     // volume so the higher level preference code can start dropping files immediately
 
-    // Allocate formatting buffer on the heap so it isn't permanently pinned in BSS
+    // Allocate formatting buffer on the heap so it isn't permanently pinned in RAM.
+    // Use a smaller buffer (512 bytes) on AVR platforms due to limited RAM constraints,
+    // and a larger buffer (4096 bytes) on other platforms for faster formatting performance.
+    // The unique_ptr with nothrow ensures automatic cleanup and safe error handling if
+    // memory allocation fails.
 #ifdef __AVR__
     std::unique_ptr<uint8_t[]> workbuf(new (std::nothrow) uint8_t[512]);
 #else
@@ -152,11 +156,11 @@ bool copyFile(const char *from, const char *to)
     }
 
     while (f1.available() > 0) {
-        byte i = f1.read(cbuffer, 16);
-        f2.write(cbuffer, i);
+        byte i = f1.read(cbuffer, 16); // Read up to 16 bytes
+        f2.write(cbuffer, i);          // Write the bytes to the destination file
     }
 
-    f2.flush();
+    f2.flush(); // Ensure all data is written to the flash
     f2.close();
     f1.close();
     return true;
@@ -242,42 +246,56 @@ static void buildPath(char *dest, size_t destLen, const char *parent, const char
 }
 
 /**
- * @brief Get the list of files in a directory.
+ * @brief Recursively retrieves information about all files in a directory and its subdirectories.
  *
- * This function returns a list of files in a directory. The list includes the full path of each file.
- * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
+ * This function traverses a directory structure and collects metadata about all files found,
+ * including their full paths and sizes. It supports both external flash storage (via FatFile)
+ * and standard filesystem implementations (FSCom).
  *
- * @param dirname The name of the directory.
- * @param levels The number of levels of subdirectories to list.
- * @return A vector of strings containing the full path of each file in the directory.
+ * @param dirname The path to the directory to scan. Must be a valid directory path.
+ * @param levels The maximum depth of subdirectories to traverse. Set to 0 to scan only
+ *               the specified directory without recursion. Each level decrements this value
+ *               when recursing into subdirectories.
+ *
+ * @return A vector of meshtastic_FileInfo structures, where each entry contains:
+ *         - file_name: The full path to the file
+ *         - file_size: The size of the file in bytes
+ *         Returns an empty vector if the directory cannot be opened, is not a valid directory,
+ *         or contains no accessible files.
+ *
+ * @note Directories named "." and ".." are skipped during traversal.
+ * @note Files ending with "." are filtered out in the FSCom implementation.
+ * @note The behavior differs slightly between platforms:
+ *       - ARCH_ESP32: Uses file.path() for full path resolution
+ *       - Other architectures: Uses file.name() for path construction
  */
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
 #ifdef USE_EXTERNAL_FLASH
     FatFile root;
-    if (!root.open(dirname, O_READ)) {
-        return filenames;
+    if (!root.open(dirname, O_READ)) { // Failed to open directory
+        return filenames;              // Return empty list
     }
-    if (!root.isDir()) {
-        return filenames;
+    if (!root.isDir()) {  // Not a directory
+        return filenames; // Return empty list
     }
 
     FatFile file;
-    char name[64];
-    char path[128];
-    while (file.openNext(&root, O_READ)) {
-        file.getName(name, sizeof(name));
-        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
-            if (levels) {
-                buildPath(path, sizeof(path), dirname, name);
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(path, levels - 1);
-                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+    char name[64];                                                               // Buffer for file name
+    char path[128];                                                              // Buffer for full path
+    while (file.openNext(&root, O_READ)) {                                       // Iterate through directory entries
+        file.getName(name, sizeof(name));                                        // Get file name
+        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) { // if it's a directory and name is not . or ..
+            if (levels) {                                                        // Recurse into subdirectory
+                buildPath(path, sizeof(path), dirname, name);                    // Build full path
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(path, levels - 1);     // Recurse
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end()); // Append results
             }
-        } else if (!file.isDir()) {
-            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.fileSize())};
-            buildPath(fileInfo.file_name, sizeof(fileInfo.file_name), dirname, name);
-            filenames.push_back(fileInfo);
+        } else if (!file.isDir()) {                                                      // if it's a file
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.fileSize())}; // Create file info struct
+            buildPath(fileInfo.file_name, sizeof(fileInfo.file_name), dirname, name);    // Build full path
+            filenames.push_back(fileInfo);                                               // Add to list
         }
         file.close();
     }
@@ -321,45 +339,53 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 }
 
 /**
- * Lists the contents of a directory.
- * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
+ * Recursively iterate over a directory tree and optionally delete its contents.
  *
- * @param dirname The name of the directory to list.
- * @param levels The number of levels of subdirectories to list.
- * @param del Whether or not to delete the contents of the directory after listing.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
+ * The function enumerates files and subdirectories within the specified
+ * `dirname`, logging each entry. When `levels` is greater than zero, it will
+ * descend into subdirectories up to the given depth. If `del` is true, it
+ * performs a depth-first traversal to remove files and directories after
+ * processing their contents, ensuring directory deletions occur after all
+ * child entries are handled. Platform-specific filesystem backends are used
+ * for both listing and deletion.
+ *
+ * @param dirname Path to the directory to process.
+ * @param levels  Maximum recursion depth for traversing subdirectories.
+ * @param del     When true, delete files and directories instead of only listing.
  */
 void listDir(const char *dirname, uint8_t levels, bool del)
 {
 #ifdef USE_EXTERNAL_FLASH
     FatFile root;
-    if (!root.open(dirname, O_READ)) {
+    if (!root.open(dirname, O_READ)) { // Failed to open directory
         return;
     }
-    if (!root.isDir()) {
+    if (!root.isDir()) { // Not a directory
         return;
     }
 
     FatFile file;
     char name[64];
     char path[128];
-    while (file.openNext(&root, O_READ)) {
-        file.getName(name, sizeof(name));
-        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
-            if (levels) {
-                buildPath(path, sizeof(path), dirname, name);
-                listDir(path, levels - 1, del);
-                if (del) {
+    while (file.openNext(&root, O_READ)) {                                       // Iterate through directory entries
+        file.getName(name, sizeof(name));                                        // Get file name
+        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) { // if it's a directory and name is not . or ..
+            if (levels) {                                                        // Recurse into subdirectory
+                buildPath(path, sizeof(path), dirname, name);                    // Build full path
+                listDir(path, levels - 1, del);                                  // Recurse
+                if (del) {                                                       // After recursion, delete directory if requested
                     LOG_DEBUG("Remove %s", path);
                     file.close();
                     // FatVolume::rmdir is the only recursive delete we have, so walk depth
                     // first and remove directories once their contents have been handled.
-                    fatfs.rmdir(path);
+                    fatfs.rmdir(path); // Remove directory
                     continue;
                 }
             }
-        } else if (!file.isDir()) {
-            buildPath(path, sizeof(path), dirname, name);
-            if (del) {
+        } else if (!file.isDir()) {                       // if it's a file
+            buildPath(path, sizeof(path), dirname, name); // Build full path
+            if (del) {                                    // Delete file
                 LOG_DEBUG("Delete %s", path);
                 file.close();
                 // FatVolume::remove issues the low level FAT delete, ensuring we do not
@@ -480,10 +506,10 @@ void rmDir(const char *dirname)
 {
 #ifdef USE_EXTERNAL_FLASH
     // Adafruit SPI Flash FatFs implementation does not support recursive delete, so we do it manually here
-    std::vector<meshtastic_FileInfo> files = getFiles(dirname, 10);
-    for (auto const &fileInfo : files) {
+    std::vector<meshtastic_FileInfo> files = getFiles(dirname, 10); // Get all files in directory and subdirectories
+    for (auto const &fileInfo : files) {                            // Iterate through files and delete them
         LOG_DEBUG("Delete %s", fileInfo.file_name);
-        fatfs.remove(fileInfo.file_name);
+        fatfs.remove(fileInfo.file_name); // Delete file
     }
     // Finally remove the (now empty) directory itself
     LOG_DEBUG("Remove directory %s", dirname);
