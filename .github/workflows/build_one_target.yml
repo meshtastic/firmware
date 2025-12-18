@@ -44,12 +44,13 @@ jobs:
         id: jsonStep
         env:
           BUILDTARGET: ${{ inputs.target }}
+          MATRIXARCH: ${{ inputs.arch }}
         run: |
           TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level extra)
           if [ "$BUILDTARGET" = "" ]; then
             echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
             echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
-            echo "Arch: ${{ inputs.arch }}" >> $GITHUB_STEP_SUMMARY
+            echo "Arch: "$MATRIXARCH"" >> $GITHUB_STEP_SUMMARY
             echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
             echo "## 🎯 The following target boards are available to build:" >> $GITHUB_STEP_SUMMARY
             echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
@@ -60,12 +61,12 @@ jobs:
             ARCH=$(echo "$TARGETS" | jq -r '.[] | select(.board=="$BUILDTARGET") | .platform')
             echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
             echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
-            echo "| $ARCH | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
+            echo "| $ARCH | "$BUILDTARGET" |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             if [[ "$ARCH" == "" ]]; then
-              echo "## ❌ Error: Target $BUILDTARGET not found!" >> $GITHUB_STEP_SUMMARY
+              echo "## ❌ Error: Target "$BUILDTARGET" not found!" >> $GITHUB_STEP_SUMMARY
             else
-              echo "## ✅ Target $BUILDTARGET found, proceeding to build." >> $GITHUB_STEP_SUMMARY
+              echo "## ✅ Target "$BUILDTARGET" found, proceeding to build." >> $GITHUB_STEP_SUMMARY
             fi
             echo "You may need to refresh this page to make the built firmware appear below." >> $GITHUB_STEP_SUMMARY
             echo "arch=$ARCH" >> $GITHUB_OUTPUT
