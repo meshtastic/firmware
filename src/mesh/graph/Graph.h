@@ -70,7 +70,6 @@ public:
 
     // Relay algorithm constants
     static uint32_t getContentionWindowMs();                      // Dynamic contention window based on LoRa preset
-    static constexpr uint32_t RELAY_TIMEOUT_MS = 400;             // 400ms total timeout for relay decision
     static constexpr size_t MAX_RELAY_TIERS = 3;                  // Primary + 2 backup tiers
 
     Graph();
@@ -261,7 +260,6 @@ private:
 
     static constexpr uint32_t ROUTE_CACHE_TIMEOUT_MS = 300 * 1000; // 300 seconds
     static constexpr uint32_t EDGE_AGING_TIMEOUT_MS = 300 * 1000; // 300 seconds
-    static constexpr uint32_t NODE_AGING_TIMEOUT_MS = 300 * 1000; // 300 seconds (5 minutes) for inactive nodes
     static constexpr uint32_t RELAY_STATE_TIMEOUT_MS = 2000;      // Forget relay state after 2 seconds
 
     /**
