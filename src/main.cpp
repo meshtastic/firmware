@@ -396,7 +396,10 @@ void setup()
     io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
     io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+#elif defined(HACKADAY_COMMUNICATOR)
+    pinMode(KB_INT, INPUT);
 #endif
+
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
     SPISettings spiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
@@ -427,16 +430,36 @@ void setup()
 #endif
 
 #if ARCH_PORTDUINO
+    RTCQuality ourQuality = RTCQualityDevice;
+
+    std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
+    if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    }
+
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityDevice, &tv);
+    perhapsSetRTC(ourQuality, &tv);
 #endif
 
     powerMonInit();
     serialSinceMsec = millis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
+
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#ifndef SENSECAP_INDICATOR
+    // use PSRAM for malloc calls > 256 bytes
+    heap_caps_malloc_extmem_enable(256);
+#endif
+#endif
+
+#if defined(DEBUG_MUTE) && defined(DEBUG_PORT)
+    DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
+    DEBUG_PORT.printf("Version %s for %s from %s\r\n", optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
+    DEBUG_PORT.printf("Debug mute is enabled, there will be no serial output.\r\n");
+#endif
 
     initDeepSleep();
 
@@ -472,6 +495,10 @@ void setup()
 
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
+    digitalWrite(RESET_OLED, 1);
+    delay(2);
+    digitalWrite(RESET_OLED, 0);
+    delay(10);
     digitalWrite(RESET_OLED, 1);
 #endif
 
@@ -843,7 +870,14 @@ void setup()
         SPI.begin();
     }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
+#if defined(RAK3401) || defined(RAK13302)
+    pinMode(WB_IO2, OUTPUT);
+    digitalWrite(WB_IO2, HIGH);
+    SPI1.setPins(LORA_MISO, LORA_SCK, LORA_MOSI);
+    SPI1.begin();
+#else
     SPI.begin();
+#endif
 #else
         // ESP32
 #if defined(HW_SPI1_DEVICE)
@@ -863,7 +897,7 @@ void setup()
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306)
+    defined(USE_SPISSD1306) || defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
@@ -948,6 +982,7 @@ void setup()
     i2cScanner.reset();
 #endif
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
     // warn the user about a low entropy key
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
@@ -958,6 +993,7 @@ void setup()
         service->sendClientNotification(cn);
         nodeDB->hasWarned = true;
     }
+#endif
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON
@@ -1138,7 +1174,7 @@ void setup()
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306)
+    defined(USE_ST7796) || defined(USE_SPISSD1306) || defined(HACKADAY_COMMUNICATOR)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
@@ -1390,7 +1426,7 @@ void setup()
 #endif
 
     // check if the radio chip matches the selected region
-    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
+    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && rIf && (!rIf->wideLora())) {
         LOG_WARN("LoRa chip does not support 2.4GHz. Revert to unset");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
@@ -1591,7 +1627,7 @@ void loop()
 #endif
 
     service->loop();
-#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS)
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     if (inputBroker)
         inputBroker->processInputEventQueue();
 #endif

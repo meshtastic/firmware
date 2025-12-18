@@ -14,6 +14,8 @@
 #define BATTERY_PIN 8
 #define ADC_CHANNEL ADC1_GPIO8_CHANNEL
 
+#define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
+
 #define PIN_BUZZER 9
 
 // Buttons

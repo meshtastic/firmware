@@ -51,6 +51,7 @@ constexpr int reconnectMax = 5;
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
 static bool isMqttServerAddressPrivate = false;
+static bool isConnected = false;
 
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
@@ -59,17 +60,40 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
         return;
     }
+
     const meshtastic_Channel &ch = channels.getByName(e.channel_id);
+    // Find channel by channel_id and check downlink_enabled
+    if (!(strcmp(e.channel_id, "PKI") == 0 ||
+          (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
+        return;
+    }
+
+    bool anyChannelHasDownlink = false;
+    size_t numChan = channels.getNumChannels();
+    for (size_t i = 0; i < numChan; ++i) {
+        const auto &c = channels.getByIndex(i);
+        if (c.settings.downlink_enabled) {
+            anyChannelHasDownlink = true;
+            break;
+        }
+    }
+
+    if (strcmp(e.channel_id, "PKI") == 0 && !anyChannelHasDownlink) {
+        return;
+    }
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
         // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
         // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
         // receives it when we get our own packet back. Then we'll stop our retransmissions.
-        if (isFromUs(e.packet))
-            routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
-        else
+        if (isFromUs(e.packet)) {
+            auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+            pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+            router->sendLocal(pAck);
+        } else {
             LOG_INFO("Ignore downlink message we originally sent");
+        }
         return;
     }
     if (isFromUs(e.packet)) {
@@ -77,11 +101,6 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         return;
     }
 
-    // Find channel by channel_id and check downlink_enabled
-    if (!(strcmp(e.channel_id, "PKI") == 0 ||
-          (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
-        return;
-    }
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
     if (e.packet->hop_limit > HOP_MAX || e.packet->hop_start > HOP_MAX) {
         LOG_INFO("Invalid hop_limit(%u) or hop_start(%u)", e.packet->hop_limit, e.packet->hop_start);
@@ -305,8 +324,10 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     std::string nodeId = nodeDB->getNodeId();
     const bool connected = pubSub.connect(nodeId.c_str(), config.mqttUsername, config.mqttPassword);
     if (connected) {
+        isConnected = true;
         LOG_INFO("MQTT connected");
     } else {
+        isConnected = false;
         LOG_WARN("Failed to connect to MQTT server");
     }
     return connected;
@@ -492,6 +513,7 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
 
 void MQTT::reconnect()
 {
+    isConnected = false;
     if (wantsLink()) {
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
             LOG_INFO("MQTT connect via client proxy instead");
@@ -519,7 +541,7 @@ void MQTT::reconnect()
             runASAP = true;
             reconnectCount = 0;
             isMqttServerAddressPrivate = isPrivateIpAddress(clientConnection->remoteIP());
-
+            isConnected = true;
             publishNodeInfo();
             sendSubscriptions();
         } else {
@@ -674,6 +696,9 @@ void MQTT::publishNodeInfo()
 void MQTT::publishQueuedMessages()
 {
     if (mqttQueue.isEmpty())
+        return;
+
+    if (!moduleConfig.mqtt.proxy_to_client_enabled && !isConnected)
         return;
 
     LOG_DEBUG("Publish enqueued MQTT message");

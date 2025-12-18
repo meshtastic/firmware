@@ -1,5 +1,6 @@
-#include "VirtualKeyboard.h"
 #include "configuration.h"
+#if HAS_SCREEN
+#include "VirtualKeyboard.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -505,6 +506,9 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
             centeredTextY -= 1;
         }
     }
+#ifdef MUZI_BASE // Correct issue with character vertical position on MUZI_BASE
+    centeredTextY -= 2;
+#endif
     display->drawString(textX, centeredTextY, keyText.c_str());
 }
 
@@ -736,3 +740,4 @@ bool VirtualKeyboard::isTimedOut() const
 }
 
 } // namespace graphics
+#endif
