@@ -58,7 +58,7 @@ jobs:
             echo $TARGETS | jq -r 'sort_by(.board) | sort_by(.platform) |.[] | "| " + .platform + " | " + .board + " |" ' >> $GITHUB_STEP_SUMMARY
           else
             echo "We build this one:" >> $GITHUB_STEP_SUMMARY
-            ARCH=$(echo "$TARGETS" | jq -r --arg buildtarget "$BUILDTARGET" '.[] | select(.board==$buildtarget) | .platform')            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            ARCH=$(echo "$TARGETS" | jq --arg BUILDTARGET "$BUILDTARGET" -r '.[] | select(.board==$BUILDTARGET) | .platform')            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
             echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
             echo "| $ARCH | "$BUILDTARGET" |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
