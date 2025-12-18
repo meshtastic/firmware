@@ -42,9 +42,11 @@ jobs:
       - run: pip install -U platformio
       - name: Generate matrix
         id: jsonStep
+        env:
+          BUILDTARGET: ${{ inputs.target }}
         run: |
           TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level extra)
-          if [ "${{ inputs.target }}" = "" ]; then
+          if [ "$BUILDTARGET" = "" ]; then
             echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
             echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
             echo "Arch: ${{ inputs.arch }}" >> $GITHUB_STEP_SUMMARY
@@ -55,15 +57,15 @@ jobs:
             echo $TARGETS | jq -r 'sort_by(.board) | sort_by(.platform) |.[] | "| " + .platform + " | " + .board + " |" ' >> $GITHUB_STEP_SUMMARY
           else
             echo "We build this one:" >> $GITHUB_STEP_SUMMARY
-            ARCH=$(echo "$TARGETS" | jq -r '.[] | select(.board=="${{ inputs.target }}") | .platform')
+            ARCH=$(echo "$TARGETS" | jq -r '.[] | select(.board=="$BUILDTARGET") | .platform')
             echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
             echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
-            echo "| $ARCH | ${{ inputs.target }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| $ARCH | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             if [[ "$ARCH" == "" ]]; then
-              echo "## ❌ Error: Target ${{ inputs.target }} not found!" >> $GITHUB_STEP_SUMMARY
+              echo "## ❌ Error: Target $BUILDTARGET not found!" >> $GITHUB_STEP_SUMMARY
             else
-              echo "## ✅ Target ${{ inputs.target }} found, proceeding to build." >> $GITHUB_STEP_SUMMARY
+              echo "## ✅ Target $BUILDTARGET found, proceeding to build." >> $GITHUB_STEP_SUMMARY
             fi
             echo "You may need to refresh this page to make the built firmware appear below." >> $GITHUB_STEP_SUMMARY
             echo "arch=$ARCH" >> $GITHUB_OUTPUT
