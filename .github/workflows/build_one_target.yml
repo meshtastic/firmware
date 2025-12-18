@@ -50,7 +50,7 @@ jobs:
           if [ "$BUILDTARGET" = "" ]; then
             echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
             echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
-            echo "Arch: "$MATRIXARCH"" >> $GITHUB_STEP_SUMMARY
+            echo "Arch: $MATRIXARCH" >> $GITHUB_STEP_SUMMARY
             echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
             echo "## 🎯 The following target boards are available to build:" >> $GITHUB_STEP_SUMMARY
             echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
