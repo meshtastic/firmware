@@ -839,8 +839,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         }
         if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_MS) {
             routingGraph->ageEdges(currentTime);
+            ageInactiveNodes(currentTime);
             lastGraphUpdate = currentTime;
-            LOG_DEBUG("[SR] Aged edges and updated graph");
+            LOG_DEBUG("[SR] Aged edges and inactive nodes");
         }
     }
 
@@ -2164,6 +2165,84 @@ size_t SignalRoutingModule::getGatewayDownstreamCount(NodeNum gateway) const
     auto it = gatewayDownstream.find(gateway);
     if (it == gatewayDownstream.end()) return 0;
     return it->second.size();
+#endif
+}
+
+uint32_t SignalRoutingModule::getNodeLastActivityTime(NodeNum nodeId) const
+{
+    uint32_t now = getTime();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Lite mode: linear search
+    for (uint8_t i = 0; i < capabilityRecordCount; i++) {
+        if (capabilityRecords[i].nodeId == nodeId) {
+            if ((now - capabilityRecords[i].record.lastUpdated) > CAPABILITY_TTL_SECS) {
+                return 0; // Too old, consider inactive
+            }
+            return capabilityRecords[i].record.lastUpdated;
+        }
+    }
+    return 0;
+#else
+    auto it = capabilityRecords.find(nodeId);
+    if (it == capabilityRecords.end()) {
+        return 0;
+    }
+
+    if ((now - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
+        return 0; // Too old, consider inactive
+    }
+
+    return it->second.lastUpdated;
+#endif
+}
+
+void SignalRoutingModule::ageInactiveNodes(uint32_t currentTime)
+{
+    if (!routingGraph) {
+        return;
+    }
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // In lite mode, we need to check each node in the graph
+    GraphLite *graph = static_cast<GraphLite*>(routingGraph);
+    size_t nodeCount = graph->getNodeCount();
+    NodeNum nodeIds[GRAPH_LITE_MAX_NODES];
+    size_t count = graph->getAllNodeIds(nodeIds, GRAPH_LITE_MAX_NODES);
+
+    for (size_t i = 0; i < count; ) {
+        NodeNum nodeId = nodeIds[i];
+        uint32_t lastActivity = getNodeLastActivityTime(nodeId);
+        if (lastActivity == 0 || (currentTime - lastActivity) > CAPABILITY_TTL_SECS) {
+            // Node is inactive, remove it from graph
+            LOG_INFO("[SR] Removing inactive node %08x from graph (last activity: %u, current: %u)",
+                     nodeId, lastActivity, currentTime);
+            graph->removeNode(nodeId);
+            // Re-fetch the node list since we modified it
+            count = graph->getAllNodeIds(nodeIds, GRAPH_LITE_MAX_NODES);
+            i = 0; // Restart iteration
+        } else {
+            i++;
+        }
+    }
+#else
+    // In full mode, we can iterate through the graph's nodes
+    Graph *graph = static_cast<Graph*>(routingGraph);
+    auto allNodes = graph->getAllNodes();
+
+    for (auto it = allNodes.begin(); it != allNodes.end(); ) {
+        NodeNum nodeId = *it;
+        uint32_t lastActivity = getNodeLastActivityTime(nodeId);
+        if (lastActivity == 0 || (currentTime - lastActivity) > CAPABILITY_TTL_SECS) {
+            // Node is inactive, remove it from graph
+            LOG_INFO("[SR] Removing inactive node %08x from graph (last activity: %u, current: %u)",
+                     nodeId, lastActivity, currentTime);
+            graph->removeNode(nodeId);
+            it = allNodes.erase(it); // Remove from our copy too
+        } else {
+            ++it;
+        }
+    }
 #endif
 }
 
