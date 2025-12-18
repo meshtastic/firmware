@@ -235,6 +235,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 
 #include <vector>
 
+#ifdef USE_EXTERNAL_FLASH
 // Helper for building full path
 static void buildPath(char *dest, size_t destLen, const char *parent, const char *child)
 {
@@ -244,7 +245,7 @@ static void buildPath(char *dest, size_t destLen, const char *parent, const char
         snprintf(dest, destLen, "%s/%s", parent, child);
     }
 }
-
+#endif
 /**
  * @brief Recursively retrieves information about all files in a directory and its subdirectories.
  *
@@ -399,7 +400,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
         file.close();
     }
     root.close();
-#elif FSCom
+#else
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
 #endif
