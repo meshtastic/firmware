@@ -123,6 +123,7 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
 }
 
 void Graph::ageEdges(uint32_t currentTime) {
+    // Age individual edges
     for (auto& pair : adjacencyList) {
         auto& edges = pair.second;
         edges.erase(
@@ -133,7 +134,7 @@ void Graph::ageEdges(uint32_t currentTime) {
             edges.end());
     }
 
-    // Clear empty adjacency lists
+    // Clear empty adjacency lists (nodes with no edges)
     for (auto it = adjacencyList.begin(); it != adjacencyList.end();) {
         if (it->second.empty()) {
             it = adjacencyList.erase(it);
@@ -359,6 +360,36 @@ std::unordered_set<NodeNum> Graph::getAllNodes() const {
         }
     }
     return nodes;
+}
+
+void Graph::removeNode(NodeNum nodeId) {
+    // Remove all edges from this node to others
+    adjacencyList.erase(nodeId);
+
+    // Remove all edges to this node from other nodes
+    for (auto& pair : adjacencyList) {
+        auto& edges = pair.second;
+        edges.erase(
+            std::remove_if(edges.begin(), edges.end(),
+                [nodeId](const Edge& e) {
+                    return e.to == nodeId;
+                }),
+            edges.end());
+    }
+
+    // Clear route cache if it involves this node
+    if (routeCache.find(nodeId) != routeCache.end()) {
+        routeCache.erase(nodeId);
+    }
+
+    // Also clear any cached routes that go through this node
+    for (auto it = routeCache.begin(); it != routeCache.end();) {
+        if (it->second.nextHop == nodeId) {
+            it = routeCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 std::unordered_set<NodeNum> Graph::getCoverageIfRelays(NodeNum relay, const std::unordered_set<NodeNum>& alreadyCovered) const {
