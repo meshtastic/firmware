@@ -44,7 +44,7 @@ public:
     /**
      * Get the next hop for signal-based routing (unicast only)
      */
-    NodeNum getNextHop(NodeNum destination);
+    NodeNum getNextHop(NodeNum destination, NodeNum sourceNode = 0, NodeNum heardFrom = 0);
 
     /**
      * Update neighbor information from a directly received packet
@@ -103,7 +103,7 @@ private:
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000; // 15 seconds
     static constexpr uint32_t HEARTBEAT_FLASH_MS = 60;
-    static constexpr uint32_t CAPABILITY_TTL_SECS = 600;
+    static constexpr uint32_t CAPABILITY_TTL_SECS = 1800; // 30 minutes for gateway relationships
     static constexpr float MIN_CAPABLE_RATIO = 0.4f;
     static constexpr size_t MIN_CAPABLE_NODES = 3;
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
