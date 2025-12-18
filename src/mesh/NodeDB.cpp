@@ -806,11 +806,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312)
+#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE)
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
+#if defined(MUZI_BASE)
+    moduleConfig.external_notification.active = false;
+#else
     moduleConfig.external_notification.active = true;
+#endif
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
