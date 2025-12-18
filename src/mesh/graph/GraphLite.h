@@ -152,6 +152,12 @@ class GraphLite {
     size_t getAllNodeIds(NodeNum *outArray, size_t maxCount) const;
 
     /**
+     * Remove a node and all its edges from the graph
+     * @param nodeId Node to remove
+     */
+    void removeNode(NodeNum nodeId);
+
+    /**
      * Get memory usage estimate in bytes
      */
     static constexpr size_t getMemoryUsage() {

@@ -160,7 +160,7 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs)
     for (uint8_t n = 0; n < nodeCount;) {
         NodeEdgesLite *node = &nodes[n];
 
-        // Check if entire node is stale
+        // Check if entire node is stale (no recent updates)
         if (currentTimeSecs - node->lastFullUpdate > EDGE_AGING_TIMEOUT_SECS) {
             // Remove this node by swapping with last
             if (n < nodeCount - 1) {
@@ -533,5 +533,25 @@ size_t GraphLite::getAllNodeIds(NodeNum *outArray, size_t maxCount) const
         outArray[count++] = nodes[i].nodeId;
     }
     return count;
+}
+
+void GraphLite::removeNode(NodeNum nodeId)
+{
+    for (uint8_t n = 0; n < nodeCount; n++) {
+        if (nodes[n].nodeId == nodeId) {
+            // Remove this node by swapping with last
+            if (n < nodeCount - 1) {
+                nodes[n] = nodes[nodeCount - 1];
+            }
+            nodeCount--;
+
+            // Also clear route cache if it was for this node
+            if (routeCache.destination == nodeId) {
+                routeCache.destination = 0;
+                routeCacheTime = 0;
+            }
+            return;
+        }
+    }
 }
 

@@ -103,7 +103,7 @@ private:
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_MS = 300 * 1000; // 300 seconds
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000; // 15 seconds
     static constexpr uint32_t HEARTBEAT_FLASH_MS = 60;
-    static constexpr uint32_t CAPABILITY_TTL_SECS = 1800; // 30 minutes for gateway relationships
+    static constexpr uint32_t CAPABILITY_TTL_SECS = 300; // 5 minutes for node activity/capability tracking
     static constexpr float MIN_CAPABLE_RATIO = 0.4f;
     static constexpr size_t MIN_CAPABLE_NODES = 3;
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
@@ -253,6 +253,17 @@ private:
     void recordGatewayRelation(NodeNum gateway, NodeNum downstream);
     NodeNum getGatewayFor(NodeNum downstream) const;
     size_t getGatewayDownstreamCount(NodeNum gateway) const;
+
+    /**
+     * Get the last activity time for a node from capability records
+     * @return last activity timestamp, or 0 if unknown/no recent activity
+     */
+    uint32_t getNodeLastActivityTime(NodeNum nodeId) const;
+
+    /**
+     * Age out inactive nodes from the graph (nodes that haven't been active for 5 minutes)
+     */
+    void ageInactiveNodes(uint32_t currentTime);
     bool isActiveRoutingRole() const;
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;

@@ -22,6 +22,7 @@ struct Edge {
         : from(f), to(t), etx(e), lastUpdate(timestamp), stability(1.0f), variance(0), source(s) {}
 };
 
+
 struct Route {
     NodeNum destination;
     NodeNum nextHop;
@@ -84,7 +85,7 @@ public:
                    Edge::Source source = Edge::Source::Mirrored);
 
     /**
-     * Remove edges that haven't been updated in the last 300 seconds
+     * Remove edges and inactive nodes that haven't been active in the last 5 minutes
      */
     void ageEdges(uint32_t currentTime);
 
@@ -136,6 +137,12 @@ public:
      * @return set of all known node IDs
      */
     std::unordered_set<NodeNum> getAllNodes() const;
+
+    /**
+     * Remove a node and all its edges from the graph
+     * @param nodeId Node to remove
+     */
+    void removeNode(NodeNum nodeId);
 
     /**
      * Calculate which nodes would be covered if a specific relay rebroadcasts
@@ -254,6 +261,7 @@ private:
 
     static constexpr uint32_t ROUTE_CACHE_TIMEOUT_MS = 300 * 1000; // 300 seconds
     static constexpr uint32_t EDGE_AGING_TIMEOUT_MS = 300 * 1000; // 300 seconds
+    static constexpr uint32_t NODE_AGING_TIMEOUT_MS = 300 * 1000; // 300 seconds (5 minutes) for inactive nodes
     static constexpr uint32_t RELAY_STATE_TIMEOUT_MS = 2000;      // Forget relay state after 2 seconds
 
     /**
