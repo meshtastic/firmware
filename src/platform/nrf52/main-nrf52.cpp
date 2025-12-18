@@ -17,13 +17,13 @@
 #include <memory.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
-#include <power/PowerHAL.h>
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"
 #include "meshUtils.h"
 #include "power.h"
+#include <power/PowerHAL.h>
 
 #include <hal/nrf_lpcomp.h>
 
@@ -32,7 +32,7 @@
 #endif
 
 #ifndef SAFE_VDD_VOLTAGE_THRESHOLD
-    #define SAFE_VDD_VOLTAGE_THRESHOLD 2.7
+#define SAFE_VDD_VOLTAGE_THRESHOLD 2.7
 #endif
 
 // Weak empty variant initialization function.
@@ -56,38 +56,46 @@ static inline void debugger_break(void)
 }
 
 // PowerHAL NRF52 specific function implementations
-bool powerHAL_isVBUSConnected() { 
-     return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
+bool powerHAL_isVBUSConnected()
+{
+    return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
 }
 
-bool powerHAL_isPowerLevelSafe() {
-    
-    uint16_t vddVoltage = analogReadVDD();
-
+bool powerHAL_isPowerLevelSafe()
+{
     // some variants use AREF_VOLTAGE as 3.0
     // but this is fine as we hunt for VDD values less than 3V
     // otherwise either set here the reference for each measure and make sure
     // same is done for battery reading (which long term should be implemented here as HAL function)
 
+    // we use the same values as regular battery read so there is no conflict on SAADC
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+
+    uint16_t vddADCRead = analogReadVDD();
+    voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
+    LOG_INFO("VDD VOLTAGE: %f", voltage);
+
     return true;
 }
 
- void powerHAL_platformInit(){
+void powerHAL_platformInit()
+{
 
-    // enable POF power failure comparator. It will prevent writing to NVMC flash when supply voltage is too low.
-    // Set to 2.4V as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node behaviour on its own.
+    // Enable POF power failure comparator. It will prevent writing to NVMC flash when supply voltage is too low.
+    // Set to 2.4V as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node behaviour on its
+    // own.
 
-    // @phaseloop note: during my tests - setting threshold to 2.7V would still trigger POFWARN only at 2.5V fed to VDDH (??). According to datasheet,
-    // below 2.8V setting both VDD and VDDH level are covered by this register. So feeding 2.5V to VDDH would result at 2.2V at VDD (because LDO voltage drop)
-    // which is even weirder. Anyway we don't rely much on POFWARN.
+    // @phaseloop note: during my tests - setting threshold to 2.7V would still trigger POFWARN only at 2.5V fed to VDDH (??).
+    // According to datasheet, below 2.8V setting both VDD and VDDH level are covered by this register. So feeding 2.5V to VDDH
+    // would result at 2.2V at VDD (because LDO voltage drop) which is even weirder. Anyway we don't rely much on POFWARN.
 
-    // POFWARN is pretty useless for node power management because it triggers only once and clearing this event will not re-trigger it again
-    // until voltage rises to safe level and drops again. So we will use SAADC routed to VDD to read safely voltage.
+    // POFWARN is pretty useless for node power management because it triggers only once and clearing this event will not
+    // re-trigger it again until voltage rises to safe level and drops again. So we will use SAADC routed to VDD to read safely
+    // voltage.
 
-    NRF_POWER->POFCON = ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
-
- }
-
+    NRF_POWER->POFCON =
+        ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+}
 
 bool loopCanSleep()
 {
@@ -116,7 +124,6 @@ void getMacAddr(uint8_t *dmac)
     dmac[1] = src[4];
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
-
 
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
@@ -219,7 +226,6 @@ extern "C" void lfs_assert(const char *reason)
     // Try setting GPREGRET with the SoftDevice first. If that fails (perhaps because the SD hasn't been initialize yet) then set
     // NRF_POWER->GPREGRET directly.
 
-
     // TODO: this will/can crash CPU if bluetooth stack is not compiled in or bluetooth is not initialized
     // (regardless if enabled or disabled) - as there is no live SoftDevice stack
     // implement "safe" functions detecting softdevice stack state and using proper method to set registers
@@ -227,8 +233,9 @@ extern "C" void lfs_assert(const char *reason)
     // do not set GPREGRET if POFWARN is triggered because it means lfs_assert reports flash undervoltage protection
     // and not data corruption. Reboot is fine as boot procedure will wait until power level is safe again
 
-    if(powerHAL_isPowerLevelSafe()){
-        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
+    if (powerHAL_isPowerLevelSafe()) {
+        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
+              sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
             NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
         }
     }

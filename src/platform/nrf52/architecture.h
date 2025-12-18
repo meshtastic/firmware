@@ -20,6 +20,10 @@
 #define AREF_VOLTAGE 3.6
 #endif
 
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
+#endif
+
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 1
 #endif
