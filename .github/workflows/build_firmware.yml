@@ -56,19 +56,21 @@ jobs:
           ota_firmware_source: ${{ steps.ota_dir.outputs.src || '' }}
           ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
 
-      - name: Echo manifest from release/firmware-*.mt.json to job summary
-        if: ${{ always() }}
+      - name: Job summary
         env:
           PIO_ENV: ${{ inputs.pio_env }}
         run: |
-          echo "## Manifest: \`$PIO_ENV\`" >> $GITHUB_STEP_SUMMARY
+          echo "## $PIO_ENV" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary><strong>Manifest</strong></summary>" >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
           echo '```json' >> $GITHUB_STEP_SUMMARY
           cat release/firmware-*.mt.json >> $GITHUB_STEP_SUMMARY
           echo '' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         id: upload
         with:
           name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}

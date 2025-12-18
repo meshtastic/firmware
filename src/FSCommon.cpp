@@ -518,9 +518,9 @@ void fsInit()
         }
     }
     LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-    /*   Uncomment to auto-format on init external flash to test backup restoring functionality from internal flash.
+    /*   Uncomment to auto-format on init the external flash to test backup restoring functionality from internal flash.
          If it works correctly, the board should boot normally after this, loosing only the node db but restoring
-         all configuration and preferences from internal flash.
+         all configuration and preferences from internal flash mirror.
     if (!format_fat12()) {
         LOG_ERROR("format_fat12 failed during fsInit");
         return;
