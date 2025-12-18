@@ -206,7 +206,7 @@ namespace
   // The directory and filenames match those normally used by the firmware even when external flash isn't present.
   // This makes the firmware with USE_EXTERNAL_FLASH interchangeable with normal or older builds and makes updating seamless.
 
-using InternalFsOpenResult = decltype(InternalFS.open("/prefs/config.proto", FILE_O_READ));
+using InternalFsOpenResult = decltype(InternalFS.open("/prefs/example.proto", FILE_O_READ));
 // Type helper: deduce the InternalFS file handle type using an example path; runtime calls still pass the actual filename
 // (config/devicestate/channels/etc). The example path is only to get the return type from InternalFS.open at compile time.
 // The example path in decltype never affects which files are actually opened.
