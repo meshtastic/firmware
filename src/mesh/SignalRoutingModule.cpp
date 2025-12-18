@@ -690,6 +690,9 @@ void SignalRoutingModule::logNetworkTopology()
 #endif
     }
 
+    // Add legend explaining ETX to signal quality mapping
+    LOG_INFO("[SR] ETX to signal mapping: ETX=1.0~RSSI=-60dB/SNR=10dB, ETX=2.0~RSSI=-90dB/SNR=0dB, ETX=4.0~RSSI=-110dB/SNR=-5dB");
+
     LOG_DEBUG("[SR] Topology logging complete");
 }
 
@@ -920,7 +923,15 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
     NodeNum nextHop = getNextHop(p->to);
     if (nextHop == 0) {
-        LOG_DEBUG("[SR] No route found to destination (including gateway/fallback search)");
+        // Check if another node is the designated gateway for this destination
+        NodeNum designatedGateway = getGatewayFor(p->to);
+        if (designatedGateway != 0 && designatedGateway != nodeDB->getNodeNum()) {
+            char gwName[64];
+            getNodeDisplayName(designatedGateway, gwName, sizeof(gwName));
+            LOG_INFO("[SR] Not relaying to %s - %s is the designated gateway", destName, gwName);
+        } else {
+            LOG_DEBUG("[SR] No route found to destination (including gateway/fallback search)");
+        }
         return false;
     }
 
@@ -1193,6 +1204,25 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination)
         getNodeDisplayName(bestNeighbor, nhName, sizeof(nhName));
         LOG_DEBUG("[SR] No route to %s; forwarding opportunistically via %s (ETX=%.2f)", destName, nhName, bestEtx);
         return bestNeighbor;
+    }
+
+    // Fallback 3: if we are recorded as a gateway for this destination, we can deliver directly
+    // This handles true gateway scenarios where we have unique connectivity that other SR nodes don't
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    if (myNode != 0 && getGatewayFor(destination) == myNode) {
+        LOG_INFO("[SR] We are the designated gateway for %s - delivering directly", destName);
+        return destination; // We are the gateway, deliver directly
+    }
+
+    // Fallback 4: if the destination only has us as a neighbor (effective gateway scenario),
+    // we should try to deliver directly even without formal gateway designation
+    // This handles cases like FMC6 where a node only connects through us
+    if (routingGraph && nodeDB && myNode != 0) {
+        const NodeEdgesLite *destEdges = routingGraph->findNode(destination);
+        if (destEdges && destEdges->edgeCount == 1 && destEdges->edges[0].to == myNode) {
+            LOG_INFO("[SR] %s only connects through us (effective gateway) - delivering directly", destName);
+            return destination; // We are the effective gateway, deliver directly
+        }
     }
 
     LOG_DEBUG("[SR] No route found to %s", destName);
