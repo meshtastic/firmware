@@ -909,6 +909,12 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
             bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
 #endif
             LOG_DEBUG("[SR] Graph routing decision: %s", shouldRelay ? "SHOULD relay" : "should NOT relay");
+
+            if (!shouldRelay && router) {
+                // Cancel any pending transmission that traditional routing might have queued
+                router->cancelSending(p->from, p->id);
+            }
+
             return shouldRelay;
         }
 
@@ -932,6 +938,13 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         } else {
             LOG_DEBUG("[SR] No route found to destination (including gateway/fallback search)");
         }
+
+        // Cancel any pending transmission that traditional routing might have queued
+        // since SR is taking over routing decisions for this packet
+        if (router) {
+            router->cancelSending(p->from, p->id);
+        }
+
         return false;
     }
 
