@@ -104,8 +104,6 @@ private:
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000; // 15 seconds
     static constexpr uint32_t HEARTBEAT_FLASH_MS = 60;
     static constexpr uint32_t CAPABILITY_TTL_SECS = 300; // 5 minutes for node activity/capability tracking
-    static constexpr float MIN_CAPABLE_RATIO = 0.4f;
-    static constexpr size_t MIN_CAPABLE_NODES = 3;
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
 
     // Signal-based routing enabled by default
