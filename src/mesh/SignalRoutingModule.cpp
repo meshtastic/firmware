@@ -590,7 +590,7 @@ void SignalRoutingModule::logNetworkTopology()
                 getNodeDisplayName(downstreams[i], dn, sizeof(dn));
                 int written = snprintf(buf + pos, sizeof(buf) - pos, (i == 0) ? "%s" : ", %s", dn);
                 if (written < 0 || (size_t)written >= (sizeof(buf) - pos)) {
-                    buf[sizeof(buf) - 1) = '\0';
+                    buf[sizeof(buf) - 1] = '\0';
                     break;
                 }
                 pos += static_cast<size_t>(written);
@@ -783,10 +783,10 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             } else {
                 // No direct signal data available - preserve existing edge or create with defaults
 #ifdef SIGNAL_ROUTING_LITE_MODE
-                const NodeEdgesLite *relayEdges = routingGraph->findNode(inferredRelayer);
+                const NodeEdgesLite *relayEdges = routingGraph->getEdgesFrom(inferredRelayer);
                 bool hasExistingEdge = false;
                 int32_t existingRssi = -70; // default
-                float existingSnr = 5.0f;   // default
+                int32_t existingSnr = 5;   // default
 
                 if (relayEdges) {
                     for (uint8_t i = 0; i < relayEdges->edgeCount; i++) {
@@ -966,7 +966,9 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
-    NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom);
+    // For unicast with healthy topology, don't allow opportunistic forwarding
+    // Only allow opportunistic forwarding when topology is unhealthy
+    NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom, !topologyHealthy);
     if (nextHop == 0) {
         // For unicast packets where topology is healthy (destination exists),
         // don't relay if we can't find a route. Assume other nodes will handle it.
@@ -1160,7 +1162,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     return shouldRelay;
 }
 
-NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode, NodeNum heardFrom)
+NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode, NodeNum heardFrom, bool allowOpportunistic)
 {
     if (!routingGraph) {
         LOG_DEBUG("[SR] No graph available for routing");
@@ -1229,47 +1231,49 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
     }
 
     // Fallback 2: opportunistic forward like broadcast — pick best direct neighbor (lowest ETX) to move the packet
-    // Exclude the source and heardFrom nodes to avoid forwarding back to them
+    // Only do this if opportunistic forwarding is allowed
     NodeNum bestNeighbor = 0;
-    float bestEtx = 1e9f;
+    if (allowOpportunistic) {
+        float bestEtx = 1e9f;
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-    if (myEdges) {
-        for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
-            NodeNum neighbor = myEdges->edges[i].to;
-            // Don't forward back to source or heardFrom nodes
-            if (neighbor == sourceNode || neighbor == heardFrom) {
-                continue;
-            }
-            float etx = myEdges->edges[i].getEtx();
-            if (etx < bestEtx) {
-                bestEtx = etx;
-                bestNeighbor = neighbor;
+        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (myEdges) {
+            for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                NodeNum neighbor = myEdges->edges[i].to;
+                // Don't forward back to source or heardFrom nodes
+                if (neighbor == sourceNode || neighbor == heardFrom) {
+                    continue;
+                }
+                float etx = myEdges->edges[i].getEtx();
+                if (etx < bestEtx) {
+                    bestEtx = etx;
+                    bestNeighbor = neighbor;
+                }
             }
         }
-    }
 #else
-    auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-    if (edges) {
-        for (const Edge& e : *edges) {
-            NodeNum neighbor = e.to;
-            // Don't forward back to source or heardFrom nodes
-            if (neighbor == sourceNode || neighbor == heardFrom) {
-                continue;
-            }
-            if (e.etx < bestEtx) {
-                bestEtx = e.etx;
-                bestNeighbor = neighbor;
+        auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (edges) {
+            for (const Edge& e : *edges) {
+                NodeNum neighbor = e.to;
+                // Don't forward back to source or heardFrom nodes
+                if (neighbor == sourceNode || neighbor == heardFrom) {
+                    continue;
+                }
+                if (e.etx < bestEtx) {
+                    bestEtx = e.etx;
+                    bestNeighbor = neighbor;
+                }
             }
         }
-    }
 #endif
 
-    if (bestNeighbor != 0) {
-        char nhName[64];
-        getNodeDisplayName(bestNeighbor, nhName, sizeof(nhName));
-        LOG_DEBUG("[SR] No route to %s; forwarding opportunistically via %s (ETX=%.2f)", destName, nhName, bestEtx);
-        return bestNeighbor;
+        if (bestNeighbor != 0) {
+            char nhName[64];
+            getNodeDisplayName(bestNeighbor, nhName, sizeof(nhName));
+            LOG_DEBUG("[SR] No route to %s; forwarding opportunistically via %s (ETX=%.2f)", destName, nhName, bestEtx);
+            return bestNeighbor;
+        }
     }
 
     // Fallback 3: if we are recorded as a gateway for this destination, we can deliver directly
@@ -1287,7 +1291,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
     // This handles cases like FMC6 where a node only connects through us
 #ifdef SIGNAL_ROUTING_LITE_MODE
     if (routingGraph && nodeDB && myNode != 0) {
-        const NodeEdgesLite *destEdges = routingGraph->findNode(destination);
+        const NodeEdgesLite *destEdges = routingGraph->getEdgesFrom(destination);
         if (destEdges && destEdges->edgeCount == 1 && destEdges->edges[0].to == myNode) {
             LOG_INFO("[SR] %s only connects through us (effective gateway) - delivering directly", destName);
             // Record ourselves as gateway for this destination since we're the only connection
