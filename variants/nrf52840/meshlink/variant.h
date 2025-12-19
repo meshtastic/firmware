@@ -104,7 +104,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES W25Q16JVUXIQ
 #define EXTERNAL_FLASH_USE_QSPI
-// #define USE_EXTERNAL_FLASH
+// NOTE: USE_EXTERNAL_FLASH is configured via platformio.ini build flags for this variant.
 
 #define USE_SX1262
 #define SX126X_CS (12)
