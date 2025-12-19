@@ -3,7 +3,7 @@
 set -e
 
 echo "Starting simulator"
-.pio/build/native/program &
+.pio/build/native/meshtasticd -s &
 sleep 20 # 5 seconds was not enough
 
 echo "Simulator started, launching python test..."
