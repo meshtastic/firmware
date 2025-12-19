@@ -158,6 +158,12 @@ class GraphLite {
     void removeNode(NodeNum nodeId);
 
     /**
+     * Clear all edges to/from a specific node (used for graph merging)
+     * @param nodeId Node whose edges to clear
+     */
+    void clearEdgesForNode(NodeNum nodeId);
+
+    /**
      * Get memory usage estimate in bytes
      */
     static constexpr size_t getMemoryUsage() {
