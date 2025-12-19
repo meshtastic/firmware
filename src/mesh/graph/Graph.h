@@ -144,6 +144,12 @@ public:
     void removeNode(NodeNum nodeId);
 
     /**
+     * Clear all edges to/from a specific node (used for graph merging)
+     * @param nodeId Node whose edges to clear
+     */
+    void clearEdgesForNode(NodeNum nodeId);
+
+    /**
      * Calculate which nodes would be covered if a specific relay rebroadcasts
      * @param relay The node that would relay
      * @param alreadyCovered Nodes that have already received the packet

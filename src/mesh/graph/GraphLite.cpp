@@ -555,3 +555,34 @@ void GraphLite::removeNode(NodeNum nodeId)
     }
 }
 
+void GraphLite::clearEdgesForNode(NodeNum nodeId)
+{
+    // Find and clear edges from this node
+    NodeEdgesLite *node = findNode(nodeId);
+    if (node) {
+        node->edgeCount = 0;
+    }
+
+    // Remove edges from other nodes that point to this node
+    for (uint8_t i = 0; i < nodeCount; i++) {
+        NodeEdgesLite *otherNode = &nodes[i];
+        // Remove edges where destination is the target node
+        uint8_t writeIdx = 0;
+        for (uint8_t readIdx = 0; readIdx < otherNode->edgeCount; readIdx++) {
+            if (otherNode->edges[readIdx].to != nodeId) {
+                if (writeIdx != readIdx) {
+                    otherNode->edges[writeIdx] = otherNode->edges[readIdx];
+                }
+                writeIdx++;
+            }
+        }
+        otherNode->edgeCount = writeIdx;
+    }
+
+    // Clear route cache if it involves this node
+    if (routeCache.destination == nodeId) {
+        routeCache.destination = 0;
+        routeCacheTime = 0;
+    }
+}
+

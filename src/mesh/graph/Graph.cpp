@@ -392,6 +392,36 @@ void Graph::removeNode(NodeNum nodeId) {
     }
 }
 
+void Graph::clearEdgesForNode(NodeNum nodeId) {
+    // Remove all edges from this node to others
+    adjacencyList.erase(nodeId);
+
+    // Remove all edges to this node from other nodes
+    for (auto& pair : adjacencyList) {
+        auto& edges = pair.second;
+        edges.erase(
+            std::remove_if(edges.begin(), edges.end(),
+                [nodeId](const Edge& e) {
+                    return e.to == nodeId;
+                }),
+            edges.end());
+    }
+
+    // Clear route cache if it involves this node
+    if (routeCache.find(nodeId) != routeCache.end()) {
+        routeCache.erase(nodeId);
+    }
+
+    // Also clear any cached routes that go through this node
+    for (auto it = routeCache.begin(); it != routeCache.end();) {
+        if (it->second.nextHop == nodeId) {
+            it = routeCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 std::unordered_set<NodeNum> Graph::getCoverageIfRelays(NodeNum relay, const std::unordered_set<NodeNum>& alreadyCovered) const {
     std::unordered_set<NodeNum> newCoverage;
 
