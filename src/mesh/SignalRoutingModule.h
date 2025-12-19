@@ -249,6 +249,7 @@ private:
     void cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId);
     static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
     void recordGatewayRelation(NodeNum gateway, NodeNum downstream);
+    void removeGatewayRelationship(NodeNum gateway, NodeNum downstream);
     void clearGatewayRelationsFor(NodeNum node);
     NodeNum getGatewayFor(NodeNum downstream) const;
     size_t getGatewayDownstreamCount(NodeNum gateway) const;

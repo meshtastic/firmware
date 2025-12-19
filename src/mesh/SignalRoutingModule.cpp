@@ -755,6 +755,26 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         LOG_INFO("[SR] Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
+        // Remove this node from any gateway relationships since we can hear it directly
+        // Find all gateways that claim this node as downstream and remove those relationships
+        std::vector<NodeNum> gatewaysToRemove;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        for (uint8_t i = 0; i < gatewayRelationCount; i++) {
+            if (gatewayRelations[i].downstream == mp.from) {
+                gatewaysToRemove.push_back(gatewayRelations[i].gateway);
+            }
+        }
+#else
+        for (const auto& pair : downstreamGateway) {
+            if (pair.first == mp.from) {
+                gatewaysToRemove.push_back(pair.second);
+            }
+        }
+#endif
+        for (NodeNum gateway : gatewaysToRemove) {
+            removeGatewayRelationship(gateway, mp.from);
+        }
+
         // Brief purple flash for any direct packet received
         flashRgbLed(128, 0, 128, 100, true);
 
@@ -789,7 +809,32 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             // Relay node is actively participating, tracked via SR capability system
 
             // Record gateway relationship: inferredRelayer is gateway for mp.from
-            recordGatewayRelation(inferredRelayer, mp.from);
+            // But only if we don't have a direct connection to mp.from ourselves
+            bool hasDirectConnection = false;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (edges) {
+                for (uint8_t i = 0; i < edges->edgeCount; i++) {
+                    if (edges->edges[i].to == mp.from) {
+                        hasDirectConnection = true;
+                        break;
+                    }
+                }
+            }
+#else
+            const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (edges) {
+                for (const Edge& e : *edges) {
+                    if (e.to == mp.from) {
+                        hasDirectConnection = true;
+                        break;
+                    }
+                }
+            }
+#endif
+            if (!hasDirectConnection) {
+                recordGatewayRelation(inferredRelayer, mp.from);
+            }
 
             // Update relay node's edge in the graph since it's actively relaying
             if (hasSignalData) {
@@ -2093,6 +2138,60 @@ NodeNum SignalRoutingModule::resolveRelayIdentity(uint8_t relayId) const
 }
 
 // Record gateway/downstream relationship inferred from relayed packets
+void SignalRoutingModule::removeGatewayRelationship(NodeNum gateway, NodeNum downstream)
+{
+    if (gateway == 0 || downstream == 0 || gateway == downstream) return;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Remove gateway relation for this downstream
+    for (uint8_t i = 0; i < gatewayRelationCount; ) {
+        if (gatewayRelations[i].gateway == gateway && gatewayRelations[i].downstream == downstream) {
+            // Remove by shifting remaining elements
+            for (uint8_t j = i; j < gatewayRelationCount - 1; j++) {
+                gatewayRelations[j] = gatewayRelations[j + 1];
+            }
+            gatewayRelationCount--;
+        } else {
+            i++;
+        }
+    }
+
+    // Remove downstream from gateway's list
+    GatewayDownstreamSet *set = nullptr;
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+        if (gatewayDownstream[i].gateway == gateway) {
+            set = &gatewayDownstream[i];
+            break;
+        }
+    }
+    if (set) {
+        // Remove the downstream from the set
+        uint8_t writeIdx = 0;
+        for (uint8_t readIdx = 0; readIdx < set->count; readIdx++) {
+            if (set->downstream[readIdx] != downstream) {
+                if (writeIdx != readIdx) {
+                    set->downstream[writeIdx] = set->downstream[readIdx];
+                }
+                writeIdx++;
+            }
+        }
+        set->count = writeIdx;
+    }
+#else
+    // Remove from downstreamGateway map
+    auto it = downstreamGateway.find(downstream);
+    if (it != downstreamGateway.end() && it->second == gateway) {
+        downstreamGateway.erase(it);
+    }
+
+    // Remove from gatewayDownstream map
+    auto git = gatewayDownstream.find(gateway);
+    if (git != gatewayDownstream.end()) {
+        git->second.erase(downstream);
+    }
+#endif
+}
+
 void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstream)
 {
     if (gateway == 0 || downstream == 0 || gateway == downstream) return;
