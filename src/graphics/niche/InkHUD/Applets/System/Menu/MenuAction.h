@@ -110,6 +110,9 @@ enum MenuAction {
     TOGGLE_DISPLAY_UNITS,
     // Network
     TOGGLE_WIFI,
+    // Administration
+    RESET_NODEDB_ALL,
+    RESET_NODEDB_KEEP_FAVORITES,
 };
 
 } // namespace NicheGraphics::InkHUD

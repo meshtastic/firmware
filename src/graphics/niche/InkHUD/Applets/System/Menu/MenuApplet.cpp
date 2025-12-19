@@ -785,6 +785,18 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
     }
 
+    case RESET_NODEDB_ALL:
+        InkHUD::getInstance()->notifyApplyingChanges();
+        nodeDB->resetNodes();
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        break;
+
+    case RESET_NODEDB_KEEP_FAVORITES:
+        InkHUD::getInstance()->notifyApplyingChanges();
+        nodeDB->resetNodes(1);
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -888,6 +900,12 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         items.push_back(MenuItem("Display", MenuPage::NODE_CONFIG_DISPLAY));
         items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
+
+        // Administration Section
+        items.push_back(MenuItem::Header("Administration"));
+        items.push_back(MenuItem("Reset NodeDB", MenuPage::NODE_CONFIG_ADMIN_RESET));
+
+        // Exit
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -1212,7 +1230,15 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+    // Administration Section
+    case NODE_CONFIG_ADMIN_RESET:
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        items.push_back(MenuItem("Reset All", MenuAction::RESET_NODEDB_ALL, MenuPage::EXIT));
+        items.push_back(MenuItem("Keep Favorites Only", MenuAction::RESET_NODEDB_KEEP_FAVORITES, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
 
+    // Exit
     case EXIT:
         sendToBackground(); // Menu applet dismissed, allow normal behavior to resume
         break;
