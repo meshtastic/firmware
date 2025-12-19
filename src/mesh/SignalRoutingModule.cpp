@@ -713,6 +713,11 @@ void SignalRoutingModule::logNetworkTopology()
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // Update NodeDB with packet information like FloodingRouter does
+    if (nodeDB) {
+        nodeDB->updateFrom(mp);
+    }
+
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.request_id != 0 &&
         mp.to == nodeDB->getNodeNum()) {
         cancelSpeculativeRetransmit(nodeDB->getNodeNum(), mp.decoded.request_id);
@@ -975,6 +980,12 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     LOG_DEBUG("[SR] Considering unicast from %s to %s (hop_limit=%d)",
              senderName, destName, p->hop_limit);
 
+    // Don't use SR for packets addressed to us - let them be delivered normally
+    if (p->to == nodeDB->getNodeNum()) {
+        LOG_DEBUG("[SR] Packet addressed to local node - not using SR");
+        return false;
+    }
+
     if (!isActiveRoutingRole()) {
         LOG_DEBUG("[SR] Passive role - not using SR for unicast");
         return false;
@@ -1039,16 +1050,17 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
             char gwName[64];
             getNodeDisplayName(designatedGateway, gwName, sizeof(gwName));
             LOG_INFO("[SR] Not relaying to %s - %s is the designated gateway", destName, gwName);
+
+            // Cancel any pending transmission that traditional routing might have queued
+            if (router) {
+                router->cancelSending(p->from, p->id);
+            }
+
+            return false; // Don't use SR - designated gateway should handle this packet
         } else {
-            LOG_DEBUG("[SR] No route found to destination - not relaying unicast packet");
+            LOG_DEBUG("[SR] No route found to destination - allowing traditional routing to attempt delivery");
+            return false; // Don't use SR - allow traditional routing/flooding for this unicast packet
         }
-
-        // Cancel any pending transmission that traditional routing might have queued
-        if (router) {
-            router->cancelSending(p->from, p->id);
-        }
-
-        return false; // Don't allow traditional flooding for this unicast packet
     }
 
     // Gateway preference: if we know the destination is behind a gateway we can reach directly, prefer that
