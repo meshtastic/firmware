@@ -72,7 +72,7 @@ bool powerHAL_isPowerLevelSafe()
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 
     uint16_t vddADCRead = analogReadVDD();
-    voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
+    float voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
     LOG_INFO("VDD VOLTAGE: %f", voltage);
 
     return true;
@@ -95,6 +95,13 @@ void powerHAL_platformInit()
 
     NRF_POWER->POFCON =
         ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+
+    // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in varian definition file
+#ifdef VBAT_AR_INTERNAL
+    analogReference(VBAT_AR_INTERNAL);
+#else
+    analogReference(AR_INTERNAL); // 3.6V
+#endif
 }
 
 bool loopCanSleep()

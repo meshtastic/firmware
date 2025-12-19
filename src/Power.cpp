@@ -664,13 +664,7 @@ bool Power::analogInit()
     }
 #endif // ARCH_ESP32
 
-#ifdef ARCH_NRF52
-#ifdef VBAT_AR_INTERNAL
-    analogReference(VBAT_AR_INTERNAL);
-#else
-    analogReference(AR_INTERNAL); // 3.6V
-#endif
-#endif // ARCH_NRF52
+    // NRF52 ADC init moved to powerHAL_init in nrf52 platform
 
 #ifndef ARCH_ESP32
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
