@@ -545,7 +545,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.has_security = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
 
+#ifdef USE_GC1109_PA
+    config.lora.sx126x_rx_boosted_gain = false; // Disable for boards with external PA/LNA (e.g., Heltec V4)
+#else
     config.lora.sx126x_rx_boosted_gain = true;
+#endif
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;

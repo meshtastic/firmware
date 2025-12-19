@@ -143,6 +143,14 @@ template <typename T> bool SX126xInterface<T>::init()
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
+#ifdef USE_GC1109_PA
+    // Force boosted gain OFF for boards with external PA/LNA
+    uint16_t result = lora.setRxBoostedGainMode(false);
+    LOG_INFO("Set RX gain to power saving mode (boosted mode off; forced for external PA/LNA); result: %d", result);
+    if (config.lora.sx126x_rx_boosted_gain) {
+        LOG_WARN("Overriding sx126x_rx_boosted_gain to false for board with external PA/LNA");
+    }
+#else
     if (config.lora.sx126x_rx_boosted_gain) {
         uint16_t result = lora.setRxBoostedGainMode(true);
         LOG_INFO("Set RX gain to boosted mode; result: %d", result);
@@ -150,6 +158,7 @@ template <typename T> bool SX126xInterface<T>::init()
         uint16_t result = lora.setRxBoostedGainMode(false);
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
     }
+#endif
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
