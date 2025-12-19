@@ -12,24 +12,26 @@ InkHUD::TipsApplet::TipsApplet()
 {
     bool needsRegion = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
+    bool showTutorialTips = (settings->tips.firstBoot || needsRegion);
+
     // Welcome screen
-    if (settings->tips.firstBoot)
+    if (showTutorialTips)
         tipQueue.push_back(Tip::WELCOME);
 
-    // Finish setup (info only, not picker)
+    // Finish setup
     if (needsRegion)
         tipQueue.push_back(Tip::FINISH_SETUP);
+
+    // Using the UI
+    if (showTutorialTips) {
+        tipQueue.push_back(Tip::CUSTOMIZATION);
+        tipQueue.push_back(Tip::BUTTONS);
+    }
 
     // Shutdown info
     // Shown until user performs one valid shutdown
     if (!settings->tips.safeShutdownSeen)
         tipQueue.push_back(Tip::SAFE_SHUTDOWN);
-
-    // Using the UI
-    if (settings->tips.firstBoot) {
-        tipQueue.push_back(Tip::CUSTOMIZATION);
-        tipQueue.push_back(Tip::BUTTONS);
-    }
 
     // Catch an incorrect attempt at rotating display
     if (config.display.flip_screen)
@@ -253,6 +255,7 @@ void InkHUD::TipsApplet::onBackground()
 // While our SystemApplet::handleInput flag is true
 void InkHUD::TipsApplet::onButtonShortPress()
 {
+    bool needsRegion = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     // If we're prompting the user to pick a region, hand off to the menu
     if (!tipQueue.empty() && tipQueue.front() == Tip::PICK_REGION) {
         tipQueue.pop_front();
@@ -272,7 +275,7 @@ void InkHUD::TipsApplet::onButtonShortPress()
     if (tipQueue.empty()) {
         // Record that user has now seen the "tutorial" set of tips
         // Don't show them on subsequent boots
-        if (settings->tips.firstBoot) {
+        if (settings->tips.firstBoot && !needsRegion) {
             settings->tips.firstBoot = false;
             inkhud->persistence->saveSettings();
         }
@@ -280,10 +283,7 @@ void InkHUD::TipsApplet::onButtonShortPress()
         // Close applet and clean the screen
         sendToBackground();
         inkhud->forceUpdate(EInk::UpdateTypes::FULL);
-    }
-
-    // More tips left
-    else {
+    } else {
         requestUpdate();
     }
 }
