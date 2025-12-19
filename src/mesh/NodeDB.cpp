@@ -257,9 +257,10 @@ bool ensureInternalBackupStorageMounted()
         mounted = InternalFS.begin();
         if (!mounted) {
             LOG_ERROR("Failed to mount internal flash storage for config backups");
+        } else {
+            LOG_INFO("Internal backup storage mounted: %d", mounted);
         }
     }
-    LOG_INFO("Internal backup storage mounted: %d", mounted);
     return mounted;
 }
 
