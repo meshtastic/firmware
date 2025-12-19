@@ -45,8 +45,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
-    // If inbound message is a replay (or spoof!) of our own messages, we shouldn't process
-    // (why use second-hand sources for our own data?)
+    const auto transport = mp.transport_mechanism;
+    if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
+                                    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API)) {
+        LOG_WARN("Ignoring packet supposedly from us over external transport");
+        return true;
+    }
 
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
@@ -472,19 +476,53 @@ void PositionModule::sendLostAndFoundText()
     delete[] message;
 }
 
+// Helper: return imprecise (truncated + centered) lat/lon as int32 using current precision
+static inline void computeImpreciseLatLon(int32_t inLat, int32_t inLon, uint8_t precisionBits, int32_t &outLat, int32_t &outLon)
+{
+    if (precisionBits > 0 && precisionBits < 32) {
+        // Build mask for top 'precisionBits' bits of a 32-bit unsigned field
+        const uint32_t mask = (precisionBits == 32) ? UINT32_MAX : (UINT32_MAX << (32 - precisionBits));
+        // Note: latitude_i/longitude_i are stored as signed 32-bit in meshtastic code but
+        // the bitmask logic used previously operated as unsigned—preserve that behavior by
+        // casting to uint32_t for masking, then back to int32_t.
+        uint32_t lat_u = static_cast<uint32_t>(inLat) & mask;
+        uint32_t lon_u = static_cast<uint32_t>(inLon) & mask;
+
+        // Add the "center of cell" offset used elsewhere:
+        // The code previously added (1 << (31 - precision)) to produce the middle of the possible location.
+        uint32_t center_offset = (1u << (31 - precisionBits));
+        lat_u += center_offset;
+        lon_u += center_offset;
+
+        outLat = static_cast<int32_t>(lat_u);
+        outLon = static_cast<int32_t>(lon_u);
+    } else {
+        // full precision: return input unchanged
+        outLat = inLat;
+        outLon = inLon;
+    }
+}
+
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
 {
-    // The minimum distance to travel before we are able to send a new position packet.
     const uint32_t distanceTravelThreshold =
         Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
 
-    // Determine the distance in meters between two points on the globe
-    float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
-        lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
+    int32_t lastLatImprecise, lastLonImprecise;
+    int32_t currentLatImprecise, currentLonImprecise;
 
-    return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
+    computeImpreciseLatLon(lastGpsLatitude, lastGpsLongitude, precision, lastLatImprecise, lastLonImprecise);
+    computeImpreciseLatLon(currentPosition.latitude_i, currentPosition.longitude_i, precision, currentLatImprecise,
+                           currentLonImprecise);
+
+    float distMeters = GeoCoord::latLongToMeter(lastLatImprecise * 1e-7, lastLonImprecise * 1e-7, currentLatImprecise * 1e-7,
+                                                currentLonImprecise * 1e-7);
+
+    float distanceTraveled = fabsf(distMeters);
+
+    return SmartPosition{.distanceTraveled = distanceTraveled,
                          .distanceThreshold = distanceTravelThreshold,
-                         .hasTraveledOverThreshold = abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold};
+                         .hasTraveledOverThreshold = distanceTraveled >= distanceTravelThreshold};
 }
 
 void PositionModule::handleNewPosition()
