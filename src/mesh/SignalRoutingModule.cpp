@@ -430,6 +430,12 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         LOG_INFO("[SR] %s is online (SR v%d, %s) - no neighbors detected yet",
                  senderName, p->routing_version,
                  p->signal_based_capable ? "SR-capable" : "legacy mode");
+
+        // Clear gateway relationships for SR-capable nodes with no neighbors - they can't be gateways
+        if (p->signal_based_capable) {
+            clearGatewayRelationsFor(mp.from);
+        }
+
         return false;
     }
 
@@ -439,6 +445,14 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
     // Flash cyan for network topology update
     flashRgbLed(0, 255, 255, 150, true);
+
+    // Clear all existing edges for this node before adding the new ones from the broadcast
+    // This ensures our view of the sender's connectivity matches exactly what it reported
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    routingGraph->clearEdgesForNode(mp.from);
+#else
+    routingGraph->clearEdgesForNode(mp.from);
+#endif
 
     // Add edges from each neighbor TO the sender
     // The RSSI/SNR describes how well the sender hears the neighbor,
@@ -993,33 +1007,36 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     }
 
     // Gateway preference: if we know the destination is behind a gateway we can reach directly, prefer that
-    NodeNum gatewayForDest = getGatewayFor(p->to);
-    if (gatewayForDest && gatewayForDest != nextHop) {
-        bool directToGateway = false;
+    // But only if we don't already have a direct route to the destination
+    if (nextHop != p->to) {  // Only use gateway if we don't have a direct route
+        NodeNum gatewayForDest = getGatewayFor(p->to);
+        if (gatewayForDest && gatewayForDest != nextHop) {
+            bool directToGateway = false;
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-        if (edges) {
-            for (uint8_t i = 0; i < edges->edgeCount; i++) {
-                if (edges->edges[i].to == gatewayForDest) {
-                    directToGateway = true;
-                    break;
+            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (edges) {
+                for (uint8_t i = 0; i < edges->edgeCount; i++) {
+                    if (edges->edges[i].to == gatewayForDest) {
+                        directToGateway = true;
+                        break;
+                    }
                 }
             }
-        }
 #else
-        const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-        if (edges) {
-            for (const Edge& e : *edges) {
-                if (e.to == gatewayForDest) {
-                    directToGateway = true;
-                    break;
+            const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (edges) {
+                for (const Edge& e : *edges) {
+                    if (e.to == gatewayForDest) {
+                        directToGateway = true;
+                        break;
+                    }
                 }
             }
-        }
 #endif
-        if (directToGateway) {
-            LOG_INFO("[SR] Gateway preference: using gateway %08x to reach %08x (was %08x)", gatewayForDest, p->to, nextHop);
-            nextHop = gatewayForDest;
+            if (directToGateway) {
+                LOG_INFO("[SR] Gateway preference: using gateway %08x to reach %08x (was %08x)", gatewayForDest, p->to, nextHop);
+                nextHop = gatewayForDest;
+            }
         }
     }
 
@@ -2169,6 +2186,50 @@ size_t SignalRoutingModule::getGatewayDownstreamCount(NodeNum gateway) const
     auto it = gatewayDownstream.find(gateway);
     if (it == gatewayDownstream.end()) return 0;
     return it->second.size();
+#endif
+}
+
+void SignalRoutingModule::clearGatewayRelationsFor(NodeNum node)
+{
+    if (node == 0) return;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Remove gateway relations where this node is the gateway
+    for (uint8_t i = 0; i < gatewayRelationCount; ) {
+        if (gatewayRelations[i].gateway == node) {
+            // Remove by shifting remaining elements
+            for (uint8_t j = i; j < gatewayRelationCount - 1; j++) {
+                gatewayRelations[j] = gatewayRelations[j + 1];
+            }
+            gatewayRelationCount--;
+        } else {
+            i++;
+        }
+    }
+
+    // Remove downstream sets for this gateway
+    for (uint8_t i = 0; i < gatewayDownstreamCount; ) {
+        if (gatewayDownstream[i].gateway == node) {
+            // Remove by shifting remaining elements
+            for (uint8_t j = i; j < gatewayDownstreamCount - 1; j++) {
+                gatewayDownstream[j] = gatewayDownstream[j + 1];
+            }
+            gatewayDownstreamCount--;
+        } else {
+            i++;
+        }
+    }
+#else
+    // In full mode, erase from maps
+    gatewayDownstream.erase(node);
+    // Also remove any relations where this node is the gateway
+    for (auto it = downstreamGateway.begin(); it != downstreamGateway.end(); ) {
+        if (it->second == node) {
+            it = downstreamGateway.erase(it);
+        } else {
+            ++it;
+        }
+    }
 #endif
 }
 
