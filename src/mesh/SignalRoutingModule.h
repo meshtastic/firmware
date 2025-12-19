@@ -44,7 +44,7 @@ public:
     /**
      * Get the next hop for signal-based routing (unicast only)
      */
-    NodeNum getNextHop(NodeNum destination, NodeNum sourceNode = 0, NodeNum heardFrom = 0);
+    NodeNum getNextHop(NodeNum destination, NodeNum sourceNode = 0, NodeNum heardFrom = 0, bool allowOpportunistic = true);
 
     /**
      * Update neighbor information from a directly received packet
