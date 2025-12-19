@@ -9,9 +9,13 @@
 #include <Throttle.h>
 #include <algorithm>
 
+#ifndef USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS
+#define USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS (12 * 60 * 60)
+#endif
+
 NodeInfoModule *nodeInfoModule;
 
-static constexpr uint32_t NodeInfoReplySuppressSeconds = 12 * 60 * 60; // 12 hours
+static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
@@ -93,11 +97,6 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         bool requestWantResponse = (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
                                     config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
                                    wantReplies;
-
-        if (requestWantResponse && lastSentToMesh == 0 && nodeDB && nodeDB->numMeshNodes >= 10) {
-            LOG_DEBUG("Stripping want_response because we have 10 or nodes in our NodeDB");
-            requestWantResponse = false;
-        }
 
         p->decoded.want_response = requestWantResponse;
         if (_shorterTimeout)
