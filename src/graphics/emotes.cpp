@@ -127,9 +127,9 @@ const Emote emotes[] = {
     {"\u2199", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height},       // ↙ South West Arrow
     {"\u2199\uFE0E", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙︎ South West Arrow (text)
     {"\u2199\uFE0F", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙️ South West Arrow (emoji)
-    {"\u2190", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},          // ← Leftwards Arrow
-    {"\u2190\uFE0E", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},    // ←︎ Leftwards Arrow (text)
-    {"\u2190\uFE0F", Leftwards_Arrow, Leftwards_Arrow_width, Leftwards_Arrow_height},    // ←️ Leftwards Arrow (emoji)
+    {"\u2190", leftwards_arrow, leftwards_arrow_width, leftwards_arrow_height},          // ← Leftwards Arrow
+    {"\u2190\uFE0E", leftwards_arrow, leftwards_arrow_width, leftwards_arrow_height},    // ←︎ Leftwards Arrow (text)
+    {"\u2190\uFE0F", leftwards_arrow, leftwards_arrow_width, leftwards_arrow_height},    // ←️ Leftwards Arrow (emoji)
     {"\u2196", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height},       // ↖ North West Arrow
     {"\u2196\uFE0E", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖︎ North West Arrow (text)
     {"\u2196\uFE0F", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖️ North West Arrow (emoji)
