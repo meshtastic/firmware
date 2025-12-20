@@ -140,6 +140,23 @@ void InkHUD::TipsApplet::onRender()
         printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
+        int16_t cursorY = fontMedium.lineHeight() * 1.5;
+
+        if (!settings->joystick.enabled) {
+            printAt(0, cursorY, "User Button");
+            cursorY += fontSmall.lineHeight() * 1.2;
+            printAt(0, cursorY, "- short press: next");
+            cursorY += fontSmall.lineHeight() * 1.2;
+            printAt(0, cursorY, "- long press: select / open menu");
+        } else {
+            printAt(0, cursorY, "Joystick");
+            cursorY += fontSmall.lineHeight() * 1.2;
+            printAt(0, cursorY, "- open menu / select");
+            cursorY += fontSmall.lineHeight() * 1.5;
+            printAt(0, cursorY, "Exit Button");
+            cursorY += fontSmall.lineHeight() * 1.2;
+            printAt(0, cursorY, "- switch tile / close menu");
+        }
         int16_t cursorY = h + fontSmall.lineHeight();
 
         auto drawBullet = [&](const char *text) {
@@ -163,14 +180,19 @@ void InkHUD::TipsApplet::onRender()
         printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
-        int16_t cursorY = h + fontSmall.lineHeight();
+        if (!settings->joystick.enabled) {
+            int16_t cursorY = h + fontSmall.lineHeight();
 
-        const char *body = "To rotate the display, use the InkHUD menu. "
+            const char *body = "To rotate the display, use the InkHUD menu. "
                            "Long-press the user button > Options > Rotate.";
 
         uint16_t bh = getWrappedTextHeight(0, width(), body);
         printWrapped(0, cursorY, width(), body);
         cursorY += bh + (fontSmall.lineHeight() / 2);
+        } else {
+            printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
+                         "To rotate the display, use the InkHUD menu. Press the user button > Options > Rotate.");
+        }
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
 
@@ -286,6 +308,12 @@ void InkHUD::TipsApplet::onButtonShortPress()
     } else {
         requestUpdate();
     }
+}
+
+// Functions the same as the user button in this instance
+void InkHUD::TipsApplet::onExitShort()
+{
+    onButtonShortPress();
 }
 
 #endif
