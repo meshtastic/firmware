@@ -291,24 +291,24 @@ extern const unsigned char South_East_Arrow[] PROGMEM;
 extern const unsigned char North_West_Arrow[] PROGMEM;
 
 #define North_East_Arrow_width 16
-#define North_East_Arrow_height 16
-extern const unsigned char North_East_Arrow[] PROGMEM;
+#define north_east_arrow_height 16
+extern const unsigned char north_east_arrow[] PROGMEM;
 
-#define Downwards_Arrow_width 16
-#define Downwards_Arrow_height 16
-extern const unsigned char Downwards_Arrow[] PROGMEM;
+#define downwards_arrow_width 16
+#define downwards_arrow_height 16
+extern const unsigned char downwards_arrow[] PROGMEM;
 
-#define Leftwards_Arrow_width 16
-#define Leftwards_Arrow_height 16
-extern const unsigned char Leftwards_Arrow[] PROGMEM;
+#define leftwards_arrow_width 16
+#define leftwards_arrow_height 16
+extern const unsigned char leftwards_arrow[] PROGMEM;
 
-#define Upwards_Arrow_width 16
-#define Upwards_Arrow_height 16
-extern const unsigned char Upwards_Arrow[] PROGMEM;
+#define upwards_arrow_width 16
+#define upwards_arrow_height 16
+extern const unsigned char upwards_arrow[] PROGMEM;
 
-#define Rightwards_Arrow_width 16
-#define Rightwards_Arrow_height 16
-extern const unsigned char Rightwards_Arrow[] PROGMEM;
+#define rightwards_arrow_width 16
+#define rightwards_arrow_height 16
+extern const unsigned char rightwards_arrow[] PROGMEM;
 
 #define strong_width 16
 #define strong_height 16
