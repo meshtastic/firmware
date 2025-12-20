@@ -53,13 +53,18 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if defined(USE_GC1109_PA)
+    // GC1109 FEM chip initialization
+    // PA_POWER: Power enable for GC1109 (always on)
     pinMode(LORA_PA_POWER, OUTPUT);
     digitalWrite(LORA_PA_POWER, HIGH);
 
+    // PA_EN: Main enable for GC1109 (must be HIGH for both RX and TX)
     pinMode(LORA_PA_EN, OUTPUT);
-    digitalWrite(LORA_PA_EN, LOW);
+    digitalWrite(LORA_PA_EN, HIGH); // CRITICAL: Must be HIGH, not LOW!
+
+    // PA_TX_EN: RF switch control (LOW=RX/LNA, HIGH=TX/PA)
     pinMode(LORA_PA_TX_EN, OUTPUT);
-    digitalWrite(LORA_PA_TX_EN, LOW);
+    digitalWrite(LORA_PA_TX_EN, LOW); // Default to RX mode
 #endif
 
 #if ARCH_PORTDUINO
