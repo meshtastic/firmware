@@ -121,9 +121,9 @@ const Emote emotes[] = {
     {"\U0001F3B3", bowling, bowling_width, bowling_height},          // 🎳 Bowling
 
     // --- Arrows ---
-    {"\u2193", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},          // ↓ Downwards Arrow
-    {"\u2193\uFE0E", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},    // ↓︎ Downwards Arrow (text)
-    {"\u2193\uFE0F", Downwards_Arrow, Downwards_Arrow_width, Downwards_Arrow_height},    // ↓️ Downwards Arrow (emoji)
+    {"\u2193", downwards_arrow, downwards_arrow_width, downwards_arrow_height},          // ↓ Downwards Arrow
+    {"\u2193\uFE0E", downwards_arrow, downwards_arrow_width, downwards_arrow_height},    // ↓︎ Downwards Arrow (text)
+    {"\u2193\uFE0F", downwards_arrow, downwards_arrow_width, downwards_arrow_height},    // ↓️ Downwards Arrow (emoji)
     {"\u2199", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height},       // ↙ South West Arrow
     {"\u2199\uFE0E", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙︎ South West Arrow (text)
     {"\u2199\uFE0F", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙️ South West Arrow (emoji)
