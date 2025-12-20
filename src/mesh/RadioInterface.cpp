@@ -558,6 +558,26 @@ void RadioInterface::applyModemConfig()
                 cr = 5;
                 sf = 9;
                 break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW:
+                bw = 125;
+                cr = 5;
+                sf = 10;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST:
+                bw = 62.5;
+                cr = 6;
+                sf = 7;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
+                bw = 62.5;
+                cr = 6;
+                sf = 8;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST:
+                bw = 250;
+                cr = 5;
+                sf = 7;
+                break;
             }
         } else {
             sf = loraConfig.spread_factor;
@@ -604,6 +624,38 @@ void RadioInterface::applyModemConfig()
             // Set to default modem preset
             loraConfig.use_preset = true;
             loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        } else if (isOneOf(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
+                           meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW) &&
+                   !isOneOf(meshtastic_Config_LoRaConfig_RegionCode_NARROW_868,
+                            meshtastic_Config_LoRaConfig_RegionCode_HAM_US433)) {
+            static const char *err_string = "Narrow preset requires narrow region or ham setting. Fall back to LongFast preset.";
+            LOG_ERROR(err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            sprintf(cn->message, err_string);
+            service->sendClientNotification(cn);
+
+            // Set to default modem preset
+            loraConfig.use_preset = true;
+            if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866) {
+                loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+            } else
+                loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 && bw != 62.5) {
+            static const char *err_string = "Narrow_868 requires 62.5kHz bandwidth. Fall back to NarrowFast preset";
+            LOG_ERROR(err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            sprintf(cn->message, err_string);
+            service->sendClientNotification(cn);
+
+            // Set to NarrowFast preset which is compliant
+            loraConfig.use_preset = true;
+            loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST;
         } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866 && bw != 125) {
             static const char *err_string = "EU_866 requires 125kHz bandwidth. Fall back to LiteFast preset";
             LOG_ERROR(err_string);
