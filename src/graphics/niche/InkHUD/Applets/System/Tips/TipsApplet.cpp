@@ -184,11 +184,11 @@ void InkHUD::TipsApplet::onRender()
             int16_t cursorY = h + fontSmall.lineHeight();
 
             const char *body = "To rotate the display, use the InkHUD menu. "
-                           "Long-press the user button > Options > Rotate.";
+                               "Long-press the user button > Options > Rotate.";
 
-        uint16_t bh = getWrappedTextHeight(0, width(), body);
-        printWrapped(0, cursorY, width(), body);
-        cursorY += bh + (fontSmall.lineHeight() / 2);
+            uint16_t bh = getWrappedTextHeight(0, width(), body);
+            printWrapped(0, cursorY, width(), body);
+            cursorY += bh + (fontSmall.lineHeight() / 2);
         } else {
             printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
                          "To rotate the display, use the InkHUD menu. Press the user button > Options > Rotate.");
