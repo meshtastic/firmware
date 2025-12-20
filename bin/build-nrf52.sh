@@ -21,13 +21,14 @@ rm -f $BUILDDIR/firmware*
 export APP_VERSION=$VERSION
 
 basename=firmware-$1-$VERSION
+ota_basename=${basename}-ota
 
 pio run --environment $1 -t mtjson # -v
 
 cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
 
 echo "Copying NRF52 dfu (OTA) file"
-cp $BUILDDIR/$basename.zip $OUTDIR/$basename.zip
+cp $BUILDDIR/$basename.zip $OUTDIR/$ota_basename.zip
 
 echo "Copying NRF52 UF2 file"
 cp $BUILDDIR/$basename.uf2 $OUTDIR/$basename.uf2
