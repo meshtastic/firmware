@@ -75,7 +75,7 @@ const Emote emotes[] = {
      cloud_with_lightning_rain_height}, // ⛈ Cloud with Lightning and Rain
     {"\u26C8\uFE0F", cloud_with_lightning_rain, cloud_with_lightning_rain_width,
      cloud_with_lightning_rain_height},                                 // ⛈️ Cloud with Lightning and Rain
-    {"\U0001F32C\uFE0F", Wind_Face, Wind_Face_width, Wind_Face_height}, // 🌬️ Wind Face
+    {"\U0001F32C\uFE0F", wind_face, wind_face_width, wind_face_height}, // 🌬️ Wind Face
 
     // --- Moon Phases ---
     {"\U0001F311", new_moon, new_moon_width, new_moon_height},                                     // 🌑 New Moon
