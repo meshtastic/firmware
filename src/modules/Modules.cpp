@@ -69,6 +69,7 @@
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #include "modules/DMShell.h"
+#include "modules/Native/StoreForwardPlusPlus.h"
 #include "modules/Telemetry/HostMetrics.h"
 #include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
@@ -260,6 +261,7 @@ void setupModules()
     else
         LOG_INFO("DMShell disabled, set Security.DMShell: true in config.yaml to enable");
 #endif
+    new StoreForwardPlusPlusModule();
 #endif
 #ifdef DMSHELL_TEST_PEER
     dmShellTestModule = new DMShellTestModule();
