@@ -526,6 +526,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #elif ARCH_PORTDUINO
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+        } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
+                JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
+            }
         }
 #endif
         return DecodeState::DECODE_SUCCESS;
@@ -688,7 +692,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // Store a copy of encrypted packet for MQTT
     DEBUG_HEAP_BEFORE;
-    meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
+    p_encrypted = packetPool.allocCopy(*p);
     DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
@@ -754,6 +758,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
+    p_encrypted = nullptr;
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
