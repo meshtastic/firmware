@@ -44,7 +44,7 @@
 #define SX126X_POWER_EN 40
 
 // TX power offset for external PA (0 = no offset, full SX1262 power)
-#define TX_GAIN_LORA 0
+#define TX_GAIN_LORA 10
 
 #ifdef USE_SX1262
 #define SX126X_CS LORA_CS
