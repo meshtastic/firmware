@@ -44,7 +44,8 @@ class menuHandler
         trace_route_menu,
         throttle_message,
         node_name_length_menu,
-        FrameToggles
+        FrameToggles,
+        DisplayUnits
     };
     static screenMenus menuQueue;
 
@@ -88,6 +89,7 @@ class menuHandler
     static void powerMenu();
     static void nodeNameLengthMenu();
     static void FrameToggles_menu();
+    static void DisplayUnits_menu();
     static void textMessageMenu();
 
   private:
@@ -96,6 +98,25 @@ class menuHandler
     static void keyVerificationFinalPrompt();
     static void BluetoothToggleMenu();
 };
+
+/* Generic Menu Options designations  */
+enum class OptionsAction { Back, Select };
+
+template <typename T> struct MenuOption {
+    const char *label;
+    OptionsAction action;
+    bool hasValue;
+    T value;
+
+    MenuOption(const char *labelIn, OptionsAction actionIn, T valueIn)
+        : label(labelIn), action(actionIn), hasValue(true), value(valueIn)
+    {
+    }
+
+    MenuOption(const char *labelIn, OptionsAction actionIn) : label(labelIn), action(actionIn), hasValue(false), value() {}
+};
+
+using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
 
 } // namespace graphics
 #endif

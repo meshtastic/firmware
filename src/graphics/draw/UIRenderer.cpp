@@ -11,6 +11,7 @@
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "target_specific.h"
@@ -256,7 +257,8 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
     }
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS)) &&            \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
+     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (isHighResolution) {
@@ -383,17 +385,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
-        uint32_t uptime = node->device_metrics.uptime_seconds;
-        uint32_t days = uptime / 86400;
-        uint32_t hours = (uptime % 86400) / 3600;
-        uint32_t mins = (uptime % 3600) / 60;
-        // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
-        if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
-        else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
-        else
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+        getUptimeStr(node->device_metrics.uptime_seconds * 1000, " Up", uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
@@ -552,6 +544,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         // else show nothing
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************
@@ -591,18 +584,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
 #endif
     char uptimeStr[32] = "";
-    uint32_t uptime = millis() / 1000;
-    uint32_t days = uptime / 86400;
-    uint32_t hours = (uptime % 86400) / 3600;
-    uint32_t mins = (uptime % 3600) / 60;
-    // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
 #if !defined(M5STACK_UNITC6L)
-    if (days)
-        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %ud %uh", days, hours);
-    else if (hours)
-        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
-    else
-        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
+    getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
 #endif
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
@@ -771,6 +754,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
     }
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // Start Functions to write date/time to the screen
@@ -1046,36 +1030,17 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
         // === Second Row: Last GPS Fix ===
         if (gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
-            uint32_t days = delta / 86400;
-            uint32_t hours = (delta % 86400) / 3600;
-            uint32_t mins = (delta % 3600) / 60;
-            uint32_t secs = delta % 60;
-
-            char buf[32];
+            uint32_t delta = millis() - gpsStatus->getLastFixMillis();
+            char uptimeStr[32];
 #if defined(USE_EINK)
             // E-Ink: skip seconds, show only days/hours/mins
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
-            } else {
-                snprintf(buf, sizeof(buf), "Last: %um", mins);
-            }
+            getUptimeStr(delta, "Last", uptimeStr, sizeof(uptimeStr), false);
 #else
             // Non E-Ink: include seconds where useful
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
-            } else if (mins > 0) {
-                snprintf(buf, sizeof(buf), "Last: %um %us", mins, secs);
-            } else {
-                snprintf(buf, sizeof(buf), "Last: %us", secs);
-            }
+            getUptimeStr(delta, "Last", uptimeStr, sizeof(uptimeStr), true);
 #endif
 
-            display->drawString(0, getTextPositions(display)[line++], buf);
+            display->drawString(0, getTextPositions(display)[line++], uptimeStr);
         } else {
             display->drawString(0, getTextPositions(display)[line++], "Last: ?");
         }
@@ -1183,6 +1148,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 #endif
 #endif // HAS_GPS
+    graphics::drawCommonFooter(display, x, y);
 }
 
 #ifdef USERPREFS_OEM_TEXT
@@ -1267,7 +1233,13 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (totalIcons == 0)
         return;
 
-    const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
+    const int navPadding = isHighResolution ? 24 : 12; // padding per side
+
+    int usableWidth = SCREEN_WIDTH - (navPadding * 2);
+    if (usableWidth < iconSize)
+        usableWidth = iconSize;
+
+    const size_t iconsPerPage = usableWidth / (iconSize + spacing);
     const size_t currentPage = currentFrame / iconsPerPage;
     const size_t pageStart = currentPage * iconsPerPage;
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
@@ -1338,6 +1310,47 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(WHITE);
         }
     }
+
+    // Compact arrow drawer
+    auto drawArrow = [&](bool rightSide) {
+        display->setColor(WHITE);
+
+        const int offset = isHighResolution ? 3 : 1;
+        const int halfH = rectHeight / 2;
+
+        const int top = (y - 2) + (rectHeight - halfH) / 2;
+        const int bottom = top + halfH - 1;
+        const int midY = top + (halfH / 2);
+
+        const int maxW = 4;
+
+        // Determine left X coordinate
+        int baseX = rightSide ? (rectX + rectWidth + offset) : // right arrow
+                        (rectX - offset - 1);                  // left arrow
+
+        for (int yy = top; yy <= bottom; yy++) {
+            int dist = abs(yy - midY);
+            int lineW = maxW - (dist * maxW / (halfH / 2));
+            if (lineW < 1)
+                lineW = 1;
+
+            if (rightSide) {
+                display->drawHorizontalLine(baseX, yy, lineW);
+            } else {
+                display->drawHorizontalLine(baseX - lineW + 1, yy, lineW);
+            }
+        }
+    };
+    // Right arrow
+    if (pageEnd < totalIcons) {
+        drawArrow(true);
+    }
+
+    // Left arrow
+    if (pageStart > 0) {
+        drawArrow(false);
+    }
+
     // Knock the corners off the square
     display->setColor(BLACK);
     display->drawRect(rectX, y - 2, 1, 1);

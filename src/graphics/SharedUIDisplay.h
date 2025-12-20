@@ -52,6 +52,9 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr = "", bool force_no_invert = false,
                       bool show_date = false);
 
+// Shared battery/time/mail header
+void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
+
 const int *getTextPositions(OLEDDisplay *display);
 
 bool isAllowedPunctuation(char c);

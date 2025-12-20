@@ -17,7 +17,7 @@ typedef struct PacketCacheEntry {
             uint8_t encrypted : 1;    // Payload is encrypted
             uint8_t has_metadata : 1; // Payload includes PacketCacheMetadata
             uint8_t : 6;              // Reserved for future use
-            uint16_t : 8;             // Reserved for future use
+            uint8_t : 8;              // Reserved for future use
         };
     };
 } PacketCacheEntry;
