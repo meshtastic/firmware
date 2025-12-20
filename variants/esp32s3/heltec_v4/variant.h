@@ -29,10 +29,14 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define USE_GC1109_PA   // We have a GC1109 power amplifier+attenuator
-#define LORA_PA_POWER 7 // power en
-#define LORA_PA_EN 2
-#define LORA_PA_TX_EN 46 // enable tx
+#define USE_GC1109_PA    // We have a GC1109 power amplifier+attenuator
+#define LORA_PA_POWER 7  // power en
+#define LORA_PA_EN 2     // main enable (HIGH for both RX and TX)
+#define LORA_PA_TX_EN 46 // enable tx (LOW=RX/LNA, HIGH=TX/PA)
+
+// Tell RadioLib about external RF switch control
+#define SX126X_RXEN RADIOLIB_NC   // No separate RX enable pin
+#define SX126X_TXEN LORA_PA_TX_EN // TX enable pin controls RF switch
 
 #if HAS_TFT
 #define USE_TFTDISPLAY 1
