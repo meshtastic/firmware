@@ -1043,6 +1043,7 @@ void NodeDB::clearLocalPosition()
     node->position.altitude = 0;
     node->position.time = 0;
     setLocalPosition(meshtastic_Position_init_default);
+    localPositionUpdatedSinceBoot = false;
 }
 
 void NodeDB::cleanupMeshDB()
