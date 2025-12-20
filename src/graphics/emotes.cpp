@@ -13,12 +13,12 @@ const Emote emotes[] = {
     {"\U0001F44E", thumbdown, thumbs_width, thumbs_height}, // 👎 Thumbs Down
 
     // --- Smileys (Multiple Unicode Aliases) ---
-    {"\U0001F60A", Smiling_Eyes, Smiling_Eyes_width, Smiling_Eyes_height},             // 😊 Smiling Eyes
-    {"\U0001F600", Grinning, Grinning_width, Grinning_height},                         // 😀 Grinning Face
-    {"\U0001F642", Slightly_Smiling, Slightly_Smiling_width, Slightly_Smiling_height}, // 🙂 Slightly Smiling Face
-    {"\U0001F609", Winking_Face, Winking_Face_width, Winking_Face_height},             // 😉 Winking Face
-    {"\U0001F601", Grinning_Smiling_Eyes, Grinning_Smiling_Eyes_width, Grinning_Smiling_Eyes_height}, // 😁 Grinning Smiling Eyes
-    {"\U0001F60D", Heart_eyes, Heart_eyes_width, Heart_eyes_height},                                  // 😍 Heart Eyes
+    {"\U0001F60A", smiling_eyes, smiling_eyes_width, smiling_eyes_height},             // 😊 Smiling Eyes
+    {"\U0001F600", grinning, grinning_width, grinning_height},                         // 😀 Grinning Face
+    {"\U0001F642", slightly_smiling, slightly_smiling_width, slightly_smiling_height}, // 🙂 Slightly Smiling Face
+    {"\U0001F609", winking_face, winking_face_width, winking_face_height},             // 😉 Winking Face
+    {"\U0001F601", grinning_smiling_eyes, grinning_smiling_eyes_width, grinning_smiling_eyes_height}, // 😁 Grinning Smiling Eyes
+    {"\U0001F60D", heart_eyes, heart_eyes_width, heart_eyes_height},                                  // 😍 Heart Eyes
     {"\U0001F970", heart_smile, heart_smile_width, heart_smile_height}, // 🥰 Smiling Face with Hearts
 
     // --- Question/Alert ---
@@ -28,12 +28,12 @@ const Emote emotes[] = {
 
     // --- Laughing Faces ---
     {"\U0001F602", haha, haha_width, haha_height}, // 😂 Face with Tears of Joy
-    {"\U0001F923", ROFL, ROFL_width, ROFL_height}, // 🤣 Rolling on the Floor Laughing
-    {"\U0001F606", Smiling_Closed_Eyes, Smiling_Closed_Eyes_width, Smiling_Closed_Eyes_height}, // 😆 Smiling Closed Eyes
+    {"\U0001F923", rofl, rofl_width, rofl_height}, // 🤣 Rolling on the Floor Laughing
+    {"\U0001F606", smiling_closed_eyes, smiling_closed_eyes_width, smiling_closed_eyes_height}, // 😆 Smiling Closed Eyes
     {"\U0001F605", haha, haha_width, haha_height},                                              // 😅 Smiling with Sweat
-    {"\U0001F604", Grinning_SmilingEyes2, Grinning_SmilingEyes2_width,
-     Grinning_SmilingEyes2_height}, // 😄 Grinning Face with Smiling Eyes
-    {"\U0001F62D", Loudly_Crying_Face, Loudly_Crying_Face_width, Loudly_Crying_Face_height}, // 😭 Loudly Crying Face
+    {"\U0001F604", grinning_smiling_eyes_2, grinning_smiling_eyes_2_width,
+     grinning_smiling_eyes_2_height}, // 😄 Grinning Face with Smiling Eyes
+    {"\U0001F62D", loudly_crying_face, loudly_crying_face_width, loudly_crying_face_height}, // 😭 Loudly Crying Face
     {"\U0001F92E", vomiting, vomiting_width, vomiting_height},                               // 🤮 Face Vomiting
     {"\U0001F60E", cool, cool_width, cool_height},                                           // 😎 Smiling Face with Sunglasses
     {"\U0001F440", eyes, eyes_width, eyes_height},                                           // 👀 Eyes
@@ -43,7 +43,7 @@ const Emote emotes[] = {
     {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},             // 👋 Waving Hand
     {"\u270C\uFE0F", peace_sign, peace_sign_width, peace_sign_height},        // ✌️ Victory Hand
     {"\U0001F596", vulcan_salute, vulcan_salute_width, vulcan_salute_height}, // 🖖 Vulcan Salute
-    {"\U0001F64F", Praying, Praying_width, Praying_height},                   // 🙏 Praying Hands
+    {"\U0001F64F", praying, praying_width, praying_height},                   // 🙏 Praying Hands
     {"\U0001F4AA", strong, strong_width, strong_height},                      // 💪 Flexed Biceps
     {"\U0001F937", shrug, shrug_width, shrug_height},                         // 🤷 Person Shrugging
     {"\U0001F920", cowboy, cowboy_width, cowboy_height},                      // 🤠 Cowboy Hat Face
@@ -115,8 +115,8 @@ const Emote emotes[] = {
     {"\U0001F351", peach, peach_width, peach_height},                // 🍑 Peach
     {"\U0001F983", turkey, turkey_width, turkey_height},             // 🦃 Turkey
     {"\U0001F357", turkey_leg, turkey_leg_width, turkey_leg_height}, // 🍗 Poultry Leg
-    {"\U0001F525", Fire, Fire_width, Fire_height},                   // 🔥 Fire
-    {"\u2728", Sparkles, Sparkles_width, Sparkles_height},           // ✨ Sparkles
+    {"\U0001F525", fire, fire_width, fire_height},                   // 🔥 Fire
+    {"\u2728", sparkles, sparkles_width, sparkles_height},           // ✨ Sparkles
     {"\U0001F573\uFE0F", hole, hole_width, hole_height},             // 🕳️ Hole
     {"\U0001F3B3", bowling, bowling_width, bowling_height},          // 🎳 Bowling
 
@@ -124,27 +124,27 @@ const Emote emotes[] = {
     {"\u2193", downwards_arrow, downwards_arrow_width, downwards_arrow_height},          // ↓ Downwards Arrow
     {"\u2193\uFE0E", downwards_arrow, downwards_arrow_width, downwards_arrow_height},    // ↓︎ Downwards Arrow (text)
     {"\u2193\uFE0F", downwards_arrow, downwards_arrow_width, downwards_arrow_height},    // ↓️ Downwards Arrow (emoji)
-    {"\u2199", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height},       // ↙ South West Arrow
-    {"\u2199\uFE0E", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙︎ South West Arrow (text)
-    {"\u2199\uFE0F", South_West_Arrow, South_West_Arrow_width, South_West_Arrow_height}, // ↙️ South West Arrow (emoji)
+    {"\u2199", south_west_arrow, south_west_arrow_width, south_west_arrow_height},       // ↙ South West Arrow
+    {"\u2199\uFE0E", south_west_arrow, south_west_arrow_width, south_west_arrow_height}, // ↙︎ South West Arrow (text)
+    {"\u2199\uFE0F", south_west_arrow, south_west_arrow_width, south_west_arrow_height}, // ↙️ South West Arrow (emoji)
     {"\u2190", leftwards_arrow, leftwards_arrow_width, leftwards_arrow_height},          // ← Leftwards Arrow
     {"\u2190\uFE0E", leftwards_arrow, leftwards_arrow_width, leftwards_arrow_height},    // ←︎ Leftwards Arrow (text)
     {"\u2190\uFE0F", leftwards_arrow, leftwards_arrow_width, leftwards_arrow_height},    // ←️ Leftwards Arrow (emoji)
-    {"\u2196", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height},       // ↖ North West Arrow
-    {"\u2196\uFE0E", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖︎ North West Arrow (text)
-    {"\u2196\uFE0F", North_West_Arrow, North_West_Arrow_width, North_West_Arrow_height}, // ↖️ North West Arrow (emoji)
+    {"\u2196", north_west_arrow, north_west_arrow_width, north_west_arrow_height},       // ↖ North West Arrow
+    {"\u2196\uFE0E", north_west_arrow, north_west_arrow_width, north_west_arrow_height}, // ↖︎ North West Arrow (text)
+    {"\u2196\uFE0F", north_west_arrow, north_west_arrow_width, north_west_arrow_height}, // ↖️ North West Arrow (emoji)
     {"\u2191", upwards_arrow, upwards_arrow_width, upwards_arrow_height},                // ↑ Upwards Arrow
     {"\u2191\uFE0E", upwards_arrow, upwards_arrow_width, upwards_arrow_height},          // ↑︎ Upwards Arrow (text)
     {"\u2191\uFE0F", upwards_arrow, upwards_arrow_width, upwards_arrow_height},          // ↑️ Upwards Arrow (emoji)
-    {"\u2197", north_east_arrow, North_East_Arrow_width, north_east_arrow_height},       // ↗ North East Arrow
-    {"\u2197\uFE0E", north_east_arrow, North_East_Arrow_width, north_east_arrow_height}, // ↗︎ North East Arrow (text)
-    {"\u2197\uFE0F", north_east_arrow, North_East_Arrow_width, north_east_arrow_height}, // ↗️ North East Arrow (emoji)
+    {"\u2197", north_east_arrow, north_east_arrow_width, north_east_arrow_height},       // ↗ North East Arrow
+    {"\u2197\uFE0E", north_east_arrow, north_east_arrow_width, north_east_arrow_height}, // ↗︎ North East Arrow (text)
+    {"\u2197\uFE0F", north_east_arrow, north_east_arrow_width, north_east_arrow_height}, // ↗️ North East Arrow (emoji)
     {"\u2192", rightwards_arrow, rightwards_arrow_width, rightwards_arrow_height},       // → Rightwards Arrow
     {"\u2192\uFE0E", rightwards_arrow, rightwards_arrow_width, rightwards_arrow_height}, // →︎ Rightwards Arrow (text)
     {"\u2192\uFE0F", rightwards_arrow, rightwards_arrow_width, rightwards_arrow_height}, // →️ Rightwards Arrow (emoji)
-    {"\u2198", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height},       // ↘ South East Arrow
-    {"\u2198\uFE0E", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height}, // ↘︎ South East Arrow (text)
-    {"\u2198\uFE0F", South_East_Arrow, South_East_Arrow_width, South_East_Arrow_height}, // ↘️ South East Arrow (emoji)
+    {"\u2198", south_east_arrow, south_east_arrow_width, south_east_arrow_height},       // ↘ South East Arrow
+    {"\u2198\uFE0E", south_east_arrow, south_east_arrow_width, south_east_arrow_height}, // ↘︎ South East Arrow (text)
+    {"\u2198\uFE0F", south_east_arrow, south_east_arrow_width, south_east_arrow_height}, // ↘️ South East Arrow (emoji)
 
     // --- Halloween ---
     {"\U0001F383", jack_o_lantern, jack_o_lantern_width, jack_o_lantern_height}, // 🎃 Jack-O-Lantern
@@ -164,23 +164,23 @@ const unsigned char thumbdown[] PROGMEM = {0xF0, 0x1F, 0x08, 0x20, 0x06, 0x30, 0
                                            0x40, 0x06, 0x70, 0x06, 0x40, 0x06, 0x3F, 0x18, 0x02, 0x20, 0x02,
                                            0x40, 0x04, 0x80, 0x04, 0x80, 0x04, 0x00, 0x03, 0x00, 0x00};
 
-const unsigned char Smiling_Eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x52,
+const unsigned char smiling_eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x52,
                                               0x4A, 0x02, 0x40, 0x02, 0x40, 0x22, 0x44, 0x22, 0x44, 0xC2, 0x43,
                                               0x04, 0x20, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Grinning[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x44, 0x22, 0x42,
+const unsigned char grinning[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x44, 0x22, 0x42,
                                           0x42, 0x02, 0x40, 0x02, 0x40, 0xF2, 0x4F, 0x12, 0x48, 0x22, 0x44,
                                           0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Slightly_Smiling[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x44, 0x22, 0x42,
+const unsigned char slightly_smiling[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x44, 0x22, 0x42,
                                                   0x42, 0x02, 0x40, 0x02, 0x40, 0x12, 0x48, 0x12, 0x48, 0x22, 0x44,
                                                   0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Winking_Face[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x44, 0x20, 0x42,
+const unsigned char winking_face[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x44, 0x20, 0x42,
                                               0x46, 0x02, 0x40, 0x02, 0x40, 0x12, 0x48, 0x12, 0x48, 0x22, 0x44,
                                               0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Grinning_Smiling_Eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x52,
+const unsigned char grinning_smiling_eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x52,
                                                        0x4A, 0x02, 0x40, 0xFA, 0x5F, 0x0A, 0x50, 0x0A, 0x50, 0x12, 0x48,
                                                        0x24, 0x24, 0xC4, 0x23, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
@@ -188,7 +188,7 @@ const unsigned char heart_smile[] PROGMEM = {0x00, 0x00, 0x6C, 0x07, 0x7C, 0x18,
                                              0x0A, 0x02, 0xD8, 0x02, 0xF8, 0x22, 0xFC, 0x20, 0x74, 0xDB, 0x23,
                                              0x1F, 0x00, 0x1F, 0x20, 0x0E, 0x18, 0xE4, 0x07, 0x00, 0x00};
 
-const unsigned char Heart_eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x54, 0x2A, 0xFA,
+const unsigned char heart_eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x54, 0x2A, 0xFA,
                                             0x5F, 0x72, 0x4E, 0x22, 0x44, 0x02, 0x40, 0x12, 0x48, 0x12, 0x48,
                                             0x24, 0x24, 0xC4, 0x23, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
@@ -204,19 +204,19 @@ const unsigned char haha[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 
                                       0x4A, 0x0A, 0x50, 0x0E, 0x70, 0xF2, 0x4F, 0x12, 0x48, 0x32, 0x44,
                                       0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char ROFL[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x84, 0x21, 0x84, 0x20, 0x02,
+const unsigned char rofl[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x84, 0x21, 0x84, 0x20, 0x02,
                                       0x4C, 0x02, 0x4A, 0x1A, 0x49, 0x8A, 0x48, 0x42, 0x48, 0x22, 0x44,
                                       0xE4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Smiling_Closed_Eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x42,
+const unsigned char smiling_closed_eyes[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x42,
                                                      0x42, 0x22, 0x44, 0x02, 0x40, 0xF2, 0x4F, 0x12, 0x48, 0x22, 0x44,
                                                      0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Grinning_SmilingEyes2[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x52,
-                                                       0x4A, 0x02, 0x40, 0x02, 0x40, 0xF2, 0x4F, 0x12, 0x48, 0x22, 0x44,
-                                                       0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
+const unsigned char grinning_smiling_eyes_2[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x24, 0x24, 0x52,
+                                                         0x4A, 0x02, 0x40, 0x02, 0x40, 0xF2, 0x4F, 0x12, 0x48, 0x22, 0x44,
+                                                         0xC4, 0x23, 0x04, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Loudly_Crying_Face[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x34, 0x2C, 0x4A,
+const unsigned char loudly_crying_face[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04, 0x20, 0x34, 0x2C, 0x4A,
                                                     0x52, 0x12, 0x48, 0x12, 0x48, 0x92, 0x49, 0x52, 0x4A, 0x52, 0x4A,
                                                     0x54, 0x2A, 0x94, 0x29, 0x18, 0x18, 0xF0, 0x0F, 0x00, 0x00};
 
@@ -268,7 +268,7 @@ const unsigned char cookie[] PROGMEM = {0x00, 0x00, 0xE0, 0x07, 0x18, 0x18, 0x04
                                         0x40, 0x02, 0x58, 0x82, 0x5B, 0x92, 0x43, 0x82, 0x43, 0x02, 0x40,
                                         0x64, 0x28, 0x64, 0x20, 0x18, 0x18, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Fire[] PROGMEM = {0x30, 0x00, 0xF0, 0x00, 0xF8, 0x03, 0xF8, 0x07, 0xFC, 0x1F, 0xFC,
+const unsigned char fire[] PROGMEM = {0x30, 0x00, 0xF0, 0x00, 0xF8, 0x03, 0xF8, 0x07, 0xFC, 0x1F, 0xFC,
                                       0x1F, 0xFE, 0x3E, 0x7E, 0x3E, 0x3E, 0x7C, 0x1E, 0x78, 0x1E, 0x70,
                                       0x1C, 0x70, 0x1C, 0x70, 0x38, 0x38, 0x30, 0x38, 0x60, 0x0C};
 
@@ -276,11 +276,11 @@ const unsigned char peace_sign[] PROGMEM = {0xC0, 0x30, 0x40, 0x29, 0x40, 0x25, 
                                             0x0A, 0x54, 0x68, 0x54, 0x58, 0x54, 0x44, 0x3C, 0x22, 0x04, 0x22,
                                             0x04, 0x12, 0x08, 0x10, 0x10, 0x08, 0xE0, 0x07, 0x00, 0x00};
 
-const unsigned char Praying[] PROGMEM = {0x00, 0x00, 0x40, 0x02, 0xA0, 0x05, 0x90, 0x09, 0x90, 0x09, 0x90,
+const unsigned char praying[] PROGMEM = {0x00, 0x00, 0x40, 0x02, 0xA0, 0x05, 0x90, 0x09, 0x90, 0x09, 0x90,
                                          0x09, 0x98, 0x19, 0x94, 0x29, 0xA4, 0x25, 0xA4, 0x25, 0x84, 0x21,
                                          0x84, 0x21, 0x86, 0x61, 0x4E, 0x72, 0x7F, 0x7E, 0x3F, 0xFC};
 
-const unsigned char Sparkles[] PROGMEM = {0x00, 0x00, 0x10, 0x00, 0x38, 0x04, 0x10, 0x04, 0x00, 0x0E, 0x00,
+const unsigned char sparkles[] PROGMEM = {0x00, 0x00, 0x10, 0x00, 0x38, 0x04, 0x10, 0x04, 0x00, 0x0E, 0x00,
                                           0x1F, 0x80, 0x3F, 0xE0, 0xFF, 0x80, 0x3F, 0x10, 0x1F, 0x10, 0x0E,
                                           0x38, 0x04, 0xFE, 0x04, 0x38, 0x00, 0x10, 0x00, 0x10, 0x00};
 
@@ -420,19 +420,19 @@ const unsigned char turkey_leg[] PROGMEM = {0x0C, 0x00, 0x1E, 0x00, 0x1F, 0x00, 
                                             0x01, 0x10, 0x0E, 0x20, 0x30, 0x20, 0x40, 0x40, 0x40, 0x40, 0x80,
                                             0x40, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00, 0x43, 0x00, 0x3C};
 
-const unsigned char South_West_Arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x1C, 0x00, 0x3E, 0x00,
+const unsigned char south_west_arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x1C, 0x00, 0x3E, 0x00,
                                                   0x1F, 0x80, 0x0F, 0xC2, 0x07, 0xE6, 0x03, 0xFE, 0x01, 0xFE, 0x00,
                                                   0x7E, 0x00, 0x7E, 0x00, 0xFE, 0x00, 0xFE, 0x01, 0x00, 0x00};
 
-const unsigned char South_East_Arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x38, 0x00, 0x7C, 0x00, 0xF8,
+const unsigned char south_east_arrow[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x38, 0x00, 0x7C, 0x00, 0xF8,
                                                   0x00, 0xF0, 0x01, 0xE0, 0x43, 0xC0, 0x67, 0x80, 0x7F, 0x00, 0x7F,
                                                   0x00, 0x7E, 0x00, 0x7E, 0x00, 0x7F, 0x80, 0x7F, 0x00, 0x00};
 
-const unsigned char North_West_Arrow[] PROGMEM = {0x00, 0x00, 0xFE, 0x01, 0xFE, 0x00, 0x7E, 0x00, 0x7E, 0x00, 0xFE,
+const unsigned char north_west_arrow[] PROGMEM = {0x00, 0x00, 0xFE, 0x01, 0xFE, 0x00, 0x7E, 0x00, 0x7E, 0x00, 0xFE,
                                                   0x00, 0xFE, 0x01, 0xE6, 0x03, 0xC2, 0x07, 0x80, 0x0F, 0x00, 0x1F,
                                                   0x00, 0x3E, 0x00, 0x1C, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00};
 
-const unsigned char North_East_Arrow[] PROGMEM = {0x00, 0x00, 0x80, 0x7F, 0x00, 0x7F, 0x00, 0x7E, 0x00, 0x7E, 0x00,
+const unsigned char north_east_arrow[] PROGMEM = {0x00, 0x00, 0x80, 0x7F, 0x00, 0x7F, 0x00, 0x7E, 0x00, 0x7E, 0x00,
                                                   0x7F, 0x80, 0x7F, 0xC0, 0x67, 0xE0, 0x43, 0xF0, 0x01, 0xF8, 0x00,
                                                   0x7C, 0x00, 0x38, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00};
 

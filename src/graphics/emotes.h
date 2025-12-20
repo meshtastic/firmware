@@ -22,33 +22,33 @@ extern const int numEmotes;
 extern const unsigned char thumbup[] PROGMEM;
 extern const unsigned char thumbdown[] PROGMEM;
 
-#define Smiling_Eyes_height 16
-#define Smiling_Eyes_width 16
-extern const unsigned char Smiling_Eyes[] PROGMEM;
+#define smiling_eyes_height 16
+#define smiling_eyes_width 16
+extern const unsigned char smiling_eyes[] PROGMEM;
 
-#define Grinning_height 16
-#define Grinning_width 16
-extern const unsigned char Grinning[] PROGMEM;
+#define grinning_height 16
+#define grinning_width 16
+extern const unsigned char grinning[] PROGMEM;
 
-#define Slightly_Smiling_height 16
-#define Slightly_Smiling_width 16
-extern const unsigned char Slightly_Smiling[] PROGMEM;
+#define slightly_smiling_height 16
+#define slightly_smiling_width 16
+extern const unsigned char slightly_smiling[] PROGMEM;
 
-#define Winking_Face_height 16
-#define Winking_Face_width 16
-extern const unsigned char Winking_Face[] PROGMEM;
+#define winking_face_height 16
+#define winking_face_width 16
+extern const unsigned char winking_face[] PROGMEM;
 
-#define Grinning_Smiling_Eyes_height 16
-#define Grinning_Smiling_Eyes_width 16
-extern const unsigned char Grinning_Smiling_Eyes[] PROGMEM;
+#define grinning_smiling_eyes_height 16
+#define grinning_smiling_eyes_width 16
+extern const unsigned char grinning_smiling_eyes[] PROGMEM;
 
 #define heart_smile_height 16
 #define heart_smile_width 16
 extern const unsigned char heart_smile[] PROGMEM;
 
-#define Heart_eyes_height 16
-#define Heart_eyes_width 16
-extern const unsigned char Heart_eyes[] PROGMEM;
+#define heart_eyes_height 16
+#define heart_eyes_width 16
+extern const unsigned char heart_eyes[] PROGMEM;
 
 #define question_height 16
 #define question_width 16
@@ -62,21 +62,21 @@ extern const unsigned char bang[] PROGMEM;
 #define haha_width 16
 extern const unsigned char haha[] PROGMEM;
 
-#define ROFL_height 16
-#define ROFL_width 16
-extern const unsigned char ROFL[] PROGMEM;
+#define rofl_height 16
+#define rofl_width 16
+extern const unsigned char rofl[] PROGMEM;
 
-#define Smiling_Closed_Eyes_height 16
-#define Smiling_Closed_Eyes_width 16
-extern const unsigned char Smiling_Closed_Eyes[] PROGMEM;
+#define smiling_closed_eyes_height 16
+#define smiling_closed_eyes_width 16
+extern const unsigned char smiling_closed_eyes[] PROGMEM;
 
-#define Grinning_SmilingEyes2_height 16
-#define Grinning_SmilingEyes2_width 16
-extern const unsigned char Grinning_SmilingEyes2[] PROGMEM;
+#define grinning_smiling_eyes_2_height 16
+#define grinning_smiling_eyes_2_width 16
+extern const unsigned char grinning_smiling_eyes_2[] PROGMEM;
 
-#define Loudly_Crying_Face_height 16
-#define Loudly_Crying_Face_width 16
-extern const unsigned char Loudly_Crying_Face[] PROGMEM;
+#define loudly_crying_face_height 16
+#define loudly_crying_face_width 16
+extern const unsigned char loudly_crying_face[] PROGMEM;
 
 #define wave_icon_height 16
 #define wave_icon_width 16
@@ -126,21 +126,21 @@ extern const unsigned char bell_icon[] PROGMEM;
 #define cookie_height 16
 extern const unsigned char cookie[] PROGMEM;
 
-#define Fire_width 16
-#define Fire_height 16
-extern const unsigned char Fire[] PROGMEM;
+#define fire_width 16
+#define fire_height 16
+extern const unsigned char fire[] PROGMEM;
 
 #define peace_sign_width 16
 #define peace_sign_height 16
 extern const unsigned char peace_sign[] PROGMEM;
 
-#define Praying_width 16
-#define Praying_height 16
-extern const unsigned char Praying[] PROGMEM;
+#define praying_width 16
+#define praying_height 16
+extern const unsigned char praying[] PROGMEM;
 
-#define Sparkles_width 16
-#define Sparkles_height 16
-extern const unsigned char Sparkles[] PROGMEM;
+#define sparkles_width 16
+#define sparkles_height 16
+extern const unsigned char sparkles[] PROGMEM;
 
 #define clown_width 16
 #define clown_height 16
@@ -278,21 +278,21 @@ extern const unsigned char turkey[] PROGMEM;
 #define turkey_leg_height 16
 extern const unsigned char turkey_leg[] PROGMEM;
 
-#define South_West_Arrow_width 16
-#define South_West_Arrow_height 16
-extern const unsigned char South_West_Arrow[] PROGMEM;
+#define south_west_arrow_width 16
+#define south_west_arrow_height 16
+extern const unsigned char south_west_arrow[] PROGMEM;
 
-#define South_East_Arrow_width 16
-#define South_East_Arrow_height 16
-extern const unsigned char South_East_Arrow[] PROGMEM;
+#define south_east_arrow_width 16
+#define south_east_arrow_height 16
+extern const unsigned char south_east_arrow[] PROGMEM;
 
-#define North_West_Arrow_width 16
-#define North_West_Arrow_height 16
-extern const unsigned char North_West_Arrow[] PROGMEM;
+#define north_west_arrow_width 16
+#define north_west_arrow_height 16
+extern const unsigned char north_west_arrow[] PROGMEM;
 
-#define North_East_Arrow_width 16
-#define North_East_Arrow_height 16
-extern const unsigned char North_East_Arrow[] PROGMEM;
+#define north_east_arrow_width 16
+#define north_east_arrow_height 16
+extern const unsigned char north_east_arrow[] PROGMEM;
 
 #define downwards_arrow_width 16
 #define downwards_arrow_height 16
