@@ -291,8 +291,8 @@ extern const unsigned char South_East_Arrow[] PROGMEM;
 extern const unsigned char North_West_Arrow[] PROGMEM;
 
 #define North_East_Arrow_width 16
-#define north_east_arrow_height 16
-extern const unsigned char north_east_arrow[] PROGMEM;
+#define North_East_Arrow_height 16
+extern const unsigned char North_East_Arrow[] PROGMEM;
 
 #define downwards_arrow_width 16
 #define downwards_arrow_height 16
