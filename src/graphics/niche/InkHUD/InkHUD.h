@@ -55,13 +55,12 @@ class InkHUD
 
     void shortpress();
     void longpress();
-
-    void stickCenterShort();
-    void stickCenterLong();
-    void stickUp();
-    void stickDown();
-    void stickLeft();
-    void stickRight();
+    void exitShort();
+    void exitLong();
+    void navUp();
+    void navDown();
+    void navLeft();
+    void navRight();
 
     // Trigger UI changes
     // - called by various InkHUD components

@@ -27,12 +27,11 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onBackground() override;
     void onButtonShortPress() override;
     void onButtonLongPress() override;
-    void onStickCenterShort() override;
-    void onStickCenterLong() override;
-    void onStickUp() override;
-    void onStickDown() override;
-    void onStickLeft() override;
-    void onStickRight() override;
+    void onExitShort() override;
+    void onNavUp() override;
+    void onNavDown() override;
+    void onNavLeft() override;
+    void onNavRight() override;
     void onRender() override;
 
     void show(Tile *t); // Open the menu, onto a user tile

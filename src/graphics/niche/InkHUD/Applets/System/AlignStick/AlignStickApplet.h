@@ -27,11 +27,11 @@ class AlignStickApplet : public SystemApplet
     void onForeground() override;
     void onBackground() override;
     void onButtonLongPress() override;
-    void onStickCenterLong() override;
-    void onStickUp() override;
-    void onStickDown() override;
-    void onStickLeft() override;
-    void onStickRight() override;
+    void onExitLong() override;
+    void onNavUp() override;
+    void onNavDown() override;
+    void onNavLeft() override;
+    void onNavRight() override;
 
   protected:
     enum Direction {

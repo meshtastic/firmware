@@ -88,7 +88,7 @@ void InkHUD::Events::onButtonLong()
         inkhud->openMenu();
 }
 
-void InkHUD::Events::onStickCenterShort()
+void InkHUD::Events::onExitShort()
 {
     if (settings->joystick.enabled) {
         // Audio feedback (via buzzer)
@@ -109,13 +109,13 @@ void InkHUD::Events::onStickCenterShort()
 
         // If no system applet is handling input, default behavior instead is change tiles
         if (consumer)
-            consumer->onStickCenterShort();
+            consumer->onExitShort();
         else if (!dismissedExt) // Don't change tile if this button press silenced the external notification module
             inkhud->nextTile();
     }
 }
 
-void InkHUD::Events::onStickCenterLong()
+void InkHUD::Events::onExitLong()
 {
     if (settings->joystick.enabled) {
         // Audio feedback (via buzzer)
@@ -131,15 +131,12 @@ void InkHUD::Events::onStickCenterLong()
             }
         }
 
-        // If no system applet is handling input, default behavior instead is to open the menu
         if (consumer)
-            consumer->onStickCenterLong();
-        else
-            inkhud->openMenu();
+            consumer->onExitLong();
     }
 }
 
-void InkHUD::Events::onStickUp()
+void InkHUD::Events::onNavUp()
 {
     if (settings->joystick.enabled) {
         // Audio feedback (via buzzer)
@@ -159,11 +156,11 @@ void InkHUD::Events::onStickUp()
         }
 
         if (consumer)
-            consumer->onStickUp();
+            consumer->onNavUp();
     }
 }
 
-void InkHUD::Events::onStickDown()
+void InkHUD::Events::onNavDown()
 {
     if (settings->joystick.enabled) {
         // Audio feedback (via buzzer)
@@ -183,11 +180,11 @@ void InkHUD::Events::onStickDown()
         }
 
         if (consumer)
-            consumer->onStickDown();
+            consumer->onNavDown();
     }
 }
 
-void InkHUD::Events::onStickLeft()
+void InkHUD::Events::onNavLeft()
 {
     if (settings->joystick.enabled) {
         // Audio feedback (via buzzer)
@@ -208,13 +205,13 @@ void InkHUD::Events::onStickLeft()
 
         // If no system applet is handling input, default behavior instead is to cycle applets
         if (consumer)
-            consumer->onStickLeft();
+            consumer->onNavLeft();
         else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
             inkhud->prevApplet();
     }
 }
 
-void InkHUD::Events::onStickRight()
+void InkHUD::Events::onNavRight()
 {
     if (settings->joystick.enabled) {
         // Audio feedback (via buzzer)
@@ -235,7 +232,7 @@ void InkHUD::Events::onStickRight()
 
         // If no system applet is handling input, default behavior instead is to cycle applets
         if (consumer)
-            consumer->onStickRight();
+            consumer->onNavRight();
         else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
             inkhud->nextApplet();
     }

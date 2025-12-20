@@ -119,15 +119,13 @@ void InkHUD::TipsApplet::onRender()
             cursorY += fontSmall.lineHeight() * 1.2;
             printAt(0, cursorY, "- long press: select / open menu");
         } else {
-            printAt(0, cursorY, "User Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- press: open / close menu");
-            cursorY += fontSmall.lineHeight() * 1.5;
             printAt(0, cursorY, "Joystick");
             cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- short press: switch tile / select");
+            printAt(0, cursorY, "- open menu / select");
+            cursorY += fontSmall.lineHeight() * 1.5;
+            printAt(0, cursorY, "Exit Button");
             cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- long press: open / close menu");
+            printAt(0, cursorY, "- switch tile / close menu");
         }
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
@@ -248,8 +246,8 @@ void InkHUD::TipsApplet::onButtonShortPress()
         requestUpdate();
 }
 
-// Functions the same as the user button
-void InkHUD::TipsApplet::onStickCenterShort()
+// Functions the same as the user button in this instance
+void InkHUD::TipsApplet::onExitShort()
 {
     onButtonShortPress();
 }

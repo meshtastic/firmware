@@ -153,37 +153,37 @@ void InkHUD::NotificationApplet::onButtonLongPress()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::NotificationApplet::onStickCenterShort()
+void InkHUD::NotificationApplet::onExitShort()
 {
     dismiss();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::NotificationApplet::onStickCenterLong()
+void InkHUD::NotificationApplet::onExitLong()
 {
     dismiss();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::NotificationApplet::onStickUp()
+void InkHUD::NotificationApplet::onNavUp()
 {
     dismiss();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::NotificationApplet::onStickDown()
+void InkHUD::NotificationApplet::onNavDown()
 {
     dismiss();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::NotificationApplet::onStickLeft()
+void InkHUD::NotificationApplet::onNavLeft()
 {
     dismiss();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::NotificationApplet::onStickRight()
+void InkHUD::NotificationApplet::onNavRight()
 {
     dismiss();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);

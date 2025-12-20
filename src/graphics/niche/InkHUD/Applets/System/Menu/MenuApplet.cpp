@@ -489,10 +489,10 @@ void InkHUD::MenuApplet::onRender()
 
 void InkHUD::MenuApplet::onButtonShortPress()
 {
-    if (!settings->joystick.enabled) {
-        // Push the auto-close timer back
-        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    // Push the auto-close timer back
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
+    if (!settings->joystick.enabled) {
         // Move menu cursor to next entry, then update
         if (cursorShown)
             cursor = (cursor + 1) % items.size();
@@ -500,52 +500,33 @@ void InkHUD::MenuApplet::onButtonShortPress()
             cursorShown = true;
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     } else {
-        // Exit the menu
-        showPage(MenuPage::EXIT);
-
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        if (cursorShown)
+            execute(items.at(cursor));
+        else
+            showPage(MenuPage::EXIT);
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
 }
 
 void InkHUD::MenuApplet::onButtonLongPress()
 {
-    if (!settings->joystick.enabled) {
-        // Push the auto-close timer back
-        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
-
-        if (cursorShown)
-            execute(items.at(cursor));
-        else
-            showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
-
-        // If we didn't already request a specialized update, when handling a menu action,
-        // then perform the usual fast update.
-        // FAST keeps things responsive: important because we're dealing with user input
-        if (!wantsToRender())
-            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-    } else {
-        // Exit the menu
-        showPage(MenuPage::EXIT);
-
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-    }
-}
-
-// The center button of the joystick takes over the role of the a long press on the user button
-void InkHUD::MenuApplet::onStickCenterShort()
-{
+    // Push the auto-close timer back
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     if (cursorShown)
         execute(items.at(cursor));
     else
-        showPage(MenuPage::EXIT);
+        showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
 
+    // If we didn't already request a specialized update, when handling a menu action,
+    // then perform the usual fast update.
+    // FAST keeps things responsive: important because we're dealing with user input
     if (!wantsToRender())
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::MenuApplet::onStickCenterLong()
+void InkHUD::MenuApplet::onExitShort()
 {
     // Exit the menu
     showPage(MenuPage::EXIT);
@@ -553,7 +534,7 @@ void InkHUD::MenuApplet::onStickCenterLong()
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::MenuApplet::onStickUp()
+void InkHUD::MenuApplet::onNavUp()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
@@ -569,7 +550,7 @@ void InkHUD::MenuApplet::onStickUp()
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::MenuApplet::onStickDown()
+void InkHUD::MenuApplet::onNavDown()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
@@ -582,7 +563,7 @@ void InkHUD::MenuApplet::onStickDown()
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::MenuApplet::onStickLeft()
+void InkHUD::MenuApplet::onNavLeft()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
@@ -591,7 +572,7 @@ void InkHUD::MenuApplet::onStickLeft()
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::MenuApplet::onStickRight()
+void InkHUD::MenuApplet::onNavRight()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 

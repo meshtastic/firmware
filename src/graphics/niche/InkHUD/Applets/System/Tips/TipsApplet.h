@@ -36,7 +36,7 @@ class TipsApplet : public SystemApplet
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;
-    void onStickCenterShort() override;
+    void onExitShort() override;
 
   protected:
     void renderWelcome(); // Very first screen of tutorial

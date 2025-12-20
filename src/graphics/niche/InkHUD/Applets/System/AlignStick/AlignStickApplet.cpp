@@ -161,13 +161,13 @@ void InkHUD::AlignStickApplet::onButtonLongPress()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::AlignStickApplet::onStickCenterLong()
+void InkHUD::AlignStickApplet::onExitLong()
 {
     sendToBackground();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::AlignStickApplet::onStickUp()
+void InkHUD::AlignStickApplet::onNavUp()
 {
     settings->joystick.aligned = true;
 
@@ -175,7 +175,7 @@ void InkHUD::AlignStickApplet::onStickUp()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::AlignStickApplet::onStickDown()
+void InkHUD::AlignStickApplet::onNavDown()
 {
     inkhud->rotateJoystick(2); // 180 deg
     settings->joystick.aligned = true;
@@ -184,7 +184,7 @@ void InkHUD::AlignStickApplet::onStickDown()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::AlignStickApplet::onStickLeft()
+void InkHUD::AlignStickApplet::onNavLeft()
 {
     inkhud->rotateJoystick(3); // 270 deg
     settings->joystick.aligned = true;
@@ -193,7 +193,7 @@ void InkHUD::AlignStickApplet::onStickLeft()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::AlignStickApplet::onStickRight()
+void InkHUD::AlignStickApplet::onNavRight()
 {
     inkhud->rotateJoystick(1); // 90 deg
     settings->joystick.aligned = true;

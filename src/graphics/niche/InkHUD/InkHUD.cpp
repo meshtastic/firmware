@@ -80,90 +80,90 @@ void InkHUD::InkHUD::longpress()
     events->onButtonLong();
 }
 
-// Call this when your joystick gets a short center press
-void InkHUD::InkHUD::stickCenterShort()
+// Call this when your exit button gets a short press
+void InkHUD::InkHUD::exitShort()
 {
-    events->onStickCenterShort();
+    events->onExitShort();
 }
 
-// Call this when your joystick gets a long center press
-void InkHUD::InkHUD::stickCenterLong()
+// Call this when your exit button gets a long press
+void InkHUD::InkHUD::exitLong()
 {
-    events->onStickCenterLong();
+    events->onExitLong();
 }
 
 // Call this when your joystick gets an up input
-void InkHUD::InkHUD::stickUp()
+void InkHUD::InkHUD::navUp()
 {
     switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
     case 1: // 90 deg
-        events->onStickLeft();
+        events->onNavLeft();
         break;
     case 2: // 180 deg
-        events->onStickDown();
+        events->onNavDown();
         break;
     case 3: // 270 deg
-        events->onStickRight();
+        events->onNavRight();
         break;
     default: // 0 deg
-        events->onStickUp();
+        events->onNavUp();
         break;
     }
 }
 
 // Call this when your joystick gets a down input
-void InkHUD::InkHUD::stickDown()
+void InkHUD::InkHUD::navDown()
 {
     switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
     case 1: // 90 deg
-        events->onStickRight();
+        events->onNavRight();
         break;
     case 2: // 180 deg
-        events->onStickUp();
+        events->onNavUp();
         break;
     case 3: // 270 deg
-        events->onStickLeft();
+        events->onNavLeft();
         break;
     default: // 0 deg
-        events->onStickDown();
+        events->onNavDown();
         break;
     }
 }
 
 // Call this when your joystick gets a left input
-void InkHUD::InkHUD::stickLeft()
+void InkHUD::InkHUD::navLeft()
 {
     switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
     case 1: // 90 deg
-        events->onStickDown();
+        events->onNavDown();
         break;
     case 2: // 180 deg
-        events->onStickRight();
+        events->onNavRight();
         break;
     case 3: // 270 deg
-        events->onStickUp();
+        events->onNavUp();
         break;
     default: // 0 deg
-        events->onStickLeft();
+        events->onNavLeft();
         break;
     }
 }
 
 // Call this when your joystick gets a right input
-void InkHUD::InkHUD::stickRight()
+void InkHUD::InkHUD::navRight()
 {
     switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
     case 1: // 90 deg
-        events->onStickUp();
+        events->onNavUp();
         break;
     case 2: // 180 deg
-        events->onStickLeft();
+        events->onNavLeft();
         break;
     case 3: // 270 deg
-        events->onStickDown();
+        events->onNavDown();
         break;
     default: // 0 deg
-        events->onStickRight();
+        events->onNavRight();
         break;
     }
 }
