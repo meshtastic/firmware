@@ -1,11 +1,3 @@
-#define LED_PIN 35
-
-#define USE_SSD1306 // Heltec_v4 has an SSD1315 display (compatible with SSD1306 driver)
-
-#define RESET_OLED 21
-#define I2C_SDA 17 // I2C pins for this board
-#define I2C_SCL 18
-
 #define VEXT_ENABLE 36 // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
@@ -42,6 +34,9 @@
 #define LORA_PA_EN 2
 #define LORA_PA_TX_EN 46 // enable tx
 
+#if HAS_TFT
+#define USE_TFTDISPLAY 1
+#endif
 /*
  * GPS pins
  */

@@ -4,6 +4,14 @@
 #include <InternalFileSystem.h>
 #include <SPI.h>
 #include <Wire.h>
+
+#define APP_WATCHDOG_SECS 90
+#define NRFX_WDT_ENABLED 1
+#define NRFX_WDT0_ENABLED 1
+#define NRFX_WDT_CONFIG_NO_IRQ 1
+#include <nrfx_wdt.c>
+#include <nrfx_wdt.h>
+
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
@@ -14,10 +22,21 @@
 #include "error.h"
 #include "main.h"
 #include "meshUtils.h"
+#include "power.h"
+
+#include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
 #endif
+
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void variant_shutdown() __attribute__((weak));
+void variant_shutdown() {}
+
+static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
+static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
 static inline void debugger_break(void)
 {
@@ -202,6 +221,15 @@ void checkSDEvents()
 
 void nrf52Loop()
 {
+    {
+        static bool watchdog_running = false;
+        if (!watchdog_running) {
+            nrfx_wdt_enable(&nrfx_wdt);
+            watchdog_running = true;
+        }
+    }
+    nrfx_wdt_channel_feed(&nrfx_wdt, nrfx_wdt_channel_id_nrf52_main);
+
     checkSDEvents();
     reportLittleFSCorruptionOnce();
 }
@@ -269,6 +297,22 @@ void nrf52Setup()
     LOG_DEBUG("Set random seed %u", seed.seed32);
     randomSeed(seed.seed32);
     nRFCrypto.end();
+
+    // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
+    // the first time through the main loop), so that other threads can
+    // allocate their own wdt channel to protect themselves from hangs.
+    nrfx_wdt_config_t wdt0_config = {
+        .behaviour = NRF_WDT_BEHAVIOUR_PAUSE_SLEEP_HALT, .reload_value = APP_WATCHDOG_SECS * 1000,
+        // Note: Not using wdt interrupts.
+        // .interrupt_priority = NRFX_WDT_DEFAULT_CONFIG_IRQ_PRIORITY
+    };
+    nrfx_err_t r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config,
+                                 nullptr // Watchdog event handler, not used, we just reset.
+    );
+    assert(r == NRFX_SUCCESS);
+
+    r = nrfx_wdt_channel_alloc(&nrfx_wdt, &nrfx_wdt_channel_id_nrf52_main);
+    assert(r == NRFX_SUCCESS);
 }
 
 void cpuDeepSleep(uint32_t msecToWake)
@@ -291,6 +335,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
 #endif
+
+#ifdef TTGO_T_ECHO
+    // To power off the T-Echo, the display must be set
+    // as an input pin; otherwise, there will be leakage current.
+    pinMode(PIN_EINK_CS, INPUT);
+    pinMode(PIN_EINK_DC, INPUT);
+    pinMode(PIN_EINK_RES, INPUT);
+    pinMode(PIN_EINK_BUSY, INPUT);
+#endif
+
     setBluetoothEnable(false);
 
 #ifdef RAK4630
@@ -352,6 +406,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         NRF_GPIO->DIRCLR = (1 << pin);
     }
 #endif
+    variant_shutdown();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -387,6 +442,23 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
         nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
         nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
+#endif
+
+#ifdef BATTERY_LPCOMP_INPUT
+        // Wake up if power rises again
+        nrf_lpcomp_config_t c;
+        c.reference = BATTERY_LPCOMP_THRESHOLD;
+        c.detection = NRF_LPCOMP_DETECT_UP;
+        c.hyst = NRF_LPCOMP_HYST_NOHYST;
+        nrf_lpcomp_configure(NRF_LPCOMP, &c);
+        nrf_lpcomp_input_select(NRF_LPCOMP, BATTERY_LPCOMP_INPUT);
+        nrf_lpcomp_enable(NRF_LPCOMP);
+
+        battery_adcEnable();
+
+        nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
+        while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
+            ;
 #endif
 
         auto ok = sd_power_system_off();

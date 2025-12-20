@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <pb_encode.h>
+#include <string>
 #include <vector>
 
 #include "MeshTypes.h"
@@ -203,6 +204,9 @@ class NodeDB
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
+    /// @return our node ID as a string in the format "!xxxxxxxx"
+    std::string getNodeId() const;
+
     // @return last byte of a NodeNum, 0xFF if it ended at 0x00
     uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }
 
@@ -225,7 +229,8 @@ class NodeDB
      */
     size_t getNumOnlineMeshNodes(bool localOnly = false);
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
+        removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
@@ -274,11 +279,17 @@ class NodeDB
         LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
                   position.time, position.timestamp);
         localPosition = position;
+        if (position.latitude_i != 0 || position.longitude_i != 0) {
+            localPositionUpdatedSinceBoot = true;
+        }
     }
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+    bool hasLocalPositionSinceBoot() const { return localPositionUpdatedSinceBoot; }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+#endif
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
@@ -294,6 +305,7 @@ class NodeDB
 
   private:
     bool duplicateWarned = false;
+    bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB

@@ -3,6 +3,7 @@
 #include "../Screen.h"
 #include "DebugRenderer.h"
 #include "FSCommon.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
@@ -10,6 +11,7 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "mesh/Channels.h"
@@ -95,7 +97,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
                                           (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     ARCH_PORTDUINO) &&                                                                                                          \
+     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796) || ARCH_PORTDUINO) &&                                                 \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12,
                                    8, imgQuestionL1);
@@ -107,7 +109,8 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
 #endif
         } else {
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS)) &&            \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
+     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 16,
                                    8, imgSFL1);
@@ -123,7 +126,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
         // TODO: Raspberry Pi supports more than just the one screen size
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     ARCH_PORTDUINO) &&                                                                                                          \
+     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796) || ARCH_PORTDUINO) &&                                                 \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
@@ -222,6 +225,8 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     display->drawString(x, getTextPositions(display)[line++], ssidStr);
 
     display->drawString(x, getTextPositions(display)[line++], "URL: http://meshtastic.local");
+
+    graphics::drawCommonFooter(display, x, y);
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
@@ -503,6 +508,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
                         chUtilPercentage);
 #endif
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************
@@ -526,7 +532,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     const int labelX = x;
     int barsOffset = (isHighResolution) ? 24 : 0;
 #ifdef USE_EINK
+#ifndef T_DECK_PRO
     barsOffset -= 12;
+#endif
 #endif
 #if defined(M5STACK_UNITC6L)
     const int barX = x + 45 + barsOffset;
@@ -568,7 +576,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 #endif
         // Value string
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(SCREEN_WIDTH - 2, getTextPositions(display)[line], combinedStr);
+        display->drawString(SCREEN_WIDTH, getTextPositions(display)[line], combinedStr);
     };
 
     // === Memory values ===
@@ -642,27 +650,48 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     int textWidth = display->getStringWidth(appversionstr);
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
 
-    display->drawString(nameX, getTextPositions(display)[line], appversionstr);
-#if !defined(M5STACK_UNITC6L)
-    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line < 4)) { // Only show uptime if the screen can show it
-        line += 1;
+    display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
+
+    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
-        uint32_t uptime = millis() / 1000;
-        uint32_t days = uptime / 86400;
-        uint32_t hours = (uptime % 86400) / 3600;
-        uint32_t mins = (uptime % 3600) / 60;
-        // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
-        if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Up: %ud %uh", days, hours);
-        else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Up: %uh %um", hours, mins);
-        else
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+        getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line], uptimeStr);
+        display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
-#endif
+
+    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
+        char api_state[32] = "";
+        const char *clientWord = nullptr;
+
+        // Determine if narrow or wide screen
+        if (isHighResolution) {
+            clientWord = "Client";
+        } else {
+            clientWord = "App";
+        }
+        snprintf(api_state, sizeof(api_state), "No %ss Connected", clientWord);
+
+        if (service->api_state == service->STATE_BLE) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (BLE)", clientWord);
+        } else if (service->api_state == service->STATE_WIFI) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (WiFi)", clientWord);
+        } else if (service->api_state == service->STATE_SERIAL) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (Serial)", clientWord);
+        } else if (service->api_state == service->STATE_PACKET) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (Internal)", clientWord);
+        } else if (service->api_state == service->STATE_HTTP) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (HTTP)", clientWord);
+        } else if (service->api_state == service->STATE_ETH) {
+            snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
+        }
+        if (api_state[0] != '\0') {
+            display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
+                                api_state);
+        }
+    }
+
+    graphics::drawCommonFooter(display, x, y);
 }
 
 // ****************************

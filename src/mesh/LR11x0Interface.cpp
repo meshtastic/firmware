@@ -218,6 +218,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -243,6 +244,8 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     int err =
         lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    if (err)
+        LOG_ERROR("StartReceive error: %d", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();

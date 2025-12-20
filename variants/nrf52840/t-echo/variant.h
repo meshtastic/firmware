@@ -181,14 +181,14 @@ External serial flash WP25R1635FZUIL0
 
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
-// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 9) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 8) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_PPS (32 + 4) // Pulse per second input from the GPS
+#define GPS_TX_PIN (32 + 8)  // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 9)  // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
@@ -202,8 +202,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
-
-#define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
