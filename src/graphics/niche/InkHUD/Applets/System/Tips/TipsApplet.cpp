@@ -140,24 +140,7 @@ void InkHUD::TipsApplet::onRender()
         printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
-        int16_t cursorY = fontMedium.lineHeight() * 1.5;
-
-        if (!settings->joystick.enabled) {
-            printAt(0, cursorY, "User Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- short press: next");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- long press: select / open menu");
-        } else {
-            printAt(0, cursorY, "Joystick");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- open menu / select");
-            cursorY += fontSmall.lineHeight() * 1.5;
-            printAt(0, cursorY, "Exit Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- switch tile / close menu");
-        }
-        cursorY = h + fontSmall.lineHeight();
+        int16_t cursorY = h + fontSmall.lineHeight();
 
         auto drawBullet = [&](const char *text) {
             uint16_t bh = getWrappedTextHeight(0, width(), text);
@@ -165,9 +148,16 @@ void InkHUD::TipsApplet::onRender()
             cursorY += bh + (fontSmall.lineHeight() / 3);
         };
 
-        drawBullet("User Button");
-        drawBullet("- short press: next");
-        drawBullet("- long press: select / open menu");
+        if (!settings->joystick.enabled) {
+            drawBullet("User Button");
+            drawBullet("- short press: next");
+            drawBullet("- long press: select or open menu");
+        } else {
+            drawBullet("Joystick");
+            drawBullet("- press: open menu or select");
+            drawBullet("Exit Button");
+            drawBullet("- press: switch tile or close menu");
+        }
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
     } break;
