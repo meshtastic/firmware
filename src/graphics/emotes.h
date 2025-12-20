@@ -226,9 +226,9 @@ extern const unsigned char cloud_with_lightning[] PROGMEM;
 #define cloud_with_lightning_rain_height 16
 extern const unsigned char cloud_with_lightning_rain[] PROGMEM;
 
-#define Wind_Face_width 16
-#define Wind_Face_height 16
-extern const unsigned char Wind_Face[] PROGMEM;
+#define wind_face_width 16
+#define wind_face_height 16
+extern const unsigned char wind_face[] PROGMEM;
 
 #define new_moon_width 16
 #define new_moon_height 16
