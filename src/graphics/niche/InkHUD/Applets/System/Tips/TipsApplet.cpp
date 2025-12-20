@@ -157,7 +157,7 @@ void InkHUD::TipsApplet::onRender()
             cursorY += fontSmall.lineHeight() * 1.2;
             printAt(0, cursorY, "- switch tile / close menu");
         }
-        int16_t cursorY = h + fontSmall.lineHeight();
+        cursorY = h + fontSmall.lineHeight();
 
         auto drawBullet = [&](const char *text) {
             uint16_t bh = getWrappedTextHeight(0, width(), text);

@@ -1466,14 +1466,17 @@ void InkHUD::MenuApplet::onNavUp()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    // Move menu cursor to previous entry, then update
-    if (cursor == 0)
-        cursor = items.size() - 1;
-    else
-        cursor--;
-
-    if (!cursorShown)
+    if (!cursorShown) {
         cursorShown = true;
+        cursor = 0;
+    } else {
+        do {
+            if (cursor == 0)
+                cursor = items.size() - 1;
+            else
+                cursor--;
+        } while (items.at(cursor).isHeader);
+    }
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
@@ -1482,11 +1485,14 @@ void InkHUD::MenuApplet::onNavDown()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    // Move menu cursor to next entry, then update
-    if (cursorShown)
-        cursor = (cursor + 1) % items.size();
-    else
+    if (!cursorShown) {
         cursorShown = true;
+        cursor = 0;
+    } else {
+        do {
+            cursor = (cursor + 1) % items.size();
+        } while (items.at(cursor).isHeader);
+    }
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
