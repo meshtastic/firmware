@@ -195,6 +195,17 @@ const RegionInfo regions[] = {
     RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, true, false, false),
 
     /*
+        EU 868MHz band: 3 channels at 868.415/868.4925/868.570 MHz
+        15 kHz gap between channels, 27 dBm, duty cycle 10%
+    */
+    RDEF(NARROW_868, 869.4f, 869.65f, 10, 0.015, 27, false, false, false),
+
+    /*
+        HAM 433MHz band
+    */
+    RDEF(HAM_US433, 432.40f, 433.0f, 100, 0, 99, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),

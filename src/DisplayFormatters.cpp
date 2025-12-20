@@ -40,6 +40,18 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
     case meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST:
         return useShortName ? "LiteF" : "LiteFast";
         break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW:
+        return useShortName ? "LiteS" : "LiteSlow";
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST:
+        return useShortName ? "NarF" : "NarrowFast";
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
+        return useShortName ? "NarS" : "NarrowSlow";
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST:
+        return useShortName ? "HamF" : "HamFast";
+        break;
     default:
         return useShortName ? "Custom" : "Invalid";
         break;

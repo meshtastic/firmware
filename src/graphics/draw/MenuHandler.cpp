@@ -132,7 +132,10 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "KZ_433",
                                          "KZ_863",
                                          "NP_865",
-                                         "BR_902"};
+                                         "BR_902",
+                                         "EU_866",
+                                         "NARROW_868",
+                                         "HAM_US433"};
     BannerOverlayOptions bannerOptions;
 #if defined(M5STACK_UNITC6L)
     bannerOptions.message = "LoRa Region";
@@ -141,7 +144,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 #endif
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 27;
+    bannerOptions.optionsCount = 30;
     bannerOptions.InitialSelected = 0;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
@@ -236,6 +239,11 @@ void menuHandler::RadioPresetPicker()
         {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
         {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
         {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
+        {"NarrowFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST},
+        {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW},
+        {"NarrowFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST},
+        {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW},
+        {"HamFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST},
     };
 
     constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
