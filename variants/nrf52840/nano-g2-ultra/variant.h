@@ -132,8 +132,8 @@ External serial flash W25Q16JV_IQ
 #define GPS_L76K
 
 #define PIN_GPS_STANDBY (0 + 13) // An output to wake GPS, low means allow sleep, high means force wake STANDBY
-#define GPS_TX_PIN (0 + 10)      // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (0 + 9)       // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (0 + 10)      // This is for bits going FROM the CPU
+#define GPS_RX_PIN (0 + 9)       // This is for bits going FROM the GPS
 
 // #define GPS_THREAD_INTERVAL 50
 

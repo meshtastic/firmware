@@ -147,8 +147,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 // GPS L76K
 #ifdef GPS_L76K
-#define GPS_TX_PIN D6
-#define GPS_RX_PIN D7
+#define GPS_TX_PIN D6 // This is data from the MCU
+#define GPS_RX_PIN D7 // This is data from the GNSS module
 #define HAS_GPS 1
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_TX GPS_TX_PIN
