@@ -1096,7 +1096,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
-#endif
+
     case NODE_CONFIG_DISPLAY: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
 
@@ -1889,3 +1889,4 @@ void InkHUD::MenuApplet::freeCannedMessageResources()
     cm.messageItems.clear();
     cm.recipientItems.clear();
 }
+#endif // MESHTASTIC_INCLUDE_INKHUD
