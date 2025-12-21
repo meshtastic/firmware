@@ -145,7 +145,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void broadcastLink(uint8_t *, size_t);
 
     // sends a LINK_PROVIDE message broadcasting the given link object from scratch message store
-    bool sendFromScratch(uint8_t);
+    bool sendFromScratch(uint8_t *);
 
     // Adds the given link object to the canonical chain database
     bool addToChain(link_object &);
