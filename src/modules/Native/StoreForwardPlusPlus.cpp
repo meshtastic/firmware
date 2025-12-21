@@ -186,7 +186,25 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     link_object chain_end = getChainEndLinkObject(root_hash_bytes, 32);
 
     if (chain_end.rx_time == 0) {
+        // TODO: we want to do the announce anyway, even if we have no message on the chain yet
         LOG_WARN("Store and Forward++ database lookup returned null");
+
+        // first attempt at a chain-only announce with no messages
+        meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
+        storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE;
+        storeforward.root_hash.size = 32;
+        memcpy(storeforward.root_hash.bytes, root_hash_bytes, 32);
+
+        storeforward.encapsulated_rxtime = 0;
+        // storeforward.
+        meshtastic_MeshPacket *p = allocDataProtobuf(storeforward);
+        p->to = NODENUM_BROADCAST;
+        p->decoded.want_response = false;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        p->channel = 0;
+        LOG_INFO("Send packet to mesh");
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
+
         return 60 * 60 * 1000;
     }
 
@@ -286,6 +304,10 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 // TODO: size check
                 addRootToMappings(router->p_encrypted->channel, t->root_hash.bytes);
                 LOG_WARN("Adding root hash to mappings");
+            }
+            if (t->encapsulated_rxtime == 0) {
+                LOG_WARN("No encapsulated time, conclude the chain is empty");
+                return true;
             }
 
             // get tip of chain for this channel
