@@ -254,7 +254,7 @@ jobs:
         uses: actions/upload-artifact@v6
         id: upload-manifest
         with:
-          name: manifests-all
+          name: manifests-${{ github.sha }}
           overwrite: true
           path: |
             manifests-new/*.mt.json
@@ -263,10 +263,10 @@ jobs:
         run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
         env:
           base: ${{ github.base_ref }}
-          head: ${{ github.head_ref }}
+          head: ${{ github.sha }}
       - name: Download the old manifests
         if: github.event_name == 'pull_request_target'
-        run: gh run download -R ${{ github.repository }} --commit ${{ env.MERGE_BASE }} --name manifests-all --dir manifest-old/
+        run: gh run download -R ${{ github.repository }} --name manifests-${{ env.MERGE_BASE }} --dir manifest-old/
       - name: Do scan and post comment
         if: github.event_name == 'pull_request_target'
         run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
