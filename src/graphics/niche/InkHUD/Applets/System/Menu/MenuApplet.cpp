@@ -955,8 +955,30 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 #if defined(ARCH_ESP32)
     case NODE_CONFIG_POWER: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
-
         items.push_back(MenuItem("Powersave", MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT, &config.power.is_power_saving));
+
+        // ADC Multiplier
+        float effectiveMult = 0.0f;
+
+        // User override always shows if it exists
+        if (config.power.adc_multiplier_override > 0.0f) {
+            effectiveMult = config.power.adc_multiplier_override;
+        }
+#ifdef ADC_MULTIPLIER
+        else {
+            // Fallback to variant defined
+            effectiveMult = ADC_MULTIPLIER;
+        }
+#endif
+
+        // Only show if we actually have a value
+        if (effectiveMult > 0.0f) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "ADC Mult: %.3f", effectiveMult);
+            nodeConfigLabels.emplace_back(buf);
+
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POWER));
+        }
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -972,7 +994,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 #if HAS_WIFI && defined(ARCH_ESP32)
         if (config.network.wifi_enabled) {
 
-            // ---- Status ----
+            // Status
             if (WiFi.status() == WL_CONNECTED) {
                 nodeConfigLabels.emplace_back("Status: Connected");
             } else {
@@ -980,7 +1002,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             }
             items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
 
-            // ---- Signal ----
+            // Signal
             if (WiFi.status() == WL_CONNECTED) {
                 int rssi = WiFi.RSSI();
                 int quality = constrain(2 * (rssi + 100), 0, 100);
@@ -996,7 +1018,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                 items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
             }
 
-            // ---- SSID ----
+            // SSID
             if (config.network.wifi_ssid && strlen(config.network.wifi_ssid) > 0) {
                 std::string ssidLabel = "SSID: ";
                 ssidLabel += config.network.wifi_ssid;
@@ -1004,7 +1026,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                 items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_NETWORK));
             }
 
-            // ---- Hostname ----
+            // Hostname
             const char *host = WiFi.getHostname();
             if (host && strlen(host) > 0) {
                 std::string hostLabel = "Host: ";
@@ -1421,11 +1443,14 @@ void InkHUD::MenuApplet::onButtonShortPress()
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     if (!settings->joystick.enabled) {
-        // Move menu cursor to next entry, then update
-        if (cursorShown)
-            cursor = (cursor + 1) % items.size();
-        else
+        if (!cursorShown) {
             cursorShown = true;
+            cursor = 0;
+        } else {
+            do {
+                cursor = (cursor + 1) % items.size();
+            } while (items.at(cursor).isHeader);
+        }
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     } else {
         if (cursorShown)
