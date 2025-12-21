@@ -479,6 +479,48 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 #endif
+    // ADC Calibration
+    case CALIBRATE_ADC: {
+        // Read current measured voltage
+        float measuredV = powerStatus->getBatteryVoltageMv() / 1000.0f;
+
+        // Sanity check
+        if (measuredV < 3.0f || measuredV > 4.5f) {
+            LOG_WARN("ADC calibration aborted, unreasonable voltage: %.2fV", measuredV);
+            break;
+        }
+
+        // Determine the base multiplier currently in effect
+        float baseMult = 0.0f;
+
+        if (config.power.adc_multiplier_override > 0.0f) {
+            baseMult = config.power.adc_multiplier_override;
+        }
+#ifdef ADC_MULTIPLIER
+        else {
+            baseMult = ADC_MULTIPLIER;
+        }
+#endif
+
+        if (baseMult <= 0.0f) {
+            LOG_WARN("ADC calibration failed: no base multiplier");
+            break;
+        }
+
+        // Target voltage considered 100% by UI
+        constexpr float TARGET_VOLTAGE = 4.19f;
+
+        // Calculate new multiplier
+        float newMult = baseMult * (TARGET_VOLTAGE / measuredV);
+
+        config.power.adc_multiplier_override = newMult;
+
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+
+        LOG_INFO("ADC calibrated: measured=%.3fV base=%.4f new=%.4f", measuredV, baseMult, newMult);
+
+        break;
+    }
 
     // Display
     case TOGGLE_DISPLAY_UNITS:
@@ -905,11 +947,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Position", MenuPage::NODE_CONFIG_POSITION));
 #endif
 
-#if defined(ARCH_ESP32)
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
+
+#if defined(ARCH_ESP32)
         items.push_back(MenuItem("Network", MenuPage::NODE_CONFIG_NETWORK));
 #endif
-
         items.push_back(MenuItem("Display", MenuPage::NODE_CONFIG_DISPLAY));
         items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
 
@@ -952,11 +994,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
     }
 
-#if defined(ARCH_ESP32)
     case NODE_CONFIG_POWER: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+#if defined(ARCH_ESP32)
         items.push_back(MenuItem("Powersave", MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT, &config.power.is_power_saving));
-
+#endif
         // ADC Multiplier
         float effectiveMult = 0.0f;
 
@@ -977,8 +1019,22 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             snprintf(buf, sizeof(buf), "ADC Mult: %.3f", effectiveMult);
             nodeConfigLabels.emplace_back(buf);
 
-            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POWER));
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POWER_ADC_CAL));
         }
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_POWER_ADC_CAL: {
+        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_POWER));
+
+        // Instruction text (header-style, non-selectable)
+        items.push_back(MenuItem::Header("Run on full charge Only"));
+
+        // Action
+        items.push_back(MenuItem("Calibrate ADC", MenuAction::CALIBRATE_ADC, MenuPage::NODE_CONFIG_POWER));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -1833,5 +1889,3 @@ void InkHUD::MenuApplet::freeCannedMessageResources()
     cm.messageItems.clear();
     cm.recipientItems.clear();
 }
-
-#endif

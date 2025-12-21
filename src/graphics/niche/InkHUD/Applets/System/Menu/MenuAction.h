@@ -99,6 +99,7 @@ enum MenuAction {
     SET_TZ_PACIFIC_NZ,
     // Power
     TOGGLE_POWER_SAVE,
+    CALIBRATE_ADC,
     // Bluetooth
     TOGGLE_BLUETOOTH,
     TOGGLE_BLUETOOTH_PAIR_MODE,
