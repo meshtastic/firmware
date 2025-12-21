@@ -60,7 +60,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         sender INT NOT NULL,           \
         packet_id INT NOT NULL,        \
         rx_time INT NOT NULL,          \
-        channel_hash INT NOT NULL,      \
+        root_hash BLOB NOT NULL,      \
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
         payload TEXT,                  \
@@ -79,7 +79,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         sender INT NOT NULL,           \
         packet_id INT NOT NULL,        \
         rx_time INT NOT NULL,          \
-        channel_hash INT NOT NULL,     \
+        root_hash BLOB NOT NULL,     \
         commit_hash BLOB NOT NULL,     \
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
@@ -114,16 +114,16 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &chain_insert_stmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "INSERT INTO local_messages (destination, sender, packet_id, channel_hash, \
+    sqlite3_prepare_v2(ppDb, "INSERT INTO local_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, payload) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &scratch_insert_stmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, channel_hash \
-        from local_messages where channel_hash=? order by rx_time asc LIMIT 1;", // earliest first
+    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, root_hash \
+        from local_messages where root_hash=? order by rx_time asc LIMIT 1;", // earliest first
                        -1, &fromScratchStmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
-                       "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, channel_hash, payload \
+                       "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, root_hash, payload \
         from local_messages where substr(message_hash,1,?)=? order by rx_time asc LIMIT 1;", // earliest first
                        -1, &fromScratchByHashStmt, NULL);
 
@@ -205,14 +205,14 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         LOG_INFO("Send packet to mesh");
         service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-        return 60 * 60 * 1000;
+        return 5 * 60 * 1000;
     }
 
     // broadcast the tip of the chain
     canonAnnounce(chain_end.message_hash, chain_end.commit_hash, root_hash_bytes, chain_end.rx_time);
 
     // eventually timeout things on the scratch queue
-    return 60 * 60 * 1000;
+    return 5 * 60 * 1000;
 }
 
 ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -318,7 +318,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 // TODO: size check
                 if (memcmp(chain_end.commit_hash, t->commit_hash.bytes, t->commit_hash.size) == 0) {
                     LOG_WARN("End of chain matches!");
-                    sendFromScratch(router->p_encrypted->channel);
+                    sendFromScratch(chain_end.root_hash);
                 } else {
                     LOG_INFO("End of chain does not match!");
 
@@ -541,8 +541,8 @@ bool StoreForwardPlusPlusModule::getNextHash(uint8_t *_root_hash, size_t _root_h
 {
     LOG_WARN("getNextHash");
 
-    ChannelHash _channel_hash = getChannelHashFromRoot(_root_hash, _root_hash_len);
-    LOG_WARN("_channel_hash %u", _channel_hash);
+    // ChannelHash _channel_hash = getChannelHashFromRoot(_root_hash, _root_hash_len);
+    // LOG_WARN("_channel_hash %u", _channel_hash);
 
     int rc;
     sqlite3_bind_int(getNextHashStmt, 1, _root_hash_len);
@@ -672,21 +672,21 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLink(uint
     return lo;
 }
 
-bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t _channel_hash)
+bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
 {
     LOG_WARN("sendFromScratch");
     //    "select destination, sender, packet_id, channel_hash, encrypted_bytes, message_hash, rx_time \
     //    from local_messages order by rx_time desc LIMIT 1;"
-    sqlite3_bind_int(fromScratchStmt, 1, _channel_hash);
+    sqlite3_bind_blob(fromScratchStmt, 1, root_hash, 32, NULL);
     if (sqlite3_step(fromScratchStmt) == SQLITE_DONE) {
         LOG_WARN("No messages in scratch to forward");
         return false;
     }
     uint8_t _root_hash[32] = {0};
-    if (!getRootFromChannelHash(_channel_hash, _root_hash)) {
-        LOG_ERROR("Error getting root hash");
-        return false;
-    }
+    // if (!getRootFromChannelHash(_channel_hash, _root_hash)) {
+    //     LOG_ERROR("Error getting root hash");
+    //     return false;
+    // }
 
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
@@ -800,6 +800,7 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
 void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *_commit_hash, uint8_t *_root_hash,
                                                uint32_t _rx_time)
 {
+    LOG_WARN("canonAnnounce()");
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE;
     // set root hash
@@ -907,6 +908,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScrat
 StoreForwardPlusPlusModule::link_object
 StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket *encrypted_meshpacket)
 {
+    LOG_WARN("ingestTextPacket()");
     link_object lo;
     SHA256 message_hash;
     lo.to = mp.to;
