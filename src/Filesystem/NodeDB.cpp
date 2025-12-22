@@ -271,9 +271,11 @@ bool ensureInternalDirExists(const char *filepath)
         return true; // root or no directory component needed
     }
 
-    char dirPath[64];
+    constexpr size_t DirBufLen = 256;
+    char dirPath[DirBufLen];
     size_t dirLen = static_cast<size_t>(lastSlash - filepath); // length of directory part
     if (dirLen >= sizeof(dirPath)) {
+        LOG_ERROR("Internal backup dir path too long (%u bytes): %s", static_cast<unsigned>(dirLen), filepath);
         return false; // avoid overflow
     }
     memcpy(dirPath, filepath, dirLen); // copy directory part
@@ -283,7 +285,11 @@ bool ensureInternalDirExists(const char *filepath)
         return true; // directory already exists
     }
 
-    return InternalFS.mkdir(dirPath); // create directory path
+    bool created = InternalFS.mkdir(dirPath); // create directory path
+    if (!created) {
+        LOG_ERROR("Failed to create internal mirror dir %s", dirPath);
+    }
+    return created;
 }
 
 LoadFileResult loadProtoFromInternal(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
