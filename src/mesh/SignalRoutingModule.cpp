@@ -520,6 +520,19 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
                  neighbor.signal_based_capable ? "SR-node" : "legacy",
                  quality, etx,
                  neighbor.position_variance);
+
+        // If the sender is SR-capable and reports this neighbor as directly reachable,
+        // clear ALL gateway relationships for this neighbor - it's now reachable via the SR network
+        if (p->signal_based_capable) {
+            NodeNum gatewayForNeighbor = getGatewayFor(neighbor.node_id);
+            if (gatewayForNeighbor != 0 && gatewayForNeighbor != mp.from) {
+                char gwName[64];
+                getNodeDisplayName(gatewayForNeighbor, gwName, sizeof(gwName));
+                LOG_INFO("[SR] Clearing gateways for %s (now directly reachable via %s, was via %s)",
+                         neighborName, senderName, gwName);
+                clearDownstreamFromAllGateways(neighbor.node_id);
+            }
+        }
     }
 
     // Log network topology summary
@@ -752,31 +765,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         LOG_INFO("[SR] Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
 
-        // Remove this node from any gateway relationships since we can hear it directly
-        // Find all gateways that claim this node as downstream and remove those relationships
-#ifdef SIGNAL_ROUTING_LITE_MODE
-        // LITE mode: use fixed-size array, no heap allocation
-        NodeNum gatewaysToRemove[MAX_GATEWAY_RELATIONS];
-        uint8_t gatewayRemoveCount = 0;
-        for (uint8_t i = 0; i < gatewayRelationCount && gatewayRemoveCount < MAX_GATEWAY_RELATIONS; i++) {
-            if (gatewayRelations[i].downstream == mp.from) {
-                gatewaysToRemove[gatewayRemoveCount++] = gatewayRelations[i].gateway;
-            }
-        }
-        for (uint8_t i = 0; i < gatewayRemoveCount; i++) {
-            removeGatewayRelationship(gatewaysToRemove[i], mp.from);
-        }
-#else
-        std::vector<NodeNum> gatewaysToRemove;
-        for (const auto& pair : downstreamGateway) {
-            if (pair.first == mp.from) {
-                gatewaysToRemove.push_back(pair.second);
-            }
-        }
-        for (NodeNum gateway : gatewaysToRemove) {
-            removeGatewayRelationship(gateway, mp.from);
-        }
-#endif
+        // Remove this node from ALL gateway relationships since we can hear it directly
+        clearDownstreamFromAllGateways(mp.from);
 
         // Brief purple flash for any direct packet received
         flashRgbLed(128, 0, 128, 100, true);
@@ -2201,6 +2191,51 @@ void SignalRoutingModule::removeGatewayRelationship(NodeNum gateway, NodeNum dow
 #endif
 }
 
+void SignalRoutingModule::clearDownstreamFromAllGateways(NodeNum downstream)
+{
+    if (downstream == 0) return;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Remove from gatewayRelations where this is the downstream
+    for (uint8_t i = 0; i < gatewayRelationCount; ) {
+        if (gatewayRelations[i].downstream == downstream) {
+            // Remove by shifting remaining elements
+            for (uint8_t j = i; j < gatewayRelationCount - 1; j++) {
+                gatewayRelations[j] = gatewayRelations[j + 1];
+            }
+            gatewayRelationCount--;
+        } else {
+            i++;
+        }
+    }
+
+    // Remove from all gatewayDownstream sets
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+        GatewayDownstreamSet &set = gatewayDownstream[i];
+        uint8_t writeIdx = 0;
+        for (uint8_t readIdx = 0; readIdx < set.count; readIdx++) {
+            if (set.downstream[readIdx] != downstream) {
+                if (writeIdx != readIdx) {
+                    set.downstream[writeIdx] = set.downstream[readIdx];
+                }
+                writeIdx++;
+            }
+        }
+        set.count = writeIdx;
+    }
+#else
+    // Remove from downstreamGateway
+    downstreamGateway.erase(downstream);
+
+    // Remove from ALL gatewayDownstream sets
+    for (auto& pair : gatewayDownstream) {
+        pair.second.erase(downstream);
+    }
+#endif
+
+    LOG_DEBUG("[SR] Cleared downstream %08x from all gateway lists", downstream);
+}
+
 void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstream)
 {
     if (gateway == 0 || downstream == 0 || gateway == downstream) return;
@@ -2251,6 +2286,14 @@ void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstr
         }
     }
 #else
+    // Remove from old gateway's set before adding to new one
+    auto oldIt = downstreamGateway.find(downstream);
+    if (oldIt != downstreamGateway.end() && oldIt->second != gateway) {
+        auto oldGwIt = gatewayDownstream.find(oldIt->second);
+        if (oldGwIt != gatewayDownstream.end()) {
+            oldGwIt->second.erase(downstream);
+        }
+    }
     downstreamGateway[downstream] = gateway;
     gatewayDownstream[gateway].insert(downstream);
 #endif
