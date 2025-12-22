@@ -113,7 +113,7 @@ bool format_fat12(void)
     // sync to make sure all data is written to flash
     flash.syncBlocks();
 
-    LOG_INFO("Formatted flash!");
+    LOG_INFO("Formatted external flash!");
     spiLock->unlock();
     return true;
 }
@@ -236,14 +236,21 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #include <vector>
 
 #ifdef USE_EXTERNAL_FLASH
-// Helper for building full path
-static void buildPath(char *dest, size_t destLen, const char *parent, const char *child)
+// Helper for building full path and detecting truncation
+static bool buildPath(char *dest, size_t destLen, const char *parent, const char *child)
 {
+    int written;
     if (strcmp(parent, "/") == 0) {
-        snprintf(dest, destLen, "/%s", child);
+        written = snprintf(dest, destLen, "/%s", child);
     } else {
-        snprintf(dest, destLen, "%s/%s", parent, child);
+        written = snprintf(dest, destLen, "%s/%s", parent, child);
     }
+    // Detect and guard against truncation or encoding errors; abort caller on failure.
+    if (written < 0 || static_cast<size_t>(written) >= destLen) {
+        LOG_ERROR("Path truncated for %s/%s", parent, child);
+        return false;
+    }
+    return true;
 }
 #endif
 /**
@@ -283,19 +290,35 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
     }
 
     FatFile file;
-    char name[64];                                                               // Buffer for file name
-    char path[128];                                                              // Buffer for full path
+    // Keep local buffers aligned with the on-wire field width to avoid mismatched truncation handling.
+    constexpr size_t FileNameFieldLen = sizeof(((meshtastic_FileInfo *)nullptr)->file_name);
+    constexpr size_t NameBufLen = FileNameFieldLen;
+    constexpr size_t PathBufLen = FileNameFieldLen;
+    char name[NameBufLen] = {0};                                                 // Buffer for file name
+    char path[PathBufLen] = {0};                                                 // Buffer for full path
     while (file.openNext(&root, O_READ)) {                                       // Iterate through directory entries
+        memset(name, 0, sizeof(name));
         file.getName(name, sizeof(name));                                        // Get file name
+        if (strnlen(name, sizeof(name)) >= sizeof(name) - 1) {                   // Detect truncation
+            LOG_ERROR("Name truncated in getFiles: %s", name);
+            file.close();
+            return filenames;                                                    // Abort traversal on truncation
+        }
         if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) { // if it's a directory and name is not . or ..
             if (levels) {                                                        // Recurse into subdirectory
-                buildPath(path, sizeof(path), dirname, name);                    // Build full path
+                if (!buildPath(path, sizeof(path), dirname, name)) {             // Build full path
+                    file.close();
+                    return filenames;                                            // Abort traversal on truncation
+                }
                 std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(path, levels - 1);     // Recurse
                 filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end()); // Append results
             }
         } else if (!file.isDir()) {                                                      // if it's a file
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.fileSize())}; // Create file info struct
-            buildPath(fileInfo.file_name, sizeof(fileInfo.file_name), dirname, name);    // Build full path
+            if (!buildPath(fileInfo.file_name, sizeof(fileInfo.file_name), dirname, name)) {
+                file.close();
+                return filenames;                                                // Abort traversal on truncation
+            }
             filenames.push_back(fileInfo);                                               // Add to list
         }
         file.close();
@@ -367,13 +390,26 @@ void listDir(const char *dirname, uint8_t levels, bool del)
     }
 
     FatFile file;
-    char name[64];
-    char path[128];
+    // Keep local buffers aligned with the on-wire field width to avoid mismatched truncation handling.
+    constexpr size_t FileNameFieldLen = sizeof(((meshtastic_FileInfo *)nullptr)->file_name);
+    constexpr size_t NameBufLen = FileNameFieldLen;
+    constexpr size_t PathBufLen = FileNameFieldLen;
+    char name[NameBufLen] = {0};
+    char path[PathBufLen] = {0};
     while (file.openNext(&root, O_READ)) {                                       // Iterate through directory entries
+        memset(name, 0, sizeof(name));
         file.getName(name, sizeof(name));                                        // Get file name
+        if (strnlen(name, sizeof(name)) >= sizeof(name) - 1) {
+            LOG_ERROR("Name truncated in listDir: %s", name);
+            file.close();
+            return;                                                                // Abort traversal on truncation
+        }
         if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) { // if it's a directory and name is not . or ..
             if (levels) {                                                        // Recurse into subdirectory
-                buildPath(path, sizeof(path), dirname, name);                    // Build full path
+                if (!buildPath(path, sizeof(path), dirname, name)) {             // Build full path
+                    file.close();
+                    return;                                                      // Abort traversal on truncation
+                }
                 listDir(path, levels - 1, del);                                  // Recurse
                 if (del) {                                                       // After recursion, delete directory if requested
                     LOG_DEBUG("Remove %s", path);
@@ -385,7 +421,10 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                 }
             }
         } else if (!file.isDir()) {                       // if it's a file
-            buildPath(path, sizeof(path), dirname, name); // Build full path
+            if (!buildPath(path, sizeof(path), dirname, name)) { // Build full path
+                file.close();
+                return;                                                          // Abort traversal on truncation
+            }
             if (del) {                                    // Delete file
                 LOG_DEBUG("Delete %s", path);
                 file.close();
