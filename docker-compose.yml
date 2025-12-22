@@ -18,7 +18,7 @@ services:
 
     # Forward the container’s port 4403 to the host
     ports:
-      - 127.0.0.1:4403:4403
+      - "${NETWORK_INTERFACE}:4403:4403"
 
     restart: unless-stopped
 
