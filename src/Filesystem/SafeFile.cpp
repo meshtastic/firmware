@@ -6,10 +6,16 @@ static File openFile(const char *filename, bool fullAtomic)
 {
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
-#ifdef ARCH_NRF52
+    if (!flashInitialized || !fatfsMounted) {
+        LOG_ERROR("External flash not ready, cannot open %s", filename);
+        return File();
+    }
+//FatFS actually supports file renaming, so we can use the correct safefile logic here.
+/*#ifdef ARCH_NRF52
     fatfs.remove(filename);
     return fatfs.open(filename, FILE_WRITE);
 #endif
+*/
     if (!fullAtomic) {
         fatfs.remove(filename); // Nuke the old file to make space (ignore if it !exists)
     }
@@ -67,9 +73,10 @@ bool SafeFile::close()
     f.close();
     spiLock->unlock();
 
-#ifdef ARCH_NRF52
+//FatFS actually supports file renaming, so don't return true here but do the correct safefile logic.
+/*#ifdef ARCH_NRF52
     return true;
-#endif
+#endif*/
     if (!testReadback())
         return false;
 
