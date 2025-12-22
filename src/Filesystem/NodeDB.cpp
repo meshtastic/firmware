@@ -2548,13 +2548,13 @@ extern "C" {
 DSTATUS disk_status(BYTE pdrv)
 {
     (void)pdrv;
-    return 0;
+    return (flashInitialized) ? 0 : STA_NOINIT;
 }
 
 DSTATUS disk_initialize(BYTE pdrv)
 {
     (void)pdrv;
-    return 0;
+    return (flashInitialized) ? 0 : STA_NOINIT;
 }
 
 DRESULT disk_read(BYTE pdrv,    /* Physical drive nmuber to identify the drive */
@@ -2564,6 +2564,9 @@ DRESULT disk_read(BYTE pdrv,    /* Physical drive nmuber to identify the drive *
 )
 {
     (void)pdrv;
+    if (!flashInitialized) {
+        return RES_NOTRDY;
+    }
     return flash.readBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
 }
 
@@ -2574,6 +2577,9 @@ DRESULT disk_write(BYTE pdrv,        /* Physical drive nmuber to identify the dr
 )
 {
     (void)pdrv;
+    if (!flashInitialized) {
+        return RES_NOTRDY;
+    }
     return flash.writeBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
 }
 
@@ -2583,6 +2589,9 @@ DRESULT disk_ioctl(BYTE pdrv, /* Physical drive nmuber (0..) */
 )
 {
     (void)pdrv;
+    if (!flashInitialized) {
+        return RES_NOTRDY;
+    }
 
     switch (cmd) {
     case CTRL_SYNC:
