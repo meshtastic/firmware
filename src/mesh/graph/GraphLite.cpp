@@ -407,9 +407,8 @@ uint32_t GraphLite::getContentionWindowMs()
 
 bool GraphLite::shouldRelayWithContention(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t packetId, uint32_t currentTime) const
 {
-    // Basic contention window logic for SR nodes in constrained environments:
-    // 1. Check if we have unique coverage
-    // 2. If multiple nodes could relay, implement simple coordination
+    // Simplified contention logic for constrained environments:
+    // Check if we have unique coverage and no other nodes have transmitted
 
     const NodeEdgesLite *myEdges = findNode(myNode);
     const NodeEdgesLite *sourceEdges = findNode(sourceNode);
@@ -452,39 +451,23 @@ bool GraphLite::shouldRelayWithContention(NodeNum myNode, NodeNum sourceNode, No
         }
     }
 
-    // Determine relay priority: primary (unique coverage) vs backup (redundancy)
-    bool isPrimaryRelay = (uniqueNeighbors > 0);
-
-    // Unified contention window logic for both primary and backup relays
-    uint32_t contentionWindowMs = getContentionWindowMs();
+    // Must have unique coverage to relay
+    if (uniqueNeighbors == 0) {
+        return false;
+    }
 
     // Check if any other nodes have already transmitted this packet
     for (uint8_t i = 0; i < nodeCount && i < GRAPH_LITE_MAX_NODES; i++) {
         NodeNum otherNode = nodes[i].nodeId;
         if (otherNode != myNode && otherNode != sourceNode && otherNode != heardFrom) {
             if (hasNodeTransmitted(otherNode, packetId, currentTime)) {
-                // Another node already transmitted, defer to avoid duplication
+                // Another node already transmitted, don't duplicate
                 return false;
             }
         }
     }
 
-    // Calculate transmission timing based on relay priority
-    uint32_t transmitTime;
-    if (isPrimaryRelay) {
-        // Primary relays transmit immediately (with small random stagger)
-        transmitTime = ((myNode + packetId) % 100) * 3;
-    } else {
-        // Backup relays wait for the full contention window
-        transmitTime = contentionWindowMs + ((myNode + packetId) % 200) * 5; // Window + 0-995ms
-    }
-
-    uint32_t timeSincePacketStart = currentTime - packetId;
-    if (timeSincePacketStart < transmitTime) {
-        return false; // Still waiting for transmission time
-    }
-
-    // Time to transmit!
+    // We have unique coverage and no one else has transmitted - relay!
     return true;
 }
 
@@ -506,10 +489,23 @@ void GraphLite::recordNodeTransmission(NodeNum nodeId, uint32_t packetId, uint32
         relayStates[relayStateCount].timestampLo = static_cast<uint16_t>(currentTime & 0xFFFF);
         relayStateCount++;
     } else {
-        // Replace oldest
-        relayStates[0].nodeId = nodeId;
-        relayStates[0].packetId = packetId;
-        relayStates[0].timestampLo = static_cast<uint16_t>(currentTime & 0xFFFF);
+        // Replace oldest entry
+        uint8_t oldestIdx = 0;
+        uint16_t oldestTimestamp = relayStates[0].timestampLo;
+        uint16_t currentLo = static_cast<uint16_t>(currentTime & 0xFFFF);
+
+        for (uint8_t i = 1; i < GRAPH_LITE_MAX_RELAY_STATES; i++) {
+            uint16_t age = currentLo - relayStates[i].timestampLo;
+            uint16_t oldestAge = currentLo - oldestTimestamp;
+            if (age > oldestAge) {
+                oldestIdx = i;
+                oldestTimestamp = relayStates[i].timestampLo;
+            }
+        }
+
+        relayStates[oldestIdx].nodeId = nodeId;
+        relayStates[oldestIdx].packetId = packetId;
+        relayStates[oldestIdx].timestampLo = static_cast<uint16_t>(currentTime & 0xFFFF);
     }
 }
 
