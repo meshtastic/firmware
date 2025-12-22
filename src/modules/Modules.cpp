@@ -261,7 +261,9 @@ void setupModules()
     else
         LOG_INFO("DMShell disabled, set Security.DMShell: true in config.yaml to enable");
 #endif
+#if SFPP_ENABLED
     new StoreForwardPlusPlusModule();
+#endif
 #endif
 #ifdef DMSHELL_TEST_PEER
     dmShellTestModule = new DMShellTestModule();
