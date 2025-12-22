@@ -244,7 +244,9 @@ void setupModules()
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
+#if SFPP_ENABLED
     new StoreForwardPlusPlusModule();
+#endif
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();
