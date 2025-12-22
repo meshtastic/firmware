@@ -94,7 +94,7 @@ void NeighborInfoModule::cleanUpNeighbors()
         // seconds since 1970
         if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
             LOG_DEBUG("Remove neighbor with node ID 0x%x", it->node_id);
-            it = std::vector<meshtastic_NeighborLink>::reverse_iterator(
+            it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
         } else {
             ++it;
@@ -209,7 +209,7 @@ void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const 
     }
 }
 
-meshtastic_NeighborLink *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSender, NodeNum n,
+meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSender, NodeNum n,
                                                              uint32_t node_broadcast_interval_secs, float snr)
 {
     // our node and the phone are the same node (not neighbors)
@@ -231,7 +231,7 @@ meshtastic_NeighborLink *NeighborInfoModule::getOrCreateNeighbor(NodeNum origina
     }
     // otherwise, allocate one and assign data to it
 
-    meshtastic_NeighborLink new_nbr = meshtastic_NeighborLink_init_zero;
+    meshtastic_Neighbor new_nbr = meshtastic_Neighbor_init_zero;
     new_nbr.node_id = n;
     new_nbr.snr = snr;
     new_nbr.last_rx_time = getTime();

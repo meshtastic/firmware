@@ -9,7 +9,7 @@
 PB_BIND(meshtastic_Position, meshtastic_Position, AUTO)
 
 
-PB_BIND(meshtastic_NeighborLink, meshtastic_NeighborLink, AUTO)
+PB_BIND(meshtastic_SignalNeighbor, meshtastic_SignalNeighbor, AUTO)
 
 
 PB_BIND(meshtastic_User, meshtastic_User, AUTO)
@@ -81,7 +81,10 @@ PB_BIND(meshtastic_ToRadio, meshtastic_ToRadio, 2)
 PB_BIND(meshtastic_Compressed, meshtastic_Compressed, AUTO)
 
 
-PB_BIND(meshtastic_NeighborInfo, meshtastic_NeighborInfo, 2)
+PB_BIND(meshtastic_NeighborInfo, meshtastic_NeighborInfo, AUTO)
+
+
+PB_BIND(meshtastic_Neighbor, meshtastic_Neighbor, AUTO)
 
 
 PB_BIND(meshtastic_SignalRoutingInfo, meshtastic_SignalRoutingInfo, 2)
