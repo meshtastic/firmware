@@ -896,14 +896,11 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-
-// Determine the new value for the pin
-// Normally: active HIGH for awake
-#ifdef PIN_GPS_STANDBY_INVERTED
-    bool val = standby;
-#else
-    bool val = !standby;
-#endif
+    bool val;
+    if (standby)
+        val = GPS_STANDBY_ACTIVE;
+    else
+        val = !GPS_STANDBY_ACTIVE;
 
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
