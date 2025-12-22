@@ -186,7 +186,6 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     link_object chain_end = getChainEndLinkObject(root_hash_bytes, 32);
 
     if (chain_end.rx_time == 0) {
-        // TODO: we want to do the announce anyway, even if we have no message on the chain yet
         LOG_WARN("Store and Forward++ database lookup returned null");
 
         // first attempt at a chain-only announce with no messages
@@ -246,6 +245,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
         if (!portduino_config.sfpp_stratum0) {
             if (!isInDB(lo.message_hash, lo.message_hash_len)) {
+                // todo check for valid root hash
                 addToScratch(lo);
                 LOG_WARN("added message to scratch");
                 // send link to upstream?
@@ -413,8 +413,14 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 }
                 requestNextMessage(t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size);
             } else {
-                // todo: handle this
-                // add to scratch?
+                if (!isInScratch(incoming_link.message_hash, incoming_link.message_hash_len)) {
+                    addToScratch(incoming_link);
+                    LOG_WARN("added incoming non-canon message to scratch");
+                    if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
+                        LOG_WARN("Attempting to Rebroadcast message");
+                        rebroadcastLinkObject(incoming_link);
+                    }
+                }
             }
         }
     }
@@ -439,7 +445,6 @@ bool StoreForwardPlusPlusModule::getRootFromChannelHash(ChannelHash _ch_hash, ui
 
 ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_hash, size_t _root_hash_len)
 {
-    // TODO move and substr()
     sqlite3_bind_int(getHashFromRootStmt, 1, _root_hash_len);
     sqlite3_bind_blob(getHashFromRootStmt, 2, _root_hash, _root_hash_len, NULL);
     sqlite3_step(getHashFromRootStmt);
