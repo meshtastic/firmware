@@ -19,7 +19,7 @@
 
 // Compile-time configuration for constrained devices
 #ifndef GRAPH_LITE_MAX_NODES
-#define GRAPH_LITE_MAX_NODES 32 // Maximum nodes in graph
+#define GRAPH_LITE_MAX_NODES 100 // Maximum nodes in graph
 #endif
 
 #ifndef GRAPH_LITE_MAX_EDGES_PER_NODE
@@ -27,7 +27,7 @@
 #endif
 
 #ifndef GRAPH_LITE_MAX_RELAY_STATES
-#define GRAPH_LITE_MAX_RELAY_STATES 8 // Track recent transmissions
+#define GRAPH_LITE_MAX_RELAY_STATES 16 // Track recent transmissions
 #endif
 
 struct EdgeLite {
