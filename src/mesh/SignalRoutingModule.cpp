@@ -296,14 +296,16 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
 
     for (size_t i = 0; i < selectedCount; i++) {
         const EdgeLite& edge = *selected[i];
-        meshtastic_NeighborLink& neighbor = info.neighbors[i];
+        meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
 
         neighbor.node_id = edge.to;
-        neighbor.last_rx_time = nodeEdges->lastFullUpdate;
-        neighbor.position_variance = edge.variance * 12; // Scale back
+        neighbor.position_variance = edge.variance; // Already uint8, 0-255 scaled
         neighbor.signal_based_capable = isSignalBasedCapable(edge.to);
 
-        GraphLite::etxToSignal(edge.getEtx(), neighbor.rssi, neighbor.snr);
+        int32_t rssi32, snr32;
+        GraphLite::etxToSignal(edge.getEtx(), rssi32, snr32);
+        neighbor.rssi = static_cast<int8_t>(std::max((int32_t)-128, std::min((int32_t)127, rssi32)));
+        neighbor.snr = static_cast<int8_t>(std::max((int32_t)-128, std::min((int32_t)127, snr32)));
     }
 #else
     const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
@@ -344,14 +346,18 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
 
     for (size_t i = 0; i < selected.size(); i++) {
         const Edge& edge = *selected[i];
-        meshtastic_NeighborLink& neighbor = info.neighbors[i];
+        meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
 
         neighbor.node_id = edge.to;
-        neighbor.last_rx_time = edge.lastUpdate;
-        neighbor.position_variance = edge.variance;
+        // Scale variance from uint32 (0-3000) to uint8 (0-255)
+        uint32_t scaledVar = edge.variance / 12;
+        neighbor.position_variance = scaledVar > 255 ? 255 : static_cast<uint8_t>(scaledVar);
         neighbor.signal_based_capable = isSignalBasedCapable(edge.to);
 
-        Graph::etxToSignal(edge.etx, neighbor.rssi, neighbor.snr);
+        int32_t rssi32, snr32;
+        Graph::etxToSignal(edge.etx, rssi32, snr32);
+        neighbor.rssi = static_cast<int8_t>(std::max((int32_t)-128, std::min((int32_t)127, rssi32)));
+        neighbor.snr = static_cast<int8_t>(std::max((int32_t)-128, std::min((int32_t)127, snr32)));
     }
 #endif
 }
@@ -382,8 +388,10 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     // Add edges from each neighbor TO the sender
     // The RSSI/SNR describes how well the sender hears the neighbor,
     // which characterizes the neighbor→sender transmission quality
+    // Use packet rx_time since SignalNeighbor doesn't have last_rx_time
+    uint32_t rxTime = p->rx_time ? p->rx_time : getTime();
     for (pb_size_t i = 0; i < info.neighbors_count; i++) {
-        const meshtastic_NeighborLink& neighbor = info.neighbors[i];
+        const meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
         trackNodeCapability(neighbor.node_id,
                             neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
         float etx =
@@ -392,17 +400,19 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 #else
             Graph::calculateETX(neighbor.rssi, neighbor.snr);
 #endif
+        // Scale position_variance from uint8 (0-255) back to full range (0-3000) for graph storage
+        uint32_t scaledVariance = static_cast<uint32_t>(neighbor.position_variance) * 12;
         // Edge direction: neighbor → sender (the direction of the transmission that produced the RSSI)
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance,
+        routingGraph->updateEdge(neighbor.node_id, p->from, etx, rxTime, scaledVariance,
                                  EdgeLite::Source::Reported);
         // Also mirror: sender's view of this neighbor for others to consume
-        routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+        routingGraph->updateEdge(p->from, neighbor.node_id, etx, rxTime, scaledVariance,
                                  EdgeLite::Source::Mirrored);
 #else
-        routingGraph->updateEdge(neighbor.node_id, p->from, etx, neighbor.last_rx_time, neighbor.position_variance,
+        routingGraph->updateEdge(neighbor.node_id, p->from, etx, rxTime, scaledVariance,
                                  Edge::Source::Reported);
-        routingGraph->updateEdge(p->from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+        routingGraph->updateEdge(p->from, neighbor.node_id, etx, rxTime, scaledVariance,
                                  Edge::Source::Mirrored);
 #endif
     }
@@ -457,9 +467,11 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     // Add edges from each neighbor TO the sender
     // The RSSI/SNR describes how well the sender hears the neighbor,
     // which characterizes the neighbor→sender transmission quality
+    // Use packet rx_time since SignalNeighbor doesn't have last_rx_time
     // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
+    uint32_t rxTime = mp.rx_time ? mp.rx_time : getTime();
     for (pb_size_t i = 0; i < p->neighbors_count; i++) {
-        const meshtastic_NeighborLink& neighbor = p->neighbors[i];
+        const meshtastic_SignalNeighbor& neighbor = p->neighbors[i];
 
         char neighborName[64];
         getNodeDisplayName(neighbor.node_id, neighborName, sizeof(neighborName));
@@ -475,16 +487,19 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
             Graph::calculateETX(neighbor.rssi, neighbor.snr);
 #endif
 
+        // Scale position_variance from uint8 (0-255) back to full range (0-3000) for graph storage
+        uint32_t scaledVariance = static_cast<uint32_t>(neighbor.position_variance) * 12;
+
         // Add edge: neighbor -> sender (the direction of the transmission that produced the RSSI)
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance,
+        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
                                                   EdgeLite::Source::Reported);
-        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
                                  EdgeLite::Source::Mirrored);
 #else
-        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, neighbor.last_rx_time, neighbor.position_variance,
+        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
                                                   Edge::Source::Reported);
-        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, neighbor.last_rx_time, neighbor.position_variance,
+        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
                                  Edge::Source::Mirrored);
 #endif
 
@@ -500,19 +515,11 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         else if (etx < 8.0f) quality = "fair";
         else quality = "poor";
 
-        int32_t age = computeAgeSecs(neighbor.last_rx_time, getTime());
-        char ageBuf[16];
-        if (age < 0) {
-            snprintf(ageBuf, sizeof(ageBuf), "-");
-        } else {
-            snprintf(ageBuf, sizeof(ageBuf), "%d", age);
-        }
-
-        LOG_INFO("  ├── %s: %s link (%s, ETX=%.1f, %s sec ago)",
+        LOG_INFO("  ├── %s: %s link (%s, ETX=%.1f, var=%u)",
                  neighborName,
                  neighbor.signal_based_capable ? "SR-node" : "legacy",
                  quality, etx,
-                 ageBuf);
+                 neighbor.position_variance);
     }
 
     // Log network topology summary

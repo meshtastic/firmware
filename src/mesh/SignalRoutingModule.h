@@ -15,8 +15,8 @@
 // Routing protocol version for compatibility checking
 #define SIGNAL_ROUTING_VERSION 1
 
-// Maximum neighbors we track/broadcast
-#define MAX_SIGNAL_ROUTING_NEIGHBORS 10
+// Maximum neighbors we track/broadcast (optimized to fit 14 in 233 byte payload)
+#define MAX_SIGNAL_ROUTING_NEIGHBORS 14
 
 // Broadcast interval for signal routing info (2 minutes)
 #define SIGNAL_ROUTING_BROADCAST_SECS 120

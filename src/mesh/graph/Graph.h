@@ -121,7 +121,7 @@ public:
 
     /**
      * Reverse calculate RSSI and SNR from ETX (approximate)
-     * Used when populating NeighborLink from stored ETX values
+     * Used when populating SignalNeighbor from stored ETX values
      */
     static void etxToSignal(float etx, int32_t &rssi, int32_t &snr);
 
