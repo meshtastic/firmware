@@ -1,4 +1,5 @@
 #pragma once
+#if __has_include("sqlite3.h")
 #include "Channels.h"
 #include "ProtobufModule.h"
 #include "Router.h"
@@ -210,3 +211,4 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     uint32_t rebroadcastTimeout = 3600; // Messages older than this (in seconds) will not be rebroadcast
 };
+#endif
