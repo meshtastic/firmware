@@ -366,6 +366,14 @@ void portduinoSetup()
                         cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
                 } else if (found_ch341) {
                     product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
+                    // look for more data after the null terminator
+                    size_t len = strlen(autoconf_product);
+                    if (len < 75) {
+                        memcpy(portduino_config.device_id, autoconf_product + len + 1, 16);
+                        if (!memfll(portduino_config.device_id, '\0', 16) && !memfll(portduino_config.device_id, 0xff, 16)) {
+                            portduino_config.has_device_id = true;
+                        }
+                    }
                 }
 
                 // Don't try to automatically find config for a device with RAK eeprom.
