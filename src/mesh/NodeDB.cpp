@@ -53,7 +53,7 @@
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-#include <WiFiOTA.h>
+#include <MeshtasticOTA.h>
 #endif
 
 NodeDB *nodeDB = nullptr;
@@ -739,8 +739,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.compass_orientation = COMPASS_ORIENTATION;
 #endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-    if (WiFiOTA::isUpdated()) {
-        WiFiOTA::recoverConfig(&config.network);
+    if (MeshtasticOTA::isUpdated()) {
+        MeshtasticOTA::recoverConfig(&config.network);
     }
 #endif
 

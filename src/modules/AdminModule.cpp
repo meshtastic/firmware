@@ -9,11 +9,8 @@
 #include "meshUtils.h"
 #include <FSCommon.h>
 #include <ctype.h> // for better whitespace handling
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "BleOta.h"
-#endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-#include "WiFiOTA.h"
+#include "MeshtasticOTA.h"
 #endif
 #include "Router.h"
 #include "configuration.h"
@@ -237,24 +234,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
+        // TODO: Update to new protobufs
         int32_t s = r->reboot_ota_seconds;
 #if defined(ARCH_ESP32)
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
-        if (!BleOta::getOtaAppVersion().isEmpty()) {
+        if (MeshtasticOTA::trySwitchToOTA()) {
+            LOG_INFO("OTA Requested");
             if (screen)
                 screen->startFirmwareUpdateScreen();
-            BleOta::switchToOtaApp();
-            LOG_INFO("Rebooting to BLE OTA");
-        }
-#endif
-#if !MESHTASTIC_EXCLUDE_WIFI
-        if (WiFiOTA::trySwitchToOTA()) {
-            if (screen)
-                screen->startFirmwareUpdateScreen();
-            WiFiOTA::saveConfig(&config.network);
+            MeshtasticOTA::saveConfig(&config.network, (s % 2) & 0b1);
             LOG_INFO("Rebooting to WiFi OTA");
+        } else {
+            LOG_INFO("WIFI OTA Failed");
         }
-#endif
 #endif
         LOG_INFO("Reboot in %d seconds", s);
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
