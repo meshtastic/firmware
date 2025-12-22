@@ -807,14 +807,15 @@ void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *
     // set root hash
 
     // set message hash
-    storeforward.message_hash.size = 32;
-    memcpy(storeforward.message_hash.bytes, _message_hash, 32);
+    storeforward.message_hash.size = 8;
+    memcpy(storeforward.message_hash.bytes, _message_hash, 8);
 
     // set chain hash
-    storeforward.commit_hash.size = 32;
-    memcpy(storeforward.commit_hash.bytes, _commit_hash, 32);
+    storeforward.commit_hash.size = 8;
+    memcpy(storeforward.commit_hash.bytes, _commit_hash, 8);
 
     // set root hash
+    // needs to be the full hash to bootstrap
     storeforward.root_hash.size = 32;
     memcpy(storeforward.root_hash.bytes, _root_hash, 32);
 
