@@ -251,6 +251,7 @@ private:
     void recordGatewayRelation(NodeNum gateway, NodeNum downstream);
     void removeGatewayRelationship(NodeNum gateway, NodeNum downstream);
     void clearGatewayRelationsFor(NodeNum node);
+    void clearDownstreamFromAllGateways(NodeNum downstream);
     NodeNum getGatewayFor(NodeNum downstream) const;
     size_t getGatewayDownstreamCount(NodeNum gateway) const;
 
