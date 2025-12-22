@@ -184,6 +184,8 @@ Input:
 Logging:
   LogLevel: info # debug, info, warn, error
 #  TraceFile: /var/log/meshtasticd.json
+#  JSONFile: /packets.json # File location for JSON output of decoded packets
+#  JSONFilter: position # filter for packets to save to JSON file
 #  AsciiLogs: true     # default if not specified is !isatty() on stdout
 
 Webserver:
