@@ -688,11 +688,6 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
         LOG_WARN("No messages in scratch to forward");
         return false;
     }
-    uint8_t _root_hash[32] = {0};
-    // if (!getRootFromChannelHash(_channel_hash, _root_hash)) {
-    //     LOG_ERROR("Error getting root hash");
-    //     return false;
-    // }
 
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
@@ -712,7 +707,7 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
     storeforward.encapsulated_rxtime = sqlite3_column_int(fromScratchStmt, 5);
 
     storeforward.root_hash.size = 32;
-    memcpy(storeforward.root_hash.bytes, _root_hash, 32);
+    memcpy(storeforward.root_hash.bytes, root_hash, 32);
 
     sqlite3_reset(fromScratchStmt);
 
