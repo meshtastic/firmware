@@ -8,7 +8,7 @@
  * device's filesystem.
  *
  */
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "SPILock.h"
 #include "configuration.h"
 #include <memory>

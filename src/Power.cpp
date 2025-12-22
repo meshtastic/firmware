@@ -11,7 +11,7 @@
  * For more information, see: https://meshtastic.org/
  */
 #include "power.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
 #include "buzz/buzz.h"

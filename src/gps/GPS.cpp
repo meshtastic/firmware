@@ -6,7 +6,7 @@
 #include "Default.h"
 #include "GPS.h"
 #include "GpioLogic.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
 #include "Throttle.h"

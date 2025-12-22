@@ -2,7 +2,7 @@
 #if HAS_SCREEN
 
 #include "DisplayFormatters.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "NotificationRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"

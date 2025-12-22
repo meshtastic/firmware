@@ -5,9 +5,9 @@
 
 #include "Channels.h"
 #include "Default.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PacketHistory.h"
 #include "PhoneAPI.h"
 #include "PowerFSM.h"

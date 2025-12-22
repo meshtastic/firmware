@@ -1,6 +1,6 @@
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>

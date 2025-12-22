@@ -2,8 +2,8 @@
 
 #include "./CannedMessageStore.h"
 
-#include "FSCommon.h"
-#include "NodeDB.h"
+#include "Filesystem/FSCommon.h"
+#include "Filesystem/NodeDB.h"
 #include "SPILock.h"
 #include "generated/meshtastic/cannedmessages.pb.h"
 

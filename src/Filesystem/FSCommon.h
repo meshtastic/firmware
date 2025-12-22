@@ -44,7 +44,7 @@ using namespace STM32_LittleFS_Namespace;
 #if defined(USE_EXTERNAL_FLASH)
 // nRF52 version with external flash
 #include "SdFat_Adafruit_Fork.h"
-#include "mesh/fatfs_ff.h"
+#include "Filesystem/fatfs_ff.h"
 
 #include "diskio.h"
 #include <Adafruit_SPIFlash.h>

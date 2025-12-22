@@ -15,7 +15,7 @@
  */
 #include "ExternalNotificationModule.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
 #include "buzz/buzz.h"

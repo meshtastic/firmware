@@ -6,7 +6,7 @@
 #include "Default.h"
 #include "HealthTelemetry.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"

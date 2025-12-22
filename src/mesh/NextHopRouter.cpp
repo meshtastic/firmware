@@ -4,7 +4,7 @@
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 NextHopRouter::NextHopRouter() {}
 

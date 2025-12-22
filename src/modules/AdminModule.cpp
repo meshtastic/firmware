@@ -1,13 +1,13 @@
 #include "AdminModule.h"
 #include "Channels.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
-#include <FSCommon.h>
+#include "Filesystem/FSCommon.h"
 #include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"

@@ -2,7 +2,7 @@
 #include "SX126xInterface.h"
 #include "configuration.h"
 #include "error.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif

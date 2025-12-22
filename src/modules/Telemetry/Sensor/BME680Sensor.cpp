@@ -4,7 +4,7 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BME680Sensor.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "SPILock.h"
 #include "TelemetrySensor.h"
 

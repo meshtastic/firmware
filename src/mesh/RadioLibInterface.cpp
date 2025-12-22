@@ -1,6 +1,6 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "SPILock.h"
 #include "Throttle.h"

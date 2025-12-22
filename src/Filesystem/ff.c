@@ -24,8 +24,8 @@
 // Using ESP-IDF/Arduino FatFs; this copy is disabled to avoid multiple definitions.
 #else
 
-#include "diskio.h"   /* Declarations of device I/O functions */
 #include "fatfs_ff.h" /* Declarations of FatFs API */
+#include "diskio.h"   /* Declarations of device I/O functions */
 
 /*--------------------------------------------------------------------------
 

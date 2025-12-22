@@ -1,7 +1,7 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 #ifndef UPDOWN_LONG_PRESS_DURATION
 #define UPDOWN_LONG_PRESS_DURATION 300

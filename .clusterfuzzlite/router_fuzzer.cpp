@@ -11,7 +11,7 @@
 #include "PortduinoGlue.h"
 #include "PowerFSM.h"
 #include "mesh/MeshTypes.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "mesh/Router.h"
 #include "mesh/TypeConversions.h"
 #include "mesh/mesh-pb-constants.h"

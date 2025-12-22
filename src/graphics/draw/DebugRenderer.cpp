@@ -2,9 +2,9 @@
 #if HAS_SCREEN
 #include "../Screen.h"
 #include "DebugRenderer.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"

@@ -8,7 +8,7 @@
 #include "GPS.h"
 #include "MeshService.h"
 #include "Module.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "main.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"

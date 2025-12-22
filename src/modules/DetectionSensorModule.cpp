@@ -1,7 +1,7 @@
 #include "DetectionSensorModule.h"
 #include "Default.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"

@@ -5,7 +5,7 @@
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "MeshModule.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "detect/ScanI2C.h"
 #include <utility>
 

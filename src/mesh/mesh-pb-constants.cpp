@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "SPILock.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>

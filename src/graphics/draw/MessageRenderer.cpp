@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MessageRenderer.h"
 
 // Core includes
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
