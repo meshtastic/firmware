@@ -1,5 +1,6 @@
 #pragma once
 #if __has_include("sqlite3.h")
+#define SFPP_ENABLED 1
 #include "Channels.h"
 #include "ProtobufModule.h"
 #include "Router.h"
