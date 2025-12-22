@@ -531,27 +531,7 @@ void SignalRoutingModule::logNetworkTopology()
     if (!routingGraph) return;
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    auto appendGatewayDownstreams = [&](NodeNum gateway, std::vector<NodeNum> &out) {
-        uint32_t now = getTime();
-        for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
-            const GatewayDownstreamSet &set = gatewayDownstream[i];
-            if (set.gateway != gateway) continue;
-            if ((now - set.lastSeen) > CAPABILITY_TTL_SECS) return;
-            for (uint8_t j = 0; j < set.count; j++) {
-                out.push_back(set.downstream[j]);
-            }
-            return;
-        }
-    };
-#else
-    auto appendGatewayDownstreams = [&](NodeNum gateway, std::vector<NodeNum> &out) {
-        auto it = gatewayDownstream.find(gateway);
-        if (it == gatewayDownstream.end()) return;
-        out.insert(out.end(), it->second.begin(), it->second.end());
-    };
-#endif
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
+    // LITE mode: use fixed-size arrays only, no heap allocations
     NodeNum nodeBuf[GRAPH_LITE_MAX_NODES];
     size_t nodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
     if (nodeCount == 0) {
@@ -559,25 +539,15 @@ void SignalRoutingModule::logNetworkTopology()
         return;
     }
     LOG_INFO("[SR] Network Topology: %d nodes total", nodeCount);
-    std::vector<NodeNum> sortedNodes(nodeBuf, nodeBuf + nodeCount);
-    std::sort(sortedNodes.begin(), sortedNodes.end());
-#else
-    auto allNodes = routingGraph->getAllNodes();
-    if (allNodes.empty()) {
-        LOG_INFO("[SR] Network Topology: No nodes in graph yet");
-        return;
-    }
-    LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
-    // Sort nodes for consistent output
-    std::vector<NodeNum> sortedNodes(allNodes.begin(), allNodes.end());
-    std::sort(sortedNodes.begin(), sortedNodes.end());
-#endif
 
-    for (NodeNum nodeId : sortedNodes) {
-        char nodeName[64];
+    // Sort in place using fixed array (avoid std::vector heap allocation)
+    std::sort(nodeBuf, nodeBuf + nodeCount);
+
+    for (size_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+        NodeNum nodeId = nodeBuf[nodeIdx];
+        char nodeName[48]; // Reduced buffer size for stack safety
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
-#ifdef SIGNAL_ROUTING_LITE_MODE
         const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->edgeCount == 0) {
             CapabilityStatus status = getCapabilityStatus(nodeId);
@@ -587,37 +557,26 @@ void SignalRoutingModule::logNetworkTopology()
             continue;
         }
 
-        std::vector<NodeNum> downstreams;
-        appendGatewayDownstreams(nodeId, downstreams);
+        // Count gateway downstreams using fixed iteration (no heap allocation)
+        uint8_t downstreamCount = 0;
+        uint32_t now = getTime();
+        for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+            const GatewayDownstreamSet &set = gatewayDownstream[i];
+            if (set.gateway == nodeId && (now - set.lastSeen) <= CAPABILITY_TTL_SECS) {
+                downstreamCount = set.count;
+                break;
+            }
+        }
 
-        if (downstreams.empty()) {
+        if (downstreamCount == 0) {
             LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->edgeCount);
         } else {
-            size_t totalGatewayNodes = downstreams.size();
-            std::sort(downstreams.begin(), downstreams.end());
-            downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
-            char buf[128];
-            size_t pos = 0;
-            size_t maxList = std::min<size_t>(downstreams.size(), 4);
-            for (size_t i = 0; i < maxList; i++) {
-                char dn[32];
-                getNodeDisplayName(downstreams[i], dn, sizeof(dn));
-                int written = snprintf(buf + pos, sizeof(buf) - pos, (i == 0) ? "%s" : ", %s", dn);
-                if (written < 0 || (size_t)written >= (sizeof(buf) - pos)) {
-                    buf[sizeof(buf) - 1] = '\0';
-                    break;
-                }
-                pos += static_cast<size_t>(written);
-            }
-            if (downstreams.size() > maxList && pos < sizeof(buf) - 6) {
-                snprintf(buf + pos, sizeof(buf) - pos, ", +%zu", downstreams.size() - maxList);
-            }
-            LOG_INFO("[SR] +- %s: connected to %d nodes (gateway for %zu nodes: %s)", nodeName, edges->edgeCount, totalGatewayNodes, buf);
+            LOG_INFO("[SR] +- %s: connected to %d nodes (gateway for %d nodes)", nodeName, edges->edgeCount, downstreamCount);
         }
 
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
             const EdgeLite& edge = edges->edges[i];
-            char neighborName[64];
+            char neighborName[48]; // Reduced buffer size for stack safety
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
 
             float etx = edge.getEtx();
@@ -638,7 +597,34 @@ void SignalRoutingModule::logNetworkTopology()
             LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %s sec ago)",
                     neighborName, quality, etx, ageBuf);
         }
+    }
+
+    // Add legend explaining ETX to signal quality mapping
+    LOG_INFO("[SR] ETX to signal mapping: ETX=1.0~RSSI=-60dB/SNR=10dB, ETX=2.0~RSSI=-90dB/SNR=0dB, ETX=4.0~RSSI=-110dB/SNR=-5dB");
+    LOG_DEBUG("[SR] Topology logging complete");
+
 #else
+    // Full mode: use dynamic allocations (std::vector) for flexibility
+    auto appendGatewayDownstreams = [&](NodeNum gateway, std::vector<NodeNum> &out) {
+        auto it = gatewayDownstream.find(gateway);
+        if (it == gatewayDownstream.end()) return;
+        out.insert(out.end(), it->second.begin(), it->second.end());
+    };
+
+    auto allNodes = routingGraph->getAllNodes();
+    if (allNodes.empty()) {
+        LOG_INFO("[SR] Network Topology: No nodes in graph yet");
+        return;
+    }
+    LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
+    // Sort nodes for consistent output
+    std::vector<NodeNum> sortedNodes(allNodes.begin(), allNodes.end());
+    std::sort(sortedNodes.begin(), sortedNodes.end());
+
+    for (NodeNum nodeId : sortedNodes) {
+        char nodeName[64];
+        getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
+
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
             CapabilityStatus status = getCapabilityStatus(nodeId);
@@ -702,13 +688,12 @@ void SignalRoutingModule::logNetworkTopology()
             LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %s sec ago)",
                     neighborName, quality, edge.etx, ageBuf);
         }
-#endif
     }
 
     // Add legend explaining ETX to signal quality mapping
     LOG_INFO("[SR] ETX to signal mapping: ETX=1.0~RSSI=-60dB/SNR=10dB, ETX=2.0~RSSI=-90dB/SNR=0dB, ETX=4.0~RSSI=-110dB/SNR=-5dB");
-
     LOG_DEBUG("[SR] Topology logging complete");
+#endif
 }
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -762,23 +747,29 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
         // Remove this node from any gateway relationships since we can hear it directly
         // Find all gateways that claim this node as downstream and remove those relationships
-        std::vector<NodeNum> gatewaysToRemove;
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        for (uint8_t i = 0; i < gatewayRelationCount; i++) {
+        // LITE mode: use fixed-size array, no heap allocation
+        NodeNum gatewaysToRemove[MAX_GATEWAY_RELATIONS];
+        uint8_t gatewayRemoveCount = 0;
+        for (uint8_t i = 0; i < gatewayRelationCount && gatewayRemoveCount < MAX_GATEWAY_RELATIONS; i++) {
             if (gatewayRelations[i].downstream == mp.from) {
-                gatewaysToRemove.push_back(gatewayRelations[i].gateway);
+                gatewaysToRemove[gatewayRemoveCount++] = gatewayRelations[i].gateway;
             }
         }
+        for (uint8_t i = 0; i < gatewayRemoveCount; i++) {
+            removeGatewayRelationship(gatewaysToRemove[i], mp.from);
+        }
 #else
+        std::vector<NodeNum> gatewaysToRemove;
         for (const auto& pair : downstreamGateway) {
             if (pair.first == mp.from) {
                 gatewaysToRemove.push_back(pair.second);
             }
         }
-#endif
         for (NodeNum gateway : gatewaysToRemove) {
             removeGatewayRelationship(gateway, mp.from);
         }
+#endif
 
         // Brief purple flash for any direct packet received
         flashRgbLed(128, 0, 128, 100, true);
@@ -903,9 +894,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         }
         if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_MS) {
             routingGraph->ageEdges(currentTime);
-            ageInactiveNodes(currentTime);
             lastGraphUpdate = currentTime;
-            LOG_DEBUG("[SR] Aged edges and inactive nodes");
+            LOG_DEBUG("[SR] Aged edges");
         }
     }
 
@@ -2370,55 +2360,6 @@ uint32_t SignalRoutingModule::getNodeLastActivityTime(NodeNum nodeId) const
     }
 
     return it->second.lastUpdated;
-#endif
-}
-
-void SignalRoutingModule::ageInactiveNodes(uint32_t currentTime)
-{
-    if (!routingGraph) {
-        return;
-    }
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    // In lite mode, we need to check each node in the graph
-    GraphLite *graph = static_cast<GraphLite*>(routingGraph);
-    size_t nodeCount = graph->getNodeCount();
-    NodeNum nodeIds[GRAPH_LITE_MAX_NODES];
-    size_t count = graph->getAllNodeIds(nodeIds, GRAPH_LITE_MAX_NODES);
-
-    for (size_t i = 0; i < count; ) {
-        NodeNum nodeId = nodeIds[i];
-        uint32_t lastActivity = getNodeLastActivityTime(nodeId);
-        if (lastActivity == 0 || (currentTime - lastActivity) > CAPABILITY_TTL_SECS) {
-            // Node is inactive, remove it from graph
-            LOG_INFO("[SR] Removing inactive node %08x from graph (last activity: %u, current: %u)",
-                     nodeId, lastActivity, currentTime);
-            graph->removeNode(nodeId);
-            // Re-fetch the node list since we modified it
-            count = graph->getAllNodeIds(nodeIds, GRAPH_LITE_MAX_NODES);
-            i = 0; // Restart iteration
-        } else {
-            i++;
-        }
-    }
-#else
-    // In full mode, we can iterate through the graph's nodes
-    Graph *graph = static_cast<Graph*>(routingGraph);
-    auto allNodes = graph->getAllNodes();
-
-    for (auto it = allNodes.begin(); it != allNodes.end(); ) {
-        NodeNum nodeId = *it;
-        uint32_t lastActivity = getNodeLastActivityTime(nodeId);
-        if (lastActivity == 0 || (currentTime - lastActivity) > CAPABILITY_TTL_SECS) {
-            // Node is inactive, remove it from graph
-            LOG_INFO("[SR] Removing inactive node %08x from graph (last activity: %u, current: %u)",
-                     nodeId, lastActivity, currentTime);
-            graph->removeNode(nodeId);
-            it = allNodes.erase(it); // Remove from our copy too
-        } else {
-            ++it;
-        }
-    }
 #endif
 }
 
