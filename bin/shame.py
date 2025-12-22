@@ -42,15 +42,9 @@ if len(newlyIntroduced) > 0:
         name, size = parseFile(f)
         markdown += f"| `{name}` | {size}b |\n"
 
-removed = old - new
-if len(removed) > 0:
-    markdown += "\n## Removed Targets\n\n"
-    # create a table
-    markdown += "| File | Size |\n"
-    markdown += "| ---- | ---- |\n"
-    for f in removed:
-        name, size = parseFile(f)
-        markdown += f"| `{name}` | {size}b |\n"
+# do not log removed targets
+# PRs only run a small subset of builds, so removed targets are not meaningful
+# since they are very likely to just be not ran in PR CI
 
 both = old & new
 degradations = []
