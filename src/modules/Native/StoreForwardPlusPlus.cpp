@@ -324,6 +324,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     LOG_INFO("End of chain does not match!");
 
                     // We just got an end of chain announce, checking if we have seen this message and have it in scratch.
+                    // TODO this seems to have evicted two messages in a test
                     if (isInScratch(t->message_hash.bytes, t->message_hash.size)) {
                         link_object scratch_object = getFromScratch(t->message_hash.bytes, t->message_hash.size);
                         // if this matches, we don't need to request the message
@@ -858,10 +859,12 @@ bool StoreForwardPlusPlusModule::isInScratch(uint8_t *message_hash_bytes, size_t
 void StoreForwardPlusPlusModule::removeFromScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
 {
     LOG_WARN("removeFromScratch");
+    printBytes("removing from scratch: ", message_hash_bytes, message_hash_len);
     sqlite3_bind_int(removeScratch, 1, message_hash_len);
     sqlite3_bind_blob(removeScratch, 2, message_hash_bytes, message_hash_len, NULL);
     sqlite3_step(removeScratch);
     int numberFound = sqlite3_column_int(removeScratch, 0);
+    LOG_WARN("removed %d entries from scratch", numberFound);
     sqlite3_reset(removeScratch);
 }
 
@@ -903,6 +906,8 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScrat
     memcpy(lo.root_hash, root_hash, 32);
     lo.payload =
         std::string((char *)sqlite3_column_text(fromScratchByHashStmt, 7), sqlite3_column_bytes(fromScratchByHashStmt, 7));
+    lo.message_hash_len = hash_len;
+    memcpy(lo.message_hash, message_hash_bytes, hash_len);
     sqlite3_reset(fromScratchByHashStmt);
     return lo;
 }
