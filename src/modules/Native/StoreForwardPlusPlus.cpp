@@ -899,7 +899,8 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScrat
     uint8_t *message_hash = (uint8_t *)sqlite3_column_blob(fromScratchByHashStmt, 4);
     memcpy(lo.message_hash, message_hash, 32);
     lo.rx_time = sqlite3_column_int(fromScratchByHashStmt, 5);
-    lo.channel_hash - sqlite3_column_int(fromScratchByHashStmt, 6);
+    uint8_t *root_hash = (uint8_t *)sqlite3_column_blob(fromScratchByHashStmt, 6);
+    memcpy(lo.root_hash, root_hash, 32);
     lo.payload =
         std::string((char *)sqlite3_column_text(fromScratchByHashStmt, 7), sqlite3_column_bytes(fromScratchByHashStmt, 7));
     sqlite3_reset(fromScratchByHashStmt);
