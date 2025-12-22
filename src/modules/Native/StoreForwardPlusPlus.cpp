@@ -12,6 +12,7 @@
 // TODO: evict messages from scratch after a timeout
 
 // things may get weird if there are multiple stratum-0 nodes on a single mesh. Come up with mitigations
+#if __has_include("sqlite3.h")
 
 #include "StoreForwardPlusPlus.h"
 #include "MeshService.h"
@@ -1069,3 +1070,4 @@ uint32_t StoreForwardPlusPlusModule::getChainCount(uint8_t *root_hash, size_t ro
     sqlite3_reset(getChainCountStmt);
     return count;
 }
+#endif // has include sqlite3
