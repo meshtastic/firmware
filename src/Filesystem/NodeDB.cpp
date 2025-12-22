@@ -2416,24 +2416,25 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 #if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
         std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
-        if (!backup) {
+        meshtastic_BackupPreferences *rawBackup = backup.get();
+        if (!rawBackup) {
             LOG_ERROR("Failed to allocate backup container");
             return false;
         }
-        memset(backup.get(), 0, sizeof(*backup));
-        backup->version = DEVICESTATE_CUR_VER;
-        backup->timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
-        backup->has_config = true;
-        backup->config = config;
-        backup->has_module_config = true;
-        backup->module_config = moduleConfig;
-        backup->has_channels = true;
-        backup->channels = channelFile;
-        backup->has_owner = true;
-        backup->owner = owner;
+        memset(rawBackup, 0, sizeof(*rawBackup));
+        rawBackup->version = DEVICESTATE_CUR_VER;
+        rawBackup->timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
+        rawBackup->has_config = true;
+        rawBackup->config = config;
+        rawBackup->has_module_config = true;
+        rawBackup->module_config = moduleConfig;
+        rawBackup->has_channels = true;
+        rawBackup->channels = channelFile;
+        rawBackup->has_owner = true;
+        rawBackup->owner = owner;
 
         size_t backupSize;
-        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, backup.get());
+        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, rawBackup);
 
         spiLock->lock();
 #ifdef USE_EXTERNAL_FLASH
@@ -2479,28 +2480,29 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             spiLock->unlock();
         }
         std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
-        if (!backup) {
+        meshtastic_BackupPreferences *rawBackup = backup.get();
+        if (!rawBackup) {
             LOG_ERROR("Failed to allocate backup container");
             return false;
         }
-        memset(backup.get(), 0, sizeof(*backup));
+        memset(rawBackup, 0, sizeof(*rawBackup));
         success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
-                            &meshtastic_BackupPreferences_msg, backup.get());
+                            &meshtastic_BackupPreferences_msg, rawBackup);
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {
-                config = backup->config;
+                config = rawBackup->config;
                 LOG_DEBUG("Restored config");
             }
             if (restoreWhat & SEGMENT_MODULECONFIG) {
-                moduleConfig = backup->module_config;
+                moduleConfig = rawBackup->module_config;
                 LOG_DEBUG("Restored module config");
             }
             if (restoreWhat & SEGMENT_DEVICESTATE) {
-                devicestate.owner = backup->owner;
+                devicestate.owner = rawBackup->owner;
                 LOG_DEBUG("Restored device state");
             }
             if (restoreWhat & SEGMENT_CHANNELS) {
-                channelFile = backup->channels;
+                channelFile = rawBackup->channels;
                 LOG_DEBUG("Restored channels");
             }
 
