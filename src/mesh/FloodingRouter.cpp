@@ -124,6 +124,10 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB &&
+        nodeDB->isFromOrToFavoritedNode(*p)) {
+        iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+    }
 }
 
 bool FloodingRouter::isRebroadcaster()
