@@ -495,8 +495,7 @@ void setup()
     serialSinceMsec = millis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
-    powerHAL_isPowerLevelSafe();
-
+    
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
     // use PSRAM for malloc calls > 256 bytes

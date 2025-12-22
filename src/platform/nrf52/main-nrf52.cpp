@@ -35,6 +35,10 @@
 #define SAFE_VDD_VOLTAGE_THRESHOLD 2.7
 #endif
 
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HIST
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HOST 0.2
+#endif
+
 // Weak empty variant initialization function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
@@ -63,17 +67,10 @@ bool powerHAL_isVBUSConnected()
 
 bool powerHAL_isPowerLevelSafe()
 {
-    // some variants use AREF_VOLTAGE as 3.0
-    // but this is fine as we hunt for VDD values less than 3V
-    // otherwise either set here the reference for each measure and make sure
-    // same is done for battery reading (which long term should be implemented here as HAL function)
 
-    // we use the same values as regular battery read so there is no conflict on SAADC
-    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+    uint16_t threshhold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
 
-    uint16_t vddADCRead = analogReadVDD();
-    float voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
-    LOG_INFO("VDD VOLTAGE: %f", voltage);
+
 
     return true;
 }
@@ -102,6 +99,22 @@ void powerHAL_platformInit()
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
+}
+
+// get VDD voltage (in millivolts)
+uint16_t getVDDVoltage()
+{
+    // some variants use AREF_VOLTAGE as 3.0
+    // but this is fine as we usually hunt for VDD values less than 3V
+    // otherwise either set here the reference for each measure and make sure
+    // same is done for battery reading (which long term should be implemented here as HAL function)
+
+    // we use the same values as regular battery read so there is no conflict on SAADC
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+
+    uint16_t vddADCRead = analogReadVDD();
+    float voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
+    return voltage;
 }
 
 bool loopCanSleep()
@@ -287,6 +300,8 @@ void nrf52Loop()
 
     checkSDEvents();
     reportLittleFSCorruptionOnce();
+    LOG_INFO("VDD_VOLTAGE: %f", getVDDVoltage());
+
 }
 
 #ifdef USE_SEMIHOSTING
