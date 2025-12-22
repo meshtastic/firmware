@@ -260,10 +260,6 @@ private:
      */
     uint32_t getNodeLastActivityTime(NodeNum nodeId) const;
 
-    /**
-     * Age out inactive nodes from the graph (nodes that haven't been active for 5 minutes)
-     */
-    void ageInactiveNodes(uint32_t currentTime);
     bool isActiveRoutingRole() const;
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;

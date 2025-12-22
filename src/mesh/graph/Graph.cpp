@@ -151,6 +151,15 @@ void Graph::ageEdges(uint32_t currentTime) {
             ++it;
         }
     }
+
+    // Proactively clean expired route cache entries to prevent unbounded growth
+    for (auto it = routeCache.begin(); it != routeCache.end();) {
+        if ((currentTime - it->second.timestamp) > ROUTE_CACHE_TIMEOUT_MS) {
+            it = routeCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 Route Graph::calculateRoute(NodeNum destination, uint32_t currentTime) {
