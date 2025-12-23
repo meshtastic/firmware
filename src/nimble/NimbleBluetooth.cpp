@@ -45,6 +45,10 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 
 #ifdef ARCH_ESP32
 // Credit: https://github.com/h2zero/NimBLE-Arduino/issues/740#issuecomment-2539923656
+// Note: Despite the name, this function is invoked on every device boot (from setup()).
+// It performs a routine startup check on the stored NimBLE bond data and deletes bonds
+// only if a mismatch or migration condition is detected. It is not a one-time hook that
+// runs only when the NimBLE version changes.
 static void deleteBondsIfNimBLEVersionChanged()
 {
     esp_err_t err = nvs_flash_init();
