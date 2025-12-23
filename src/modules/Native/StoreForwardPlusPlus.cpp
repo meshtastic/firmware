@@ -222,8 +222,11 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         return ProcessMessage::CONTINUE;
     }
 
-    // For the moment, this is strictly LoRa
-    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+    // Allow only LoRa, Multicast UDP, and API packets
+    // maybe in the future, only disallow MQTT
+    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA &&
+        mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP &&
+        mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API) {
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
     }
 
@@ -261,6 +264,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         }
         // canonAnnounce(lo.message_hash, lo.commit_hash, lo.root_hash, lo.rx_time);
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+        // TODO: Block packets from self?
     } else if (mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP) {
         LOG_WARN("Got a STORE_FORWARD++ packet");
         meshtastic_StoreForwardPlusPlus scratch;
