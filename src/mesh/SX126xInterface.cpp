@@ -54,17 +54,20 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #if defined(USE_GC1109_PA)
     // GC1109 FEM chip initialization
-    // PA_POWER: Power enable for GC1109 (always on)
+    // See variant.h for full pin mapping and control logic documentation
+
+    // VFEM_Ctrl (LORA_PA_POWER): Power enable for GC1109 LDO (always on)
     pinMode(LORA_PA_POWER, OUTPUT);
     digitalWrite(LORA_PA_POWER, HIGH);
 
-    // PA_EN: Main enable for GC1109 (must be HIGH for both RX and TX)
+    // CSD (LORA_PA_EN): Chip enable - must be HIGH to enable GC1109 for both RX and TX
     pinMode(LORA_PA_EN, OUTPUT);
-    digitalWrite(LORA_PA_EN, HIGH); // CRITICAL: Must be HIGH, not LOW!
+    digitalWrite(LORA_PA_EN, HIGH);
 
-    // PA_TX_EN: RF switch control (LOW=RX/LNA, HIGH=TX/PA)
+    // CPS (LORA_PA_TX_EN): PA mode select - HIGH enables full PA during TX, LOW for RX (don't care)
+    // Note: TX/RX path switching (CTX) is handled by DIO2 via SX126X_DIO2_AS_RF_SWITCH
     pinMode(LORA_PA_TX_EN, OUTPUT);
-    digitalWrite(LORA_PA_TX_EN, LOW); // Default to RX mode
+    digitalWrite(LORA_PA_TX_EN, LOW); // Start in RX-ready state
 #endif
 
 #if ARCH_PORTDUINO
@@ -370,13 +373,13 @@ template <typename T> bool SX126xInterface<T>::sleep()
     return true;
 }
 
-/** Some boards require GPIO control of tx vs rx paths */
+/** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
 #if defined(USE_GC1109_PA)
-    digitalWrite(LORA_PA_POWER, HIGH);
-    digitalWrite(LORA_PA_EN, HIGH);
-    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0);
+    digitalWrite(LORA_PA_POWER, HIGH);  // Ensure LDO is on
+    digitalWrite(LORA_PA_EN, HIGH);     // CSD=1: Chip enabled
+    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0);  // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
 #endif
 }
 
