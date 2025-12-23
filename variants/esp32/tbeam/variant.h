@@ -43,3 +43,34 @@
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 12
 // #define GPS_DEBUG
+
+// Used when the display shield is chosen
+#ifdef USE_ST7796
+
+#undef EXT_NOTIFY_OUT
+#undef LED_STATE_ON
+#undef LED_PIN
+
+#define HAS_CST226SE 1
+#define HAS_TOUCHSCREEN 1
+// #define TOUCH_IRQ 35 // broken in this version of the lib 0.3.1
+#ifndef TOUCH_IRQ
+#define TOUCH_IRQ -1
+#endif
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+#define USE_VIRTUAL_KEYBOARD 1
+
+#define ST7796_NSS 25
+#define ST7796_RS 13  // DC
+#define ST7796_SDA 14 // MOSI
+#define ST7796_SCK 15
+#define ST7796_RESET 2
+#define ST7796_MISO -1
+#define ST7796_BUSY -1
+#define VTFT_LEDA 4
+#define TFT_SPI_FREQUENCY 60000000
+#define TFT_HEIGHT 222
+#define TFT_WIDTH 480
+#define BRIGHTNESS_DEFAULT 100        // Medium Low Brightness
+#define SCREEN_TRANSITION_FRAMERATE 5 // fps
+#endif

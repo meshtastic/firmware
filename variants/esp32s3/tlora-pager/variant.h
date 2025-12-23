@@ -20,6 +20,7 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#define USE_TFTDISPLAY 1
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
@@ -34,11 +35,8 @@
 #define GPS_TX_PIN 12
 #define PIN_GPS_PPS 13
 
-// PCF8563 RTC Module
-#if __has_include("pcf8563.h")
-#include "pcf8563.h"
-#endif
-#define PCF8563_RTC 0x51
+// PCF85063 RTC Module
+#define PCF85063_RTC 0x51
 #define HAS_RTC 1
 
 // Rotary

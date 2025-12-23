@@ -57,14 +57,7 @@ class Default
     // Note: Kept as uint32_t to match the public API parameter type
     static float congestionScalingCoefficient(uint32_t numOnlineNodes)
     {
-        // Increase frequency of broadcasts for small networks regardless of preset
-        if (numOnlineNodes <= 10) {
-            return 0.6;
-        } else if (numOnlineNodes <= 20) {
-            return 0.7;
-        } else if (numOnlineNodes <= 30) {
-            return 0.8;
-        } else if (numOnlineNodes <= 40) {
+        if (numOnlineNodes <= 40) {
             return 1.0;
         } else {
             float throttlingFactor = 0.075;

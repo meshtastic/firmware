@@ -69,7 +69,11 @@ using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
 
+#if USE_TFTDISPLAY
 extern uint16_t TFT_MESH;
+#else
+uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -226,24 +230,9 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
 {
     LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
 
-    if (NotificationRenderer::virtualKeyboard) {
-        delete NotificationRenderer::virtualKeyboard;
-        NotificationRenderer::virtualKeyboard = nullptr;
-    }
-
-    NotificationRenderer::textInputCallback = nullptr;
-
-    NotificationRenderer::virtualKeyboard = new VirtualKeyboard();
-    if (header) {
-        NotificationRenderer::virtualKeyboard->setHeader(header);
-    }
-    if (initialText) {
-        NotificationRenderer::virtualKeyboard->setInputText(initialText);
-    }
-
-    // Set up callback with safer cleanup mechanism
+    // Start OnScreenKeyboardModule session (non-touch variant)
+    OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
     NotificationRenderer::textInputCallback = textCallback;
-    NotificationRenderer::virtualKeyboard->setCallback([textCallback](const std::string &text) { textCallback(text); });
 
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
     strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);
@@ -324,7 +313,7 @@ static int8_t prevFrame = -1;
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
 // Uses a single frame and changes data every few seconds (E-Ink variant is separate)
 
-#if defined(ESP_PLATFORM) && defined(USE_ST7789)
+#if defined(ESP_PLATFORM) && (defined(USE_ST7789) || defined(USE_ST7796))
 SPIClass SPI1(HSPI);
 #endif
 
@@ -356,7 +345,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#elif defined(USE_ST7796)
+#ifdef ESP_PLATFORM
+    dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
+                            ST7796_MISO, ST7796_SCK, TFT_SPI_FREQUENCY);
+#else
+    dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -369,7 +364,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         LOG_INFO("SSD1306 init success");
     }
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||    \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
@@ -397,6 +392,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     isAUTOOled = true;
+#endif
+
+#if defined(USE_ST7789)
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#elif defined(USE_ST7796)
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
     ui = new OLEDDisplayUi(dispdev);
@@ -435,6 +436,14 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
+#if defined(MUZI_BASE)
+            dispdev->init();
+            dispdev->setBrightness(brightness);
+            dispdev->flipScreenVertically();
+            dispdev->resetDisplay();
+            digitalWrite(SCREEN_12V_ENABLE, HIGH);
+            delay(100);
+#endif
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -467,6 +476,15 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
+#ifdef USE_ST7796
+            ui->init();
+#ifdef ESP_PLATFORM
+            analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
+#else
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
+#endif
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -484,6 +502,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOff();
+
+#ifdef SCREEN_12V_ENABLE
+            digitalWrite(SCREEN_12V_ENABLE, LOW);
+#endif
 #ifdef USE_ST7789
             SPI1.end();
 #if defined(ARCH_ESP32)
@@ -498,6 +520,21 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             nrf_gpio_cfg_default(ST7789_RESET);
             nrf_gpio_cfg_default(ST7789_RS);
             nrf_gpio_cfg_default(ST7789_NSS);
+#endif
+#endif
+#ifdef USE_ST7796
+            SPI1.end();
+#if defined(ARCH_ESP32)
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, LOW);
+            pinMode(ST7796_RESET, ANALOG);
+            pinMode(ST7796_RS, ANALOG);
+            pinMode(ST7796_NSS, ANALOG);
+#else
+            nrf_gpio_cfg_default(VTFT_LEDA);
+            nrf_gpio_cfg_default(ST7796_RESET);
+            nrf_gpio_cfg_default(ST7796_RS);
+            nrf_gpio_cfg_default(ST7796_NSS);
 #endif
 #endif
 
@@ -534,13 +571,20 @@ void Screen::setup()
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
 #endif
 
-#ifdef USE_SH1107_128_64
+#if defined(USE_SH1107_128_64) || defined(USE_SH1107)
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
 #if defined(USE_ST7789) && defined(TFT_MESH)
     // Apply custom RGB color (e.g. Heltec T114/T190)
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+#if defined(MUZI_BASE)
+    dispdev->delayPoweron = true;
+#endif
+#if defined(USE_ST7796) && defined(TFT_MESH)
+    // Custom text color, if defined in variant.h
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
     // === Initialize display and UI system ===
@@ -601,10 +645,12 @@ void Screen::setup()
 #else
     if (!config.display.flip_screen) {
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS)
+    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
+#elif defined(USE_ST7796)
+        static_cast<ST7796Spi *>(dispdev)->mirrorScreen();
 #elif !defined(M5STACK_UNITC6L)
         dispdev->flipScreenVertically();
 #endif
@@ -637,7 +683,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN && !defined(USE_EINK)
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !HAS_CST226SE
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -1452,14 +1498,14 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             // Incoming message
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
-            setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
+            setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view (no-op during text_input)
 
             // Only wake/force display if the configuration allows it
             if (shouldWakeOnReceivedMessage()) {
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
             }
-            // === Prepare banner content ===
+            // === Prepare banner/popup content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
             const meshtastic_Channel channel =
                 channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
@@ -1483,38 +1529,84 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
             // 'mute' preferences set to any specific node or channel.
-            if (isAlert) {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
-                } else {
-                    strcpy(banner, "Alert Received");
+            // If on-screen keyboard is active, show a transient popup over keyboard instead of interrupting it
+            if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
+                // Wake and force redraw so popup is visible immediately
+                if (shouldWakeOnReceivedMessage()) {
+                    setOn(true);
+                    forceDisplay();
                 }
-                screen->showSimpleBanner(banner, 3000);
-            } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
-                if (longName && longName[0]) {
-#if defined(M5STACK_UNITC6L)
-                    strcpy(banner, "New Message");
-#else
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-#endif
 
+                // Build popup: title = message source name, content = message text (sanitized)
+                // Title
+                char titleBuf[64] = {0};
+                if (longName && longName[0]) {
+                    // Sanitize sender name
+                    std::string t = sanitizeString(longName);
+                    strncpy(titleBuf, t.c_str(), sizeof(titleBuf) - 1);
                 } else {
-                    strcpy(banner, "New Message");
+                    strncpy(titleBuf, "Message", sizeof(titleBuf) - 1);
                 }
+
+                // Content: payload bytes may not be null-terminated, remove ASCII_BELL and sanitize
+                char content[256] = {0};
+                {
+                    std::string raw;
+                    raw.reserve(packet->decoded.payload.size);
+                    for (size_t i = 0; i < packet->decoded.payload.size; ++i) {
+                        char c = msgRaw[i];
+                        if (c == ASCII_BELL)
+                            continue; // strip bell
+                        raw.push_back(c);
+                    }
+                    std::string sanitized = sanitizeString(raw);
+                    strncpy(content, sanitized.c_str(), sizeof(content) - 1);
+                }
+
+                NotificationRenderer::showKeyboardMessagePopupWithTitle(titleBuf, content, 3000);
+
+// Maintain existing buzzer behavior on M5 if applicable
 #if defined(M5STACK_UNITC6L)
-                screen->setOn(true);
-                screen->showSimpleBanner(banner, 1500);
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
                     (!isBroadcast(packet->to) && isToUs(packet))) {
-                    // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
-                    // - packet contains an alert and alert bell buzzer is enabled
-                    // - packet is a non-broadcast that is addressed to this node
                     playLongBeep();
                 }
-#else
-                screen->showSimpleBanner(banner, 3000);
 #endif
+            } else {
+                // No keyboard active: use regular banner flow, respecting mute settings
+                if (isAlert) {
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                    } else {
+                        strcpy(banner, "Alert Received");
+                    }
+                    screen->showSimpleBanner(banner, 3000);
+                } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
+                    if (longName && longName[0]) {
+#if defined(M5STACK_UNITC6L)
+                        strcpy(banner, "New Message");
+#else
+                        snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+#endif
+                    } else {
+                        strcpy(banner, "New Message");
+                    }
+#if defined(M5STACK_UNITC6L)
+                    screen->setOn(true);
+                    screen->showSimpleBanner(banner, 1500);
+                    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
+                        (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
+                        (!isBroadcast(packet->to) && isToUs(packet))) {
+                        // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
+                        // - packet contains an alert and alert bell buzzer is enabled
+                        // - packet is a non-broadcast that is addressed to this node
+                        playLongBeep();
+                    }
+#else
+                    screen->showSimpleBanner(banner, 3000);
+#endif
+                }
             }
         }
     }
@@ -1549,6 +1641,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
+    LOG_INPUT("Screen Input event %u! kb %u", event->inputEvent, event->kbchar);
     if (!screenOn)
         return 0;
 
@@ -1595,6 +1688,12 @@ int Screen::handleInputEvent(const InputEvent *event)
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showPrevFrame();
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
+                showNextFrame();
+            } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
+                // Long press up button for fast frame switching
+                showPrevFrame();
+            } else if (event->inputEvent == INPUT_BROKER_DOWN_LONG) {
+                // Long press down button for fast frame switching
                 showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {

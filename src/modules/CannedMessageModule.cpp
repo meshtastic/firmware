@@ -16,6 +16,7 @@
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
+#include "input/SerialKeyboard.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
@@ -836,6 +837,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -844,6 +846,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         payload = INPUT_BROKER_LEFT;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -851,6 +854,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_RIGHT) {
         payload = INPUT_BROKER_RIGHT;
         lastTouchMillis = millis();
+        requestFocus();
         runOnce();
         return true;
     }
@@ -1014,8 +1018,7 @@ int32_t CannedMessageModule::runOnce()
         // Clean up virtual keyboard if needed when going inactive
         if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr) {
             LOG_INFO("Performing delayed virtual keyboard cleanup");
-            delete graphics::NotificationRenderer::virtualKeyboard;
-            graphics::NotificationRenderer::virtualKeyboard = nullptr;
+            graphics::OnScreenKeyboardModule::instance().stop(false);
         }
 
         temporaryMessage = "";
@@ -1032,9 +1035,7 @@ int32_t CannedMessageModule::runOnce()
             // Clean up virtual keyboard after sending
             if (graphics::NotificationRenderer::virtualKeyboard) {
                 LOG_INFO("Cleaning up virtual keyboard after message send");
-                delete graphics::NotificationRenderer::virtualKeyboard;
-                graphics::NotificationRenderer::virtualKeyboard = nullptr;
-                graphics::NotificationRenderer::textInputCallback = nullptr;
+                graphics::OnScreenKeyboardModule::instance().stop(false);
                 graphics::NotificationRenderer::resetBanner();
             }
 
@@ -1092,9 +1093,7 @@ int32_t CannedMessageModule::runOnce()
         // Clean up virtual keyboard if it exists during timeout
         if (graphics::NotificationRenderer::virtualKeyboard) {
             LOG_INFO("Cleaning up virtual keyboard due to module timeout");
-            delete graphics::NotificationRenderer::virtualKeyboard;
-            graphics::NotificationRenderer::virtualKeyboard = nullptr;
-            graphics::NotificationRenderer::textInputCallback = nullptr;
+            graphics::OnScreenKeyboardModule::instance().stop(false);
             graphics::NotificationRenderer::resetBanner();
         }
 
@@ -1845,7 +1844,88 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
-        // --- Draw Free Text input with multi-emote support and proper line wrapping ---
+#if INPUTBROKER_SERIAL_TYPE == 1
+        // Chatter Modifier key mode label (right side)
+        {
+            uint8_t mode = globalSerialKeyboard ? globalSerialKeyboard->getShift() : 0;
+            const char *label = (mode == 0) ? "a" : (mode == 1) ? "A" : "#";
+
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            const int16_t th = FONT_HEIGHT_SMALL;
+            const int16_t tw = display->getStringWidth(label);
+            const int16_t padX = 3;
+            const int16_t padY = 2;
+            const int16_t r = 3;
+
+            const int16_t bw = tw + padX * 2;
+            const int16_t bh = th + padY * 2;
+
+            const int16_t bx = x + display->getWidth() - bw - 2;
+            const int16_t by = y + display->getHeight() - bh - 2;
+
+            display->setColor(WHITE);
+            display->fillRect(bx + r, by, bw - r * 2, bh);
+            display->fillRect(bx, by + r, r, bh - r * 2);
+            display->fillRect(bx + bw - r, by + r, r, bh - r * 2);
+            display->fillCircle(bx + r, by + r, r);
+            display->fillCircle(bx + bw - r - 1, by + r, r);
+            display->fillCircle(bx + r, by + bh - r - 1, r);
+            display->fillCircle(bx + bw - r - 1, by + bh - r - 1, r);
+
+            display->setColor(BLACK);
+            display->drawString(bx + padX, by + padY, label);
+        }
+
+        // LEFT-SIDE DESTINATION-HINT BOX (“Dest: Shift + ◄”)
+        {
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            const char *label = "Dest: Shift + ";
+            int16_t labelW = display->getStringWidth(label);
+
+            // triangle size visually matches glyph height, not full line height
+            const int triH = FONT_HEIGHT_SMALL - 3;
+            const int triW = triH * 0.7;
+
+            const int16_t padX = 3;
+            const int16_t padY = 2;
+            const int16_t r = 3;
+
+            const int16_t bw = labelW + triW + padX * 2 + 2;
+            const int16_t bh = FONT_HEIGHT_SMALL + padY * 2;
+
+            const int16_t bx = x + 2;
+            const int16_t by = y + display->getHeight() - bh - 2;
+
+            // Rounded white box
+            display->setColor(WHITE);
+            display->fillRect(bx + r, by, bw - (r * 2), bh);
+            display->fillRect(bx, by + r, r, bh - (r * 2));
+            display->fillRect(bx + bw - r, by + r, r, bh - (r * 2));
+            display->fillCircle(bx + r, by + r, r);
+            display->fillCircle(bx + bw - r - 1, by + r, r);
+            display->fillCircle(bx + r, by + bh - r - 1, r);
+            display->fillCircle(bx + bw - r - 1, by + bh - r - 1, r);
+
+            // Draw text
+            display->setColor(BLACK);
+            display->drawString(bx + padX, by + padY, label);
+
+            // Perfectly center triangle on text baseline
+            int16_t tx = bx + padX + labelW;
+            int16_t ty = by + padY + (FONT_HEIGHT_SMALL / 2) - (triH / 2) - 1; // -1 for optical centering
+
+            // ◄ Left-pointing triangle
+            display->fillTriangle(tx + triW, ty,       // top-right
+                                  tx, ty + triH / 2,   // left center
+                                  tx + triW, ty + triH // bottom-right
+            );
+        }
+#endif
+        // Draw Free Text input with multi-emote support and proper line wrapping
         display->setColor(WHITE);
         {
             int inputY = 0 + y + FONT_HEIGHT_SMALL;

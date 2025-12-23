@@ -30,6 +30,11 @@
 #include "BQ25713.h"
 #endif
 
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void variant_shutdown() __attribute__((weak));
+void variant_shutdown() {}
+
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
@@ -330,6 +335,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
 #endif
+
+#ifdef TTGO_T_ECHO
+    // To power off the T-Echo, the display must be set
+    // as an input pin; otherwise, there will be leakage current.
+    pinMode(PIN_EINK_CS, INPUT);
+    pinMode(PIN_EINK_DC, INPUT);
+    pinMode(PIN_EINK_RES, INPUT);
+    pinMode(PIN_EINK_BUSY, INPUT);
+#endif
+
     setBluetoothEnable(false);
 
 #ifdef RAK4630
@@ -391,6 +406,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         NRF_GPIO->DIRCLR = (1 << pin);
     }
 #endif
+    variant_shutdown();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event

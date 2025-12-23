@@ -40,10 +40,11 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (12)
-#define PIN_LED2 (7)
-#define LED_BUILTIN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_BUILTIN -1
+#define LED_BLUE -1
+#define LED_CHARGE (12)
+#define LED_PAIRING (7)
+
 #define LED_STATE_ON 1
 
 // USB power detection
@@ -106,12 +107,12 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_GPS_REINIT (29)
 #define PIN_GPS_STANDBY (30)
 #define PIN_GPS_PPS (31)
-#define GPS_TX_PIN (3)
-#define GPS_RX_PIN (2)
+#define GPS_TX_PIN (2)
+#define GPS_RX_PIN (3)
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
 // Secondary UART
 #define PIN_SERIAL2_RX (22)
