@@ -44,6 +44,7 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 } // namespace
 
 #ifdef ARCH_ESP32
+// Credit: https://github.com/h2zero/NimBLE-Arduino/issues/740#issuecomment-2539923656
 static void deleteBondsIfNimBLEVersionChanged()
 {
     esp_err_t err = nvs_flash_init();
