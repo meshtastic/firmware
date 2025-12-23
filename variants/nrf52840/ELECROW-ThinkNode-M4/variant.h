@@ -45,10 +45,12 @@ extern "C" {
 #define LED_CHARGE (32 + 9)
 #define LED_PAIRING (13)
 
-#define LED_STATE_ON 1
+#define Battery_LED_1 (15)
+#define Battery_LED_2 (17)
+#define Battery_LED_3 (32 + 2)
+#define Battery_LED_4 (32 + 4)
 
-// USB / power detection
-#define EXT_PWR_DETECT (32 + 3) // P1.03 USB present sense
+#define LED_STATE_ON 1
 
 // Button
 #define PIN_BUTTON1 (4)
@@ -65,6 +67,10 @@ extern "C" {
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 
+#define HAS_SERIAL_BATTERY_LEVEL 1
+#define SERIAL_BATTERY_RX 30
+#define SERIAL_BATTERY_TX 5
+
 static const uint8_t A0 = PIN_A0;
 
 #define PIN_NFC1 (9)
@@ -80,7 +86,7 @@ static const uint8_t A0 = PIN_A0;
 
 // charger status
 #define EXT_CHRG_DETECT (32 + 6)
-#define EXT_CHRG_DETECT_VALUE LOW
+#define EXT_CHRG_DETECT_VALUE HIGH
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
