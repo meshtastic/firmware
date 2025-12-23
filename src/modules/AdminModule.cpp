@@ -520,6 +520,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 #endif
 
   default:
+    // Skip processing messages from ourselves (echoes of our own broadcasts)
+    if (!fromOthers) {
+      LOG_DEBUG("Skip handling own admin message %d", r->which_payload_variant);
+      break;
+    }
     meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
     AdminMessageHandleResult handleResult =
         MeshModule::handleAdminMessageForAllModules(mp, r, &res);
@@ -531,8 +536,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
       LOG_DEBUG("Module API did not respond to admin message. req.variant=%d",
                 r->which_payload_variant);
     } else if (handleResult != AdminMessageHandleResult::HANDLED) {
-      // Probably a message sent by us or sent to our local node.  FIXME, we
-      // should avoid scanning these messages
       LOG_DEBUG("Module API did not handle admin message %d",
                 r->which_payload_variant);
     }
