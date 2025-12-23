@@ -231,7 +231,11 @@ private:
         std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
         std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
         std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
-        std::unordered_map<NodeNum, NodeNum> downstreamGateway; // downstream -> gateway
+        struct GatewayRelationEntry {
+            NodeNum gateway;
+            uint32_t lastSeen;
+        };
+        std::unordered_map<NodeNum, GatewayRelationEntry> downstreamGateway; // downstream -> gateway entry
         std::unordered_map<NodeNum, std::unordered_set<NodeNum>> gatewayDownstream; // gateway -> downstream set
     #endif
 
