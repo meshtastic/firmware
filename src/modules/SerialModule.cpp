@@ -566,12 +566,23 @@ float SerialModule::updateRain1h(float cum_mm, uint32_t now_ms)
     float inc = 0.0f;
     if (!isnan(cum_mm) && !isinf(cum_mm)) {
         if (cum_mm + Rain_EPS >= lastCum) {
+            // Normal increment
             inc = cum_mm - lastCum;
         } else {
-            inc = cum_mm; // reset or rollover
+            // Reset detected (cum_mm < lastCum)
+            // This happens when the weather station resets or counter rolls over
+            // Don't add the full cumulative value - just restart tracking
+            lastCum = cum_mm;
+            float sum1h = 0.0f;
+            for (int i = 0; i < 60; ++i)
+                sum1h += buckets[i];
+            return sum1h;
         }
-        if (inc < 0 || isnan(inc) || isinf(inc))
+
+        // Sanity check: reject unreasonably large increments (> 50mm in one minute)
+        if (inc < 0 || inc > 50.0f || isnan(inc) || isinf(inc))
             inc = 0.0f;
+
         buckets[idx] += inc;
         lastCum = cum_mm;
     }

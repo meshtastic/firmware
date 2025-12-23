@@ -94,6 +94,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define PIN_GPS_RX (0 + 20) // P0.20
 
 #define PIN_GPS_EN (0 + 24) // P0.24
+#define GPS_EN_ACTIVE LOW   // For MikeC PCB.
 #define GPS_UBLOX
 // define GPS_DEBUG
 
