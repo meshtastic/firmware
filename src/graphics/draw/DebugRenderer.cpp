@@ -642,7 +642,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         if (total == 0)
             return;
 
-        int percent = (total > 0) ? (used * 100) / total : 0;
+        int percent = (used * 100) / total;
 
         char combinedStr[24];
         if (isHighResolution) {
@@ -657,7 +657,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         if (adjustedBarWidth < 10)
             adjustedBarWidth = 10;
 
-        int fillWidth = (total > 0) ? (used * adjustedBarWidth) / total : 0;
+        int fillWidth = (used * adjustedBarWidth) / total;
 
         // Label
         display->setTextAlignment(TEXT_ALIGN_LEFT);

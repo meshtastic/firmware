@@ -302,32 +302,42 @@ LoadFileResult loadProtoFromInternal(const char *filename, size_t protoSize, siz
         return LoadFileResult::NO_FILESYSTEM; // can't mount internal flash
     }
 
-    InternalFsOpenResult file = InternalFS.open(filename, FILE_O_READ);
-    if (!file) {
-        return LoadFileResult::OTHER_FAILURE; // file doesn't exist or can't be opened
-    }
+    constexpr int kMaxDecodeAttempts = 2; // try twice before giving up and deleting the backup
+    for (int attempt = 1; attempt <= kMaxDecodeAttempts; ++attempt) {
+        InternalFsOpenResult file = InternalFS.open(filename, FILE_O_READ);
+        if (!file) {
+            return LoadFileResult::OTHER_FAILURE; // file doesn't exist or can't be opened
+        }
 
-    size_t fileSize = file.size();
-    if (fileSize == 0) { // empty file can't be valid
-        LOG_ERROR("Internal file %s is empty", filename);
+        size_t fileSize = file.size();
+        if (fileSize == 0) { // empty file can't be valid
+            LOG_ERROR("Internal file %s is empty", filename);
+            file.close();
+            return LoadFileResult::OTHER_FAILURE;
+        }
+
+        pb_istream_t stream = {&internalFsStreamRead, &file, fileSize}; // setup stream for reading from internal flash file
+        if (fields != &meshtastic_NodeDatabase_msg)                      // special case: clear dest_struct only for non-NodeDatabase loads
+            memset(dest_struct, 0, objSize);                             // clear destination struct before decoding
+
+        bool decoded = pb_decode(&stream, fields, dest_struct); // decode the protobuf into dest_struct
         file.close();
-        return LoadFileResult::OTHER_FAILURE;
+
+        if (decoded) {
+            return LoadFileResult::LOAD_SUCCESS;
+        }
+
+        LOG_ERROR("Internal decode failed for %s (attempt %d/%d, size=%u): %s", filename, attempt, kMaxDecodeAttempts,
+                  static_cast<unsigned>(fileSize), PB_GET_ERROR(&stream));
+
+        if (attempt == kMaxDecodeAttempts) {
+            InternalFS.remove(filename); // drop corrupt mirror after retries to avoid repeated failures
+            LOG_ERROR("Deleted corrupt internal backup file %s after %d failed decode attempts", filename, kMaxDecodeAttempts);
+            return LoadFileResult::DECODE_FAILED;
+        }
     }
 
-    pb_istream_t stream = {&internalFsStreamRead, &file, fileSize}; // setup stream for reading from internal flash file
-    if (fields != &meshtastic_NodeDatabase_msg) // special case: clear dest_struct only for non-NodeDatabase loads
-        memset(dest_struct, 0, objSize);        // clear destination struct before decoding
-
-    bool decoded = pb_decode(&stream, fields, dest_struct); // decode the protobuf into dest_struct
-    file.close();
-
-    if (!decoded) {
-        LOG_ERROR("Internal decode failed for %s: %s", filename, PB_GET_ERROR(&stream));
-        InternalFS.remove(filename); // drop corrupt mirror to avoid repeated failures
-        return LoadFileResult::DECODE_FAILED;
-    }
-
-    return LoadFileResult::LOAD_SUCCESS;
+    return LoadFileResult::DECODE_FAILED;
 }
 
 bool saveProtoToInternal(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *src_struct)
@@ -1742,7 +1752,10 @@ bool NodeDB::saveNodeDatabaseToDisk()
 {
 #ifdef USE_EXTERNAL_FLASH
     spiLock->lock();
-    fatfs.mkdir("/prefs");
+    if (!fatfs.exists("/prefs")){
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        fatfs.mkdir("/prefs");
+    }
     spiLock->unlock();
 #elif defined(FSCom)
     spiLock->lock();
@@ -2482,9 +2495,8 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             return false;
         }
 #endif
-        else {
-            spiLock->unlock();
-        }
+        spiLock->unlock();
+        
         std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
         meshtastic_BackupPreferences *rawBackup = backup.get();
         if (!rawBackup) {
