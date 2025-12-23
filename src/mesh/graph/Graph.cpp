@@ -122,6 +122,11 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
     }
 }
 
+void Graph::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
+{
+    nodeActivity[nodeId] = timestamp;
+}
+
 void Graph::ageEdges(uint32_t currentTime) {
     // Age individual edges
     for (auto& pair : adjacencyList) {
@@ -129,15 +134,33 @@ void Graph::ageEdges(uint32_t currentTime) {
         edges.erase(
             std::remove_if(edges.begin(), edges.end(),
                 [currentTime](const Edge& e) {
-                    return (currentTime - e.lastUpdate) > EDGE_AGING_TIMEOUT_MS;
+                    return (currentTime - e.lastUpdate) > EDGE_AGING_TIMEOUT_SECS;
                 }),
             edges.end());
     }
 
-    // Clear empty adjacency lists (nodes with no edges)
+    // Clear empty adjacency lists (nodes with no edges), but keep nodes that are still active
     for (auto it = adjacencyList.begin(); it != adjacencyList.end();) {
         if (it->second.empty()) {
-            it = adjacencyList.erase(it);
+            // Check if this node is still marked as active
+            auto activityIt = nodeActivity.find(it->first);
+        if (activityIt == nodeActivity.end() ||
+            (currentTime - activityIt->second) > EDGE_AGING_TIMEOUT_SECS) {
+                // Node is not active or activity has expired - remove it
+                it = adjacencyList.erase(it);
+            } else {
+                // Node is still active - keep it (even with no edges)
+                ++it;
+            }
+        } else {
+            ++it;
+        }
+    }
+
+    // Age node activity timestamps
+    for (auto it = nodeActivity.begin(); it != nodeActivity.end();) {
+        if ((currentTime - it->second) > EDGE_AGING_TIMEOUT_SECS) {
+            it = nodeActivity.erase(it);
         } else {
             ++it;
         }
@@ -145,7 +168,7 @@ void Graph::ageEdges(uint32_t currentTime) {
 
     // Age relay states - remove old transmission records
     for (auto it = relayStates.begin(); it != relayStates.end();) {
-        if ((currentTime - it->second.lastTxTime) > RELAY_STATE_TIMEOUT_MS) {
+        if ((currentTime - it->second.lastTxTime) > RELAY_STATE_TIMEOUT_SECS) {
             it = relayStates.erase(it);
         } else {
             ++it;
@@ -154,7 +177,7 @@ void Graph::ageEdges(uint32_t currentTime) {
 
     // Proactively clean expired route cache entries to prevent unbounded growth
     for (auto it = routeCache.begin(); it != routeCache.end();) {
-        if ((currentTime - it->second.timestamp) > ROUTE_CACHE_TIMEOUT_MS) {
+        if ((currentTime - it->second.timestamp) > ROUTE_CACHE_TIMEOUT_SECS) {
             it = routeCache.erase(it);
         } else {
             ++it;
@@ -191,7 +214,7 @@ Route Graph::getCachedRoute(NodeNum destination, uint32_t currentTime) {
     auto it = routeCache.find(destination);
     if (it != routeCache.end()) {
         const Route& cached = it->second;
-        if ((currentTime - cached.timestamp) < ROUTE_CACHE_TIMEOUT_MS) {
+        if ((currentTime - cached.timestamp) < ROUTE_CACHE_TIMEOUT_SECS) {
             return cached;
         } else {
             // Cache expired, remove it
@@ -302,7 +325,7 @@ Route Graph::dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime)
 float Graph::getWeightedCost(const Edge& edge, uint32_t currentTime) {
     // Age factor - older edges cost more (up to 2x penalty at timeout)
     uint32_t age = currentTime - edge.lastUpdate;
-    float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_MS));
+    float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_SECS));
 
     // Stability weighting (historical reliability)
     float stabilityFactor = 1.0f / edge.stability;
@@ -367,6 +390,10 @@ std::unordered_set<NodeNum> Graph::getAllNodes() const {
         for (const Edge& edge : pair.second) {
             nodes.insert(edge.to);
         }
+    }
+    // Include nodes that are marked as active but have no edges
+    for (const auto& pair : nodeActivity) {
+        nodes.insert(pair.first);
     }
     return nodes;
 }
@@ -459,7 +486,7 @@ float Graph::getEdgeCost(NodeNum from, NodeNum to, uint32_t currentTime) const {
         if (edge.to == to) {
             // Calculate weighted cost (same as in dijkstra)
             uint32_t age = currentTime - edge.lastUpdate;
-            float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_MS));
+            float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_SECS));
             float stabilityFactor = 1.0f / edge.stability;
             float varianceFactor = 1.0f + (edge.variance / 500.0f);
             if (varianceFactor > 3.0f) varianceFactor = 3.0f;

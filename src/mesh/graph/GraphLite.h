@@ -87,6 +87,11 @@ class GraphLite {
                    EdgeLite::Source source = EdgeLite::Source::Mirrored);
 
     /**
+     * Update node activity timestamp (keeps node in graph without edges)
+     */
+    void updateNodeActivity(NodeNum nodeId, uint32_t timestamp);
+
+    /**
      * Remove edges that haven't been updated recently
      */
     void ageEdges(uint32_t currentTimeSecs);
