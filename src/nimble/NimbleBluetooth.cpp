@@ -26,12 +26,83 @@
 #include "nimble/nimble/host/include/host/ble_gap.h"
 #endif
 
+#ifdef ARCH_ESP32
+#if defined(CONFIG_NIMBLE_CPP_IDF)
+#include "host/ble_store.h"
+#else
+#include "nimble/nimble/host/include/host/ble_store.h"
+#endif
+#include <nvs.h>
+#include <nvs_flash.h>
+#endif
+
 namespace
 {
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 } // namespace
+
+#ifdef ARCH_ESP32
+static void deleteBondsIfNimBLEVersionChanged()
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        err = nvs_flash_erase();
+        if (err != ESP_OK) {
+            LOG_ERROR("Failed to erase NVS for NimBLE migration, err=%d", err);
+            return;
+        }
+        err = nvs_flash_init();
+        if (err != ESP_OK) {
+            LOG_ERROR("Failed to re-init NVS after erase, err=%d", err);
+            return;
+        }
+    } else if (err != ESP_OK) {
+        LOG_ERROR("nvs_flash_init failed, err=%d", err);
+        return;
+    }
+
+    nvs_handle_t nimbleHandle = 0;
+    err = nvs_open("nimble_bond", NVS_READWRITE, &nimbleHandle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return;
+    }
+    if (err != ESP_OK) {
+        LOG_ERROR("Failed to open nimble_bond namespace, err=%d", err);
+        return;
+    }
+
+    size_t requiredSize = 0;
+    bool bondExists = nvs_get_blob(nimbleHandle, "peer_sec_1", nullptr, &requiredSize) == ESP_OK;
+    bool rpaExists = nvs_get_blob(nimbleHandle, "rpa_rec_1", nullptr, &requiredSize) == ESP_OK;
+    bool irkExists = nvs_get_blob(nimbleHandle, "local_irk_1", nullptr, &requiredSize) == ESP_OK;
+
+    bool erasePartition = false;
+#if defined(BLE_STORE_OBJ_TYPE_LOCAL_IRK)
+    erasePartition = bondExists && !rpaExists;
+#else
+    erasePartition = rpaExists || irkExists;
+#endif
+
+    bool restartRequired = false;
+    if (erasePartition) {
+        LOG_WARN("Clearing NimBLE bonds due to version migration");
+        if (nvs_erase_all(nimbleHandle) != ESP_OK || nvs_commit(nimbleHandle) != ESP_OK) {
+            LOG_ERROR("Failed to erase nimble_bond namespace");
+        } else {
+            restartRequired = true;
+        }
+    }
+
+    nvs_close(nimbleHandle);
+
+    if (restartRequired) {
+        LOG_INFO("Restarting after NimBLE bond cleanup");
+        ESP.restart();
+    }
+}
+#endif
 
 // Debugging options: careful, they slow things down quite a bit!
 // #define DEBUG_NIMBLE_ON_READ_TIMING  // uncomment to time onRead duration
@@ -799,6 +870,10 @@ void NimbleBluetooth::setup()
 {
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
+
+#ifdef ARCH_ESP32
+    deleteBondsIfNimBLEVersionChanged();
+#endif
 
     LOG_INFO("Init the NimBLE bluetooth module");
 
