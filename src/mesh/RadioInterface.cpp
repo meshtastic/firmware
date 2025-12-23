@@ -188,9 +188,9 @@ const RegionInfo regions[] = {
     RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
 
     /*
-        EU 866MHz RFID band (ETSI EN 302 208): 4 channels at 865.7/866.3/866.9/867.5 MHz
-        475 kHz gap between channels, 27 dBm, duty cycle 2.5% (mobile) or 10% (fixed)
-        https://www.etsi.org/deliver/etsi_en/302200_302299/302208/03.04.01_60/en_302208v030401p.pdf
+        EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
+        Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 475 kHz gap between channels, 27 dBm, duty cycle 2.5% (mobile) or 10%
+       (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
     */
     RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, true, false, false),
 
