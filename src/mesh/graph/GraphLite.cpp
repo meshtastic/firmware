@@ -155,6 +155,14 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
     return Graph::EDGE_NO_CHANGE;
 }
 
+void GraphLite::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
+{
+    NodeEdgesLite *node = findOrCreateNode(nodeId);
+    if (node) {
+        node->lastFullUpdate = timestamp;
+    }
+}
+
 void GraphLite::ageEdges(uint32_t currentTimeSecs)
 {
     for (uint8_t n = 0; n < nodeCount;) {
