@@ -1864,11 +1864,14 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
     // Lite mode: remove stale gateway relations by swapping with last
     for (uint8_t i = 0; i < gatewayRelationCount;) {
         if ((nowSecs - gatewayRelations[i].lastSeen) > CAPABILITY_TTL_SECS) {
+            NodeNum prunedDownstream = gatewayRelations[i].downstream;  // Capture before swap
             if (i < gatewayRelationCount - 1) {
                 gatewayRelations[i] = gatewayRelations[gatewayRelationCount - 1];
             }
             gatewayRelationCount--;
-            LOG_DEBUG("[SR] Pruned stale gateway relation (downstream %08x)", gatewayRelations[i].downstream);
+            char downstreamName[64];
+            getNodeDisplayName(prunedDownstream, downstreamName, sizeof(downstreamName));
+            LOG_DEBUG("[SR] Pruned stale gateway relation (downstream %s)", downstreamName);
         } else {
             i++;
         }
@@ -1877,34 +1880,41 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
     // Also prune gateway downstream sets
     for (uint8_t i = 0; i < gatewayDownstreamCount;) {
         if ((nowSecs - gatewayDownstream[i].lastSeen) > CAPABILITY_TTL_SECS) {
+            NodeNum prunedGateway = gatewayDownstream[i].gateway;  // Capture before swap
             if (i < gatewayDownstreamCount - 1) {
                 gatewayDownstream[i] = gatewayDownstream[gatewayDownstreamCount - 1];
             }
             gatewayDownstreamCount--;
-            LOG_DEBUG("[SR] Pruned stale gateway downstream set (gateway %08x)", gatewayDownstream[i].gateway);
+            char gatewayName[64];
+            getNodeDisplayName(prunedGateway, gatewayName, sizeof(gatewayName));
+            LOG_DEBUG("[SR] Pruned stale gateway downstream set (gateway %s)", gatewayName);
         } else {
             i++;
         }
     }
 #else
-    // Full mode: remove gateway relations for nodes that are no longer in the graph
-    // This indirectly ages gateway relationships since the graph ages inactive nodes
+    // Full mode: remove stale gateway relations based on time
     for (auto it = downstreamGateway.begin(); it != downstreamGateway.end();) {
-        bool gatewayExists = routingGraph && routingGraph->getAllNodes().count(it->second) > 0;
-        bool downstreamExists = routingGraph && routingGraph->getAllNodes().count(it->first) > 0;
+        if ((nowSecs - it->second.lastSeen) > CAPABILITY_TTL_SECS) {
+            // Capture values before erasing for logging
+            NodeNum gatewayId = it->second.gateway;
+            NodeNum downstreamId = it->first;
 
-        if (!gatewayExists || !downstreamExists) {
             // Remove from gateway's downstream set
-            auto gwIt = gatewayDownstream.find(it->second);
+            auto gwIt = gatewayDownstream.find(gatewayId);
             if (gwIt != gatewayDownstream.end()) {
-                gwIt->second.erase(it->first);
+                gwIt->second.erase(downstreamId);
                 if (gwIt->second.empty()) {
                     gatewayDownstream.erase(gwIt);
                 }
             }
             it = downstreamGateway.erase(it);
-            LOG_DEBUG("[SR] Pruned gateway relation (gateway %08x, downstream %08x) - node no longer in graph",
-                     it->second, it->first);
+
+            char gatewayName[64], downstreamName[64];
+            getNodeDisplayName(gatewayId, gatewayName, sizeof(gatewayName));
+            getNodeDisplayName(downstreamId, downstreamName, sizeof(downstreamName));
+            LOG_DEBUG("[SR] Pruned stale gateway relation (%s is gateway for %s)",
+                     gatewayName, downstreamName);
             continue;
         }
         ++it;
@@ -2234,7 +2244,7 @@ void SignalRoutingModule::removeGatewayRelationship(NodeNum gateway, NodeNum dow
 #else
     // Remove from downstreamGateway map
     auto it = downstreamGateway.find(downstream);
-    if (it != downstreamGateway.end() && it->second == gateway) {
+    if (it != downstreamGateway.end() && it->second.gateway == gateway) {
         downstreamGateway.erase(it);
     }
 
@@ -2343,13 +2353,13 @@ void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstr
 #else
     // Remove from old gateway's set before adding to new one
     auto oldIt = downstreamGateway.find(downstream);
-    if (oldIt != downstreamGateway.end() && oldIt->second != gateway) {
-        auto oldGwIt = gatewayDownstream.find(oldIt->second);
+    if (oldIt != downstreamGateway.end() && oldIt->second.gateway != gateway) {
+        auto oldGwIt = gatewayDownstream.find(oldIt->second.gateway);
         if (oldGwIt != gatewayDownstream.end()) {
             oldGwIt->second.erase(downstream);
         }
     }
-    downstreamGateway[downstream] = gateway;
+    downstreamGateway[downstream] = {gateway, now};
     gatewayDownstream[gateway].insert(downstream);
 #endif
 
@@ -2371,7 +2381,7 @@ NodeNum SignalRoutingModule::getGatewayFor(NodeNum downstream) const
 #else
     auto it = downstreamGateway.find(downstream);
     if (it == downstreamGateway.end()) return 0;
-    return it->second;
+    return it->second.gateway;
 #endif
 }
 
@@ -2430,7 +2440,7 @@ void SignalRoutingModule::clearGatewayRelationsFor(NodeNum node)
     gatewayDownstream.erase(node);
     // Also remove any relations where this node is the gateway
     for (auto it = downstreamGateway.begin(); it != downstreamGateway.end(); ) {
-        if (it->second == node) {
+        if (it->second.gateway == node) {
             it = downstreamGateway.erase(it);
         } else {
             ++it;
