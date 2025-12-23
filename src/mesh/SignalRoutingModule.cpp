@@ -569,12 +569,14 @@ void SignalRoutingModule::logNetworkTopology()
         char nodeName[48]; // Reduced buffer size for stack safety
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
+        CapabilityStatus status = getCapabilityStatus(nodeId);
+        const char* prefix = (status == CapabilityStatus::Capable) ? "[SR] " : "";
+
         const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->edgeCount == 0) {
-            CapabilityStatus status = getCapabilityStatus(nodeId);
             const char* statusStr = (status == CapabilityStatus::Capable) ? "SR-capable" :
                                    (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
-            LOG_INFO("[SR] +- %s: no neighbors (%s)", nodeName, statusStr);
+            LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
             continue;
         }
 
@@ -590,9 +592,9 @@ void SignalRoutingModule::logNetworkTopology()
         }
 
         if (downstreamCount == 0) {
-            LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->edgeCount);
+            LOG_INFO("[SR] +- %s%s: connected to %d nodes", prefix, nodeName, edges->edgeCount);
         } else {
-            LOG_INFO("[SR] +- %s: connected to %d nodes (gateway for %d nodes)", nodeName, edges->edgeCount, downstreamCount);
+            LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %d nodes)", prefix, nodeName, edges->edgeCount, downstreamCount);
         }
 
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
@@ -646,12 +648,14 @@ void SignalRoutingModule::logNetworkTopology()
         char nodeName[64];
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
+        CapabilityStatus status = getCapabilityStatus(nodeId);
+        const char* prefix = (status == CapabilityStatus::Capable) ? "[SR] " : "";
+
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
-            CapabilityStatus status = getCapabilityStatus(nodeId);
             const char* statusStr = (status == CapabilityStatus::Capable) ? "SR-capable" :
                                    (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
-            LOG_INFO("[SR] +- %s: no neighbors (%s)", nodeName, statusStr);
+            LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
             continue;
         }
 
@@ -659,7 +663,7 @@ void SignalRoutingModule::logNetworkTopology()
         appendGatewayDownstreams(nodeId, downstreams);
 
         if (downstreams.empty()) {
-            LOG_INFO("[SR] +- %s: connected to %d nodes", nodeName, edges->size());
+            LOG_INFO("[SR] +- %s%s: connected to %d nodes", prefix, nodeName, edges->size());
         } else {
             std::sort(downstreams.begin(), downstreams.end());
             downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
@@ -679,7 +683,7 @@ void SignalRoutingModule::logNetworkTopology()
             if (downstreams.size() > maxList && pos < sizeof(buf) - 6) {
                 snprintf(buf + pos, sizeof(buf) - pos, ", +%zu", downstreams.size() - maxList);
             }
-            LOG_INFO("[SR] +- %s: connected to %d nodes (gateway for %zu nodes: %s)", nodeName, edges->size(), downstreams.size(), buf);
+            LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %zu nodes: %s)", prefix, nodeName, edges->size(), downstreams.size(), buf);
         }
 
         // Sort edges by ETX for consistent output
