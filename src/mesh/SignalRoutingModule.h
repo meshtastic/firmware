@@ -237,6 +237,7 @@ private:
 
     void trackNodeCapability(NodeNum nodeId, CapabilityStatus status);
     void pruneCapabilityCache(uint32_t nowSecs);
+    void pruneGatewayRelations(uint32_t nowSecs);
     CapabilityStatus getCapabilityStatus(NodeNum nodeId) const;
     bool topologyHealthyForBroadcast() const;
     bool topologyHealthyForUnicast(NodeNum destination) const;
