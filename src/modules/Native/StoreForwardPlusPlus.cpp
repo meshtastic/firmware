@@ -998,6 +998,8 @@ void StoreForwardPlusPlusModule::rebroadcastLinkObject(StoreForwardPlusPlusModul
     p->to = lo.to;
     p->from = lo.from;
     p->id = lo.id;
+    p->hop_limit = HOP_RELIABLE;
+    p->hop_start = HOP_RELIABLE;
     p->channel = lo.channel_hash;
     p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     p->encrypted.size = lo.encrypted_len;
