@@ -84,6 +84,11 @@ public:
                    Edge::Source source = Edge::Source::Mirrored);
 
     /**
+     * Update node activity timestamp (keeps node in graph without edges)
+     */
+    void updateNodeActivity(NodeNum nodeId, uint32_t timestamp);
+
+    /**
      * Remove edges and inactive nodes that haven't been active in the last 5 minutes
      */
     void ageEdges(uint32_t currentTime);
@@ -254,6 +259,7 @@ public:
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;
     std::unordered_map<NodeNum, Route> routeCache;
+    std::unordered_map<NodeNum, uint32_t> nodeActivity;  // Node activity timestamps
 
     // Relay state tracking for contention window management
     struct RelayState {
@@ -264,9 +270,9 @@ private:
     };
     std::unordered_map<NodeNum, RelayState> relayStates;
 
-    static constexpr uint32_t ROUTE_CACHE_TIMEOUT_MS = 300 * 1000; // 300 seconds
-    static constexpr uint32_t EDGE_AGING_TIMEOUT_MS = 300 * 1000; // 300 seconds
-    static constexpr uint32_t RELAY_STATE_TIMEOUT_MS = 2000;      // Forget relay state after 2 seconds
+    static constexpr uint32_t ROUTE_CACHE_TIMEOUT_SECS = 300; // 300 seconds
+    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 300; // 300 seconds
+    static constexpr uint32_t RELAY_STATE_TIMEOUT_SECS = 2;      // Forget relay state after 2 seconds
 
     /**
      * Dijkstra implementation for finding lowest cost path

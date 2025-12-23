@@ -242,10 +242,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 
     // Record our transmission for contention window tracking
     if (routingGraph) {
-        uint32_t currentTime = getValidTime(RTCQualityFromNet);
-        if (!currentTime) {
-            currentTime = getTime();
-        }
+        uint32_t currentTime = getTime();
         routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
     }
 }
@@ -554,7 +551,24 @@ void SignalRoutingModule::logNetworkTopology()
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // LITE mode: use fixed-size arrays only, no heap allocations
     NodeNum nodeBuf[GRAPH_LITE_MAX_NODES];
-    size_t nodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
+    size_t rawNodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
+
+    // Filter out downstream nodes
+    size_t nodeCount = 0;
+    for (size_t i = 0; i < rawNodeCount; i++) {
+        NodeNum nodeId = nodeBuf[i];
+        bool isDownstream = false;
+        for (uint8_t j = 0; j < gatewayRelationCount; j++) {
+            if (gatewayRelations[j].downstream == nodeId) {
+                isDownstream = true;
+                break;
+            }
+        }
+        if (!isDownstream) {
+            nodeBuf[nodeCount++] = nodeId;
+        }
+    }
+
     if (nodeCount == 0) {
         LOG_INFO("[SR] Network Topology: No nodes in graph yet");
         return;
@@ -639,12 +653,27 @@ void SignalRoutingModule::logNetworkTopology()
         LOG_INFO("[SR] Network Topology: No nodes in graph yet");
         return;
     }
-    LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
-    // Sort nodes for consistent output
-    std::vector<NodeNum> sortedNodes(allNodes.begin(), allNodes.end());
-    std::sort(sortedNodes.begin(), sortedNodes.end());
 
-    for (NodeNum nodeId : sortedNodes) {
+    // Filter out downstream nodes for topology display
+    std::vector<NodeNum> topologyNodes;
+    for (NodeNum nodeId : allNodes) {
+        bool isDownstream = false;
+        for (const auto& relation : downstreamGateway) {
+            if (relation.first == nodeId) {
+                isDownstream = true;
+                break;
+            }
+        }
+        if (!isDownstream) {
+            topologyNodes.push_back(nodeId);
+        }
+    }
+
+    LOG_INFO("[SR] Network Topology: %d nodes total", topologyNodes.size());
+    // Sort nodes for consistent output
+    std::sort(topologyNodes.begin(), topologyNodes.end());
+
+    for (NodeNum nodeId : topologyNodes) {
         char nodeName[64];
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
@@ -754,6 +783,17 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         }
     }
     
+    // Update node activity for ANY packet reception to keep nodes in graph
+    if (routingGraph && notViaMqtt) {
+        if (hasSignalData && isDirectFromSender) {
+            // Real signal data available - use it
+            updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
+        } else {
+            // Relayed packet - just update node activity timestamp
+            routingGraph->updateNodeActivity(mp.from, getTime());
+        }
+    }
+
     if (hasSignalData && notViaMqtt && isDirectFromSender) {
         rememberRelayIdentity(mp.from, fromLastByte);
         trackNodeCapability(mp.from, CapabilityStatus::Unknown);
@@ -778,15 +818,10 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
         // Record that this node transmitted (for contention window tracking)
         if (routingGraph) {
-            uint32_t currentTime = getValidTime(RTCQualityFromNet);
-            if (!currentTime) {
-                currentTime = getTime();
-            }
+            uint32_t currentTime = getTime();
             routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
         }
 
-        // Note: rx_time is already Unix epoch seconds from getValidTime()
-        updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
         LOG_DEBUG("[SR] Direct neighbor %s detected (RSSI=%d, SNR=%.1f)",
                  senderName, mp.rx_rssi, mp.rx_snr);
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
@@ -795,6 +830,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
 
         if (inferredRelayer != 0 && inferredRelayer != mp.from) {
+            // Remember this relay identity mapping for future use
+            rememberRelayIdentity(inferredRelayer, mp.relay_node);
+
             // We know that inferredRelayer relayed a packet from mp.from
             // This suggests connectivity between mp.from and inferredRelayer
             LOG_DEBUG("[SR] Inferred connectivity: %08x -> %08x (relayed via %02x)",
@@ -874,10 +912,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
             // Record transmission for contention window tracking
             if (routingGraph) {
-                uint32_t currentTime = getValidTime(RTCQualityFromNet);
-                if (!currentTime) {
-                    currentTime = getTime();
-                }
+                uint32_t currentTime = getTime();
                 routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
                 routingGraph->recordNodeTransmission(inferredRelayer, mp.id, currentTime);
             }
@@ -890,11 +925,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
     // Periodic graph maintenance
     if (routingGraph) {
-        uint32_t currentTime = getValidTime(RTCQualityFromNet);
-        if (!currentTime) {
-            currentTime = getTime();
-        }
-        if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_MS) {
+        uint32_t currentTime = getTime(); // Use uptime for consistent aging
+        if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_SECS) {
             routingGraph->ageEdges(currentTime);
             lastGraphUpdate = currentTime;
             LOG_DEBUG("[SR] Aged edges");
@@ -997,10 +1029,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
             NodeNum sourceNode = p->from;
             NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
-            uint32_t currentTime = getValidTime(RTCQualityFromNet);
-            if (!currentTime) {
-                currentTime = getTime();
-            }
+            uint32_t currentTime = getTime();
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
             bool shouldRelay = routingGraph->shouldRelayWithContention(myNode, sourceNode, heardFrom, p->id, currentTime);
@@ -1136,10 +1165,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     bool weAreGateway = (gatewayForSource != 0 && gatewayForSource == myNode);
     size_t downstreamCount = weAreGateway ? getGatewayDownstreamCount(myNode) : 0;
 
-    uint32_t currentTime = getValidTime(RTCQualityFromNet);
-    if (!currentTime) {
-        currentTime = getTime();
-    }
+    uint32_t currentTime = getTime();
 
     // Check for stock gateway nodes that can be heard directly
     // If we have stock nodes that could serve as gateways, be conservative with SR relaying
@@ -1235,10 +1261,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
         return 0;
     }
 
-    uint32_t currentTime = getValidTime(RTCQualityFromNet);
-    if (!currentTime) {
-        currentTime = getTime();
-    }
+    uint32_t currentTime = getTime();
 
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
@@ -1897,13 +1920,43 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
         }
     }
 #else
-    // Full mode: remove stale gateway relations based on time
+    // Full mode: remove gateway relations when gateways or downstream nodes are removed from graph
+    // When removing a gateway, only remove downstream relations if no alternative gateway exists
     for (auto it = downstreamGateway.begin(); it != downstreamGateway.end();) {
-        if ((nowSecs - it->second.lastSeen) > CAPABILITY_TTL_SECS) {
-            // Capture values before erasing for logging
-            NodeNum gatewayId = it->second.gateway;
-            NodeNum downstreamId = it->first;
+        NodeNum gatewayId = it->second.gateway;
+        NodeNum downstreamId = it->first;
 
+        bool gatewayExists = routingGraph && routingGraph->getAllNodes().count(gatewayId) > 0;
+        bool downstreamExists = routingGraph && routingGraph->getAllNodes().count(downstreamId) > 0;
+
+        bool shouldRemove = false;
+
+        if (!downstreamExists) {
+            // Downstream node is gone - always remove the relation
+            shouldRemove = true;
+        } else if (!gatewayExists) {
+            // Gateway is gone - check if downstream has alternative gateways
+            bool hasAlternativeGateway = false;
+
+            // Check if this downstream node has any other gateway relations
+            for (const auto& other : downstreamGateway) {
+                if (other.first == downstreamId && other.second.gateway != gatewayId) {
+                    // Check if this alternative gateway still exists
+                    if (routingGraph->getAllNodes().count(other.second.gateway) > 0) {
+                        hasAlternativeGateway = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasAlternativeGateway) {
+                // No alternative gateway available - remove the relation
+                shouldRemove = true;
+            }
+            // If hasAlternativeGateway is true, keep the relation
+        }
+
+        if (shouldRemove) {
             // Remove from gateway's downstream set
             auto gwIt = gatewayDownstream.find(gatewayId);
             if (gwIt != gatewayDownstream.end()) {
@@ -1917,8 +1970,9 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
             char gatewayName[64], downstreamName[64];
             getNodeDisplayName(gatewayId, gatewayName, sizeof(gatewayName));
             getNodeDisplayName(downstreamId, downstreamName, sizeof(downstreamName));
-            LOG_DEBUG("[SR] Pruned stale gateway relation (%s is gateway for %s)",
-                     gatewayName, downstreamName);
+            LOG_DEBUG("[SR] Pruned gateway relation (%s is gateway for %s) - %s",
+                     gatewayName, downstreamName,
+                     !gatewayExists ? "gateway removed from graph" : "downstream removed from graph");
             continue;
         }
         ++it;
@@ -2507,6 +2561,8 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                 if ((myEdges->edges[i].to & 0xFF) == p->relay_node) {
+                    // Remember this mapping for future use
+                    const_cast<SignalRoutingModule*>(this)->rememberRelayIdentity(myEdges->edges[i].to, p->relay_node);
                     return myEdges->edges[i].to;
                 }
             }
@@ -2515,6 +2571,8 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
         auto neighbors = routingGraph->getDirectNeighbors(nodeDB->getNodeNum());
         for (NodeNum neighbor : neighbors) {
             if ((neighbor & 0xFF) == p->relay_node) {
+                // Remember this mapping for future use
+                const_cast<SignalRoutingModule*>(this)->rememberRelayIdentity(neighbor, p->relay_node);
                 return neighbor;
             }
         }
