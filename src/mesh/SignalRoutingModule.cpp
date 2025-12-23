@@ -133,6 +133,7 @@ int32_t SignalRoutingModule::runOnce()
     uint32_t nowSecs = getTime();
 
     pruneCapabilityCache(nowSecs);
+    pruneGatewayRelations(nowSecs);
     pruneRelayIdentityCache(nowMs);
     processSpeculativeRetransmits(nowMs);
 
@@ -1853,6 +1854,60 @@ void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
         } else {
             ++it;
         }
+    }
+#endif
+}
+
+void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
+{
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Lite mode: remove stale gateway relations by swapping with last
+    for (uint8_t i = 0; i < gatewayRelationCount;) {
+        if ((nowSecs - gatewayRelations[i].lastSeen) > CAPABILITY_TTL_SECS) {
+            if (i < gatewayRelationCount - 1) {
+                gatewayRelations[i] = gatewayRelations[gatewayRelationCount - 1];
+            }
+            gatewayRelationCount--;
+            LOG_DEBUG("[SR] Pruned stale gateway relation (downstream %08x)", gatewayRelations[i].downstream);
+        } else {
+            i++;
+        }
+    }
+
+    // Also prune gateway downstream sets
+    for (uint8_t i = 0; i < gatewayDownstreamCount;) {
+        if ((nowSecs - gatewayDownstream[i].lastSeen) > CAPABILITY_TTL_SECS) {
+            if (i < gatewayDownstreamCount - 1) {
+                gatewayDownstream[i] = gatewayDownstream[gatewayDownstreamCount - 1];
+            }
+            gatewayDownstreamCount--;
+            LOG_DEBUG("[SR] Pruned stale gateway downstream set (gateway %08x)", gatewayDownstream[i].gateway);
+        } else {
+            i++;
+        }
+    }
+#else
+    // Full mode: remove gateway relations for nodes that are no longer in the graph
+    // This indirectly ages gateway relationships since the graph ages inactive nodes
+    for (auto it = downstreamGateway.begin(); it != downstreamGateway.end();) {
+        bool gatewayExists = routingGraph && routingGraph->getAllNodes().count(it->second) > 0;
+        bool downstreamExists = routingGraph && routingGraph->getAllNodes().count(it->first) > 0;
+
+        if (!gatewayExists || !downstreamExists) {
+            // Remove from gateway's downstream set
+            auto gwIt = gatewayDownstream.find(it->second);
+            if (gwIt != gatewayDownstream.end()) {
+                gwIt->second.erase(it->first);
+                if (gwIt->second.empty()) {
+                    gatewayDownstream.erase(gwIt);
+                }
+            }
+            it = downstreamGateway.erase(it);
+            LOG_DEBUG("[SR] Pruned gateway relation (gateway %08x, downstream %08x) - node no longer in graph",
+                     it->second, it->first);
+            continue;
+        }
+        ++it;
     }
 #endif
 }
