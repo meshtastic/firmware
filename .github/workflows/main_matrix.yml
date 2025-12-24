@@ -267,7 +267,14 @@ jobs:
           base: ${{ github.base_ref }}
           head: ${{ github.head_ref }}
       - name: Download the old manifests
-        run: gh run download -R ${{ github.repository }} --commit ${{ env.MERGE_BASE }} --name manifests-all --dir manifest-old/
+        run: |
+          RUN_ID=$(gh run list -R ${{ github.repository }} --commit ${{ env.MERGE_BASE }} --workflow=main_matrix.yml --json databaseId --jq '.[0].databaseId' 2>/dev/null || echo "")
+          if [ -n "$RUN_ID" ]; then
+            gh run download "$RUN_ID" -R ${{ github.repository }} --name manifests-all --dir manifest-old/ || echo "Could not download manifests from run $RUN_ID"
+          else
+            echo "No workflow run found for merge base commit, skipping manifest comparison"
+            mkdir -p manifest-old
+          fi
       - name: Do scan and post comment
         run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
