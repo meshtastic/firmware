@@ -44,8 +44,10 @@ extern "C" {
 #define LED_BLUE -1
 #define LED_CHARGE (12)
 #define LED_PAIRING (7)
+#define PIN_LED2 LED_PAIRING
 
-#define LED_STATE_ON 1
+#define LED_STATE_ON HIGH
+#define LED_STATE_OFF LOW
 
 // USB power detection
 #define EXT_PWR_DETECT (13)
