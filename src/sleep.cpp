@@ -17,8 +17,8 @@
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
-// "esp_pm_config_esp32_t is deprecated, please include esp_pm.h and use
-// esp_pm_config_t instead"
+// Note: esp_pm_config_esp32_t was deprecated in ESP-IDF 5.x, replaced by
+// esp_pm_config_t See enableModemSleep() for version-conditional handling
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #if HAS_WIFI
