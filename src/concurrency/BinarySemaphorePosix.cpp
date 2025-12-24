@@ -61,7 +61,7 @@ BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTaskWoken) {
   // POSIX doesn't distinguish ISR context; delegate to regular give()
   give();
   if (pxHigherPriorityTaskWoken) {
-    *pxHigherPriorityTaskWoken = pdTRUE;
+    *pxHigherPriorityTaskWoken = 1; // Equivalent to pdTRUE in FreeRTOS
   }
 }
 
