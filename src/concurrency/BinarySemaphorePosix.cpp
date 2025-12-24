@@ -3,6 +3,8 @@
 
 #ifndef HAS_FREE_RTOS
 
+#ifdef ARCH_PORTDUINO
+// Full pthread implementation for Linux/native builds
 #include <errno.h>
 #include <sys/time.h>
 
@@ -67,4 +69,29 @@ BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTaskWoken) {
 
 } // namespace concurrency
 
-#endif
+#else
+// Stub implementation for non-FreeRTOS, non-POSIX platforms (e.g., STM32)
+namespace concurrency {
+
+BinarySemaphorePosix::BinarySemaphorePosix() {}
+
+BinarySemaphorePosix::~BinarySemaphorePosix() {}
+
+/**
+ * Returns false if we timed out
+ */
+bool BinarySemaphorePosix::take(uint32_t msec) {
+  delay(msec); // FIXME - proper implementation needs platform-specific support
+  return false;
+}
+
+void BinarySemaphorePosix::give() {}
+
+IRAM_ATTR void
+BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTaskWoken) {}
+
+} // namespace concurrency
+
+#endif // ARCH_PORTDUINO
+
+#endif // !HAS_FREE_RTOS
