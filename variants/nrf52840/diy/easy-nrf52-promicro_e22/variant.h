@@ -71,8 +71,8 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 |       |             |     |          |              |
 |       | Mid board   |     |          | Internal     |
 | P1.01 | Free pin    |     | 0.15     | LED          |
-| P1.02 | GPS_RX      |     | 0.13     | 3V3_EN       |
-| P1.07 | GPS_TX      |     |          |              |
+| P1.02 | GPS_TX      |     | 0.13     | 3V3_EN       |
+| P1.07 | GPS_RX      |     |          |              |
 */
 
 // Number of pins defined in PinDescription array
@@ -86,29 +86,24 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 
 // Battery
 #define BATTERY_PIN (0 + 31) // P0.31
-#define ADC_CHANNEL ADC1_GPIO4_CHANNEL
-#define ADC_RESOLUTION 14
+#define USE_VDDHDIV5         // Fallback to allow grounding BATTERY_PIN instead of installing voltage divider resistors
 #define BATTERY_SENSE_RESOLUTION_BITS 12
-#define BATTERY_SENSE_RESOLUTION 4096.0
-// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-#define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
-#define VBAT_DIVIDER (0.6F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (2.02) // 2 + magic for current drain of input
-// Fixed calculation of milliVolt from compensation value
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
-#undef AREF_VOLTAGE
+#define ADC_MULTIPLIER (2.02) // 2 + adjustment for current drain of input
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
-#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+
+#define HAS_SCREEN 1
+#define USE_SSD1306
+// #define USE_SH1106
 
 // WIRE IC AND IIC PINS
 #define WIRE_INTERFACES_COUNT 1
 
 #define PIN_WIRE_SDA (32 + 4) // P1.04
 #define PIN_WIRE_SCL (32 + 6) // P1.06
+
+// Buzzer - PWM
+#define PIN_BUZZER (0 + 8) // p0.08
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
@@ -121,8 +116,8 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 #define BUTTON_PIN (-1) // no button
 
 // GPS
-#define PIN_GPS_TX (32 + 7) // P1.07
-#define PIN_GPS_RX (32 + 2) // P1.02
+#define PIN_GPS_TX (32 + 2) // P1.02
+#define PIN_GPS_RX (32 + 7) // P1.07
 
 #define PIN_GPS_EN (0 + 13) // P0.13 3.3V enable
 #define GPS_POWER_TOGGLE
