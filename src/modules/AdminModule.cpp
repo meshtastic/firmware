@@ -746,6 +746,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             LOG_WARN("Invalid bandwidth %d, setting to default", originalBandwidth);
         }
 
+        if(!RadioInterface::validateModemConfig(validatedLora)) {
+            return;
+        }
+
         // If no lora radio parameters change, don't need to reboot
         if (oldLoraConfig.use_preset == validatedLora.use_preset && oldLoraConfig.region == validatedLora.region &&
             oldLoraConfig.modem_preset == validatedLora.modem_preset && oldLoraConfig.bandwidth == validatedLora.bandwidth &&
