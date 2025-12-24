@@ -257,6 +257,10 @@ jobs:
           overwrite: true
           path: |
             manifests-new/*.mt.json
+      - name: Fetch base and head branches
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git fetch origin ${{ github.head_ref }}
       - name: Find the merge base
         run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
         env:
