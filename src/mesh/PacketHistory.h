@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 // Number of relayers we keep track of. Use 6 to be efficient with memory alignment of PacketRecord to 20 bytes
 #define NUM_RELAYERS 6

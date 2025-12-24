@@ -5,9 +5,9 @@
 #if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "Channels.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "SPILock.h"
 #include "buzz.h"
 #include "detect/ScanI2C.h"

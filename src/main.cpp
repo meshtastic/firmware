@@ -4,14 +4,14 @@
 #endif
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
 
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"

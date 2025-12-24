@@ -14,7 +14,7 @@ Avoid bloating everyone's protobuf code for our one-off UI implementations
 #include "configuration.h"
 
 #include "SPILock.h"
-#include "SafeFile.h"
+#include "Filesystem/SafeFile.h"
 
 namespace NicheGraphics
 {

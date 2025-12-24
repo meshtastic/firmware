@@ -2,7 +2,7 @@
 #if HAS_SCREEN
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "NodeListRenderer.h"
 #include "UIRenderer.h"
 #include "airtime.h"

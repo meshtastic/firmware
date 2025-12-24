@@ -1,5 +1,5 @@
 #include "WaypointModule.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "graphics/draw/CompassRenderer.h"

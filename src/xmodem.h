@@ -32,7 +32,7 @@
 
 #pragma once
 
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "configuration.h"
 #include "mesh/generated/meshtastic/xmodem.pb.h"
 

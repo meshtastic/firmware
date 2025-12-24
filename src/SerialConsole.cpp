@@ -1,6 +1,6 @@
 #include "SerialConsole.h"
 #include "Default.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
 #include "configuration.h"

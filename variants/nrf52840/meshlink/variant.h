@@ -29,9 +29,9 @@ extern "C" {
 #define BUTTON_NEED_PULLUP
 
 // LEDs
-#define PIN_LED1 (24) // Built in white led for status
+#define PIN_LED1 (24) // Built in white led for status // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_PIN
 #define LED_BLUE PIN_LED1
-#define LED_BUILTIN PIN_LED1
+#define LED_BUILTIN PIN_LED1 // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
 
 #define LED_STATE_ON 0 // State when LED is litted
 #define LED_INVERTED 1
@@ -104,6 +104,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES W25Q16JVUXIQ
 #define EXTERNAL_FLASH_USE_QSPI
+// NOTE: USE_EXTERNAL_FLASH is configured via platformio.ini build flags for this variant.
 
 #define USE_SX1262
 #define SX126X_CS (12)

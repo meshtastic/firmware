@@ -41,11 +41,29 @@ using namespace STM32_LittleFS_Namespace;
 #endif
 
 #if defined(ARCH_NRF52)
-// NRF52 version
+#if defined(USE_EXTERNAL_FLASH)
+// nRF52 version with external flash
+#include "SdFat_Adafruit_Fork.h"
+#include "Filesystem/fatfs_ff.h"
+
+#include "diskio.h"
+#include <Adafruit_SPIFlash.h>
+#include <SPI.h>
+#define DISK_LABEL "EXT FLASH"
+#if defined(EXTERNAL_FLASH_USE_QSPI)
+extern Adafruit_FlashTransport_QSPI flashTransport;
+#endif
+extern Adafruit_SPIFlash flash;
+extern FatVolume fatfs;
+extern bool flashInitialized;
+extern bool fatfsMounted;
+#else
+// nRF52 version without external flash
 #include "InternalFileSystem.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin() // InternalFS formats on failure
 using namespace Adafruit_LittleFS_Namespace;
+#endif
 #endif
 
 void fsInit();
@@ -56,3 +74,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+#ifdef USE_EXTERNAL_FLASH
+bool check_fat12();
+bool format_fat12();
+#endif

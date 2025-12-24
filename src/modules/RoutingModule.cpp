@@ -1,7 +1,7 @@
 #include "RoutingModule.h"
 #include "Default.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"

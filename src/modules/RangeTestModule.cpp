@@ -9,9 +9,9 @@
  * The RangeTestModuleRadio class handles sending and receiving packets.
  */
 #include "RangeTestModule.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"

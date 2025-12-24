@@ -1,13 +1,13 @@
 #include "AdminModule.h"
 #include "Channels.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
-#include <FSCommon.h>
+#include "Filesystem/FSCommon.h"
 #include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
@@ -463,10 +463,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_remove_backup_preferences_tag: {
         LOG_INFO("Client requesting to remove backup preferences");
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
         if (r->remove_backup_preferences == meshtastic_AdminMessage_BackupLocation_FLASH) {
             spiLock->lock();
+#ifdef USE_EXTERNAL_FLASH
+            fatfs.remove(backupFileName);
+#else
             FSCom.remove(backupFileName);
+#endif
             spiLock->unlock();
         } else if (r->remove_backup_preferences == meshtastic_AdminMessage_BackupLocation_SD) {
             // TODO: After more mainline SD card support

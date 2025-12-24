@@ -9,7 +9,7 @@
 #endif
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "ProtobufModule.h"
 #include "detect/ScanI2CConsumer.h"
 #include <OLEDDisplay.h>

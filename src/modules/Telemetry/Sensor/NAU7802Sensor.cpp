@@ -3,10 +3,10 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "NAU7802Sensor.h"
 #include "SPILock.h"
-#include "SafeFile.h"
+#include "Filesystem/SafeFile.h"
 #include "TelemetrySensor.h"
 #include <Throttle.h>
 #include <pb_decode.h>
@@ -120,7 +120,11 @@ bool NAU7802Sensor::saveCalibrationData()
 bool NAU7802Sensor::loadCalibrationData()
 {
     spiLock->lock();
+#ifdef USE_EXTERNAL_FLASH
+    auto file = fatfs.open(nau7802ConfigFileName, FILE_READ);
+#else
     auto file = FSCom.open(nau7802ConfigFileName, FILE_O_READ);
+#endif
     bool okay = false;
     if (file) {
         LOG_INFO("%s state read from %s", sensorName, nau7802ConfigFileName);
@@ -139,5 +143,4 @@ bool NAU7802Sensor::loadCalibrationData()
     spiLock->unlock();
     return okay;
 }
-
 #endif

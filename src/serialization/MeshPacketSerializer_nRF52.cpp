@@ -3,7 +3,7 @@
 
 #include "ArduinoJson.h"
 #include "MeshPacketSerializer.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"

@@ -5,7 +5,7 @@
 #include "MenuHandler.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"

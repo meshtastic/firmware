@@ -2,7 +2,7 @@
 
 #include "./MessageStore.h"
 
-#include "SafeFile.h"
+#include "Filesystem/SafeFile.h"
 
 using namespace NicheGraphics;
 
