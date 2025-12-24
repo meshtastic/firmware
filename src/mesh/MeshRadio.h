@@ -16,6 +16,7 @@ struct RegionInfo {
     bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
+    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
     const char *name; // EU433 etc
 };
 
