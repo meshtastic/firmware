@@ -5,6 +5,25 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 
+struct RegionPresetBits {
+    uint16_t allowPreset_LONG_FAST : 1;
+    uint16_t allowPreset_LONG_SLOW : 1;
+    uint16_t allowPreset_VERY_LONG_SLOW : 1; // Deprecated
+    uint16_t allowPreset_MEDIUM_SLOW : 1;
+    uint16_t allowPreset_MEDIUM_FAST : 1;
+    uint16_t allowPreset_SHORT_SLOW : 1;
+    uint16_t allowPreset_SHORT_FAST : 1;
+    uint16_t allowPreset_LONG_MODERATE : 1;
+    uint16_t allowPreset_SHORT_TURBO : 1; // 500kHz BW
+    uint16_t allowPreset_LONG_TURBO : 1;  // 500kHz BW
+    uint16_t allowPreset_LITE_FAST : 1;   // For EU_866
+    uint16_t allowPreset_LITE_SLOW : 1;   // For EU_866
+    uint16_t allowPreset_NARROW_FAST : 1; // Narrow BW
+    uint16_t allowPreset_NARROW_SLOW : 1; // Narrow BW
+    uint16_t allowPreset_HAM_FAST : 1;    // 500kHz BW
+    uint16_t reserved : 1;
+};
+
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
@@ -17,6 +36,7 @@ struct RegionInfo {
     bool freqSwitching;
     bool wideLora;
     meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
+    RegionPresetBits presetBits;
     const char *name; // EU433 etc
 };
 
