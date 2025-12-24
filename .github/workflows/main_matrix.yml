@@ -262,7 +262,7 @@ jobs:
           git fetch origin ${{ github.base_ref }}
           git fetch origin ${{ github.head_ref }}
       - name: Find the merge base
-        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
+        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "origin/$head")" >> $GITHUB_ENV
         env:
           base: ${{ github.base_ref }}
           head: ${{ github.head_ref }}
