@@ -1465,7 +1465,7 @@ void setup()
 #endif
 
 #if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
-#ifndef T_DECK
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
 #endif
 #endif
