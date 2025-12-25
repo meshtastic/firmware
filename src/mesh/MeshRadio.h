@@ -5,24 +5,31 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 
+// TODO: make this reduce to a uint16_t bitfield?
+
 struct RegionPresetBits {
-    uint16_t allowPreset_LONG_FAST : 1;
-    uint16_t allowPreset_LONG_SLOW : 1;
-    uint16_t allowPreset_VERY_LONG_SLOW : 1; // Deprecated
-    uint16_t allowPreset_MEDIUM_SLOW : 1;
-    uint16_t allowPreset_MEDIUM_FAST : 1;
-    uint16_t allowPreset_SHORT_SLOW : 1;
-    uint16_t allowPreset_SHORT_FAST : 1;
-    uint16_t allowPreset_LONG_MODERATE : 1;
-    uint16_t allowPreset_SHORT_TURBO : 1; // 500kHz BW
-    uint16_t allowPreset_LONG_TURBO : 1;  // 500kHz BW
-    uint16_t allowPreset_LITE_FAST : 1;   // For EU_866
-    uint16_t allowPreset_LITE_SLOW : 1;   // For EU_866
-    uint16_t allowPreset_NARROW_FAST : 1; // Narrow BW
-    uint16_t allowPreset_NARROW_SLOW : 1; // Narrow BW
-    uint16_t allowPreset_HAM_FAST : 1;    // 500kHz BW
-    uint16_t reserved : 1;
+    bool allowPreset_LONG_FAST;
+    bool allowPreset_LONG_SLOW;
+    bool allowPreset_VERY_LONG_SLOW; // Deprecated
+    bool allowPreset_MEDIUM_SLOW;
+    bool allowPreset_MEDIUM_FAST;
+    bool allowPreset_SHORT_SLOW;
+    bool allowPreset_SHORT_FAST;
+    bool allowPreset_LONG_MODERATE;
+    bool allowPreset_SHORT_TURBO; // 500kHz BW
+    bool allowPreset_LONG_TURBO;  // 500kHz BW
+    bool allowPreset_LITE_FAST;   // For EU_866
+    bool allowPreset_LITE_SLOW;   // For EU_866
+    bool allowPreset_NARROW_FAST; // Narrow BW
+    bool allowPreset_NARROW_SLOW; // Narrow BW
+    bool allowPreset_HAM_FAST;    // 500kHz BW
+    bool reserved;
 };
+
+constexpr RegionPresetBits PRESETS_STD = {0b110111111100000};
+constexpr RegionPresetBits PRESETS_EU_868 = {0b110111110000000};
+constexpr RegionPresetBits PRESETS_LITE = {0b0000000000110000};
+constexpr RegionPresetBits PRESETS_NARROW = {0b0000000000001100};
 
 // Map from old region names to new region enums
 struct RegionInfo {

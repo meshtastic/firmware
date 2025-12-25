@@ -30,7 +30,7 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
@@ -38,7 +38,7 @@ const RegionInfo regions[] = {
         https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.02.01_60/en_30022002v030201p.pdf
         FIXME: https://github.com/meshtastic/firmware/issues/3371
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 10, true, false, false, LONG_FAST, 0b1111111100000000),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 10, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
@@ -54,33 +54,33 @@ const RegionInfo regions[] = {
        AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
-    RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false, LONG_FAST, 0b1111111100000000),
+    RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false, LONG_FAST, PRESETS_EU_868),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(CN, 470.0f, 510.0f, 100, 0, 19, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(CN, 470.0f, 510.0f, 100, 0, 19, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 0, 13, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(JP, 920.5f, 923.5f, 100, 0, 13, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
         Also used in Brazil.
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
         AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
         NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
      */
-    RDEF(ANZ_433, 433.05f, 434.79f, 100, 0, 14, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 0, 14, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
@@ -88,13 +88,13 @@ const RegionInfo regions[] = {
         Note:
             - We do LBT, so 100% is allowed.
      */
-    RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulId=53943&efYd=0
         https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 0, 23, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(KR, 920.0f, 923.0f, 100, 0, 23, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
@@ -102,42 +102,42 @@ const RegionInfo regions[] = {
         https://www.ncc.gov.tw/english/files/23070/102_5190_230703_1_doc_C.PDF
         https://gazette.nat.gov.tw/egFront/e_detail.do?metaid=147283
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 0, 27, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(TW, 920.0f, 925.0f, 100, 0, 27, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 36, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 36, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
     */
-    RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         433,05-434,7 Mhz 10 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_433, 433.0f, 434.7f, 10, 0, 10, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(UA_433, 433.0f, 434.7f, 10, 0, 10, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         868,0-868,6 Mhz 25 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_868, 868.0f, 868.6f, 1, 0, 14, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(UA_868, 868.0f, 868.6f, 1, 0, 14, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Malaysia
         433 - 435 MHz at 100mW, no restrictions.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_433, 433.0f, 435.0f, 100, 0, 20, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(MY_433, 433.0f, 435.0f, 100, 0, 20, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Malaysia
@@ -146,14 +146,14 @@ const RegionInfo regions[] = {
         Frequency hopping is used for 919 - 923 MHz.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_919, 919.0f, 924.0f, 100, 0, 27, true, true, false, LONG_FAST, 0b1111111111000000),
+    RDEF(MY_919, 919.0f, 924.0f, 100, 0, 27, true, true, false, LONG_FAST, PRESETS_STD),
 
     /*
         Singapore
         SG_923 Band 30d: 917 - 925 MHz at 100mW, no restrictions.
         https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/radio-comms/imdatssrd.pdf
     */
-    RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Philippines
@@ -163,9 +163,9 @@ const RegionInfo regions[] = {
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 
-    RDEF(PH_433, 433.0f, 434.7f, 100, 0, 10, true, false, false, LONG_FAST, 0b1111111111000000),
-    RDEF(PH_868, 868.0f, 869.4f, 100, 0, 14, true, false, false, LONG_FAST, 0b1111111111000000),
-    RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(PH_433, 433.0f, 434.7f, 100, 0, 10, true, false, false, LONG_FAST, PRESETS_STD),
+    RDEF(PH_868, 868.0f, 869.4f, 100, 0, 14, true, false, false, LONG_FAST, PRESETS_STD),
+    RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Kazakhstan
@@ -173,35 +173,35 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false, LONG_FAST, 0b1111111111000000),
-    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true, LONG_FAST, 0b1111111111000000),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false, LONG_FAST, PRESETS_STD),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true, LONG_FAST, PRESETS_STD),
 
     /*
         Nepal
         865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use,
        specifically in non-cellular mode. https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
     */
-    RDEF(NP_865, 865.0f, 868.0f, 100, 0, 30, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(NP_865, 865.0f, 868.0f, 100, 0, 30, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Brazil
         902 - 907.5 MHz , 1W power limit, no duty cycle restrictions
         https://github.com/meshtastic/firmware/issues/3741
     */
-    RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false, LONG_FAST, 0b1111111111000000),
+    RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
         Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 475 kHz gap between channels, 27 dBm, duty cycle 2.5% (mobile) or 10%
        (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
     */
-    RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, true, false, false, LITE_FAST, 0b0000000000110000),
+    RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, true, false, false, LITE_FAST, PRESETS_LITE),
 
     /*
         EU 868MHz band: 3 channels at 868.415/868.4925/868.570 MHz
         15 kHz gap between channels, 27 dBm, duty cycle 10%
     */
-    RDEF(NARROW_868, 869.4f, 869.65f, 10, 0.015, 27, false, false, false, NARROW_FAST, 0b0000000000001100),
+    RDEF(NARROW_868, 869.4f, 869.65f, 10, 0.015, 27, false, false, false, NARROW_FAST, PRESETS_NARROW),
 
     /*
         HAM 433MHz band
@@ -211,7 +211,7 @@ const RegionInfo regions[] = {
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true, LONG_FAST, 0b1111111111000000),
+    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true, LONG_FAST, PRESETS_STD),
 
     /*
         This needs to be last. Same as US.
@@ -605,11 +605,11 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         char err_string[160];
         if (isWideRequest) {
-            snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to LongFast.",
-                     myRegion->name, presetName);
+            snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to %.0f.",
+                     myRegion->name, presetName, myRegion->defaultPreset);
         } else {
-            snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to LongFast.",
-                     myRegion->name, regionSpanKHz, requestedBwKHz);
+            snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to %.0f.",
+                     myRegion->name, regionSpanKHz, requestedBwKHz, myRegion->defaultPreset);
         }
         LOG_ERROR("%s", err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
@@ -636,10 +636,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to default modem preset
         loraConfig.use_preset = true;
-        if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866) {
-            loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
-        } else
-            loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        loraConfig.modem_preset = myRegion->defaultPreset;
     } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 && bw != 62.5) {
         static const char *err_string = "Narrow_868 requires 62.5kHz bandwidth. Fall back to NarrowFast preset";
         LOG_ERROR(err_string);
@@ -652,7 +649,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to NarrowFast preset which is compliant
         loraConfig.use_preset = true;
-        loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST;
+        loraConfig.modem_preset = myRegion->defaultPreset;
     } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866 && bw != 125) {
         static const char *err_string = "EU_866 requires 125kHz bandwidth. Fall back to LiteFast preset";
         LOG_ERROR(err_string);
@@ -665,7 +662,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to LiteFast preset which is compliant
         loraConfig.use_preset = true;
-        loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+        loraConfig.modem_preset = myRegion->defaultPreset;
     } else {
         validConfig = true;
     }

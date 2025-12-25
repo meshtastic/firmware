@@ -227,6 +227,8 @@ void menuHandler::DeviceRolePicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// TODO: make RadioPresetOption array dynamic based on available presets for region
+
 void menuHandler::RadioPresetPicker()
 {
     static const RadioPresetOption presetOptions[] = {
@@ -239,8 +241,8 @@ void menuHandler::RadioPresetPicker()
         {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
         {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
         {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
-        {"NarrowFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST},
-        {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW},
+        {"LiteFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST},
+        {"LiteSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW},
         {"NarrowFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST},
         {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW},
         {"HamFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST},
