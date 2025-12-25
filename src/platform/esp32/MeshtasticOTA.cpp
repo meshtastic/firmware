@@ -43,13 +43,14 @@ void recoverConfig(meshtastic_Config_NetworkConfig *network)
     strncpy(network->wifi_psk, psk.c_str(), sizeof(network->wifi_psk));
 }
 
-void saveConfig(meshtastic_Config_NetworkConfig *network, bool method)
+void saveConfig(meshtastic_Config_NetworkConfig *network, meshtastic_OTAMode method, uint8_t* ota_hash)
 {
     LOG_INFO("Saving WiFi settings for upcoming OTA update");
 
     Preferences prefs;
     prefs.begin(nvsNamespace);
     prefs.putUChar("method", method);
+    prefs.putBytes("ota_hash", ota_hash, 32);
     prefs.putString("ssid", network->wifi_ssid);
     prefs.putString("psk", network->wifi_psk);
     prefs.putBool("updated", false);

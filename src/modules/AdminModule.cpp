@@ -234,19 +234,24 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
-        // TODO: Update to new protobufs
-        int32_t s = r->reboot_ota_seconds;
 #if defined(ARCH_ESP32)
+        if (r->ota_hash.size != 32) {
+            LOG_INFO("OTA Failed: Invalid `ota_hash` provided");
+            break;
+        }
+
+        meshtastic_OTAMode mode = r->reboot_ota_mode;
         if (MeshtasticOTA::trySwitchToOTA()) {
             LOG_INFO("OTA Requested");
             if (screen)
                 screen->startFirmwareUpdateScreen();
-            MeshtasticOTA::saveConfig(&config.network, (s % 2) & 0b1);
+            MeshtasticOTA::saveConfig(&config.network, mode, r->ota_hash.bytes);
             LOG_INFO("Rebooting to WiFi OTA");
         } else {
             LOG_INFO("WIFI OTA Failed");
         }
 #endif
+        int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
