@@ -378,7 +378,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (graphics::isHighResolution) ? "Environment" : "Env.";
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Environment" : "Env.";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
