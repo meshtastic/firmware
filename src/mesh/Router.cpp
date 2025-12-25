@@ -784,7 +784,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             IS_ONE_OF(
                 p->decoded.portnum, 
                 meshtastic_PortNum_POSITION_APP, 
-                meshtastic_PortNum_TELEMETRY_APP
+                meshtastic_PortNum_TELEMETRY_APP,
+                meshtastic_PortNum_TRACEROUTE_APP
             )
         ) {
             LOG_DEBUG("Handle but not send");

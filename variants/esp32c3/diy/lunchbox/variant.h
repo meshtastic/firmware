@@ -28,8 +28,6 @@
 #define LORA_RXEN       13  // LED D5
 #define LORA_DIO0       RADIOLIB_NC
 
-
-
 #define USE_SX1262
 
 #define SX126X_CS       LORA_CS
@@ -40,7 +38,10 @@
 #define SX126X_DIO2_AS_RF_SWITCH // DIO2 and TXEN connected
 #define SX126X_MAX_POWER    22
 #define TX_GAIN_LORA        0
+
+
 // #define USE_LLCC68      // Original Chatter2 with LLCC68 module
+
 // FAKE LLCC68 E220-900M22S 
 // @see https://github.com/jgromes/RadioLib/issues/1329
 //#define SX126X_XTAL_FORCE   1 
