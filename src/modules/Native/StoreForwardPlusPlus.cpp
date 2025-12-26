@@ -374,7 +374,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         if (t->chain_count != 0 && t->root_hash.size >= 8) {
             link_object link_from_count = getLinkFromCount(t->chain_count, t->root_hash.bytes, t->root_hash.size);
             LOG_WARN("Count requested %d", t->chain_count);
-            broadcastLink(link_from_count);
+            broadcastLink(link_from_count, true);
 
         } else if (getNextHash(t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size,
                                next_commit_hash)) {
@@ -663,7 +663,7 @@ void StoreForwardPlusPlusModule::broadcastLink(uint8_t *_commit_hash, size_t _co
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
-void StoreForwardPlusPlusModule::broadcastLink(link_object &lo)
+void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit_hash)
 {
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
@@ -680,7 +680,10 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo)
     if (lo.commit_hash_len >= 8) {
         // If we're sending a first link to a remote, that isn't actually the first on the chain
         // it needs the full commit hash, as it can't regenerate it.
-        storeforward.commit_hash.size = lo.commit_hash_len;
+        if (full_commit_hash)
+            storeforward.commit_hash.size = lo.commit_hash_len;
+        else
+            storeforward.commit_hash.size = 8;
         memcpy(storeforward.commit_hash.bytes, lo.commit_hash, storeforward.commit_hash.size);
     }
 
@@ -1059,7 +1062,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
     return lo;
 }
 
-void StoreForwardPlusPlusModule::rebroadcastLinkObject(StoreForwardPlusPlusModule::link_object &lo)
+void StoreForwardPlusPlusModule::rebroadcastLinkObject(link_object &lo)
 {
     LOG_WARN("Attempting to Rebroadcast1");
     meshtastic_MeshPacket *p = router->allocForSending();
