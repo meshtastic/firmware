@@ -33,5 +33,3 @@ PB_BIND(meshtastic_KeyVerificationAdmin, meshtastic_KeyVerificationAdmin, AUTO)
 
 
 
-
-
