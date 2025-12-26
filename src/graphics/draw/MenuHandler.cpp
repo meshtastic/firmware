@@ -1,14 +1,17 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "ClockRenderer.h"
+#include "Default.h"
 #include "GPS.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -20,12 +23,41 @@
 #include "modules/KeyVerificationModule.h"
 
 #include "modules/TraceRouteModule.h"
+#include <algorithm>
+#include <array>
 #include <functional>
+#include <utility>
 
 extern uint16_t TFT_MESH;
 
 namespace graphics
 {
+
+namespace
+{
+
+// Caller must ensure the provided options array outlives the banner callback.
+template <typename T, size_t N, typename Callback>
+BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOption<T> (&options)[N],
+                                               std::array<const char *, N> &labels, Callback &&onSelection)
+{
+    for (size_t i = 0; i < N; ++i) {
+        labels[i] = options[i].label;
+    }
+
+    const MenuOption<T> *optionsPtr = options;
+    auto callback = std::function<void(const MenuOption<T> &, int)>(std::forward<Callback>(onSelection));
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = message;
+    bannerOptions.optionsArrayPtr = labels.data();
+    bannerOptions.optionsCount = static_cast<uint8_t>(N);
+    bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
+    return bannerOptions;
+}
+
+} // namespace
+
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
@@ -105,11 +137,10 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "NP_865",
                                          "BR_902"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "LoRa Region";
-#else
     bannerOptions.message = "Set the LoRa region";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "LoRa Region";
+    }
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 27;
@@ -197,48 +228,38 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
-    static const char *optionsArray[] = {"Back",       "LongSlow",  "LongModerate", "LongFast",  "MediumSlow",
-                                         "MediumFast", "ShortSlow", "ShortFast",    "ShortTurbo"};
-    enum optionsNumbers {
-        Back = 0,
-        radiopreset_LongSlow = 1,
-        radiopreset_LongModerate = 2,
-        radiopreset_LongFast = 3,
-        radiopreset_MediumSlow = 4,
-        radiopreset_MediumFast = 5,
-        radiopreset_ShortSlow = 6,
-        radiopreset_ShortFast = 7,
-        radiopreset_ShortTurbo = 8
+    static const RadioPresetOption presetOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
+        {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
+        {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
+        {"MediumSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW},
+        {"MediumFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST},
+        {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
+        {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
+        {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
     };
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Radio Preset";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 9;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Back) {
-            menuHandler::menuQueue = menuHandler::lora_Menu;
-            screen->runNow();
-            return;
-        } else if (selected == radiopreset_LongSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-        } else if (selected == radiopreset_LongModerate) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
-        } else if (selected == radiopreset_LongFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-        } else if (selected == radiopreset_MediumSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
-        } else if (selected == radiopreset_MediumFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-        } else if (selected == radiopreset_ShortSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW;
-        } else if (selected == radiopreset_ShortFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
-        } else if (selected == radiopreset_ShortTurbo) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-        }
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    };
+
+    constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
+    static std::array<const char *, presetCount> presetLabels{};
+
+    auto bannerOptions =
+        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
+            if (option.action == OptionsAction::Back) {
+                menuHandler::menuQueue = menuHandler::lora_Menu;
+                screen->runNow();
+                return;
+            }
+
+            if (!option.hasValue) {
+                return;
+            }
+
+            config.lora.modem_preset = option.value;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        });
+
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -407,60 +428,415 @@ void menuHandler::clockMenu()
     };
     screen->showOverlayBanner(bannerOptions);
 }
-
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, Dismiss = 1, Preset = 2, Freetext = 3, Aloud = 4, enumEnd = 5 };
-#if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply Preset"};
-#else
-    static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply via Preset"};
-#endif
-    static int optionsEnumArray[enumEnd] = {Back, Dismiss, Preset};
-    int options = 3;
+    enum optionsNumbers { Back = 0, ViewMode, DeleteAll, DeleteOldest, ReplyMenu, Aloud, enumEnd };
 
-    if (kb_found) {
-        optionsArray[options] = "Reply via Freetext";
-        optionsEnumArray[options++] = Freetext;
-    }
+    static const char *optionsArray[enumEnd];
+    static int optionsEnumArray[enumEnd];
+    int options = 0;
+
+    auto mode = graphics::MessageRenderer::getThreadMode();
+
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+
+    // New Reply submenu (replaces Preset and Freetext directly in this menu)
+    optionsArray[options] = "Reply";
+    optionsEnumArray[options++] = ReplyMenu;
+
+    optionsArray[options] = "View Chats";
+    optionsEnumArray[options++] = ViewMode;
+
+    // Delete submenu
+    optionsArray[options] = "Delete";
+    optionsEnumArray[options++] = 900;
 
 #ifdef HAS_I2S
     optionsArray[options] = "Read Aloud";
     optionsEnumArray[options++] = Aloud;
 #endif
+
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Message";
-#else
-    bannerOptions.message = "Message Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Message";
+    } else {
+        bannerOptions.message = "Message Action";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Dismiss) {
-            screen->hideCurrentFrame();
-        } else if (selected == Preset) {
-            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-            } else {
-                cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
+        LOG_DEBUG("messageResponseMenu: selected %d", selected);
+
+        auto mode = graphics::MessageRenderer::getThreadMode();
+        int ch = graphics::MessageRenderer::getThreadChannel();
+        uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+
+        LOG_DEBUG("[ReplyCtx] mode=%d ch=%d peer=0x%08x", (int)mode, ch, (unsigned int)peer);
+
+        if (selected == ViewMode) {
+            menuHandler::menuQueue = menuHandler::message_viewmode_menu;
+            screen->runNow();
+
+            // Reply submenu
+        } else if (selected == ReplyMenu) {
+            menuHandler::menuQueue = menuHandler::reply_menu;
+            screen->runNow();
+
+            // Delete submenu
+        } else if (selected == 900) {
+            menuHandler::menuQueue = menuHandler::delete_messages_menu;
+            screen->runNow();
+
+            // Delete oldest FIRST (only change)
+        } else if (selected == DeleteOldest) {
+            auto mode = graphics::MessageRenderer::getThreadMode();
+            int ch = graphics::MessageRenderer::getThreadChannel();
+            uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+
+            if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+                // Global oldest
+                messageStore.deleteOldestMessage();
+            } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+                // Oldest in current channel
+                messageStore.deleteOldestMessageInChannel(ch);
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+                // Oldest in current DM
+                messageStore.deleteOldestMessageWithPeer(peer);
             }
-        } else if (selected == Freetext) {
-            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-            } else {
-                cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
-            }
-        }
+
+            // Delete all messages
+        } else if (selected == DeleteAll) {
+            messageStore.clearAllMessages();
+            graphics::MessageRenderer::clearThreadRegistries();
+            graphics::MessageRenderer::clearMessageCache();
+
 #ifdef HAS_I2S
-        else if (selected == Aloud) {
+        } else if (selected == Aloud) {
             const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
             const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-
             audioThread->readAloud(msg);
-        }
 #endif
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::replyMenu()
+{
+    enum replyOptions { Back = 0, ReplyPreset, ReplyFreetext, enumEnd };
+
+    static const char *optionsArray[enumEnd];
+    static int optionsEnumArray[enumEnd];
+    int options = 0;
+
+    // Back
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+
+    // Preset reply
+    optionsArray[options] = "With Preset";
+    optionsEnumArray[options++] = ReplyPreset;
+
+    // Freetext reply (only when keyboard exists)
+    if (kb_found) {
+        optionsArray[options] = "With Freetext";
+        optionsEnumArray[options++] = ReplyFreetext;
+    }
+
+    BannerOverlayOptions bannerOptions;
+
+    // Dynamic title based on thread mode
+    auto mode = graphics::MessageRenderer::getThreadMode();
+    if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+        bannerOptions.message = "Reply to Channel";
+    } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+        bannerOptions.message = "Reply to DM";
+    } else {
+        // View All
+        bannerOptions.message = "Reply to Last Msg";
+    }
+
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.InitialSelected = 1;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        auto mode = graphics::MessageRenderer::getThreadMode();
+        int ch = graphics::MessageRenderer::getThreadChannel();
+        uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::message_response_menu;
+            screen->runNow();
+            return;
+        }
+
+        // Preset reply
+        if (selected == ReplyPreset) {
+
+            if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, ch);
+
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+                cannedMessageModule->LaunchWithDestination(peer);
+
+            } else {
+                // Fallback for last received message
+                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
+                } else {
+                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
+                }
+            }
+
+            return;
+        }
+
+        // Freetext reply
+        if (selected == ReplyFreetext) {
+
+            if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch);
+
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+                cannedMessageModule->LaunchFreetextWithDestination(peer);
+
+            } else {
+                // Fallback for last received message
+                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
+                } else {
+                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
+                }
+            }
+
+            return;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+void menuHandler::deleteMessagesMenu()
+{
+    enum optionsNumbers { Back = 0, DeleteOldest, DeleteThis, DeleteAll, enumEnd };
+
+    static const char *optionsArray[enumEnd];
+    static int optionsEnumArray[enumEnd];
+    int options = 0;
+
+    auto mode = graphics::MessageRenderer::getThreadMode();
+
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+
+    optionsArray[options] = "Delete Oldest";
+    optionsEnumArray[options++] = DeleteOldest;
+
+    // If viewing ALL chats → hide “Delete This Chat”
+    if (mode != graphics::MessageRenderer::ThreadMode::ALL) {
+        optionsArray[options] = "Delete This Chat";
+        optionsEnumArray[options++] = DeleteThis;
+    }
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "Delete All";
+    } else {
+        optionsArray[options] = "Delete All Chats";
+    }
+    optionsEnumArray[options++] = DeleteAll;
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Delete Messages";
+
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [mode](int selected) -> void {
+        int ch = graphics::MessageRenderer::getThreadChannel();
+        uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::message_response_menu;
+            screen->runNow();
+            return;
+        }
+
+        if (selected == DeleteAll) {
+            LOG_INFO("Deleting all messages");
+            messageStore.clearAllMessages();
+            graphics::MessageRenderer::clearThreadRegistries();
+            graphics::MessageRenderer::clearMessageCache();
+            return;
+        }
+
+        if (selected == DeleteOldest) {
+            LOG_INFO("Deleting oldest message");
+
+            if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+                messageStore.deleteOldestMessage();
+            } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+                messageStore.deleteOldestMessageInChannel(ch);
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+                messageStore.deleteOldestMessageWithPeer(peer);
+            }
+
+            return;
+        }
+
+        // This only appears in non-ALL modes
+        if (selected == DeleteThis) {
+            LOG_INFO("Deleting all messages in this thread");
+
+            if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+                messageStore.deleteAllMessagesInChannel(ch);
+            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+                messageStore.deleteAllMessagesWithPeer(peer);
+            }
+
+            return;
+        }
+    };
+
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::messageViewModeMenu()
+{
+    auto encodeChannelId = [](int ch) -> int { return 100 + ch; };
+    auto isChannelSel = [](int id) -> bool { return id >= 100 && id < 200; };
+
+    static std::vector<std::string> labels;
+    static std::vector<int> ids;
+    static std::vector<uint32_t> idToPeer; // DM lookup
+
+    labels.clear();
+    ids.clear();
+    idToPeer.clear();
+
+    labels.push_back("Back");
+    ids.push_back(-1);
+    labels.push_back("View All Chats");
+    ids.push_back(-2);
+
+    // Channels with messages
+    for (int ch = 0; ch < 8; ++ch) {
+        auto msgs = messageStore.getChannelMessages((uint8_t)ch);
+        if (!msgs.empty()) {
+            char buf[40];
+            const char *cname = channels.getName(ch);
+            snprintf(buf, sizeof(buf), cname && cname[0] ? "#%s" : "#Ch%d", cname ? cname : "", ch);
+            labels.push_back(buf);
+            ids.push_back(encodeChannelId(ch));
+            LOG_DEBUG("messageViewModeMenu: Added live channel %s (id=%d)", buf, encodeChannelId(ch));
+        }
+    }
+
+    // Registry channels
+    for (int ch : graphics::MessageRenderer::getSeenChannels()) {
+        if (ch < 0 || ch >= 8)
+            continue;
+        auto msgs = messageStore.getChannelMessages((uint8_t)ch);
+        if (msgs.empty())
+            continue;
+        int enc = encodeChannelId(ch);
+        if (std::find(ids.begin(), ids.end(), enc) == ids.end()) {
+            char buf[40];
+            const char *cname = channels.getName(ch);
+            snprintf(buf, sizeof(buf), cname && cname[0] ? "#%s" : "#Ch%d", cname ? cname : "", ch);
+            labels.push_back(buf);
+            ids.push_back(enc);
+            LOG_DEBUG("messageViewModeMenu: Added registry channel %s (id=%d)", buf, enc);
+        }
+    }
+
+    // Gather unique peers
+    auto dms = messageStore.getDirectMessages();
+    std::vector<uint32_t> uniquePeers;
+    for (auto &m : dms) {
+        uint32_t peer = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
+        if (peer != nodeDB->getNodeNum() && std::find(uniquePeers.begin(), uniquePeers.end(), peer) == uniquePeers.end())
+            uniquePeers.push_back(peer);
+    }
+    for (uint32_t peer : graphics::MessageRenderer::getSeenPeers()) {
+        if (peer != nodeDB->getNodeNum() && std::find(uniquePeers.begin(), uniquePeers.end(), peer) == uniquePeers.end())
+            uniquePeers.push_back(peer);
+    }
+    std::sort(uniquePeers.begin(), uniquePeers.end());
+
+    // Encode peers
+    for (size_t i = 0; i < uniquePeers.size(); ++i) {
+        uint32_t peer = uniquePeers[i];
+        auto node = nodeDB->getMeshNode(peer);
+        std::string name;
+        if (node && node->has_user)
+            name = sanitizeString(node->user.long_name).substr(0, 15);
+        else {
+            char buf[20];
+            snprintf(buf, sizeof(buf), "Node %08X", peer);
+            name = buf;
+        }
+        labels.push_back("@" + name);
+        int encPeer = 1000 + (int)idToPeer.size();
+        ids.push_back(encPeer);
+        idToPeer.push_back(peer);
+        LOG_DEBUG("messageViewModeMenu: Added DM %s peer=0x%08x id=%d", name.c_str(), (unsigned int)peer, encPeer);
+    }
+
+    // Active ID
+    int activeId = -2;
+    auto mode = graphics::MessageRenderer::getThreadMode();
+    if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL)
+        activeId = encodeChannelId(graphics::MessageRenderer::getThreadChannel());
+    else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+        uint32_t cur = graphics::MessageRenderer::getThreadPeer();
+        for (size_t i = 0; i < idToPeer.size(); ++i)
+            if (idToPeer[i] == cur) {
+                activeId = 1000 + (int)i;
+                break;
+            }
+    }
+
+    LOG_DEBUG("messageViewModeMenu: Active thread id=%d", activeId);
+
+    // Build banner
+    static std::vector<const char *> options;
+    static std::vector<int> optionIds;
+    options.clear();
+    optionIds.clear();
+
+    int initialIndex = 0;
+    for (size_t i = 0; i < labels.size(); i++) {
+        options.push_back(labels[i].c_str());
+        optionIds.push_back(ids[i]);
+        if (ids[i] == activeId)
+            initialIndex = (int)i;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Select Conversation";
+    bannerOptions.optionsArrayPtr = options.data();
+    bannerOptions.optionsEnumPtr = optionIds.data();
+    bannerOptions.optionsCount = options.size();
+    bannerOptions.InitialSelected = initialIndex;
+
+    bannerOptions.bannerCallback = [=](int selected) -> void {
+        LOG_DEBUG("messageViewModeMenu: selected=%d", selected);
+        if (selected == -1) {
+            menuHandler::menuQueue = menuHandler::message_response_menu;
+            screen->runNow();
+        } else if (selected == -2) {
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::ALL);
+        } else if (isChannelSel(selected)) {
+            int ch = selected - 100;
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, ch);
+        } else if (selected >= 1000) {
+            int idx = selected - 1000;
+            if (idx >= 0 && (size_t)idx < idToPeer.size()) {
+                uint32_t peer = idToPeer[idx];
+                graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, peer);
+            }
+        }
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -486,23 +862,12 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = "Send Node Info";
     }
     optionsEnumArray[options++] = Position;
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "New Preset";
-#else
-    optionsArray[options] = "New Preset Msg";
-#endif
-    optionsEnumArray[options++] = Preset;
-    if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
-        optionsEnumArray[options++] = Freetext;
-    }
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Home";
-#else
     bannerOptions.message = "Home Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Home";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -587,21 +952,22 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Display Options";
     optionsEnumArray[options++] = ScreenOptions;
 
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Bluetooth";
-#else
-    optionsArray[options] = "Bluetooth Toggle";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "Bluetooth";
+    } else {
+        optionsArray[options] = "Bluetooth Toggle";
+    }
     optionsEnumArray[options++] = Bluetooth;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     optionsArray[options] = "WiFi Toggle";
     optionsEnumArray[options++] = WiFiToggle;
 #endif
-#if defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Power";
-#else
-    optionsArray[options] = "Reboot/Shutdown";
-#endif
+
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "Power";
+    } else {
+        optionsArray[options] = "Reboot/Shutdown";
+    }
     optionsEnumArray[options++] = PowerMenu;
 
     if (test_enabled) {
@@ -610,11 +976,10 @@ void menuHandler::systemBaseMenu()
     }
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "System";
-#else
     bannerOptions.message = "System Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "System";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -651,32 +1016,49 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, Remove, TraceRoute, enumEnd };
-#if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[enumEnd] = {"Back", "New Preset"};
-#else
-    static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
-#endif
-    static int optionsEnumArray[enumEnd] = {Back, Preset};
-    int options = 2;
+    enum optionsNumbers { Back, Preset, Freetext, GoToChat, Remove, TraceRoute, enumEnd };
+
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
+
+    // Only show "View Conversation" if a message exists with this node
+    uint32_t peer = graphics::UIRenderer::currentFavoriteNodeNum;
+    bool hasConversation = false;
+    for (const auto &m : messageStore.getMessages()) {
+        if ((m.sender == peer || m.dest == peer)) {
+            hasConversation = true;
+            break;
+        }
+    }
+    if (hasConversation) {
+        optionsArray[options] = "Go To Chat";
+        optionsEnumArray[options++] = GoToChat;
+    }
+    if (currentResolution == ScreenResolution::UltraLow) {
+        optionsArray[options] = "New Preset";
+    } else {
+        optionsArray[options] = "New Preset Msg";
+    }
+    optionsEnumArray[options++] = Preset;
 
     if (kb_found) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
-#if !defined(M5STACK_UNITC6L)
-    optionsArray[options] = "Trace Route";
-    optionsEnumArray[options++] = TraceRoute;
-#endif
+
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Trace Route";
+        optionsEnumArray[options++] = TraceRoute;
+    }
     optionsArray[options] = "Remove Favorite";
     optionsEnumArray[options++] = Remove;
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Favorites";
-#else
     bannerOptions.message = "Favorites Action";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Favorites";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -685,6 +1067,17 @@ void menuHandler::favoriteBaseMenu()
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+        }
+        // Handle new Go To Thread action
+        else if (selected == GoToChat) {
+            // Switch thread to direct conversation with this node
+            graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1,
+                                                     graphics::UIRenderer::currentFavoriteNodeNum);
+
+            // Manually create and send a UIFrameEvent to trigger the jump
+            UIFrameEvent evt;
+            evt.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+            screen->handleUIFrameEvent(&evt);
         } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
@@ -734,20 +1127,33 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, enumEnd };
-#if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset Node"};
-#else
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Key Verification", "Reset NodeDB"};
-#endif
+    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Add Favorite";
+    optionsEnumArray[options++] = Favorite;
+    optionsArray[options] = "Trace Route";
+    optionsEnumArray[options++] = TraceRoute;
+
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Key Verification";
+        optionsEnumArray[options++] = Verify;
+    }
+
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Show Long/Short Name";
+        optionsEnumArray[options++] = NodeNameLength;
+    }
+    optionsArray[options] = "Reset NodeDB";
+    optionsEnumArray[options++] = Reset;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.optionsCount = 3;
-#else
-    bannerOptions.optionsCount = 5;
-#endif
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -760,6 +1166,9 @@ void menuHandler::nodeListMenu()
             screen->runNow();
         } else if (selected == TraceRoute) {
             menuQueue = trace_route_menu;
+            screen->runNow();
+        } else if (selected == NodeNameLength) {
+            menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
         }
     };
@@ -784,7 +1193,7 @@ void menuHandler::nodeNameLengthMenu()
             LOG_INFO("Setting names to short");
             config.display.use_long_node_name = false;
         } else if (selected == Back) {
-            menuQueue = screen_options_menu;
+            menuQueue = node_base_menu;
             screen->runNow();
         }
     };
@@ -812,6 +1221,9 @@ void menuHandler::resetNodeDBMenu()
             LOG_INFO("Initiate node-db reset but keeping favorites");
             nodeDB->resetNodes(1);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 0) {
+            menuQueue = node_base_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -885,13 +1297,14 @@ void menuHandler::GPSFormatMenu()
 {
 
     static const char *optionsArray[] = {"Back",
-                                         isHighResolution ? "Decimal Degrees" : "DEC",
-                                         isHighResolution ? "Degrees Minutes Seconds" : "DMS",
-                                         isHighResolution ? "Universal Transverse Mercator" : "UTM",
-                                         isHighResolution ? "Military Grid Reference System" : "MGRS",
-                                         isHighResolution ? "Open Location Code" : "OLC",
-                                         isHighResolution ? "Ordnance Survey Grid Ref" : "OSGR",
-                                         isHighResolution ? "Maidenhead Locator" : "MLS"};
+                                         (currentResolution == ScreenResolution::High) ? "Decimal Degrees" : "DEC",
+                                         (currentResolution == ScreenResolution::High) ? "Degrees Minutes Seconds" : "DMS",
+                                         (currentResolution == ScreenResolution::High) ? "Universal Transverse Mercator" : "UTM",
+                                         (currentResolution == ScreenResolution::High) ? "Military Grid Reference System"
+                                                                                       : "MGRS",
+                                         (currentResolution == ScreenResolution::High) ? "Open Location Code" : "OLC",
+                                         (currentResolution == ScreenResolution::High) ? "Ordnance Survey Grid Ref" : "OSGR",
+                                         (currentResolution == ScreenResolution::High) ? "Maidenhead Locator" : "MLS"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "GPS Format";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -939,11 +1352,10 @@ void menuHandler::BluetoothToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Bluetooth";
-#else
     bannerOptions.message = "Toggle Bluetooth";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Bluetooth";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1159,17 +1571,17 @@ void menuHandler::rebootMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Reboot";
-#else
     bannerOptions.message = "Reboot Device?";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Reboot";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
+            messageStore.saveToFlash();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         } else {
             menuQueue = power_menu;
@@ -1183,11 +1595,10 @@ void menuHandler::shutdownMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Shutdown";
-#else
     bannerOptions.message = "Shutdown Device?";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Shutdown";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1204,12 +1615,13 @@ void menuHandler::shutdownMenu()
 
 void menuHandler::addFavoriteMenu()
 {
-#if defined(M5STACK_UNITC6L)
-    screen->showNodePicker("Node Favorite", 30000, [](uint32_t nodenum) -> void {
-#else
-    screen->showNodePicker("Node To Favorite", 30000, [](uint32_t nodenum) -> void {
-
-#endif
+    const char *NODE_PICKER_TITLE;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        NODE_PICKER_TITLE = "Node Favorite";
+    } else {
+        NODE_PICKER_TITLE = "Node To Favorite";
+    }
+    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
         LOG_WARN("Nodenum: %u", nodenum);
         nodeDB->set_favorite(true, nodenum);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1374,15 +1786,10 @@ void menuHandler::screenOptionsMenu()
     hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, NodeNameLength, Brightness, ScreenColor, FrameToggles, DisplayUnits };
+    enum optionsNumbers { Back, Brightness, ScreenColor, FrameToggles, DisplayUnits };
     static const char *optionsArray[5] = {"Back"};
     static int optionsEnumArray[5] = {Back};
     int options = 1;
-
-#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
-    optionsArray[options] = "Show Long/Short Name";
-    optionsEnumArray[options++] = NodeNameLength;
-#endif
 
     // Only show brightness for B&W displays
     if (hasSupportBrightness) {
@@ -1397,7 +1804,7 @@ void menuHandler::screenOptionsMenu()
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
-    optionsArray[options] = "Frame Visibility Toggle";
+    optionsArray[options] = "Frame Visibility";
     optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Display Units";
@@ -1414,9 +1821,6 @@ void menuHandler::screenOptionsMenu()
             screen->runNow();
         } else if (selected == ScreenColor) {
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-            screen->runNow();
-        } else if (selected == NodeNameLength) {
-            menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
         } else if (selected == FrameToggles) {
             menuHandler::menuQueue = menuHandler::FrameToggles;
@@ -1452,11 +1856,10 @@ void menuHandler::powerMenu()
 #endif
 
     BannerOverlayOptions bannerOptions;
-#if defined(M5STACK_UNITC6L)
-    bannerOptions.message = "Power";
-#else
     bannerOptions.message = "Reboot / Shutdown";
-#endif
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Power";
+    }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -1513,7 +1916,8 @@ void menuHandler::FrameToggles_menu()
 {
     enum optionsNumbers {
         Finish,
-        nodelist,
+        nodelist_nodes,
+        nodelist_location,
         nodelist_lastheard,
         nodelist_hopsignal,
         nodelist_distance,
@@ -1534,20 +1938,25 @@ void menuHandler::FrameToggles_menu()
     static int lastSelectedIndex = 0;
 
 #ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
-    optionsEnumArray[options++] = nodelist;
-#endif
-#ifdef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node Lists" : "Hide Node Lists";
+    optionsEnumArray[options++] = nodelist_nodes;
+#else
     optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
     optionsEnumArray[options++] = nodelist_lastheard;
     optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";
     optionsEnumArray[options++] = nodelist_hopsignal;
+#endif
+
+#if HAS_GPS
+#ifndef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_location") ? "Show Position Lists" : "Hide Position Lists";
+    optionsEnumArray[options++] = nodelist_location;
+#else
     optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
     optionsEnumArray[options++] = nodelist_distance;
-#endif
-#if HAS_GPS
-    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show Bearings" : "Hide Bearings";
+    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show NL - Bearings" : "Hide NL - Bearings";
     optionsEnumArray[options++] = nodelist_bearings;
+#endif
 
     optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
     optionsEnumArray[options++] = gps;
@@ -1586,8 +1995,12 @@ void menuHandler::FrameToggles_menu()
 
         if (selected == Finish) {
             screen->setFrames(Screen::FOCUS_DEFAULT);
-        } else if (selected == nodelist) {
-            screen->toggleFrameVisibility("nodelist");
+        } else if (selected == nodelist_nodes) {
+            screen->toggleFrameVisibility("nodelist_nodes");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_location) {
+            screen->toggleFrameVisibility("nodelist_location");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == nodelist_lastheard) {
@@ -1703,6 +2116,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case position_base_menu:
         positionBaseMenu();
         break;
+    case node_base_menu:
+        nodeListMenu();
+        break;
 #if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
         GPSToggleMenu();
@@ -1782,6 +2198,18 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
+        break;
+    case message_response_menu:
+        messageResponseMenu();
+        break;
+    case reply_menu:
+        replyMenu();
+        break;
+    case delete_messages_menu:
+        deleteMessagesMenu();
+        break;
+    case message_viewmode_menu:
+        messageViewModeMenu();
         break;
     }
     menuQueue = menu_none;
