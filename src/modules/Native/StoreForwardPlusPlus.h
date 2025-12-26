@@ -136,15 +136,19 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // adds the ChannelHash and root_hash to the mappings table
     void addRootToMappings(ChannelHash, uint8_t *);
 
-    // gets the tip of the chain for the given root hash
-    link_object getChainEndLinkObject(uint8_t *, size_t);
-
     // requests the next message in the chain from the mesh network
     // Sends a LINK_REQUEST message
     void requestNextMessage(uint8_t *, size_t, uint8_t *, size_t);
 
+    // request the message X entries from the end.
+    // used to bootstrap a chain, without downloading all of the history
+    void requestMessageCount(uint8_t *, size_t, uint32_t);
+
     // sends a LINK_PROVIDE message broadcasting the given link object
     void broadcastLink(uint8_t *, size_t);
+
+    // sends a LINK_PROVIDE message broadcasting the given link object
+    void broadcastLink(link_object &);
 
     // sends a LINK_PROVIDE message broadcasting the given link object from scratch message store
     bool sendFromScratch(uint8_t *);
@@ -200,6 +204,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // query the mappings table for the chain count for the given root hash
     uint32_t getChainCount(uint8_t *, size_t);
+
+    link_object getLinkFromCount(uint32_t, uint8_t *, size_t);
 
     // Track if we have a scheduled runOnce pending
     // useful to not accudentally delay a scheduled runOnce
