@@ -22,7 +22,7 @@
 #include "modules/RoutingModule.h"
 
 StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
-    : ProtobufModule("StoreForwardpp", meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP, &meshtastic_StoreForwardPlusPlus_msg),
+    : ProtobufModule("StoreForwardpp", meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP, &meshtastic_StoreForwardPlusPlus_msg),
       concurrency::OSThread("StoreForwardpp")
 {
     LOG_WARN("StoreForwardPlusPlusModule init");
@@ -274,7 +274,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         // canonAnnounce(lo.message_hash, lo.commit_hash, lo.root_hash, lo.rx_time);
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
         // TODO: Block packets from self?
-    } else if (mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP) {
+    } else if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
         LOG_WARN("Got a STORE_FORWARD++ packet");
         meshtastic_StoreForwardPlusPlus scratch;
         pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StoreForwardPlusPlus_fields, &scratch);
