@@ -183,6 +183,11 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     ChannelHash hash = channels.getHash(0);
     getOrAddRootFromChannelHash(hash, root_hash_bytes);
 
+    if (memfll(root_hash_bytes, '\0', 32)) {
+        LOG_WARN("No root hash found, not sending");
+        return 5 * 60 * 1000;
+    }
+
     // get tip of chain for this channel
     link_object chain_end = getLinkFromCount(0, root_hash_bytes, 32);
     LOG_WARN("latest payload %s", chain_end.payload.c_str());
@@ -368,6 +373,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         // If chain_count is set, this is a request for x messages up the chain.
         if (t->chain_count != 0 && t->root_hash.size >= 8) {
             link_object link_from_count = getLinkFromCount(t->chain_count, t->root_hash.bytes, t->root_hash.size);
+            LOG_WARN("Count requested %d", t->chain_count);
             broadcastLink(link_from_count);
 
         } else if (getNextHash(t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size,
@@ -672,7 +678,9 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo)
     storeforward.encapsulated_rxtime = lo.rx_time;
 
     if (lo.commit_hash_len >= 8) {
-        storeforward.commit_hash.size = 8;
+        // If we're sending a first link to a remote, that isn't actually the first on the chain
+        // it needs the full commit hash, as it can't regenerate it.
+        storeforward.commit_hash.size = lo.commit_hash_len;
         memcpy(storeforward.commit_hash.bytes, lo.commit_hash, storeforward.commit_hash.size);
     }
 
@@ -1023,11 +1031,18 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
         lo.root_hash_len = 32;
     } else {
         LOG_WARN("root hash does not match %d bytes", t->root_hash.size);
-        printBytes("Using partial root hash: 0x", t->root_hash.bytes, t->root_hash.size);
         lo.root_hash_len = 0;
+        lo.validObject = false;
+        return lo;
     }
 
-    if (t->commit_hash.size > 0) {
+    if (t->commit_hash.size == 32 && getChainCount(t->root_hash.bytes, t->root_hash.size) == 0 &&
+        portduino_config.initial_sync != 0 && !portduino_config.sfpp_stratum0) {
+        LOG_WARN("Accepting SF++ ch ");
+        lo.commit_hash_len = 32;
+        memcpy(lo.commit_hash, t->commit_hash.bytes, 32);
+
+    } else if (t->commit_hash.size > 0) {
         // calculate the full commit hash and replace the partial if it matches
         if (checkCommitHash(lo, t->commit_hash.bytes, t->commit_hash.size)) {
             printBytes("commit hash matches: 0x", t->commit_hash.bytes, t->commit_hash.size);
