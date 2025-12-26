@@ -240,6 +240,13 @@ void initRegion()
     myRegion = r;
 }
 
+const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code) {
+    const RegionInfo *r = regions;
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != code; r++)
+        ;
+    return r;
+}
+
 /**
  * Get duty cycle for current region. EU_866: 10% for routers, 2.5% for mobile.
  */
@@ -504,52 +511,52 @@ struct ModemConfig {
     uint8_t cr;
 };
 
-ModemConfig settingsForPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+ModemConfig settingsForPreset(bool wide, meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     ModemConfig cfg = {0};
     switch (preset) {
     case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-        cfg.bw = (myRegion->wideLora) ? 1625.0 : 500;
+        cfg.bw = wide ? 1625.0 : 500;
         cfg.cr = 5;
         cfg.sf = 7;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        cfg.bw = (myRegion->wideLora) ? 812.5 : 250;
+        cfg.bw = wide ? 812.5 : 250;
         cfg.cr = 5;
         cfg.sf = 7;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        cfg.bw = (myRegion->wideLora) ? 812.5 : 250;
+        cfg.bw = wide ? 812.5 : 250;
         cfg.cr = 5;
         cfg.sf = 8;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-        cfg.bw = (myRegion->wideLora) ? 812.5 : 250;
+        cfg.bw = wide ? 812.5 : 250;
         cfg.cr = 5;
         cfg.sf = 9;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        cfg.bw = (myRegion->wideLora) ? 812.5 : 250;
+        cfg.bw = wide ? 812.5 : 250;
         cfg.cr = 5;
         cfg.sf = 10;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
-        cfg.bw = (myRegion->wideLora) ? 1625.0 : 500;
+        cfg.bw = wide ? 1625.0 : 500;
         cfg.cr = 8;
         cfg.sf = 11;
         break;
     default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
-        cfg.bw = (myRegion->wideLora) ? 812.5 : 250;
+        cfg.bw = wide ? 812.5 : 250;
         cfg.cr = 5;
         cfg.sf = 11;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        cfg.bw = (myRegion->wideLora) ? 406.25 : 125;
+        cfg.bw = wide ? 406.25 : 125;
         cfg.cr = 8;
         cfg.sf = 11;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        cfg.bw = (myRegion->wideLora) ? 406.25 : 125;
+        cfg.bw = wide ? 406.25 : 125;
         cfg.cr = 8;
         cfg.sf = 12;
         break;
@@ -587,7 +594,8 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 {
     bool validConfig = false;
 
-    auto cfg = settingsForPreset(loraConfig.modem_preset);
+    const RegionInfo *newRegion = getRegion(loraConfig.region);
+    auto cfg = settingsForPreset(newRegion->wideLora, loraConfig.modem_preset);
 
     float bw;
     if (loraConfig.use_preset) {
@@ -596,8 +604,8 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         bw = loraConfig.bandwidth;
     }
 
-    if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-        const float regionSpanKHz = (myRegion->freqEnd - myRegion->freqStart) * 1000.0f;
+    if ((newRegion->freqEnd - newRegion->freqStart) < bw / 1000) {
+        const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         const float requestedBwKHz = bw;
         const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
         const char *presetName =
@@ -606,10 +614,10 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         char err_string[160];
         if (isWideRequest) {
             snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to %.0f.",
-                     myRegion->name, presetName, myRegion->defaultPreset);
+                     newRegion->name, presetName, newRegion->defaultPreset);
         } else {
             snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to %.0f.",
-                     myRegion->name, regionSpanKHz, requestedBwKHz, myRegion->defaultPreset);
+                     newRegion->name, regionSpanKHz, requestedBwKHz, newRegion->defaultPreset);
         }
         LOG_ERROR("%s", err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
@@ -621,7 +629,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to default modem preset
         loraConfig.use_preset = true;
-        loraConfig.modem_preset = myRegion->defaultPreset;
+        loraConfig.modem_preset = newRegion->defaultPreset;
     } else if (isOneOf(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
                        meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW) &&
                !isOneOf(meshtastic_Config_LoRaConfig_RegionCode_NARROW_868, meshtastic_Config_LoRaConfig_RegionCode_HAM_US433)) {
@@ -636,8 +644,8 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to default modem preset
         loraConfig.use_preset = true;
-        loraConfig.modem_preset = myRegion->defaultPreset;
-    } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 && bw != 62.5) {
+        loraConfig.modem_preset = newRegion->defaultPreset;
+    } else if (newRegion->code == meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 && bw != 62.5) {
         static const char *err_string = "Narrow_868 requires 62.5kHz bandwidth. Fall back to NarrowFast preset";
         LOG_ERROR(err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
@@ -649,8 +657,8 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to NarrowFast preset which is compliant
         loraConfig.use_preset = true;
-        loraConfig.modem_preset = myRegion->defaultPreset;
-    } else if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866 && bw != 125) {
+        loraConfig.modem_preset = newRegion->defaultPreset;
+    } else if (newRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866 && bw != 125) {
         static const char *err_string = "EU_866 requires 125kHz bandwidth. Fall back to LiteFast preset";
         LOG_ERROR(err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
@@ -662,7 +670,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
 
         // Set to LiteFast preset which is compliant
         loraConfig.use_preset = true;
-        loraConfig.modem_preset = myRegion->defaultPreset;
+        loraConfig.modem_preset = newRegion->defaultPreset;
     } else {
         validConfig = true;
     }
@@ -681,7 +689,7 @@ void RadioInterface::applyModemConfig()
     bool validConfig = false; // We need to check for a valid configuration
     while (!validConfig) {
         if (loraConfig.use_preset) {
-            auto settings = settingsForPreset(loraConfig.modem_preset);
+            auto settings = settingsForPreset(myRegion->wideLora, loraConfig.modem_preset);
             sf = settings.sf;
             cr = settings.cr;
             bw = settings.bw;
