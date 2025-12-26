@@ -112,6 +112,13 @@ bool Syslog::isEnabled()
     return this->_enabled;
 }
 
+bool Syslog::isConnected()
+{
+    // For UDP syslog, "connected" means enabled and properly configured
+    // (UDP is connectionless, so we check if we could potentially send)
+    return this->_enabled && this->_port != 0 && (this->_server != NULL || this->_ip != INADDR_NONE);
+}
+
 bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 {
     return this->vlogf(pri, this->_appName, fmt, args);

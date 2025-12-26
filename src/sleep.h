@@ -4,11 +4,12 @@
 #include "Observer.h"
 #include "configuration.h"
 
-void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), cpuDeepSleep(uint32_t msecToWake);
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb),
+    cpuDeepSleep(uint32_t msecToWake);
 
 #ifdef ARCH_ESP32
 #include "esp_sleep.h"
-esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
+esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake = 30000);
 
 extern esp_sleep_source_t wakeCause;
 #endif
@@ -31,10 +32,12 @@ extern int bootCount;
 // is bluetooth sw currently running?
 extern bool bluetoothOn;
 
-/// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
+/// Called to ask any observers if they want to veto sleep. Return 1 to veto or
+/// 0 to allow sleep to happen
 extern Observable<void *> preflightSleep;
 
-/// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
+/// Called to tell observers we are now entering (deep) sleep and you should
+/// prepare.  Must return 0
 extern Observable<void *> notifyDeepSleep;
 
 /// Called to tell observers we are rebooting ASAP.  Must return 0
