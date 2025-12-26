@@ -273,7 +273,7 @@ _(Example shows only config required by InkHUD. This is not a complete `env` def
 extends = esp32s3_base, inkhud ; or nrf52840_base, etc
 
 build_src_filter =
-${esp32_base.build_src_filter}
+${esp32s3_base.build_src_filter}
 ${inkhud.build_src_filter}
 
 build_flags =
