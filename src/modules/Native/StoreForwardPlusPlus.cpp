@@ -374,7 +374,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         if (t->chain_count != 0 && t->root_hash.size >= 8) {
             link_object link_from_count = getLinkFromCount(t->chain_count, t->root_hash.bytes, t->root_hash.size);
             LOG_WARN("Count requested %d", t->chain_count);
-            broadcastLink(link_from_count, true);
+            if (link_from_count.validObject)
+                broadcastLink(link_from_count, true);
 
         } else if (getNextHash(t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size,
                                next_commit_hash)) {
@@ -1155,20 +1156,32 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromC
 
     int rc;
     int step = 0;
+    uint32_t _rx_time = 0;
+
+    uint8_t last_message_commit_hash[32] = {0};
+    uint8_t last_message_hash[32] = {0};
+
     sqlite3_bind_int(getChainEndStmt, 1, _root_hash_len);
     sqlite3_bind_blob(getChainEndStmt, 2, _root_hash, _root_hash_len, NULL);
     // this needs to handle a count of 0, indicating the latest
-    while (sqlite3_step(getChainEndStmt) != SQLITE_DONE) {
+    while (sqlite3_step(getChainEndStmt) == SQLITE_ROW) {
+        // get the data from the row while it is still valid
+        uint8_t *last_message_commit_hash_ptr = (uint8_t *)sqlite3_column_blob(getChainEndStmt, 0);
+        uint8_t *last_message_hash_ptr = (uint8_t *)sqlite3_column_blob(getChainEndStmt, 1);
+        _rx_time = sqlite3_column_int(getChainEndStmt, 2);
+        memcpy(last_message_commit_hash, last_message_commit_hash_ptr, 32);
+        memcpy(last_message_hash, last_message_hash_ptr, 32);
         if (_count == step)
             break;
 
         step++;
     }
-    uint8_t *last_message_commit_hash = (uint8_t *)sqlite3_column_blob(getChainEndStmt, 0);
-    uint8_t *last_message_hash = (uint8_t *)sqlite3_column_blob(getChainEndStmt, 1);
-    uint32_t _rx_time = sqlite3_column_int(getChainEndStmt, 2);
-    if (last_message_commit_hash != nullptr) {
+    LOG_WARN("step %d", step);
+    if (last_message_commit_hash != nullptr && _rx_time != 0) {
         lo = getLink(last_message_commit_hash, 32);
+    } else {
+        LOG_WARN("Failed to get link from count");
+        lo.validObject = false;
     }
 
     sqlite3_reset(getChainEndStmt);
