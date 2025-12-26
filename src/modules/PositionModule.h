@@ -64,6 +64,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     bool hasQualityTimesource();
     bool hasGPS();
     uint32_t lastSentReply = 0; // Last time we sent a position reply (used for reply throttling only)
+    uint32_t lastWarn = 0;      // for throttling initial position warning
 
 #if USERPREFS_EVENT_MODE
     // In event mode we want to prevent excessive position broadcasts

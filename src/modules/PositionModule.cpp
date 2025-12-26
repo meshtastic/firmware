@@ -428,8 +428,9 @@ int32_t PositionModule::runOnce()
     bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
 
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-        if (waitingForFreshPosition) {
+        if (waitingForFreshPosition && !Throttle::isWithinTimespanMs(lastWarn, ONE_MINUTE_MS)) {
             LOG_DEBUG("Skip initial position send; no fresh position since boot");
+            lastWarn = now;
         } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
