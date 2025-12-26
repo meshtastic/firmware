@@ -249,7 +249,10 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
         if (!portduino_config.sfpp_stratum0) {
             if (!isInDB(lo.message_hash, lo.message_hash_len)) {
-                // todo check for valid root hash
+                if (lo.root_hash_len == 0) {
+                    LOG_WARN("Received message, but no known chain");
+                    return ProcessMessage::CONTINUE;
+                }
                 addToScratch(lo);
                 LOG_WARN("added message to scratch");
                 // send link to upstream?
