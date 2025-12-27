@@ -24,11 +24,13 @@ SignalRouting is an advanced mesh networking protocol for Meshtastic that replac
 |------|----------------|-------------------|
 | **CLIENT_MUTE** | Never rebroadcasts | Never rebroadcasts (legacy role) |
 | **CLIENT** | Rebroadcasts, can cancel duplicates | Uses SR coordination for broadcasts |
-| **ROUTER/ROUTER_LATE** | Always rebroadcasts, never cancels | SR coordinates broadcasts, always relays when needed |
+| **ROUTER/ROUTER_LATE** | Always rebroadcasts, never cancels | **Priority relays** - SR gives them highest priority as they always rebroadcast |
 | **ROUTER_CLIENT** | Rebroadcasts, can cancel duplicates | Uses SR coordination for broadcasts |
-| **REPEATER** | Rebroadcasts, can cancel duplicates | Uses SR coordination for broadcasts |
+| **REPEATER** | Rebroadcasts, can cancel duplicates | **Priority relays** - SR gives them highest priority as they always rebroadcast |
 | **CLIENT_BASE** | Special: acts as ROUTER for favorited nodes | Uses SR coordination for broadcasts |
 | **TRACKER/SENSOR/TAK** | Rebroadcasts, can cancel duplicates | Treated as legacy, no SR participation |
+
+**Legacy Node Priority:** SignalRouting prioritizes ROUTER and REPEATER roles because these nodes are configured to always rebroadcast packets. This ensures compatibility with existing network infrastructure while allowing SignalRouting nodes to provide additional coordination.
 
 ### Retransmission Behavior
 
@@ -68,7 +70,7 @@ SignalRouting maintains a network topology graph where:
 
 ### Route Calculation Algorithm
 
-For unicast packets, SignalRouting calculates optimal multi-hop routes using a Dijkstra-like algorithm:
+SignalRouting calculates unicast routes and coordinates delivery for reliable packet transmission:
 
 ```cpp
 NodeNum SignalRoutingModule::getNextHop(NodeNum destination, ...) {
@@ -77,23 +79,37 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, ...) {
     for each direct neighbor:
         if (neighbor == destination) return destination; // Direct route
 
-    // 2. Find 2-hop routes through neighbors
-    for each direct neighbor:
-        for each neighbor's neighbor:
-            if (neighbor's neighbor == destination):
-                calculate total ETX cost
-                select lowest cost 2-hop route
+    // 2. Find multi-hop routes using Dijkstra (full mode) or simplified routing (lite mode)
+    Route route = routingGraph->calculateRoute(destination, currentTime);
+    if (route.nextHop != 0) {
+        return route.nextHop; // Multi-hop route found
+    }
 
-    return best next hop or 0 (no route found)
+    // 3. Fallback options: gateway routes, opportunistic forwarding
+    return findBestFallbackOption(destination, ...);
+}
+
+// Special handling for relayed unicast packets to direct neighbors
+bool shouldDeliverDirectToNeighbor(NodeNum destination, NodeNum heardFrom) {
+    // If we received this as a relayed packet and destination is our direct neighbor,
+    // deliver directly since the destination didn't hear the original transmission
+    if (heardFrom != sourceNode && isDirectNeighbor(destination)) {
+        // Check if better positioned neighbors exist before delivering directly
+        if (!hasBetterPositionedNeighborForDirectDelivery(destination, ourRouteCost)) {
+            return destination; // Deliver directly
+        }
+    }
+    return 0; // Use normal routing
 }
 ```
 
 ### Unicast Route Selection Priority
 
-1. **Direct routes** (1-hop) - when destination is a direct neighbor
-2. **Gateway routes** - prefer direct connections to known gateways
-3. **2-hop routes** - through neighbors with lowest total ETX
-4. **Opportunistic forwarding** - when topology is unhealthy, forward to best direct neighbor
+1. **Direct delivery to neighbors**: For relayed packets where destination didn't hear original transmission
+2. **Calculated multi-hop routes**: Using Dijkstra algorithm with ETX weights
+3. **Gateway routes**: Prefer direct connections to known gateways for extended reach
+4. **Opportunistic forwarding**: When topology incomplete, forward to best direct neighbor
+5. **Broadcast coordination**: For well-connected destinations, broadcast for coordinated delivery
 
 ### Speculative Retransmission
 
@@ -102,32 +118,75 @@ For unicast packets, SignalRouting implements speculative retransmission:
 - Retransmits after 600ms timeout if no ACK received
 - Helps recover from temporary link failures or interference
 
-## Broadcast Routing
+### Unicast Broadcast Coordination
 
-### Coordinated Flooding Algorithm
-
-Traditional flooding sends redundant copies everywhere. SignalRouting coordinates relays to ensure coverage while minimizing redundancy:
+When SignalRouting has good route information to a unicast destination, it may broadcast the packet for coordinated delivery:
 
 ```cpp
-bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p) {
-    // Calculate which nodes would be covered if we relay
-    coverage = routingGraph->getCoverageIfRelays(myNode, alreadyCovered);
+bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p) {
+    // Check if we have a good route to the destination
+    Route route = routingGraph->calculateRoute(p->to, getTime());
+    if (route.nextHop != 0 && route.cost < 5.0f) {
+        // Broadcast unicast packet for relay coordination
+        return true;
+    }
+    return false; // Use traditional unicast routing
+}
+```
 
-    // Only relay if we provide significant new coverage
-    // Consider gateway relationships and legacy node compatibility
-    // Use contention windows to avoid collisions
+This approach allows multiple nodes to coordinate delivery of unicast packets, improving reliability for important destinations while maintaining efficient routing for well-connected scenarios.
 
-    return shouldRelay;
+## Broadcast Routing
+
+### Iterative Relay Coordination Algorithm
+
+SignalRouting uses an iterative algorithm to coordinate broadcast relays, ensuring coverage while minimizing redundancy. The algorithm prioritizes legacy routers/repeaters and uses timeout-based candidate selection:
+
+```cpp
+bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId) {
+    // Start with all nodes that can hear the transmitter
+    std::unordered_set<NodeNum> candidates = getNodesThatHeardTransmitter(heardFrom);
+
+    // Iterative loop: keep trying candidates until we decide to relay or run out of candidates
+    while (!candidates.empty()) {
+        // Find best candidate from current candidate list (prioritizing legacy routers)
+        RelayCandidate bestCandidate = findBestRelayCandidate(candidates, alreadyCovered, currentTime, packetId);
+
+        if (bestCandidate.nodeId == myNode) {
+            return true; // We're the best candidate - relay immediately
+        }
+
+        // Wait for best candidate to relay within contention window
+        if (hasNodeTransmitted(bestCandidate.nodeId, packetId, currentTime)) {
+            // Best candidate relayed - check if we have unique coverage
+            if (hasUniqueCoverage(myNode, bestCandidate.nodeId, alreadyCovered)) {
+                return true; // Relay for unique coverage
+            }
+            // Remove best candidate and try next best
+            candidates.erase(bestCandidate.nodeId);
+        } else {
+            // Best candidate hasn't relayed yet - wait or timeout
+            return false; // Wait for best candidate
+        }
+    }
+
+    // No candidates left - check if we have uncovered neighbors
+    if (hasUncoveredNeighbors(myNode, alreadyCovered)) {
+        return true; // Relay to reach uncovered neighbors
+    }
+
+    return false; // Don't relay
 }
 ```
 
 ### Relay Decision Factors
 
-1. **Coverage Analysis**: Does relaying reach nodes not already covered?
-2. **Gateway Awareness**: Prioritize packets from stock gateways for branch coverage
-3. **Legacy Compatibility**: Defer to legacy nodes when present
-4. **Backup Relay Logic**: Uses contention windows (1-2s) to allow backup relays if primary relays fail
-5. **Topology Health**: Only coordinate when sufficient capable nodes exist
+1. **Candidate Selection**: Only nodes that can hear the transmitter are considered
+2. **Legacy Priority**: Legacy routers/repeaters are prioritized as they are designed to always rebroadcast
+3. **Iterative Refinement**: Candidate list shrinks with each non-relaying node, ensuring optimal selection
+4. **Unique Coverage**: After other nodes relay, check if we cover areas they don't reach
+5. **Timeout Handling**: Non-relaying candidates are excluded, forcing re-calculation with remaining nodes
+6. **Fallback Logic**: Relay if no candidates remain but neighbors haven't been covered
 
 ### Broadcast Coordination Example
 
@@ -139,11 +198,36 @@ Network: A ── B ── C
 Packet from A to BROADCAST:
 
 1. A transmits first
-2. B and D hear it, calculate relay decisions
-3. B determines: "If I relay, I cover C,E"
-4. D determines: "If I relay, I cover E" (redundant with B)
-5. Only B relays, D stays silent
-6. Result: Full coverage with 1 relay instead of 2
+2. B, D, and E hear it (assuming they can all hear A)
+3. Candidate list: [B, D, E]
+4. Find best candidate: assume B provides most coverage (C,E)
+5. B is not best candidate - wait for best candidate (B) to relay
+6. B relays, covering C and E
+7. After B relays, check for unique coverage:
+   - D: covers E (already covered by B) - no unique coverage
+   - E: covers no additional nodes - no unique coverage
+8. No nodes have unique coverage - no additional relays needed
+9. Result: Full coverage with 1 relay
+```
+
+**With Legacy Router Priority:**
+
+```
+Network: A ── B(legacy) ── C
+           │        │
+           D ─────── E
+
+Packet from A to BROADCAST:
+
+1. A transmits first
+2. B (legacy router), D, and E hear it
+3. Candidate list: [B, D, E]
+4. Find best candidate: B prioritized as legacy router
+5. B relays immediately (legacy behavior)
+6. After B relays, check for unique coverage:
+   - D: covers areas not reached by B - may relay if unique coverage exists
+   - E: covers areas not reached by B - may relay if unique coverage exists
+7. Result: Legacy router relays first, then additional relays only for unique coverage
 ```
 
 ## Benefits for Mesh Network Reliability
@@ -151,7 +235,7 @@ Packet from A to BROADCAST:
 ### Improved Deliverability
 
 **Dense Node Scenarios:**
-SignalRouting coordinates broadcast relays to prevent redundant transmissions while ensuring full network coverage. Instead of every node blindly rebroadcasting, the algorithm calculates which nodes provide unique coverage and uses contention windows to avoid collisions.
+SignalRouting attempts to coordinate broadcast relays to reduce redundant transmissions. In networks with multiple nodes that can hear the same transmissions, the algorithm identifies which nodes provide unique coverage and prioritizes their relays. However, coordination depends on accurate topology information and may fall back to contention-based approaches when topology is incomplete.
 
 ### Mesh Branch Handling
 
@@ -159,36 +243,36 @@ SignalRouting coordinates broadcast relays to prevent redundant transmissions wh
 ```
 Network Gateway
      │
-     G (Stock Node)
+     G (Stock/Legacy Node)
     / \
    /   \
   A ── B
   │    │
   C ── D
 
-SignalRouting automatically:
-1. Identifies G as a gateway node bridging network segments
-2. Routes unicasts through G when destination is in another network segment
-3. Prioritizes broadcasts from G for full branch coverage
-4. Prevents redundant relays within branches
+SignalRouting considerations:
+1. Identifies legacy nodes (G) and gives them priority in relay decisions
+2. Routes unicasts through gateways when direct routes aren't available
+3. Allows broadcasts from legacy gateways to be relayed by SignalRouting nodes for branch coverage
+4. Attempts to minimize redundant relays within branches, but legacy nodes may still flood independently
 ```
 
 ### Reliability Improvements
 
 **Link Quality Awareness:**
-- Routes around poor quality links automatically
-- Prefers stable, high-SNR paths
-- Adapts to changing radio conditions
+- Uses ETX metrics to prefer higher quality links for unicast routing
+- Routes around known poor quality links when better alternatives exist
+- May adapt to changing conditions through periodic topology updates
 
 **Failure Recovery:**
-- Speculative retransmission for unicasts
-- Automatic fallback to flooding when topology unhealthy
-- Route recalculation when links degrade
+- Speculative retransmission provides basic recovery for unicast packet loss
+- Falls back to contention-based flooding when topology information is incomplete
+- Limited adaptation to sudden link failures without immediate topology updates
 
 **Congestion Control:**
-- Reduces broadcast storms in dense networks
-- Backup relay contention windows ensure reliability when primary relays fail
-- Graph-based coordination prevents redundant transmissions
+- Attempts to reduce redundant broadcasts through coordination
+- Uses timeout-based relay selection to allow backup relays when primary relays fail
+- Coordination effectiveness depends on network topology knowledge and node participation
 
 ## Graph vs GraphLite Implementation
 
@@ -345,38 +429,52 @@ Farm House ── Barn ── Equipment Shed
 - Gateway integration for external network access
 - Topology-aware routing adapts to physical layout
 
-## Performance Metrics
+## Algorithm Details
 
-### Efficiency Improvements
+### Iterative Relay Selection
+
+SignalRouting uses an iterative algorithm for relay coordination:
+
+1. **Initial Candidate Selection**: All nodes that can hear the transmitter
+2. **Best Candidate Identification**: Select node with best coverage/cost ratio (prioritizing legacy routers)
+3. **Immediate Relay**: If selected node relays immediately
+4. **Wait/Timeout**: Wait for best candidate to relay within contention window
+5. **Unique Coverage Check**: After relay, other nodes check if they cover additional areas
+6. **Candidate Exclusion**: Remove non-relaying candidates and repeat with remaining nodes
+7. **Fallback**: If no candidates remain, relay if neighbors haven't been covered
+
+This iterative approach ensures optimal relay selection while handling timeouts and network dynamics.
+
+### Performance Characteristics
 
 **Broadcast Coordination:**
-- Prevents redundant relay transmissions through coverage analysis
-- Uses contention windows to avoid transmission collisions
-- Reduces broadcast storms in dense node configurations
-- Maintains full network coverage with fewer transmissions
+- Attempts to minimize redundant transmissions through coverage analysis
+- Uses timeout-based coordination rather than perfect synchronization
+- May still have some redundant relays in dynamic network conditions
+- Effectiveness depends on topology knowledge and node participation
 
 **Unicast Optimization:**
-- Routes via highest quality links (lowest ETX)
-- Considers gateway relationships for extended reach
-- Speculative retransmission recovers from temporary failures
-- Fallback to opportunistic forwarding when topology incomplete
+- Uses ETX-based routing for known destinations
+- Provides basic retransmission recovery for unicast failures
+- May broadcast unicast packets for coordination in well-connected scenarios
+- Falls back to opportunistic forwarding when routes are unknown
 
 **Network Adaptation:**
-- Automatic topology health assessment
-- Graceful degradation to traditional flooding
-- Adapts to changing link conditions and node movement
-- Works alongside legacy routing for mixed networks
+- Assesses topology health but may not detect sudden changes immediately
+- Degrades to contention-based approaches when coordination isn't possible
+- Works with mixed legacy/SignalRouting networks but coordination is limited by legacy node behavior
 
 ## Implementation Notes
 
 ### Fallback Mechanisms
 
-SignalRouting gracefully degrades when conditions aren't met:
+SignalRouting gracefully degrades when coordination isn't possible:
 
-1. **Topology Unhealthy**: Falls back to contention-window flooding
-2. **Memory Pressure**: Disables on low-RAM devices
-3. **Legacy Networks**: Works alongside traditional routers
-4. **Hardware Limits**: Automatic feature disabling for constrained devices
+1. **Topology Incomplete**: Falls back to contention-window based flooding
+2. **Legacy Node Priority**: Gives priority to legacy routers/repeaters for compatibility
+3. **Iterative Timeouts**: Excludes non-relaying candidates and tries remaining options
+4. **Unique Coverage Fallback**: Relays if neighbors haven't been covered by other relays
+5. **Memory/CPU Constraints**: Automatic feature disabling for constrained devices
 
 ### Compatibility
 
@@ -385,15 +483,15 @@ SignalRouting gracefully degrades when conditions aren't met:
 - **Mixed Networks**: Automatically detects and adapts to legacy nodes
 - **Gateway Integration**: Special handling for nodes bridging network segments
 
-## Future Enhancements
+## Future Considerations
 
-Potential improvements for SignalRouting:
+Potential areas for improvement:
 
-1. **Adaptive Broadcast Intervals**: Shorter intervals for dynamic networks
-2. **Quality-of-Service Classes**: Different routing for priority messages
-3. **Multi-Radio Support**: Coordination across different frequency bands
-4. **Energy-Aware Routing**: Battery-level considerations in route selection
-5. **Machine Learning**: Predictive link quality based on historical data
+1. **Topology Update Optimization**: Reduce broadcast frequency while maintaining accuracy
+2. **Legacy Node Coordination**: Better integration with existing router behaviors
+3. **Dynamic Timeout Adjustment**: Adapt contention windows based on network conditions
+4. **Route Caching Improvements**: Better handling of topology changes
+5. **Memory Optimization**: Further reduce RAM usage for constrained devices
 
 ## Troubleshooting
 
@@ -404,19 +502,28 @@ Potential improvements for SignalRouting:
 - Switch to GraphLite mode or upgrade hardware
 
 **"Topology unhealthy - flooding only"**
-- Too few SR-capable nodes (need at least 1 direct neighbor)
+- Too few SR-capable nodes or incomplete topology information
 - Add more SignalRouting-capable devices or wait for topology convergence
 
 **"No route found for unicast"**
 - Destination not in topology graph
-- Wait for topology convergence or use flooding
+- Wait for topology convergence or use opportunistic forwarding
 
 **High CPU usage**
 - Large network with Graph mode
 - Consider switching to GraphLite or reducing network size
 
 **"Packet not relayed despite good coverage"**
-- Primary relays may have transmitted within contention window
-- Backup relays wait 1-2 seconds before transmitting
+- Iterative algorithm may have excluded the node or found better candidates
+- Legacy nodes may have priority and relayed instead
+- Unique coverage requirements may not be met
 
-SignalRouting represents a significant advancement in mesh networking, providing intelligent, efficient routing that scales from small personal networks to large community meshes while maintaining backward compatibility and graceful degradation.
+**"Unexpected relays from legacy nodes"**
+- Legacy routers/repeaters are prioritized and may relay independently
+- This is expected behavior for compatibility with existing infrastructure
+
+**"Broadcast unicasts being sent"**
+- SignalRouting broadcasts unicast packets when good routes exist
+- This coordinates delivery but may appear as unexpected broadcasts
+
+SignalRouting provides an alternative to traditional flooding-based mesh networking, offering basic coordination for packet relay decisions. It works alongside existing routing approaches and provides benefits in networks with sufficient SignalRouting-capable nodes, while maintaining compatibility with legacy devices through prioritized relay handling.

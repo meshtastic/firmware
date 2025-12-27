@@ -230,6 +230,18 @@ public:
                                                       uint32_t currentTime, uint32_t packetId) const;
 
     /**
+     * Find the single best relay candidate
+     * @param candidates Potential relay nodes
+     * @param alreadyCovered Nodes already covered by transmission
+     * @param currentTime Current time for edge aging
+     * @param packetId Current packet ID for transmission tracking
+     * @return Best relay candidate or empty candidate if none found
+     */
+    RelayCandidate findBestRelayCandidate(const std::unordered_set<NodeNum>& candidates,
+                                        const std::unordered_set<NodeNum>& alreadyCovered,
+                                        uint32_t currentTime, uint32_t packetId) const;
+
+    /**
      * Check if a node is a gateway (bridges disconnected network segments)
      * @param nodeId Node to check
      * @param sourceNode Original packet source

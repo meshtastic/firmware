@@ -936,6 +936,128 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     return ProcessMessage::CONTINUE;
 }
 
+bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p)
+{
+    if (!routingGraph || !nodeDB) {
+        return false;
+    }
+
+    NodeNum myNode = nodeDB->getNodeNum();
+    NodeNum destination = p->to;
+    NodeNum sourceNode = p->from;
+    NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
+
+    char destName[64];
+    getNodeDisplayName(destination, destName, sizeof(destName));
+
+    // Check if any legacy routers that heard this packet should relay instead
+    // Legacy routers/repeaters get priority as they are meant to always rebroadcast
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* transmittingEdges = routingGraph->getEdgesFrom(heardFrom);
+    if (transmittingEdges) {
+        for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
+            NodeNum candidate = transmittingEdges->edges[i].to;
+            if (candidate != myNode && isLegacyRouter(candidate)) {
+                // Check if this legacy router can reach the destination
+                RouteLite route = routingGraph->calculateRoute(destination, getTime());
+                if (route.nextHop != 0) {
+                    char legacyName[64];
+                    getNodeDisplayName(candidate, legacyName, sizeof(legacyName));
+                    LOG_DEBUG("[SR] Legacy router %s should relay unicast to %s instead of us", legacyName, destName);
+                    return false; // Let the legacy router handle it
+                }
+            }
+        }
+    }
+#else
+    auto transmittingEdges = routingGraph->getEdgesFrom(heardFrom);
+    if (transmittingEdges) {
+        for (const Edge& edge : *transmittingEdges) {
+            NodeNum candidate = edge.to;
+            if (candidate != myNode && isLegacyRouter(candidate)) {
+                // Check if this legacy router can reach the destination
+                Route route = routingGraph->calculateRoute(destination, getTime());
+                if (route.nextHop != 0) {
+                    char legacyName[64];
+                    getNodeDisplayName(candidate, legacyName, sizeof(legacyName));
+                    LOG_DEBUG("[SR] Legacy router %s should relay unicast to %s instead of us", legacyName, destName);
+                    return false; // Let the legacy router handle it
+                }
+            }
+        }
+    }
+#endif
+
+    // Calculate our route cost to the destination
+    float ourRouteCost = 0.0f;
+    bool haveRoute = false;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    RouteLite ourRoute = routingGraph->calculateRoute(destination, getTime());
+    haveRoute = ourRoute.nextHop != 0;
+    ourRouteCost = ourRoute.getCost();
+#else
+    Route ourRoute = routingGraph->calculateRoute(destination, getTime());
+    haveRoute = ourRoute.nextHop != 0;
+    ourRouteCost = ourRoute.cost;
+#endif
+
+    if (!haveRoute) {
+        LOG_DEBUG("[SR] No route to unicast destination %s - not relaying", destName);
+        return false;
+    }
+
+    LOG_DEBUG("[SR] Our route cost to %s: %.2f", destName, ourRouteCost);
+
+    // Check if the node we heard this from has a better route to the destination
+    // If they do, they should relay instead of us
+    if (heardFrom != sourceNode && heardFrom != myNode) {
+        // Check if heardFrom has a direct connection to destination with better ETX
+        bool heardFromHasBetterDirect = false;
+        float heardFromDirectEtx = 1e9f;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        const NodeEdgesLite* heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
+        if (heardFromEdges) {
+            for (uint8_t i = 0; i < heardFromEdges->edgeCount; i++) {
+                if (heardFromEdges->edges[i].to == destination) {
+                    heardFromDirectEtx = heardFromEdges->edges[i].getEtx();
+                    if (heardFromDirectEtx < ourRouteCost - 1.0f) {
+                        heardFromHasBetterDirect = true;
+                    }
+                    break;
+                }
+            }
+        }
+#else
+        auto heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
+        if (heardFromEdges) {
+            for (const Edge& e : *heardFromEdges) {
+                if (e.to == destination) {
+                    heardFromDirectEtx = e.etx;
+                    if (heardFromDirectEtx < ourRouteCost - 1.0f) {
+                        heardFromHasBetterDirect = true;
+                    }
+                    break;
+                }
+            }
+        }
+#endif
+
+        if (heardFromHasBetterDirect) {
+            char heardFromName[64];
+            getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
+            LOG_DEBUG("[SR] Node %s has better direct connection (ETX=%.2f) to %s than our route (%.2f) - not relaying",
+                     heardFromName, heardFromDirectEtx, destName, ourRouteCost);
+            return false;
+        }
+    }
+
+    // We're the best positioned node, so we should relay
+    LOG_DEBUG("[SR] We are best positioned for unicast to %s - relaying", destName);
+    return true;
+}
+
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p)
 {
     if (!p || !signalBasedRoutingEnabled || !routingGraph || !nodeDB) {
@@ -1013,6 +1135,25 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     if (!isActiveRoutingRole()) {
         LOG_DEBUG("[SR] Passive role - not using SR for unicast");
         return false;
+    }
+
+    // Check if we have a good route to the destination - if so, consider broadcasting for relay coordination
+    bool haveGoodRoute = false;
+    float routeCost = 0.0f;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    RouteLite route = routingGraph ? routingGraph->calculateRoute(p->to, getTime()) : RouteLite();
+    haveGoodRoute = route.nextHop != 0 && route.getCost() < 5.0f; // Consider routes with cost < 5 as "good"
+    routeCost = route.getCost();
+#else
+    Route route = routingGraph ? routingGraph->calculateRoute(p->to, getTime()) : Route();
+    haveGoodRoute = route.nextHop != 0 && route.cost < 5.0f; // Consider routes with cost < 5 as "good"
+    routeCost = route.cost;
+#endif
+
+    if (haveGoodRoute) {
+        LOG_DEBUG("[SR] We have good route to %s (cost: %.2f) - broadcasting for relay coordination", destName, routeCost);
+        return true; // Broadcast using SR for coordinated delivery to destination
     }
 
     bool topologyHealthy = topologyHealthyForUnicast(p->to);
@@ -1138,8 +1279,15 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
 bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 {
-    if (!routingGraph || !nodeDB || !isBroadcast(p->to)) {
+    if (!routingGraph || !nodeDB) {
         return true;
+    }
+
+    // Special handling for unicast packets that are broadcast for relay coordination
+    if (!isBroadcast(p->to)) {
+        // This is a unicast packet being broadcast for coordination
+        // Relay decision should be based on our ability to reach the destination
+        return shouldRelayUnicastForCoordination(p);
     }
 
     if (!isActiveRoutingRole()) {
@@ -1286,6 +1434,15 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
                     destName, routeCost);
         }
 
+        // Even if we have a route, check if any neighbor has a significantly better route
+        // This ensures unicasts are forwarded to better-positioned nodes
+        if (allowOpportunistic && routeCost > 2.0f) { // Only check if our route is not excellent
+            NodeNum betterNeighbor = findBetterPositionedNeighbor(destination, sourceNode, heardFrom, routeCost, currentTime);
+            if (betterNeighbor != 0) {
+                return betterNeighbor;
+            }
+        }
+
         return route.nextHop;
     }
 
@@ -1319,67 +1476,69 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
 #endif
     }
 
-    // Fallback 2: opportunistic forward like broadcast — pick best direct neighbor (lowest ETX) to move the packet
+    // Fallback 2: opportunistic forward — find neighbor with better position for destination
     // Only do this if opportunistic forwarding is allowed
-    NodeNum bestNeighbor = 0;
     if (allowOpportunistic) {
-        float bestEtx = 1e9f;
+        NodeNum betterNeighbor = findBetterPositionedNeighbor(destination, sourceNode, heardFrom,
+                                                            std::numeric_limits<float>::infinity(), currentTime);
+        if (betterNeighbor != 0) {
+            return betterNeighbor;
+        }
+    }
+
+    // Fallback 3: Special case for unicast packets to direct neighbors that didn't hear the transmission
+    // If we received this as a relayed packet (heardFrom != sourceNode) and destination is our direct neighbor,
+    // we should deliver it directly since the destination didn't hear the original transmission
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    if (routingGraph && nodeDB && myNode != 0 && heardFrom != sourceNode) {
+        bool isDirectNeighbor = false;
+        float directEtx = 1e9f;
+
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
-                NodeNum neighbor = myEdges->edges[i].to;
-                // Don't forward back to source or heardFrom nodes
-                if (neighbor == sourceNode || neighbor == heardFrom) {
-                    continue;
-                }
-                float etx = myEdges->edges[i].getEtx();
-                if (etx < bestEtx) {
-                    bestEtx = etx;
-                    bestNeighbor = neighbor;
+                if (myEdges->edges[i].to == destination) {
+                    isDirectNeighbor = true;
+                    directEtx = myEdges->edges[i].getEtx();
+                    break;
                 }
             }
         }
 #else
-        auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-        if (edges) {
-            for (const Edge& e : *edges) {
-                NodeNum neighbor = e.to;
-                // Don't forward back to source or heardFrom nodes
-                if (neighbor == sourceNode || neighbor == heardFrom) {
-                    continue;
-                }
-                if (e.etx < bestEtx) {
-                    bestEtx = e.etx;
-                    bestNeighbor = neighbor;
+        auto myEdges = routingGraph->getEdgesFrom(myNode);
+        if (myEdges) {
+            for (const Edge& e : *myEdges) {
+                if (e.to == destination) {
+                    isDirectNeighbor = true;
+                    directEtx = e.etx;
+                    break;
                 }
             }
         }
 #endif
 
-        if (bestNeighbor != 0) {
-            char nhName[64];
-            getNodeDisplayName(bestNeighbor, nhName, sizeof(nhName));
-            LOG_DEBUG("[SR] No route to %s; forwarding opportunistically via %s (ETX=%.2f)", destName, nhName, bestEtx);
-            return bestNeighbor;
+        if (isDirectNeighbor) {
+            LOG_DEBUG("[SR] Delivering unicast to direct neighbor %s (ETX=%.2f) since destination didn't hear transmission",
+                     destName, directEtx);
+            return destination; // Deliver directly to our neighbor
         }
     }
 
-    // Fallback 3: if we are recorded as a gateway for this destination, we can deliver directly
+    // Fallback 4: if we are recorded as a gateway for this destination, we can deliver directly
     // This handles true gateway scenarios where we have unique connectivity that other SR nodes don't
-    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
-    if (myNode != 0 && getGatewayFor(destination) == myNode) {
+    if (getGatewayFor(destination) == myNode) {
         LOG_INFO("[SR] We are the designated gateway for %s - delivering directly", destName);
         // Refresh the gateway relationship since we're actively using it
         recordGatewayRelation(myNode, destination);
         return destination; // We are the gateway, deliver directly
     }
 
-    // Fallback 4: if the destination only has us as a neighbor (effective gateway scenario),
+    // Fallback 5: if the destination only has us as a neighbor (effective gateway scenario),
     // we should try to deliver directly even without formal gateway designation
     // This handles cases like FMC6 where a node only connects through us
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    if (routingGraph && nodeDB && myNode != 0) {
+    if (routingGraph && nodeDB) {
         const NodeEdgesLite *destEdges = routingGraph->getEdgesFrom(destination);
         if (destEdges && destEdges->edgeCount == 1 && destEdges->edges[0].to == myNode) {
             LOG_INFO("[SR] %s only connects through us (effective gateway) - delivering directly", destName);
@@ -1392,6 +1551,90 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
 
     LOG_DEBUG("[SR] No route found to %s", destName);
     return 0;
+}
+
+NodeNum SignalRoutingModule::findBetterPositionedNeighbor(NodeNum destination, NodeNum sourceNode, NodeNum heardFrom,
+                                                         float ourRouteCost, uint32_t currentTime) {
+    if (!routingGraph || !nodeDB) {
+        return 0;
+    }
+
+    NodeNum myNode = nodeDB->getNodeNum();
+    NodeNum bestNeighbor = 0;
+    float bestNeighborRouteCost = ourRouteCost;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+    if (!myEdges) {
+        return 0;
+    }
+
+    for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+        NodeNum neighbor = myEdges->edges[i].to;
+
+        // Don't forward back to source or heardFrom nodes
+        if (neighbor == sourceNode || neighbor == heardFrom) {
+            continue;
+        }
+
+        // Check if this neighbor has a direct connection to the destination
+        const NodeEdgesLite* neighborEdges = routingGraph->getEdgesFrom(neighbor);
+        if (neighborEdges) {
+            for (uint8_t j = 0; j < neighborEdges->edgeCount; j++) {
+                if (neighborEdges->edges[j].to == destination) {
+                    float directEtx = neighborEdges->edges[j].getEtx();
+                    // If neighbor has a direct connection that's significantly better than our route cost,
+                    // forward to them. Direct connection ETX should be much better than multi-hop route cost.
+                    if (directEtx < ourRouteCost - 1.0f && directEtx < bestNeighborRouteCost) {
+                        bestNeighbor = neighbor;
+                        bestNeighborRouteCost = directEtx;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+#else
+    auto myEdges = routingGraph->getEdgesFrom(myNode);
+    if (!myEdges) {
+        return 0;
+    }
+
+    for (const Edge& myEdge : *myEdges) {
+        NodeNum neighbor = myEdge.to;
+
+        // Don't forward back to source or heardFrom nodes
+        if (neighbor == sourceNode || neighbor == heardFrom) {
+            continue;
+        }
+
+        // Check if this neighbor has a direct connection to the destination
+        auto neighborEdges = routingGraph->getEdgesFrom(neighbor);
+        if (neighborEdges) {
+            for (const Edge& neighborEdge : *neighborEdges) {
+                if (neighborEdge.to == destination) {
+                    // If neighbor has a direct connection that's significantly better than our route cost,
+                    // forward to them. Direct connection ETX should be much better than multi-hop route cost.
+                    if (neighborEdge.etx < ourRouteCost - 1.0f && neighborEdge.etx < bestNeighborRouteCost) {
+                        bestNeighbor = neighbor;
+                        bestNeighborRouteCost = neighborEdge.etx;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+#endif
+
+    if (bestNeighbor != 0) {
+        char nhName[64], destName[64];
+        getNodeDisplayName(bestNeighbor, nhName, sizeof(nhName));
+        getNodeDisplayName(destination, destName, sizeof(destName));
+        LOG_DEBUG("[SR] Found better positioned neighbor %s for %s (our cost: %.2f, neighbor direct ETX: %.2f)",
+                 nhName, destName, ourRouteCost, bestNeighborRouteCost);
+    }
+
+    return bestNeighbor;
 }
 
 void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance)
