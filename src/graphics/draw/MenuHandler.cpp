@@ -1400,40 +1400,46 @@ void menuHandler::GPSSmartPositionMenu()
 
 void menuHandler::GPSUpdateIntervalMenu()
 {
-    static const char *optionsArray[] = {"Back",       "30 Seconds", "1 Minute",    "2 Minutes", "5 Minutes",
-                                         "10 Minutes", "15 Minutes", "30 Minutes",  "1 Hour",    "6 Hours",
-                                         "12 Hours",   "24 Hours",   "At Boot Only"};
+    static const char *optionsArray[] = {"Back",      "8 seconds", "20 seconds", "40 seconds",  "1 minute",   "80 seconds",
+                                         "2 minutes", "5 minutes", "10 minutes", "15 minutes",  "30 minutes", "1 hour",
+                                         "6 hours",   "12 hours",  "24 hours",   "At Boot Only"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Update Interval";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 13;
+    bannerOptions.optionsCount = 15;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuQueue = position_base_menu;
             screen->runNow();
         } else if (selected == 1) {
-            config.position.gps_update_interval = 30;
+            config.position.gps_update_interval = 8;
         } else if (selected == 2) {
-            config.position.gps_update_interval = 60;
+            config.position.gps_update_interval = 20;
         } else if (selected == 3) {
-            config.position.gps_update_interval = 120;
+            config.position.gps_update_interval = 40;
         } else if (selected == 4) {
-            config.position.gps_update_interval = 300;
+            config.position.gps_update_interval = 60;
         } else if (selected == 5) {
-            config.position.gps_update_interval = 600;
+            config.position.gps_update_interval = 80;
         } else if (selected == 6) {
-            config.position.gps_update_interval = 900;
+            config.position.gps_update_interval = 120;
         } else if (selected == 7) {
-            config.position.gps_update_interval = 1800;
+            config.position.gps_update_interval = 300;
         } else if (selected == 8) {
-            config.position.gps_update_interval = 3600;
+            config.position.gps_update_interval = 600;
         } else if (selected == 9) {
-            config.position.gps_update_interval = 21600;
+            config.position.gps_update_interval = 900;
         } else if (selected == 10) {
-            config.position.gps_update_interval = 43200;
+            config.position.gps_update_interval = 1800;
         } else if (selected == 11) {
-            config.position.gps_update_interval = 86400;
+            config.position.gps_update_interval = 3600;
         } else if (selected == 12) {
+            config.position.gps_update_interval = 21600;
+        } else if (selected == 13) {
+            config.position.gps_update_interval = 43200;
+        } else if (selected == 14) {
+            config.position.gps_update_interval = 86400;
+        } else if (selected == 15) {
             config.position.gps_update_interval = 2147483647; // At Boot Only
         }
 
@@ -1476,39 +1482,48 @@ void menuHandler::GPSUpdateIntervalMenu()
 
 void menuHandler::GPSPositionBroadcastMenu()
 {
-    static const char *optionsArray[] = {"Back",     "1 Hour",   "2 Hours",  "3 Hours",  "4 Hours",  "5 Hours", "6 Hours",
-                                         "12 Hours", "18 Hours", "24 Hours", "36 Hours", "48 Hours", "72 Hours"};
+    static const char *optionsArray[] = {"Back",     "1 minute", "90 seconds", "5 minutes", "15 minutes", "1 hour",
+                                         "2 hours",  "3 hours",  "4 hours",    "5 hours",   "6 hours",    "12 hours",
+                                         "18 hours", "24 hours", "36 hours",   "48 hours",  "72 hours"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Broadcast Interval";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 13;
+    bannerOptions.optionsCount = 16;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuQueue = position_base_menu;
             screen->runNow();
         } else if (selected == 1) {
-            config.position.position_broadcast_secs = 3600;
+            config.position.position_broadcast_secs = 60;
         } else if (selected == 2) {
-            config.position.position_broadcast_secs = 7200;
+            config.position.position_broadcast_secs = 90;
         } else if (selected == 3) {
-            config.position.position_broadcast_secs = 10800;
+            config.position.position_broadcast_secs = 300;
         } else if (selected == 4) {
-            config.position.position_broadcast_secs = 14400;
+            config.position.position_broadcast_secs = 900;
         } else if (selected == 5) {
-            config.position.position_broadcast_secs = 18000;
+            config.position.position_broadcast_secs = 3600;
         } else if (selected == 6) {
-            config.position.position_broadcast_secs = 21600;
+            config.position.position_broadcast_secs = 7200;
         } else if (selected == 7) {
-            config.position.position_broadcast_secs = 43200;
+            config.position.position_broadcast_secs = 10800;
         } else if (selected == 8) {
-            config.position.position_broadcast_secs = 64800;
+            config.position.position_broadcast_secs = 14400;
         } else if (selected == 9) {
-            config.position.position_broadcast_secs = 86400;
+            config.position.position_broadcast_secs = 18000;
         } else if (selected == 10) {
-            config.position.position_broadcast_secs = 129600;
+            config.position.position_broadcast_secs = 21600;
         } else if (selected == 11) {
-            config.position.position_broadcast_secs = 172800;
+            config.position.position_broadcast_secs = 43200;
         } else if (selected == 12) {
+            config.position.position_broadcast_secs = 64800;
+        } else if (selected == 13) {
+            config.position.position_broadcast_secs = 86400;
+        } else if (selected == 14) {
+            config.position.position_broadcast_secs = 129600;
+        } else if (selected == 15) {
+            config.position.position_broadcast_secs = 172800;
+        } else if (selected == 16) {
             config.position.position_broadcast_secs = 259200;
         }
 
