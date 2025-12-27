@@ -162,6 +162,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #if HAS_NETWORKING
 
+namespace meshtastic {
 class Syslog
 {
   private:
@@ -193,6 +194,8 @@ class Syslog
 
     bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
     bool vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
+};
+
 };
 
 #endif // HAS_NETWORKING
