@@ -169,6 +169,10 @@ extern struct portduino_config_struct {
     int configDisplayMode = 0;
     bool has_configDisplayMode = false;
 
+    // Store and Forward++
+    bool sfpp_stratum0 = false;
+    int initial_sync = 10;
+
     // General
     std::string mac_address = "";
     bool mac_address_explicit = false;
@@ -486,6 +490,15 @@ extern struct portduino_config_struct {
             }
 
             out << YAML::EndMap; // Config
+        }
+
+        // StoreAndForward
+        if (sfpp_stratum0 || initial_sync != 10) {
+            out << YAML::Key << "StoreAndForward" << YAML::Value << YAML::BeginMap;
+
+            out << YAML::Key << "Stratum0" << YAML::Value << sfpp_stratum0;
+            out << YAML::Key << "InitialSync" << YAML::Value << initial_sync;
+            out << YAML::EndMap; // StoreAndForward
         }
 
         // General

@@ -788,6 +788,11 @@ bool loadConfig(const char *configPath)
             }
         }
 
+        if (yamlConfig["StoreAndForward"]) {
+            portduino_config.sfpp_stratum0 = (yamlConfig["StoreAndForward"]["Stratum0"]).as<bool>(false);
+            portduino_config.initial_sync = (yamlConfig["StoreAndForward"]["InitialSync"]).as<int>(10);
+        }
+
         if (yamlConfig["General"]) {
             portduino_config.MaxNodes = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             portduino_config.maxtophone = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
