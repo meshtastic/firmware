@@ -4,7 +4,7 @@
 // This board has a serial coprocessor for sensor readings
 #define SENSOR_RP2040_TXD 19
 #define SENSOR_RP2040_RXD 20
-#define SENSOR_PORT_NUM 2
+#define SENSOR_PORT_NUM UART_NUM_2
 #define SENSOR_BAUD_RATE 115200
 
 #define BUTTON_PIN 38

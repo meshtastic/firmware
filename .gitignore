@@ -39,5 +39,14 @@ release/
 src/mesh/raspihttp/certificate.pem
 src/mesh/raspihttp/private_key.pem
 
+# pioarduino platform
+managed_components/*
+arduino-lib-builder*
+dependencies.lock
+idf_component.yml
+CMakeLists.txt
+sdkconfig.*
+.dummy/*
+
 # Ignore logo (set at build time with platformio-custom.py)
 data/boot/logo.*
