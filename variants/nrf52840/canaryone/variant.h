@@ -103,7 +103,7 @@ static const uint8_t A0 = PIN_A0;
 #define EXTERNAL_FLASH_USE_QSPI
 
 // Add a delay on startup to allow LoRa and GPS to power up
-#define PIN_PWR_DELAY_MS 100
+#define PERIPHERAL_WARMUP_MS 100
 
 /*
  * Lora radio
