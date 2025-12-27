@@ -1450,30 +1450,36 @@ void menuHandler::GPSUpdateIntervalMenu()
         }
     };
 
-    if (config.position.gps_update_interval == 30) {
+    if (config.position.gps_update_interval == 8) {
         bannerOptions.InitialSelected = 1;
-    } else if (config.position.gps_update_interval == 60) {
+    } else if (config.position.gps_update_interval == 20) {
         bannerOptions.InitialSelected = 2;
-    } else if (config.position.gps_update_interval == 120) {
+    } else if (config.position.gps_update_interval == 40) {
         bannerOptions.InitialSelected = 3;
-    } else if (config.position.gps_update_interval == 300) {
+    } else if (config.position.gps_update_interval == 60) {
         bannerOptions.InitialSelected = 4;
-    } else if (config.position.gps_update_interval == 600) {
+    } else if (config.position.gps_update_interval == 80) {
         bannerOptions.InitialSelected = 5;
-    } else if (config.position.gps_update_interval == 900) {
+    } else if (config.position.gps_update_interval == 120) {
         bannerOptions.InitialSelected = 6;
-    } else if (config.position.gps_update_interval == 1800) {
+    } else if (config.position.gps_update_interval == 300) {
         bannerOptions.InitialSelected = 7;
-    } else if (config.position.gps_update_interval == 3600) {
+    } else if (config.position.gps_update_interval == 600) {
         bannerOptions.InitialSelected = 8;
-    } else if (config.position.gps_update_interval == 21600) {
+    } else if (config.position.gps_update_interval == 900) {
         bannerOptions.InitialSelected = 9;
-    } else if (config.position.gps_update_interval == 43200) {
+    } else if (config.position.gps_update_interval == 1800) {
         bannerOptions.InitialSelected = 10;
-    } else if (config.position.gps_update_interval == 86400) {
+    } else if (config.position.gps_update_interval == 3600) {
         bannerOptions.InitialSelected = 11;
-    } else if (config.position.gps_update_interval == 2147483647) { // At Boot Only
+    } else if (config.position.gps_update_interval == 21600) {
         bannerOptions.InitialSelected = 12;
+    } else if (config.position.gps_update_interval == 43200) {
+        bannerOptions.InitialSelected = 13;
+    } else if (config.position.gps_update_interval == 86400) {
+        bannerOptions.InitialSelected = 14;
+    } else if (config.position.gps_update_interval == 2147483647) { // At Boot Only
+        bannerOptions.InitialSelected = 15;
     } else {
         bannerOptions.InitialSelected = 0;
     }
@@ -1534,30 +1540,38 @@ void menuHandler::GPSPositionBroadcastMenu()
         }
     };
 
-    if (config.position.position_broadcast_secs == 3600) {
+    if (config.position.position_broadcast_secs == 60) {
         bannerOptions.InitialSelected = 1;
-    } else if (config.position.position_broadcast_secs == 7200) {
+    } else if (config.position.position_broadcast_secs == 90) {
         bannerOptions.InitialSelected = 2;
-    } else if (config.position.position_broadcast_secs == 10800) {
+    } else if (config.position.position_broadcast_secs == 300) {
         bannerOptions.InitialSelected = 3;
-    } else if (config.position.position_broadcast_secs == 14400) {
+    } else if (config.position.position_broadcast_secs == 900) {
         bannerOptions.InitialSelected = 4;
-    } else if (config.position.position_broadcast_secs == 18000) {
+    } else if (config.position.position_broadcast_secs == 3600) {
         bannerOptions.InitialSelected = 5;
-    } else if (config.position.position_broadcast_secs == 21600) {
+    } else if (config.position.position_broadcast_secs == 7200) {
         bannerOptions.InitialSelected = 6;
-    } else if (config.position.position_broadcast_secs == 43200) {
+    } else if (config.position.position_broadcast_secs == 10800) {
         bannerOptions.InitialSelected = 7;
-    } else if (config.position.position_broadcast_secs == 64800) {
+    } else if (config.position.position_broadcast_secs == 14400) {
         bannerOptions.InitialSelected = 8;
-    } else if (config.position.position_broadcast_secs == 86400) {
+    } else if (config.position.position_broadcast_secs == 18000) {
         bannerOptions.InitialSelected = 9;
-    } else if (config.position.position_broadcast_secs == 129600) {
+    } else if (config.position.position_broadcast_secs == 21600) {
         bannerOptions.InitialSelected = 10;
-    } else if (config.position.position_broadcast_secs == 172800) {
+    } else if (config.position.position_broadcast_secs == 43200) {
         bannerOptions.InitialSelected = 11;
-    } else if (config.position.position_broadcast_secs == 259200) {
+    } else if (config.position.position_broadcast_secs == 64800) {
         bannerOptions.InitialSelected = 12;
+    } else if (config.position.position_broadcast_secs == 86400) {
+        bannerOptions.InitialSelected = 13;
+    } else if (config.position.position_broadcast_secs == 129600) {
+        bannerOptions.InitialSelected = 14;
+    } else if (config.position.position_broadcast_secs == 172800) {
+        bannerOptions.InitialSelected = 15;
+    } else if (config.position.position_broadcast_secs == 259200) {
+        bannerOptions.InitialSelected = 16;
     } else {
         bannerOptions.InitialSelected = 0;
     }
