@@ -32,10 +32,13 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     virtual int32_t runOnce() override;
 
     void flush();
+    void rxInt();
 
   protected:
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
+
+    virtual void onNowHasData(uint32_t fromRadioNum) override;
 
     /// Possibly switch to protobufs if we see a valid protobuf message
     virtual void log_to_serial(const char *logLevel, const char *format, va_list arg);

@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
 #include <cstring>
@@ -57,7 +58,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
 #endif
 
 #ifdef ARCH_PORTDUINO
-    bool color = !settingsMap[ascii_logs];
+    bool color = !portduino_config.ascii_logs;
 #else
     bool color = true;
 #endif
@@ -99,7 +100,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
     size_t r = 0;
 
 #ifdef ARCH_PORTDUINO
-    bool color = !settingsMap[ascii_logs];
+    bool color = !portduino_config.ascii_logs;
 #else
     bool color = true;
 #endif
@@ -166,6 +167,16 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         print(thread->ThreadName);
         print("] ");
     }
+
+#ifdef DEBUG_HEAP
+    // Add heap free space bytes prefix before every log message
+#ifdef ARCH_PORTDUINO
+    ::printf("[heap %u] ", memGet.getFreeHeap());
+#else
+    printf("[heap %u] ", memGet.getFreeHeap());
+#endif
+#endif // DEBUG_HEAP
+
     r += vprintf(logLevel, format, arg);
 }
 
@@ -288,7 +299,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-        if (settingsStrings[traceFilename] != "") {
+        if (portduino_config.traceFilename != "") {
             va_list arg;
             va_start(arg, format);
             try {
@@ -297,18 +308,18 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
             }
             va_end(arg);
         }
-        if (settingsMap[logoutputlevel] < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
+        if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
             delete[] newFormat;
             return;
         }
     }
-    if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
+    if (portduino_config.logoutputlevel < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         delete[] newFormat;
         return;
-    } else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
+    } else if (portduino_config.logoutputlevel < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
         delete[] newFormat;
         return;
-    } else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
+    } else if (portduino_config.logoutputlevel < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
         delete[] newFormat;
         return;
     }

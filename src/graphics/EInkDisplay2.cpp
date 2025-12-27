@@ -243,7 +243,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK)
+#elif defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK) || defined(HELTEC_MESH_SOLAR_EINK)
     {
         spi1 = &SPI1;
         spi1->begin();

@@ -2,6 +2,8 @@
 #include "configuration.h"
 #include <Throttle.h>
 
+SerialKeyboard *globalSerialKeyboard = nullptr;
+
 #ifdef INPUTBROKER_SERIAL_TYPE
 #define CANNED_MESSAGE_MODULE_ENABLE 1 // in case it's not set in the variant file
 
@@ -25,11 +27,13 @@ unsigned char KeyMap[3][4][10] = {{{'.', 'a', 'd', 'g', 'j', 'm', 'p', 't', 'w',
 SerialKeyboard::SerialKeyboard(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;
+
+    globalSerialKeyboard = this;
 }
 
 void SerialKeyboard::erase()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_BACK;
     e.kbchar = 0x08;
     e.source = this->_originName;
@@ -80,14 +84,26 @@ int32_t SerialKeyboard::runOnce()
 
         if (keys < prevKeys) { // a new key has been pressed (and not released), doesn't works for multiple presses at once but
                                // shouldn't be a limitation
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             // SELECT OR SEND OR CANCEL EVENT
             if (!(shiftRegister2 & (1 << 3))) {
-                e.inputEvent = INPUT_BROKER_UP;
+                if (shift > 0) {
+                    e.inputEvent = INPUT_BROKER_ANYKEY; // REQUIRED
+                    e.kbchar = 0x09;                    // TAB
+                    shift = 0;                          // reset shift after TAB
+                } else {
+                    e.inputEvent = INPUT_BROKER_LEFT;
+                }
             } else if (!(shiftRegister2 & (1 << 2))) {
-                e.inputEvent = INPUT_BROKER_RIGHT;
+                if (shift > 0) {
+                    e.inputEvent = INPUT_BROKER_ANYKEY; // REQUIRED
+                    e.kbchar = 0x09;                    // TAB
+                    shift = 0;                          // reset shift after TAB
+                } else {
+                    e.inputEvent = INPUT_BROKER_RIGHT;
+                }
                 e.kbchar = 0;
             } else if (!(shiftRegister2 & (1 << 1))) {
                 e.inputEvent = INPUT_BROKER_SELECT;
