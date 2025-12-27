@@ -1406,7 +1406,7 @@ void menuHandler::GPSUpdateIntervalMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Update Interval";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 15;
+    bannerOptions.optionsCount = 16;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuQueue = position_base_menu;
@@ -1488,7 +1488,7 @@ void menuHandler::GPSPositionBroadcastMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Broadcast Interval";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 16;
+    bannerOptions.optionsCount = 17;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuQueue = position_base_menu;
