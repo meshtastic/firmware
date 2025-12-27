@@ -653,7 +653,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL)) &&                                                                                                  \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT)) &&                                                                        \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -664,7 +664,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306)
+    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306) ||         \
+    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -734,6 +735,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
+#ifdef COMPASS_ORIENTATION
+    config.display.compass_orientation = COMPASS_ORIENTATION;
+#endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (WiFiOTA::isUpdated()) {
         WiFiOTA::recoverConfig(&config.network);
@@ -801,11 +805,16 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312)
-    // Default to RAK led pin 2 (blue)
+#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
+    defined(ELECROW_ThinkNode_M6)
+    // Default to PIN_LED2 for external notification output (LED color depends on device variant)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
+#if defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
+    moduleConfig.external_notification.active = false;
+#else
     moduleConfig.external_notification.active = true;
+#endif
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
@@ -984,12 +993,25 @@ void NodeDB::installDefaultChannels()
     channelFile.version = DEVICESTATE_CUR_VER;
 }
 
-void NodeDB::resetNodes()
+void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    if (keepFavorites) {
+        LOG_INFO("Clearing node database - preserving favorites");
+        for (size_t i = 0; i < meshNodes->size(); i++) {
+            meshtastic_NodeInfoLite &node = meshNodes->at(i);
+            if (i > 0 && !node.is_favorite) {
+                node = meshtastic_NodeInfoLite();
+            } else {
+                numMeshNodes += 1;
+            }
+        };
+    } else {
+        LOG_INFO("Clearing node database - removing favorites");
+        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+    }
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1022,6 +1044,7 @@ void NodeDB::clearLocalPosition()
     node->position.altitude = 0;
     node->position.time = 0;
     setLocalPosition(meshtastic_Position_init_default);
+    localPositionUpdatedSinceBoot = false;
 }
 
 void NodeDB::cleanupMeshDB()
@@ -1638,13 +1661,32 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // If should_ignore is set,
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
         info->is_ignored = true;
+        info->is_favorite = false;
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
         info->user.public_key.bytes[0] = 0;
     } else {
-        info->last_heard = getValidTime(RTCQualityNTP);
-        info->is_favorite = true;
+        /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
+         * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
+         */
+
+        /* "Boring old nodes" are the first to be evicted out of the node database when full. This includes a newly-zeroed
+         * nodeinfo because it has: !is_favorite && last_heard==0. To keep this from happening when we addFromContact, we set the
+         * new node as a favorite, and we leave last_heard alone (even if it's zero).
+         */
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+            // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
+            // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
+            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
+            info->last_heard = getTime();
+        } else {
+            // Normal case: set is_favorite to prevent expiration.
+            // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
+            info->is_favorite = true;
+        }
+
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
             info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
@@ -1976,6 +2018,7 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
 bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
@@ -1990,6 +2033,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     }
     return false;
 }
+#endif
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
