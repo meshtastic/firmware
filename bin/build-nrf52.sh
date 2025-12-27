@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Example: ./bin/build-nrf52.sh heltec-mesh-node-t114
 
 set -e
 
