@@ -265,7 +265,11 @@ jobs:
           head: ${{ github.sha }}
       - name: Download the old manifests
         if: github.event_name == 'pull_request_target'
-        run: gh run download -R ${{ github.repository }} --name manifests-${{ env.MERGE_BASE }} --dir manifest-old/
+        run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          merge_base: ${{ env.MERGE_BASE }}
+          repo: ${{ github.repository }}
       - name: Do scan and post comment
         if: github.event_name == 'pull_request_target'
         run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
