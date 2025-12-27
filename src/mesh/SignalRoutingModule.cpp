@@ -1161,33 +1161,11 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
              topologyHealthy ? "HEALTHY" : "unhealthy");
 
     if (!topologyHealthy) {
-        LOG_DEBUG("[SR] Insufficient SR-capable nodes for reliable unicast - using Graph routing with contention window");
+        LOG_DEBUG("[SR] Destination node not known - not broadcasting unicast packet to avoid network flooding");
+        LOG_DEBUG("[SR] Unknown nodes should announce themselves through broadcasts for topology discovery");
 
-        // Use the Graph's shouldRelay logic which has built-in contention window support
-        // This provides the same redundancy and coordination logic as regular flooding
-        if (routingGraph) {
-            NodeNum myNode = nodeDB->getNodeNum();
-            NodeNum sourceNode = p->from;
-            NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
-
-            uint32_t currentTime = getTime();
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-            bool shouldRelay = routingGraph->shouldRelayWithContention(myNode, sourceNode, heardFrom, p->id, currentTime);
-#else
-            bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
-#endif
-            LOG_DEBUG("[SR] Graph routing decision: %s", shouldRelay ? "SHOULD relay" : "should NOT relay");
-
-            if (!shouldRelay && router) {
-                // Cancel any pending transmission that traditional routing might have queued
-                router->cancelSending(p->from, p->id);
-            }
-
-            return shouldRelay;
-        }
-
-        // No routing graph available, fall back to flooding
+        // Don't broadcast unicast packets for unknown destinations to prevent flooding
+        // The destination node should exist and broadcast its presence for us to learn about it
         return false;
     }
 
