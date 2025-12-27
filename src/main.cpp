@@ -1186,11 +1186,6 @@ void setup()
 #endif
 #endif
 
-#ifdef PIN_PWR_DELAY_MS
-    // This may be required to give the peripherals time to power up.
-    delay(PIN_PWR_DELAY_MS);
-#endif
-
 #ifdef ARCH_PORTDUINO
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
