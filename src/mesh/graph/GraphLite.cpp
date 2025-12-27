@@ -307,69 +307,61 @@ RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime)
 
 bool GraphLite::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const
 {
-    // Simplified relay decision for constrained devices:
-    // 1. If we have unique neighbors that didn't hear the packet, relay
-    // 2. Otherwise, don't relay
+    // Simplified version of the algorithm for constrained devices
+    // Find best candidate and relay logic similar to full Graph
 
     const NodeEdgesLite *myEdges = findNode(myNode);
-    const NodeEdgesLite *sourceEdges = findNode(sourceNode);
-    const NodeEdgesLite *relayEdges = (heardFrom == sourceNode) ? nullptr : findNode(heardFrom);
+    const NodeEdgesLite *transmittingEdges = findNode(heardFrom);
 
     if (!myEdges || myEdges->edgeCount == 0) {
         return false; // We have no neighbors, no point relaying
     }
 
-    // Count neighbors we have that the source doesn't have direct connection to
+    if (!transmittingEdges) {
+        return false; // No transmitting node edges found
+    }
+
+    // Build set of already covered nodes
+    std::unordered_set<NodeNum> alreadyCovered;
+    alreadyCovered.insert(sourceNode);
+    alreadyCovered.insert(heardFrom);
+
+    for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
+        alreadyCovered.insert(transmittingEdges->edges[i].to);
+    }
+
+    // Find best candidate (simplified - just check if we have unique coverage)
     uint8_t uniqueNeighbors = 0;
     for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
         NodeNum neighbor = myEdges->edges[i].to;
-        if (neighbor == sourceNode || neighbor == heardFrom) {
-            continue; // They already have the packet
-        }
-
-        // Check if source or relayer has direct connection to this neighbor
-        bool sourceHasIt = false;
-        if (sourceEdges) {
-            for (uint8_t j = 0; j < sourceEdges->edgeCount; j++) {
-                if (sourceEdges->edges[j].to == neighbor) {
-                    sourceHasIt = true;
-                    break;
-                }
-            }
-        }
-
-        if (relayEdges && !sourceHasIt) {
-            for (uint8_t j = 0; j < relayEdges->edgeCount; j++) {
-                if (relayEdges->edges[j].to == neighbor) {
-                    sourceHasIt = true;
-                    break;
-                }
-            }
-        }
-
-        if (!sourceHasIt) {
+        if (alreadyCovered.find(neighbor) == alreadyCovered.end()) {
             uniqueNeighbors++;
         }
     }
 
-    // Relay if we have at least one unique neighbor
+    // For lite mode, simplified logic: relay if we have unique neighbors
+    // In full implementation this would check if we're the best candidate, wait for others, etc.
     return uniqueNeighbors > 0;
 }
 
 bool GraphLite::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const
 {
     // Conservative relay decision for mixed networks with stock gateways:
+    // Only consider nodes that directly heard the transmitting node (heardFrom)
     // Be more selective about relaying to avoid competing with stock gateways
 
     const NodeEdgesLite *myEdges = findNode(myNode);
-    const NodeEdgesLite *sourceEdges = findNode(sourceNode);
-    const NodeEdgesLite *relayEdges = (heardFrom == sourceNode) ? nullptr : findNode(heardFrom);
+    const NodeEdgesLite *transmittingEdges = findNode(heardFrom);  // Only consider transmitting node's neighbors
 
     if (!myEdges || myEdges->edgeCount == 0) {
         return false; // We have no neighbors, no point relaying
     }
 
-    // Count SR neighbors we have that the source doesn't have direct connection to
+    if (!transmittingEdges) {
+        return false; // No transmitting node edges found
+    }
+
+    // Count SR neighbors we have that the transmitting node doesn't have direct connection to
     uint8_t uniqueSrNeighbors = 0;
     for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
         NodeNum neighbor = myEdges->edges[i].to;
@@ -377,27 +369,16 @@ bool GraphLite::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode
             continue; // They already have the packet
         }
 
-        // Check if source or relayer has direct connection to this neighbor
-        bool sourceHasIt = false;
-        if (sourceEdges) {
-            for (uint8_t j = 0; j < sourceEdges->edgeCount; j++) {
-                if (sourceEdges->edges[j].to == neighbor) {
-                    sourceHasIt = true;
-                    break;
-                }
+        // Check if the transmitting node has direct connection to this neighbor
+        bool transmittingHasIt = false;
+        for (uint8_t j = 0; j < transmittingEdges->edgeCount; j++) {
+            if (transmittingEdges->edges[j].to == neighbor) {
+                transmittingHasIt = true;
+                break;
             }
         }
 
-        if (relayEdges && !sourceHasIt) {
-            for (uint8_t j = 0; j < relayEdges->edgeCount; j++) {
-                if (relayEdges->edges[j].to == neighbor) {
-                    sourceHasIt = true;
-                    break;
-                }
-            }
-        }
-
-        if (!sourceHasIt) {
+        if (!transmittingHasIt) {
             uniqueSrNeighbors++;
         }
     }
