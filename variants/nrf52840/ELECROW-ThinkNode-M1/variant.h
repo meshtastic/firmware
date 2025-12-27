@@ -55,7 +55,6 @@ extern "C" {
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
 #define LED_GREEN PIN_LED2
-#define LED_BUILTIN LED_BLUE
 #define LED_CONN PIN_GREEN
 #define LED_STATE_ON 0 // State when LED is lit  // LED灯亮时的状态
 #define PIN_BUZZER (0 + 6)
