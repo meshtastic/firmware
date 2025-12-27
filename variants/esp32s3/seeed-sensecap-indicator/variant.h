@@ -14,7 +14,7 @@
 // #define BUTTON_NEED_PULLUP
 
 // #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-// #define ADC_CHANNEL ADC1_GPIO27_CHANNEL
+// #define ADC_CHANNEL ADC2_GPIO27_CHANNEL
 // #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
