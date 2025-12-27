@@ -22,6 +22,9 @@ class menuHandler
         node_base_menu,
         gps_toggle_menu,
         gps_format_menu,
+        gps_smart_position_menu,
+        gps_update_interval_menu,
+        gps_position_broadcast_menu,
         compass_point_north_menu,
         reset_node_db_menu,
         buzzermodemenupicker,
@@ -77,6 +80,9 @@ class menuHandler
     static void compassNorthMenu();
     static void GPSToggleMenu();
     static void GPSFormatMenu();
+    static void GPSSmartPositionMenu();
+    static void GPSUpdateIntervalMenu();
+    static void GPSPositionBroadcastMenu();
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
     static void TFTColorPickerMenu(OLEDDisplay *display);

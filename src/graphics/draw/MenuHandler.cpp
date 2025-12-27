@@ -1092,11 +1092,23 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    enum optionsNumbers { Back, GPSToggle, GPSFormat, CompassMenu, CompassCalibrate, enumEnd };
+    enum optionsNumbers {
+        Back,
+        GPSToggle,
+        GPSFormat,
+        CompassMenu,
+        CompassCalibrate,
+        GPSSmartPosition,
+        GPSUpdateInterval,
+        GPSPositionBroadcast,
+        enumEnd
+    };
 
-    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "GPS Format", "Compass"};
-    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, GPSFormat, CompassMenu};
-    int options = 4;
+    static const char *optionsArray[enumEnd] = {
+        "Back", "On/Off Toggle", "Format", "Smart Position", "Update Interval", "Broadcast Interval", "Compass"};
+    static int optionsEnumArray[enumEnd] = {
+        Back, GPSToggle, GPSFormat, GPSSmartPosition, GPSUpdateInterval, GPSPositionBroadcast, CompassMenu};
+    int options = 7;
 
     if (accelerometerThread) {
         optionsArray[options] = "Compass Calibrate";
@@ -1104,7 +1116,7 @@ void menuHandler::positionBaseMenu()
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Position Action";
+    bannerOptions.message = "GPS Action";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -1120,6 +1132,15 @@ void menuHandler::positionBaseMenu()
             screen->runNow();
         } else if (selected == CompassCalibrate) {
             accelerometerThread->calibrate(30);
+        } else if (selected == GPSSmartPosition) {
+            menuQueue = gps_smart_position_menu;
+            screen->runNow();
+        } else if (selected == GPSUpdateInterval) {
+            menuQueue = gps_update_interval_menu;
+            screen->runNow();
+        } else if (selected == GPSPositionBroadcast) {
+            menuQueue = gps_position_broadcast_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -1346,6 +1367,203 @@ void menuHandler::GPSFormatMenu()
     bannerOptions.InitialSelected = uiconfig.gps_format + 1;
     screen->showOverlayBanner(bannerOptions);
 }
+
+void menuHandler::GPSSmartPositionMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Toggle Smart Position";
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Smrt Postn";
+    }
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = position_base_menu;
+            screen->runNow();
+        } else if (selected == 1) {
+            config.position.position_broadcast_smart_enabled = true;
+            saveUIConfig();
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 2) {
+            config.position.position_broadcast_smart_enabled = false;
+            saveUIConfig();
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+    bannerOptions.InitialSelected = config.position.position_broadcast_smart_enabled ? 1 : 2;
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::GPSUpdateIntervalMenu()
+{
+    static const char *optionsArray[] = {"Back",      "8 seconds", "20 seconds", "40 seconds",  "1 minute",   "80 seconds",
+                                         "2 minutes", "5 minutes", "10 minutes", "15 minutes",  "30 minutes", "1 hour",
+                                         "6 hours",   "12 hours",  "24 hours",   "At Boot Only"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Update Interval";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 16;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = position_base_menu;
+            screen->runNow();
+        } else if (selected == 1) {
+            config.position.gps_update_interval = 8;
+        } else if (selected == 2) {
+            config.position.gps_update_interval = 20;
+        } else if (selected == 3) {
+            config.position.gps_update_interval = 40;
+        } else if (selected == 4) {
+            config.position.gps_update_interval = 60;
+        } else if (selected == 5) {
+            config.position.gps_update_interval = 80;
+        } else if (selected == 6) {
+            config.position.gps_update_interval = 120;
+        } else if (selected == 7) {
+            config.position.gps_update_interval = 300;
+        } else if (selected == 8) {
+            config.position.gps_update_interval = 600;
+        } else if (selected == 9) {
+            config.position.gps_update_interval = 900;
+        } else if (selected == 10) {
+            config.position.gps_update_interval = 1800;
+        } else if (selected == 11) {
+            config.position.gps_update_interval = 3600;
+        } else if (selected == 12) {
+            config.position.gps_update_interval = 21600;
+        } else if (selected == 13) {
+            config.position.gps_update_interval = 43200;
+        } else if (selected == 14) {
+            config.position.gps_update_interval = 86400;
+        } else if (selected == 15) {
+            config.position.gps_update_interval = 2147483647; // At Boot Only
+        }
+
+        if (selected != 0) {
+            saveUIConfig();
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+
+    if (config.position.gps_update_interval == 30) {
+        bannerOptions.InitialSelected = 1;
+    } else if (config.position.gps_update_interval == 60) {
+        bannerOptions.InitialSelected = 2;
+    } else if (config.position.gps_update_interval == 120) {
+        bannerOptions.InitialSelected = 3;
+    } else if (config.position.gps_update_interval == 300) {
+        bannerOptions.InitialSelected = 4;
+    } else if (config.position.gps_update_interval == 600) {
+        bannerOptions.InitialSelected = 5;
+    } else if (config.position.gps_update_interval == 900) {
+        bannerOptions.InitialSelected = 6;
+    } else if (config.position.gps_update_interval == 1800) {
+        bannerOptions.InitialSelected = 7;
+    } else if (config.position.gps_update_interval == 3600) {
+        bannerOptions.InitialSelected = 8;
+    } else if (config.position.gps_update_interval == 21600) {
+        bannerOptions.InitialSelected = 9;
+    } else if (config.position.gps_update_interval == 43200) {
+        bannerOptions.InitialSelected = 10;
+    } else if (config.position.gps_update_interval == 86400) {
+        bannerOptions.InitialSelected = 11;
+    } else if (config.position.gps_update_interval == 2147483647) { // At Boot Only
+        bannerOptions.InitialSelected = 12;
+    } else {
+        bannerOptions.InitialSelected = 0;
+    }
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::GPSPositionBroadcastMenu()
+{
+    static const char *optionsArray[] = {"Back",     "1 minute", "90 seconds", "5 minutes", "15 minutes", "1 hour",
+                                         "2 hours",  "3 hours",  "4 hours",    "5 hours",   "6 hours",    "12 hours",
+                                         "18 hours", "24 hours", "36 hours",   "48 hours",  "72 hours"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Broadcast Interval";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 17;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = position_base_menu;
+            screen->runNow();
+        } else if (selected == 1) {
+            config.position.position_broadcast_secs = 60;
+        } else if (selected == 2) {
+            config.position.position_broadcast_secs = 90;
+        } else if (selected == 3) {
+            config.position.position_broadcast_secs = 300;
+        } else if (selected == 4) {
+            config.position.position_broadcast_secs = 900;
+        } else if (selected == 5) {
+            config.position.position_broadcast_secs = 3600;
+        } else if (selected == 6) {
+            config.position.position_broadcast_secs = 7200;
+        } else if (selected == 7) {
+            config.position.position_broadcast_secs = 10800;
+        } else if (selected == 8) {
+            config.position.position_broadcast_secs = 14400;
+        } else if (selected == 9) {
+            config.position.position_broadcast_secs = 18000;
+        } else if (selected == 10) {
+            config.position.position_broadcast_secs = 21600;
+        } else if (selected == 11) {
+            config.position.position_broadcast_secs = 43200;
+        } else if (selected == 12) {
+            config.position.position_broadcast_secs = 64800;
+        } else if (selected == 13) {
+            config.position.position_broadcast_secs = 86400;
+        } else if (selected == 14) {
+            config.position.position_broadcast_secs = 129600;
+        } else if (selected == 15) {
+            config.position.position_broadcast_secs = 172800;
+        } else if (selected == 16) {
+            config.position.position_broadcast_secs = 259200;
+        }
+
+        if (selected != 0) {
+            saveUIConfig();
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+
+    if (config.position.position_broadcast_secs == 3600) {
+        bannerOptions.InitialSelected = 1;
+    } else if (config.position.position_broadcast_secs == 7200) {
+        bannerOptions.InitialSelected = 2;
+    } else if (config.position.position_broadcast_secs == 10800) {
+        bannerOptions.InitialSelected = 3;
+    } else if (config.position.position_broadcast_secs == 14400) {
+        bannerOptions.InitialSelected = 4;
+    } else if (config.position.position_broadcast_secs == 18000) {
+        bannerOptions.InitialSelected = 5;
+    } else if (config.position.position_broadcast_secs == 21600) {
+        bannerOptions.InitialSelected = 6;
+    } else if (config.position.position_broadcast_secs == 43200) {
+        bannerOptions.InitialSelected = 7;
+    } else if (config.position.position_broadcast_secs == 64800) {
+        bannerOptions.InitialSelected = 8;
+    } else if (config.position.position_broadcast_secs == 86400) {
+        bannerOptions.InitialSelected = 9;
+    } else if (config.position.position_broadcast_secs == 129600) {
+        bannerOptions.InitialSelected = 10;
+    } else if (config.position.position_broadcast_secs == 172800) {
+        bannerOptions.InitialSelected = 11;
+    } else if (config.position.position_broadcast_secs == 259200) {
+        bannerOptions.InitialSelected = 12;
+    } else {
+        bannerOptions.InitialSelected = 0;
+    }
+    screen->showOverlayBanner(bannerOptions);
+}
+
 #endif
 
 void menuHandler::BluetoothToggleMenu()
@@ -2125,6 +2343,15 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case gps_format_menu:
         GPSFormatMenu();
+        break;
+    case gps_smart_position_menu:
+        GPSSmartPositionMenu();
+        break;
+    case gps_update_interval_menu:
+        GPSUpdateIntervalMenu();
+        break;
+    case gps_position_broadcast_menu:
+        GPSPositionBroadcastMenu();
         break;
 #endif
     case compass_point_north_menu:
