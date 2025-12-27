@@ -22,7 +22,7 @@
 class UdpMulticastHandler final
 {
   public:
-    UdpMulticastHandler() { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastHandler() { udpIpAddress = IPAddress(239, 0, 0, 69); }
 
     void start()
     {
