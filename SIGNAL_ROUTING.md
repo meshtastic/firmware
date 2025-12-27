@@ -109,7 +109,7 @@ bool shouldDeliverDirectToNeighbor(NodeNum destination, NodeNum heardFrom) {
 2. **Calculated multi-hop routes**: Using Dijkstra algorithm with ETX weights
 3. **Gateway routes**: Prefer direct connections to known gateways for extended reach
 4. **Opportunistic forwarding**: When topology incomplete, forward to best direct neighbor
-5. **Broadcast coordination**: For well-connected destinations, broadcast for coordinated delivery
+5. **Broadcast coordination**: Only for known, well-connected destinations to prevent flooding
 
 ### Speculative Retransmission
 
@@ -120,11 +120,18 @@ For unicast packets, SignalRouting implements speculative retransmission:
 
 ### Unicast Broadcast Coordination
 
-When SignalRouting has good route information to a unicast destination, it may broadcast the packet for coordinated delivery:
+SignalRouting broadcasts unicast packets only when the destination is known and well-connected:
 
 ```cpp
 bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p) {
-    // Check if we have a good route to the destination
+    // Only broadcast unicast packets for known destinations
+    bool topologyHealthy = topologyHealthyForUnicast(p->to);
+    if (!topologyHealthy) {
+        // Don't broadcast unicasts for unknown destinations to prevent flooding
+        return false;
+    }
+
+    // Check if we have a good route to the known destination
     Route route = routingGraph->calculateRoute(p->to, getTime());
     if (route.nextHop != 0 && route.cost < 5.0f) {
         // Broadcast unicast packet for relay coordination
@@ -134,7 +141,7 @@ bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p) {
 }
 ```
 
-This approach allows multiple nodes to coordinate delivery of unicast packets, improving reliability for important destinations while maintaining efficient routing for well-connected scenarios.
+This conservative approach prevents network flooding by only coordinating delivery for destinations that are already known in the network topology. Unknown nodes must announce themselves through broadcasts before unicast coordination can occur.
 
 ## Broadcast Routing
 
@@ -470,11 +477,10 @@ This iterative approach ensures optimal relay selection while handling timeouts 
 
 SignalRouting gracefully degrades when coordination isn't possible:
 
-1. **Topology Incomplete**: Falls back to contention-window based flooding
-2. **Legacy Node Priority**: Gives priority to legacy routers/repeaters for compatibility
-3. **Iterative Timeouts**: Excludes non-relaying candidates and tries remaining options
-4. **Unique Coverage Fallback**: Relays if neighbors haven't been covered by other relays
-5. **Memory/CPU Constraints**: Automatic feature disabling for constrained devices
+1. **Unknown Destinations**: Does not broadcast unicast packets for unknown nodes to prevent flooding
+2. **Topology Incomplete**: Uses traditional unicast routing for known but poorly connected destinations
+3. **Legacy Node Priority**: Gives priority to legacy routers/repeaters for compatibility
+4. **Memory/CPU Constraints**: Automatic feature disabling for constrained devices
 
 ### Compatibility
 
@@ -523,7 +529,7 @@ Potential areas for improvement:
 - This is expected behavior for compatibility with existing infrastructure
 
 **"Broadcast unicasts being sent"**
-- SignalRouting broadcasts unicast packets when good routes exist
-- This coordinates delivery but may appear as unexpected broadcasts
+- SignalRouting only broadcasts unicast packets for known destinations with good routes
+- Unknown destinations use traditional unicast routing to prevent network flooding
 
 SignalRouting provides an alternative to traditional flooding-based mesh networking, offering basic coordination for packet relay decisions. It works alongside existing routing approaches and provides benefits in networks with sufficient SignalRouting-capable nodes, while maintaining compatibility with legacy devices through prioritized relay handling.
