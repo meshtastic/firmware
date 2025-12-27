@@ -47,6 +47,17 @@ public:
     NodeNum getNextHop(NodeNum destination, NodeNum sourceNode = 0, NodeNum heardFrom = 0, bool allowOpportunistic = true);
 
     /**
+     * Find a better positioned neighbor for unicast forwarding
+     */
+    NodeNum findBetterPositionedNeighbor(NodeNum destination, NodeNum sourceNode, NodeNum heardFrom,
+                                       float ourRouteCost, uint32_t currentTime);
+
+    /**
+     * Decide whether to relay a unicast packet that was broadcast for coordination
+     */
+    bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p);
+
+    /**
      * Update neighbor information from a directly received packet
      */
     void updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance = 0);
