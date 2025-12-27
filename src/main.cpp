@@ -428,10 +428,17 @@ void setup()
 #endif
 
 #if ARCH_PORTDUINO
+    RTCQuality ourQuality = RTCQualityDevice;
+
+    std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
+    if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    }
+
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityDevice, &tv);
+    perhapsSetRTC(ourQuality, &tv);
 #endif
 
     powerMonInit();
@@ -440,8 +447,10 @@ void setup()
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#ifndef SENSECAP_INDICATOR
     // use PSRAM for malloc calls > 256 bytes
     heap_caps_malloc_extmem_enable(256);
+#endif
 #endif
 
 #if defined(DEBUG_MUTE) && defined(DEBUG_PORT)
@@ -1456,7 +1465,9 @@ void setup()
 #endif
 
 #if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
+#endif
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER

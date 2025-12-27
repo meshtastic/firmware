@@ -296,11 +296,6 @@ bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
         return true;
     }
 
-    // If we are a CLIENT_BASE and the packet is from or to a favorited node, we should rebroadcast early
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
-        return nodeDB->isFromOrToFavoritedNode(*p);
-    }
-
     return false;
 }
 
@@ -503,6 +498,11 @@ void RadioInterface::applyModemConfig()
                 cr = 5;
                 sf = 10;
                 break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+                bw = (myRegion->wideLora) ? 1625.0 : 500;
+                cr = 8;
+                sf = 11;
+                break;
             default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
                 bw = (myRegion->wideLora) ? 812.5 : 250;
                 cr = 5;
@@ -539,13 +539,26 @@ void RadioInterface::applyModemConfig()
         }
 
         if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-            static const char *err_string = "Regional frequency range is smaller than bandwidth. Fall back to default preset";
-            LOG_ERROR(err_string);
+            const float regionSpanKHz = (myRegion->freqEnd - myRegion->freqStart) * 1000.0f;
+            const float requestedBwKHz = bw;
+            const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
+            const char *presetName =
+                DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+
+            char err_string[160];
+            if (isWideRequest) {
+                snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to LongFast.",
+                         myRegion->name, presetName);
+            } else {
+                snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to LongFast.",
+                         myRegion->name, regionSpanKHz, requestedBwKHz);
+            }
+            LOG_ERROR("%s", err_string);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_ERROR;
-            sprintf(cn->message, err_string);
+            snprintf(cn->message, sizeof(cn->message), "%s", err_string);
             service->sendClientNotification(cn);
 
             // Set to default modem preset
