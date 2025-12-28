@@ -19,8 +19,12 @@ class menuHandler
         clock_face_picker,
         clock_menu,
         position_base_menu,
+        node_base_menu,
         gps_toggle_menu,
         gps_format_menu,
+        gps_smart_position_menu,
+        gps_update_interval_menu,
+        gps_position_broadcast_menu,
         compass_point_north_menu,
         reset_node_db_menu,
         buzzermodemenupicker,
@@ -43,6 +47,10 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
+        message_response_menu,
+        message_viewmode_menu,
+        reply_menu,
+        delete_messages_menu,
         node_name_length_menu,
         FrameToggles,
         DisplayUnits
@@ -61,6 +69,9 @@ class menuHandler
     static void TwelveHourPicker();
     static void ClockFacePicker();
     static void messageResponseMenu();
+    static void messageViewModeMenu();
+    static void replyMenu();
+    static void deleteMessagesMenu();
     static void homeBaseMenu();
     static void textMessageBaseMenu();
     static void systemBaseMenu();
@@ -69,6 +80,9 @@ class menuHandler
     static void compassNorthMenu();
     static void GPSToggleMenu();
     static void GPSFormatMenu();
+    static void GPSSmartPositionMenu();
+    static void GPSUpdateIntervalMenu();
+    static void GPSPositionBroadcastMenu();
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
     static void TFTColorPickerMenu(OLEDDisplay *display);
