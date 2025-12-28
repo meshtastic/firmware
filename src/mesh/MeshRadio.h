@@ -5,31 +5,44 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 
-// TODO: make this reduce to a uint16_t bitfield?
 
-struct RegionPresetBits {
-    bool allowPreset_LONG_FAST;
-    bool allowPreset_LONG_SLOW;
-    bool allowPreset_VERY_LONG_SLOW; // Deprecated
-    bool allowPreset_MEDIUM_SLOW;
-    bool allowPreset_MEDIUM_FAST;
-    bool allowPreset_SHORT_SLOW;
-    bool allowPreset_SHORT_FAST;
-    bool allowPreset_LONG_MODERATE;
-    bool allowPreset_SHORT_TURBO; // 500kHz BW
-    bool allowPreset_LONG_TURBO;  // 500kHz BW
-    bool allowPreset_LITE_FAST;   // For EU_866
-    bool allowPreset_LITE_SLOW;   // For EU_866
-    bool allowPreset_NARROW_FAST; // Narrow BW
-    bool allowPreset_NARROW_SLOW; // Narrow BW
-    bool allowPreset_HAM_FAST;    // 500kHz BW
-    bool reserved;
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO
+};
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE
+};
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW
 };
 
-constexpr RegionPresetBits PRESETS_STD = {0b110111111100000};
-constexpr RegionPresetBits PRESETS_EU_868 = {0b110111110000000};
-constexpr RegionPresetBits PRESETS_LITE = {0b0000000000110000};
-constexpr RegionPresetBits PRESETS_NARROW = {0b0000000000001100};
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
+};
+
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST,
+};
+
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+};
 
 // Map from old region names to new region enums
 struct RegionInfo {
@@ -43,7 +56,8 @@ struct RegionInfo {
     bool freqSwitching;
     bool wideLora;
     meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
-    RegionPresetBits presetBits;
+    // static list of available presets
+    const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
     const char *name; // EU433 etc
 };
 
