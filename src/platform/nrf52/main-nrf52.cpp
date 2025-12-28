@@ -30,6 +30,10 @@
 #include "BQ25713.h"
 #endif
 
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
+#include "modules/DetectionSensorModule.h"
+#endif
+
 // Weak empty variant initialization function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
@@ -408,21 +412,32 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     variant_shutdown();
 
-    // Sleepy trackers or sensors can low power "sleep"
-    // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
+    // Sleepy trackers or sensors can low power "sleep".
+    // When they wake up in regular intervals enter the following delay loop, which monitors user inputs and potential GPIO events
+    // of the detection sensor if active. Detection Sensors may also shutdown and still monitor their assigned GPIO
     if (msecToWake != portMAX_DELAY &&
         (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                    meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR) &&
          config.power.is_power_saving == true)) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
-        delay(msecToWake);
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
+        if (detectionSensorModule != nullptr && detectionSensorModule->shouldLoop()) {
+            detectionSensorModule->lpLoop(msecToWake);
+        } else
+#endif
+            delay(msecToWake);
         NVIC_SystemReset();
+
     } else {
         // Resume on user button press
         // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
         constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
-        sd_power_gpregret_clr(0, 0xFF);           // Clear the register before setting a new values in it for stability reasons
-        sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
+
+        // Clear the register before setting a new values in it for stability reasons
+        // if sd_functions fail the softdevice is not initialized. Fallback to setting GPREGRET directly.
+        if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, DFU_MAGIC_SKIP) == NRF_SUCCESS)) {
+            NRF_POWER->GPREGRET = DFU_MAGIC_SKIP;
+        }
 
         // FIXME, use system off mode with ram retention for key state?
         // FIXME, use non-init RAM per
@@ -459,6 +474,13 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
         while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
             ;
+#endif
+
+#ifndef DMESHTASTIC_EXCLUDE_DETECTIONSENSOR
+        // enforce the rules of message_rate_limit of the detectionSensorModule. simply by delaying deep sleep
+        // in a low power mode delay
+        if (detectionSensorModule != nullptr && detectionSensorModule->shouldLoop())
+            detectionSensorModule->lpDelay();
 #endif
 
         auto ok = sd_power_system_off();
