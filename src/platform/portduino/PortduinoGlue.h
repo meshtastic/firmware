@@ -170,8 +170,17 @@ extern struct portduino_config_struct {
     bool has_configDisplayMode = false;
 
     // Store and Forward++
+    // DB location /var/lib/meshtasticd/
+    std::string sfpp_db_path = "/var/lib/meshtasticd/";
     bool sfpp_stratum0 = false;
-    int initial_sync = 10;
+    int sfpp_initial_sync = 10;
+    int sfpp_hops = 3;
+    int sfpp_announce_interval = 5; // minutes
+    uint32_t sfpp_max_chain = 1000;
+    // allowed root hashes
+    // upstream node
+    // Are we allowing unknown channel hashes? Does this even make sense?
+    // Allow DMs
 
     // General
     std::string mac_address = "";
@@ -493,11 +502,14 @@ extern struct portduino_config_struct {
         }
 
         // StoreAndForward
-        if (sfpp_stratum0 || initial_sync != 10) {
+        if (sfpp_stratum0 || sfpp_initial_sync != 10 || sfpp_hops != 3 || sfpp_announce_interval != 5 || sfpp_max_chain != 1000) {
             out << YAML::Key << "StoreAndForward" << YAML::Value << YAML::BeginMap;
 
             out << YAML::Key << "Stratum0" << YAML::Value << sfpp_stratum0;
-            out << YAML::Key << "InitialSync" << YAML::Value << initial_sync;
+            out << YAML::Key << "InitialSync" << YAML::Value << sfpp_initial_sync;
+            out << YAML::Key << "Hops" << YAML::Value << sfpp_hops;
+            out << YAML::Key << "AnnounceInterval" << YAML::Value << sfpp_announce_interval;
+            out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
             out << YAML::EndMap; // StoreAndForward
         }
 
