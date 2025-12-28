@@ -790,7 +790,8 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["StoreAndForward"]) {
             portduino_config.sfpp_stratum0 = (yamlConfig["StoreAndForward"]["Stratum0"]).as<bool>(false);
-            portduino_config.initial_sync = (yamlConfig["StoreAndForward"]["InitialSync"]).as<int>(10);
+            portduino_config.sfpp_initial_sync = (yamlConfig["StoreAndForward"]["InitialSync"]).as<int>(10);
+            portduino_config.sfpp_hops = (yamlConfig["StoreAndForward"]["Hops"]).as<int>(3);
         }
 
         if (yamlConfig["General"]) {
