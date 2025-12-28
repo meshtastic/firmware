@@ -884,8 +884,7 @@ void menuHandler::homeBaseMenu()
             if (moduleConfig.external_notification.enabled && externalNotificationModule) {
                 bool isMuted = externalNotificationModule->getMute();
                 externalNotificationModule->setMute(!isMuted);
-                IF_SCREEN(graphics::isMuted = !isMuted; if (!isMuted) externalNotificationModule->stopNow();
-                          screen->showSimpleBanner(isMuted ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);)
+                IF_SCREEN(graphics::isMuted = !isMuted; if (!isMuted) externalNotificationModule->stopNow();)
             }
         } else if (selected == Backlight) {
             screen->setOn(false);
