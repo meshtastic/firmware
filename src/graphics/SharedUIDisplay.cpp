@@ -325,7 +325,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
 
-                if (isInverted) {
+                if (isInverted && !force_no_invert) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mute_symbol_width + 2, mute_symbol_height + 2);
                     display->setColor(BLACK);
