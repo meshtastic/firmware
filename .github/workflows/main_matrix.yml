@@ -259,13 +259,27 @@ jobs:
           path: manifests-new/*.mt.json
       - name: Find the merge base
         if: github.event_name == 'pull_request_target'
-        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
-        env:
-          base: ${{ github.base_ref }}
-          head: ${{ github.sha }}
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          MERGE_BASE=$(git merge-base origin/${{ github.base_ref }} ${{ github.sha }} 2>/dev/null || echo "")
+          echo "MERGE_BASE=$MERGE_BASE" >> $GITHUB_ENV
+          if [ -z "$MERGE_BASE" ]; then
+            echo "::warning::Could not determine merge base"
+          else
+            echo "Merge base: $MERGE_BASE"
+          fi
       - name: Download the old manifests
-        if: github.event_name == 'pull_request_target'
-        run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
+        if: github.event_name == 'pull_request_target' && env.MERGE_BASE != ''
+        run: |
+          mkdir -p manifest-old
+          # Try to find a workflow run for the merge base commit
+          RUN_ID=$(gh run list -R "$repo" --commit "$merge_base" --workflow=main_matrix.yml --json databaseId --jq '.[0].databaseId' 2>/dev/null || echo "")
+          if [ -n "$RUN_ID" ]; then
+            echo "Found run ID: $RUN_ID for merge base $merge_base"
+            gh run download "$RUN_ID" -R "$repo" --name "manifests-$merge_base" --dir manifest-old/ || echo "::warning::No manifests artifact found for run $RUN_ID"
+          else
+            echo "::notice::No previous CI run found for merge base $merge_base, skipping comparison"
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
           merge_base: ${{ env.MERGE_BASE }}
