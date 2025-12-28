@@ -849,13 +849,14 @@ void menuHandler::homeBaseMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    if (!isMuted) {
-        optionsArray[options] = "Temporarily Mute";
-    } else {
-        optionsArray[options] = "Unmute";
+    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED) {
+        if (!isMuted) {
+            optionsArray[options] = "Temporarily Mute";
+        } else {
+            optionsArray[options] = "Unmute";
+        }
+        optionsEnumArray[options++] = Mute;
     }
-    optionsEnumArray[options++] = Mute;
-
 #if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
     optionsArray[options] = "Toggle Backlight";
     optionsEnumArray[options++] = Backlight;
