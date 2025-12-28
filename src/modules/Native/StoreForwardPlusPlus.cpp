@@ -34,6 +34,12 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         ppDb = nullptr;
         exit(EXIT_FAILURE);
     }
+    if (sqlite3_db_readonly(ppDb, "main")) {
+        LOG_ERROR("Database opened read-only!");
+        sqlite3_close(ppDb);
+        ppDb = nullptr;
+        exit(EXIT_FAILURE);
+    }
     LOG_WARN("Result1 %u", res);
 
     char *err = nullptr;
