@@ -23,7 +23,7 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     devicestate.has_rx_text_message = true;
 #if HAS_SCREEN
     // Guard against running in MeshtasticUI
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    if (screen && config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         // Store in the central message history
         const StoredMessage &sm = messageStore.addFromPacket(mp);
 
