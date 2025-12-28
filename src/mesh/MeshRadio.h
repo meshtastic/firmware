@@ -5,45 +5,6 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 
-
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO
-};
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE
-};
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW
-};
-
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
-};
-
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST,
-};
-
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-};
-
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
@@ -72,3 +33,11 @@ extern void initRegion();
  * For other regions, returns the standard duty cycle.
  */
 extern float getEffectiveDutyCycle();
+
+
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];

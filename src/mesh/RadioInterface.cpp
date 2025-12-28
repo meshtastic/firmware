@@ -12,6 +12,45 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO
+};
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE
+};
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW
+};
+
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
+};
+
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST,
+};
+
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+};
+
 // Calculate 2^n without calling pow()
 uint32_t pow_of_2(uint32_t n)
 {
