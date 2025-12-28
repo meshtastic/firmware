@@ -7,6 +7,8 @@
 #include "SinglePortModule.h"
 #include "sqlite3.h"
 
+#define SFPP_HASH_SIZE 32
+
 /**
  * Store and forward ++ module
  * There's an obvious need for a store-and-forward mechanism in Meshtastic.
@@ -53,11 +55,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         ChannelHash channel_hash;
         uint8_t encrypted_bytes[256] = {0};
         size_t encrypted_len;
-        uint8_t message_hash[32] = {0};
+        uint8_t message_hash[SFPP_HASH_SIZE] = {0};
         size_t message_hash_len = 0;
-        uint8_t root_hash[32] = {0};
+        uint8_t root_hash[SFPP_HASH_SIZE] = {0};
         size_t root_hash_len = 0;
-        uint8_t commit_hash[32] = {0};
+        uint8_t commit_hash[SFPP_HASH_SIZE] = {0};
         size_t commit_hash_len = 0;
         uint32_t counter = 0;
         std::string payload;
@@ -130,8 +132,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // but this function will add the root hash if it is not already present
-    // returns true if the hash is new
-    bool getOrAddRootFromChannelHash(ChannelHash, uint8_t *);
+    // returns hash size or 0 if not found/added
+    size_t getOrAddRootFromChannelHash(ChannelHash, uint8_t *);
 
     // adds the ChannelHash and root_hash to the mappings table
     void addRootToMappings(ChannelHash, uint8_t *);
