@@ -195,15 +195,13 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 
     p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
 
-#if HAS_SCREEN
-    if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 && p.to != NODENUM_BROADCAST &&
-        p.to != 0) // DM only
-    {
-        perhapsDecode(&p);
-        const StoredMessage &sm = messageStore.addFromPacket(p);
-        graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
-    }
-#endif
+    IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
+                  p.to != NODENUM_BROADCAST && p.to != 0) // DM only
+              {
+                  perhapsDecode(&p);
+                  const StoredMessage &sm = messageStore.addFromPacket(p);
+                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+              })
     // Send the packet into the mesh
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
