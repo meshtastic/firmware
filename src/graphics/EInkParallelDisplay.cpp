@@ -83,8 +83,13 @@ bool EInkParallelDisplay::connect()
         epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
 #elif defined(T5_S3_EPAPER_PRO_V2)
         epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
-        epaper->ioPinMode(0, OUTPUT);
-        epaper->ioWrite(0, HIGH);
+        // Initialize all Port 0 pins (0-7) as outputs with HIGH values
+        // This matches the stock firmware initialization in epd_board_v7.c
+        // Without this, the display may not power on correctly
+        for (int i = 0; i < 8; i++) {
+            epaper->ioPinMode(i, OUTPUT);
+            epaper->ioWrite(i, HIGH);
+        }
 #else
 #error "unsupported EPD device!"
 #endif
