@@ -202,6 +202,12 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 
     if (chain_end.rx_time == 0) {
         LOG_WARN("Store and Forward++ database lookup returned null");
+        if (portduino_config.sfpp_stratum0) {
+            LOG_WARN("Stratum0 with no messages on chain, sending empty announce");
+        } else {
+            LOG_WARN("Non-stratum0 with no chain, not sending");
+            return portduino_config.sfpp_announce_interval * 60 * 1000;
+        }
 
         // first attempt at a chain-only announce with no messages
         meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
