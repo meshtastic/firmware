@@ -352,7 +352,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     LOG_INFO("End of chain does not match!");
 
                     // We just got an end of chain announce, checking if we have seen this message and have it in scratch.
-                    // TODO this seems to have evicted two messages in a test
                     if (isInScratch(t->message_hash.bytes, t->message_hash.size)) {
                         link_object scratch_object = getFromScratch(t->message_hash.bytes, t->message_hash.size);
                         // if this matches, we don't need to request the message
@@ -794,13 +793,13 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
     memcpy(storeforward.message.bytes, _encrypted, storeforward.message.size);
 
     uint8_t *_message_hash = (uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
-    storeforward.message_hash.size = SFPP_HASH_SIZE;
-    memcpy(storeforward.message_hash.bytes, _message_hash, storeforward.message_hash.size);
+    // storeforward.message_hash.size = SFPP_HASH_SIZE;
+    // memcpy(storeforward.message_hash.bytes, _message_hash, storeforward.message_hash.size);
 
     storeforward.encapsulated_rxtime = sqlite3_column_int(fromScratchStmt, 5);
 
-    storeforward.root_hash.size = SFPP_HASH_SIZE;
-    memcpy(storeforward.root_hash.bytes, root_hash, SFPP_HASH_SIZE);
+    storeforward.root_hash.size = SFPP_SHORT_HASH_SIZE;
+    memcpy(storeforward.root_hash.bytes, root_hash, SFPP_SHORT_HASH_SIZE);
 
     sqlite3_reset(fromScratchStmt);
 
@@ -811,7 +810,9 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
     p->channel = 0;
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
-    LOG_INFO("Send link to mesh");
+    printBytes("Send link to mesh ", _message_hash, 8);
+    LOG_WARN("Size: %d", storeforward.message.size);
+    printBytes("encrypted ", storeforward.message.bytes, storeforward.message.size);
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     return true;
 }
@@ -861,7 +862,10 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     sqlite3_bind_text(chain_insert_stmt, 9, lo.payload.c_str(), lo.payload.length(), NULL);
 
     sqlite3_bind_int(chain_insert_stmt, 10, lo.counter);
-    sqlite3_step(chain_insert_stmt);
+    int res = sqlite3_step(chain_insert_stmt);
+    if (res != SQLITE_OK) {
+        LOG_ERROR("Cannot step: %s", sqlite3_errmsg(ppDb));
+    }
     sqlite3_reset(chain_insert_stmt);
     setChainCount(lo.root_hash, SFPP_HASH_SIZE, lo.counter);
     return true;
