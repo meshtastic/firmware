@@ -470,18 +470,49 @@ bool isAllowedPunctuation(char c)
     return allowed.find(c) != std::string::npos;
 }
 
+static void replaceAll(std::string &s, const std::string &from, const std::string &to)
+{
+    if (from.empty())
+        return;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+
 std::string sanitizeString(const std::string &input)
 {
     std::string output;
     bool inReplacement = false;
 
-    for (char c : input) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
+    // Make a mutable copy so we can normalize UTF-8 “smart punctuation” into ASCII first.
+    std::string s = input;
+
+    // Curly single quotes: ‘ ’
+    replaceAll(s, "\xE2\x80\x98", "'"); // U+2018
+    replaceAll(s, "\xE2\x80\x99", "'"); // U+2019
+
+    // Curly double quotes: “ ”
+    replaceAll(s, "\xE2\x80\x9C", "\""); // U+201C
+    replaceAll(s, "\xE2\x80\x9D", "\""); // U+201D
+
+    // En dash / Em dash: – —
+    replaceAll(s, "\xE2\x80\x93", "-"); // U+2013
+    replaceAll(s, "\xE2\x80\x94", "-"); // U+2014
+
+    // Non-breaking space
+    replaceAll(s, "\xC2\xA0", " "); // U+00A0
+
+    // Now do your original sanitize pass over the normalized string.
+    for (unsigned char uc : s) {
+        char c = static_cast<char>(uc);
+        if (std::isalnum(uc) || isAllowedPunctuation(c)) {
             output += c;
             inReplacement = false;
         } else {
             if (!inReplacement) {
-                output += 0xbf; // ISO-8859-1 for inverted question mark
+                output += static_cast<char>(0xBF); // ISO-8859-1 for inverted question mark
                 inReplacement = true;
             }
         }
