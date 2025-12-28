@@ -16,8 +16,8 @@
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
-#include "input/kbLayout.h"
 #include "input/SerialKeyboard.h"
+#include "input/kbLayout.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
@@ -1242,7 +1242,7 @@ int32_t CannedMessageModule::runOnce()
                     // Note: multi-byte UTF-8 support is only partial because Arduino's String::length() counts bytes for
                     // multi-byte characters.
                     this->cursor += mapped.length();
-                    uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
                         this->freetext = this->freetext.substring(0, maxChars);
