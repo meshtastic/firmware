@@ -233,19 +233,19 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         reboot(r->reboot_seconds);
         break;
     }
-    case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
+    case meshtastic_AdminMessage_ota_request_tag: {
 #if defined(ARCH_ESP32)
-        if (r->ota_hash.size != 32) {
+        if (r->ota_request.ota_hash.size != 32) {
             LOG_INFO("OTA Failed: Invalid `ota_hash` provided");
             break;
         }
 
-        meshtastic_OTAMode mode = r->reboot_ota_mode;
+        meshtastic_OTAMode mode = r->ota_request.reboot_ota_mode;
         if (MeshtasticOTA::trySwitchToOTA()) {
             LOG_INFO("OTA Requested");
             if (screen)
                 screen->startFirmwareUpdateScreen();
-            MeshtasticOTA::saveConfig(&config.network, mode, r->ota_hash.bytes);
+            MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
             LOG_INFO("Rebooting to WiFi OTA");
         } else {
             LOG_INFO("WIFI OTA Failed");
