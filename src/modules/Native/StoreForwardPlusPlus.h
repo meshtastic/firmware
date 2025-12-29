@@ -9,7 +9,6 @@
 
 #define SFPP_HASH_SIZE 16
 #define SFPP_SHORT_HASH_SIZE 8
-#define USE_COMPRESSED_PORT false
 
 /**
  * Store and forward ++ module
@@ -79,12 +78,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     */
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override
     {
-        switch (p->decoded.portnum) {
-        case meshtastic_PortNum_TEXT_MESSAGE_APP:
-        case USE_COMPRESSED_PORT ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
-        meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP:
+        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+            p->decoded.portnum == (portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
+                                                                    : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP)) {
             return true;
-        default:
+        } else {
             return false;
         }
     }
