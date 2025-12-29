@@ -16,6 +16,7 @@ struct RegionInfo {
     bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
+    bool licensedOnly; // Only allow in HAM mode
     meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
     // static list of available presets
     const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
@@ -33,7 +34,6 @@ extern void initRegion();
  * For other regions, returns the standard duty cycle.
  */
 extern float getEffectiveDutyCycle();
-
 
 extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
 extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
