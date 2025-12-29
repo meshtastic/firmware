@@ -796,6 +796,7 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_hops = (yamlConfig["StoreAndForward"]["Hops"]).as<int>(3);
             portduino_config.sfpp_announce_interval = (yamlConfig["StoreAndForward"]["AnnounceInterval"]).as<int>(5);
             portduino_config.sfpp_max_chain = (yamlConfig["StoreAndForward"]["MaxChain"]).as<uint32_t>(1000);
+            portduino_config.sfpp_steal_port = (yamlConfig["StoreAndForward"]["StealPort"]).as<bool>(false);
         }
 
         if (yamlConfig["General"]) {

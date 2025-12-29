@@ -18,18 +18,16 @@
 
 StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     : ProtobufModule("StoreForwardpp",
-                     USE_COMPRESSED_PORT ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
-                                         : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP,
+                     portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
+                                                      : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP,
                      &meshtastic_StoreForwardPlusPlus_msg),
       concurrency::OSThread("StoreForwardpp")
 {
-    LOG_WARN("StoreForwardPlusPlusModule init");
 
-    if (portduino_config.sfpp_stratum0)
-        LOG_WARN("SF++ stratum0");
     std::string db_path = portduino_config.sfpp_db_path + "storeforwardpp.db";
-    LOG_WARN("Opening SF++ DB at %s", db_path.c_str());
-
+    LOG_INFO("Opening StoreForwardpp DB at %s", db_path.c_str());
+    if (portduino_config.sfpp_stratum0)
+        LOG_INFO("SF++ running as stratum0");
     int res = sqlite3_open(db_path.c_str(), &ppDb);
     if (res != SQLITE_OK) {
         LOG_ERROR("Cannot open database: %s", sqlite3_errmsg(ppDb));
@@ -43,12 +41,11 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         ppDb = nullptr;
         exit(EXIT_FAILURE);
     }
-    LOG_WARN("Result1 %u", res);
-
     char *err = nullptr;
 
     res = sqlite3_exec(ppDb, "         \
-        CREATE TABLE channel_messages( \
+        CREATE TABLE IF NOT EXISTS     \
+        channel_messages(              \
         destination INT NOT NULL,      \
         sender INT NOT NULL,           \
         packet_id INT NOT NULL,        \
@@ -62,37 +59,43 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
-    LOG_WARN("Result2 %u", res);
+    if (res != SQLITE_OK) {
+        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
+    }
     if (err != nullptr)
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
     res = sqlite3_exec(ppDb, "         \
-        CREATE TABLE local_messages( \
+        CREATE TABLE IF NOT EXISTS     \
+        local_messages(                \
         destination INT NOT NULL,      \
         sender INT NOT NULL,           \
         packet_id INT NOT NULL,        \
         rx_time INT NOT NULL,          \
-        root_hash BLOB NOT NULL,      \
+        root_hash BLOB NOT NULL,       \
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
         payload TEXT,                  \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
-    LOG_WARN("Result2 %u", res);
+    if (res != SQLITE_OK) {
+        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
+    }
     if (err != nullptr)
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
     // create table DMs
     res = sqlite3_exec(ppDb, "         \
-        CREATE TABLE direct_messages( \
+        CREATE TABLE IF NOT EXISTS     \
+        direct_messages(               \
         destination INT NOT NULL,      \
         sender INT NOT NULL,           \
         packet_id INT NOT NULL,        \
         rx_time INT NOT NULL,          \
-        root_hash BLOB NOT NULL,     \
+        root_hash BLOB NOT NULL,       \
         commit_hash BLOB NOT NULL,     \
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
@@ -100,22 +103,29 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
-    LOG_WARN("Result2 %u", res);
+
+    if (res != SQLITE_OK) {
+        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
+    }
     if (err != nullptr)
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
     // mappings table -- connects the root hashes to channel hashes and DM identifiers
     res = sqlite3_exec(ppDb, "         \
-        CREATE TABLE mappings( \
-        chain_type INT NOT NULL,      \
-        identifier INT NOT NULL,           \
-        root_hash BLOB NOT NULL,     \
-        count INT DEFAULT 0,         \
-        PRIMARY KEY (identifier)     \
+        CREATE TABLE IF NOT EXISTS     \
+        mappings(                      \
+        chain_type INT NOT NULL,       \
+        identifier INT NOT NULL,       \
+        root_hash BLOB NOT NULL,       \
+        count INT DEFAULT 0,           \
+        PRIMARY KEY (identifier)       \
         );",
                        NULL, NULL, &err);
-    LOG_WARN("Result2 %u", res);
+
+    if (res != SQLITE_OK) {
+        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
+    }
     if (err != nullptr)
         LOG_ERROR("%s", err);
     sqlite3_free(err);
@@ -183,9 +193,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
 int32_t StoreForwardPlusPlusModule::runOnce()
 {
-    // get number of links on chain
-    // if more than max_chain, evict oldest
-    LOG_WARN("StoreForward++ runONce");
     pendingRun = false;
     if (getRTCQuality() < RTCQualityNTP) {
         LOG_WARN("StoreForward++ deferred due to time quality %u", getRTCQuality());
@@ -195,9 +202,10 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     ChannelHash hash = channels.getHash(0);
     getOrAddRootFromChannelHash(hash, root_hash_bytes);
     uint32_t chain_count = getChainCount(root_hash_bytes, SFPP_HASH_SIZE);
-    LOG_WARN("Chain count is %u", chain_count);
+    LOG_DEBUG("Chain count is %u", chain_count);
     if (chain_count > portduino_config.sfpp_max_chain) {
-        LOG_WARN("Chain length %u exceeds max %u, evicting oldest", chain_count, portduino_config.sfpp_max_chain);
+        LOG_DEBUG("Chain length %u exceeds max %u, evicting oldest", chain_count, portduino_config.sfpp_max_chain);
+        // TODO
     }
 
     if (memfll(root_hash_bytes, '\0', SFPP_HASH_SIZE)) {
@@ -207,14 +215,12 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 
     // get tip of chain for this channel
     link_object chain_end = getLinkFromCount(0, root_hash_bytes, SFPP_HASH_SIZE);
-    LOG_WARN("latest payload %s", chain_end.payload.c_str());
 
     if (chain_end.rx_time == 0) {
-        LOG_WARN("Store and Forward++ database lookup returned null");
         if (portduino_config.sfpp_stratum0) {
-            LOG_WARN("Stratum0 with no messages on chain, sending empty announce");
+            LOG_DEBUG("Stratum0 with no messages on chain, sending empty announce");
         } else {
-            LOG_WARN("Non-stratum0 with no chain, not sending");
+            LOG_DEBUG("Non-stratum0 with no chain, not sending");
             return portduino_config.sfpp_announce_interval * 60 * 1000;
         }
 
@@ -265,12 +271,11 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
     }
-    LOG_WARN("in handleReceived");
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && mp.to == NODENUM_BROADCAST) {
         link_object lo = ingestTextPacket(mp, router->p_encrypted);
 
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
-            LOG_WARN("found message in db");
+            LOG_DEBUG("Found text message in chain DB");
             // We may have this message already, but we may not have the payload
             // if we do, we can update the payload in the database
             if (lo.payload != "")
@@ -281,11 +286,11 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         if (!portduino_config.sfpp_stratum0) {
             if (!isInDB(lo.message_hash, lo.message_hash_len)) {
                 if (lo.root_hash_len == 0) {
-                    LOG_WARN("Received message, but no known chain");
+                    LOG_DEBUG("Received text message, but no chain. Possibly no Stratum0 on local mesh.");
                     return ProcessMessage::CONTINUE;
                 }
                 addToScratch(lo);
-                LOG_WARN("added message to scratch");
+                LOG_DEBUG("added message to scratch db");
                 // send link to upstream?
             }
             return ProcessMessage::CONTINUE;
@@ -299,9 +304,8 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         // canonAnnounce(lo.message_hash, lo.commit_hash, lo.root_hash, lo.rx_time);
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
         // TODO: Block packets from self?
-    } else if (mp.decoded.portnum == USE_COMPRESSED_PORT ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
-                                                         : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP) {
-        LOG_WARN("Got a STORE_FORWARD++ packet");
+    } else if (mp.decoded.portnum == portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
+                                                                      : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP) {
         meshtastic_StoreForwardPlusPlus scratch;
         pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StoreForwardPlusPlus_fields, &scratch);
         handleReceivedProtobuf(mp, &scratch);
@@ -312,8 +316,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
 bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
-    LOG_WARN("in handleReceivedProtobuf");
-    LOG_WARN("Sfp++ node %u sent us sf++ packet", mp.from);
+    LOG_DEBUG("StoreForwardpp node %u sent us sf++ packet", mp.from);
     printBytes("commit_hash ", t->commit_hash.bytes, t->commit_hash.size);
     printBytes("root_hash ", t->root_hash.bytes, t->root_hash.size);
 
@@ -332,19 +335,19 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         } else {
             uint8_t tmp_root_hash_bytes[SFPP_HASH_SIZE] = {0};
 
-            LOG_WARN("Received a CANON_ANNOUNCE");
+            LOG_DEBUG("Received a CANON_ANNOUNCE");
             if (getRootFromChannelHash(router->p_encrypted->channel, tmp_root_hash_bytes)) {
                 // we found the hash, check if it's the right one
                 if (memcmp(tmp_root_hash_bytes, t->root_hash.bytes, t->root_hash.size) != 0) {
-                    LOG_WARN("Found root hash, and it doesn't match!");
+                    LOG_INFO("Root hash does not match. Possibly two stratum0 nodes on the mesh?");
                     return true;
                 }
             } else {
                 addRootToMappings(router->p_encrypted->channel, t->root_hash.bytes);
-                LOG_WARN("Adding root hash to mappings");
+                LOG_DEBUG("Adding root hash to mappings");
             }
             if (t->encapsulated_rxtime == 0) {
-                LOG_WARN("No encapsulated time, conclude the chain is empty");
+                LOG_DEBUG("No encapsulated time, conclude the chain is empty");
                 return true;
             }
 
@@ -354,10 +357,10 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             // get chain tip
             if (chain_end.rx_time != 0) {
                 if (memcmp(chain_end.commit_hash, t->commit_hash.bytes, t->commit_hash.size) == 0) {
-                    LOG_WARN("End of chain matches!");
+                    LOG_DEBUG("End of chain matches!");
                     sendFromScratch(chain_end.root_hash);
                 } else {
-                    LOG_INFO("End of chain does not match!");
+                    LOG_DEBUG("End of chain does not match!");
 
                     // We just got an end of chain announce, checking if we have seen this message and have it in scratch.
                     if (isInScratch(t->message_hash.bytes, t->message_hash.size)) {
@@ -379,8 +382,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     }
                 }
             } else { // if chainEnd()
-                LOG_WARN("No Messages on this chain, request!");
                 if (airTime->isTxAllowedChannelUtil(true)) {
+                    LOG_DEBUG("New chain, requesting last %u messages", portduino_config.sfpp_initial_sync);
                     requestMessageCount(t->root_hash.bytes, t->root_hash.size, portduino_config.sfpp_initial_sync);
                 }
             }
@@ -388,12 +391,12 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST) {
         uint8_t next_commit_hash[SFPP_HASH_SIZE] = {0};
 
-        LOG_WARN("Received link request");
+        LOG_DEBUG("Received link request");
 
         // If chain_count is set, this is a request for x messages up the chain.
         if (t->chain_count != 0 && t->root_hash.size >= 8) {
             link_object link_from_count = getLinkFromCount(t->chain_count, t->root_hash.bytes, t->root_hash.size);
-            LOG_WARN("Count requested %d", t->chain_count);
+            LOG_DEBUG("Count requested %d", t->chain_count);
             if (link_from_count.validObject)
                 broadcastLink(link_from_count, true);
 
@@ -408,7 +411,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         // if different, get the message directly after.
 
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE) {
-        LOG_WARN("Link Provide received!");
+        LOG_DEBUG("Link Provide received!");
 
         link_object incoming_link = ingestLinkMessage(t);
         if (incoming_link.root_hash_len == 0) {
@@ -423,7 +426,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
         if (portduino_config.sfpp_stratum0) {
             if (isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
-                LOG_WARN("Received link already in chain");
+                LOG_INFO("Received link already in chain");
                 // TODO: respond with next link?
                 return true;
             }
@@ -452,7 +455,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 } else {
                     // if this packet is new to us, we rebroadcast it, but only up to an hour old
                     if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
-                        LOG_WARN("Attempting to Rebroadcast message");
                         rebroadcastLinkObject(incoming_link);
                     }
                 }
@@ -460,9 +462,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             } else {
                 if (!isInScratch(incoming_link.message_hash, incoming_link.message_hash_len)) {
                     addToScratch(incoming_link);
-                    LOG_WARN("added incoming non-canon message to scratch");
+                    LOG_INFO("added incoming non-canon message to scratch");
                     if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
-                        LOG_WARN("Attempting to Rebroadcast message");
                         rebroadcastLinkObject(incoming_link);
                     }
                 }
@@ -480,7 +481,6 @@ bool StoreForwardPlusPlusModule::getRootFromChannelHash(ChannelHash _ch_hash, ui
     sqlite3_step(getRootFromChannelHashStmt);
     uint8_t *tmp_root_hash = (uint8_t *)sqlite3_column_blob(getRootFromChannelHashStmt, 0);
     if (tmp_root_hash) {
-        LOG_WARN("Found root hash!");
         memcpy(_root_hash, tmp_root_hash, SFPP_HASH_SIZE);
         found = true;
     }
@@ -501,12 +501,11 @@ ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_ha
 // return code indicates bytes in root hash, or 0 if not found/added
 size_t StoreForwardPlusPlusModule::getOrAddRootFromChannelHash(ChannelHash _ch_hash, uint8_t *_root_hash)
 {
-    LOG_WARN("getOrAddRootFromChannelHash()");
     bool wasFound = getRootFromChannelHash(_ch_hash, _root_hash);
 
     if (!wasFound) {
         if (portduino_config.sfpp_stratum0) {
-            LOG_WARN("Generating Root hash!");
+            LOG_INFO("Generating Root hash!");
             SHA256 root_hash;
             root_hash.update(&_ch_hash, sizeof(_ch_hash));
             NodeNum ourNode = nodeDB->getNodeNum();
@@ -526,13 +525,7 @@ size_t StoreForwardPlusPlusModule::getOrAddRootFromChannelHash(ChannelHash _ch_h
 
 void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t *_root_hash)
 {
-    LOG_WARN("addRootToMappings()");
-    printBytes("_root_hash", _root_hash, SFPP_HASH_SIZE);
-
-    // write to the table
     int type = chain_types::channel_chain;
-    // note, must be an int variable
-
     sqlite3_bind_int(addRootToMappingsStmt, 1, type);
     sqlite3_bind_int(addRootToMappingsStmt, 2, _ch_hash);
     sqlite3_bind_blob(addRootToMappingsStmt, 3, _root_hash, SFPP_HASH_SIZE, NULL);
@@ -566,7 +559,6 @@ void StoreForwardPlusPlusModule::requestNextMessage(uint8_t *_root_hash, size_t 
     p->channel = 0;
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
-    LOG_INFO("Send packet to mesh");
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -591,18 +583,12 @@ void StoreForwardPlusPlusModule::requestMessageCount(uint8_t *_root_hash, size_t
     p->channel = 0;
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
-    LOG_INFO("Send packet to mesh");
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 bool StoreForwardPlusPlusModule::getNextHash(uint8_t *_root_hash, size_t _root_hash_len, uint8_t *_commit_hash,
                                              size_t _commit_hash_len, uint8_t *next_commit_hash)
 {
-    LOG_WARN("getNextHash");
-
-    // ChannelHash _channel_hash = getChannelHashFromRoot(_root_hash, _root_hash_len);
-    // LOG_WARN("_channel_hash %u", _channel_hash);
-
     int rc;
     sqlite3_bind_int(getNextHashStmt, 1, _root_hash_len);
     sqlite3_bind_blob(getNextHashStmt, 2, _root_hash, _root_hash_len, NULL);
@@ -612,11 +598,10 @@ bool StoreForwardPlusPlusModule::getNextHash(uint8_t *_root_hash, size_t _root_h
     if (memcmp(_root_hash, _commit_hash, _commit_hash_len) == 0) {
         rc = sqlite3_step(getNextHashStmt);
         if (rc != SQLITE_OK) {
-            LOG_WARN("here2 %u, %s", rc, sqlite3_errmsg(ppDb));
+            LOG_WARN("Get Hash error %u, %s", rc, sqlite3_errmsg(ppDb));
         }
         uint8_t *tmp_commit_hash = (uint8_t *)sqlite3_column_blob(getNextHashStmt, 0);
         if (tmp_commit_hash == nullptr) {
-            LOG_WARN("No next hash found");
             sqlite3_reset(getNextHashStmt);
             return false;
         }
@@ -626,13 +611,11 @@ bool StoreForwardPlusPlusModule::getNextHash(uint8_t *_root_hash, size_t _root_h
     } else {
         bool found_hash = false;
 
-        LOG_WARN("Looking for next hashes");
         uint8_t *tmp_commit_hash;
         while (sqlite3_step(getNextHashStmt) != SQLITE_DONE) {
             tmp_commit_hash = (uint8_t *)sqlite3_column_blob(getNextHashStmt, 0);
 
             if (found_hash) {
-                LOG_WARN("Found hash");
                 memcpy(next_commit_hash, tmp_commit_hash, SFPP_HASH_SIZE);
                 next_hash = true;
                 break;
@@ -648,10 +631,9 @@ bool StoreForwardPlusPlusModule::getNextHash(uint8_t *_root_hash, size_t _root_h
 
 void StoreForwardPlusPlusModule::broadcastLink(uint8_t *_commit_hash, size_t _commit_hash_len)
 {
-    int rc;
     sqlite3_bind_int(getLinkStmt, 1, _commit_hash_len);
     sqlite3_bind_blob(getLinkStmt, 2, _commit_hash, _commit_hash_len, NULL);
-    LOG_WARN("%d", sqlite3_step(getLinkStmt));
+    int res = sqlite3_step(getLinkStmt);
 
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
@@ -668,8 +650,6 @@ void StoreForwardPlusPlusModule::broadcastLink(uint8_t *_commit_hash, size_t _co
     memcpy(storeforward.message.bytes, _payload, storeforward.message.size);
 
     uint8_t *_message_hash = (uint8_t *)sqlite3_column_blob(getLinkStmt, 4);
-    // storeforward.message_hash.size = 8;
-    // memcpy(storeforward.message_hash.bytes, _message_hash, storeforward.message_hash.size);
 
     storeforward.encapsulated_rxtime = sqlite3_column_int(getLinkStmt, 5);
 
@@ -742,10 +722,9 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit
 StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLink(uint8_t *_commit_hash, size_t _commit_hash_len)
 {
     link_object lo;
-    int rc;
     sqlite3_bind_int(getLinkStmt, 1, _commit_hash_len);
     sqlite3_bind_blob(getLinkStmt, 2, _commit_hash, _commit_hash_len, NULL);
-    LOG_WARN("%d", sqlite3_step(getLinkStmt));
+    int res = sqlite3_step(getLinkStmt);
 
     lo.to = sqlite3_column_int(getLinkStmt, 0);
     lo.from = sqlite3_column_int(getLinkStmt, 1);
@@ -782,12 +761,8 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLink(uint
 
 bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
 {
-    LOG_WARN("sendFromScratch");
-    //    "select destination, sender, packet_id, channel_hash, encrypted_bytes, message_hash, rx_time \
-    //    from local_messages order by rx_time desc LIMIT 1;"
     sqlite3_bind_blob(fromScratchStmt, 1, root_hash, SFPP_HASH_SIZE, NULL);
     if (sqlite3_step(fromScratchStmt) == SQLITE_DONE) {
-        LOG_WARN("No messages in scratch to forward");
         return false;
     }
 
@@ -806,8 +781,6 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
     memcpy(storeforward.message.bytes, _encrypted, storeforward.message.size);
 
     uint8_t *_message_hash = (uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
-    // storeforward.message_hash.size = SFPP_HASH_SIZE;
-    // memcpy(storeforward.message_hash.bytes, _message_hash, storeforward.message_hash.size);
 
     storeforward.encapsulated_rxtime = sqlite3_column_int(fromScratchStmt, 5);
 
@@ -832,7 +805,6 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
 
 bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
 {
-    LOG_WARN("Add to chain");
     link_object chain_end = getLinkFromCount(0, lo.root_hash, lo.root_hash_len);
 
     // we may need to calculate the full commit hash at this point
@@ -850,7 +822,6 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
         }
 
         commit_hash.update(lo.message_hash, SFPP_HASH_SIZE);
-        // message_hash.update(&mp.rx_time, sizeof(mp.rx_time));
         commit_hash.finalize(lo.commit_hash, SFPP_HASH_SIZE);
     }
     lo.counter = chain_end.counter + 1;
@@ -903,9 +874,12 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
     sqlite3_bind_int(scratch_insert_stmt, 7, lo.rx_time);
     // payload
     sqlite3_bind_text(scratch_insert_stmt, 8, lo.payload.c_str(), lo.payload.length(), NULL);
-    const char *_error_mesg = sqlite3_errmsg(ppDb);
 
-    LOG_WARN("step %u, %s", sqlite3_step(scratch_insert_stmt), _error_mesg);
+    int res = sqlite3_step(scratch_insert_stmt);
+    if (res != SQLITE_OK) {
+        const char *_error_mesg = sqlite3_errmsg(ppDb);
+        LOG_WARN("step %u, %s", res, _error_mesg);
+    }
     sqlite3_reset(scratch_insert_stmt);
     return true;
 }
@@ -913,7 +887,6 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
 void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *_commit_hash, uint8_t *_root_hash,
                                                uint32_t _rx_time)
 {
-    LOG_WARN("canonAnnounce()");
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE;
     // set root hash
@@ -940,7 +913,7 @@ void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *
     p->channel = 0;
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
-    LOG_INFO("Send packet to mesh payload size %u", p->decoded.payload.size); // 60 bytes
+    LOG_INFO("Send packet to mesh payload size %u", p->decoded.payload.size);
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -958,7 +931,6 @@ bool StoreForwardPlusPlusModule::isInDB(uint8_t *message_hash_bytes, size_t mess
 
 bool StoreForwardPlusPlusModule::isInScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
 {
-    LOG_WARN("isInScratch");
     sqlite3_bind_int(checkScratch, 1, message_hash_len);
     sqlite3_bind_blob(checkScratch, 2, message_hash_bytes, message_hash_len, NULL);
     sqlite3_step(checkScratch);
@@ -971,13 +943,10 @@ bool StoreForwardPlusPlusModule::isInScratch(uint8_t *message_hash_bytes, size_t
 
 void StoreForwardPlusPlusModule::removeFromScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
 {
-    LOG_WARN("removeFromScratch");
     printBytes("removing from scratch: ", message_hash_bytes, message_hash_len);
     sqlite3_bind_int(removeScratch, 1, message_hash_len);
     sqlite3_bind_blob(removeScratch, 2, message_hash_bytes, message_hash_len, NULL);
     sqlite3_step(removeScratch);
-    int numberFound = sqlite3_column_int(removeScratch, 0);
-    LOG_WARN("removed %d entries from scratch", numberFound);
     sqlite3_reset(removeScratch);
 }
 
@@ -988,23 +957,24 @@ void StoreForwardPlusPlusModule::updatePayload(uint8_t *message_hash_bytes, size
     sqlite3_bind_int(updatePayloadStmt, 2, message_hash_len);
     sqlite3_bind_blob(updatePayloadStmt, 3, message_hash_bytes, message_hash_len, NULL);
     auto res = sqlite3_step(updatePayloadStmt);
-    const char *_error_mesg = sqlite3_errmsg(ppDb);
-    LOG_WARN("step %u, %s", res, _error_mesg);
+    if (res != SQLITE_OK) {
+        const char *_error_mesg = sqlite3_errmsg(ppDb);
+        LOG_WARN("step error %u, %s", res, _error_mesg);
+    }
     sqlite3_reset(updatePayloadStmt);
 }
 
 StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScratch(uint8_t *message_hash_bytes, size_t hash_len)
 {
-
-    // vscode wrote this
-    LOG_WARN("getFromScratch");
     link_object lo;
 
     sqlite3_bind_int(fromScratchByHashStmt, 1, hash_len);
     sqlite3_bind_blob(fromScratchByHashStmt, 2, message_hash_bytes, hash_len, NULL);
     auto res = sqlite3_step(fromScratchByHashStmt);
-    const char *_error_mesg = sqlite3_errmsg(ppDb);
-    LOG_WARN("step %u, %s", res, _error_mesg);
+    if (res != SQLITE_ROW && res != SQLITE_OK) {
+        const char *_error_mesg = sqlite3_errmsg(ppDb);
+        LOG_WARN("step error %u, %s", res, _error_mesg);
+    }
     lo.to = sqlite3_column_int(fromScratchByHashStmt, 0);
     lo.from = sqlite3_column_int(fromScratchByHashStmt, 1);
     lo.id = sqlite3_column_int(fromScratchByHashStmt, 2);
@@ -1029,7 +999,6 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScrat
 StoreForwardPlusPlusModule::link_object
 StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket *encrypted_meshpacket)
 {
-    LOG_WARN("ingestTextPacket()");
     link_object lo;
     SHA256 message_hash;
     lo.to = mp.to;
@@ -1094,7 +1063,6 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
 
     if (t->commit_hash.size == SFPP_HASH_SIZE && getChainCount(t->root_hash.bytes, t->root_hash.size) == 0 &&
         portduino_config.sfpp_initial_sync != 0 && !portduino_config.sfpp_stratum0) {
-        LOG_WARN("Accepting SF++ ch ");
         lo.commit_hash_len = SFPP_HASH_SIZE;
         memcpy(lo.commit_hash, t->commit_hash.bytes, SFPP_HASH_SIZE);
 
@@ -1103,7 +1071,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
         if (checkCommitHash(lo, t->commit_hash.bytes, t->commit_hash.size)) {
             printBytes("commit hash matches: 0x", t->commit_hash.bytes, t->commit_hash.size);
         } else {
-            LOG_WARN("commit hash does not match");
+            LOG_WARN("commit hash does not match, rejecting link.");
             lo.commit_hash_len = 0;
             lo.validObject = false;
         }
@@ -1117,7 +1085,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
 
 void StoreForwardPlusPlusModule::rebroadcastLinkObject(link_object &lo)
 {
-    LOG_WARN("Attempting to Rebroadcast1");
+    LOG_INFO("Attempting to Rebroadcast a message received over SF++");
     meshtastic_MeshPacket *p = router->allocForSending();
     p->to = lo.to;
     p->from = lo.from;
@@ -1146,7 +1114,7 @@ bool StoreForwardPlusPlusModule::checkCommitHash(StoreForwardPlusPlusModule::lin
         commit_hash.update(chain_end.commit_hash, SFPP_HASH_SIZE);
     } else {
         if (lo.root_hash_len != SFPP_HASH_SIZE) {
-            LOG_WARN("Short root hash in link object, cannot create new chain");
+            LOG_ERROR("Short root hash in link object, cannot create new chain");
             return false;
         }
         printBytes("new chain root: 0x", lo.root_hash, SFPP_HASH_SIZE);
@@ -1166,14 +1134,13 @@ bool StoreForwardPlusPlusModule::checkCommitHash(StoreForwardPlusPlusModule::lin
 bool StoreForwardPlusPlusModule::lookUpFullRootHash(uint8_t *partial_root_hash, size_t partial_root_hash_len,
                                                     uint8_t *full_root_hash)
 {
-    LOG_WARN("lookUpFullRootHash");
     printBytes("partial_root_hash", partial_root_hash, partial_root_hash_len);
     sqlite3_bind_int(getFullRootHashStmt, 1, partial_root_hash_len);
     sqlite3_bind_blob(getFullRootHashStmt, 2, partial_root_hash, partial_root_hash_len, NULL);
     sqlite3_step(getFullRootHashStmt);
     uint8_t *tmp_root_hash = (uint8_t *)sqlite3_column_blob(getFullRootHashStmt, 0);
     if (tmp_root_hash) {
-        LOG_WARN("Found full root hash!");
+        LOG_DEBUG("Found full root hash!");
         memcpy(full_root_hash, tmp_root_hash, SFPP_HASH_SIZE);
         sqlite3_reset(getFullRootHashStmt);
         return true;
@@ -1205,7 +1172,6 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromC
                                                                                      size_t _root_hash_len)
 {
     // TODO return blank if there's no entries
-    LOG_WARN("getLinkFromCount");
     link_object lo;
 
     int rc;
@@ -1230,7 +1196,6 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromC
 
         step++;
     }
-    LOG_WARN("step %d", step);
     if (last_message_commit_hash != nullptr && _rx_time != 0) {
         lo = getLink(last_message_commit_hash, SFPP_HASH_SIZE);
     } else {

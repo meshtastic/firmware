@@ -170,10 +170,10 @@ extern struct portduino_config_struct {
     bool has_configDisplayMode = false;
 
     // Store and Forward++
-    // DB location /var/lib/meshtasticd/
     std::string sfpp_db_path = "/var/lib/meshtasticd/";
     bool sfpp_stratum0 = false;
     bool sfpp_enabled = true;
+    bool sfpp_steal_port = false;
     int sfpp_initial_sync = 10;
     int sfpp_hops = 3;
     int sfpp_announce_interval = 5; // minutes
@@ -512,6 +512,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Hops" << YAML::Value << sfpp_hops;
             out << YAML::Key << "AnnounceInterval" << YAML::Value << sfpp_announce_interval;
             out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
+            out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
             out << YAML::EndMap; // StoreAndForward
         }
 
