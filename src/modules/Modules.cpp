@@ -262,7 +262,9 @@ void setupModules()
         LOG_INFO("DMShell disabled, set Security.DMShell: true in config.yaml to enable");
 #endif
 #if SFPP_ENABLED
-    new StoreForwardPlusPlusModule();
+    if (portduino_config.sfpp_enabled) {
+        new StoreForwardPlusPlusModule();
+    }
 #endif
 #endif
 #ifdef DMSHELL_TEST_PEER
