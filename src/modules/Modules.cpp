@@ -245,7 +245,9 @@ void setupModules()
 #if ARCH_PORTDUINO
     new HostMetricsModule();
 #if SFPP_ENABLED
-    new StoreForwardPlusPlusModule();
+    if (portduino_config.sfpp_enabled) {
+        new StoreForwardPlusPlusModule();
+    }
 #endif
 #endif
 #if HAS_TELEMETRY
