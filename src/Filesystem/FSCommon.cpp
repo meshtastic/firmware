@@ -554,8 +554,7 @@ void rmDir(const char *dirname)
     // Finally remove the (now empty) directory itself
     LOG_DEBUG("Remove directory %s", dirname);
     fatfs.rmdir(dirname);
-#endif
-#ifdef FSCom
+#elif defined(FSCom)
 
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
@@ -604,8 +603,7 @@ void fsInit()
         fatfsMounted = true;
         LOG_INFO("Filesystem mounted!");
     }
-#endif
-#ifdef FSCom
+#elif defined(FSCom)
     concurrency::LockGuard g(spiLock);
     preFSBegin();
     if (!FSBegin()) {

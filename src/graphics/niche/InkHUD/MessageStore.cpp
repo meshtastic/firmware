@@ -27,18 +27,24 @@ InkHUD::MessageStore::MessageStore(std::string label)
 void InkHUD::MessageStore::saveToFlash()
 {
     assert(!filename.empty());
-
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    spiLock->lock();
+    if (!fatfs.exists("/NicheGraphics")){
+        LOG_WARN("Creating missing /NicheGraphics directory in external flash");
+        fatfs.mkdir("/NicheGraphics");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     // Make the directory, if doesn't already exist
     // This is the same directory accessed by NicheGraphics::FlashData
     spiLock->lock();
     FSCom.mkdir("/NicheGraphics");
     spiLock->unlock();
-
+#endif
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     // Open or create the file
     // No "full atomic": don't save then rename
     auto f = SafeFile(filename.c_str(), false);
-
     LOG_INFO("Saving messages in %s", filename.c_str());
 
     // Take firmware's SPI Lock while writing
@@ -79,7 +85,54 @@ void InkHUD::MessageStore::loadFromFlash()
     // Hopefully redundant. Initial intention is to only load / save once per boot.
     messages.clear();
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    // Take the firmware's SPI Lock
+    concurrency::LockGuard guard(spiLock);
+    // Check that the file *does* actually exist
+    if (!fatfs.exists(filename.c_str())) {
+        LOG_WARN("MessageStore: file %s does not exist in external flash, Using default values", filename.c_str());
+        return;
+    }
+    // Open the file
+    File32 f = fatfs.open(filename.c_str(), FILE_READ);
+    if (!f) {
+        LOG_WARN("MessageStore: Failed to open file %s from external flash", filename.c_str());
+        return;
+    }
+    if (f.size() == 0) {
+        LOG_INFO("%s is empty", filename.c_str());
+        f.close();
+        return;
+    }
+    LOG_INFO("Loading threaded messages '%s'", filename.c_str());
+    // First byte: how many messages are in the flash store
+    uint8_t flashMessageCount = 0;
+    f.read((uint8_t *)&flashMessageCount, 1);
+    LOG_DEBUG("Messages available: %u", (uint32_t)flashMessageCount);
+    // For each message
+    for (uint8_t i = 0; i < flashMessageCount && i < MAX_MESSAGES_SAVED; i++) {
+        Message m;
+        // Read meta data (fixed width)
+        f.read((uint8_t *)&m.timestamp, sizeof(m.timestamp));
+        f.read((uint8_t *)&m.sender, sizeof(m.sender));
+        f.read((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));
+        // Read characters until we find a null term
+        char c;
+        while (m.text.size() < MAX_MESSAGE_SIZE) {
+            f.read((uint8_t *)&c, 1);
+            if (c != '\0')
+                m.text += c;
+            else
+                break;
+        }
+        // Store in RAM
+        messages.push_back(m);
+        LOG_DEBUG("#%u, timestamp=%u, sender(num)=%u, text=\"%s\"", (uint32_t)i, m.timestamp, m.sender, m.text.c_str());
+    }
+    f.close();
+
+
+#elif defined(FSCom)
 
     // Take the firmware's SPI Lock, in case filesystem is on SD card
     concurrency::LockGuard guard(spiLock);

@@ -428,7 +428,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_delete_file_request_tag: {
         LOG_DEBUG("Client requesting to delete file: %s", r->delete_file_request);
 
-#ifdef FSCom
+#if defined(USE_EXTERNAL_FLASH)
+        spiLock->lock();
+        if (fatfs.remove(r->delete_file_request)) {
+            LOG_DEBUG("Successfully deleted file from external flash");
+        } else {
+            LOG_DEBUG("Failed to delete file from external flash");
+        }
+        spiLock->unlock();
+#elif defined(FSCom)
         spiLock->lock();
         if (FSCom.remove(r->delete_file_request)) {
             LOG_DEBUG("Successfully deleted file");

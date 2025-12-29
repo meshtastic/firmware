@@ -1729,7 +1729,14 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
 bool NodeDB::saveChannelsToDisk()
 {
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    spiLock->lock();
+    if (!fatfs.exists("/prefs")){
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        fatfs.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
@@ -1739,7 +1746,14 @@ bool NodeDB::saveChannelsToDisk()
 
 bool NodeDB::saveDeviceStateToDisk()
 {
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    spiLock->lock();
+    if (!fatfs.exists("/prefs")){
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        fatfs.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();

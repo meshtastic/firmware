@@ -52,7 +52,7 @@ void PhoneAPI::handleStartConfig()
     if (!isConnected()) {
         onConnectionChanged(true);
         observe(&service->fromNumChanged);
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
         observe(&xModem.packetReady);
 #endif
     }
@@ -104,7 +104,7 @@ void PhoneAPI::close()
         state = STATE_SEND_NOTHING;
         resetReadIndex();
         unobserve(&service->fromNumChanged);
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
         unobserve(&xModem.packetReady);
 #endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
@@ -167,7 +167,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         case meshtastic_ToRadio_xmodemPacket_tag:
             LOG_INFO("Got xmodem packet");
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
             xModem.handlePacket(toRadioScratch.xmodemPacket);
 #endif
             break;
@@ -710,7 +710,7 @@ bool PhoneAPI::available()
         if (hasPacket)
             return true;
 
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
         if (xmodemPacketForPhone.control == meshtastic_XModem_Control_NUL)
             xmodemPacketForPhone = xModem.getForPhone();
         if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
