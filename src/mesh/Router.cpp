@@ -86,6 +86,11 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true; // Always decrement on first hop
     }
 
+    // If skip_hop_decrement user preference is enabled, don't decrement hop_limit
+    if (config.lora.skip_hop_decrement) {
+        return false;
+    }
+
     // Check if both local device and previous relay are routers (including CLIENT_BASE)
     bool localIsRouter =
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
