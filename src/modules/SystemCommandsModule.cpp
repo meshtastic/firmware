@@ -1,10 +1,13 @@
 #include "SystemCommandsModule.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
+
 #if HAS_SCREEN
+#include "MessageStore.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #endif
+
 #include "GPS.h"
 #include "MeshService.h"
 #include "Module.h"
@@ -28,10 +31,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     switch (event->kbchar) {
     // Fn key symbols
     case INPUT_BROKER_MSG_FN_SYMBOL_ON:
-        IF_SCREEN(screen->setFunctionSymbol("Fn"));
-        return 0;
     case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
-        IF_SCREEN(screen->removeFunctionSymbol("Fn"));
         return 0;
     // Brightness
     case INPUT_BROKER_MSG_BRIGHTNESS_UP:
@@ -78,6 +78,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_MSG_REBOOT:
         IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
         nodeDB->saveToDisk();
+#if HAS_SCREEN
+        messageStore.saveToFlash();
+#endif
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;

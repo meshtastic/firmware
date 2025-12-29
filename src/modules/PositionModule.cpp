@@ -429,7 +429,9 @@ int32_t PositionModule::runOnce()
 
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
         if (waitingForFreshPosition) {
+#ifdef GPS_DEBUG
             LOG_DEBUG("Skip initial position send; no fresh position since boot");
+#endif
         } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
