@@ -853,6 +853,7 @@ void NimbleBluetooth::setupService()
 
 void NimbleBluetooth::startAdvertising()
 {
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     NimBLEExtAdvertisement legacyAdvertising;
 
@@ -879,6 +880,20 @@ void NimbleBluetooth::startAdvertising()
     } else if (!pAdvertising->start(0, 0, 0)) {
         LOG_ERROR("BLE failed to start legacyAdvertising");
     }
+#else
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(NimBLEUUID(MESH_SERVICE_UUID));
+    if (powerStatus->getHasBattery() == 1) {
+        pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f));
+    }
+    pAdvertising->setName(getDeviceName());
+    // Optionally, set scan response data (not required unless you want to advertise more info)
+    // pAdvertising->setScanResponseData(...); // if needed
+
+    if (!pAdvertising->start()) {
+        LOG_ERROR("BLE failed to start advertising");
+    }
+#endif
 }
 
 /// Given a level between 0-100, update the BLE attribute
