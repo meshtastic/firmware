@@ -1,12 +1,6 @@
-// I've done a lot of this in SQLite for now, but honestly it needs to happen in memory, and get saved to sqlite during downtime
-
-// TODO: custom hops. 1 maybe 0. Configurable?
-
 // TODO: non-stratum0 nodes need to be pointed at their upstream source? Maybe
 
 // TODO: evict messages from scratch after a timeout
-
-// things may get weird if there are multiple stratum-0 nodes on a single mesh. Come up with mitigations
 #if __has_include("sqlite3.h")
 
 #include "StoreForwardPlusPlus.h"
@@ -1171,10 +1165,7 @@ uint32_t StoreForwardPlusPlusModule::getChainCount(uint8_t *root_hash, size_t ro
 StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromCount(uint32_t _count, uint8_t *_root_hash,
                                                                                      size_t _root_hash_len)
 {
-    // TODO return blank if there's no entries
     link_object lo;
-
-    int rc;
     int step = 0;
     uint32_t _rx_time = 0;
 
