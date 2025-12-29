@@ -7,7 +7,7 @@
 #include "SinglePortModule.h"
 #include "sqlite3.h"
 
-#define SFPP_HASH_SIZE 32
+#define SFPP_HASH_SIZE 16
 #define SFPP_SHORT_HASH_SIZE 8
 
 /**
