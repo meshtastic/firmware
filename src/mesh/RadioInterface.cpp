@@ -272,10 +272,6 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     const RegionInfo *r = regions;
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != code; r++)
         ;
-    if (r->licensedOnly == true && !devicestate.owner.is_licensed) {
-        LOG_WARN("Region code %d not permitted without license, defaulting to unset", config.lora.region);
-        r = 0; // Default to unset
-    }
     return r;
 }
 
@@ -628,6 +624,10 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
     char err_string[160];
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
+    if (newRegion->licensedOnly == true && !devicestate.owner.is_licensed) {
+        LOG_WARN("Region code %d not permitted without license, reverting", config.lora.region);
+        // Phaseloop: I don't know how to return that this is invalid. Help!
+    }
 
     auto cfg = settingsForPreset(newRegion->wideLora, loraConfig.modem_preset);
 
