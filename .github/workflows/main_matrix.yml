@@ -240,6 +240,7 @@ jobs:
     needs: [build]
     steps:
       - uses: actions/checkout@v6
+        if: github.event_name == 'pull_request_target'
         with:
           filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
           fetch-depth: 0
@@ -253,22 +254,24 @@ jobs:
         uses: actions/upload-artifact@v6
         id: upload-manifest
         with:
-          name: manifests-all
+          name: manifests-${{ github.sha }}
           overwrite: true
-          path: |
-            manifests-new/*.mt.json
-      - name: Fetch base and head branches
-        run: |
-          git fetch origin ${{ github.base_ref }}
-          git fetch origin ${{ github.head_ref }}
+          path: manifests-new/*.mt.json
       - name: Find the merge base
+        if: github.event_name == 'pull_request_target'
         run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
         env:
           base: ${{ github.base_ref }}
-          head: ${{ github.head_ref }}
+          head: ${{ github.sha }}
       - name: Download the old manifests
-        run: gh run download -R ${{ github.repository }} --commit ${{ env.MERGE_BASE }} --name manifests-all --dir manifest-old/
+        if: github.event_name == 'pull_request_target'
+        run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          merge_base: ${{ env.MERGE_BASE }}
+          repo: ${{ github.repository }}
       - name: Do scan and post comment
+        if: github.event_name == 'pull_request_target'
         run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
   release-artifacts:
