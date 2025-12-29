@@ -17,7 +17,12 @@ static File openFile(const char *filename, bool fullAtomic)
 #endif
 */
     if (!fullAtomic) {
-        fatfs.remove(filename); // Nuke the old file to make space (ignore if it !exists)
+        LOG_INFO("Removing old file %s, not fullAtomic", filename);
+        if(!fatfs.exists(filename)) {
+            LOG_DEBUG("File %s does not exist, no need to remove", filename);
+        } else if(!fatfs.remove(filename)) { // Nuke the old file to make space
+            LOG_ERROR("Can't remove old file %s", filename);
+        }
     }
 
     String filenameTmp = filename;

@@ -32,15 +32,23 @@ static inline void resetMessagePool()
 }
 
 // Allocate text in pool and return offset
-// If not enough space remains, wrap around (ring buffer style)
+// Returns 0 and stores empty string if pool is full (safer than wrapping)
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
+    if (!g_messagePool) {
+        LOG_ERROR("MessageStore: Pool not allocated!");
+        return 0;
+    }
+    
     if (len >= MAX_MESSAGE_SIZE)
         len = MAX_MESSAGE_SIZE - 1;
 
-    // Wrap pool if out of space
+    // Check if we have enough space - don't wrap to avoid invalidating existing offsets
     if (g_poolWritePos + len + 1 >= MESSAGE_TEXT_POOL_SIZE) {
-        g_poolWritePos = 0;
+        LOG_WARN("MessageStore: Pool full (%u + %u >= %u), cannot store new message", 
+                 g_poolWritePos, len + 1, MESSAGE_TEXT_POOL_SIZE);
+        // Return offset 0 which will point to empty string after reset
+        return 0;
     }
 
     uint16_t offset = g_poolWritePos;
@@ -53,8 +61,19 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
 // Retrieve a const pointer to message text by offset
 static inline const char *getTextFromPool(uint16_t offset)
 {
-    if (!g_messagePool || offset >= MESSAGE_TEXT_POOL_SIZE)
+    if (!g_messagePool) {
+        LOG_ERROR("MessageStore: Pool not allocated!");
         return "";
+    }
+    if (offset >= MESSAGE_TEXT_POOL_SIZE) {
+        LOG_WARN("MessageStore: Invalid offset %u >= %u", offset, MESSAGE_TEXT_POOL_SIZE);
+        return "";
+    }
+    // Additional safety: check if we're reading beyond current write position in a wrapped scenario
+    if (offset >= g_poolWritePos && g_poolWritePos > 0) {
+        // This might be an old offset that got invalidated by wrapping
+        LOG_WARN("MessageStore: Potentially stale offset %u (current pos: %u)", offset, g_poolWritePos);
+    }
     return &g_messagePool[offset];
 }
 
@@ -187,8 +206,16 @@ static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
 
     // Copy the actual text into the record from RAM pool
     const char *txt = getTextFromPool(m.textOffset);
-    strncpy(rec.text, txt, MAX_MESSAGE_SIZE - 1);
-    rec.text[MAX_MESSAGE_SIZE - 1] = '\0';
+    if (!txt || txt[0] == '\0') {
+        LOG_WARN("MessageStore: Empty or invalid text at offset %u, saving empty message", m.textOffset);
+        rec.text[0] = '\0';
+        rec.textLength = 0;
+    } else {
+        strncpy(rec.text, txt, MAX_MESSAGE_SIZE - 1);
+        rec.text[MAX_MESSAGE_SIZE - 1] = '\0';
+        // Update length based on actual copied text
+        rec.textLength = strnlen(rec.text, MAX_MESSAGE_SIZE - 1);
+    }
 
     f.write(reinterpret_cast<const uint8_t *>(&rec), sizeof(rec));
 }
@@ -236,19 +263,19 @@ void MessageStore::saveToFlash()
     spiLock->unlock();
 #endif
 #if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
+    LOG_INFO("Saving messages in %s", filename.c_str());
     SafeFile f(filename.c_str(), false);
-
+    LOG_INFO("opened %s", filename.c_str());
     spiLock->lock();
     uint8_t count = static_cast<uint8_t>(liveMessages.size());
+    LOG_INFO("writing %d messages", count);
     if (count > MAX_MESSAGES_SAVED)
         count = MAX_MESSAGES_SAVED;
     f.write(&count, 1);
-
     for (uint8_t i = 0; i < count; ++i) {
         writeMessageRecord(f, liveMessages[i]);
     }
-    spiLock->unlock();
-
+    spiLock->unlock(); // MUST unlock BEFORE calling f.close() to avoid deadlock!
     f.close();
 #endif
 }
@@ -320,6 +347,7 @@ void MessageStore::loadFromFlash()
 
     f.close();
 #endif
+LOG_INFO("MessageStore loaded from flash");
 }
 
 #else

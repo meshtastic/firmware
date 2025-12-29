@@ -688,7 +688,7 @@ void Screen::setup()
 
     // Load persisted messages into RAM
     messageStore.loadFromFlash();
-    LOG_INFO("MessageStore loaded from flash");
+    
 
     // Notify modules that support UI events
     MeshModule::observeUIEvents(&uiFrameEventObserver);
