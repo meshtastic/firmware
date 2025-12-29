@@ -4,7 +4,7 @@
 #include "configuration.h"
 #if defined(ARCH_ESP32)
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include <libpax_api.h>
 
 /**

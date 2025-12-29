@@ -1,7 +1,7 @@
 #include "TextMessageModule.h"
 #include "MeshService.h"
 #include "MessageStore.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "buzz.h"
 #include "configuration.h"

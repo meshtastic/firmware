@@ -17,7 +17,7 @@
 #include <memory.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"

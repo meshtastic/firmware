@@ -12,7 +12,7 @@
  */
 #include "power.h"
 #include "MessageStore.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
 #include "buzz/buzz.h"

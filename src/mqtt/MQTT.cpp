@@ -1,6 +1,6 @@
 #include "MQTT.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "ServiceEnvelope.h"
 #include "configuration.h"

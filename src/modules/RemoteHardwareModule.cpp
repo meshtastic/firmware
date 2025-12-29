@@ -1,6 +1,6 @@
 #include "RemoteHardwareModule.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"

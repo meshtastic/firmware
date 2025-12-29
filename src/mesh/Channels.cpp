@@ -3,7 +3,7 @@
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "RadioInterface.h"
 #include "configuration.h"
 

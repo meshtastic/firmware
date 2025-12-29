@@ -5,7 +5,7 @@
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Adafruit_PM25AQI.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "ProtobufModule.h"
 
 class AirQualityTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>

@@ -1,6 +1,6 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"

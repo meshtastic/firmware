@@ -2,7 +2,7 @@
 
 #include "./LogoApplet.h"
 
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 using namespace NicheGraphics;
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 #ifndef TB_DIRECTION
 #if ARCH_PORTDUINO

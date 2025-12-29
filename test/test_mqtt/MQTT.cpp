@@ -6,7 +6,7 @@
 #include "mesh/CryptoEngine.h"
 #include "mesh/Default.h"
 #include "mesh/MeshService.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "mesh/Router.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"

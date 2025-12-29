@@ -3,7 +3,7 @@
 #include "DisplayFormatters.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"

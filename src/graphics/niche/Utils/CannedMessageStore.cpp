@@ -2,8 +2,8 @@
 
 #include "./CannedMessageStore.h"
 
-#include "FSCommon.h"
-#include "NodeDB.h"
+#include "Filesystem/FSCommon.h"
+#include "Filesystem/NodeDB.h"
 #include "SPILock.h"
 #include "generated/meshtastic/cannedmessages.pb.h"
 
@@ -122,7 +122,14 @@ void CannedMessageStore::handleSet(const meshtastic_AdminMessage *request)
             sizeof(cannedMessageModuleConfig.messages));
 
     // Ensure the directory exists
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    spiLock->lock();
+    if (!fatfs.exists("/prefs")) {
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        fatfs.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();

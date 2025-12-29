@@ -14,7 +14,7 @@ Avoid bloating everyone's protobuf code for our one-off UI implementations
 #include "configuration.h"
 
 #include "SPILock.h"
-#include "SafeFile.h"
+#include "Filesystem/SafeFile.h"
 
 namespace NicheGraphics
 {
@@ -56,7 +56,52 @@ template <typename T> class FlashData
         // Get a filename based on the label
         std::string filename = getFilename(label);
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+        // Check that the file *does* actually exist
+        if (!fatfs.exists(filename.c_str())) {
+            LOG_WARN("'%s' not found in external flash. Using default values", filename.c_str());
+            okay = false;
+            return okay;
+        }
+
+        // Open the file
+        auto f = fatfs.open(filename.c_str(), FILE_O_READ);
+
+        // If opened, start reading
+        if (f) {
+            LOG_INFO("Loading NicheGraphics data '%s'", filename.c_str());
+
+            // Create an object which will received data from flash
+            // We read here first, so we can verify the checksum, without committing to overwriting the *data object
+            // Allows us to retain any defaults that might be set after we declared *data, but before loading settings,
+            // in case the flash values are corrupt
+            T flashData;
+
+            // Read the actual data
+            size_t n = f.read(reinterpret_cast<uint8_t *>(&flashData), sizeof(T));
+            // Read the hash
+            uint32_t savedHash = 0;
+            size_t h = f.read(reinterpret_cast<uint8_t *>(&savedHash), sizeof(savedHash));
+            if (n != sizeof(T) || h != sizeof(savedHash)) {
+                LOG_WARN("'%s' incomplete/corrupt (short read). Using default values", filename.c_str());
+                okay = false;
+            } else {
+                // Calculate hash of the loaded data, then compare with the saved hash
+                // If hash looks good, copy the values to the main data object
+                uint32_t calculatedHash = getHash(&flashData);
+                if (savedHash != calculatedHash) {
+                    LOG_WARN("'%s' is corrupt (hash mismatch). Using default values", filename.c_str());
+                    okay = false;
+                } else {
+                    *data = flashData;
+                }
+            }
+            f.close();
+        } else {
+            LOG_ERROR("Could not open / read %s", filename.c_str());
+            okay = false;
+        }
+#elif defined(FSCom)
 
         // Check that the file *does* actually exist
         if (!FSCom.exists(filename.c_str())) {
@@ -114,12 +159,20 @@ template <typename T> class FlashData
     {
         // Get a filename based on the label
         std::string filename = getFilename(label);
+#ifdef USE_EXTERNAL_FLASH
+        spiLock->lock();
+        if (!fatfs.exists("/NicheGraphics")){
+            LOG_WARN("Creating missing /NicheGraphics directory in external flash");
+            fatfs.mkdir("/NicheGraphics");
+        }
+        spiLock->unlock();
 
-#ifdef FSCom
+#elif defined(FSCom)
         spiLock->lock();
         FSCom.mkdir("/NicheGraphics");
         spiLock->unlock();
-
+#endif
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
         auto f = SafeFile(filename.c_str(), true); // "true": full atomic. Write new data to temp file, then rename.
 
         LOG_INFO("Saving %s", filename.c_str());
@@ -149,8 +202,22 @@ inline void clearFlashData()
 
     // Take firmware's SPI lock, in case the files are stored on SD card
     concurrency::LockGuard guard(spiLock);
+#ifdef USE_EXTERNAL_FLASH
+    File32 dir = fatfs.open("/NicheGraphics"); // Open the directory
+    File32 file = dir.openNextFile();          // Attempt to open the first file in the directory
 
-#ifdef FSCom
+    // While the directory still contains files
+    while (file) {
+        std::string path = "/NicheGraphics/";
+        path += file.name();
+        LOG_DEBUG("Erasing %s", path.c_str());
+        file.close();
+        fatfs.remove(path.c_str());
+
+        file = dir.openNextFile();
+    }
+
+#elif defined(FSCom)
     File dir = FSCom.open("/NicheGraphics"); // Open the directory
     File file = dir.openNextFile();          // Attempt to open the first file in the directory
 
