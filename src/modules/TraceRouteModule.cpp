@@ -1,5 +1,6 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -359,8 +360,8 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
     }
 
     // Only insert unknown hops if hop_start is valid
-    if (p.hop_start != 0 && p.hop_limit <= p.hop_start) {
-        uint8_t hopsTaken = p.hop_start - p.hop_limit;
+    const int8_t hopsTaken = getHopsAway(p);
+    if (hopsTaken >= 0) {
         int8_t diff = hopsTaken - *route_count;
         for (uint8_t i = 0; i < diff; i++) {
             if (*route_count < ROUTE_SIZE) {
