@@ -15,7 +15,6 @@ on:
           - rp2040
           - rp2350
           - stm32
-          - native
       target:
         type: string
         required: false
@@ -42,7 +41,6 @@ jobs:
           - rp2040
           - rp2350
           - stm32
-
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -60,7 +58,7 @@ jobs:
           echo "Arch: ${{matrix.arch}}" >> $GITHUB_STEP_SUMMARY
           echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
           echo "Targets:" >> $GITHUB_STEP_SUMMARY
-          echo $TARGETS >> $GITHUB_STEP_SUMMARY
+          echo $TARGETS | jq -r 'sort_by(.board) |.[] | "- " + .board' >> $GITHUB_STEP_SUMMARY
 
   version:
     if: ${{ inputs.target != '' }}
@@ -87,25 +85,6 @@ jobs:
       pio_env: ${{ inputs.target }}
       platform: ${{ inputs.arch }}
 
-  build-debian-src:
-    if: ${{ github.repository == 'meshtastic/firmware' && inputs.arch == 'native' }}
-    uses: ./.github/workflows/build_debian_src.yml
-    with:
-      series: UNRELEASED
-      build_location: local
-    secrets: inherit
-
-  package-pio-deps-native-tft:
-    if: ${{ inputs.arch == 'native' }}
-    uses: ./.github/workflows/package_pio_deps.yml
-    with:
-      pio_env: native-tft
-    secrets: inherit
-
-  test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'workflow_dispatch' ||  !contains(github.ref_name, 'event/') && inputs.arch == 'native' && inputs.target != '' }}
-    uses: ./.github/workflows/test_native.yml
-
   gather-artifacts:
     permissions:
       contents: write
@@ -119,7 +98,7 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           path: ./
           pattern: firmware-*-*
@@ -132,7 +111,7 @@ jobs:
         run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: firmware-${{inputs.target}}-${{ needs.version.outputs.long }}
           overwrite: true
@@ -140,7 +119,7 @@ jobs:
             ./firmware-*.bin
             ./firmware-*.uf2
             ./firmware-*.hex
-            ./firmware-*-ota.zip
+            ./firmware-*.zip
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
@@ -148,7 +127,7 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           pattern: firmware-*-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -160,14 +139,14 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: debug-elfs-${{inputs.target}}-${{ needs.version.outputs.long }}.zip
           overwrite: true

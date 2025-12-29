@@ -13,18 +13,48 @@
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "main.h"
+#include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
 
 #include "modules/TraceRouteModule.h"
+#include <algorithm>
+#include <array>
 #include <functional>
+#include <utility>
 
 extern uint16_t TFT_MESH;
 
 namespace graphics
 {
+
+namespace
+{
+
+// Caller must ensure the provided options array outlives the banner callback.
+template <typename T, size_t N, typename Callback>
+BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOption<T> (&options)[N],
+                                               std::array<const char *, N> &labels, Callback &&onSelection)
+{
+    for (size_t i = 0; i < N; ++i) {
+        labels[i] = options[i].label;
+    }
+
+    const MenuOption<T> *optionsPtr = options;
+    auto callback = std::function<void(const MenuOption<T> &, int)>(std::forward<Callback>(onSelection));
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = message;
+    bannerOptions.optionsArrayPtr = labels.data();
+    bannerOptions.optionsCount = static_cast<uint8_t>(N);
+    bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
+    return bannerOptions;
+}
+
+} // namespace
+
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
@@ -196,48 +226,38 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::RadioPresetPicker()
 {
-    static const char *optionsArray[] = {"Back",       "LongSlow",  "LongModerate", "LongFast",  "MediumSlow",
-                                         "MediumFast", "ShortSlow", "ShortFast",    "ShortTurbo"};
-    enum optionsNumbers {
-        Back = 0,
-        radiopreset_LongSlow = 1,
-        radiopreset_LongModerate = 2,
-        radiopreset_LongFast = 3,
-        radiopreset_MediumSlow = 4,
-        radiopreset_MediumFast = 5,
-        radiopreset_ShortSlow = 6,
-        radiopreset_ShortFast = 7,
-        radiopreset_ShortTurbo = 8
+    static const RadioPresetOption presetOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
+        {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
+        {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
+        {"MediumSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW},
+        {"MediumFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST},
+        {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
+        {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
+        {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
     };
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Radio Preset";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 9;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Back) {
-            menuHandler::menuQueue = menuHandler::lora_Menu;
-            screen->runNow();
-            return;
-        } else if (selected == radiopreset_LongSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-        } else if (selected == radiopreset_LongModerate) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
-        } else if (selected == radiopreset_LongFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-        } else if (selected == radiopreset_MediumSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
-        } else if (selected == radiopreset_MediumFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-        } else if (selected == radiopreset_ShortSlow) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW;
-        } else if (selected == radiopreset_ShortFast) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
-        } else if (selected == radiopreset_ShortTurbo) {
-            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-        }
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    };
+
+    constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
+    static std::array<const char *, presetCount> presetLabels{};
+
+    auto bannerOptions =
+        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
+            if (option.action == OptionsAction::Back) {
+                menuHandler::menuQueue = menuHandler::lora_Menu;
+                screen->runNow();
+                return;
+            }
+
+            if (!option.hasValue) {
+                return;
+            }
+
+            config.lora.modem_preset = option.value;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        });
+
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -576,7 +596,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -592,6 +612,10 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Bluetooth Toggle";
 #endif
     optionsEnumArray[options++] = Bluetooth;
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    optionsArray[options] = "WiFi Toggle";
+    optionsEnumArray[options++] = WiFiToggle;
+#endif
 #if defined(M5STACK_UNITC6L)
     optionsArray[options] = "Power";
 #else
@@ -629,6 +653,11 @@ void menuHandler::systemBaseMenu()
         } else if (selected == Bluetooth) {
             menuQueue = bluetooth_toggle_menu;
             screen->runNow();
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        } else if (selected == WiFiToggle) {
+            menuQueue = wifi_toggle_menu;
+            screen->runNow();
+#endif
         } else if (selected == Back && !test_enabled) {
             test_count++;
             if (test_count > 4) {
@@ -1031,14 +1060,16 @@ void menuHandler::switchToMUIMenu()
 
 void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 {
-    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
-                                         "Pink", "White"};
+    static const char *optionsArray[] = {
+        "Back",  "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Blue", "Teal", "Cyan", "Ice", "Pink",
+        "White", "Gray"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Select Screen Color";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 10;
+    bannerOptions.optionsCount = 14;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
         uint8_t TFT_MESH_r = 0;
         uint8_t TFT_MESH_g = 0;
         uint8_t TFT_MESH_b = 0;
@@ -1071,20 +1102,40 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             TFT_MESH_g = 153;
             TFT_MESH_b = 255;
         } else if (selected == 7) {
-            LOG_INFO("Setting color to Teal");
-            TFT_MESH_r = 64;
-            TFT_MESH_g = 224;
-            TFT_MESH_b = 208;
+            LOG_INFO("Setting color to Blue");
+            TFT_MESH_r = 0;
+            TFT_MESH_g = 0;
+            TFT_MESH_b = 255;
         } else if (selected == 8) {
+            LOG_INFO("Setting color to Teal");
+            TFT_MESH_r = 16;
+            TFT_MESH_g = 102;
+            TFT_MESH_b = 102;
+        } else if (selected == 9) {
+            LOG_INFO("Setting color to Cyan");
+            TFT_MESH_r = 0;
+            TFT_MESH_g = 255;
+            TFT_MESH_b = 255;
+        } else if (selected == 10) {
+            LOG_INFO("Setting color to Ice");
+            TFT_MESH_r = 173;
+            TFT_MESH_g = 216;
+            TFT_MESH_b = 230;
+        } else if (selected == 11) {
             LOG_INFO("Setting color to Pink");
             TFT_MESH_r = 255;
             TFT_MESH_g = 105;
             TFT_MESH_b = 180;
-        } else if (selected == 9) {
+        } else if (selected == 12) {
             LOG_INFO("Setting color to White");
             TFT_MESH_r = 255;
             TFT_MESH_g = 255;
             TFT_MESH_b = 255;
+        } else if (selected == 13) {
+            LOG_INFO("Setting color to Gray");
+            TFT_MESH_r = 128;
+            TFT_MESH_g = 128;
+            TFT_MESH_b = 128;
         } else {
             menuQueue = system_base_menu;
             screen->runNow();
@@ -1278,17 +1329,26 @@ void menuHandler::wifiBaseMenu()
 
 void menuHandler::wifiToggleMenu()
 {
-    enum optionsNumbers { Back, Wifi_toggle };
+    enum optionsNumbers { Back, Wifi_disable, Wifi_enable };
 
-    static const char *optionsArray[] = {"Back", "Disable"};
+    static const char *optionsArray[] = {"Back", "WiFi Disabled", "WiFi Enabled"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Disable Wifi and\nEnable Bluetooth?";
+    bannerOptions.message = "WiFi Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
+    if (config.network.wifi_enabled == true)
+        bannerOptions.InitialSelected = 2;
+    else
+        bannerOptions.InitialSelected = 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Wifi_toggle) {
+        if (selected == Wifi_disable) {
             config.network.wifi_enabled = false;
             config.bluetooth.enabled = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == Wifi_enable) {
+            config.network.wifi_enabled = true;
+            config.bluetooth.enabled = false;
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
@@ -1338,7 +1398,7 @@ void menuHandler::screenOptionsMenu()
     static int optionsEnumArray[5] = {Back};
     int options = 1;
 
-#if defined(T_DECK) || defined(T_LORA_PAGER)
+#if defined(T_DECK) || defined(T_LORA_PAGER) || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Show Long/Short Name";
     optionsEnumArray[options++] = NodeNameLength;
 #endif
@@ -1350,7 +1410,8 @@ void menuHandler::screenOptionsMenu()
     }
 
     // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
