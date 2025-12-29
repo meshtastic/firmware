@@ -3,6 +3,9 @@
 
 #ifndef HAS_FREE_RTOS
 
+// Only use pthread implementation on native Linux (Portduino)
+#ifdef ARCH_PORTDUINO
+
 #include <errno.h>
 #include <sys/time.h>
 
@@ -61,10 +64,38 @@ BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTaskWoken) {
   // POSIX doesn't distinguish ISR context; delegate to regular give()
   give();
   if (pxHigherPriorityTaskWoken) {
-    *pxHigherPriorityTaskWoken = pdTRUE;
+    *pxHigherPriorityTaskWoken = 1; // Equivalent to pdTRUE
   }
 }
 
 } // namespace concurrency
 
-#endif
+#else // !ARCH_PORTDUINO - Stub implementation for bare-metal platforms
+
+namespace concurrency {
+
+BinarySemaphorePosix::BinarySemaphorePosix() {}
+BinarySemaphorePosix::~BinarySemaphorePosix() {}
+
+bool BinarySemaphorePosix::take(uint32_t msec) {
+  // Stub: just delay and return
+  delay(msec);
+  return false;
+}
+
+void BinarySemaphorePosix::give() {
+  // Stub: no-op on bare-metal without FreeRTOS
+}
+
+IRAM_ATTR void
+BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTaskWoken) {
+  if (pxHigherPriorityTaskWoken) {
+    *pxHigherPriorityTaskWoken = 0;
+  }
+}
+
+} // namespace concurrency
+
+#endif // ARCH_PORTDUINO
+
+#endif // HAS_FREE_RTOS

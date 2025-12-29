@@ -9,10 +9,10 @@
 extern concurrency::Lock *cryptLock;
 
 struct CryptoKey {
-    uint8_t bytes[32];
+  uint8_t bytes[32];
 
-    /// # of bytes, or -1 to mean "invalid key - do not use"
-    int8_t length;
+  /// # of bytes, or -1 to mean "invalid key - do not use"
+  int8_t length;
 };
 
 /**
@@ -21,77 +21,143 @@ struct CryptoKey {
  */
 
 #define MAX_BLOCKSIZE 256
-#define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+#define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for
+                                  // testing keys
 
-class CryptoEngine
-{
-  public:
+class CryptoEngine {
+public:
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    uint8_t public_key[32] = {0};
+  uint8_t public_key[32] = {0};
 #endif
 
-    virtual ~CryptoEngine() {}
+  virtual ~CryptoEngine() {}
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-    virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
-    virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+  virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+  virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
 
 #endif
-    void clearKeys();
-    void setDHPrivateKey(uint8_t *_private_key);
-    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
-                                   uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
-                                   size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool setDHPublicKey(uint8_t *publicKey);
-    virtual void hash(uint8_t *bytes, size_t numBytes);
+  void clearKeys();
+  void setDHPrivateKey(uint8_t *_private_key);
+  virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode,
+                                 meshtastic_UserLite_public_key_t remotePublic,
+                                 uint64_t packetNum, size_t numBytes,
+                                 const uint8_t *bytes, uint8_t *bytesOut);
+  virtual bool decryptCurve25519(uint32_t fromNode,
+                                 meshtastic_UserLite_public_key_t remotePublic,
+                                 uint64_t packetNum, size_t numBytes,
+                                 const uint8_t *bytes, uint8_t *bytesOut);
+  virtual bool setDHPublicKey(uint8_t *publicKey);
+  virtual void hash(uint8_t *bytes, size_t numBytes);
 
-    virtual void aesSetKey(const uint8_t *key, size_t key_len);
+  /**
+   * Encrypt with Perfect Forward Secrecy using Triple-DH.
+   * Uses both identity and ephemeral keys for enhanced security.
+   * Falls back to standard encryptCurve25519 if PFS not available.
+   *
+   * @param toNode Destination node number.
+   * @param fromNode Source node number.
+   * @param remoteIdentityKey Remote node's long-term identity public key.
+   * @param remoteEphemeralKey Remote node's ephemeral public key (32 bytes).
+   * @param packetNum Packet ID for nonce generation.
+   * @param numBytes Number of bytes to encrypt.
+   * @param bytes Input plaintext.
+   * @param bytesOut Output ciphertext buffer.
+   * @return true if encryption succeeded.
+   */
+  virtual bool
+  encryptWithPFS(uint32_t toNode, uint32_t fromNode,
+                 meshtastic_UserLite_public_key_t remoteIdentityKey,
+                 const uint8_t *remoteEphemeralKey, uint64_t packetNum,
+                 size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
 
-    virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    AESSmall256 *aes = NULL;
+  /**
+   * Decrypt with Perfect Forward Secrecy using Triple-DH.
+   *
+   * @param fromNode Source node number.
+   * @param remoteIdentityKey Remote node's long-term identity public key.
+   * @param remoteEphemeralKey Remote node's ephemeral public key (32 bytes).
+   * @param packetNum Packet ID for nonce generation.
+   * @param numBytes Number of bytes to decrypt.
+   * @param bytes Input ciphertext.
+   * @param bytesOut Output plaintext buffer.
+   * @return true if decryption succeeded.
+   */
+  virtual bool
+  decryptWithPFS(uint32_t fromNode,
+                 meshtastic_UserLite_public_key_t remoteIdentityKey,
+                 const uint8_t *remoteEphemeralKey, uint64_t packetNum,
+                 size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+
+  /**
+   * Derive a session key using Triple-DH and HKDF.
+   *
+   * Triple-DH combines:
+   *   DH1 = DH(identity_local, ephemeral_remote)
+   *   DH2 = DH(ephemeral_local, identity_remote)
+   *   DH3 = DH(ephemeral_local, ephemeral_remote)
+   *
+   * @param remoteIdentityKey Remote node's identity public key.
+   * @param remoteEphemeralKey Remote node's ephemeral public key.
+   * @param localEphemeralPrivKey Local ephemeral private key.
+   * @param sessionKeyOut Output buffer for derived session key (32 bytes).
+   * @return true if key derivation succeeded.
+   */
+  bool deriveTripleDHSessionKey(const uint8_t *remoteIdentityKey,
+                                const uint8_t *remoteEphemeralKey,
+                                const uint8_t *localEphemeralPrivKey,
+                                uint8_t *sessionKeyOut);
+
+  virtual void aesSetKey(const uint8_t *key, size_t key_len);
+
+  virtual void aesEncrypt(uint8_t *in, uint8_t *out);
+  AESSmall256 *aes = NULL;
 
 #endif
 
-    /**
-     * Set the key used for encrypt, decrypt.
-     *
-     * As a special case: If all bytes are zero, we assume _no encryption_ and send all data in cleartext.
-     *
-     * @param numBytes must be 16 (AES128), 32 (AES256) or 0 (no crypt)
-     * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
-     * provided pointer)
-     */
-    virtual void setKey(const CryptoKey &k);
+  /**
+   * Set the key used for encrypt, decrypt.
+   *
+   * As a special case: If all bytes are zero, we assume _no encryption_ and
+   * send all data in cleartext.
+   *
+   * @param numBytes must be 16 (AES128), 32 (AES256) or 0 (no crypt)
+   * @param bytes a _static_ buffer that will remain valid for the life of this
+   * crypto instance (i.e. this class will cache the provided pointer)
+   */
+  virtual void setKey(const CryptoKey &k);
 
-    /**
-     * Encrypt a packet
-     *
-     * @param bytes is updated in place
-     */
-    virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-    virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
+  /**
+   * Encrypt a packet
+   *
+   * @param bytes is updated in place
+   */
+  virtual void encryptPacket(uint32_t fromNode, uint64_t packetId,
+                             size_t numBytes, uint8_t *bytes);
+  virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes,
+                       uint8_t *bytes);
+  virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes,
+                             uint8_t *bytes);
 #ifndef PIO_UNIT_TESTING
-  protected:
+protected:
 #endif
-    /** Our per packet nonce */
-    uint8_t nonce[16] = {0};
-    CryptoKey key = {};
-    CTRCommon *ctr = NULL;
+  /** Our per packet nonce */
+  uint8_t nonce[16] = {0};
+  CryptoKey key = {};
+  CTRCommon *ctr = NULL;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    uint8_t shared_key[32] = {0};
-    uint8_t private_key[32] = {0};
+  uint8_t shared_key[32] = {0};
+  uint8_t private_key[32] = {0};
 #endif
-    /**
-     * Init our 128 bit nonce for a new packet
-     *
-     * The NONCE is constructed by concatenating (from MSB to LSB):
-     * a 64 bit packet number (stored in little endian order)
-     * a 32 bit sending node number (stored in little endian order)
-     * a 32 bit block counter (starts at zero)
-     */
-    void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
+  /**
+   * Init our 128 bit nonce for a new packet
+   *
+   * The NONCE is constructed by concatenating (from MSB to LSB):
+   * a 64 bit packet number (stored in little endian order)
+   * a 32 bit sending node number (stored in little endian order)
+   * a 32 bit block counter (starts at zero)
+   */
+  void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
 };
 
 extern CryptoEngine *crypto;
