@@ -380,7 +380,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 }
             } else { // if chainEnd()
                 LOG_WARN("No Messages on this chain, request!");
-                // todo request using portduino config initial_sync
                 if (airTime->isTxAllowedChannelUtil(true)) {
                     requestMessageCount(t->root_hash.bytes, t->root_hash.size, portduino_config.sfpp_initial_sync);
                 }
