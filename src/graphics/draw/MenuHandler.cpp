@@ -849,8 +849,9 @@ void menuHandler::homeBaseMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED) {
-        if (!isMuted) {
+    if (moduleConfig.external_notification.enabled && externalNotificationModule &&
+        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED) {
+        if (!externalNotificationModule->getMute()) {
             optionsArray[options] = "Temporarily Mute";
         } else {
             optionsArray[options] = "Unmute";
@@ -882,9 +883,8 @@ void menuHandler::homeBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Mute) {
             if (moduleConfig.external_notification.enabled && externalNotificationModule) {
-                bool isMuted = externalNotificationModule->getMute();
-                externalNotificationModule->setMute(!isMuted);
-                IF_SCREEN(graphics::isMuted = !isMuted; if (!isMuted) externalNotificationModule->stopNow();)
+                externalNotificationModule->setMute(!externalNotificationModule->getMute());
+                IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow();)
             }
         } else if (selected == Backlight) {
             screen->setOn(false);

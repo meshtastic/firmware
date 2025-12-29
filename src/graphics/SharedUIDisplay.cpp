@@ -8,6 +8,7 @@
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OLEDDisplay.h>
 #include <graphics/images.h>
@@ -56,7 +57,6 @@ void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second)
 
 // === Shared External State ===
 bool hasUnreadMessage = false;
-bool isMuted = false;
 ScreenResolution currentResolution = ScreenResolution::Low;
 
 // === Internal State ===
@@ -306,7 +306,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (isMuted) {
+        } else if (externalNotificationModule->getMute()) {
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
@@ -383,7 +383,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (isMuted) {
+        } else if (externalNotificationModule->getMute()) {
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
