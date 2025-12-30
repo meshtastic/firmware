@@ -1,6 +1,7 @@
-// TODO: non-stratum0 nodes need to be pointed at their upstream source? Maybe
+// TODO: Split packets when needed
+// TODO: roll messages out of DB
 
-// TODO: evict messages from scratch after a timeout
+// Eventual TODO: non-stratum0 nodes need to be pointed at their upstream source? Maybe
 #if __has_include("sqlite3.h")
 
 #include "StoreForwardPlusPlus.h"
@@ -178,7 +179,15 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(ppDb, "UPDATE mappings SET count=? WHERE substr(root_hash,1,?)=?;", -1, &setChainCountStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "SELECT count FROM mappings WHERE substr(root_hash,1,?)=?;", -1, &getChainCountStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM channel_messages WHERE substr(root_hash,1,?)=?;", -1, &getChainCountStmt,
+                       NULL);
+
+    sqlite3_prepare_v2(ppDb, "DELETE FROM local_messages WHERE rx_time < ?;", -1, &pruneScratchQueueStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb,
+                       "DELETE FROM channel_messages WHERE commit_hash in ( select commit_hash from channel_messages where "
+                       "substr(root_hash,1,?)=? ORDER BY rowid ASC LIMIT 1);",
+                       -1, &trimOldestLinkStmt, NULL);
 
     encryptedOk = true;
 
@@ -197,10 +206,13 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     getOrAddRootFromChannelHash(hash, root_hash_bytes);
     uint32_t chain_count = getChainCount(root_hash_bytes, SFPP_HASH_SIZE);
     LOG_DEBUG("Chain count is %u", chain_count);
-    if (chain_count > portduino_config.sfpp_max_chain) {
+    while (chain_count > portduino_config.sfpp_max_chain) {
         LOG_DEBUG("Chain length %u exceeds max %u, evicting oldest", chain_count, portduino_config.sfpp_max_chain);
-        // TODO
+        trimOldestLink(root_hash_bytes, SFPP_HASH_SIZE);
+        chain_count--;
     }
+    // evict old messages from scratch
+    pruneScratchQueue();
 
     if (memfll(root_hash_bytes, '\0', SFPP_HASH_SIZE)) {
         LOG_WARN("No root hash found, not sending");
@@ -1156,7 +1168,11 @@ uint32_t StoreForwardPlusPlusModule::getChainCount(uint8_t *root_hash, size_t ro
 {
     sqlite3_bind_int(getChainCountStmt, 1, root_hash_len);
     sqlite3_bind_blob(getChainCountStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_step(getChainCountStmt);
+
+    int res = sqlite3_step(getChainCountStmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE) {
+        LOG_ERROR("getChainCount sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    }
     uint32_t count = sqlite3_column_int(getChainCountStmt, 0);
     sqlite3_reset(getChainCountStmt);
     return count;
@@ -1196,6 +1212,27 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromC
 
     sqlite3_reset(getChainEndStmt);
     return lo;
+}
+
+void StoreForwardPlusPlusModule::pruneScratchQueue()
+{
+    sqlite3_bind_int(pruneScratchQueueStmt, 1, time(nullptr) - 60 * 60 * 24);
+    int res = sqlite3_step(pruneScratchQueueStmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE) {
+        LOG_ERROR("Prune Scratch sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    }
+    sqlite3_reset(pruneScratchQueueStmt);
+}
+
+void StoreForwardPlusPlusModule::trimOldestLink(uint8_t *root_hash, size_t root_hash_len)
+{
+    sqlite3_bind_int(trimOldestLinkStmt, 1, root_hash_len);
+    sqlite3_bind_blob(trimOldestLinkStmt, 2, root_hash, root_hash_len, NULL);
+    int res = sqlite3_step(trimOldestLinkStmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE) {
+        LOG_ERROR("Trim Oldest Link sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    }
+    sqlite3_reset(trimOldestLinkStmt);
 }
 
 #endif // has include sqlite3
