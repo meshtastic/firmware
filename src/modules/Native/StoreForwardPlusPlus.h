@@ -189,7 +189,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // ingests a LINK_PROVIDE message and builds a link_object
     // confirms the root hash and commit hash
-    link_object ingestLinkMessage(meshtastic_StoreForwardPlusPlus *);
+    link_object ingestLinkMessage(meshtastic_StoreForwardPlusPlus *, bool = true);
 
     // retrieves a link object from the canonical chain database given a message hash
     link_object getLink(uint8_t *, size_t);
