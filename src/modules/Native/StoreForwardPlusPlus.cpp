@@ -430,8 +430,9 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         link_object incoming_link = ingestLinkMessage(t);
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_FIRSTHALF) {
         LOG_DEBUG("Link Provide First Half received!");
-        split_link_in = ingestLinkMessage(t);
+        split_link_in = ingestLinkMessage(t, false);
         doing_split_receive = true;
+        split_link_in.validObject = true;
         return true;
 
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF) {
@@ -445,11 +446,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             doing_split_receive = false;
             return true;
         }
-        link_object second_half = ingestLinkMessage(t);
-        if (second_half.validObject == false) {
-            LOG_WARN("Second half invalid");
-            return true;
-        }
+        link_object second_half = ingestLinkMessage(t, false);
         if (split_link_in.encrypted_len + second_half.encrypted_len > 256) {
             LOG_WARN("Combined link too large");
             return true;
@@ -736,7 +733,7 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit
 {
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
-    if (lo.encrypted_len > 200) {
+    if (lo.encrypted_len > 180) {
         LOG_WARN("Link too large to send (%u bytes)", lo.encrypted_len);
         doing_split_send = true;
         storeforward.message_hash.size = SFPP_SHORT_HASH_SIZE;
@@ -1087,7 +1084,8 @@ StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, co
     return lo;
 }
 
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMessage(meshtastic_StoreForwardPlusPlus *t)
+StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMessage(meshtastic_StoreForwardPlusPlus *t,
+                                                                                      bool recalc)
 {
     // TODO: If not stratum0, injest the chain count
     link_object lo;
@@ -1106,40 +1104,48 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
 
     memcpy(lo.encrypted_bytes, t->message.bytes, t->message.size);
     lo.encrypted_len = t->message.size;
+    if (recalc) {
+        message_hash.reset();
+        message_hash.update(lo.encrypted_bytes, lo.encrypted_len);
+        message_hash.update(&lo.to, sizeof(lo.to));
+        message_hash.update(&lo.from, sizeof(lo.from));
+        message_hash.update(&lo.id, sizeof(lo.id));
+        message_hash.finalize(lo.message_hash, SFPP_HASH_SIZE);
+        lo.message_hash_len = SFPP_HASH_SIZE;
 
-    message_hash.reset();
-    message_hash.update(lo.encrypted_bytes, lo.encrypted_len);
-    message_hash.update(&lo.to, sizeof(lo.to));
-    message_hash.update(&lo.from, sizeof(lo.from));
-    message_hash.update(&lo.id, sizeof(lo.id));
-    message_hash.finalize(lo.message_hash, SFPP_HASH_SIZE);
-    lo.message_hash_len = SFPP_HASH_SIZE;
-
-    // look up full root hash and copy over the partial if it matches
-    if (lookUpFullRootHash(t->root_hash.bytes, t->root_hash.size, lo.root_hash)) {
-        printBytes("Found full root hash: 0x", lo.root_hash, SFPP_HASH_SIZE);
-        lo.root_hash_len = SFPP_HASH_SIZE;
-    } else {
-        LOG_WARN("root hash does not match %d bytes", t->root_hash.size);
-        lo.root_hash_len = 0;
-        lo.validObject = false;
-        return lo;
-    }
-
-    if (t->commit_hash.size == SFPP_HASH_SIZE && getChainCount(t->root_hash.bytes, t->root_hash.size) == 0 &&
-        portduino_config.sfpp_initial_sync != 0 && !portduino_config.sfpp_stratum0) {
-        lo.commit_hash_len = SFPP_HASH_SIZE;
-        memcpy(lo.commit_hash, t->commit_hash.bytes, SFPP_HASH_SIZE);
-
-    } else if (t->commit_hash.size > 0) {
-        // calculate the full commit hash and replace the partial if it matches
-        if (checkCommitHash(lo, t->commit_hash.bytes, t->commit_hash.size)) {
-            printBytes("commit hash matches: 0x", t->commit_hash.bytes, t->commit_hash.size);
+        // look up full root hash and copy over the partial if it matches
+        if (lookUpFullRootHash(t->root_hash.bytes, t->root_hash.size, lo.root_hash)) {
+            printBytes("Found full root hash: 0x", lo.root_hash, SFPP_HASH_SIZE);
+            lo.root_hash_len = SFPP_HASH_SIZE;
         } else {
-            LOG_WARN("commit hash does not match, rejecting link.");
-            lo.commit_hash_len = 0;
+            LOG_WARN("root hash does not match %d bytes", t->root_hash.size);
+            lo.root_hash_len = 0;
             lo.validObject = false;
+            return lo;
         }
+
+        if (t->commit_hash.size == SFPP_HASH_SIZE && getChainCount(t->root_hash.bytes, t->root_hash.size) == 0 &&
+            portduino_config.sfpp_initial_sync != 0 && !portduino_config.sfpp_stratum0) {
+            lo.commit_hash_len = SFPP_HASH_SIZE;
+            memcpy(lo.commit_hash, t->commit_hash.bytes, SFPP_HASH_SIZE);
+
+        } else if (t->commit_hash.size > 0) {
+            // calculate the full commit hash and replace the partial if it matches
+            if (checkCommitHash(lo, t->commit_hash.bytes, t->commit_hash.size)) {
+                printBytes("commit hash matches: 0x", t->commit_hash.bytes, t->commit_hash.size);
+            } else {
+                LOG_WARN("commit hash does not match, rejecting link.");
+                lo.commit_hash_len = 0;
+                lo.validObject = false;
+            }
+        }
+    } else {
+        memcpy(lo.message_hash, t->message_hash.bytes, t->message_hash.size);
+        lo.message_hash_len = t->message_hash.size;
+        memcpy(lo.root_hash, t->root_hash.bytes, t->root_hash.size);
+        lo.root_hash_len = t->root_hash.size;
+        memcpy(lo.commit_hash, t->commit_hash.bytes, t->commit_hash.size);
+        lo.commit_hash_len = t->commit_hash.size;
     }
 
     // we don't ever get the payload here, so it's always an empty string
