@@ -363,7 +363,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
     const int8_t hopsTaken = getHopsAway(p);
     if (hopsTaken >= 0) {
         int8_t diff = hopsTaken - *route_count;
-        for (uint8_t i = 0; i < diff; i++) {
+        for (int8_t i = 0; i < diff; i++) {
             if (*route_count < ROUTE_SIZE) {
                 route[*route_count] = NODENUM_BROADCAST; // This will represent an unknown hop
                 *route_count += 1;
@@ -371,7 +371,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         }
         // Add unknown SNR values if necessary
         diff = *route_count - *snr_count;
-        for (uint8_t i = 0; i < diff; i++) {
+        for (int8_t i = 0; i < diff; i++) {
             if (*snr_count < ROUTE_SIZE) {
                 snr_list[*snr_count] = INT8_MIN; // This will represent an unknown SNR
                 *snr_count += 1;
