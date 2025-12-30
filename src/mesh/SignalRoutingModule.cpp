@@ -127,7 +127,7 @@ SignalRoutingModule::SignalRoutingModule()
 int32_t SignalRoutingModule::runOnce()
 {
     uint32_t nowMs = millis();
-    uint32_t nowSecs = getTime();
+    uint32_t nowSecs = millis() / 1000;  // Use monotonic time for aging
 
     pruneCapabilityCache(nowSecs);
     pruneGatewayRelations(nowSecs);
@@ -195,6 +195,9 @@ int32_t SignalRoutingModule::runOnce()
     }
 #endif
 
+    // Turn off LED when RTOS task completes
+    turnOffRgbLed();
+
     uint32_t nextDelay = std::min({timeToLedOff, timeToBroadcast, timeToSpeculative});
     if (nextDelay < 20) {
         nextDelay = 20;
@@ -227,7 +230,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 
     // Record our transmission for contention window tracking
     if (routingGraph) {
-        uint32_t currentTime = getTime();
+        uint32_t currentTime = millis() / 1000;  // Use monotonic time
         routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
     }
 }
@@ -278,10 +281,16 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     // Filter out placeholders before assigning to neighbors array
     const EdgeLite* filteredSelected[GRAPH_LITE_MAX_EDGES_PER_NODE];
     size_t filteredCount = 0;
+    size_t placeholdersFiltered = 0;
     for (size_t i = 0; i < selectedCount; i++) {
         if (!isPlaceholderNode(selected[i]->to)) {
             filteredSelected[filteredCount++] = selected[i];
+        } else {
+            placeholdersFiltered++;
         }
+    }
+    if (placeholdersFiltered > 0) {
+        LOG_DEBUG("[SR] Filtered %zu placeholder nodes from topology broadcast", placeholdersFiltered);
     }
 
     info.neighbors_count = filteredCount;
@@ -339,10 +348,16 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     // Filter out placeholders before assigning to neighbors array
     std::vector<const Edge*> filteredSelected;
     filteredSelected.reserve(selected.size());
+    size_t placeholdersFiltered = 0;
     for (auto* e : selected) {
         if (!isPlaceholderNode(e->to)) {
             filteredSelected.push_back(e);
+        } else {
+            placeholdersFiltered++;
         }
+    }
+    if (placeholdersFiltered > 0) {
+        LOG_DEBUG("[SR] Filtered %zu placeholder nodes from topology broadcast", placeholdersFiltered);
     }
 
     info.neighbors_count = filteredSelected.size();
@@ -456,11 +471,8 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
              senderName, p->neighbors_count, p->routing_version,
              p->signal_based_capable ? "SR-capable" : "legacy mode");
 
-    // Set cyan for network topology update
+    // Set cyan for network topology update (operation start)
     setRgbLed(0, 255, 255);
-    // Brief visible period then turn off
-    delay(150);
-    turnOffRgbLed();
 
     // Clear all existing edges for this node before adding the new ones from the broadcast
     // This ensures our view of the sender's connectivity matches exactly what it reported
@@ -569,7 +581,7 @@ bool SignalRoutingModule::isPlaceholderNode(NodeNum nodeId) const
 NodeNum SignalRoutingModule::createPlaceholderNode(uint8_t relayId)
 {
     NodeNum placeholderId = PLACEHOLDER_BASE | relayId;
-    LOG_DEBUG("[SR] Created placeholder node %08x for unknown relay 0x%02x", placeholderId, relayId);
+    LOG_INFO("[SR] Created placeholder node %08x for unknown relay 0x%02x", placeholderId, relayId);
     return placeholderId;
 }
 
@@ -583,17 +595,85 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
         return false; // Can't resolve to another placeholder
     }
 
-    LOG_INFO("[SR] Resolving placeholder %08x -> real node %08x", placeholderId, realNodeId);
+    // Check if this placeholder is already resolved to a different node
+    uint8_t relayId = placeholderId & 0xFF;
+    NodeNum alreadyResolved = resolveRelayIdentity(relayId);
+    if (alreadyResolved != 0 && alreadyResolved != realNodeId) {
+        LOG_WARN("[SR] Placeholder %08x already resolved to %08x, refusing to resolve to %08x",
+                placeholderId, alreadyResolved, realNodeId);
+        return false; // Already resolved to a different node
+    }
+
+    LOG_INFO("[SR] Resolved placeholder %08x -> real node %08x", placeholderId, realNodeId);
 
     // Update relay identity cache - this ensures future relay resolutions work
-    uint8_t relayId = placeholderId & 0xFF;
     rememberRelayIdentity(realNodeId, relayId);
 
     // Update gateway relationships
     replaceGatewayNode(placeholderId, realNodeId);
 
-    // Note: Existing graph edges referencing the placeholder will age out over time
-    // Future packets will use the resolved real node ID
+    // Transfer graph edges from placeholder to real node and remove placeholder
+    // This ensures topology continuity during resolution
+    if (routingGraph) {
+        NodeNum ourNode = nodeDB->getNodeNum();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        // Get all edges where placeholder is the source
+        const NodeEdgesLite* placeholderEdges = routingGraph->getEdgesFrom(placeholderId);
+        if (placeholderEdges) {
+            for (uint8_t i = 0; i < placeholderEdges->edgeCount; i++) {
+                NodeNum target = placeholderEdges->edges[i].to;
+                float etx = placeholderEdges->edges[i].getEtx();
+                // Create equivalent edge from real node to target
+                routingGraph->updateEdge(realNodeId, target, etx, millis() / 1000);
+                LOG_DEBUG("[SR] Transferred edge: %08x -> %08x (ETX=%.2f)",
+                         realNodeId, target, etx);
+            }
+        }
+
+        // Also check for reverse edges (where placeholder is the target)
+        const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+        if (ourEdges) {
+            for (uint8_t i = 0; i < ourEdges->edgeCount; i++) {
+                if (ourEdges->edges[i].to == placeholderId) {
+                    float etx = ourEdges->edges[i].getEtx();
+                    // Create equivalent edge from our node to real node
+                    routingGraph->updateEdge(ourNode, realNodeId, etx, millis() / 1000);
+                    LOG_DEBUG("[SR] Transferred reverse edge: %08x -> %08x (ETX=%.2f)",
+                             ourNode, realNodeId, etx);
+                }
+            }
+        }
+#else
+        // Get all edges where placeholder is the source
+        const std::vector<Edge>* placeholderEdges = routingGraph->getEdgesFrom(placeholderId);
+        if (placeholderEdges) {
+            for (const Edge& edge : *placeholderEdges) {
+                // Create equivalent edge from real node to target
+                routingGraph->updateEdge(realNodeId, edge.to, edge.etx, edge.lastUpdate, edge.variance);
+                LOG_DEBUG("[SR] Transferred edge: %08x -> %08x (ETX=%.2f)",
+                         realNodeId, edge.to, edge.etx);
+            }
+        }
+
+        // Also check for reverse edges (where placeholder is the target)
+        const std::vector<Edge>* ourEdges = routingGraph->getEdgesFrom(ourNode);
+        if (ourEdges) {
+            for (const Edge& edge : *ourEdges) {
+                if (edge.to == placeholderId) {
+                    // Create equivalent edge from our node to real node
+                    routingGraph->updateEdge(ourNode, realNodeId, edge.etx, edge.lastUpdate, edge.variance);
+                    LOG_DEBUG("[SR] Transferred reverse edge: %08x -> %08x (ETX=%.2f)",
+                             ourNode, realNodeId, edge.etx);
+                }
+            }
+        }
+#endif
+
+        // Remove the placeholder node from the graph now that edges are transferred
+        routingGraph->removeNode(placeholderId);
+        LOG_DEBUG("[SR] Removed placeholder node %08x from graph", placeholderId);
+    }
 
     return true;
 }
@@ -689,6 +769,245 @@ bool SignalRoutingModule::isPlaceholderConnectedToUs(NodeNum placeholderId) cons
     return false;
 }
 
+bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime)
+{
+    if (!routingGraph) {
+        return false;
+    }
+
+    // Find stock firmware nodes that might need coverage: direct neighbors + downstream nodes
+    std::vector<NodeNum> stockNeighbors;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Check our direct neighbors for stock firmware nodes
+    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+    if (myEdges) {
+        for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+            NodeNum neighbor = myEdges->edges[i].to;
+            if (getCapabilityStatus(neighbor) == CapabilityStatus::Legacy) {
+                stockNeighbors.push_back(neighbor);
+            }
+        }
+    }
+
+    // Also check downstream nodes of direct stock relays
+    if (myEdges) {
+        for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+            NodeNum relay = myEdges->edges[i].to;
+            // Check if this relay has downstream nodes
+            for (uint8_t j = 0; j < gatewayRelationCount; j++) {
+                if (gatewayRelations[j].gateway == relay) {
+                    NodeNum downstream = gatewayRelations[j].downstream;
+                    if (getCapabilityStatus(downstream) == CapabilityStatus::Legacy) {
+                        stockNeighbors.push_back(downstream);
+                    }
+                }
+            }
+        }
+    }
+#else
+    const std::vector<Edge>* myEdges = routingGraph->getEdgesFrom(myNode);
+    if (myEdges) {
+        for (const Edge& edge : *myEdges) {
+            NodeNum neighbor = edge.to;
+            if (getCapabilityStatus(neighbor) == CapabilityStatus::Legacy) {
+                stockNeighbors.push_back(neighbor);
+            }
+        }
+    }
+
+    // Also check downstream nodes of direct stock relays
+    if (myEdges) {
+        for (const Edge& edge : *myEdges) {
+            NodeNum relay = edge.to;
+            // Check if this relay has downstream nodes
+            auto it = gatewayDownstream.find(relay);
+            if (it != gatewayDownstream.end()) {
+                for (NodeNum downstream : it->second) {
+                    if (getCapabilityStatus(downstream) == CapabilityStatus::Legacy) {
+                        stockNeighbors.push_back(downstream);
+                    }
+                }
+            }
+        }
+    }
+#endif
+
+    if (stockNeighbors.empty()) {
+        return false; // No stock neighbors to worry about
+    }
+
+    LOG_INFO("[SR] Checking broadcast coverage for %zu stock neighbors", stockNeighbors.size());
+
+    // Check if any stock neighbor needs this packet
+    // A stock neighbor needs the packet if they didn't hear it directly from the source
+    bool hasUncoveredStockNeighbor = false;
+    NodeNum bestStockNeighbor = 0;
+    float bestStockCost = std::numeric_limits<float>::max();
+
+    for (NodeNum stockNeighbor : stockNeighbors) {
+        // Check if stock neighbor heard the transmission directly
+        // If source can reach stock neighbor directly, they already heard it
+        // Also check if heardFrom (relaying SR node) can reach them directly
+        bool heardDirectly = false;
+
+        // Check if original source can reach stock neighbor
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        const NodeEdgesLite* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
+        if (sourceEdges) {
+            for (uint8_t i = 0; i < sourceEdges->edgeCount; i++) {
+                if (sourceEdges->edges[i].to == stockNeighbor) {
+                    heardDirectly = true;
+                    break;
+                }
+            }
+        }
+#else
+        const std::vector<Edge>* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
+        if (sourceEdges) {
+            for (const Edge& edge : *sourceEdges) {
+                if (edge.to == stockNeighbor) {
+                    heardDirectly = true;
+                    break;
+                }
+            }
+        }
+#endif
+
+        // If not heard from source, check if heard from relaying SR node
+        if (!heardDirectly) {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            const NodeEdgesLite* heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
+            if (heardFromEdges) {
+                for (uint8_t i = 0; i < heardFromEdges->edgeCount; i++) {
+                    if (heardFromEdges->edges[i].to == stockNeighbor) {
+                        heardDirectly = true;
+                        LOG_DEBUG("[SR] Stock neighbor %08x already covered by relaying SR node %08x",
+                                 stockNeighbor, heardFrom);
+                        break;
+                    }
+                }
+            }
+#else
+            const std::vector<Edge>* heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
+            if (heardFromEdges) {
+                for (const Edge& edge : *heardFromEdges) {
+                    if (edge.to == stockNeighbor) {
+                        heardDirectly = true;
+                        LOG_DEBUG("[SR] Stock neighbor %08x already covered by relaying SR node %08x",
+                                 stockNeighbor, heardFrom);
+                        break;
+                    }
+                }
+            }
+#endif
+        }
+
+        if (!heardDirectly) {
+            hasUncoveredStockNeighbor = true;
+            LOG_DEBUG("[SR] Stock neighbor %08x did not hear transmission directly", stockNeighbor);
+
+            // Check if we're the best positioned to reach this stock neighbor
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+            if (myEdges) {
+                for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                    if (myEdges->edges[i].to == stockNeighbor) {
+                        float cost = myEdges->edges[i].getEtx();
+                        if (cost < bestStockCost) {
+                            bestStockCost = cost;
+                            bestStockNeighbor = stockNeighbor;
+                        }
+                        break;
+                    }
+                }
+            }
+#else
+            const std::vector<Edge>* myEdges = routingGraph->getEdgesFrom(myNode);
+            if (myEdges) {
+                for (const Edge& edge : *myEdges) {
+                    if (edge.to == stockNeighbor) {
+                        float cost = edge.etx;
+                        if (cost < bestStockCost) {
+                            bestStockCost = cost;
+                            bestStockNeighbor = stockNeighbor;
+                        }
+                        break;
+                    }
+                }
+            }
+#endif
+        }
+    }
+
+    if (hasUncoveredStockNeighbor && bestStockNeighbor != 0) {
+        LOG_INFO("[SR] STOCK COVERAGE: Relaying broadcast for uncovered stock neighbor %08x (ETX=%.2f)",
+                 bestStockNeighbor, bestStockCost);
+        return true;
+    }
+
+    if (hasUncoveredStockNeighbor) {
+        LOG_DEBUG("[SR] STOCK COVERAGE: Found %zu uncovered stock neighbors but no valid relay path from this node", stockNeighbors.size());
+    }
+
+    return false;
+}
+
+bool SignalRoutingModule::isDownstreamOfHeardRelay(NodeNum destination, NodeNum myNode)
+{
+    if (!routingGraph) {
+        return false;
+    }
+
+    // Check if destination is downstream of any relay we can hear directly
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Check our direct neighbors for relays that have this destination as downstream
+    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+    if (myEdges) {
+        for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+            NodeNum neighbor = myEdges->edges[i].to;
+            // Check if this neighbor has destination as downstream
+            for (uint8_t j = 0; j < gatewayRelationCount; j++) {
+                if (gatewayRelations[j].gateway == neighbor && gatewayRelations[j].downstream == destination) {
+                    LOG_INFO("[SR] Found downstream: %08x is downstream of relay %08x (direct neighbor)", destination, neighbor);
+                    return true;
+                }
+            }
+        }
+    }
+#else
+    // Check our direct neighbors for relays that have this destination as downstream
+    auto myEdges = routingGraph->getEdgesFrom(myNode);
+    if (myEdges) {
+        for (const Edge& edge : *myEdges) {
+            NodeNum neighbor = edge.to;
+            // Check if this neighbor has destination as downstream
+            auto it = gatewayDownstream.find(neighbor);
+            if (it != gatewayDownstream.end()) {
+                for (NodeNum downstream : it->second) {
+                    if (downstream == destination) {
+                        LOG_INFO("[SR] Found downstream: %08x is downstream of relay %08x (direct neighbor)", destination, neighbor);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+#endif
+
+    return false;
+}
+
+uint32_t SignalRoutingModule::getNodeTtlSeconds(CapabilityStatus status) const
+{
+    // Mute/inactive nodes (Legacy status) get longer TTL
+    if (status == CapabilityStatus::Legacy) {
+        return MUTE_NODE_TTL_SECS;
+    }
+    // Active nodes (Capable, Unknown) get shorter TTL
+    return ACTIVE_NODE_TTL_SECS;
+}
+
 void SignalRoutingModule::logNetworkTopology()
 {
     if (!routingGraph) return;
@@ -741,10 +1060,10 @@ void SignalRoutingModule::logNetworkTopology()
 
         // Count gateway downstreams using fixed iteration (no heap allocation)
         uint8_t downstreamCount = 0;
-        uint32_t now = getTime();
+        uint32_t now = millis() / 1000;  // Use monotonic time
         for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
             const GatewayDownstreamSet &set = gatewayDownstream[i];
-            if (set.gateway == nodeId && (now - set.lastSeen) <= CAPABILITY_TTL_SECS) {
+            if (set.gateway == nodeId && (now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
                 downstreamCount = set.count;
                 break;
             }
@@ -897,6 +1216,11 @@ void SignalRoutingModule::logNetworkTopology()
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // Turn on LED to indicate SR processing active
+    // We'll turn it off when this RTOS task completes
+    // For now, use a neutral color - will be overridden by specific operations
+    setRgbLed(255, 255, 255);  // White for SR active
+
     // Update NodeDB with packet information like FloodingRouter does
     if (nodeDB) {
         nodeDB->updateFrom(mp);
@@ -935,7 +1259,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             updateNeighborInfo(mp.from, mp.rx_rssi, mp.rx_snr, mp.rx_time);
         } else {
             // Relayed packet - just update node activity timestamp
-            routingGraph->updateNodeActivity(mp.from, getTime());
+            routingGraph->updateNodeActivity(mp.from, millis() / 1000);
         }
     }
 
@@ -944,6 +1268,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         NodeNum placeholderId = getPlaceholderForRelay(fromLastByte);
         if (isPlaceholderNode(placeholderId)) {
             // This sender matches a placeholder - resolve it
+            LOG_INFO("[SR] Direct contact: resolving placeholder %08x with node %08x", placeholderId, mp.from);
             resolvePlaceholder(placeholderId, mp.from);
         }
 
@@ -965,14 +1290,12 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // Remove this node from ALL gateway relationships since we can hear it directly
         clearDownstreamFromAllGateways(mp.from);
 
-        // Brief purple for direct packet received
+        // Purple for direct packet received (operation start)
         setRgbLed(128, 0, 128);
-        delay(100);
-        turnOffRgbLed();
 
         // Record that this node transmitted (for contention window tracking)
         if (routingGraph) {
-            uint32_t currentTime = getTime();
+            uint32_t currentTime = millis() / 1000;  // Use monotonic time
             routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
         }
 
@@ -981,13 +1304,49 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
         // Process relayed packets to infer network topology
         // We don't have direct signal info to the original sender, but we can infer connectivity
+
+
         NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
+
+        // If still not resolved, try direct neighbors
+        if (inferredRelayer == 0 && routingGraph && nodeDB) {
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (myEdges) {
+                for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                    NodeNum neighbor = myEdges->edges[i].to;
+                    if ((neighbor & 0xFF) == mp.relay_node) {
+                        inferredRelayer = neighbor;
+                        // Remember this mapping for future use
+                        rememberRelayIdentity(neighbor, mp.relay_node);
+                        LOG_DEBUG("[SR] Resolved relay 0x%02x to direct neighbor %08x",
+                                 mp.relay_node, neighbor);
+                        break;
+                    }
+                }
+            }
+#else
+            auto neighbors = routingGraph->getDirectNeighbors(nodeDB->getNodeNum());
+            for (NodeNum neighbor : neighbors) {
+                if ((neighbor & 0xFF) == mp.relay_node) {
+                    inferredRelayer = neighbor;
+                    // Remember this mapping for future use
+                    rememberRelayIdentity(neighbor, mp.relay_node);
+                    LOG_DEBUG("[SR] Resolved relay 0x%02x to direct neighbor %08x",
+                             mp.relay_node, neighbor);
+                    break;
+                }
+            }
+#endif
+        }
 
         // If we can't resolve the relay identity, create a placeholder node
         if (inferredRelayer == 0) {
             inferredRelayer = createPlaceholderNode(mp.relay_node);
             // Remember this placeholder for future reference
             rememberRelayIdentity(inferredRelayer, mp.relay_node);
+            LOG_DEBUG("[SR] Created placeholder %08x for unknown relay 0x%02x",
+                     inferredRelayer, mp.relay_node);
         }
 
         if (inferredRelayer != 0 && inferredRelayer != mp.from) {
@@ -998,6 +1357,14 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             // This suggests connectivity between mp.from and inferredRelayer
             LOG_DEBUG("[SR] Inferred connectivity: %08x -> %08x (relayed via %02x)",
                      mp.from, inferredRelayer, mp.relay_node);
+
+            // For placeholders, add a synthetic graph edge with default ETX
+            if (isPlaceholderNode(inferredRelayer)) {
+                // Use ETX=2.0 for inferred placeholder connections (corresponds to poor connectivity)
+                routingGraph->updateEdge(mp.from, inferredRelayer, 2.0f, millis() / 1000);
+                LOG_DEBUG("[SR] Added synthetic edge: %08x -> %08x (ETX=2.0, placeholder)",
+                         mp.from, inferredRelayer);
+            }
 
             // Track that both the original sender and relayer are active
             trackNodeCapability(mp.from, CapabilityStatus::Unknown);
@@ -1073,7 +1440,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 
             // Record transmission for contention window tracking
             if (routingGraph) {
-                uint32_t currentTime = getTime();
+                uint32_t currentTime = millis() / 1000;  // Use monotonic time
                 routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
                 routingGraph->recordNodeTransmission(inferredRelayer, mp.id, currentTime);
             }
@@ -1084,13 +1451,26 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         handleSniffedPayload(mp, isDirectFromSender);
     }
 
-    // Periodic graph maintenance
+    // Periodic graph maintenance with stability safeguards
     if (routingGraph) {
-        uint32_t currentTime = getTime(); // Use uptime for consistent aging
+        // Use monotonic time (seconds since boot) for aging to avoid RTC sync issues
+        uint32_t currentTime = millis() / 1000;
         if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_SECS) {
+            uint32_t nodeCountBefore = routingGraph->getNodeCount();
             routingGraph->ageEdges(currentTime);
+            uint32_t nodeCountAfter = routingGraph->getNodeCount();
             lastGraphUpdate = currentTime;
-            LOG_DEBUG("[SR] Aged edges");
+
+            if (nodeCountBefore != nodeCountAfter) {
+                LOG_INFO("[SR] Graph aged: %u -> %u nodes", nodeCountBefore, nodeCountAfter);
+            } else {
+                LOG_DEBUG("[SR] Graph aged (no node count change)");
+            }
+
+            // Safety check: ensure we still have our own node
+            if (!routingGraph->getEdgesFrom(nodeDB->getNodeNum())) {
+                LOG_WARN("[SR] Graph aging removed local node edges - topology unstable");
+            }
         }
     }
 
@@ -1110,6 +1490,13 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
 
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
+
+    // Check if destination is a downstream node of relays we can hear directly
+    // If so, broadcast the unicast for relay coordination to ensure delivery
+    if (isDownstreamOfHeardRelay(destination, myNode)) {
+        LOG_INFO("[SR] UNICAST RELAY: Broadcasting unicast to %s - downstream of relay we can hear", destName);
+        return true; // Broadcast for coordination
+    }
 
     // Check if any legacy routers that heard this packet should relay instead
     // Legacy routers/repeaters get priority as they are meant to always rebroadcast
@@ -1216,6 +1603,9 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
 
     // We're the best positioned node, so we should relay
     LOG_DEBUG("[SR] We are best positioned for unicast to %s - relaying", destName);
+
+    // Turn off LED when RTOS task completes
+    turnOffRgbLed();
     return true;
 }
 
@@ -1523,23 +1913,43 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         shouldRelay = true;
     }
 
+    // Unified Coverage Logic: Ensure both SR coordination and stock coverage requirements are met
+    // SR coordination provides efficient unique coverage between SR nodes
+    // Stock coverage provides guaranteed coverage for stock firmware nodes
+
+    bool srCoordinationRequiresRelay = shouldRelay;
+
+    if (!srCoordinationRequiresRelay) {
+        // Check if stock nodes need guaranteed coverage
+        bool stockCoverageNeeded = shouldRelayForStockNeighbors(myNode, sourceNode, heardFrom, currentTime);
+        if (stockCoverageNeeded) {
+            LOG_INFO("[SR] UNIFIED COVERAGE: SR coordination declined relay, but stock nodes require guaranteed coverage");
+            shouldRelay = true;
+        } else {
+            LOG_DEBUG("[SR] UNIFIED COVERAGE: No relay needed - SR coordination satisfied and stock nodes covered");
+        }
+    } else {
+        LOG_DEBUG("[SR] UNIFIED COVERAGE: Relay required by SR coordination");
+    }
+
     char myName[64], sourceName[64], heardFromName[64];
     getNodeDisplayName(myNode, myName, sizeof(myName));
     getNodeDisplayName(sourceNode, sourceName, sizeof(sourceName));
     getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
 
-    LOG_INFO("[SR] Broadcast from %s (heard via %s): %s relay",
-             sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT");
+    const char* decisionReason = srCoordinationRequiresRelay ?
+        "SR coordination requires relay" :
+        "Stock coverage requires relay";
+
+    LOG_INFO("[SR] Broadcast from %s (heard via %s): %s relay (%s)",
+             sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT",
+             shouldRelay ? decisionReason : "No relay needed");
 
     if (shouldRelay) {
         routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
         setRgbLed(255, 128, 0);  // Orange for relaying
-        delay(150);
-        turnOffRgbLed();
     } else {
-        setRgbLed(255, 0, 0);  // Red for not relaying
-        delay(100);
-        turnOffRgbLed();
+        setRgbLed(255, 0, 0);    // Red for not relaying
     }
 
     return shouldRelay;
@@ -1821,20 +2231,14 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
         getNodeDisplayName(nodeId, neighborName, sizeof(neighborName));
 
         if (changeType == Graph::EDGE_NEW) {
-            LOG_INFO("[SR] New neighbor %s detected", neighborName);
-            // Set green for new neighbor
+            // Set green for new neighbor (operation start)
             setRgbLed(0, 255, 0);
-            delay(300);
-            turnOffRgbLed();
-            // Log topology for new connections
-            LOG_INFO("[SR] Topology changed: new neighbor %s", neighborName);
+            LOG_INFO("[SR] Topology changed: new neighbor %s (total nodes: %zu)", neighborName, routingGraph->getNodeCount());
             logNetworkTopology();
         } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
-            LOG_INFO("[SR] Topology changed: ETX change for %s", neighborName);
-            // Set blue for signal quality change
+            // Set blue for signal quality change (operation start)
             setRgbLed(0, 0, 255);
-            delay(300);
-            turnOffRgbLed();
+            LOG_INFO("[SR] Topology changed: ETX change for %s (total nodes: %zu)", neighborName, routingGraph->getNodeCount());
             logNetworkTopology();
         }
 
@@ -1941,7 +2345,7 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
         if (!node || node->num == nodeDB->getNodeNum()) {
             continue;
         }
-        if (node->last_heard == 0 || (now - (node->last_heard / 1000)) > CAPABILITY_TTL_SECS) {
+        if (node->last_heard == 0 || (now - (node->last_heard / 1000)) > ACTIVE_NODE_TTL_SECS) {
             continue;
         }
         total++;
@@ -2131,14 +2535,42 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
                   routing.route_request.route_count);
 
         // Check for placeholder resolution in route_request hops
-        // Only resolve placeholders that are connected to our node
+        // Only resolve if the hop node is a direct neighbor of ours
         for (size_t i = 0; i < routing.route_request.route_count; i++) {
             NodeNum hopNode = routing.route_request.route[i];
             uint8_t hopLastByte = hopNode & 0xFF;
             NodeNum placeholderId = getPlaceholderForRelay(hopLastByte);
             if (isPlaceholderNode(placeholderId) && isPlaceholderConnectedToUs(placeholderId)) {
-                // This hop node matches a placeholder connected to us - resolve it
-                resolvePlaceholder(placeholderId, hopNode);
+                // Additional check: the hop node must be a direct neighbor of ours
+                bool isDirectNeighbor = false;
+                NodeNum ourNode = nodeDB->getNodeNum();
+#ifdef SIGNAL_ROUTING_LITE_MODE
+                const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+                if (ourEdges) {
+                    for (uint8_t j = 0; j < ourEdges->edgeCount; j++) {
+                        if (ourEdges->edges[j].to == hopNode) {
+                            isDirectNeighbor = true;
+                            break;
+                        }
+                    }
+                }
+#else
+                const std::vector<Edge>* ourEdges = routingGraph->getEdgesFrom(ourNode);
+                if (ourEdges) {
+                    for (const Edge& edge : *ourEdges) {
+                        if (edge.to == hopNode) {
+                            isDirectNeighbor = true;
+                            break;
+                        }
+                    }
+                }
+#endif
+                if (isDirectNeighbor) {
+                    LOG_INFO("[SR] Traceroute resolution: placeholder %08x -> %08x (direct neighbor in route_request)", placeholderId, hopNode);
+                    resolvePlaceholder(placeholderId, hopNode);
+                } else {
+                    LOG_DEBUG("[SR] Skipping traceroute resolution: %08x is not a direct neighbor", hopNode);
+                }
             }
         }
         break;
@@ -2146,14 +2578,42 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
         LOG_DEBUG("[SR] Routing reply from %s for %u hops", senderName, routing.route_reply.route_back_count);
 
         // Check for placeholder resolution in route_reply hops
-        // Only resolve placeholders that are connected to our node
+        // Only resolve if the hop node is a direct neighbor of ours
         for (size_t i = 0; i < routing.route_reply.route_back_count; i++) {
             NodeNum hopNode = routing.route_reply.route_back[i];
             uint8_t hopLastByte = hopNode & 0xFF;
             NodeNum placeholderId = getPlaceholderForRelay(hopLastByte);
             if (isPlaceholderNode(placeholderId) && isPlaceholderConnectedToUs(placeholderId)) {
-                // This hop node matches a placeholder connected to us - resolve it
-                resolvePlaceholder(placeholderId, hopNode);
+                // Additional check: the hop node must be a direct neighbor of ours
+                bool isDirectNeighbor = false;
+                NodeNum ourNode = nodeDB->getNodeNum();
+#ifdef SIGNAL_ROUTING_LITE_MODE
+                const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+                if (ourEdges) {
+                    for (uint8_t j = 0; j < ourEdges->edgeCount; j++) {
+                        if (ourEdges->edges[j].to == hopNode) {
+                            isDirectNeighbor = true;
+                            break;
+                        }
+                    }
+                }
+#else
+                const std::vector<Edge>* ourEdges = routingGraph->getEdgesFrom(ourNode);
+                if (ourEdges) {
+                    for (const Edge& edge : *ourEdges) {
+                        if (edge.to == hopNode) {
+                            isDirectNeighbor = true;
+                            break;
+                        }
+                    }
+                }
+#endif
+                if (isDirectNeighbor) {
+                    LOG_INFO("[SR] Traceroute resolution: placeholder %08x -> %08x (direct neighbor in route_reply)", placeholderId, hopNode);
+                    resolvePlaceholder(placeholderId, hopNode);
+                } else {
+                    LOG_DEBUG("[SR] Skipping traceroute resolution: %08x is not a direct neighbor", hopNode);
+                }
             }
         }
         break;
@@ -2249,7 +2709,8 @@ void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: remove stale entries by swapping with last
     for (uint8_t i = 0; i < capabilityRecordCount;) {
-        if ((nowSecs - capabilityRecords[i].record.lastUpdated) > CAPABILITY_TTL_SECS) {
+        uint32_t ttl = getNodeTtlSeconds(capabilityRecords[i].record.status);
+        if ((nowSecs - capabilityRecords[i].record.lastUpdated) > ttl) {
             if (i < capabilityRecordCount - 1) {
                 capabilityRecords[i] = capabilityRecords[capabilityRecordCount - 1];
             }
@@ -2260,7 +2721,8 @@ void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
     }
 #else
     for (auto it = capabilityRecords.begin(); it != capabilityRecords.end();) {
-        if ((nowSecs - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
+        uint32_t ttl = getNodeTtlSeconds(it->second.status);
+        if ((nowSecs - it->second.lastUpdated) > ttl) {
             it = capabilityRecords.erase(it);
         } else {
             ++it;
@@ -2274,7 +2736,7 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: remove stale gateway relations by swapping with last
     for (uint8_t i = 0; i < gatewayRelationCount;) {
-        if ((nowSecs - gatewayRelations[i].lastSeen) > CAPABILITY_TTL_SECS) {
+        if ((nowSecs - gatewayRelations[i].lastSeen) > ACTIVE_NODE_TTL_SECS) {
             NodeNum prunedDownstream = gatewayRelations[i].downstream;  // Capture before swap
             if (i < gatewayRelationCount - 1) {
                 gatewayRelations[i] = gatewayRelations[gatewayRelationCount - 1];
@@ -2290,7 +2752,7 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
 
     // Also prune gateway downstream sets
     for (uint8_t i = 0; i < gatewayDownstreamCount;) {
-        if ((nowSecs - gatewayDownstream[i].lastSeen) > CAPABILITY_TTL_SECS) {
+        if ((nowSecs - gatewayDownstream[i].lastSeen) > ACTIVE_NODE_TTL_SECS) {
             NodeNum prunedGateway = gatewayDownstream[i].gateway;  // Capture before swap
             if (i < gatewayDownstreamCount - 1) {
                 gatewayDownstream[i] = gatewayDownstream[gatewayDownstreamCount - 1];
@@ -2372,7 +2834,8 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
     // Lite mode: linear search
     for (uint8_t i = 0; i < capabilityRecordCount; i++) {
         if (capabilityRecords[i].nodeId == nodeId) {
-            if ((now - capabilityRecords[i].record.lastUpdated) > CAPABILITY_TTL_SECS) {
+            uint32_t ttl = getNodeTtlSeconds(capabilityRecords[i].record.status);
+            if ((now - capabilityRecords[i].record.lastUpdated) > ttl) {
                 return CapabilityStatus::Unknown;
             }
             return capabilityRecords[i].record.status;
@@ -2385,7 +2848,8 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
         return CapabilityStatus::Unknown;
     }
 
-    if ((now - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
+    uint32_t ttl = getNodeTtlSeconds(it->second.status);
+    if ((now - it->second.lastUpdated) > ttl) {
         return CapabilityStatus::Unknown;
     }
 
@@ -2445,12 +2909,8 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
     }
 #else
     const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-    if (!edges) {
-        LOG_DEBUG("[SR] No edges returned, graph corrupted - disabling SR");
-        return false;
-    }
     if (!edges || edges->empty()) {
-        LOG_DEBUG("[SR] No edges found, returning false");
+        LOG_DEBUG("[SR] No edges found for local node, topology not ready");
         return false; // No direct neighbors at all
     }
 
@@ -2484,8 +2944,8 @@ bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
         return false;
     }
 
-    uint32_t now = getTime();
-    return (now - node->last_heard) < CAPABILITY_TTL_SECS;
+    uint32_t now = millis() / 1000;  // Use monotonic time
+    return (now - node->last_heard) < ACTIVE_NODE_TTL_SECS;
 }
 
 void SignalRoutingModule::rememberRelayIdentity(NodeNum nodeId, uint8_t relayId)
@@ -2747,7 +3207,7 @@ void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstr
 {
     if (gateway == 0 || downstream == 0 || gateway == downstream) return;
 
-    uint32_t now = getTime();
+    uint32_t now = millis() / 1000;  // Use monotonic time
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
     bool found = false;
@@ -2811,10 +3271,10 @@ void SignalRoutingModule::recordGatewayRelation(NodeNum gateway, NodeNum downstr
 NodeNum SignalRoutingModule::getGatewayFor(NodeNum downstream) const
 {
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    uint32_t now = getTime();
+    uint32_t now = millis() / 1000;  // Use monotonic time
     for (uint8_t i = 0; i < gatewayRelationCount; i++) {
         if (gatewayRelations[i].downstream == downstream) {
-            if ((now - gatewayRelations[i].lastSeen) < CAPABILITY_TTL_SECS) {
+            if ((now - gatewayRelations[i].lastSeen) < ACTIVE_NODE_TTL_SECS) {
                 return gatewayRelations[i].gateway;
             }
         }
@@ -2830,10 +3290,10 @@ NodeNum SignalRoutingModule::getGatewayFor(NodeNum downstream) const
 size_t SignalRoutingModule::getGatewayDownstreamCount(NodeNum gateway) const
 {
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    uint32_t now = getTime();
+    uint32_t now = millis() / 1000;  // Use monotonic time
     for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
         if (gatewayDownstream[i].gateway == gateway) {
-            if ((now - gatewayDownstream[i].lastSeen) > CAPABILITY_TTL_SECS) {
+            if ((now - gatewayDownstream[i].lastSeen) > ACTIVE_NODE_TTL_SECS) {
                 return 0;
             }
             return gatewayDownstream[i].count;
@@ -2899,7 +3359,8 @@ uint32_t SignalRoutingModule::getNodeLastActivityTime(NodeNum nodeId) const
     // Lite mode: linear search
     for (uint8_t i = 0; i < capabilityRecordCount; i++) {
         if (capabilityRecords[i].nodeId == nodeId) {
-            if ((now - capabilityRecords[i].record.lastUpdated) > CAPABILITY_TTL_SECS) {
+            uint32_t ttl = getNodeTtlSeconds(capabilityRecords[i].record.status);
+            if ((now - capabilityRecords[i].record.lastUpdated) > ttl) {
                 return 0; // Too old, consider inactive
             }
             return capabilityRecords[i].record.lastUpdated;
@@ -2912,7 +3373,8 @@ uint32_t SignalRoutingModule::getNodeLastActivityTime(NodeNum nodeId) const
         return 0;
     }
 
-    if ((now - it->second.lastUpdated) > CAPABILITY_TTL_SECS) {
+    uint32_t ttl = getNodeTtlSeconds(it->second.status);
+    if ((now - it->second.lastUpdated) > ttl) {
         return 0; // Too old, consider inactive
     }
 
