@@ -275,10 +275,19 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         selected[selectedCount++] = mirrored[i];
     }
 
-    info.neighbors_count = selectedCount;
-
+    // Filter out placeholders before assigning to neighbors array
+    const EdgeLite* filteredSelected[GRAPH_LITE_MAX_EDGES_PER_NODE];
+    size_t filteredCount = 0;
     for (size_t i = 0; i < selectedCount; i++) {
-        const EdgeLite& edge = *selected[i];
+        if (!isPlaceholderNode(selected[i]->to)) {
+            filteredSelected[filteredCount++] = selected[i];
+        }
+    }
+
+    info.neighbors_count = filteredCount;
+
+    for (size_t i = 0; i < filteredCount; i++) {
+        const EdgeLite& edge = *filteredSelected[i];
         meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
 
         neighbor.node_id = edge.to;
@@ -327,8 +336,19 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
 
     info.neighbors_count = selected.size();
 
-    for (size_t i = 0; i < selected.size(); i++) {
-        const Edge& edge = *selected[i];
+    // Filter out placeholders before assigning to neighbors array
+    std::vector<const Edge*> filteredSelected;
+    filteredSelected.reserve(selected.size());
+    for (auto* e : selected) {
+        if (!isPlaceholderNode(e->to)) {
+            filteredSelected.push_back(e);
+        }
+    }
+
+    info.neighbors_count = filteredSelected.size();
+
+    for (size_t i = 0; i < filteredSelected.size(); i++) {
+        const Edge& edge = *filteredSelected[i];
         meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
 
         neighbor.node_id = edge.to;
@@ -465,6 +485,11 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         trackNodeCapability(neighbor.node_id,
                             neighbor.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
 
+        // Note: We intentionally do NOT resolve placeholders from topology merging
+        // to avoid conflicts. Placeholders are only resolved from:
+        // 1. Direct contact (nodes we hear directly)
+        // 2. Traceroute packets (confirmed routing paths)
+
         // Calculate ETX from the received RSSI/SNR
         float etx =
 #ifdef SIGNAL_ROUTING_LITE_MODE
@@ -532,6 +557,138 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 /**
  * Log the current network topology graph in a readable format
  */
+// Placeholder node system for unknown relays
+// Use high NodeNum values that won't conflict with real nodes
+#define PLACEHOLDER_BASE 0xFF000000
+
+bool SignalRoutingModule::isPlaceholderNode(NodeNum nodeId) const
+{
+    return (nodeId & PLACEHOLDER_BASE) == PLACEHOLDER_BASE;
+}
+
+NodeNum SignalRoutingModule::createPlaceholderNode(uint8_t relayId)
+{
+    NodeNum placeholderId = PLACEHOLDER_BASE | relayId;
+    LOG_DEBUG("[SR] Created placeholder node %08x for unknown relay 0x%02x", placeholderId, relayId);
+    return placeholderId;
+}
+
+bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum realNodeId)
+{
+    if (!isPlaceholderNode(placeholderId)) {
+        return false; // Not a placeholder
+    }
+
+    if (isPlaceholderNode(realNodeId)) {
+        return false; // Can't resolve to another placeholder
+    }
+
+    LOG_INFO("[SR] Resolving placeholder %08x -> real node %08x", placeholderId, realNodeId);
+
+    // Update relay identity cache - this ensures future relay resolutions work
+    uint8_t relayId = placeholderId & 0xFF;
+    rememberRelayIdentity(realNodeId, relayId);
+
+    // Update gateway relationships
+    replaceGatewayNode(placeholderId, realNodeId);
+
+    // Note: Existing graph edges referencing the placeholder will age out over time
+    // Future packets will use the resolved real node ID
+
+    return true;
+}
+
+NodeNum SignalRoutingModule::getPlaceholderForRelay(uint8_t relayId) const
+{
+    return PLACEHOLDER_BASE | relayId;
+}
+
+void SignalRoutingModule::replaceGatewayNode(NodeNum oldNode, NodeNum newNode)
+{
+    if (oldNode == newNode) return;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Update gatewayRelations array
+    for (uint8_t i = 0; i < gatewayRelationCount; i++) {
+        if (gatewayRelations[i].gateway == oldNode) {
+            gatewayRelations[i].gateway = newNode;
+        }
+        if (gatewayRelations[i].downstream == oldNode) {
+            gatewayRelations[i].downstream = newNode;
+        }
+    }
+
+    // Update gatewayDownstream array
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+        if (gatewayDownstream[i].gateway == oldNode) {
+            gatewayDownstream[i].gateway = newNode;
+        }
+        for (uint8_t j = 0; j < gatewayDownstream[i].count; j++) {
+            if (gatewayDownstream[i].downstream[j] == oldNode) {
+                gatewayDownstream[i].downstream[j] = newNode;
+            }
+        }
+    }
+#else
+    // Full mode: update std::unordered_map structures
+    // Update downstreamGateway
+    auto it = downstreamGateway.find(oldNode);
+    if (it != downstreamGateway.end()) {
+        GatewayRelationEntry entry = it->second;
+        downstreamGateway.erase(it);
+        downstreamGateway[newNode] = entry;
+    }
+
+    // Update gatewayDownstream
+    auto git = gatewayDownstream.find(oldNode);
+    if (git != gatewayDownstream.end()) {
+        auto downstreamSet = git->second;
+        gatewayDownstream.erase(git);
+        gatewayDownstream[newNode] = downstreamSet;
+    }
+
+    // Update any references within downstream sets
+    for (auto& pair : gatewayDownstream) {
+        auto& downstreamSet = pair.second;
+        // Remove oldNode if it exists
+        downstreamSet.erase(oldNode);
+        // Note: we don't add newNode here as it's now the key
+    }
+#endif
+}
+
+bool SignalRoutingModule::isPlaceholderConnectedToUs(NodeNum placeholderId) const
+{
+    if (!routingGraph || !isPlaceholderNode(placeholderId)) {
+        return false;
+    }
+
+    // Check if the placeholder has edges connected to our node
+    NodeNum ourNode = nodeDB->getNodeNum();
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* edges = routingGraph->getEdgesFrom(placeholderId);
+    if (edges) {
+        for (uint8_t i = 0; i < edges->edgeCount; i++) {
+            if (edges->edges[i].to == ourNode) {
+                return true;
+            }
+        }
+    }
+#else
+    const std::vector<Edge>* edges = routingGraph->getEdgesFrom(placeholderId);
+    if (edges) {
+        for (const Edge& edge : *edges) {
+            if (edge.to == ourNode) {
+                return true;
+            }
+        }
+    }
+#endif
+
+    return false;
+}
+
 void SignalRoutingModule::logNetworkTopology()
 {
     if (!routingGraph) return;
@@ -783,6 +940,13 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     }
 
     if (hasSignalData && notViaMqtt && isDirectFromSender) {
+        // Check if this sender matches a known placeholder
+        NodeNum placeholderId = getPlaceholderForRelay(fromLastByte);
+        if (isPlaceholderNode(placeholderId)) {
+            // This sender matches a placeholder - resolve it
+            resolvePlaceholder(placeholderId, mp.from);
+        }
+
         rememberRelayIdentity(mp.from, fromLastByte);
         trackNodeCapability(mp.from, CapabilityStatus::Unknown);
 
@@ -818,6 +982,13 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // Process relayed packets to infer network topology
         // We don't have direct signal info to the original sender, but we can infer connectivity
         NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
+
+        // If we can't resolve the relay identity, create a placeholder node
+        if (inferredRelayer == 0) {
+            inferredRelayer = createPlaceholderNode(mp.relay_node);
+            // Remember this placeholder for future reference
+            rememberRelayIdentity(inferredRelayer, mp.relay_node);
+        }
 
         if (inferredRelayer != 0 && inferredRelayer != mp.from) {
             // Remember this relay identity mapping for future use
@@ -1958,9 +2129,33 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
     case meshtastic_Routing_route_request_tag:
         LOG_DEBUG("[SR] Routing request from %s with %u hops recorded", senderName,
                   routing.route_request.route_count);
+
+        // Check for placeholder resolution in route_request hops
+        // Only resolve placeholders that are connected to our node
+        for (size_t i = 0; i < routing.route_request.route_count; i++) {
+            NodeNum hopNode = routing.route_request.route[i];
+            uint8_t hopLastByte = hopNode & 0xFF;
+            NodeNum placeholderId = getPlaceholderForRelay(hopLastByte);
+            if (isPlaceholderNode(placeholderId) && isPlaceholderConnectedToUs(placeholderId)) {
+                // This hop node matches a placeholder connected to us - resolve it
+                resolvePlaceholder(placeholderId, hopNode);
+            }
+        }
         break;
     case meshtastic_Routing_route_reply_tag:
         LOG_DEBUG("[SR] Routing reply from %s for %u hops", senderName, routing.route_reply.route_back_count);
+
+        // Check for placeholder resolution in route_reply hops
+        // Only resolve placeholders that are connected to our node
+        for (size_t i = 0; i < routing.route_reply.route_back_count; i++) {
+            NodeNum hopNode = routing.route_reply.route_back[i];
+            uint8_t hopLastByte = hopNode & 0xFF;
+            NodeNum placeholderId = getPlaceholderForRelay(hopLastByte);
+            if (isPlaceholderNode(placeholderId) && isPlaceholderConnectedToUs(placeholderId)) {
+                // This hop node matches a placeholder connected to us - resolve it
+                resolvePlaceholder(placeholderId, hopNode);
+            }
+        }
         break;
     case meshtastic_Routing_error_reason_tag:
         if (routing.error_reason == meshtastic_Routing_Error_NONE) {
@@ -1973,8 +2168,6 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
         LOG_DEBUG("[SR] Routing control variant %u from %s", routing.which_variant, senderName);
         break;
     }
-
-    trackNodeCapability(mp.from, CapabilityStatus::Capable);
 }
 
 bool SignalRoutingModule::isActiveRoutingRole() const
