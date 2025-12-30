@@ -290,7 +290,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         }
     }
     if (placeholdersFiltered > 0) {
-        LOG_DEBUG("[SR] Filtered %zu placeholder nodes from topology broadcast", placeholdersFiltered);
+        LOG_DEBUG("[SR] Filtered %u placeholder nodes from topology broadcast", placeholdersFiltered);
     }
 
     info.neighbors_count = filteredCount;
@@ -357,7 +357,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         }
     }
     if (placeholdersFiltered > 0) {
-        LOG_DEBUG("[SR] Filtered %zu placeholder nodes from topology broadcast", placeholdersFiltered);
+        LOG_DEBUG("[SR] Filtered %u placeholder nodes from topology broadcast", placeholdersFiltered);
     }
 
     info.neighbors_count = filteredSelected.size();
@@ -837,7 +837,7 @@ bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum s
         return false; // No stock neighbors to worry about
     }
 
-    LOG_INFO("[SR] Checking broadcast coverage for %zu stock neighbors", stockNeighbors.size());
+    LOG_INFO("[SR] Checking broadcast coverage for %u stock neighbors", static_cast<unsigned int>(stockNeighbors.size()));
 
     // Check if any stock neighbor needs this packet
     // A stock neighbor needs the packet if they didn't hear it directly from the source
@@ -947,7 +947,7 @@ bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum s
     }
 
     if (hasUncoveredStockNeighbor) {
-        LOG_DEBUG("[SR] STOCK COVERAGE: Found %zu uncovered stock neighbors but no valid relay path from this node", stockNeighbors.size());
+        LOG_DEBUG("[SR] STOCK COVERAGE: Found %u uncovered stock neighbors but no valid relay path from this node", static_cast<unsigned int>(stockNeighbors.size()));
     }
 
     return false;
@@ -1174,9 +1174,9 @@ void SignalRoutingModule::logNetworkTopology()
                 pos += static_cast<size_t>(written);
             }
             if (downstreams.size() > maxList && pos < sizeof(buf) - 6) {
-                snprintf(buf + pos, sizeof(buf) - pos, ", +%zu", downstreams.size() - maxList);
+                snprintf(buf + pos, sizeof(buf) - pos, ", +%u", static_cast<unsigned int>(downstreams.size() - maxList));
             }
-            LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %zu nodes: %s)", prefix, nodeName, edges->size(), downstreams.size(), buf);
+            LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %u nodes: %s)", prefix, nodeName, edges->size(), static_cast<unsigned int>(downstreams.size()), buf);
         }
 
         // Sort edges by ETX for consistent output
@@ -1909,7 +1909,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 #endif
 
     if (!shouldRelay && weAreGateway) {
-        LOG_INFO("[SR] We are gateway for %08x (downstream=%zu) -> force relay", sourceNode, downstreamCount);
+        LOG_INFO("[SR] We are gateway for %08x (downstream=%u) -> force relay", sourceNode, static_cast<unsigned int>(downstreamCount));
         shouldRelay = true;
     }
 
@@ -2233,12 +2233,12 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
         if (changeType == Graph::EDGE_NEW) {
             // Set green for new neighbor (operation start)
             setRgbLed(0, 255, 0);
-            LOG_INFO("[SR] Topology changed: new neighbor %s (total nodes: %zu)", neighborName, routingGraph->getNodeCount());
+            LOG_INFO("[SR] Topology changed: new neighbor %s (total nodes: %u)", neighborName, static_cast<unsigned int>(routingGraph->getNodeCount()));
             logNetworkTopology();
         } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
             // Set blue for signal quality change (operation start)
             setRgbLed(0, 0, 255);
-            LOG_INFO("[SR] Topology changed: ETX change for %s (total nodes: %zu)", neighborName, routingGraph->getNodeCount());
+            LOG_INFO("[SR] Topology changed: ETX change for %s (total nodes: %u)", neighborName, static_cast<unsigned int>(routingGraph->getNodeCount()));
             logNetworkTopology();
         }
 
