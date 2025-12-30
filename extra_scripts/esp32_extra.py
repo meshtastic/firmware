@@ -72,4 +72,4 @@ env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
 # Enable Newlib Nano formatting to save space
 # ...but allow printf float support (compromise)
-env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+# env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
