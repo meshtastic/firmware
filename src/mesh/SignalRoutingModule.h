@@ -113,7 +113,6 @@ private:
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_SECS = 300; // 300 seconds
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000; // 15 seconds
-    static constexpr uint32_t HEARTBEAT_FLASH_MS = 60;
     static constexpr uint32_t CAPABILITY_TTL_SECS = 300; // 5 minutes for node activity/capability tracking
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
 
@@ -139,36 +138,28 @@ private:
     void buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &info);
 
     /**
-     * Flash RGB LED for Signal Routing notifications
-     * 
+     * Set RGB LED color for Signal Routing notifications
+     *
      * Color meanings:
-     *   White (dim pulse)      - Heartbeat (idle indicator)
+     *   White (dim)            - Heartbeat (idle indicator)
      *   Purple (128,0,128)     - Direct packet received from neighbor
      *   Orange (255,128,0)     - Relay decision: YES (relaying broadcast)
      *   Red (255,0,0)          - Relay decision: NO (suppressing relay)
      *   Green (0,255,0)        - New neighbor detected
      *   Blue (0,0,255)         - Significant signal quality change
      *   Cyan (0,255,255)       - Topology update received (SignalRoutingInfo)
+     *   Off (0,0,0)            - Idle (no active operation)
      */
-    void flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms = 200, bool isNotification = false);
+    void setRgbLed(uint8_t r, uint8_t g, uint8_t b);
 
     /**
-     * Turn off RGB LED when timer expires
+     * Turn off RGB LED
      */
-    void updateRgbLed();
+    void turnOffRgbLed();
 
-    // RGB LED timing
-    bool rgbLedActive = false;
-    uint32_t rgbLedOffTime = 0;
-    uint32_t lastFlashTime = 0;
-    static constexpr uint32_t MIN_FLASH_INTERVAL_MS = 500;   // Minimum time between flashes
-    static constexpr uint32_t MIN_EVENT_FLASH_INTERVAL_MS = 4000;
-
-    // Heartbeat timing
-    uint32_t lastHeartbeatTime = 0;
+    // LED operation feedback timing
     uint32_t lastNotificationTime = 0;
-    uint32_t heartbeatIntervalMs = 2000;                     // Configurable, default 2 seconds
-    uint32_t lastEventFlashTime = 0;
+    uint32_t heartbeatEndTime = 0;                           // When to turn off operation feedback LED
 
     enum class CapabilityStatus : uint8_t {
         Unknown = 0,
