@@ -113,7 +113,9 @@ private:
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_SECS = 300; // 300 seconds
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000; // 15 seconds
-    static constexpr uint32_t CAPABILITY_TTL_SECS = 300; // 5 minutes for node activity/capability tracking
+    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 240;    // 4 minutes for active nodes
+    static constexpr uint32_t MUTE_NODE_TTL_SECS = 960;     // 16 minutes for mute/inactive nodes
+    static constexpr uint32_t CAPABILITY_TTL_SECS = 300;     // Fallback for legacy compatibility
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
 
     // Signal-based routing enabled by default
@@ -285,6 +287,22 @@ private:
     NodeNum getPlaceholderForRelay(uint8_t relayId) const;
     void replaceGatewayNode(NodeNum oldNode, NodeNum newNode);
     bool isPlaceholderConnectedToUs(NodeNum placeholderId) const;
+
+    /**
+     * Stock neighbor coverage
+     */
+    bool shouldRelayForStockNeighbors(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime);
+
+    /**
+     * Check if destination is downstream of relays we can hear directly
+     */
+    bool isDownstreamOfHeardRelay(NodeNum destination, NodeNum myNode);
+
+    /**
+     * Get TTL for node based on its capability status
+     * Active nodes: 4 minutes, Mute/Legacy nodes: 16 minutes
+     */
+    uint32_t getNodeTtlSeconds(CapabilityStatus status) const;
 
     /**
      * Log the current network topology graph in a readable format
