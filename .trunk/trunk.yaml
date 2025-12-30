@@ -9,7 +9,7 @@ plugins:
 lint:
   enabled:
     - checkov@3.2.496
-    - renovate@42.66.11
+    - renovate@42.66.14
     - prettier@3.7.4
     - trufflehog@3.92.4
     - yamllint@1.37.1
