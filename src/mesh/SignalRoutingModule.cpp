@@ -94,9 +94,6 @@ SignalRoutingModule::SignalRoutingModule()
     }
 
     trackNodeCapability(nodeDB->getNodeNum(), CapabilityStatus::Capable);
-    uint32_t nowMs = millis();
-    lastHeartbeatTime = nowMs;
-    lastNotificationTime = nowMs;
 
     // We want to see all packets for signal quality updates
     isPromiscuous = true;
@@ -138,12 +135,10 @@ int32_t SignalRoutingModule::runOnce()
     processSpeculativeRetransmits(nowMs);
 
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
-    updateRgbLed();
-    bool notificationsIdle = (nowMs - lastNotificationTime) > MIN_FLASH_INTERVAL_MS;
-    bool heartbeatDue = (nowMs - lastHeartbeatTime) >= heartbeatIntervalMs;
-    if (!rgbLedActive && notificationsIdle && heartbeatDue) {
-        flashRgbLed(24, 24, 24, HEARTBEAT_FLASH_MS, false);
-        lastHeartbeatTime = nowMs;
+    // Turn off heartbeat LED if duration expired (for operation feedback)
+    if (heartbeatEndTime > 0 && nowMs >= heartbeatEndTime) {
+        turnOffRgbLed();
+        heartbeatEndTime = 0;
     }
 #endif
 
@@ -160,9 +155,10 @@ int32_t SignalRoutingModule::runOnce()
         }
     }
 
-    uint32_t timeToHeartbeat = heartbeatIntervalMs;
-    if (nowMs - lastHeartbeatTime < heartbeatIntervalMs) {
-        timeToHeartbeat = heartbeatIntervalMs - (nowMs - lastHeartbeatTime);
+    // Track time until LED operation feedback should turn off
+    uint32_t timeToLedOff = UINT32_MAX;
+    if (heartbeatEndTime > nowMs) {
+        timeToLedOff = heartbeatEndTime - nowMs;
     }
 
     uint32_t timeToBroadcast = SIGNAL_ROUTING_BROADCAST_SECS * 1000;
@@ -199,18 +195,7 @@ int32_t SignalRoutingModule::runOnce()
     }
 #endif
 
-    uint32_t timeToLed = UINT32_MAX;
-#if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
-    if (rgbLedActive) {
-        if (rgbLedOffTime > nowMs) {
-            timeToLed = rgbLedOffTime - nowMs;
-        } else {
-            timeToLed = 0;
-        }
-    }
-#endif
-
-    uint32_t nextDelay = std::min({timeToHeartbeat, timeToBroadcast, timeToSpeculative, timeToLed});
+    uint32_t nextDelay = std::min({timeToLedOff, timeToBroadcast, timeToSpeculative});
     if (nextDelay < 20) {
         nextDelay = 20;
     }
@@ -451,8 +436,11 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
              senderName, p->neighbors_count, p->routing_version,
              p->signal_based_capable ? "SR-capable" : "legacy mode");
 
-    // Flash cyan for network topology update
-    flashRgbLed(0, 255, 255, 150, true);
+    // Set cyan for network topology update
+    setRgbLed(0, 255, 255);
+    // Brief visible period then turn off
+    delay(150);
+    turnOffRgbLed();
 
     // Clear all existing edges for this node before adding the new ones from the broadcast
     // This ensures our view of the sender's connectivity matches exactly what it reported
@@ -813,8 +801,10 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // Remove this node from ALL gateway relationships since we can hear it directly
         clearDownstreamFromAllGateways(mp.from);
 
-        // Brief purple flash for any direct packet received
-        flashRgbLed(128, 0, 128, 100, true);
+        // Brief purple for direct packet received
+        setRgbLed(128, 0, 128);
+        delay(100);
+        turnOffRgbLed();
 
         // Record that this node transmitted (for contention window tracking)
         if (routingGraph) {
@@ -1372,9 +1362,13 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 
     if (shouldRelay) {
         routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
-        flashRgbLed(255, 128, 0, 150, true);
+        setRgbLed(255, 128, 0);  // Orange for relaying
+        delay(150);
+        turnOffRgbLed();
     } else {
-        flashRgbLed(255, 0, 0, 100, true);
+        setRgbLed(255, 0, 0);  // Red for not relaying
+        delay(100);
+        turnOffRgbLed();
     }
 
     return shouldRelay;
@@ -1657,15 +1651,19 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
 
         if (changeType == Graph::EDGE_NEW) {
             LOG_INFO("[SR] New neighbor %s detected", neighborName);
-            // Flash green for new neighbor
-            flashRgbLed(0, 255, 0, 300, true);
+            // Set green for new neighbor
+            setRgbLed(0, 255, 0);
+            delay(300);
+            turnOffRgbLed();
             // Log topology for new connections
             LOG_INFO("[SR] Topology changed: new neighbor %s", neighborName);
             logNetworkTopology();
         } else if (changeType == Graph::EDGE_SIGNIFICANT_CHANGE) {
             LOG_INFO("[SR] Topology changed: ETX change for %s", neighborName);
-            // Flash blue for signal quality change
-            flashRgbLed(0, 0, 255, 300, true);
+            // Set blue for signal quality change
+            setRgbLed(0, 0, 255);
+            delay(300);
+            turnOffRgbLed();
             logNetworkTopology();
         }
 
@@ -1790,20 +1788,9 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
  * Flash RGB LED for Signal Routing notifications
  * Colors: Green = new neighbor, Blue = signal change, Cyan = topology update
  */
-void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t duration_ms, bool isNotification)
+void SignalRoutingModule::setRgbLed(uint8_t r, uint8_t g, uint8_t b)
 {
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
-    uint32_t now = millis();
-
-    if (isNotification && (now - lastEventFlashTime) < MIN_EVENT_FLASH_INTERVAL_MS) {
-        return;
-    }
-
-    // Debounce: ignore rapid-fire flash requests
-    if (now - lastFlashTime < MIN_FLASH_INTERVAL_MS) {
-        return;
-    }
-
     // Set LED to specified color
 #ifdef RGBLED_CA
     // Common anode: high = off, low = on (invert values)
@@ -1816,40 +1803,23 @@ void SignalRoutingModule::flashRgbLed(uint8_t r, uint8_t g, uint8_t b, uint16_t 
     analogWrite(RGBLED_GREEN, g);
     analogWrite(RGBLED_BLUE, b);
 #endif
-
-    // Schedule LED off after duration
-    rgbLedOffTime = now + duration_ms;
-    rgbLedActive = true;
-    lastFlashTime = now;
-
-    // Track notification time to prevent heartbeat during active notifications
-    lastNotificationTime = now;
-    if (isNotification) {
-        lastEventFlashTime = now;
-    }
 #endif
 }
 
-/**
- * Turn off RGB LED (called periodically)
- */
-void SignalRoutingModule::updateRgbLed()
+void SignalRoutingModule::turnOffRgbLed()
 {
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
-    if (rgbLedActive && millis() >= rgbLedOffTime) {
 #ifdef RGBLED_CA
-        // Common anode: high = off
-        analogWrite(RGBLED_RED, 255);
-        analogWrite(RGBLED_GREEN, 255);
-        analogWrite(RGBLED_BLUE, 255);
+    // Common anode: high = off
+    analogWrite(RGBLED_RED, 255);
+    analogWrite(RGBLED_GREEN, 255);
+    analogWrite(RGBLED_BLUE, 255);
 #else
-        // Common cathode: low = off
-        analogWrite(RGBLED_RED, 0);
-        analogWrite(RGBLED_GREEN, 0);
-        analogWrite(RGBLED_BLUE, 0);
+    // Common cathode: low = off
+    analogWrite(RGBLED_RED, 0);
+    analogWrite(RGBLED_GREEN, 0);
+    analogWrite(RGBLED_BLUE, 0);
 #endif
-        rgbLedActive = false;
-    }
 #endif
 }
 
