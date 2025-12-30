@@ -153,7 +153,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void broadcastLink(uint8_t *, size_t);
 
     // sends a LINK_PROVIDE message broadcasting the given link object
-    void broadcastLink(link_object &, bool);
+    void broadcastLink(link_object &, bool, bool = false);
 
     // sends a LINK_PROVIDE message broadcasting the given link object from scratch message store
     bool sendFromScratch(uint8_t *);
@@ -226,5 +226,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     };
 
     uint32_t rebroadcastTimeout = 3600; // Messages older than this (in seconds) will not be rebroadcast
+    bool doing_split_send = false;
+    link_object split_link_out;
+
+    bool doing_split_receive = false;
+    link_object split_link_in;
 };
 #endif
