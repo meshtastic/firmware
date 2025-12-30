@@ -1553,7 +1553,9 @@ int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
 {
     // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
     // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
-    // version is guaranteed to have hop_start populated.
+    // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
+    // the bitfield is encrypted under the channel encryption key. For encrypted packets, this returns
+    // defaultIfUnknown when hop_start is 0.
     if (p.hop_start == 0 && !(p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield))
         return defaultIfUnknown; // Cannot reliably determine the number of hops.
 
