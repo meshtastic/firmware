@@ -277,6 +277,16 @@ private:
     void handleRoutingControlPacket(const meshtastic_MeshPacket &mp);
 
     /**
+     * Placeholder node system for unknown relays
+     */
+    bool isPlaceholderNode(NodeNum nodeId) const;
+    NodeNum createPlaceholderNode(uint8_t relayId);
+    bool resolvePlaceholder(NodeNum placeholderId, NodeNum realNodeId);
+    NodeNum getPlaceholderForRelay(uint8_t relayId) const;
+    void replaceGatewayNode(NodeNum oldNode, NodeNum newNode);
+    bool isPlaceholderConnectedToUs(NodeNum placeholderId) const;
+
+    /**
      * Log the current network topology graph in a readable format
      */
     void logNetworkTopology();
