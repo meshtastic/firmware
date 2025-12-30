@@ -263,16 +263,17 @@ jobs:
         env:
           base: ${{ github.base_ref }}
           head: ${{ github.sha }}
-      - name: Download the old manifests
-        if: github.event_name == 'pull_request_target'
-        run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
-        env:
-          GH_TOKEN: ${{ github.token }}
-          merge_base: ${{ env.MERGE_BASE }}
-          repo: ${{ github.repository }}
-      - name: Do scan and post comment
-        if: github.event_name == 'pull_request_target'
-        run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
+      # Currently broken (for-loop through EVERY artifact -- rate limiting)
+      # - name: Download the old manifests
+      #   if: github.event_name == 'pull_request_target'
+      #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
+      #   env:
+      #     GH_TOKEN: ${{ github.token }}
+      #     merge_base: ${{ env.MERGE_BASE }}
+      #     repo: ${{ github.repository }}
+      # - name: Do scan and post comment
+      #   if: github.event_name == 'pull_request_target'
+      #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
   release-artifacts:
     runs-on: ubuntu-latest

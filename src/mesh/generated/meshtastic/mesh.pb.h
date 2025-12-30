@@ -822,6 +822,8 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     uint32_t encapsulated_from;
     /* The receive time of the message in question */
     uint32_t encapsulated_rxtime;
+    /* Used in a LINK_REQUEST to specify the message X spots back from head */
+    uint32_t chain_count;
 } meshtastic_StoreForwardPlusPlus;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
@@ -1428,7 +1430,7 @@ extern "C" {
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
-#define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0}
+#define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
@@ -1460,7 +1462,7 @@ extern "C" {
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
-#define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0}
+#define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
@@ -1548,6 +1550,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_encapsulated_to_tag 7
 #define meshtastic_StoreForwardPlusPlus_encapsulated_from_tag 8
 #define meshtastic_StoreForwardPlusPlus_encapsulated_rxtime_tag 9
+#define meshtastic_StoreForwardPlusPlus_chain_count_tag 10
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1773,7 +1776,8 @@ X(a, STATIC,   SINGULAR, BYTES,    message,           5) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_id,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_to,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_from,   8) \
-X(a, STATIC,   SINGULAR, UINT32,   encapsulated_rxtime,   9)
+X(a, STATIC,   SINGULAR, UINT32,   encapsulated_rxtime,   9) \
+X(a, STATIC,   SINGULAR, UINT32,   chain_count,      10)
 #define meshtastic_StoreForwardPlusPlus_CALLBACK NULL
 #define meshtastic_StoreForwardPlusPlus_DEFAULT NULL
 
@@ -2143,7 +2147,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
-#define meshtastic_StoreForwardPlusPlus_size     371
+#define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
 #define meshtastic_Waypoint_size                 165
