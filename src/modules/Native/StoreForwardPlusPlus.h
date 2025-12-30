@@ -117,6 +117,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getFullRootHashStmt;
     sqlite3_stmt *setChainCountStmt;
     sqlite3_stmt *getChainCountStmt;
+    sqlite3_stmt *pruneScratchQueueStmt;
+    sqlite3_stmt *trimOldestLinkStmt;
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -209,6 +211,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t getChainCount(uint8_t *, size_t);
 
     link_object getLinkFromCount(uint32_t, uint8_t *, size_t);
+
+    void pruneScratchQueue();
+
+    void trimOldestLink(uint8_t *, size_t);
 
     // Track if we have a scheduled runOnce pending
     // useful to not accudentally delay a scheduled runOnce
