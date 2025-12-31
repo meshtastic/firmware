@@ -207,7 +207,9 @@ int32_t SignalRoutingModule::runOnce()
 
 void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 {
-    if (!isActiveRoutingRole()) {
+    // Allow mute nodes to broadcast their direct neighbors to help active SR nodes
+    // make better unicast routing decisions, even though mute nodes don't participate in relaying
+    if (!isActiveRoutingRole() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
         return;
     }
 
@@ -438,6 +440,12 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 
 bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_SignalRoutingInfo *p)
 {
+    // Inactive SR roles don't participate in routing decisions - skip processing topology broadcasts from others
+    if (!isActiveRoutingRole()) {
+        LOG_DEBUG("[SR] Inactive role: Skipping topology broadcast processing from %08x", mp.from);
+        return false;
+    }
+
     // Note: Graph may have already been updated by preProcessSignalRoutingPacket()
     // This is intentional - we want up-to-date data for relay decisions
     if (!routingGraph || !p) return false;
@@ -473,6 +481,13 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
     // Set cyan for network topology update (operation start)
     setRgbLed(0, 255, 255);
+
+    // For mute nodes (signal_based_capable = false), we still need to store their edges for direct connection checks
+    // Active nodes use these edges to determine if a mute node has direct connections to destinations
+    // However, routing algorithms must not consider paths through mute nodes since they don't relay
+    if (!p->signal_based_capable) {
+        LOG_DEBUG("[SR] Received topology from non-SR capable node %08x - storing edges for direct connection detection", mp.from);
+    }
 
     // Clear all existing edges for this node before adding the new ones from the broadcast
     // This ensures our view of the sender's connectivity matches exactly what it reported
@@ -1302,11 +1317,11 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         LOG_DEBUG("[SR] Direct neighbor %s detected (RSSI=%d, SNR=%.1f)",
                  senderName, mp.rx_rssi, mp.rx_snr);
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
-        // Process relayed packets to infer network topology
-        // We don't have direct signal info to the original sender, but we can infer connectivity
-
-
-        NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
+        // Process relayed packets to infer network topology (skip for inactive roles - they only track direct neighbors)
+        if (!isActiveRoutingRole()) {
+            LOG_DEBUG("[SR] Inactive role: Skipping relayed packet topology inference");
+        } else {
+            NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
 
         // If still not resolved, try direct neighbors
         if (inferredRelayer == 0 && routingGraph && nodeDB) {
@@ -1444,15 +1459,16 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
                 routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
                 routingGraph->recordNodeTransmission(inferredRelayer, mp.id, currentTime);
             }
-        }
+        }  // End of else block for active routing roles relayed packet processing
+    }
     }
 
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         handleSniffedPayload(mp, isDirectFromSender);
     }
 
-    // Periodic graph maintenance with stability safeguards
-    if (routingGraph) {
+    // Periodic graph maintenance with stability safeguards (CLIENT_MUTE maintains direct neighbors, others do full maintenance)
+    if (routingGraph && (isActiveRoutingRole() || config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE)) {
         // Use monotonic time (seconds since boot) for aging to avoid RTC sync issues
         uint32_t currentTime = millis() / 1000;
         if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_SECS) {
@@ -1491,6 +1507,32 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
 
+    // Check if the sending node (heardFrom) has a direct connection to the destination
+    // If so, the destination should have already received this packet directly, so don't relay
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* senderEdges = routingGraph->getEdgesFrom(heardFrom);
+    if (senderEdges) {
+        for (uint8_t i = 0; i < senderEdges->edgeCount; i++) {
+            if (senderEdges->edges[i].to == destination) {
+                LOG_DEBUG("[SR] UNICAST RELAY: Sender %08x has direct connection to %s (ETX=%.2f) - destination already received directly",
+                         heardFrom, destName, senderEdges->edges[i].getEtx());
+                return false; // Don't relay - destination should have received it directly
+            }
+        }
+    }
+#else
+    const std::vector<Edge>* senderEdges = routingGraph->getEdgesFrom(heardFrom);
+    if (senderEdges) {
+        for (const Edge& edge : *senderEdges) {
+            if (edge.to == destination) {
+                LOG_DEBUG("[SR] UNICAST RELAY: Sender %08x has direct connection to %s (ETX=%.2f) - destination already received directly",
+                         heardFrom, destName, edge.etx);
+                return false; // Don't relay - destination should have received it directly
+            }
+        }
+    }
+#endif
+
     // Check if destination is a downstream node of relays we can hear directly
     // If so, broadcast the unicast for relay coordination to ensure delivery
     if (isDownstreamOfHeardRelay(destination, myNode)) {
@@ -1507,7 +1549,8 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
             NodeNum candidate = transmittingEdges->edges[i].to;
             if (candidate != myNode && isLegacyRouter(candidate)) {
                 // Check if this legacy router can reach the destination
-                RouteLite route = routingGraph->calculateRoute(destination, getTime());
+                RouteLite route = routingGraph->calculateRoute(destination, millis() / 1000,
+                    [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
                 if (route.nextHop != 0) {
                     char legacyName[64];
                     getNodeDisplayName(candidate, legacyName, sizeof(legacyName));
@@ -1524,7 +1567,8 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
             NodeNum candidate = edge.to;
             if (candidate != myNode && isLegacyRouter(candidate)) {
                 // Check if this legacy router can reach the destination
-                Route route = routingGraph->calculateRoute(destination, getTime());
+                Route route = routingGraph->calculateRoute(destination, millis() / 1000,
+                    [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
                 if (route.nextHop != 0) {
                     char legacyName[64];
                     getNodeDisplayName(candidate, legacyName, sizeof(legacyName));
@@ -1541,11 +1585,13 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     bool haveRoute = false;
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    RouteLite ourRoute = routingGraph->calculateRoute(destination, getTime());
+    RouteLite ourRoute = routingGraph->calculateRoute(destination, millis() / 1000,
+                        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
     haveRoute = ourRoute.nextHop != 0;
     ourRouteCost = ourRoute.getCost();
 #else
-    Route ourRoute = routingGraph->calculateRoute(destination, getTime());
+    Route ourRoute = routingGraph->calculateRoute(destination, millis() / 1000,
+                      [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
     haveRoute = ourRoute.nextHop != 0;
     ourRouteCost = ourRoute.cost;
 #endif
@@ -1693,11 +1739,13 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     float routeCost = 0.0f;
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    RouteLite route = routingGraph ? routingGraph->calculateRoute(p->to, getTime()) : RouteLite();
+    RouteLite route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
+                        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); }) : RouteLite();
     haveGoodRoute = route.nextHop != 0 && route.getCost() < 5.0f; // Consider routes with cost < 5 as "good"
     routeCost = route.getCost();
 #else
-    Route route = routingGraph ? routingGraph->calculateRoute(p->to, getTime()) : Route();
+    Route route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
+                      [this](NodeNum nodeId) { return isNodeRoutable(nodeId); }) : Route();
     haveGoodRoute = route.nextHop != 0 && route.cost < 5.0f; // Consider routes with cost < 5 as "good"
     routeCost = route.cost;
 #endif
@@ -1713,7 +1761,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
     if (!topologyHealthy) {
         LOG_DEBUG("[SR] Destination node not known - not broadcasting unicast packet to avoid network flooding");
-        LOG_DEBUG("[SR] Unknown nodes should announce themselves through broadcasts for topology discovery");
+        LOG_DEBUG("[SR] Unknown destination - discovery occurs via broadcasts, direct packets, or relayed packet inference");
 
         // Don't broadcast unicast packets for unknown destinations to prevent flooding
         // The destination node should exist and broadcast its presence for us to learn about it
@@ -1962,16 +2010,18 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
         return 0;
     }
 
-    uint32_t currentTime = getTime();
+    uint32_t currentTime = millis() / 1000;  // Use monotonic time for consistency
 
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    RouteLite route = routingGraph->calculateRoute(destination, currentTime);
+    RouteLite route = routingGraph->calculateRoute(destination, currentTime,
+                        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
     float routeCost = route.getCost();
 #else
-    Route route = routingGraph->calculateRoute(destination, currentTime);
+    Route route = routingGraph->calculateRoute(destination, currentTime,
+                      [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
     float routeCost = route.cost;
 #endif
 
@@ -2877,6 +2927,29 @@ bool SignalRoutingModule::isLegacyRouter(NodeNum nodeId) const
     default:
         return false;
     }
+}
+
+/**
+ * Check if a node is routable (can be used as intermediate hop for routing)
+ * Mute nodes are not routable since they don't relay packets
+ */
+bool SignalRoutingModule::isNodeRoutable(NodeNum nodeId) const {
+    // Mute nodes don't relay, so they cannot be used as intermediate routing hops
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+        nodeId == nodeDB->getNodeNum()) {
+        // Local mute node - not routable
+        return false;
+    }
+
+    // Check if this is a known mute node (signal_based_capable = false)
+    // For remote nodes, we use the capability tracking
+    CapabilityStatus status = getCapabilityStatus(nodeId);
+    if (status == CapabilityStatus::Legacy) {
+        // Legacy nodes (including mute nodes) don't participate in SR routing
+        return false;
+    }
+
+    return true;
 }
 
 bool SignalRoutingModule::topologyHealthyForBroadcast() const
