@@ -185,7 +185,7 @@ void Graph::ageEdges(uint32_t currentTime) {
     }
 }
 
-Route Graph::calculateRoute(NodeNum destination, uint32_t currentTime) {
+Route Graph::calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter) {
     // Age edges before calculating
     ageEdges(currentTime);
 
@@ -200,7 +200,7 @@ Route Graph::calculateRoute(NodeNum destination, uint32_t currentTime) {
     if (myNode == 0) {
         return Route(destination, 0, std::numeric_limits<float>::infinity(), currentTime);
     }
-    Route route = dijkstra(myNode, destination, currentTime);
+    Route route = dijkstra(myNode, destination, currentTime, nodeFilter);
 
     // Cache the result
     if (route.nextHop != 0) {
@@ -270,7 +270,7 @@ void Graph::updateStability(NodeNum from, NodeNum to, float newStability) {
     }
 }
 
-Route Graph::dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime) {
+Route Graph::dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter) {
     std::unordered_map<NodeNum, float> distances;
     std::unordered_map<NodeNum, NodeNum> previous;
     std::priority_queue<std::pair<float, NodeNum>, std::vector<std::pair<float, NodeNum>>, std::greater<std::pair<float, NodeNum>>> pq;
@@ -289,6 +289,11 @@ Route Graph::dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime)
         if (cost > distances[current]) continue;
 
         if (current == destination) break;
+
+        // Skip nodes that don't pass the filter (e.g., mute nodes that don't relay)
+        if (nodeFilter && !nodeFilter(current)) {
+            continue;
+        }
 
         auto it = adjacencyList.find(current);
         if (it == adjacencyList.end()) continue;

@@ -95,8 +95,9 @@ public:
 
     /**
      * Calculate route to destination using Dijkstra with ETX costs
+     * @param nodeFilter Optional function to filter which nodes can be used as intermediate hops (returns true to allow)
      */
-    Route calculateRoute(NodeNum destination, uint32_t currentTime);
+    Route calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter = nullptr);
 
     /**
      * Get cached route if still valid
@@ -289,7 +290,7 @@ private:
     /**
      * Dijkstra implementation for finding lowest cost path
      */
-    Route dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime);
+    Route dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter = nullptr);
 
     /**
      * Calculate weighted ETX cost including stability
