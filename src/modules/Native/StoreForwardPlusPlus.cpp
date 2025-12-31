@@ -427,7 +427,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE) {
         LOG_DEBUG("Link Provide received!");
 
-        link_object incoming_link = ingestLinkMessage(t);
+        incoming_link = ingestLinkMessage(t);
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_FIRSTHALF) {
         LOG_DEBUG("Link Provide First Half received!");
         split_link_in = ingestLinkMessage(t, false);
@@ -468,6 +468,43 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             split_link_in = link_object();
             split_link_in.validObject = false;
             doing_split_receive = false;
+            // do the recalcualte step we skipped
+            // TODO put this in a function
+            SHA256 message_hash;
+            message_hash.reset();
+            message_hash.update(incoming_link.encrypted_bytes, incoming_link.encrypted_len);
+            message_hash.update(&incoming_link.to, sizeof(incoming_link.to));
+            message_hash.update(&incoming_link.from, sizeof(incoming_link.from));
+            message_hash.update(&incoming_link.id, sizeof(incoming_link.id));
+            message_hash.finalize(incoming_link.message_hash, SFPP_HASH_SIZE);
+            incoming_link.message_hash_len = SFPP_HASH_SIZE;
+
+            // look up full root hash and copy over the partial if it matches
+            if (lookUpFullRootHash(t->root_hash.bytes, t->root_hash.size, incoming_link.root_hash)) {
+                printBytes("Found full root hash: 0x", incoming_link.root_hash, SFPP_HASH_SIZE);
+                incoming_link.root_hash_len = SFPP_HASH_SIZE;
+            } else {
+                LOG_WARN("root hash does not match %d bytes", t->root_hash.size);
+                incoming_link.root_hash_len = 0;
+                incoming_link.validObject = false;
+                return true;
+            }
+
+            if (t->commit_hash.size == SFPP_HASH_SIZE && getChainCount(t->root_hash.bytes, t->root_hash.size) == 0 &&
+                portduino_config.sfpp_initial_sync != 0 && !portduino_config.sfpp_stratum0) {
+                incoming_link.commit_hash_len = SFPP_HASH_SIZE;
+                memcpy(incoming_link.commit_hash, t->commit_hash.bytes, SFPP_HASH_SIZE);
+
+            } else if (t->commit_hash.size > 0) {
+                // calculate the full commit hash and replace the partial if it matches
+                if (checkCommitHash(incoming_link, t->commit_hash.bytes, t->commit_hash.size)) {
+                    printBytes("commit hash matches: 0x", t->commit_hash.bytes, t->commit_hash.size);
+                } else {
+                    LOG_WARN("commit hash does not match, rejecting link.");
+                    incoming_link.commit_hash_len = 0;
+                    incoming_link.validObject = false;
+                }
+            }
         } else {
             LOG_WARN("No first half stored, cannot combine");
             return true;
