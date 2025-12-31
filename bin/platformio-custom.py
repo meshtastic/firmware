@@ -173,7 +173,8 @@ if platform.name == "espressif32":
     target_lfs = env.DataToBin(
         join("$BUILD_DIR", "${ESP32_FS_IMAGE_NAME}"), "$PROJECT_DATA_DIR"
     )
-    mtjson_deps.append(target_lfs)
+    # prepend the littlefs target to the mtjson dependencies
+    # mtjson_deps.insert(0, target_lfs)
 
 env.AddCustomTarget(
     name="mtjson",

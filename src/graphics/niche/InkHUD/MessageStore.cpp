@@ -50,12 +50,14 @@ void InkHUD::MessageStore::saveToFlash()
     // For each message
     for (uint8_t i = 0; i < messages.size() && i < MAX_MESSAGES_SAVED; i++) {
         Message &m = messages.at(i);
-        f.write((uint8_t *)&m.timestamp, sizeof(m.timestamp));                    // Write timestamp. 4 bytes
-        f.write((uint8_t *)&m.sender, sizeof(m.sender));                          // Write sender NodeId. 4 Bytes
-        f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex));              // Write channel index. 1 Byte
-        f.write((uint8_t *)m.text.c_str(), min(MAX_MESSAGE_SIZE, m.text.size())); // Write message text. Variable length
-        f.write('\0');                                                            // Append null term
-        LOG_DEBUG("Wrote message %u, length %u, text \"%s\"", (uint32_t)i, min(MAX_MESSAGE_SIZE, m.text.size()), m.text.c_str());
+        f.write((uint8_t *)&m.timestamp, sizeof(m.timestamp));       // Write timestamp. 4 bytes
+        f.write((uint8_t *)&m.sender, sizeof(m.sender));             // Write sender NodeId. 4 Bytes
+        f.write((uint8_t *)&m.channelIndex, sizeof(m.channelIndex)); // Write channel index. 1 Byte
+        f.write((uint8_t *)m.text.c_str(),
+                std::min<size_t>(MAX_MESSAGE_SIZE, m.text.size())); // Write message text. Variable length
+        f.write('\0');                                              // Append null term
+        LOG_DEBUG("Wrote message %u, length %u, text \"%s\"", (uint32_t)i, std::min<size_t>(MAX_MESSAGE_SIZE, m.text.size()),
+                  m.text.c_str());
     }
 
     // Release firmware's SPI lock, because SafeFile::close needs it
