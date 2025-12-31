@@ -98,8 +98,9 @@ class GraphLite {
 
     /**
      * Calculate route to destination (simplified Dijkstra)
+     * @param nodeFilter Optional function to filter which nodes can be used as intermediate hops (returns true to allow)
      */
-    RouteLite calculateRoute(NodeNum destination, uint32_t currentTime);
+    RouteLite calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter = nullptr);
 
     /**
      * Calculate ETX from RSSI and SNR values

@@ -305,6 +305,12 @@ private:
     uint32_t getNodeTtlSeconds(CapabilityStatus status) const;
 
     /**
+     * Check if a node is routable (can be used as intermediate hop for routing)
+     * Mute nodes are not routable since they don't relay packets
+     */
+    bool isNodeRoutable(NodeNum nodeId) const;
+
+    /**
      * Log the current network topology graph in a readable format
      */
     void logNetworkTopology();

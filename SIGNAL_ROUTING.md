@@ -22,7 +22,7 @@ SignalRouting is an advanced mesh networking protocol for Meshtastic that replac
 
 | Role | Stock Flooding | With SignalRouting |
 |------|----------------|-------------------|
-| **CLIENT_MUTE** | Never rebroadcasts | Never rebroadcasts (legacy role) |
+| **CLIENT_MUTE** | Never rebroadcasts | **Topology broadcasts only** - Announces direct neighbors to help active SR nodes (simplified: no graph maintenance, no complex topology inference) |
 | **CLIENT** | Rebroadcasts, can cancel duplicates | Uses SR coordination for broadcasts |
 | **ROUTER/ROUTER_LATE** | Always rebroadcasts, never cancels | **Priority relays** - SR gives them highest priority as they always rebroadcast |
 | **ROUTER_CLIENT** | Rebroadcasts, can cancel duplicates | Uses SR coordination for broadcasts |
@@ -30,7 +30,7 @@ SignalRouting is an advanced mesh networking protocol for Meshtastic that replac
 | **CLIENT_BASE** | Special: acts as ROUTER for favorited nodes | Uses SR coordination for broadcasts |
 | **TRACKER/SENSOR/TAK** | Rebroadcasts, can cancel duplicates | Treated as legacy, no SR participation |
 
-**Legacy Node Priority:** SignalRouting prioritizes ROUTER and REPEATER roles because these nodes are configured to always rebroadcast packets. This ensures compatibility with existing network infrastructure while allowing SignalRouting nodes to provide additional coordination.
+**Legacy Node Priority:** SignalRouting prioritizes ROUTER and REPEATER roles because these nodes are configured to always rebroadcast packets. CLIENT_MUTE nodes participate minimally by broadcasting their direct neighbor topology to assist active SignalRouting nodes in making informed unicast routing decisions.
 
 ### Retransmission Behavior
 
@@ -65,6 +65,24 @@ SignalRouting maintains a network topology graph where:
 - **Nodes** = Mesh devices
 - **Edges** = Wireless links with ETX weights
 - **Sources** = Reported (measured by peer) vs Mirrored (estimated from our perspective)
+
+#### Topology Discovery Mechanisms
+
+SignalRouting discovers network topology through multiple channels:
+
+1. **Direct Neighbor Detection**: When receiving packets directly with signal data (RSSI/SNR), immediate neighbor relationships are established with calculated ETX values
+
+2. **Topology Broadcasts**: Nodes periodically broadcast their complete neighbor list, allowing comprehensive topology learning from other nodes' perspectives
+
+3. **Mute Node Topology Sharing**: CLIENT_MUTE nodes broadcast their direct neighbor information to help active SignalRouting nodes discover network topology, even though mute nodes don't participate in packet relaying. Active nodes learn about mute node neighbors for discovery purposes but don't consider routing paths through mute nodes since they don't relay. CLIENT_MUTE nodes maintain their direct neighbor graph (add/remove expired connections) but use simplified topology tracking. Other inactive roles (TRACKER, SENSOR, TAK, etc.) do not participate in topology sharing.
+
+4. **Relayed Packet Inference**: When receiving relayed packets, connectivity between the original sender and relay node is inferred, even without direct signal measurements
+
+5. **Placeholder System**: Unknown relay nodes are tracked as placeholders until their real identities are discovered through direct contact or topology broadcasts
+
+6. **Gateway Relationship Tracking**: Downstream relationships are learned when packets flow through relay nodes, enabling multi-hop route discovery
+
+This multi-modal discovery ensures robust topology awareness even in challenging network conditions. Mute nodes contribute to network intelligence by sharing their local connectivity knowledge without consuming relay bandwidth.
 
 ## Unicast Routing
 
@@ -105,11 +123,12 @@ bool shouldDeliverDirectToNeighbor(NodeNum destination, NodeNum heardFrom) {
 
 ### Unicast Route Selection Priority
 
-1. **Direct delivery to neighbors**: For relayed packets where destination didn't hear original transmission
-2. **Calculated multi-hop routes**: Using Dijkstra algorithm with ETX weights
-3. **Gateway routes**: Prefer direct connections to known gateways for extended reach
-4. **Opportunistic forwarding**: When topology incomplete, forward to best direct neighbor
-5. **Broadcast coordination**: Only for known, well-connected destinations to prevent flooding
+1. **Direct sender coverage check**: If the sending node has direct connection to destination, don't relay (destination already received)
+2. **Direct delivery to neighbors**: For relayed packets where destination didn't hear original transmission
+3. **Calculated multi-hop routes**: Using Dijkstra algorithm with ETX weights
+4. **Gateway routes**: Prefer direct connections to known gateways for extended reach
+5. **Opportunistic forwarding**: When topology incomplete, forward to best direct neighbor
+6. **Broadcast coordination**: Only for known, well-connected destinations to prevent flooding
 
 ### Speculative Retransmission
 
@@ -141,7 +160,14 @@ bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p) {
 }
 ```
 
-This conservative approach prevents network flooding by only coordinating delivery for destinations that are already known in the network topology. Unknown nodes must announce themselves through broadcasts before unicast coordination can occur.
+This conservative approach prevents network flooding by only coordinating delivery for destinations that are already known in the network topology. Unknown nodes are discovered through multiple mechanisms:
+
+- **Broadcast topology announcements**: Nodes periodically broadcast their neighbor information
+- **Direct packet reception**: When receiving packets directly from unknown nodes with signal data
+- **Relayed packet inference**: Inferring connectivity between senders and relays from relayed packets
+- **Placeholder resolution**: Unknown relays are tracked as placeholders until real node identities are discovered
+
+Unicast coordination can occur once a destination is known through any of these discovery methods. Additionally, unicast packets are not relayed if the sending node has a direct connection to the destination, as the destination should have already received the packet directly.
 
 ## Broadcast Routing
 
@@ -351,6 +377,17 @@ class GraphLite {
 #endif
 ```
 
+### Timing and Synchronization
+
+SignalRouting uses **monotonic time** (time since boot) for all graph operations to ensure consistency:
+
+- **Graph aging**: Edge expiration and node cleanup
+- **Route caching**: Cache validity and expiration
+- **Transmission tracking**: Contention window timing
+- **Edge timestamps**: Connection update times
+
+This prevents issues with RTC updates that could cause time jumps, ensuring reliable graph maintenance and routing decisions.
+
 **Automatic Hardware Adaptation:**
 - **STM32WL**: Disabled entirely (64KB RAM limit)
 - **RP2040**: RAM guard (< 30KB free disables SR)
@@ -452,6 +489,29 @@ SignalRouting uses an iterative algorithm for relay coordination:
 
 This iterative approach ensures optimal relay selection while handling timeouts and network dynamics.
 
+### Unicast Relay Logic
+
+SignalRouting implements conservative unicast relaying to prevent unnecessary transmissions:
+
+1. **Direct Sender Coverage Check**: If the sending node has a direct connection to the destination, don't relay (destination already received the packet directly)
+2. **Downstream Relay Check**: If destination is downstream of a relay we can hear, broadcast for coordination
+3. **Legacy Router Priority**: Check if legacy routers that heard the packet should relay instead
+4. **Route Cost Comparison**: Compare our route cost against other nodes that heard the transmission
+5. **Gateway Coordination**: Use gateway relationships for extended network reach
+
+```cpp
+bool shouldRelayUnicastForCoordination(NodeNum destination, NodeNum heardFrom) {
+    // 1. Check if sender has direct connection to destination
+    if (senderHasDirectConnectionTo(heardFrom, destination)) {
+        return false; // Destination already received directly
+    }
+
+    // 2. Check downstream relay coordination...
+    // 3. Check legacy router priorities...
+    // 4. Compare route costs...
+}
+```
+
 ### Performance Characteristics
 
 **Broadcast Coordination:**
@@ -477,7 +537,7 @@ This iterative approach ensures optimal relay selection while handling timeouts 
 
 SignalRouting gracefully degrades when coordination isn't possible:
 
-1. **Unknown Destinations**: Does not broadcast unicast packets for unknown nodes to prevent flooding
+1. **Unknown Destinations**: Does not broadcast unicast packets for unknown nodes to prevent flooding (discovery occurs via any received packet)
 2. **Topology Incomplete**: Uses traditional unicast routing for known but poorly connected destinations
 3. **Legacy Node Priority**: Gives priority to legacy routers/repeaters for compatibility
 4. **Memory/CPU Constraints**: Automatic feature disabling for constrained devices
@@ -486,8 +546,9 @@ SignalRouting gracefully degrades when coordination isn't possible:
 
 - **Backward Compatible**: Works with all existing Meshtastic nodes
 - **Progressive Enhancement**: Benefits increase with more SR-capable nodes
-- **Mixed Networks**: Automatically detects and adapts to legacy nodes
+- **Mixed Networks**: Automatically detects and adapts to legacy nodes including CLIENT_MUTE topology sharing
 - **Gateway Integration**: Special handling for nodes bridging network segments
+- **Mute Node Intelligence**: CLIENT_MUTE nodes contribute topology information without relay participation
 
 ## Future Considerations
 

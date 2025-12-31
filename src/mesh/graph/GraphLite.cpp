@@ -246,7 +246,7 @@ uint8_t GraphLite::getNeighborCount(NodeNum node) const
     return n ? n->edgeCount : 0;
 }
 
-RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime)
+RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter)
 {
     // Check cache first
     if (routeCache.destination == destination && (currentTime - routeCacheTime) < ROUTE_CACHE_TIMEOUT_SECS) {
@@ -280,6 +280,12 @@ RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime)
         // Two-hop search: check neighbors' neighbors
         for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
             NodeNum neighbor = myEdges->edges[i].to;
+
+            // Skip neighbors that don't pass the filter (e.g., mute nodes that don't relay)
+            if (nodeFilter && !nodeFilter(neighbor)) {
+                continue;
+            }
+
             uint16_t costToNeighbor = myEdges->edges[i].etxFixed;
 
             const NodeEdgesLite *neighborEdges = findNode(neighbor);
