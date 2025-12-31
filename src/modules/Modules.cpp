@@ -203,7 +203,7 @@ void setupModules()
 #endif
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
-#if defined(M5STACK_UNITC6L)
+#if defined(M5STACK_UNITC6L) || defined(ARDUINO_NESSO_N1)
         i2cButton = new i2cButtonThread("i2cButtonThread");
 #endif
 #ifdef INPUTBROKER_MATRIX_TYPE
