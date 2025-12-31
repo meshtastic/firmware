@@ -37,8 +37,8 @@
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
-#elif defined(ARCH_STM32WL)
-// On STM32 there isn't enough heap left over for the rest of the firmware if we allocate this statically.
+#elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
+// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
 // For now, make it dynamic again.
 #define MAX_PACKETS                                                                                                              \
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
@@ -81,8 +81,7 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 {
     // First hop MUST always decrement to prevent retry issues
-    bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
-    if (isFirstHop) {
+    if (getHopsAway(*p) == 0) {
         return true; // Always decrement on first hop
     }
 
@@ -526,6 +525,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #elif ARCH_PORTDUINO
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+        } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
+                JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
+            }
         }
 #endif
         return DecodeState::DECODE_SUCCESS;

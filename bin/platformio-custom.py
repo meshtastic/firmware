@@ -17,6 +17,8 @@ lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
 
 def manifest_gather(source, target, env):
     out = []
+    board_platform = env.BoardConfig().get("platform")
+    needs_ota_suffix = board_platform == "nordicnrf52"
     check_paths = [
         progname,
         f"{progname}.elf",
@@ -32,8 +34,11 @@ def manifest_gather(source, target, env):
     for p in check_paths:
         f = env.File(env.subst(f"$BUILD_DIR/{p}"))
         if f.exists():
+            manifest_name = p
+            if needs_ota_suffix and p == f"{progname}.zip":
+                manifest_name = f"{progname}-ota.zip"
             d = {
-                "name": p,
+                "name": manifest_name,
                 "md5": f.get_content_hash(), # Returns MD5 hash
                 "bytes": f.get_size() # Returns file size in bytes
             }
@@ -159,20 +164,22 @@ def load_boot_logo(source, target, env):
 
 # Load the boot logo on TFT builds
 if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
-    env.AddPreAction('$BUILD_DIR/littlefs.bin', load_boot_logo)
+    env.AddPreAction(f"$BUILD_DIR/{lfsbin}", load_boot_logo)
 
-# Rename (mv) littlefs.bin to include the PROGNAME
-# This ensures the littlefs.bin is named consistently with the firmware
-env.AddPostAction('$BUILD_DIR/littlefs.bin', env.VerboseAction(
-    f'mv $BUILD_DIR/littlefs.bin $BUILD_DIR/{lfsbin}',
-    f'Renaming littlefs.bin to {lfsbin}'
-))
+mtjson_deps = ["buildprog"]
+if platform.name == "espressif32":
+    # Build littlefs image as part of mtjson target
+    # Equivalent to `pio run -t buildfs`
+    target_lfs = env.DataToBin(
+        join("$BUILD_DIR", "${ESP32_FS_IMAGE_NAME}"), "$PROJECT_DATA_DIR"
+    )
+    mtjson_deps.append(target_lfs)
 
 env.AddCustomTarget(
     name="mtjson",
-    dependencies=None,
+    dependencies=mtjson_deps,
     actions=[manifest_gather],
     title="Meshtastic Manifest",
     description="Generating Meshtastic manifest JSON + Checksums",
-    always_build=True,
+    always_build=False,
 )
