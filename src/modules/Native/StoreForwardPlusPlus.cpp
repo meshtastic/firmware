@@ -193,7 +193,10 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
 int32_t StoreForwardPlusPlusModule::runOnce()
 {
-    pendingRun = false;
+    if (pendingRun) {
+        pendingRun = false;
+        setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 60 * 1000);
+    }
     if (getRTCQuality() < RTCQualityNTP) {
         LOG_WARN("StoreForward++ deferred due to time quality %u", getRTCQuality());
         return portduino_config.sfpp_announce_interval * 60 * 1000;
@@ -559,7 +562,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 requestNextMessage(incoming_link.root_hash, incoming_link.root_hash_len, incoming_link.commit_hash,
                                    incoming_link.commit_hash_len);
             } else {
-                if (!isInScratch(incoming_link.message_hash, incoming_link.message_hash_len)) {
+                if (!isInScratch(incoming_link.message_hash, incoming_link.message_hash_len) &&
+                    !isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
                     addToScratch(incoming_link);
                     LOG_INFO("added incoming non-canon message to scratch");
                     if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
