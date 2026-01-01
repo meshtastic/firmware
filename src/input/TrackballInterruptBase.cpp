@@ -45,7 +45,9 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
 
     LOG_DEBUG("Trackball GPIO initialized - UP:%d DOWN:%d LEFT:%d RIGHT:%d PRESS:%d", this->_pinUp, this->_pinDown,
               this->_pinLeft, this->_pinRight, pinPress);
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
+#endif
     this->setInterval(100);
 }
 

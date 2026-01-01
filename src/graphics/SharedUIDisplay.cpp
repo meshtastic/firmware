@@ -8,6 +8,7 @@
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OLEDDisplay.h>
 #include <graphics/images.h>
@@ -56,7 +57,6 @@ void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second)
 
 // === Shared External State ===
 bool hasUnreadMessage = false;
-bool isMuted = false;
 ScreenResolution currentResolution = ScreenResolution::Low;
 
 // === Internal State ===
@@ -306,7 +306,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (isMuted) {
+        } else if (externalNotificationModule->getMute()) {
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
@@ -325,7 +325,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
 
-                if (isInverted) {
+                if (isInverted && !force_no_invert) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mute_symbol_width + 2, mute_symbol_height + 2);
                     display->setColor(BLACK);
@@ -383,7 +383,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (isMuted) {
+        } else if (externalNotificationModule->getMute()) {
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
@@ -470,18 +470,49 @@ bool isAllowedPunctuation(char c)
     return allowed.find(c) != std::string::npos;
 }
 
+static void replaceAll(std::string &s, const std::string &from, const std::string &to)
+{
+    if (from.empty())
+        return;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+
 std::string sanitizeString(const std::string &input)
 {
     std::string output;
     bool inReplacement = false;
 
-    for (char c : input) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
+    // Make a mutable copy so we can normalize UTF-8 “smart punctuation” into ASCII first.
+    std::string s = input;
+
+    // Curly single quotes: ‘ ’
+    replaceAll(s, "\xE2\x80\x98", "'"); // U+2018
+    replaceAll(s, "\xE2\x80\x99", "'"); // U+2019
+
+    // Curly double quotes: “ ”
+    replaceAll(s, "\xE2\x80\x9C", "\""); // U+201C
+    replaceAll(s, "\xE2\x80\x9D", "\""); // U+201D
+
+    // En dash / Em dash: – —
+    replaceAll(s, "\xE2\x80\x93", "-"); // U+2013
+    replaceAll(s, "\xE2\x80\x94", "-"); // U+2014
+
+    // Non-breaking space
+    replaceAll(s, "\xC2\xA0", " "); // U+00A0
+
+    // Now do your original sanitize pass over the normalized string.
+    for (unsigned char uc : s) {
+        char c = static_cast<char>(uc);
+        if (std::isalnum(uc) || isAllowedPunctuation(c)) {
             output += c;
             inReplacement = false;
         } else {
             if (!inReplacement) {
-                output += 0xbf; // ISO-8859-1 for inverted question mark
+                output += static_cast<char>(0xBF); // ISO-8859-1 for inverted question mark
                 inReplacement = true;
             }
         }
