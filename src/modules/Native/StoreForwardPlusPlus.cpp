@@ -198,8 +198,20 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 60 * 1000);
     }
     if (getRTCQuality() < RTCQualityNTP) {
-        LOG_WARN("StoreForward++ deferred due to time quality %u", getRTCQuality());
-        return portduino_config.sfpp_announce_interval * 60 * 1000;
+        RTCQuality ourQuality = RTCQualityDevice;
+
+        std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
+        if (timeCommandResult[0] == '1') {
+            ourQuality = RTCQualityNTP;
+
+            struct timeval tv;
+            tv.tv_sec = time(NULL);
+            tv.tv_usec = 0;
+            perhapsSetRTC(ourQuality, &tv);
+        } else {
+            LOG_WARN("StoreForward++ deferred due to time quality %u result:%s", getRTCQuality(), timeCommandResult.c_str());
+            return portduino_config.sfpp_announce_interval * 60 * 1000;
+        }
     }
     uint8_t root_hash_bytes[SFPP_HASH_SIZE] = {0};
     ChannelHash hash = channels.getHash(0);
