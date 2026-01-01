@@ -20,7 +20,7 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
     switch (arg->getStatusType()) {
     case STATUS_TYPE_POWER: {
         meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)arg;
-        if (powerStatus->getHasUSB()) {
+        if (powerStatus->getHasUSB() || powerStatus->getIsCharging()) {
             power_state = charging;
             if (powerStatus->getBatteryChargePercent() >= 100) {
                 power_state = charged;

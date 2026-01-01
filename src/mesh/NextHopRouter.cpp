@@ -64,7 +64,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
                 perhapsRebroadcast(p);
             }
         } else {
-            bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+            bool isRepeated = getHopsAway(*p) == 0;
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
@@ -101,8 +101,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                 bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
                 bool weWereSoleRelayer = false;
                 bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
-                if ((weWereRelayer && wasAlreadyRelayer) ||
-                    (p->hop_start != 0 && p->hop_start == p->hop_limit && weWereSoleRelayer)) {
+                if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
                     if (origTx->next_hop != p->relay_node) { // Not already set
                         LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
                                  p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);

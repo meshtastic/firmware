@@ -81,8 +81,7 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 {
     // First hop MUST always decrement to prevent retry issues
-    bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
-    if (isFirstHop) {
+    if (getHopsAway(*p) == 0) {
         return true; // Always decrement on first hop
     }
 

@@ -170,7 +170,7 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         } else {
             LOG_DEBUG("  Ignoring dummy neighbor info packet (single neighbor with nodeId 0, snr 0)");
         }
-    } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
+    } else if (getHopsAway(mp) == 0) {
         LOG_DEBUG("Get or create neighbor: %u with snr %f", mp.from, mp.rx_snr);
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0,

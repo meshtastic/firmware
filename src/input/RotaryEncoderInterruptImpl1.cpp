@@ -27,7 +27,9 @@ bool RotaryEncoderInterruptImpl1::init()
                                      RotaryEncoderInterruptImpl1::handleIntA, RotaryEncoderInterruptImpl1::handleIntB,
                                      RotaryEncoderInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
+#endif
     return true;
 }
 
