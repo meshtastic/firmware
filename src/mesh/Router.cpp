@@ -747,8 +747,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p_encrypted == nullptr) {
             LOG_WARN("p_encrypted is null, skipping MQTT publish");
         } else {
-            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
-            // us (because we would be able to decrypt it)
+            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
+            // to us (because we would be able to decrypt it)
             if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
                 !isBroadcast(p->to) && !isToUs(p))
                 p_encrypted->pki_encrypted = true;
