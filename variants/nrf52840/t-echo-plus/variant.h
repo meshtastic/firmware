@@ -129,7 +129,7 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
 
-// Sensors / accessories (disable buzzer/driver to avoid PWM pin use on this variant)
+// Sensors / accessories
 #define PIN_BUZZER (0 + 6)
 #define PIN_DRV_EN (0 + 8)
 
