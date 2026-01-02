@@ -423,7 +423,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
             // get chain tip
             if (chain_end.rx_time != 0) {
-                if (memcmp(chain_end.commit_hash, t->commit_hash.bytes, t->commit_hash.size) == 0) {
+                if (t->commit_hash.size >= SFPP_SHORT_HASH_SIZE &&
+                    memcmp(chain_end.commit_hash, t->commit_hash.bytes, t->commit_hash.size) == 0) {
                     LOG_DEBUG("StoreForwardpp End of chain matches!");
                     sendFromScratch(chain_end.root_hash);
                 } else {
