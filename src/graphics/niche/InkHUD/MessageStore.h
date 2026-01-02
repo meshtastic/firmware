@@ -16,30 +16,28 @@ and methods for serializing them to flash.
 
 #include "mesh/MeshTypes.h"
 
-namespace NicheGraphics::InkHUD
-{
+namespace NicheGraphics::InkHUD {
 
-class MessageStore
-{
-  public:
-    // A stored message
-    struct Message {
-        uint32_t timestamp; // Epoch seconds
-        NodeNum sender = 0;
-        uint8_t channelIndex;
-        std::string text;
-    };
+class MessageStore {
+public:
+  // A stored message
+  struct Message {
+    uint32_t timestamp; // Epoch seconds
+    NodeNum sender = 0;
+    uint8_t channelIndex;
+    std::string text;
+  };
 
-    MessageStore() = delete;
-    explicit MessageStore(std::string label); // Label determines filename in flash
+  MessageStore() = delete;
+  explicit MessageStore(std::string label); // Label determines filename in flash
 
-    void saveToFlash();
-    void loadFromFlash();
+  void saveToFlash();
+  void loadFromFlash();
 
-    std::deque<Message> messages; // Interact with this object!
+  std::deque<Message> messages; // Interact with this object!
 
-  private:
-    std::string filename;
+private:
+  std::string filename;
 };
 
 } // namespace NicheGraphics::InkHUD

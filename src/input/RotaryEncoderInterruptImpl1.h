@@ -8,14 +8,13 @@
  *      to your device as you wish, but you always need to have separate event
  *      handlers, thus you need to have a RotaryEncoderInterrupt implementation.
  */
-class RotaryEncoderInterruptImpl1 : public RotaryEncoderInterruptBase
-{
-  public:
-    RotaryEncoderInterruptImpl1();
-    bool init();
-    static void handleIntA();
-    static void handleIntB();
-    static void handleIntPressed();
+class RotaryEncoderInterruptImpl1 : public RotaryEncoderInterruptBase {
+public:
+  RotaryEncoderInterruptImpl1();
+  bool init();
+  static void handleIntA();
+  static void handleIntB();
+  static void handleIntPressed();
 };
 
 extern RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
