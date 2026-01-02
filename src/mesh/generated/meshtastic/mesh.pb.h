@@ -92,8 +92,8 @@ typedef enum _meshtastic_HardwareModel {
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
     meshtastic_HardwareModel_LORA_RELAY_V1 = 32,
-    /* TODO: REPLACE */
-    meshtastic_HardwareModel_NRF52840DK = 33,
+    /* T-Echo Plus device from LilyGo */
+    meshtastic_HardwareModel_T_ECHO_PLUS = 33,
     /* TODO: REPLACE */
     meshtastic_HardwareModel_PPR = 34,
     /* TODO: REPLACE */
@@ -475,7 +475,10 @@ typedef enum _meshtastic_Routing_Error {
     meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37,
     /* Airtime fairness rate limit exceeded for a packet
  This typically enforced per portnum and is used to prevent a single node from monopolizing airtime */
-    meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38
+    meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38,
+    /* PKI encryption failed, due to no public key for the remote node
+ This is different from PKI_UNKNOWN_PUBKEY which indicates a failure upon receiving a packet */
+    meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY = 39
 } meshtastic_Routing_Error;
 
 /* Enum of message types */
@@ -1351,8 +1354,12 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY+1))
+
+#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
+#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
+#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF+1))
 
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
