@@ -582,6 +582,9 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
                 // if this packet is new to us, we rebroadcast it
                 rebroadcastLinkObject(incoming_link);
+            } else {
+                LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was &u",
+                          incoming_link.rx_time);
             }
 
         } else {
@@ -597,6 +600,9 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     // if this packet is new to us, we rebroadcast it, but only up to an hour old
                     if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
                         rebroadcastLinkObject(incoming_link);
+                    } else {
+                        LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was &u",
+                                  incoming_link.rx_time);
                     }
                 }
                 requestNextMessage(incoming_link.root_hash, incoming_link.root_hash_len, incoming_link.commit_hash,
@@ -608,6 +614,9 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     LOG_INFO("StoreForwardpp added incoming non-canon message to scratch");
                     if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
                         rebroadcastLinkObject(incoming_link);
+                    } else {
+                        LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was &u",
+                                  incoming_link.rx_time);
                     }
                 }
             }
