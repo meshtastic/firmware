@@ -37,8 +37,8 @@
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
-#elif defined(ARCH_STM32WL)
-// On STM32 there isn't enough heap left over for the rest of the firmware if we allocate this statically.
+#elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
+// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
 // For now, make it dynamic again.
 #define MAX_PACKETS                                                                                                              \
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
@@ -81,8 +81,7 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 {
     // First hop MUST always decrement to prevent retry issues
-    bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
-    if (isFirstHop) {
+    if (getHopsAway(*p) == 0) {
         return true; // Always decrement on first hop
     }
 
@@ -479,6 +478,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!");
+#if !(MESHTASTIC_EXCLUDE_PKI)
+                } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+                    LOG_WARN("Rejecting legacy DM");
+                    return DecodeState::DECODE_FAILURE;
+#endif
                 } else {
                     p->decoded = decodedtmp;
                     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -521,6 +525,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #elif ARCH_PORTDUINO
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+        } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
+                JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
+            }
         }
 #endif
         return DecodeState::DECODE_SUCCESS;
@@ -683,7 +691,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // Store a copy of encrypted packet for MQTT
     DEBUG_HEAP_BEFORE;
-    meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
+    p_encrypted = packetPool.allocCopy(*p);
     DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
@@ -721,7 +729,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                        meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP,
                        meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP,
                        meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_WAYPOINT_APP,
-                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP)) {
+                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP,
+                       meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP)) {
             LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;
@@ -736,19 +745,24 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
-        // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
-        // us (because we would be able to decrypt it)
-        if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
-            !isBroadcast(p->to) && !isToUs(p))
-            p_encrypted->pki_encrypted = true;
-        // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-            !isFromUs(p) && mqtt)
-            mqtt->onSend(*p_encrypted, *p, p->channel);
+        if (p_encrypted == nullptr) {
+            LOG_WARN("p_encrypted is null, skipping MQTT publish");
+        } else {
+            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
+            // to us (because we would be able to decrypt it)
+            if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
+                !isBroadcast(p->to) && !isToUs(p))
+                p_encrypted->pki_encrypted = true;
+            // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
+            if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
+                !isFromUs(p) && mqtt)
+                mqtt->onSend(*p_encrypted, *p, p->channel);
+        }
 #endif
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
+    p_encrypted = nullptr;
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)

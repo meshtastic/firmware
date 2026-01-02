@@ -28,6 +28,7 @@
 #define TFT_OFFSET_Y -1
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define USE_TFTDISPLAY 1
 
 #define VEXT_ENABLE 3 // active HIGH, powers the lora antenna boost
 #define VEXT_ON_VALUE HIGH

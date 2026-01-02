@@ -117,7 +117,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (graphics::isHighResolution) ? "Power Telem." : "Power";
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Power Telem." : "Power";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -165,6 +165,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     if (m.has_ch3_voltage || m.has_ch3_current) {
         drawLine("Ch3", m.ch3_voltage, m.ch3_current);
     }
+    graphics::drawCommonFooter(display, x, y);
 }
 #endif
 
