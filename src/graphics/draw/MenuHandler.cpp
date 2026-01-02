@@ -1211,9 +1211,9 @@ void menuHandler::positionBaseMenu()
 
     BannerOverlayOptions bannerOptions;
     if (accelerometerThread) {
-        bannerOptions = createStaticBannerOptions("Position Action", calibrateOptions, calibrateLabels, onSelection);
+        bannerOptions = createStaticBannerOptions("GPS Action", calibrateOptions, calibrateLabels, onSelection);
     } else {
-        bannerOptions = createStaticBannerOptions("Position Action", baseOptions, baseLabels, onSelection);
+        bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
     }
 
     screen->showOverlayBanner(bannerOptions);
