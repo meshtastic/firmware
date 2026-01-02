@@ -542,28 +542,17 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 
 class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
 {
-    uint32_t onPassKeyRequest()
+    void onPassKeyNotify(uint32_t passkey) override
     {
-        uint32_t passkey = config.bluetooth.fixed_pin;
-
-        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
-            LOG_INFO("Use random passkey");
-            passkey = random(100000, 999999);
-        }
-        return passkey;
-    }
-
-    void onPasskeyNotify(uint32_t pass_key)
-    {
-        LOG_INFO("*** Enter passkey %06u on the peer side ***", pass_key);
+        LOG_INFO("*** Enter passkey %06u on the peer side ***", passkey);
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        meshtastic::BluetoothStatus newStatus(std::to_string(pass_key));
+        meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
         bluetoothStatus->updateStatus(&newStatus);
 #if HAS_SCREEN
         if (screen) {
-            screen->startAlert([pass_key](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
                 char btPIN[16] = "888888";
-                snprintf(btPIN, sizeof(btPIN), "%06u", pass_key);
+                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
                 int x_offset = display->width() / 2;
                 int y_offset = display->height() <= 80 ? 0 : 12;
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -597,6 +586,7 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
 
+        // BROKEN -- Authentication completes but the screen never gets cleared
         if (passkeyShowing) {
             passkeyShowing = false;
             if (screen) {
@@ -678,14 +668,15 @@ void NimbleBluetooth::startAdvertising()
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
-    if (powerStatus->getHasBattery() == 1) {
-        pAdvertising->addServiceUUID(BLEUUID((uint16_t)0x180f));
-    }
+    // if (powerStatus->getHasBattery() == 1) {
+    //     pAdvertising->addServiceUUID(BLEUUID((uint16_t)0x180f));
+    // }
 
-    BLEAdvertisementData scan;
+    BLEAdvertisementData scan = BLEAdvertisementData();
     scan.setName(getDeviceName());
     pAdvertising->setScanResponseData(scan);
-    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
+    pAdvertising->setMaxPreferred(0x12);
 
     if (!pAdvertising->start(0)) {
         LOG_ERROR("BLE failed to start advertising");
@@ -772,10 +763,27 @@ void NimbleBluetooth::setup()
     BLEDevice::init(getDeviceName());
     BLEDevice::setPower(ESP_PWR_LVL_P9);
 
+    int mtuResult = BLEDevice::setMTU(kPreferredBleMtu);
+    if (mtuResult == 0) {
+        LOG_INFO("BLE MTU request set to %u", kPreferredBleMtu);
+    } else {
+        LOG_WARN("Unable to request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
+    }
+
     BLESecurity *pSecurity = new BLESecurity();
+    pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    pSecurity->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         // Set IO capability to DisplayOnly for MITM authentication
         pSecurity->setCapability(ESP_IO_CAP_OUT);
+        // Set the passkey
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
+            LOG_INFO("Use random passkey");
+            pSecurity->setPassKey(false); // generate a random passkey
+        } else {
+            LOG_INFO("Use fixed passkey");
+            pSecurity->setPassKey(true, config.bluetooth.fixed_pin);
+        }
         // Enable authorization requirements:
         // - bonding: true (for persistent storage of the keys)
         // - MITM: true (enables Man-In-The-Middle protection for password prompts)
