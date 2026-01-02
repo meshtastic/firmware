@@ -328,6 +328,10 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         return ProcessMessage::CONTINUE;
     }
 
+    if (mp.from == nodeDB->getNodeNum()) {
+        return ProcessMessage::CONTINUE; // don't process our own packets
+    }
+
     // Allow only LoRa, Multicast UDP, and API packets
     // maybe in the future, only disallow MQTT
     if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA &&
