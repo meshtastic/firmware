@@ -128,7 +128,28 @@ template <typename T> struct MenuOption {
     MenuOption(const char *labelIn, OptionsAction actionIn) : label(labelIn), action(actionIn), hasValue(false), value() {}
 };
 
+struct ScreenColor {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    bool useVariant;
+
+    ScreenColor(uint8_t rIn = 0, uint8_t gIn = 0, uint8_t bIn = 0, bool variantIn = false)
+        : r(rIn), g(gIn), b(bIn), useVariant(variantIn)
+    {
+    }
+};
+
 using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
+using LoraRegionOption = MenuOption<meshtastic_Config_LoRaConfig_RegionCode>;
+using TimezoneOption = MenuOption<const char *>;
+using CompassOption = MenuOption<meshtastic_CompassMode>;
+using ScreenColorOption = MenuOption<ScreenColor>;
+using GPSToggleOption = MenuOption<meshtastic_Config_PositionConfig_GpsMode>;
+using GPSFormatOption = MenuOption<meshtastic_DeviceUIConfig_GpsCoordinateFormat>;
+using NodeNameOption = MenuOption<bool>;
+using PositionMenuOption = MenuOption<int>;
+using ClockFaceOption = MenuOption<bool>;
 
 } // namespace graphics
 #endif
