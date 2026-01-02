@@ -125,7 +125,6 @@ static const uint8_t A0 = PIN_A0;
 #define GPS_TX_PIN (32 + 8)
 #define GPS_RX_PIN (32 + 9)
 #define GPS_THREAD_INTERVAL 50
-#define NO_GPS 1
 
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
