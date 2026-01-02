@@ -10,8 +10,6 @@
 extern "C" {
 #endif
 
-#define TTGO_T_ECHO_PLUS
-
 // Pin counts
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
