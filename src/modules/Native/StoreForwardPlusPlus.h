@@ -186,6 +186,12 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // removes a link object from the scratch database
     void removeFromScratch(uint8_t *, size_t);
 
+    // iterate through our scratch database, and see if we can speculate a chain up to the given commit hash
+    bool speculateScratchChain(uint8_t *, size_t, uint8_t *, uint8_t *);
+
+    // retrieves the next link object from scratch given a root hash
+    link_object getNextScratchObject(uint8_t *);
+
     // fills the payload section with the decrypted data for the given message hash
     // probably not needed for production, but useful for testing
     void updatePayload(uint8_t *, size_t, std::string);
