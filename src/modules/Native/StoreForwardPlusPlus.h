@@ -120,6 +120,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *pruneScratchQueueStmt;
     sqlite3_stmt *trimOldestLinkStmt;
     sqlite3_stmt *maybeAddPeerStmt;
+    sqlite3_stmt *getPeerStmt;
+    sqlite3_stmt *updatePeerStmt;
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -221,7 +223,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // returns true if a match
     bool recalculateHash(link_object &, uint8_t *, size_t, uint8_t *, size_t);
 
-    void maybeAddPeer(const meshtastic_MeshPacket &);
+    void updatePeers(const meshtastic_MeshPacket &, meshtastic_StoreForwardPlusPlus_SFPP_message_type);
 
     // Track if we have a scheduled runOnce pending
     // useful to not accudentally delay a scheduled runOnce
