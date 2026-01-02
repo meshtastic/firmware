@@ -384,7 +384,7 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
 {
-    void onWrite(BLECharacteristic *pCharacteristic)
+    void onWrite(BLECharacteristic *pCharacteristic) override
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
         // Assumption: onWrite is serialized by NimBLE, so we don't need to lock here against multiple concurrent onWrite calls.
@@ -434,7 +434,7 @@ class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
 
 class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 {
-    void onRead(BLECharacteristic *pCharacteristic)
+    void onRead(BLECharacteristic *pCharacteristic) override
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
 
