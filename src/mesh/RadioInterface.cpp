@@ -520,6 +520,10 @@ void RadioInterface::applyModemConfig()
                 sf = 12;
                 break;
             }
+            if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cr) {
+                cr = loraConfig.coding_rate;
+                LOG_INFO("Using custom Coding Rate %u", cr);
+            }
         } else {
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
