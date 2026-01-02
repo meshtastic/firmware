@@ -177,7 +177,7 @@ static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<m
                 fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
             }
 #else
-            if (strlen(fileName) < sizeof(fileInfo.file_name)) {
+            if (fileName && strlen(fileName) < sizeof(fileInfo.file_name)) {
                 strncpy(fileInfo.file_name, fileName, sizeof(fileInfo.file_name) - 1);
                 fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
             }
@@ -201,7 +201,7 @@ static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<m
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
- * @return A vector of strings containing the full path of each file in the directory.
+ * @return A vector of meshtastic_FileInfo structs containing the file path and size for each file in the directory.
  */
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {

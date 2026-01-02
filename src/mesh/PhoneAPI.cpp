@@ -3,7 +3,6 @@
 #include "GPS.h"
 #endif
 #ifdef ARCH_ESP32
-#include <esp_heap_caps.h>
 #define MIN_HEAP_FOR_FILE_MANIFEST 8192 // Minimum heap required before generating file manifest
 #endif
 
@@ -78,14 +77,14 @@ void PhoneAPI::handleStartConfig()
 #ifdef ARCH_ESP32
     size_t freeHeap = ESP.getFreeHeap();
     if (freeHeap < MIN_HEAP_FOR_FILE_MANIFEST) {
-        LOG_WARN("Low memory (%d bytes), skipping file manifest", freeHeap);
+        LOG_WARN("Low memory (%zu bytes), skipping file manifest", freeHeap);
         filesManifest.clear();
     } else {
 #endif
         spiLock->lock();
         filesManifest = getFiles("/", 10);
         spiLock->unlock();
-        LOG_DEBUG("Got %d files in manifest", filesManifest.size());
+        LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
 #ifdef ARCH_ESP32
     }
 #endif
