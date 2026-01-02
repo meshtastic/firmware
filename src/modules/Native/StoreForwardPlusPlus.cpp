@@ -171,7 +171,11 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         from local_messages where substr(message_hash,1,?)=? order by rx_time asc LIMIT 1;", // earliest first
                        -1, &fromScratchByHashStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from channel_messages where substr(message_hash,1,?)=?", -1, &checkDup, NULL);
+    sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from channel_messages where substr(message_hash,1,?)=?", -1, &checkDupMessageHash,
+                       NULL);
+
+    sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from channel_messages where substr(commit_hash,1,?)=?", -1, &checkDupCommitHash,
+                       NULL);
 
     sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from local_messages where substr(message_hash,1,?)=?", -1, &checkScratch, NULL);
 
@@ -238,7 +242,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 {
     if (pendingRun) {
         pendingRun = false;
-        setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 60 * 1000);
+        setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 30 * 1000);
     }
     if (getRTCQuality() < RTCQualityNTP) {
         RTCQuality ourQuality = RTCQualityDevice;
@@ -376,12 +380,11 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         addToChain(lo);
 
         if (!pendingRun) {
-            setIntervalFromNow(60 * 1000); // run again in 60 seconds to announce the new tip of chain
+            setIntervalFromNow(30 * 1000); // run again in 30 seconds to announce the new tip of chain
             pendingRun = true;
         }
-        // canonAnnounce(lo.message_hash, lo.commit_hash, lo.root_hash, lo.rx_time);
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
-        // TODO: Block packets from self?
+
     } else if (mp.decoded.portnum == portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
                                                                       : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP) {
         meshtastic_StoreForwardPlusPlus scratch;
@@ -405,7 +408,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
     if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE) {
 
-        // TODO: Regardless of where we are in the chain, if we have a newer message, send it back.
         if (portduino_config.sfpp_stratum0) {
             LOG_WARN("StoreForwardpp Received a CANON_ANNOUNCE while stratum 0");
             uint8_t next_commit_hash[SFPP_HASH_SIZE] = {0};
@@ -562,18 +564,18 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             return true;
         }
 
-        if (isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
+        if (isCommitInDB(incoming_link.commit_hash, incoming_link.commit_hash_len) ||
+            isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
             LOG_INFO("StoreForwardpp Received link already in chain");
             // TODO: respond with next link?
             return true;
         }
-
         if (portduino_config.sfpp_stratum0) {
 
             // calculate the commit_hash
             addToChain(incoming_link);
             if (!pendingRun) {
-                setIntervalFromNow(60 * 1000); // run again in 60 seconds to announce the new tip of chain
+                setIntervalFromNow(30 * 1000); // run again in 30 seconds to announce the new tip of chain
                 pendingRun = true;
             }
             // timebox to no more than an hour old
@@ -1060,11 +1062,27 @@ void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *
 
 bool StoreForwardPlusPlusModule::isInDB(uint8_t *message_hash_bytes, size_t message_hash_len)
 {
-    sqlite3_bind_int(checkDup, 1, message_hash_len);
-    sqlite3_bind_blob(checkDup, 2, message_hash_bytes, message_hash_len, NULL);
-    sqlite3_step(checkDup);
-    int numberFound = sqlite3_column_int(checkDup, 0);
-    sqlite3_reset(checkDup);
+    if (message_hash_len < SFPP_SHORT_HASH_SIZE)
+        return false;
+    sqlite3_bind_int(checkDupMessageHash, 1, message_hash_len);
+    sqlite3_bind_blob(checkDupMessageHash, 2, message_hash_bytes, message_hash_len, NULL);
+    sqlite3_step(checkDupMessageHash);
+    int numberFound = sqlite3_column_int(checkDupMessageHash, 0);
+    sqlite3_reset(checkDupMessageHash);
+    if (numberFound > 0)
+        return true;
+    return false;
+}
+
+bool StoreForwardPlusPlusModule::isCommitInDB(uint8_t *commit_hash_bytes, size_t commit_hash_len)
+{
+    if (commit_hash_len < SFPP_SHORT_HASH_SIZE)
+        return false;
+    sqlite3_bind_int(checkDupCommitHash, 1, commit_hash_len);
+    sqlite3_bind_blob(checkDupCommitHash, 2, commit_hash_bytes, commit_hash_len, NULL);
+    sqlite3_step(checkDupCommitHash);
+    int numberFound = sqlite3_column_int(checkDupCommitHash, 0);
+    sqlite3_reset(checkDupCommitHash);
     if (numberFound > 0)
         return true;
     return false;

@@ -101,7 +101,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3 *ppDb;
     sqlite3_stmt *chain_insert_stmt;
     sqlite3_stmt *scratch_insert_stmt;
-    sqlite3_stmt *checkDup;
+    sqlite3_stmt *checkDupMessageHash;
+    sqlite3_stmt *checkDupCommitHash;
     sqlite3_stmt *checkScratch;
     sqlite3_stmt *removeScratch;
     sqlite3_stmt *updatePayloadStmt;
@@ -172,6 +173,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // checks if the message hash is present in the canonical chain database
     bool isInDB(uint8_t *, size_t);
+
+    // checks if the commit hash is present in the canonical chain database
+    bool isCommitInDB(uint8_t *, size_t);
 
     // checks if the message hash is present in the scratch database
     bool isInScratch(uint8_t *, size_t);
