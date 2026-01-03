@@ -39,6 +39,7 @@ BuildRequires: pkgconfig(bluez)
 BuildRequires: pkgconfig(libusb-1.0)
 BuildRequires: libi2c-devel
 BuildRequires: pkgconfig(libuv)
+BuildRequires: pkgconfig(sqlite3)
 # Web components:
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)

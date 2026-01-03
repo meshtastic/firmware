@@ -788,6 +788,17 @@ bool loadConfig(const char *configPath)
             }
         }
 
+        if (yamlConfig["StoreAndForward"]) {
+            portduino_config.sfpp_stratum0 = (yamlConfig["StoreAndForward"]["Stratum0"]).as<bool>(false);
+            portduino_config.sfpp_enabled = (yamlConfig["StoreAndForward"]["Enabled"]).as<bool>(true);
+            portduino_config.sfpp_db_path = (yamlConfig["StoreAndForward"]["DBPath"]).as<std::string>("/var/lib/meshtasticd/");
+            portduino_config.sfpp_initial_sync = (yamlConfig["StoreAndForward"]["InitialSync"]).as<int>(10);
+            portduino_config.sfpp_hops = (yamlConfig["StoreAndForward"]["Hops"]).as<int>(3);
+            portduino_config.sfpp_announce_interval = (yamlConfig["StoreAndForward"]["AnnounceInterval"]).as<int>(5);
+            portduino_config.sfpp_max_chain = (yamlConfig["StoreAndForward"]["MaxChainLength"]).as<uint32_t>(1000);
+            portduino_config.sfpp_steal_port = (yamlConfig["StoreAndForward"]["StealPort"]).as<bool>(false);
+        }
+
         if (yamlConfig["General"]) {
             portduino_config.MaxNodes = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             portduino_config.maxtophone = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
