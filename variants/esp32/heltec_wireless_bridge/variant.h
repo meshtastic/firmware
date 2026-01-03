@@ -38,4 +38,5 @@
 
 // user button is present on device, but currently untested & unconfigured - couldn't figure out how it's connected
 
-// battery support is present within device, but currently untested & unconfigured - couldn't find reliable information yet
+// battery support is present within device, but currently untested & unconfigured - couldn't find reliable information
+// yet

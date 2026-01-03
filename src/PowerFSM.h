@@ -17,7 +17,8 @@
 #define EVENT_RECEIVED_MSG 5
 // #define EVENT_BOOT 6 // now done with a timed transition
 #define EVENT_BLUETOOTH_PAIR 7
-// #define EVENT_NODEDB_UPDATED 8     // Now defunct: NodeDB has a big enough change that we think you should turn on the screen
+// #define EVENT_NODEDB_UPDATED 8     // Now defunct: NodeDB has a big enough change that we think you should turn on
+// the screen
 #define EVENT_CONTACT_FROM_PHONE 9 // the phone just talked to us over bluetooth
 #define EVENT_LOW_BATTERY 10       // Battery is critically low, go to sleep
 #define EVENT_SERIAL_CONNECTED 11
@@ -29,21 +30,19 @@
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
 
 #if MESHTASTIC_EXCLUDE_POWER_FSM
-class FakeFsm
-{
-  public:
-    void trigger(int event)
-    {
-        if (event == EVENT_SERIAL_CONNECTED) {
-            serialConnected = true;
-        } else if (event == EVENT_SERIAL_DISCONNECTED) {
-            serialConnected = false;
-        }
-    };
-    bool getState() { return serialConnected; };
+class FakeFsm {
+public:
+  void trigger(int event) {
+    if (event == EVENT_SERIAL_CONNECTED) {
+      serialConnected = true;
+    } else if (event == EVENT_SERIAL_DISCONNECTED) {
+      serialConnected = false;
+    }
+  };
+  bool getState() { return serialConnected; };
 
-  private:
-    bool serialConnected = false;
+private:
+  bool serialConnected = false;
 };
 extern FakeFsm powerFSM;
 void PowerFSM_setup();

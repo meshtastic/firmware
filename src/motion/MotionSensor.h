@@ -17,48 +17,47 @@
 #include "Wire.h"
 
 // Base class for motion processing
-class MotionSensor
-{
-  public:
-    explicit MotionSensor(ScanI2C::FoundDevice foundDevice);
-    virtual ~MotionSensor(){};
+class MotionSensor {
+public:
+  explicit MotionSensor(ScanI2C::FoundDevice foundDevice);
+  virtual ~MotionSensor(){};
 
-    // Get the device type
-    ScanI2C::DeviceType deviceType();
+  // Get the device type
+  ScanI2C::DeviceType deviceType();
 
-    // Get the device address
-    uint8_t deviceAddress();
+  // Get the device address
+  uint8_t deviceAddress();
 
-    // Get the device port
-    ScanI2C::I2CPort devicePort();
+  // Get the device port
+  ScanI2C::I2CPort devicePort();
 
-    // Initialise the motion sensor
-    inline virtual bool init() { return false; };
+  // Initialise the motion sensor
+  inline virtual bool init() { return false; };
 
-    // The method that will be called each time our sensor gets a chance to run
-    // Returns the desired period for next invocation (or RUN_SAME for no change)
-    // Refer to /src/concurrency/OSThread.h for more information
-    inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
+  // The method that will be called each time our sensor gets a chance to run
+  // Returns the desired period for next invocation (or RUN_SAME for no change)
+  // Refer to /src/concurrency/OSThread.h for more information
+  inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
 
-    virtual void calibrate(uint16_t forSeconds){};
+  virtual void calibrate(uint16_t forSeconds){};
 
-  protected:
-    // Turn on the screen when a tap or motion is detected
-    virtual void wakeScreen();
+protected:
+  // Turn on the screen when a tap or motion is detected
+  virtual void wakeScreen();
 
-    // Register a button press when a double-tap is detected
-    virtual void buttonPress();
+  // Register a button press when a double-tap is detected
+  virtual void buttonPress();
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
-    static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+  // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
+  static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
-    ScanI2C::FoundDevice device;
+  ScanI2C::FoundDevice device;
 
-    // Do calibration if true
-    bool doCalibration = false;
-    uint32_t endCalibrationAt = 0;
+  // Do calibration if true
+  bool doCalibration = false;
+  uint32_t endCalibrationAt = 0;
 };
 
 #endif

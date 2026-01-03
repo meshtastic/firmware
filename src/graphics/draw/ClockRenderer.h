@@ -3,14 +3,12 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-namespace graphics
-{
+namespace graphics {
 
 /// Forward declarations
 class Screen;
 
-namespace ClockRenderer
-{
+namespace ClockRenderer {
 
 // Clock frame functions
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

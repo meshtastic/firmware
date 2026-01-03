@@ -4,8 +4,7 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 
-namespace WiFiOTA
-{
+namespace WiFiOTA {
 void initialize();
 bool isUpdated();
 
