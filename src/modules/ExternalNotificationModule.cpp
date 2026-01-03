@@ -168,7 +168,7 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
             drv.go();
 #endif
         }
@@ -283,7 +283,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #ifdef UNPHONE
     unphone.rgb(red, green, blue);
 #endif
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
     if (on) {
         drv.go();
     } else {
@@ -319,7 +319,7 @@ void ExternalNotificationModule::stopNow()
         externalTurnedOn[i] = 0;
     }
     setIntervalFromNow(0);
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
     drv.stop();
 #endif
 
