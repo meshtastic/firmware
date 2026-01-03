@@ -67,8 +67,8 @@ extern "C" {
 #define BLE_ERROR_INVALID_ATTR_HANDLE (NRF_ERROR_STK_BASE_NUM + 0x003) /**< Invalid attribute handle. */
 #define BLE_ERROR_INVALID_ADV_HANDLE (NRF_ERROR_STK_BASE_NUM + 0x004)  /**< Invalid advertising handle. */
 #define BLE_ERROR_INVALID_ROLE (NRF_ERROR_STK_BASE_NUM + 0x005)        /**< Invalid role. */
-#define BLE_ERROR_BLOCKED_BY_OTHER_LINKS                                                                                         \
-    (NRF_ERROR_STK_BASE_NUM + 0x006) /**< The attempt to change link settings failed due to the scheduling of other links. */
+#define BLE_ERROR_BLOCKED_BY_OTHER_LINKS                                                                                                             \
+  (NRF_ERROR_STK_BASE_NUM + 0x006) /**< The attempt to change link settings failed due to the scheduling of other links. */
 /** @} */
 
 /** @defgroup BLE_ERROR_SUBRANGES Module specific error code subranges

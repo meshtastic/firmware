@@ -8,15 +8,14 @@
 
 #include <Adafruit_LIS3DH.h>
 
-class LIS3DHSensor : public MotionSensor
-{
-  private:
-    Adafruit_LIS3DH sensor;
+class LIS3DHSensor : public MotionSensor {
+private:
+  Adafruit_LIS3DH sensor;
 
-  public:
-    explicit LIS3DHSensor(ScanI2C::FoundDevice foundDevice);
-    virtual bool init() override;
-    virtual int32_t runOnce() override;
+public:
+  explicit LIS3DHSensor(ScanI2C::FoundDevice foundDevice);
+  virtual bool init() override;
+  virtual int32_t runOnce() override;
 };
 
 #endif

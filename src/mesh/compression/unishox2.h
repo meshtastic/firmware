@@ -59,139 +59,79 @@
 
 // enum {USX_ALPHA = 0, USX_SYM, USX_NUM, USX_DICT, USX_DELTA};
 
-/// Default Horizontal codes. When composition of text is know beforehand, the other hcodes in this section can be used to achieve
-/// more compression.
-#define USX_HCODES_DFLT                                                                                                          \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x40, 0x80, 0xC0, 0xE0                                                                                             \
-    }
+/// Default Horizontal codes. When composition of text is know beforehand, the other hcodes in this section can be used
+/// to achieve more compression.
+#define USX_HCODES_DFLT                                                                                                                              \
+  (const unsigned char[]) { 0x00, 0x40, 0x80, 0xC0, 0xE0 }
 /// Length of each default hcode
-#define USX_HCODE_LENS_DFLT                                                                                                      \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        2, 2, 2, 3, 3                                                                                                            \
-    }
+#define USX_HCODE_LENS_DFLT                                                                                                                          \
+  (const unsigned char[]) { 2, 2, 2, 3, 3 }
 
 /// Horizontal codes preset for English Alphabet content only
-#define USX_HCODES_ALPHA_ONLY                                                                                                    \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x00, 0x00, 0x00, 0x00                                                                                             \
-    }
+#define USX_HCODES_ALPHA_ONLY                                                                                                                        \
+  (const unsigned char[]) { 0x00, 0x00, 0x00, 0x00, 0x00 }
 /// Length of each Alpha only hcode
-#define USX_HCODE_LENS_ALPHA_ONLY                                                                                                \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0, 0, 0, 0, 0                                                                                                            \
-    }
+#define USX_HCODE_LENS_ALPHA_ONLY                                                                                                                    \
+  (const unsigned char[]) { 0, 0, 0, 0, 0 }
 
 /// Horizontal codes preset for Alpha Numeric content only
-#define USX_HCODES_ALPHA_NUM_ONLY                                                                                                \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x00, 0x80, 0x00, 0x00                                                                                             \
-    }
+#define USX_HCODES_ALPHA_NUM_ONLY                                                                                                                    \
+  (const unsigned char[]) { 0x00, 0x00, 0x80, 0x00, 0x00 }
 /// Length of each Alpha numeric hcode
-#define USX_HCODE_LENS_ALPHA_NUM_ONLY                                                                                            \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        1, 0, 1, 0, 0                                                                                                            \
-    }
+#define USX_HCODE_LENS_ALPHA_NUM_ONLY                                                                                                                \
+  (const unsigned char[]) { 1, 0, 1, 0, 0 }
 
 /// Horizontal codes preset for Alpha Numeric and Symbol content only
-#define USX_HCODES_ALPHA_NUM_SYM_ONLY                                                                                            \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x80, 0xC0, 0x00, 0x00                                                                                             \
-    }
+#define USX_HCODES_ALPHA_NUM_SYM_ONLY                                                                                                                \
+  (const unsigned char[]) { 0x00, 0x80, 0xC0, 0x00, 0x00 }
 /// Length of each Alpha numeric and symbol hcodes
-#define USX_HCODE_LENS_ALPHA_NUM_SYM_ONLY                                                                                        \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        1, 2, 2, 0, 0                                                                                                            \
-    }
+#define USX_HCODE_LENS_ALPHA_NUM_SYM_ONLY                                                                                                            \
+  (const unsigned char[]) { 1, 2, 2, 0, 0 }
 
 /// Horizontal codes preset favouring Alphabet content
-#define USX_HCODES_FAVOR_ALPHA                                                                                                   \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x80, 0xA0, 0xC0, 0xE0                                                                                             \
-    }
+#define USX_HCODES_FAVOR_ALPHA                                                                                                                       \
+  (const unsigned char[]) { 0x00, 0x80, 0xA0, 0xC0, 0xE0 }
 /// Length of each hcode favouring Alpha content
-#define USX_HCODE_LENS_FAVOR_ALPHA                                                                                               \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        1, 3, 3, 3, 3                                                                                                            \
-    }
+#define USX_HCODE_LENS_FAVOR_ALPHA                                                                                                                   \
+  (const unsigned char[]) { 1, 3, 3, 3, 3 }
 
 /// Horizontal codes preset favouring repeating sequences
-#define USX_HCODES_FAVOR_DICT                                                                                                    \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x40, 0xC0, 0x80, 0xE0                                                                                             \
-    }
+#define USX_HCODES_FAVOR_DICT                                                                                                                        \
+  (const unsigned char[]) { 0x00, 0x40, 0xC0, 0x80, 0xE0 }
 /// Length of each hcode favouring repeating sequences
-#define USX_HCODE_LENS_FAVOR_DICT                                                                                                \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        2, 2, 3, 2, 3                                                                                                            \
-    }
+#define USX_HCODE_LENS_FAVOR_DICT                                                                                                                    \
+  (const unsigned char[]) { 2, 2, 3, 2, 3 }
 
 /// Horizontal codes preset favouring symbols
-#define USX_HCODES_FAVOR_SYM                                                                                                     \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x80, 0x00, 0xA0, 0xC0, 0xE0                                                                                             \
-    }
+#define USX_HCODES_FAVOR_SYM                                                                                                                         \
+  (const unsigned char[]) { 0x80, 0x00, 0xA0, 0xC0, 0xE0 }
 /// Length of each hcode favouring symbols
-#define USX_HCODE_LENS_FAVOR_SYM                                                                                                 \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        3, 1, 3, 3, 3                                                                                                            \
-    }
+#define USX_HCODE_LENS_FAVOR_SYM                                                                                                                     \
+  (const unsigned char[]) { 3, 1, 3, 3, 3 }
 
 // #define USX_HCODES_FAVOR_UMLAUT {0x00, 0x40, 0xE0, 0xC0, 0x80}
 // #define USX_HCODE_LENS_FAVOR_UMLAUT {2, 2, 3, 3, 2}
 
 /// Horizontal codes preset favouring umlaut letters
-#define USX_HCODES_FAVOR_UMLAUT                                                                                                  \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x80, 0xA0, 0xC0, 0xE0, 0x00                                                                                             \
-    }
+#define USX_HCODES_FAVOR_UMLAUT                                                                                                                      \
+  (const unsigned char[]) { 0x80, 0xA0, 0xC0, 0xE0, 0x00 }
 /// Length of each hcode favouring umlaut letters
-#define USX_HCODE_LENS_FAVOR_UMLAUT                                                                                              \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        3, 3, 3, 3, 1                                                                                                            \
-    }
+#define USX_HCODE_LENS_FAVOR_UMLAUT                                                                                                                  \
+  (const unsigned char[]) { 3, 3, 3, 3, 1 }
 
 /// Horizontal codes preset for no repeating sequences
-#define USX_HCODES_NO_DICT                                                                                                       \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x40, 0x80, 0x00, 0xC0                                                                                             \
-    }
+#define USX_HCODES_NO_DICT                                                                                                                           \
+  (const unsigned char[]) { 0x00, 0x40, 0x80, 0x00, 0xC0 }
 /// Length of each hcode for no repeating sequences
-#define USX_HCODE_LENS_NO_DICT                                                                                                   \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        2, 2, 2, 0, 2                                                                                                            \
-    }
+#define USX_HCODE_LENS_NO_DICT                                                                                                                       \
+  (const unsigned char[]) { 2, 2, 2, 0, 2 }
 
 /// Horizontal codes preset for no Unicode characters
-#define USX_HCODES_NO_UNI                                                                                                        \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        0x00, 0x40, 0x80, 0xC0, 0x00                                                                                             \
-    }
+#define USX_HCODES_NO_UNI                                                                                                                            \
+  (const unsigned char[]) { 0x00, 0x40, 0x80, 0xC0, 0x00 }
 /// Length of each hcode for no Unicode characters
-#define USX_HCODE_LENS_NO_UNI                                                                                                    \
-    (const unsigned char[])                                                                                                      \
-    {                                                                                                                            \
-        2, 2, 2, 2, 0                                                                                                            \
-    }
+#define USX_HCODE_LENS_NO_UNI                                                                                                                        \
+  (const unsigned char[]) { 2, 2, 2, 2, 0 }
 
 extern const char *USX_FREQ_SEQ_DFLT[];
 extern const char *USX_FREQ_SEQ_TXT[];
@@ -201,19 +141,17 @@ extern const char *USX_FREQ_SEQ_HTML[];
 extern const char *USX_FREQ_SEQ_XML[];
 extern const char *USX_TEMPLATES[];
 
-/// Default preset parameter set. When composition of text is know beforehand, the other parameter sets in this section can be
-/// used to achieve more compression.
+/// Default preset parameter set. When composition of text is know beforehand, the other parameter sets in this section
+/// can be used to achieve more compression.
 #define USX_PSET_DFLT USX_HCODES_DFLT, USX_HCODE_LENS_DFLT, USX_FREQ_SEQ_DFLT, USX_TEMPLATES
 /// Preset parameter set for English Alphabet only content
 #define USX_PSET_ALPHA_ONLY USX_HCODES_ALPHA_ONLY, USX_HCODE_LENS_ALPHA_ONLY, USX_FREQ_SEQ_TXT, USX_TEMPLATES
 /// Preset parameter set for Alpha numeric content
 #define USX_PSET_ALPHA_NUM_ONLY USX_HCODES_ALPHA_NUM_ONLY, USX_HCODE_LENS_ALPHA_NUM_ONLY, USX_FREQ_SEQ_TXT, USX_TEMPLATES
 /// Preset parameter set for Alpha numeric and symbol content
-#define USX_PSET_ALPHA_NUM_SYM_ONLY                                                                                              \
-    USX_HCODES_ALPHA_NUM_SYM_ONLY, USX_HCODE_LENS_ALPHA_NUM_SYM_ONLY, USX_FREQ_SEQ_DFLT, USX_TEMPLATES
+#define USX_PSET_ALPHA_NUM_SYM_ONLY USX_HCODES_ALPHA_NUM_SYM_ONLY, USX_HCODE_LENS_ALPHA_NUM_SYM_ONLY, USX_FREQ_SEQ_DFLT, USX_TEMPLATES
 /// Preset parameter set for Alpha numeric symbol content having predominantly text
-#define USX_PSET_ALPHA_NUM_SYM_ONLY_TXT                                                                                          \
-    USX_HCODES_ALPHA_NUM_SYM_ONLY, USX_HCODE_LENS_ALPHA_NUM_SYM_ONLY, USX_FREQ_SEQ_DFLT, USX_TEMPLATES
+#define USX_PSET_ALPHA_NUM_SYM_ONLY_TXT USX_HCODES_ALPHA_NUM_SYM_ONLY, USX_HCODE_LENS_ALPHA_NUM_SYM_ONLY, USX_FREQ_SEQ_DFLT, USX_TEMPLATES
 /// Preset parameter set favouring Alphabet content
 #define USX_PSET_FAVOR_ALPHA USX_HCODES_FAVOR_ALPHA, USX_HCODE_LENS_FAVOR_ALPHA, USX_FREQ_SEQ_TXT, USX_TEMPLATES
 /// Preset parameter set favouring repeating sequences
@@ -244,8 +182,8 @@ extern const char *USX_TEMPLATES[];
  * This is passed as a parameter to the unishox2_decompress_lines() function
  */
 struct us_lnk_lst {
-    char *data;
-    struct us_lnk_lst *previous;
+  char *data;
+  struct us_lnk_lst *previous;
 };
 
 /**
@@ -294,9 +232,8 @@ extern int unishox2_decompress_simple(const char *in, int len, char *out);
  * @param[in] usx_freq_seq   Frequently occurring sequences. See USX_FREQ_SEQ_* macros for samples
  * @param[in] usx_templates  Templates of frequently occurring patterns. See USX_TEMPLATES macro.
  */
-extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
-                             const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[], const char *usx_freq_seq[],
-                             const char *usx_templates[]);
+extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen), const unsigned char usx_hcodes[],
+                             const unsigned char usx_hcode_lens[], const char *usx_freq_seq[], const char *usx_templates[]);
 /**
  * Comprehensive API for de-compressing a string
  *
@@ -313,9 +250,8 @@ extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(ch
  * @param[in] usx_freq_seq   Frequently occurring sequences. See USX_FREQ_SEQ_* macros for samples
  * @param[in] usx_templates  Templates of frequently occurring patterns. See USX_TEMPLATES macro.
  */
-extern int unishox2_decompress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
-                               const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[], const char *usx_freq_seq[],
-                               const char *usx_templates[]);
+extern int unishox2_decompress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen), const unsigned char usx_hcodes[],
+                               const unsigned char usx_hcode_lens[], const char *usx_freq_seq[], const char *usx_templates[]);
 /**
  * More Comprehensive API for compressing array of strings
  *
@@ -326,9 +262,9 @@ extern int unishox2_decompress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(
  * and stored in a compressed array of bytes for use as a constant in other programs \n
  * where each element of the array can be decompressed and used at runtime.
  */
-extern int unishox2_compress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
-                                   const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[],
-                                   const char *usx_freq_seq[], const char *usx_templates[], struct us_lnk_lst *prev_lines);
+extern int unishox2_compress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen), const unsigned char usx_hcodes[],
+                                   const unsigned char usx_hcode_lens[], const char *usx_freq_seq[], const char *usx_templates[],
+                                   struct us_lnk_lst *prev_lines);
 /**
  * More Comprehensive API for de-compressing array of strings \n
  * This function is not be used in conjuction with unishox2_compress_lines()
@@ -340,8 +276,8 @@ extern int unishox2_compress_lines(const char *in, int len, UNISHOX_API_OUT_AND_
  * routine which takes this compressed array as parameter and index to be \n
  * decompressed.
  */
-extern int unishox2_decompress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
-                                     const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[],
-                                     const char *usx_freq_seq[], const char *usx_templates[], struct us_lnk_lst *prev_lines);
+extern int unishox2_decompress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen), const unsigned char usx_hcodes[],
+                                     const unsigned char usx_hcode_lens[], const char *usx_freq_seq[], const char *usx_templates[],
+                                     struct us_lnk_lst *prev_lines);
 
 #endif

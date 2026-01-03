@@ -181,11 +181,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
 // IO1 is hooked to PPS (pin 12 on header) = gpio 17
-// IO2 is hooked to GPS RESET = gpio 34, but it can not be used to this because IO2 is ALSO used to control 3V3_S power (1 is on).
-// Therefore must be 1 to keep peripherals powered
-// Power is on the controllable 3V3_S rail
-// #define PIN_GPS_RESET (34)
-// #define PIN_GPS_EN PIN_3V3_EN
+// IO2 is hooked to GPS RESET = gpio 34, but it can not be used to this because IO2 is ALSO used to control 3V3_S power
+// (1 is on). Therefore must be 1 to keep peripherals powered Power is on the controllable 3V3_S rail #define
+// PIN_GPS_RESET (34) #define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX

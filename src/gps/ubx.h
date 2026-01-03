@@ -1,13 +1,13 @@
 static const char *failMessage = "Unable to %s";
 
-#define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
-    do {                                                                                                                         \
-        msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                    \
-        _serial_gps->write(UBXscratch, msglen);                                                                                  \
-        if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                     \
-            LOG_WARN(failMessage, #ERRMSG);                                                                                      \
-        }                                                                                                                        \
-    } while (0)
+#define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                                             \
+  do {                                                                                                                                               \
+    msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                                            \
+    _serial_gps->write(UBXscratch, msglen);                                                                                                          \
+    if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                                             \
+      LOG_WARN(failMessage, #ERRMSG);                                                                                                                \
+    }                                                                                                                                                \
+  } while (0)
 
 // Power Management
 
@@ -337,8 +337,8 @@ static const uint8_t _message_SAVE_10[] = {
 // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
 // BBR will survive a restart, and power off for a while, but modules with small backup
 // batteries or super caps will not retain the config for a long power off time.
-// for all configurations using sleep / low power modes, V_BCKP needs to be hooked to permanent power for fast aquisition after
-// sleep
+// for all configurations using sleep / low power modes, V_BCKP needs to be hooked to permanent power for fast
+// aquisition after sleep
 
 // VALSET Commands for M10
 // Please refer to the M10 Protocol Specification:
@@ -370,11 +370,13 @@ EXTINTACTIVITY U4 0 no ext ints
 LIMITPEAKCURRENT L 1
 
 // Ram layer config message:
-// b5 62 06 8a 26 00 00 01 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
+// b5 62 06 8a 26 00 00 01 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01
+10 00 d0
 // 10 01 8b de
 
 // BBR layer config message:
-// b5 62 06 8a 26 00 00 02 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
+// b5 62 06 8a 26 00 00 02 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01
+10 00 d0
 // 10 01 8c 03
 */
 static const uint8_t _message_VALSET_PM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
@@ -396,21 +398,21 @@ CFG-ITFM replaced by 5 valset messages which can be combined into one for RAM an
 
 b5 62 06 8a 0e 00 00 01 00 00 0d 00 41 10 01 13 00 41 10 01 63 c6
 */
-static const uint8_t _message_VALSET_ITFM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x0d, 0x00, 0x41,
-                                                   0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
-static const uint8_t _message_VALSET_ITFM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x0d, 0x00, 0x41,
-                                                   0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
+static const uint8_t _message_VALSET_ITFM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x0d, 0x00, 0x41, 0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
+static const uint8_t _message_VALSET_ITFM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x0d, 0x00, 0x41, 0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
 
 // Turn off all NMEA messages:
 // Ram layer config message:
-// b5 62 06 8a 22 00 00 01 00 00 c0 00 91 20 00 ca 00 91 20 00 c5 00 91 20 00 ac 00 91 20 00 b1 00 91 20 00 bb 00 91 20 00 40 8f
+// b5 62 06 8a 22 00 00 01 00 00 c0 00 91 20 00 ca 00 91 20 00 c5 00 91 20 00 ac 00 91 20 00 b1 00 91 20 00 bb 00 91 20
+// 00 40 8f
 
 // Disable GLL, GSV, VTG messages in BBR layer
 // BBR layer config message:
 // b5 62 06 8a 13 00 00 02 00 00 ca 00 91 20 00 c5 00 91 20 00 b1 00 91 20 00 f8 4e
 
 static const uint8_t _message_VALSET_DISABLE_NMEA_RAM[] = {
-    /*0x00, 0x01, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00 */
+    /*0x00, 0x01, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00
+     */
     0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91,
     0x20, 0x00, 0xac, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00, 0xbb, 0x00, 0x91, 0x20, 0x00};
 
@@ -437,14 +439,10 @@ static const uint8_t _message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x0
 static const uint8_t _message_VALSET_DISABLE_TXT_INFO_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
 static const uint8_t _message_VALSET_DISABLE_TXT_INFO_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
 
-static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xbb, 0x00, 0x91,
-                                                          0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
-static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xbb, 0x00, 0x91,
-                                                          0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
-static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31,
-                                                           0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
-static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31,
-                                                           0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xbb, 0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xbb, 0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31, 0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31, 0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
 
 /*
 Operational issues with the M10:

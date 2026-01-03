@@ -8,15 +8,14 @@
 
 #include <Adafruit_MPU6050.h>
 
-class MPU6050Sensor : public MotionSensor
-{
-  private:
-    Adafruit_MPU6050 sensor;
+class MPU6050Sensor : public MotionSensor {
+private:
+  Adafruit_MPU6050 sensor;
 
-  public:
-    explicit MPU6050Sensor(ScanI2C::FoundDevice foundDevice);
-    virtual bool init() override;
-    virtual int32_t runOnce() override;
+public:
+  explicit MPU6050Sensor(ScanI2C::FoundDevice foundDevice);
+  virtual bool init() override;
+  virtual int32_t runOnce() override;
 };
 
 #endif

@@ -21,10 +21,10 @@
  * internally and must not be accessed by the application.
  */
 typedef struct {
-    float filterCoefficient;
-    unsigned int timeout;
-    unsigned int timer;
-    FusionVector gyroscopeOffset;
+  float filterCoefficient;
+  unsigned int timeout;
+  unsigned int timer;
+  FusionVector gyroscopeOffset;
 } FusionOffset;
 
 //------------------------------------------------------------------------------

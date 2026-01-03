@@ -12,149 +12,145 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
-RTCQuality getRTCQuality()
-{
-    return currentQuality;
-}
+RTCQuality getRTCQuality() { return currentQuality; }
 
 // stuff that really should be in in the instance instead...
-static uint32_t
-    timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
+static uint32_t timeStartMsec;  // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds
+                                // to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
 /**
  * Reads the current date and time from the RTC module and updates the system time.
  * @return True if the RTC was successfully read and the system time was updated, false otherwise.
  */
-RTCSetResult readFromRTC()
-{
-    struct timeval tv; /* btw settimeofday() is helpful here too*/
+RTCSetResult readFromRTC() {
+  struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
-    if (rtc_found.address == RV3028_RTC) {
-        uint32_t now = millis();
-        Melopero_RV3028 rtc;
+  if (rtc_found.address == RV3028_RTC) {
+    uint32_t now = millis();
+    Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
-        rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+    rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-        rtc.initI2C();
+    rtc.initI2C();
 #endif
-        tm t;
-        t.tm_year = rtc.getYear() - 1900;
-        t.tm_mon = rtc.getMonth() - 1;
-        t.tm_mday = rtc.getDate();
-        t.tm_hour = rtc.getHour();
-        t.tm_min = rtc.getMinute();
-        t.tm_sec = rtc.getSecond();
-        tv.tv_sec = gm_mktime(&t);
-        tv.tv_usec = 0;
-        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+    tm t;
+    t.tm_year = rtc.getYear() - 1900;
+    t.tm_mon = rtc.getMonth() - 1;
+    t.tm_mday = rtc.getDate();
+    t.tm_hour = rtc.getHour();
+    t.tm_min = rtc.getMinute();
+    t.tm_sec = rtc.getSecond();
+    tv.tv_sec = gm_mktime(&t);
+    tv.tv_usec = 0;
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
 #ifdef BUILD_EPOCH
-        if (tv.tv_sec < BUILD_EPOCH) {
-            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-            }
-            return RTCSetResultInvalidTime;
-        }
+    if (tv.tv_sec < BUILD_EPOCH) {
+      if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+      }
+      return RTCSetResultInvalidTime;
+    }
 #endif
 
-        LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
-                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        if (currentQuality == RTCQualityNone) {
-            timeStartMsec = now;
-            zeroOffsetSecs = tv.tv_sec;
-            currentQuality = RTCQualityDevice;
-        }
-        return RTCSetResultSuccess;
-    } else {
-        LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
+    LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
+              t.tm_min, t.tm_sec, printableEpoch);
+    if (currentQuality == RTCQualityNone) {
+      timeStartMsec = now;
+      zeroOffsetSecs = tv.tv_sec;
+      currentQuality = RTCQualityDevice;
     }
+    return RTCSetResultSuccess;
+  } else {
+    LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
+  }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
-    if (rtc_found.address == PCF8563_RTC) {
+  if (rtc_found.address == PCF8563_RTC) {
 #elif defined(PCF85063_RTC)
-    if (rtc_found.address == PCF85063_RTC) {
+  if (rtc_found.address == PCF85063_RTC) {
 #endif
-        uint32_t now = millis();
-        SensorRtcHelper rtc;
+    uint32_t now = millis();
+    SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
-        rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+    rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-        rtc.begin(Wire);
+    rtc.begin(Wire);
 #endif
 
-        RTC_DateTime datetime = rtc.getDateTime();
-        tm t = datetime.toUnixTime();
-        tv.tv_sec = gm_mktime(&t);
-        tv.tv_usec = 0;
-        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+    RTC_DateTime datetime = rtc.getDateTime();
+    tm t = datetime.toUnixTime();
+    tv.tv_sec = gm_mktime(&t);
+    tv.tv_usec = 0;
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
 #ifdef BUILD_EPOCH
-        if (tv.tv_sec < BUILD_EPOCH) {
-            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-                lastTimeValidationWarning = millis();
-            }
-            return RTCSetResultInvalidTime;
-        }
+    if (tv.tv_sec < BUILD_EPOCH) {
+      if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        lastTimeValidationWarning = millis();
+      }
+      return RTCSetResultInvalidTime;
+    }
 #endif
 
-        LOG_DEBUG("Read RTC time from %s getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
-                  t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        if (currentQuality == RTCQualityNone) {
-            timeStartMsec = now;
-            zeroOffsetSecs = tv.tv_sec;
-            currentQuality = RTCQualityDevice;
-        }
-        return RTCSetResultSuccess;
-    } else {
-        LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
+    LOG_DEBUG("Read RTC time from %s getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900, t.tm_mon + 1,
+              t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+    if (currentQuality == RTCQualityNone) {
+      timeStartMsec = now;
+      zeroOffsetSecs = tv.tv_sec;
+      currentQuality = RTCQualityDevice;
     }
+    return RTCSetResultSuccess;
+  } else {
+    LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
+  }
 #elif defined(RX8130CE_RTC)
-    if (rtc_found.address == RX8130CE_RTC) {
-        uint32_t now = millis();
+  if (rtc_found.address == RX8130CE_RTC) {
+    uint32_t now = millis();
 #ifdef MUZI_BASE
-        ArtronShop_RX8130CE rtc(&Wire1);
+    ArtronShop_RX8130CE rtc(&Wire1);
 #else
-        ArtronShop_RX8130CE rtc(&Wire);
+    ArtronShop_RX8130CE rtc(&Wire);
 #endif
-        tm t;
-        if (rtc.getTime(&t)) {
-            tv.tv_sec = gm_mktime(&t);
-            tv.tv_usec = 0;
+    tm t;
+    if (rtc.getTime(&t)) {
+      tv.tv_sec = gm_mktime(&t);
+      tv.tv_usec = 0;
 
-            uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-            LOG_DEBUG("Read RTC time from RX8130CE getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900,
-                      t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+      uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+      LOG_DEBUG("Read RTC time from RX8130CE getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
 #ifdef BUILD_EPOCH
-            if (tv.tv_sec < BUILD_EPOCH) {
-                if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-                    lastTimeValidationWarning = millis();
-                }
-                return RTCSetResultInvalidTime;
-            }
-#endif
-            if (currentQuality == RTCQualityNone) {
-                timeStartMsec = now;
-                zeroOffsetSecs = tv.tv_sec;
-                currentQuality = RTCQualityDevice;
-            }
-            return RTCSetResultSuccess;
+      if (tv.tv_sec < BUILD_EPOCH) {
+        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+          LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+          lastTimeValidationWarning = millis();
         }
-    }
-#else
-    if (!gettimeofday(&tv, NULL)) {
-        uint32_t now = millis();
-        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-        LOG_DEBUG("Read RTC time as %ld", printableEpoch);
+        return RTCSetResultInvalidTime;
+      }
+#endif
+      if (currentQuality == RTCQualityNone) {
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
-        return RTCSetResultSuccess;
+        currentQuality = RTCQualityDevice;
+      }
+      return RTCSetResultSuccess;
     }
+  }
+#else
+  if (!gettimeofday(&tv, NULL)) {
+    uint32_t now = millis();
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+    LOG_DEBUG("Read RTC time as %ld", printableEpoch);
+    timeStartMsec = now;
+    zeroOffsetSecs = tv.tv_sec;
+    return RTCSetResultSuccess;
+  }
 #endif
-    return RTCSetResultNotSet;
+  return RTCSetResultNotSet;
 }
 
 /**
@@ -166,143 +162,140 @@ RTCSetResult readFromRTC()
  *
  * If we haven't yet set our RTC this boot, set it from a GPS derived time
  */
-RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
-{
-    static uint32_t lastSetMsec = 0;
-    uint32_t now = millis();
-    uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate) {
+  static uint32_t lastSetMsec = 0;
+  uint32_t now = millis();
+  uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
-    if (tv->tv_sec < BUILD_EPOCH) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-            lastTimeValidationWarning = millis();
-        }
-        return RTCSetResultInvalidTime;
-    } else if ((uint64_t)tv->tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            // Calculate max allowed time safely to avoid overflow in logging
-            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
-            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
-                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
-            lastTimeValidationWarning = millis();
-        }
-        return RTCSetResultInvalidTime;
+  if (tv->tv_sec < BUILD_EPOCH) {
+    if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+      LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+      lastTimeValidationWarning = millis();
     }
+    return RTCSetResultInvalidTime;
+  } else if ((uint64_t)tv->tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+    if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+      // Calculate max allowed time safely to avoid overflow in logging
+      uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
+      uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
+      LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, (uint32_t)BUILD_EPOCH,
+               maxAllowedPrintable);
+      lastTimeValidationWarning = millis();
+    }
+    return RTCSetResultInvalidTime;
+  }
 #endif
 
-    bool shouldSet;
-    if (forceUpdate) {
-        shouldSet = true;
-        LOG_DEBUG("Override current RTC quality (%s) with incoming time of RTC quality of %s", RtcName(currentQuality),
-                  RtcName(q));
-    } else if (q > currentQuality) {
-        shouldSet = true;
-        LOG_DEBUG("Upgrade time to quality %s", RtcName(q));
-    } else if (q == RTCQualityGPS) {
-        shouldSet = true;
-        LOG_DEBUG("Reapply GPS time: %ld secs", printableEpoch);
-    } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL))) {
-        // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
-        shouldSet = true;
-        LOG_DEBUG("Reapply external time to correct clock drift %ld secs", printableEpoch);
-    } else {
-        shouldSet = false;
-        LOG_DEBUG("Current RTC quality: %s. Ignore time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
+  bool shouldSet;
+  if (forceUpdate) {
+    shouldSet = true;
+    LOG_DEBUG("Override current RTC quality (%s) with incoming time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
+  } else if (q > currentQuality) {
+    shouldSet = true;
+    LOG_DEBUG("Upgrade time to quality %s", RtcName(q));
+  } else if (q == RTCQualityGPS) {
+    shouldSet = true;
+    LOG_DEBUG("Reapply GPS time: %ld secs", printableEpoch);
+  } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL))) {
+    // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
+    shouldSet = true;
+    LOG_DEBUG("Reapply external time to correct clock drift %ld secs", printableEpoch);
+  } else {
+    shouldSet = false;
+    LOG_DEBUG("Current RTC quality: %s. Ignore time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
+  }
+
+  if (shouldSet) {
+    currentQuality = q;
+    lastSetMsec = now;
+    if (currentQuality >= RTCQualityNTP) {
+      lastSetFromPhoneNtpOrGps = now;
     }
 
-    if (shouldSet) {
-        currentQuality = q;
-        lastSetMsec = now;
-        if (currentQuality >= RTCQualityNTP) {
-            lastSetFromPhoneNtpOrGps = now;
-        }
-
-        // This delta value works on all platforms
-        timeStartMsec = now;
-        zeroOffsetSecs = tv->tv_sec;
-        // If this platform has a setable RTC, set it
+    // This delta value works on all platforms
+    timeStartMsec = now;
+    zeroOffsetSecs = tv->tv_sec;
+    // If this platform has a setable RTC, set it
 #ifdef RV3028_RTC
-        if (rtc_found.address == RV3028_RTC) {
-            Melopero_RV3028 rtc;
+    if (rtc_found.address == RV3028_RTC) {
+      Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
-            rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+      rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-            rtc.initI2C();
+      rtc.initI2C();
 #endif
-            tm *t = gmtime(&tv->tv_sec);
-            rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
-        } else {
-            LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
-        }
+      tm *t = gmtime(&tv->tv_sec);
+      rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+      LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min,
+                t->tm_sec, printableEpoch);
+    } else {
+      LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
+    }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
-        if (rtc_found.address == PCF8563_RTC) {
+    if (rtc_found.address == PCF8563_RTC) {
 #elif defined(PCF85063_RTC)
-        if (rtc_found.address == PCF85063_RTC) {
+    if (rtc_found.address == PCF85063_RTC) {
 #endif
-            SensorRtcHelper rtc;
+      SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
-            rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+      rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-            rtc.begin(Wire);
+      rtc.begin(Wire);
 #endif
-            tm *t = gmtime(&tv->tv_sec);
-            rtc.setDateTime(*t);
-            LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1,
-                      t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
-        } else {
-            LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
-        }
-#elif defined(RX8130CE_RTC)
-        if (rtc_found.address == RX8130CE_RTC) {
-#ifdef MUZI_BASE
-            ArtronShop_RX8130CE rtc(&Wire1);
-#else
-            ArtronShop_RX8130CE rtc(&Wire);
-#endif
-            tm *t = gmtime(&tv->tv_sec);
-            if (rtc.setTime(*t)) {
-                LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
-                          t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
-            } else {
-                LOG_WARN("Failed to set time for RX8130CE");
-            }
-        }
-#elif defined(ARCH_ESP32)
-        settimeofday(tv, NULL);
-#endif
-
-        // nrf52 doesn't have a readable RTC (yet - software not written)
-#if HAS_RTC
-        readFromRTC();
-#endif
-
-        return RTCSetResultSuccess;
+      tm *t = gmtime(&tv->tv_sec);
+      rtc.setDateTime(*t);
+      LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour,
+                t->tm_min, t->tm_sec, printableEpoch);
     } else {
-        return RTCSetResultNotSet; // RTC was already set with a higher quality time
+      LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
     }
+#elif defined(RX8130CE_RTC)
+    if (rtc_found.address == RX8130CE_RTC) {
+#ifdef MUZI_BASE
+      ArtronShop_RX8130CE rtc(&Wire1);
+#else
+      ArtronShop_RX8130CE rtc(&Wire);
+#endif
+      tm *t = gmtime(&tv->tv_sec);
+      if (rtc.setTime(*t)) {
+        LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min,
+                  t->tm_sec, printableEpoch);
+      } else {
+        LOG_WARN("Failed to set time for RX8130CE");
+      }
+    }
+#elif defined(ARCH_ESP32)
+    settimeofday(tv, NULL);
+#endif
+
+    // nrf52 doesn't have a readable RTC (yet - software not written)
+#if HAS_RTC
+    readFromRTC();
+#endif
+
+    return RTCSetResultSuccess;
+  } else {
+    return RTCSetResultNotSet; // RTC was already set with a higher quality time
+  }
 }
 
-const char *RtcName(RTCQuality quality)
-{
-    switch (quality) {
-    case RTCQualityNone:
-        return "None";
-    case RTCQualityDevice:
-        return "Device";
-    case RTCQualityFromNet:
-        return "Net";
-    case RTCQualityNTP:
-        return "NTP";
-    case RTCQualityGPS:
-        return "GPS";
-    default:
-        return "Unknown";
-    }
+const char *RtcName(RTCQuality quality) {
+  switch (quality) {
+  case RTCQualityNone:
+    return "None";
+  case RTCQualityDevice:
+    return "Device";
+  case RTCQualityFromNet:
+    return "Net";
+  case RTCQualityNTP:
+    return "NTP";
+  case RTCQualityGPS:
+    return "GPS";
+  default:
+    return "Unknown";
+  }
 }
 
 /**
@@ -312,46 +305,45 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
-{
-    /* Convert to unix time
-    The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
-    (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-    */
-    // horrible hack to make mktime TZ agnostic - best practise according to
-    // https://www.gnu.org/software/libc/manual/html_node/Broken_002ddown-Time.html
-    time_t res = gm_mktime(&t);
-    struct timeval tv;
-    tv.tv_sec = res;
-    tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
-    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t) {
+  /* Convert to unix time
+  The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
+  1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+  */
+  // horrible hack to make mktime TZ agnostic - best practise according to
+  // https://www.gnu.org/software/libc/manual/html_node/Broken_002ddown-Time.html
+  time_t res = gm_mktime(&t);
+  struct timeval tv;
+  tv.tv_sec = res;
+  tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
+  uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
-    if (tv.tv_sec < BUILD_EPOCH) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            LOG_WARN("Ignore time (%lu) before build epoch (%lu)!", printableEpoch, BUILD_EPOCH);
-            lastTimeValidationWarning = millis();
-        }
-        return RTCSetResultInvalidTime;
-    } else if ((uint64_t)tv.tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
-        if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            // Calculate max allowed time safely to avoid overflow in logging
-            uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
-            uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%lu) too far in the future (build epoch: %lu, max allowed: %lu)!", printableEpoch,
-                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
-            lastTimeValidationWarning = millis();
-        }
-        return RTCSetResultInvalidTime;
+  if (tv.tv_sec < BUILD_EPOCH) {
+    if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+      LOG_WARN("Ignore time (%lu) before build epoch (%lu)!", printableEpoch, BUILD_EPOCH);
+      lastTimeValidationWarning = millis();
     }
+    return RTCSetResultInvalidTime;
+  } else if ((uint64_t)tv.tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+    if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+      // Calculate max allowed time safely to avoid overflow in logging
+      uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
+      uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
+      LOG_WARN("Ignore time (%lu) too far in the future (build epoch: %lu, max allowed: %lu)!", printableEpoch, (uint32_t)BUILD_EPOCH,
+               maxAllowedPrintable);
+      lastTimeValidationWarning = millis();
+    }
+    return RTCSetResultInvalidTime;
+  }
 #endif
 
-    // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
-    if (t.tm_year < 0 || t.tm_year >= 300) {
-        // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
-        return RTCSetResultInvalidTime;
-    } else {
-        return perhapsSetRTC(q, &tv);
-    }
+  // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
+  if (t.tm_year < 0 || t.tm_year >= 300) {
+    // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
+    return RTCSetResultInvalidTime;
+  } else {
+    return perhapsSetRTC(q, &tv);
+  }
 }
 
 /**
@@ -359,16 +351,15 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
  *
  * @return The timezone offset in seconds.
  */
-int32_t getTZOffset()
-{
+int32_t getTZOffset() {
 #if MESHTASTIC_EXCLUDE_TZ
-    return 0;
+  return 0;
 #else
-    time_t now = getTime(false);
-    struct tm *gmt;
-    gmt = gmtime(&now);
-    gmt->tm_isdst = -1;
-    return (int32_t)difftime(now, mktime(gmt));
+  time_t now = getTime(false);
+  struct tm *gmt;
+  gmt = gmtime(&now);
+  gmt->tm_isdst = -1;
+  return (int32_t)difftime(now, mktime(gmt));
 #endif
 }
 
@@ -377,13 +368,12 @@ int32_t getTZOffset()
  *
  * @return The current time in seconds since the Unix epoch.
  */
-uint32_t getTime(bool local)
-{
-    if (local) {
-        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
-    } else {
-        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
-    }
+uint32_t getTime(bool local) {
+  if (local) {
+    return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
+  } else {
+    return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+  }
 }
 
 /**
@@ -392,49 +382,45 @@ uint32_t getTime(bool local)
  * @param minQuality The minimum quality of the RTC time required for it to be considered valid.
  * @return The current time from the RTC if it meets the minimum quality requirement, or 0 if the time is not valid.
  */
-uint32_t getValidTime(RTCQuality minQuality, bool local)
-{
-    return (currentQuality >= minQuality) ? getTime(local) : 0;
-}
+uint32_t getValidTime(RTCQuality minQuality, bool local) { return (currentQuality >= minQuality) ? getTime(local) : 0; }
 
-time_t gm_mktime(struct tm *tm)
-{
+time_t gm_mktime(struct tm *tm) {
 #if !MESHTASTIC_EXCLUDE_TZ
-    time_t result = 0;
+  time_t result = 0;
 
-    // First, get us to the start of tm->year, by calcuating the number of days since the Unix epoch.
-    int year = 1900 + tm->tm_year; // tm_year is years since 1900
-    int year_minus_one = year - 1;
-    int days_before_this_year = 0;
-    days_before_this_year += year_minus_one * 365;
-    // leap days: every 4 years, except 100s, but including 400s.
-    days_before_this_year += year_minus_one / 4 - year_minus_one / 100 + year_minus_one / 400;
-    // subtract from 1970-01-01 to get days since epoch
-    days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
+  // First, get us to the start of tm->year, by calcuating the number of days since the Unix epoch.
+  int year = 1900 + tm->tm_year; // tm_year is years since 1900
+  int year_minus_one = year - 1;
+  int days_before_this_year = 0;
+  days_before_this_year += year_minus_one * 365;
+  // leap days: every 4 years, except 100s, but including 400s.
+  days_before_this_year += year_minus_one / 4 - year_minus_one / 100 + year_minus_one / 400;
+  // subtract from 1970-01-01 to get days since epoch
+  days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
 
-    // Now, within this tm->year, compute the days *before* this tm->month starts.
-    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
-    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
+  // Now, within this tm->year, compute the days *before* this tm->month starts.
+  int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+  int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
 
-    // If this is a leap year, and we're past February, add a day:
-    if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
-        days_this_year_before_this_month += 1;
-    }
+  // If this is a leap year, and we're past February, add a day:
+  if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
+    days_this_year_before_this_month += 1;
+  }
 
-    // And within this month:
-    int days_this_month_before_today = tm->tm_mday - 1; // tm->tm_mday is 1..31
+  // And within this month:
+  int days_this_month_before_today = tm->tm_mday - 1; // tm->tm_mday is 1..31
 
-    // Now combine them all together, and convert days to seconds:
-    result += (days_before_this_year + days_this_year_before_this_month + days_this_month_before_today);
-    result *= 86400L;
+  // Now combine them all together, and convert days to seconds:
+  result += (days_before_this_year + days_this_year_before_this_month + days_this_month_before_today);
+  result *= 86400L;
 
-    // Finally, add in the hours, minutes, and seconds of today:
-    result += tm->tm_hour * 3600;
-    result += tm->tm_min * 60;
-    result += tm->tm_sec;
+  // Finally, add in the hours, minutes, and seconds of today:
+  result += tm->tm_hour * 3600;
+  result += tm->tm_min * 60;
+  result += tm->tm_sec;
 
-    return result;
+  return result;
 #else
-    return mktime(tm);
+  return mktime(tm);
 #endif
 }

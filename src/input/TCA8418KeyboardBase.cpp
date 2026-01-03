@@ -32,346 +32,314 @@
 #define _TCA8418_REG_LCK_EC_KLEC_0 0x01   // Key event count bit 0
 
 TCA8418KeyboardBase::TCA8418KeyboardBase(uint8_t rows, uint8_t columns)
-    : rows(rows), columns(columns), state(Init), queue(""), m_wire(nullptr), m_addr(0), readCallback(nullptr),
-      writeCallback(nullptr)
-{
+    : rows(rows), columns(columns), state(Init), queue(""), m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr) {}
+
+void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire) {
+  m_addr = addr;
+  m_wire = wire;
+  m_wire->begin();
+  reset();
 }
 
-void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire)
-{
-    m_addr = addr;
-    m_wire = wire;
-    m_wire->begin();
-    reset();
+void TCA8418KeyboardBase::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr) {
+  m_addr = addr;
+  m_wire = nullptr;
+  writeCallback = w;
+  readCallback = r;
+  reset();
 }
 
-void TCA8418KeyboardBase::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
-{
-    m_addr = addr;
-    m_wire = nullptr;
-    writeCallback = w;
-    readCallback = r;
-    reset();
+void TCA8418KeyboardBase::reset() {
+  LOG_DEBUG("TCA8418 Reset");
+  //  GPIO
+  //  set default all GIO pins to INPUT
+  writeRegister(TCA8418_REG_GPIO_DIR_1, 0x00);
+  writeRegister(TCA8418_REG_GPIO_DIR_2, 0x00);
+  writeRegister(TCA8418_REG_GPIO_DIR_3, 0x00);
+
+  //  add all pins to key events
+  writeRegister(TCA8418_REG_GPI_EM_1, 0xFF);
+  writeRegister(TCA8418_REG_GPI_EM_2, 0xFF);
+  writeRegister(TCA8418_REG_GPI_EM_3, 0xFF);
+
+  //  set all pins to FALLING interrupts
+  writeRegister(TCA8418_REG_GPIO_INT_LVL_1, 0x00);
+  writeRegister(TCA8418_REG_GPIO_INT_LVL_2, 0x00);
+  writeRegister(TCA8418_REG_GPIO_INT_LVL_3, 0x00);
+
+  //  add all pins to interrupts
+  writeRegister(TCA8418_REG_GPIO_INT_EN_1, 0xFF);
+  writeRegister(TCA8418_REG_GPIO_INT_EN_2, 0xFF);
+  writeRegister(TCA8418_REG_GPIO_INT_EN_3, 0xFF);
+
+  // Set keyboard matrix size
+  matrix(rows, columns);
+  enableDebounce();
+  flush();
+  state = Idle;
 }
 
-void TCA8418KeyboardBase::reset()
-{
-    LOG_DEBUG("TCA8418 Reset");
-    //  GPIO
-    //  set default all GIO pins to INPUT
-    writeRegister(TCA8418_REG_GPIO_DIR_1, 0x00);
-    writeRegister(TCA8418_REG_GPIO_DIR_2, 0x00);
-    writeRegister(TCA8418_REG_GPIO_DIR_3, 0x00);
+bool TCA8418KeyboardBase::matrix(uint8_t rows, uint8_t columns) {
+  if (rows < 1 || rows > 8 || columns < 1 || columns > 10)
+    return false;
 
-    //  add all pins to key events
-    writeRegister(TCA8418_REG_GPI_EM_1, 0xFF);
-    writeRegister(TCA8418_REG_GPI_EM_2, 0xFF);
-    writeRegister(TCA8418_REG_GPI_EM_3, 0xFF);
+  // Setup the keypad matrix.
+  uint8_t mask = 0x00;
+  for (int r = 0; r < rows; r++) {
+    mask <<= 1;
+    mask |= 1;
+  }
+  writeRegister(TCA8418_REG_KP_GPIO_1, mask);
 
-    //  set all pins to FALLING interrupts
-    writeRegister(TCA8418_REG_GPIO_INT_LVL_1, 0x00);
-    writeRegister(TCA8418_REG_GPIO_INT_LVL_2, 0x00);
-    writeRegister(TCA8418_REG_GPIO_INT_LVL_3, 0x00);
+  mask = 0x00;
+  for (int c = 0; c < columns && c < 8; c++) {
+    mask <<= 1;
+    mask |= 1;
+  }
+  writeRegister(TCA8418_REG_KP_GPIO_2, mask);
 
-    //  add all pins to interrupts
-    writeRegister(TCA8418_REG_GPIO_INT_EN_1, 0xFF);
-    writeRegister(TCA8418_REG_GPIO_INT_EN_2, 0xFF);
-    writeRegister(TCA8418_REG_GPIO_INT_EN_3, 0xFF);
+  if (columns > 8) {
+    if (columns == 9)
+      mask = 0x01;
+    else
+      mask = 0x03;
+    writeRegister(TCA8418_REG_KP_GPIO_3, mask);
+  }
 
-    // Set keyboard matrix size
-    matrix(rows, columns);
-    enableDebounce();
-    flush();
-    state = Idle;
+  return true;
 }
 
-bool TCA8418KeyboardBase::matrix(uint8_t rows, uint8_t columns)
-{
-    if (rows < 1 || rows > 8 || columns < 1 || columns > 10)
-        return false;
-
-    // Setup the keypad matrix.
-    uint8_t mask = 0x00;
-    for (int r = 0; r < rows; r++) {
-        mask <<= 1;
-        mask |= 1;
-    }
-    writeRegister(TCA8418_REG_KP_GPIO_1, mask);
-
-    mask = 0x00;
-    for (int c = 0; c < columns && c < 8; c++) {
-        mask <<= 1;
-        mask |= 1;
-    }
-    writeRegister(TCA8418_REG_KP_GPIO_2, mask);
-
-    if (columns > 8) {
-        if (columns == 9)
-            mask = 0x01;
-        else
-            mask = 0x03;
-        writeRegister(TCA8418_REG_KP_GPIO_3, mask);
-    }
-
-    return true;
+uint8_t TCA8418KeyboardBase::keyCount() const {
+  uint8_t eventCount = readRegister(TCA8418_REG_KEY_LCK_EC);
+  eventCount &= 0x0F; //  lower 4 bits only
+  return eventCount;
 }
 
-uint8_t TCA8418KeyboardBase::keyCount() const
-{
-    uint8_t eventCount = readRegister(TCA8418_REG_KEY_LCK_EC);
-    eventCount &= 0x0F; //  lower 4 bits only
-    return eventCount;
+bool TCA8418KeyboardBase::hasEvent() const { return queue.length() > 0; }
+
+void TCA8418KeyboardBase::queueEvent(char next) {
+  if (next == NONE) {
+    return;
+  }
+  queue.concat(next);
 }
 
-bool TCA8418KeyboardBase::hasEvent() const
-{
-    return queue.length() > 0;
+char TCA8418KeyboardBase::dequeueEvent() {
+  if (queue.length() < 1) {
+    return NONE;
+  }
+  char next = queue.charAt(0);
+  queue.remove(0, 1);
+  return next;
 }
 
-void TCA8418KeyboardBase::queueEvent(char next)
-{
-    if (next == NONE) {
-        return;
-    }
-    queue.concat(next);
-}
-
-char TCA8418KeyboardBase::dequeueEvent()
-{
-    if (queue.length() < 1) {
-        return NONE;
-    }
-    char next = queue.charAt(0);
-    queue.remove(0, 1);
-    return next;
-}
-
-void TCA8418KeyboardBase::trigger()
-{
-    if (keyCount() == 0) {
-        return;
-    }
-    if (state != Init) {
-        // Read the key register
-        uint8_t k = readRegister(TCA8418_REG_KEY_EVENT_A);
-        uint8_t key = k & 0x7F;
-        if (k & 0x80) {
-            if (state == Idle)
-                pressed(key);
-            return;
-        } else {
-            if (state == Held) {
-                released();
-            }
-            state = Idle;
-            return;
-        }
+void TCA8418KeyboardBase::trigger() {
+  if (keyCount() == 0) {
+    return;
+  }
+  if (state != Init) {
+    // Read the key register
+    uint8_t k = readRegister(TCA8418_REG_KEY_EVENT_A);
+    uint8_t key = k & 0x7F;
+    if (k & 0x80) {
+      if (state == Idle)
+        pressed(key);
+      return;
     } else {
-        reset();
+      if (state == Held) {
+        released();
+      }
+      state = Idle;
+      return;
     }
+  } else {
+    reset();
+  }
 }
 
-void TCA8418KeyboardBase::pressed(uint8_t key)
-{
-    // must be defined in derived class
-    LOG_ERROR("pressed() not implemented in derived class");
+void TCA8418KeyboardBase::pressed(uint8_t key) {
+  // must be defined in derived class
+  LOG_ERROR("pressed() not implemented in derived class");
 }
 
-void TCA8418KeyboardBase::released()
-{
-    // must be defined in derived class
-    LOG_ERROR("released() not implemented in derived class");
+void TCA8418KeyboardBase::released() {
+  // must be defined in derived class
+  LOG_ERROR("released() not implemented in derived class");
 }
 
-uint8_t TCA8418KeyboardBase::flush()
-{
-    // Flush key events
-    uint8_t count = 0;
-    while (readRegister(TCA8418_REG_KEY_EVENT_A) != 0)
-        count++;
+uint8_t TCA8418KeyboardBase::flush() {
+  // Flush key events
+  uint8_t count = 0;
+  while (readRegister(TCA8418_REG_KEY_EVENT_A) != 0)
+    count++;
 
-    // Flush gpio events
-    readRegister(TCA8418_REG_GPIO_INT_STAT_1);
-    readRegister(TCA8418_REG_GPIO_INT_STAT_2);
-    readRegister(TCA8418_REG_GPIO_INT_STAT_3);
+  // Flush gpio events
+  readRegister(TCA8418_REG_GPIO_INT_STAT_1);
+  readRegister(TCA8418_REG_GPIO_INT_STAT_2);
+  readRegister(TCA8418_REG_GPIO_INT_STAT_3);
 
-    // Clear INT_STAT register
-    writeRegister(TCA8418_REG_INT_STAT, 3);
-    return count;
+  // Clear INT_STAT register
+  writeRegister(TCA8418_REG_INT_STAT, 3);
+  return count;
 }
 
-void TCA8418KeyboardBase::clearInt()
-{
-    writeRegister(TCA8418_REG_INT_STAT, 3);
+void TCA8418KeyboardBase::clearInt() { writeRegister(TCA8418_REG_INT_STAT, 3); }
+
+uint8_t TCA8418KeyboardBase::digitalRead(uint8_t pinnum) const {
+  if (pinnum > TCA8418_COL9)
+    return 0xFF;
+
+  uint8_t reg = TCA8418_REG_GPIO_DAT_STAT_1 + pinnum / 8;
+  uint8_t mask = (1 << (pinnum % 8));
+
+  // Level  0 = low  other = high
+  uint8_t value = readRegister(reg);
+  if (value & mask)
+    return HIGH;
+  return LOW;
 }
 
-uint8_t TCA8418KeyboardBase::digitalRead(uint8_t pinnum) const
-{
-    if (pinnum > TCA8418_COL9)
-        return 0xFF;
+bool TCA8418KeyboardBase::digitalWrite(uint8_t pinnum, uint8_t level) {
+  if (pinnum > TCA8418_COL9)
+    return false;
 
-    uint8_t reg = TCA8418_REG_GPIO_DAT_STAT_1 + pinnum / 8;
-    uint8_t mask = (1 << (pinnum % 8));
+  uint8_t reg = TCA8418_REG_GPIO_DAT_OUT_1 + pinnum / 8;
+  uint8_t mask = (1 << (pinnum % 8));
 
-    // Level  0 = low  other = high
-    uint8_t value = readRegister(reg);
-    if (value & mask)
-        return HIGH;
-    return LOW;
-}
-
-bool TCA8418KeyboardBase::digitalWrite(uint8_t pinnum, uint8_t level)
-{
-    if (pinnum > TCA8418_COL9)
-        return false;
-
-    uint8_t reg = TCA8418_REG_GPIO_DAT_OUT_1 + pinnum / 8;
-    uint8_t mask = (1 << (pinnum % 8));
-
-    // Level  0 = low  other = high
-    uint8_t value = readRegister(reg);
-    if (level == LOW)
-        value &= ~mask;
-    else
-        value |= mask;
-    writeRegister(reg, value);
-    return true;
-}
-
-bool TCA8418KeyboardBase::pinMode(uint8_t pinnum, uint8_t mode)
-{
-    if (pinnum > TCA8418_COL9)
-        return false;
-
-    uint8_t idx = pinnum / 8;
-    uint8_t reg = TCA8418_REG_GPIO_DIR_1 + idx;
-    uint8_t mask = (1 << (pinnum % 8));
-
-    // Mode  0 = input   1 = output
-    uint8_t value = readRegister(reg);
-    if (mode == OUTPUT)
-        value |= mask;
-    else
-        value &= ~mask;
-    writeRegister(reg, value);
-
-    // Pullup  0 = enabled   1 = disabled
-    reg = TCA8418_REG_GPIO_PULL_1 + idx;
-    value = readRegister(reg);
-    if (mode == INPUT_PULLUP)
-        value &= ~mask;
-    else
-        value |= mask;
-    writeRegister(reg, value);
-
-    return true;
-}
-
-bool TCA8418KeyboardBase::pinIRQMode(uint8_t pinnum, uint8_t mode)
-{
-    if (pinnum > TCA8418_COL9)
-        return false;
-    if ((mode != RISING) && (mode != FALLING))
-        return false;
-
-    //  Mode  0 = falling   1 = rising
-    uint8_t idx = pinnum / 8;
-    uint8_t reg = TCA8418_REG_GPIO_INT_LVL_1 + idx;
-    uint8_t mask = (1 << (pinnum % 8));
-
-    uint8_t value = readRegister(reg);
-    if (mode == RISING)
-        value |= mask;
-    else
-        value &= ~mask;
-    writeRegister(reg, value);
-
-    // Enable interrupt
-    reg = TCA8418_REG_GPIO_INT_EN_1 + idx;
-    value = readRegister(reg);
+  // Level  0 = low  other = high
+  uint8_t value = readRegister(reg);
+  if (level == LOW)
+    value &= ~mask;
+  else
     value |= mask;
-    writeRegister(reg, value);
-
-    return true;
+  writeRegister(reg, value);
+  return true;
 }
 
-void TCA8418KeyboardBase::enableInterrupts()
-{
-    uint8_t value = readRegister(TCA8418_REG_CFG);
-    value |= (_TCA8418_REG_CFG_GPI_IEN | _TCA8418_REG_CFG_KE_IEN);
-    writeRegister(TCA8418_REG_CFG, value);
-};
+bool TCA8418KeyboardBase::pinMode(uint8_t pinnum, uint8_t mode) {
+  if (pinnum > TCA8418_COL9)
+    return false;
 
-void TCA8418KeyboardBase::disableInterrupts()
-{
-    uint8_t value = readRegister(TCA8418_REG_CFG);
-    value &= ~(_TCA8418_REG_CFG_GPI_IEN | _TCA8418_REG_CFG_KE_IEN);
-    writeRegister(TCA8418_REG_CFG, value);
-};
+  uint8_t idx = pinnum / 8;
+  uint8_t reg = TCA8418_REG_GPIO_DIR_1 + idx;
+  uint8_t mask = (1 << (pinnum % 8));
 
-void TCA8418KeyboardBase::enableMatrixOverflow()
-{
-    uint8_t value = readRegister(TCA8418_REG_CFG);
-    value |= _TCA8418_REG_CFG_OVR_FLOW_M;
-    writeRegister(TCA8418_REG_CFG, value);
-};
+  // Mode  0 = input   1 = output
+  uint8_t value = readRegister(reg);
+  if (mode == OUTPUT)
+    value |= mask;
+  else
+    value &= ~mask;
+  writeRegister(reg, value);
 
-void TCA8418KeyboardBase::disableMatrixOverflow()
-{
-    uint8_t value = readRegister(TCA8418_REG_CFG);
-    value &= ~_TCA8418_REG_CFG_OVR_FLOW_M;
-    writeRegister(TCA8418_REG_CFG, value);
-};
+  // Pullup  0 = enabled   1 = disabled
+  reg = TCA8418_REG_GPIO_PULL_1 + idx;
+  value = readRegister(reg);
+  if (mode == INPUT_PULLUP)
+    value &= ~mask;
+  else
+    value |= mask;
+  writeRegister(reg, value);
 
-void TCA8418KeyboardBase::enableDebounce()
-{
-    writeRegister(TCA8418_REG_DEBOUNCE_DIS_1, 0x00);
-    writeRegister(TCA8418_REG_DEBOUNCE_DIS_2, 0x00);
-    writeRegister(TCA8418_REG_DEBOUNCE_DIS_3, 0x00);
+  return true;
 }
 
-void TCA8418KeyboardBase::disableDebounce()
-{
-    writeRegister(TCA8418_REG_DEBOUNCE_DIS_1, 0xFF);
-    writeRegister(TCA8418_REG_DEBOUNCE_DIS_2, 0xFF);
-    writeRegister(TCA8418_REG_DEBOUNCE_DIS_3, 0xFF);
+bool TCA8418KeyboardBase::pinIRQMode(uint8_t pinnum, uint8_t mode) {
+  if (pinnum > TCA8418_COL9)
+    return false;
+  if ((mode != RISING) && (mode != FALLING))
+    return false;
+
+  //  Mode  0 = falling   1 = rising
+  uint8_t idx = pinnum / 8;
+  uint8_t reg = TCA8418_REG_GPIO_INT_LVL_1 + idx;
+  uint8_t mask = (1 << (pinnum % 8));
+
+  uint8_t value = readRegister(reg);
+  if (mode == RISING)
+    value |= mask;
+  else
+    value &= ~mask;
+  writeRegister(reg, value);
+
+  // Enable interrupt
+  reg = TCA8418_REG_GPIO_INT_EN_1 + idx;
+  value = readRegister(reg);
+  value |= mask;
+  writeRegister(reg, value);
+
+  return true;
+}
+
+void TCA8418KeyboardBase::enableInterrupts() {
+  uint8_t value = readRegister(TCA8418_REG_CFG);
+  value |= (_TCA8418_REG_CFG_GPI_IEN | _TCA8418_REG_CFG_KE_IEN);
+  writeRegister(TCA8418_REG_CFG, value);
+};
+
+void TCA8418KeyboardBase::disableInterrupts() {
+  uint8_t value = readRegister(TCA8418_REG_CFG);
+  value &= ~(_TCA8418_REG_CFG_GPI_IEN | _TCA8418_REG_CFG_KE_IEN);
+  writeRegister(TCA8418_REG_CFG, value);
+};
+
+void TCA8418KeyboardBase::enableMatrixOverflow() {
+  uint8_t value = readRegister(TCA8418_REG_CFG);
+  value |= _TCA8418_REG_CFG_OVR_FLOW_M;
+  writeRegister(TCA8418_REG_CFG, value);
+};
+
+void TCA8418KeyboardBase::disableMatrixOverflow() {
+  uint8_t value = readRegister(TCA8418_REG_CFG);
+  value &= ~_TCA8418_REG_CFG_OVR_FLOW_M;
+  writeRegister(TCA8418_REG_CFG, value);
+};
+
+void TCA8418KeyboardBase::enableDebounce() {
+  writeRegister(TCA8418_REG_DEBOUNCE_DIS_1, 0x00);
+  writeRegister(TCA8418_REG_DEBOUNCE_DIS_2, 0x00);
+  writeRegister(TCA8418_REG_DEBOUNCE_DIS_3, 0x00);
+}
+
+void TCA8418KeyboardBase::disableDebounce() {
+  writeRegister(TCA8418_REG_DEBOUNCE_DIS_1, 0xFF);
+  writeRegister(TCA8418_REG_DEBOUNCE_DIS_2, 0xFF);
+  writeRegister(TCA8418_REG_DEBOUNCE_DIS_3, 0xFF);
 }
 
 void TCA8418KeyboardBase::setBacklight(bool on) {}
 
-uint8_t TCA8418KeyboardBase::readRegister(uint8_t reg) const
-{
-    if (m_wire) {
-        m_wire->beginTransmission(m_addr);
-        m_wire->write(reg);
-        m_wire->endTransmission();
+uint8_t TCA8418KeyboardBase::readRegister(uint8_t reg) const {
+  if (m_wire) {
+    m_wire->beginTransmission(m_addr);
+    m_wire->write(reg);
+    m_wire->endTransmission();
 
-        m_wire->requestFrom(m_addr, (uint8_t)1);
-        if (m_wire->available() < 1)
-            return 0;
+    m_wire->requestFrom(m_addr, (uint8_t)1);
+    if (m_wire->available() < 1)
+      return 0;
 
-        return m_wire->read();
-    }
-    if (readCallback) {
-        uint8_t data;
-        readCallback(m_addr, reg, &data, 1);
-        return data;
-    }
-    return 0;
+    return m_wire->read();
+  }
+  if (readCallback) {
+    uint8_t data;
+    readCallback(m_addr, reg, &data, 1);
+    return data;
+  }
+  return 0;
 }
 
-void TCA8418KeyboardBase::writeRegister(uint8_t reg, uint8_t value)
-{
-    uint8_t data[2];
-    data[0] = reg;
-    data[1] = value;
+void TCA8418KeyboardBase::writeRegister(uint8_t reg, uint8_t value) {
+  uint8_t data[2];
+  data[0] = reg;
+  data[1] = value;
 
-    if (m_wire) {
-        m_wire->beginTransmission(m_addr);
-        m_wire->write(data, sizeof(uint8_t) * 2);
-        m_wire->endTransmission();
-    }
-    if (writeCallback) {
-        writeCallback(m_addr, data[0], &(data[1]), 1);
-    }
+  if (m_wire) {
+    m_wire->beginTransmission(m_addr);
+    m_wire->write(data, sizeof(uint8_t) * 2);
+    m_wire->endTransmission();
+  }
+  if (writeCallback) {
+    writeCallback(m_addr, data[0], &(data[1]), 1);
+  }
 }

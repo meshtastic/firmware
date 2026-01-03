@@ -1,15 +1,14 @@
 #pragma once
 #include <Arduino.h>
 
-namespace graphics
-{
+namespace graphics {
 
 // === Emote List ===
 struct Emote {
-    const char *label;
-    const unsigned char *bitmap;
-    int width;
-    int height;
+  const char *label;
+  const unsigned char *bitmap;
+  int width;
+  int height;
 };
 
 extern const Emote emotes[/* numEmotes */];

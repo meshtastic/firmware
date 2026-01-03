@@ -3,8 +3,7 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-namespace graphics
-{
+namespace graphics {
 
 /// Forward declarations
 class Screen;
@@ -16,8 +15,7 @@ class DebugInfo;
  * Contains all functions related to drawing debug information,
  * WiFi status, settings screens, and diagnostic data.
  */
-namespace DebugRenderer
-{
+namespace DebugRenderer {
 // Debug frame functions
 void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
