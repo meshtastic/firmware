@@ -21,11 +21,13 @@ size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc
 }
 
 /// helper function for decoding a record as a protobuf, we will return false if the decoding failed
-bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct)
+bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct,
+                          bool suppress_errors)
 {
     pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
     if (!pb_decode(&stream, fields, dest_struct)) {
-        LOG_ERROR("Can't decode protobuf reason='%s', pb_msgdesc %p", PB_GET_ERROR(&stream), fields);
+        if (!suppress_errors)
+            LOG_ERROR("Can't decode protobuf reason='%s', pb_msgdesc %p", PB_GET_ERROR(&stream), fields);
         return false;
     } else {
         return true;
