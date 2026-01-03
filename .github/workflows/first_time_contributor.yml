@@ -22,7 +22,7 @@ jobs:
             ### @{fc-author}, Welcome to Meshtastic! :wave:
 
             Thanks for opening your first issue. If it's helpful, an easy way
-            to get logs is the "Open Serial Monitor" button on the (Web Flasher](https://flasher.meshtastic.org).
+            to get logs is the "Open Serial Monitor" button on the [Web Flasher](https://flasher.meshtastic.org).
 
             If you have ideas for features, note that we often debate big ideas
             in the [discussions tab](https://github.com/meshtastic/firmware/discussions/categories/ideas)
