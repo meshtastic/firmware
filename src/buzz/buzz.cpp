@@ -113,7 +113,14 @@ void playShutdownMelody()
 void playChirp()
 {
     // A short, friendly "chirp" sound for key presses
-    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Very short AS3 note
+    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Short AS3 note
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void playClick()
+{
+    // A very short "click" sound with minimum delay; ideal for rotary encoder events
+    ToneDuration melody[] = {{NOTE_AS3, 1}}; // Very Short AS3
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
