@@ -135,8 +135,8 @@ void initDeepSleep() {
     Not using yet because we are using wake on all buttons being low
 
     wakeButtons = esp_sleep_get_ext1_wakeup_status();       // If one of these buttons is set it was the reason we woke
-    if (wakeCause == ESP_SLEEP_WAKEUP_EXT1 && !wakeButtons) // we must have been using the 'all buttons rule for waking' to
-    support busted boards, assume button one was pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
+    if (wakeCause == ESP_SLEEP_WAKEUP_EXT1 && !wakeButtons) // we must have been using the 'all buttons rule for waking'
+    to support busted boards, assume button one was pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
     */
 
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
@@ -370,8 +370,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
   // LOG_DEBUG("Enter light sleep");
 
-  // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
-  // LightSleep.
+  // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not
+  // entering LightSleep.
 #if defined(SENSECAP_INDICATOR)
   return ESP_SLEEP_WAKEUP_TIMER;
 #endif

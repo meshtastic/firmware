@@ -31,8 +31,8 @@ bool PowerStressModule::handleReceivedProtobuf(const meshtastic_MeshPacket &req,
     case meshtastic_PowerStressMessage_Opcode_PRINT_INFO:
       printInfo();
 
-      // Now that we know we are actually doing power stress testing, go ahead and turn on all enables (so the log is fully
-      // detailed)
+      // Now that we know we are actually doing power stress testing, go ahead and turn on all enables (so the log is
+      // fully detailed)
       powerMon->force_enabled = true;
       break;
 

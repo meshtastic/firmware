@@ -44,12 +44,13 @@ static bool isPowered() {
   bool isPowerSavingMode = config.power.is_power_saving || isRouter;
 
   /* To determine if we're externally powered, assumptions
-      1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
+      1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead
+     otherwise)
 
       2) If we detect USB power from the power management chip, we must be getting power externally.
 
-      3) On some boards we don't have the power management chip (like AXPxxxx) so we use EXT_PWR_DETECT GPIO pin to detect
-     external power source (see `isVbusIn()` in `Power.cpp`)
+      3) On some boards we don't have the power management chip (like AXPxxxx) so we use EXT_PWR_DETECT GPIO pin to
+     detect external power source (see `isVbusIn()` in `Power.cpp`)
   */
   return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
@@ -247,15 +248,16 @@ void PowerFSM_setup() {
   powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
   // wake timer expired or a packet arrived
-  // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to phone)
+  // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to
+  // phone)
 #ifdef ARCH_ESP32
   powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
 #else // Don't go into a no-bluetooth state on low power platforms
   powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
 #endif
 
-  // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from
-  // light sleep we _always_ transition to NB or dark and
+  // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we
+  // wake from light sleep we _always_ transition to NB or dark and
   powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, exiting light sleep");
   powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
@@ -323,7 +325,8 @@ void PowerFSM_setup() {
   // powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_POWER_DISCONNECTED, NULL, "power disconnected");
 
   // the only way to leave state serial is for the client to disconnect (or we timeout and force disconnect them)
-  // when we leave, go to ON (which might not be the correct state if we have power connected, we will fix that in onEnter)
+  // when we leave, go to ON (which might not be the correct state if we have power connected, we will fix that in
+  // onEnter)
   powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
 
   powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
@@ -342,8 +345,8 @@ void PowerFSM_setup() {
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
   // See: https://github.com/meshtastic/firmware/issues/1071
-  // Don't add power saving transitions if we are a power saving tracker or sensor or have Wifi enabled. Sleep will be initiated
-  // through the modules
+  // Don't add power saving transitions if we are a power saving tracker or sensor or have Wifi enabled. Sleep will be
+  // initiated through the modules
 
 #if HAS_WIFI && !defined(MESHTASTIC_EXCLUDE_WIFI)
   bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||

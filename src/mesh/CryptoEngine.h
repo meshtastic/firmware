@@ -58,8 +58,8 @@ public:
    * As a special case: If all bytes are zero, we assume _no encryption_ and send all data in cleartext.
    *
    * @param numBytes must be 16 (AES128), 32 (AES256) or 0 (no crypt)
-   * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
-   * provided pointer)
+   * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will
+   * cache the provided pointer)
    */
   virtual void setKey(const CryptoKey &k);
 

@@ -48,8 +48,8 @@ protected:
 };
 
 /**
- * An observable class that will notify observers anytime notifyObservers is called.  Argument type T can be any type, but for
- * performance reasons a pointer or word sized object is recommended.
+ * An observable class that will notify observers anytime notifyObservers is called.  Argument type T can be any type,
+ * but for performance reasons a pointer or word sized object is recommended.
  */
 template <class T> class Observable {
   std::list<Observer<T> *> observers;

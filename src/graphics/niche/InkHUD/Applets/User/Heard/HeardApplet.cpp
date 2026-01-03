@@ -54,7 +54,8 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c) {
 // When applet is activated, pre-fill with stale data from NodeDB
 // We're sorting using the last_heard value. Susceptible to weirdness if node's RTC changes.
 // No SNR is available in node db, so we can't calculate signal either
-// These initial cards from node db will be gradually pushed out by new packets which originate from out base applet instead
+// These initial cards from node db will be gradually pushed out by new packets which originate from out base applet
+// instead
 void InkHUD::HeardApplet::populateFromNodeDB() {
   // Fill a collection with pointers to each node in db
   std::vector<meshtastic_NodeInfoLite *> ordered;

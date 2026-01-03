@@ -55,7 +55,8 @@ void InkHUD::Renderer::begin() { forceUpdate(Drivers::EInk::UpdateTypes::FULL, f
 
 // Set a flag, which will be picked up by runOnce, ASAP.
 // Quite likely, multiple applets will all want to respond to one event (Observable, etc)
-// Each affected applet can independently call requestUpdate(), and all share the one opportunity to render, at next runOnce
+// Each affected applet can independently call requestUpdate(), and all share the one opportunity to render, at next
+// runOnce
 void InkHUD::Renderer::requestUpdate() {
   requested = true;
 

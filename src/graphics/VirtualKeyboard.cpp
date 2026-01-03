@@ -73,8 +73,8 @@ void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offset
   const int screenW = display->getWidth();
   const int screenH = display->getHeight();
 
-  // Decide wide-screen mode: if there is comfortable width, allow taller keys and reserve fixed width for last column labels
-  // Heuristic: if screen width >= 200px (e.g., 240x135), treat as wide
+  // Decide wide-screen mode: if there is comfortable width, allow taller keys and reserve fixed width for last column
+  // labels Heuristic: if screen width >= 200px (e.g., 240x135), treat as wide
   const bool isWide = screenW >= 200;
 
   // Determine last-column label max width
@@ -349,8 +349,6 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     if (screenHeight <= 64) {
       textY = boxY + (boxHeight - inputLineH) / 2;
     } else {
-      const int innerLeft = boxX + 1;
-      const int innerRight = boxX + boxWidth - 2;
       const int innerTop = boxY + 1;
       const int innerBottom = boxY + boxHeight - 2;
 

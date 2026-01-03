@@ -24,8 +24,8 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p) {
   p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
   LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
 
-  // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
-  // not 0 or want_ack is set, start retransmissions
+  // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop
+  // limit is not 0 or want_ack is set, start retransmissions
   if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack))
     startRetransmission(packetPool.allocCopy(*p)); // start retransmission for relayed packet
 
@@ -61,7 +61,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p) {
         perhapsRebroadcast(p);
       }
     } else {
-      bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+      bool isRepeated = getHopsAway(*p) == 0;
       // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
       if (isRepeated) {
         if (!findInTxQueue(p->from, p->id)) {
@@ -85,9 +85,9 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
   uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
   bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0 || p->decoded.reply_id != 0);
   if (isAckorReply) {
-    // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from"
-    // is not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the
-    // destination
+    // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if
+    // "from" is not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to
+    // the destination
     if (p->from != 0) {
       meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
       if (origTx) {
@@ -96,7 +96,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
         bool weWereSoleRelayer = false;
         bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
-        if ((weWereRelayer && wasAlreadyRelayer) || (p->hop_start != 0 && p->hop_start == p->hop_limit && weWereSoleRelayer)) {
+        if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
           if (origTx->next_hop != p->relay_node) { // Not already set
             LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from, p->relay_node, wasAlreadyRelayer,
                      weWereSoleRelayer);

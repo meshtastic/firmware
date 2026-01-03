@@ -195,7 +195,7 @@ const RegionInfo regions[] = {
                                 https://github.com/meshtastic/firmware/issues/7204
     */
     RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false, false, LONG_FAST, PRESETS_STD),
-    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true, false, LONG_FAST, PRESETS_STD),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, false, false, LONG_FAST, PRESETS_STD),
 
     /*
         Nepal
@@ -245,8 +245,6 @@ const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
-
-//
 
 void initRegion() {
   const RegionInfo *r = regions;
@@ -710,62 +708,63 @@ void RadioInterface::applyModemConfig() {
       loraConfig.modem_preset = newRegion->defaultPreset;
       loraConfig.use_preset = true;
     }
-
-    auto settings = settingsForPreset(myRegion->wideLora, loraConfig.modem_preset);
-    sf = settings.sf;
-    cr = settings.cr;
-    bw = settings.bw;
   }
 
-  power = loraConfig.tx_power;
+  auto settings = settingsForPreset(myRegion->wideLora, loraConfig.modem_preset);
+  sf = settings.sf;
+  cr = settings.cr;
+  bw = settings.bw;
+}
 
-  if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-    power = myRegion->powerLimit;
+power = loraConfig.tx_power;
 
-  if (power == 0)
-    power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
-                // to 0, currently no region has an actual power limit of 0 [dBm] so we can assume regions which have this
-                // variable set to 0 don't have a valid power limit)
+if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
+  power = myRegion->powerLimit;
 
-  // Set final tx_power back onto config
-  loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
+if (power == 0)
+  power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
+              // to 0, currently no region has an actual power limit of 0 [dBm] so we can assume regions which have this
+              // variable set to 0 don't have a valid power limit)
 
-  // Calculate number of channels: spacing = gap between channels (0 for continuous spectrum)
-  float channelSpacing = myRegion->spacing + (bw / 1000);
-  uint32_t numChannels = round((myRegion->freqEnd - myRegion->freqStart + myRegion->spacing) / channelSpacing);
+// Set final tx_power back onto config
+loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
 
-  // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
-  const char *channelName = channels.getName(channels.getPrimaryIndex());
-  // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-  uint32_t channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+// Calculate number of channels: spacing = gap between channels (0 for continuous spectrum)
+float channelSpacing = myRegion->spacing + (bw / 1000);
+uint32_t numChannels = round((myRegion->freqEnd - myRegion->freqStart + myRegion->spacing) / channelSpacing);
 
-  // Check if we use the default frequency slot
-  RadioInterface::uses_default_frequency_slot =
-      channel_num == hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset)) % numChannels;
+// If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
+const char *channelName = channels.getName(channels.getPrimaryIndex());
+// channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
+uint32_t channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
-  // Calculate frequency: freqStart is band edge, add half bandwidth to get first channel center
-  float freq = myRegion->freqStart + (bw / 2000) + (channel_num * channelSpacing);
+// Check if we use the default frequency slot
+RadioInterface::uses_default_frequency_slot =
+    channel_num == hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset)) % numChannels;
 
-  // override if we have a verbatim frequency
-  if (loraConfig.override_frequency) {
-    freq = loraConfig.override_frequency;
-    channel_num = -1;
-  }
+// Calculate frequency: freqStart is band edge, add half bandwidth to get first channel center
+float freq = myRegion->freqStart + (bw / 2000) + (channel_num * channelSpacing);
 
-  saveChannelNum(channel_num);
-  saveFreq(freq + loraConfig.frequency_offset);
+// override if we have a verbatim frequency
+if (loraConfig.override_frequency) {
+  freq = loraConfig.override_frequency;
+  channel_num = -1;
+}
 
-  slotTimeMsec = computeSlotTimeMsec();
-  preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
+saveChannelNum(channel_num);
+saveFreq(freq + loraConfig.frequency_offset);
 
-  LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
-  LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
-  LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)", myRegion->freqStart, myRegion->freqEnd,
-           myRegion->freqEnd - myRegion->freqStart);
-  LOG_INFO("numChannels: %d x %.3fkHz", numChannels, bw);
-  LOG_INFO("channel_num: %d", channel_num + 1);
-  LOG_INFO("frequency: %f", getFreq());
-  LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
+slotTimeMsec = computeSlotTimeMsec();
+preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
+
+LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
+LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
+LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)", myRegion->freqStart, myRegion->freqEnd,
+         myRegion->freqEnd - myRegion->freqStart);
+LOG_INFO("numChannels: %d x %.3fkHz", numChannels, bw);
+LOG_INFO("channel_num: %d", channel_num + 1);
+LOG_INFO("frequency: %f", getFreq());
+LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
 }
 
 /** Slottime is the time to detect a transmission has started, consisting of:

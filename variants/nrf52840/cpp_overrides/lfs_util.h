@@ -5,11 +5,11 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-// MESHTASTIC/@geeksville note: This file is copied from the Adafruit nrf52 arduino lib.  And we use a special -include in
-// nrf52.ini to load it before EVERY file we do this hack because the default definitions for LFS_ASSERT are quite poor and we
-// don't want to fork the adafruit lib (again) and send in a PR that they probably won't merge anyways. This file might break if
-// they ever update lfs.util on their side, in which case we'll need to update this file to match their new version. The version
-// this is a copy from is almost exactly
+// MESHTASTIC/@geeksville note: This file is copied from the Adafruit nrf52 arduino lib.  And we use a special -include
+// in nrf52.ini to load it before EVERY file we do this hack because the default definitions for LFS_ASSERT are quite
+// poor and we don't want to fork the adafruit lib (again) and send in a PR that they probably won't merge anyways. This
+// file might break if they ever update lfs.util on their side, in which case we'll need to update this file to match
+// their new version. The version this is a copy from is almost exactly
 // https://github.com/adafruit/Adafruit_nRF52_Arduino/blob/c25d93268a3b9c23e9a1ccfcaf9b208beca624ca/libraries/Adafruit_LittleFS/src/littlefs/lfs_util.h
 
 #ifndef LFS_UTIL_H

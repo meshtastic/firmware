@@ -7,7 +7,8 @@ using namespace NicheGraphics;
 // Load settings and latestMessage data
 void InkHUD::Persistence::loadSettings() {
   // Load the InkHUD settings from flash, and check version number
-  // We should only consider the version number if the InkHUD flashdata component reports that we *did* actually load flash data
+  // We should only consider the version number if the InkHUD flashdata component reports that we *did* actually load
+  // flash data
   Settings loadedSettings;
   bool loadSucceeded = FlashData<Settings>::load(&loadedSettings, "settings");
   if (loadSucceeded && loadedSettings.meta.version == SETTINGS_VERSION && loadedSettings.meta.version != 0)

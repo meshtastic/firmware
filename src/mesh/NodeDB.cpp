@@ -240,8 +240,9 @@ NodeDB::NodeDB() {
 
   // likewise - we always want the app requirements to come from the running appload
   myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
-  // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
-  // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
+  // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we
+  // won't keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid
+  // conflicts)
   pickNewNodeNum();
 
   // Set our board type so we can share it with others
@@ -314,8 +315,8 @@ NodeDB::NodeDB() {
   // Uncomment below to always enable UDP broadcasts
   // config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
 
-  // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
-  // of 30 minutes or more
+  // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum
+  // value of 30 minutes or more
   if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
     LOG_DEBUG("Coerce telemetry to min of 30 minutes on defaults");
     moduleConfig.telemetry.device_update_interval =
@@ -428,8 +429,8 @@ NodeDB::NodeDB() {
 }
 
 /**
- * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
- * the local node. If from is zero this function returns our node number instead
+ * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they
+ * originated on the local node. If from is zero this function returns our node number instead
  */
 NodeNum getFrom(const meshtastic_MeshPacket *p) { return (p->from == 0) ? nodeDB->getNodeNum() : p->from; }
 
@@ -779,7 +780,7 @@ void NodeDB::installDefaultModuleConfig() {
   moduleConfig.external_notification.output_ms = 500;
   moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
+#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) || defined(ELECROW_ThinkNode_M6)
   // Default to PIN_LED2 for external notification output (LED color depends on device variant)
   moduleConfig.external_notification.enabled = true;
   moduleConfig.external_notification.output = PIN_LED2;
@@ -940,102 +941,10 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role) {
   }
 }
 
-void NodeDB::installDefaultChannels() {
-  LOG_INFO("Install default ChannelFile");
-  memset(&channelFile, 0, sizeof(meshtastic_ChannelFile));
-  channelFile.version = DEVICESTATE_CUR_VER;
-}
-
-void NodeDB::resetNodes(bool keepFavorites) {
-  if (!config.position.fixed_position)
-    clearLocalPosition();
-  numMeshNodes = 1;
-  if (keepFavorites) {
-    LOG_INFO("Clearing node database - preserving favorites");
-    for (size_t i = 0; i < meshNodes->size(); i++) {
-      meshtastic_NodeInfoLite &node = meshNodes->at(i);
-      if (i > 0 && !node.is_favorite) {
-        node = meshtastic_NodeInfoLite();
-      } else {
-        numMeshNodes += 1;
-      }
-    };
-  } else {
-    LOG_INFO("Clearing node database - removing favorites");
-    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
-  }
-  devicestate.has_rx_text_message = false;
-  devicestate.has_rx_waypoint = false;
-  saveNodeDatabaseToDisk();
-  saveDeviceStateToDisk();
-  if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
-    neighborInfoModule->resetNeighbors();
-}
-
-void NodeDB::removeNodeByNum(NodeNum nodeNum) {
-  int newPos = 0, removed = 0;
-  for (int i = 0; i < numMeshNodes; i++) {
-    if (meshNodes->at(i).num != nodeNum)
-      meshNodes->at(newPos++) = meshNodes->at(i);
-    else
-      removed++;
-  }
-  numMeshNodes -= removed;
-  std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1, meshtastic_NodeInfoLite());
-  LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
-  saveNodeDatabaseToDisk();
-}
-
-void NodeDB::clearLocalPosition() {
-  meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
-  node->position.latitude_i = 0;
-  node->position.longitude_i = 0;
-  node->position.altitude = 0;
-  node->position.time = 0;
-  setLocalPosition(meshtastic_Position_init_default);
-  localPositionUpdatedSinceBoot = false;
-}
-
-void NodeDB::cleanupMeshDB() {
-  int newPos = 0, removed = 0;
-  for (int i = 0; i < numMeshNodes; i++) {
-    if (meshNodes->at(i).has_user) {
-      if (meshNodes->at(i).user.public_key.size > 0) {
-        if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
-          meshNodes->at(i).user.public_key.size = 0;
-        }
-      }
-      if (newPos != i)
-        meshNodes->at(newPos++) = meshNodes->at(i);
-      else
-        newPos++;
-    } else {
-      removed++;
-    }
-  }
-  numMeshNodes -= removed;
-  std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed, meshtastic_NodeInfoLite());
-  LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
-}
-
-void NodeDB::installDefaultDeviceState() {
-  LOG_INFO("Install default DeviceState");
-  // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
-
-  // init our devicestate with valid flags so protobuf writing/reading will work
-  devicestate.has_my_node = true;
-  devicestate.has_owner = true;
-  devicestate.version = DEVICESTATE_CUR_VER;
-  devicestate.receive_queue_count = 0; // Not yet implemented FIXME
-  devicestate.has_rx_waypoint = false;
-  devicestate.has_rx_text_message = false;
-
-  generatePacketId(); // FIXME - ugly way to init current_packet_id;
-
-  // Set default owner name
-  pickNewNodeNum(); // based on macaddr now
-#ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
-  snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
+void NodeDB::initModuleConfigIntervals() {
+  // Zero out telemetry intervals so that they coalesce to defaults in Default.h
+#ifdef USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL
+  moduleConfig.telemetry.device_update_interval = USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL;
 #else
   moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
@@ -1100,6 +1009,7 @@ void NodeDB::clearLocalPosition() {
   node->position.altitude = 0;
   node->position.time = 0;
   setLocalPosition(meshtastic_Position_init_default);
+  localPositionUpdatedSinceBoot = false;
 }
 
 void NodeDB::cleanupMeshDB() {
@@ -1284,11 +1194,10 @@ void NodeDB::loadFromDisk() {
   state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
   // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
-  // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of our
-  // critical config may still be valid (in the other files - loaded next).
-  // Also, if we did fail on reading we probably failed on the enormous (and non critical) nodeDB.  So DO NOT install default
-  // device state.
-  // if (state != LoadFileResult::LOAD_SUCCESS) {
+  // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most
+  // of our critical config may still be valid (in the other files - loaded next). Also, if we did fail on reading we
+  // probably failed on the enormous (and non critical) nodeDB.  So DO NOT install default device state. if (state !=
+  // LoadFileResult::LOAD_SUCCESS) {
   //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
   //} else {
   if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
@@ -1466,7 +1375,8 @@ bool NodeDB::saveDeviceStateToDisk() {
   spiLock->unlock();
 #endif
   // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
-  // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
+  // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of
+  // this
   return saveProto(deviceStateFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate, true);
 }
 
@@ -1582,6 +1492,22 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p) {
   return delta;
 }
 
+int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown) {
+  // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
+  // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
+  // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
+  // the bitfield is encrypted under the channel encryption key. For encrypted packets, this returns
+  // defaultIfUnknown when hop_start is 0.
+  if (p.hop_start == 0 && !(p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield))
+    return defaultIfUnknown; // Cannot reliably determine the number of hops.
+
+  // Guard against invalid values.
+  if (p.hop_start < p.hop_limit)
+    return defaultIfUnknown;
+
+  return p.hop_start - p.hop_limit;
+}
+
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineMeshNodes(bool localOnly) {
@@ -1695,19 +1621,20 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact) {
     info->user.public_key.size = 0;
     info->user.public_key.bytes[0] = 0;
   } else {
-    /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
-     * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
+    /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database
+     * with public keys than the radio holds). However, we don't want to update last_heard just because we sent someone
+     * a DM!
      */
 
     /* "Boring old nodes" are the first to be evicted out of the node database when full. This includes a newly-zeroed
-     * nodeinfo because it has: !is_favorite && last_heard==0. To keep this from happening when we addFromContact, we set the
-     * new node as a favorite, and we leave last_heard alone (even if it's zero).
+     * nodeinfo because it has: !is_favorite && last_heard==0. To keep this from happening when we addFromContact, we
+     * set the new node as a favorite, and we leave last_heard alone (even if it's zero).
      */
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
       // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
-      // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
-      // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
-      // last_heard to now, so that the add_contact node doesn't immediately get evicted.
+      // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to
+      // add contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll
+      // set last_heard to now, so that the add_contact node doesn't immediately get evicted.
       info->last_heard = getTime();
     } else {
       // Normal case: set is_favorite to prevent expiration.
@@ -1715,7 +1642,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact) {
       info->is_favorite = true;
     }
 
-    // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
+    // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually
+    // verified
     if (contact.manually_verified) {
       info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     }
@@ -1825,9 +1753,10 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp) {
     info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
     // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
-    if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
+    const int8_t hopsAway = getHopsAway(mp);
+    if (hopsAway >= 0) {
       info->has_hops_away = true;
-      info->hops_away = mp.hop_start - mp.hop_limit;
+      info->hops_away = hopsAway;
     }
     sortMeshDB();
   }
@@ -1892,8 +1821,8 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p) {
     if (seenFrom && seenTo)
       return false; // we've seen both, and neither is a favorite, so we can stop searching early
 
-    // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
-    // all favorited nodes first.
+    // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after
+    // searching all favorited nodes first.
   }
 
   return false;

@@ -342,7 +342,8 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id) 
 }
 
 /**
- * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+ * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better
+ * version
  * @return Whether a pending packet was removed
  */
 bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) {

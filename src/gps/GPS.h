@@ -67,8 +67,8 @@ class GPS : private concurrency::OSThread {
 public:
   meshtastic_Position p = meshtastic_Position_init_default;
 
-  /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more advanced
-   * implementations. Those boards will set this public variable to a custom implementation.
+  /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more
+   * advanced implementations. Those boards will set this public variable to a custom implementation.
    *
    * Normally set by GPS::createGPS()
    */

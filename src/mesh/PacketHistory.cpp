@@ -77,8 +77,10 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.rxTimeMsec = 1;
 
 #if VERBOSE_PACKET_HISTORY
-  LOG_DEBUG("Packet History - Was Seen Recently: @start s=%08x id=%08x / to=%08x nh=%02x rn=%02x / wUpd=%s / wasFb?%d wWNH?%d", r.sender, r.id, p->to,
-            p->next_hop, p->relay_node, withUpdate ? "YES" : "NO", wasFallback ? *wasFallback : -1, weWereNextHop ? *weWereNextHop : -1);
+  LOG_DEBUG("Packet History - Was Seen Recently: @start s=%08x id=%08x / to=%08x nh=%02x rn=%02x / wUpd=%s / wasFb?%d "
+            "wWNH?%d",
+            r.sender, r.id, p->to, p->next_hop, p->relay_node, withUpdate ? "YES" : "NO", wasFallback ? *wasFallback : -1,
+            weWereNextHop ? *weWereNextHop : -1);
 #endif
 
   PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
@@ -94,9 +96,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
   if (seenRecently) {
     if (wasFallback) {
-      // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
-      // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
-      // it now.
+      // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed
+      // already before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need
+      // to handle it now.
       if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID &&
           p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, *found) && !wasRelayer(ourRelayID, *found) &&
           !wasRelayer(found->next_hop,
@@ -239,8 +241,9 @@ void PacketHistory::insert(const PacketRecord &r) {
       it = (recentPackets + recentPacketsCapacity);
     } else {
       if (it->rxTimeMsec == 0) {
-        LOG_WARN("Packet History - insert: Found packet s=%08x id=%08x with rxTimeMsec = 0, slot %d/%d. Should never happen!", it->sender, it->id,
-                 it - recentPackets, recentPacketsCapacity);
+        LOG_WARN("Packet History - insert: Found packet s=%08x id=%08x with rxTimeMsec = 0, slot %d/%d. Should never "
+                 "happen!",
+                 it->sender, it->id, it - recentPackets, recentPacketsCapacity);
       }
       if ((now_millis - it->rxTimeMsec) > OldtrxTimeMsec) { // 49.7 days rollover friendly
         OldtrxTimeMsec = now_millis - it->rxTimeMsec;

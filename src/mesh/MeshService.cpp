@@ -26,22 +26,22 @@
 #endif
 
 /*
-receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
-It is implemented with a FreeRTos queue (wrapped with a little RTQueue class) of pointers to MeshPacket protobufs (which were
-alloced with new). After a packet ptr is removed from the queue and processed it should be deleted.  (eventually we should move
-sent packets into a 'sentToPhone' queue of packets we can delete just as soon as we are sure the phone has acked those packets -
-when the phone writes to FromNum)
+receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the
+phone. It is implemented with a FreeRTos queue (wrapped with a little RTQueue class) of pointers to MeshPacket protobufs
+(which were alloced with new). After a packet ptr is removed from the queue and processed it should be deleted.
+(eventually we should move sent packets into a 'sentToPhone' queue of packets we can delete just as soon as we are sure
+the phone has acked those packets - when the phone writes to FromNum)
 
-mesh - an instance of Mesh class.  Which manages the interface to the mesh radio library, reception of packets from other nodes,
-arbitrating to select a node number and keeping the current nodedb.
+mesh - an instance of Mesh class.  Which manages the interface to the mesh radio library, reception of packets from
+other nodes, arbitrating to select a node number and keeping the current nodedb.
 
 */
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
 
 The algorithm is as follows:
-* when a node starts up, it broadcasts their user and the normal flow is for all other nodes to reply with their User as well (so
-the new node can build its node db)
+* when a node starts up, it broadcasts their user and the normal flow is for all other nodes to reply with their User as
+well (so the new node can build its node db)
 */
 
 MeshService *service;
@@ -91,11 +91,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp) {
   } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user && nodeInfoModule &&
              !isPreferredRebroadcaster && !nodeDB->isFull()) {
     if (airTime->isTxAllowedChannelUtil(true)) {
-      // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
-      auto hopStart = mp->hop_start;
-      auto hopLimit = mp->hop_limit;
-      uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
-      if (hopsUsed > config.lora.hop_limit + 2) {
+      const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
+      if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
         LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
       } else {
         LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
@@ -166,8 +163,8 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id) {
 
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
- * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
- * reference
+ * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can
+ * not keep a reference
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p) {
 #if defined(ARCH_PORTDUINO)
@@ -185,8 +182,14 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p) {
     p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
   p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
-                                               // (so we update our nodedb for the local node)
 
+  IF_SCREEN(
+      if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 && p.to != NODENUM_BROADCAST && p.to != 0) // DM only
+      {
+        perhapsDecode(&p);
+        const StoredMessage &sm = messageStore.addFromPacket(p);
+        graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+      })
   // Send the packet into the mesh
   DEBUG_HEAP_BEFORE;
   auto a = packetPool.allocCopy(p);
@@ -202,7 +205,8 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p) {
   }
 }
 
-/** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+/** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could
+ * cancel */
 bool MeshService::cancelSending(PacketId id) { return router->cancelSending(nodeDB->getNodeNum(), id); }
 
 ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id) {
@@ -278,15 +282,7 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies) {
       nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
     }
   }
-}
-else {
-#endif
-  if (nodeInfoModule) {
-    LOG_INFO("Send nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-    nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
-  }
-}
-return false;
+  return false;
 }
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p) {

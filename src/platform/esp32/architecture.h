@@ -212,8 +212,8 @@
 // -----------------------------------------------------------------------------
 
 // If an SPI-related pin used by the LoRa module isn't defined, use the conventional pin number for it.
-// FIXME: these pins should really be defined in each variant.h file to prevent breakages if the defaults change, currently many
-// ESP32 variants don't define these pins in their variant.h file.
+// FIXME: these pins should really be defined in each variant.h file to prevent breakages if the defaults change,
+// currently many ESP32 variants don't define these pins in their variant.h file.
 #ifndef LORA_SCK
 #define LORA_SCK 5
 #endif

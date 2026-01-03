@@ -231,13 +231,13 @@ CryptoKey Channels::getKey(ChannelIndex chIndex) {
         *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
       }
     } else if (k.length < 16) {
-      // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the
-      // key with zeros
+      // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of
+      // the key with zeros
       LOG_WARN("User provided a too short AES128 key - padding");
       k.length = 16;
     } else if (k.length < 32 && k.length != 16) {
-      // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the
-      // key with zeros
+      // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of
+      // the key with zeros
       LOG_WARN("User provided a too short AES256 key - padding");
       k.length = 32;
     }
@@ -375,7 +375,8 @@ bool Channels::isDefaultChannel(ChannelIndex chIndex) {
 }
 
 bool Channels::hasDefaultChannel() {
-  // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
+  // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default
+  // channel
   if (!config.lora.use_preset || !RadioInterface::uses_default_frequency_slot || config.lora.override_frequency)
     return false;
   // Check if any of the channels are using the default name and PSK

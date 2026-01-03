@@ -348,7 +348,8 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
                         p - airyEcc * airyA * cosBeta * cosBeta * cosBeta); // leave in radians
   osgb_Longitude = atan2(osgbY, osgbX);                                     // leave in radians
                                                                             // osgb height = p*cos(osgb.latitude) + osgbZ*sin(osgb.latitude) -
-  //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
+                                                                            //(airyA*airyA/(airyA / sqrt(1 -
+  // airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
 /// Ported from my old java code, returns distance in meters along the globe

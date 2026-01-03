@@ -41,8 +41,8 @@ public:
   /** Return the Channel for a specified name, return primary if not found. */
   meshtastic_Channel &getByName(const char *chName);
 
-  /** Using the index inside the channel, update the specified channel's settings and role.  If this channel is being promoted
-   * to be primary, force all other channels to be secondary.
+  /** Using the index inside the channel, update the specified channel's settings and role.  If this channel is being
+   * promoted to be primary, force all other channels to be secondary.
    */
   void setChannel(const meshtastic_Channel &c);
 
@@ -130,8 +130,8 @@ private:
   void initDefaultChannel(ChannelIndex chIndex);
 
   /**
-   * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
-   * PSK)
+   * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary
+   * channel's PSK)
    */
   CryptoKey getKey(ChannelIndex chIndex);
 };

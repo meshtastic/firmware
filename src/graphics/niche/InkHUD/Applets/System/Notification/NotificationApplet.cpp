@@ -197,7 +197,8 @@ void InkHUD::NotificationApplet::dismiss() {
   sendToBackground();
   hasNotification = false;
   // Not requesting update directly from this method,
-  // as it is used to dismiss notifications which have been made redundant by autoshow settings, before they are ever drawn
+  // as it is used to dismiss notifications which have been made redundant by autoshow settings, before they are ever
+  // drawn
 }
 
 // Get a string for the main body text of a notification

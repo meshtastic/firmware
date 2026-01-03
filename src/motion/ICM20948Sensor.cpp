@@ -95,7 +95,8 @@ int32_t ICM20948Sensor::runOnce() {
         screen->endAlert();
     }
 
-    // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
+    // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX,
+    // highestX,
     //           lowestY, highestY, lowestZ, highestZ);
   }
 

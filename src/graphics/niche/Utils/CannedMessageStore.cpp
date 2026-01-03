@@ -82,7 +82,8 @@ void CannedMessageStore::load() {
 // Handle incoming admin messages
 // We get these as an observer of AdminModule
 // It's our responsibility to handle setting and getting of canned messages via the client API
-// Ordinarily, this would be handled by the CannedMessageModule, but it is bound to Screen.cpp, so not suitable for NicheGraphics
+// Ordinarily, this would be handled by the CannedMessageModule, but it is bound to Screen.cpp, so not suitable for
+// NicheGraphics
 int CannedMessageStore::onAdminMessage(AdminModule_ObserverData *data) {
   switch (data->request->which_payload_variant) {
 

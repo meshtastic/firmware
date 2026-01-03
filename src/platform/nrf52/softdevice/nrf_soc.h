@@ -92,8 +92,8 @@ extern "C" {
 #define NRF_RADIO_LENGTH_MAX_US (100000) /**< The longest allowed radio timeslot, in microseconds. */
 
 #define NRF_RADIO_DISTANCE_MAX_US                                                                                                                    \
-  (128000000UL - 1UL) /**< The longest timeslot distance, in microseconds, allowed for the distance parameter (see @ref                              \
-                         nrf_radio_request_normal_t) in the request. */
+  (128000000UL - 1UL) /**< The longest timeslot distance, in microseconds, allowed for the distance parameter (see                                   \
+                         @ref nrf_radio_request_normal_t) in the request. */
 
 #define NRF_RADIO_EARLIEST_TIMEOUT_MAX_US                                                                                                            \
   (128000000UL - 1UL) /**< The longest timeout, in microseconds, allowed when requesting the earliest possible timeslot. */
@@ -238,7 +238,8 @@ enum NRF_RADIO_NOTIFICATION_DISTANCES {
 enum NRF_RADIO_NOTIFICATION_TYPES {
   NRF_RADIO_NOTIFICATION_TYPE_NONE = 0,        /**< The event does not have a radio notification signal. */
   NRF_RADIO_NOTIFICATION_TYPE_INT_ON_ACTIVE,   /**< Using interrupt for notification when the radio will be enabled. */
-  NRF_RADIO_NOTIFICATION_TYPE_INT_ON_INACTIVE, /**< Using interrupt for notification when the radio has been disabled. */
+  NRF_RADIO_NOTIFICATION_TYPE_INT_ON_INACTIVE, /**< Using interrupt for notification when the radio has been disabled.
+                                                */
   NRF_RADIO_NOTIFICATION_TYPE_INT_ON_BOTH,     /**< Using interrupt for notification both when the radio will be enabled and
                                                   disabled. */
 };
@@ -273,14 +274,16 @@ enum NRF_RADIO_SIGNAL_CALLBACK_ACTION {
 enum NRF_RADIO_HFCLK_CFG {
   NRF_RADIO_HFCLK_CFG_XTAL_GUARANTEED, /**< The SoftDevice will guarantee that the high frequency clock source is the
                                            external crystal for the whole duration of the timeslot. This should be the
-                                           preferred option for events that use the radio or require high timing accuracy.
+                                           preferred option for events that use the radio or require high timing
+                                          accuracy.
                                            @note The SoftDevice will automatically turn on and off the external crystal,
                                            at the beginning and end of the timeslot, respectively. The crystal may also
                                            intentionally be left running after the timeslot, in cases where it is needed
                                            by the SoftDevice shortly after the end of the timeslot. */
   NRF_RADIO_HFCLK_CFG_NO_GUARANTEE     /**< This configuration allows for earlier and tighter scheduling of timeslots.
-                                            The RC oscillator may be the clock source in part or for the whole duration of the
-                                          timeslot.     The RC oscillator's accuracy must therefore be taken into consideration.
+                                            The RC oscillator may be the clock source in part or for the whole duration of
+                                          the     timeslot.     The RC oscillator's accuracy must therefore be taken into
+                                          consideration.
                                             @note If the application will use the radio peripheral in timeslots with this
                                           configuration,     it must make sure that the crystal is running and stable before
                                           starting     the radio. */
@@ -289,13 +292,14 @@ enum NRF_RADIO_HFCLK_CFG {
 /**@brief Radio timeslot priorities. */
 enum NRF_RADIO_PRIORITY {
   NRF_RADIO_PRIORITY_HIGH,   /**< High (equal priority as the normal connection priority of the SoftDevice stack(s)). */
-  NRF_RADIO_PRIORITY_NORMAL, /**< Normal (equal priority as the priority of secondary activities of the SoftDevice stack(s)). */
+  NRF_RADIO_PRIORITY_NORMAL, /**< Normal (equal priority as the priority of secondary activities of the SoftDevice
+                                stack(s)). */
 };
 
 /**@brief Radio timeslot request type. */
 enum NRF_RADIO_REQUEST_TYPE {
-  NRF_RADIO_REQ_TYPE_EARLIEST, /**< Request radio timeslot as early as possible. This should always be used for the first
-                                  request in a session. */
+  NRF_RADIO_REQ_TYPE_EARLIEST, /**< Request radio timeslot as early as possible. This should always be used for the
+                                  first request in a session. */
   NRF_RADIO_REQ_TYPE_NORMAL    /**< Normal radio timeslot request. */
 };
 
@@ -307,8 +311,8 @@ enum NRF_SOC_EVTS {
   NRF_EVT_FLASH_OPERATION_ERROR,                /**< Event indicating that the ongoing flash operation has timed out with an error. */
   NRF_EVT_RADIO_BLOCKED,                        /**< Event indicating that a radio timeslot was blocked. */
   NRF_EVT_RADIO_CANCELED,                       /**< Event indicating that a radio timeslot was canceled by SoftDevice. */
-  NRF_EVT_RADIO_SIGNAL_CALLBACK_INVALID_RETURN, /**< Event indicating that a radio timeslot signal callback handler return was
-                                                   invalid. */
+  NRF_EVT_RADIO_SIGNAL_CALLBACK_INVALID_RETURN, /**< Event indicating that a radio timeslot signal callback handler
+                                                   return was invalid. */
   NRF_EVT_RADIO_SESSION_IDLE,                   /**< Event indicating that a radio timeslot session is idle. */
   NRF_EVT_RADIO_SESSION_CLOSED,                 /**< Event indicating that a radio timeslot session is closed. */
   NRF_EVT_POWER_USB_POWER_READY,                /**< Event indicating that a USB 3.3 V supply is ready. */
@@ -340,8 +344,8 @@ typedef struct {
 typedef struct {
   uint8_t hfclk;        /**< High frequency clock source, see @ref NRF_RADIO_HFCLK_CFG. */
   uint8_t priority;     /**< The radio timeslot priority, see @ref NRF_RADIO_PRIORITY. */
-  uint32_t distance_us; /**< Distance from the start of the previous radio timeslot (up to @ref NRF_RADIO_DISTANCE_MAX_US
-                           microseconds). */
+  uint32_t distance_us; /**< Distance from the start of the previous radio timeslot (up to @ref
+                           NRF_RADIO_DISTANCE_MAX_US microseconds). */
   uint32_t length_us;   /**< The radio timeslot length (in the range [100..100,000] microseconds). */
 } nrf_radio_request_normal_t;
 
@@ -356,15 +360,15 @@ typedef struct {
 
 /**@brief Return parameters of the radio timeslot signal callback. */
 typedef struct {
-  uint8_t callback_action; /**< The action requested by the application when returning from the signal callback, see @ref
-                              NRF_RADIO_SIGNAL_CALLBACK_ACTION. */
+  uint8_t callback_action; /**< The action requested by the application when returning from the signal callback, see
+                              @ref NRF_RADIO_SIGNAL_CALLBACK_ACTION. */
   union {
     struct {
       nrf_radio_request_t *p_next; /**< The request parameters for the next radio timeslot. */
     } request;                     /**< Additional parameters for return_code @ref NRF_RADIO_SIGNAL_CALLBACK_ACTION_REQUEST_AND_END. */
     struct {
-      uint32_t length_us; /**< Requested extension of the radio timeslot duration (microseconds) (for minimum time see @ref
-                             NRF_RADIO_MINIMUM_TIMESLOT_LENGTH_EXTENSION_TIME_US). */
+      uint32_t length_us; /**< Requested extension of the radio timeslot duration (microseconds) (for minimum time see
+                             @ref NRF_RADIO_MINIMUM_TIMESLOT_LENGTH_EXTENSION_TIME_US). */
     } extend;             /**< Additional parameters for return_code @ref NRF_RADIO_SIGNAL_CALLBACK_ACTION_EXTEND. */
   } params;               /**< Parameter union. */
 } nrf_radio_signal_callback_return_param_t;
@@ -455,8 +459,8 @@ SVCALL(SD_RAND_APPLICATION_BYTES_AVAILABLE_GET, uint32_t, sd_rand_application_by
  * @param[in]   length  Number of bytes to take from pool and place in p_buff.
  *
  * @retval ::NRF_SUCCESS The requested bytes were written to p_buff.
- * @retval ::NRF_ERROR_SOC_RAND_NOT_ENOUGH_VALUES No bytes were written to the buffer, because there were not enough bytes
- * available.
+ * @retval ::NRF_ERROR_SOC_RAND_NOT_ENOUGH_VALUES No bytes were written to the buffer, because there were not enough
+ * bytes available.
  */
 SVCALL(SD_RAND_APPLICATION_VECTOR_GET, uint32_t, sd_rand_application_vector_get(uint8_t *p_buff, uint8_t length));
 

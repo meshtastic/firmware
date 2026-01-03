@@ -34,8 +34,8 @@ bool MeshPacketQueue::empty() { return queue.empty(); }
  * Some clients might not properly set priority, therefore we fix it here.
  */
 void fixPriority(meshtastic_MeshPacket *p) {
-  // We might receive acks from other nodes (and since generated remotely, they won't have priority assigned.  Check for that
-  // and fix it
+  // We might receive acks from other nodes (and since generated remotely, they won't have priority assigned.  Check for
+  // that and fix it
   if (p->priority == meshtastic_MeshPacket_Priority_UNSET) {
     // if a reliable message give a bit higher default priority
     p->priority = (p->want_ack ? meshtastic_MeshPacket_Priority_RELIABLE : meshtastic_MeshPacket_Priority_DEFAULT);
@@ -112,7 +112,8 @@ meshtastic_MeshPacket *MeshPacketQueue::getPacketFromQueue(NodeNum from, PacketI
   return NULL;
 }
 
-/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
+/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found
+ */
 meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late, uint8_t hop_limit_lt) {
   for (auto it = queue.begin(); it != queue.end(); it++) {
     auto p = (*it);

@@ -22,9 +22,9 @@ static BLEDfu bledfu; // DFU software update helper service
 static BLEDfuSecure bledfusecure;                                           // DFU software update helper service
 #endif
 
-// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
-// process at once
-// static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
+// This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be
+// in process at once static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size),
+// MyNodeInfo_size), FromRadio_size)];
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
@@ -138,8 +138,8 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
   if (request->offset == 0) {
     // If the read is long, we will get multiple authorize invocations - we only populate data on the first
     size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
-    // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
-    // or make empty if the queue is empty
+    // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the
+    // queue or make empty if the queue is empty
     fromRadio.write(fromRadioBytes, numBytes);
   } else {
     // LOG_INFO("Ignore successor read");
@@ -168,7 +168,8 @@ void setupMeshService(void) {
   auto secMode = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
   fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
   fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
-  fromNum.setFixedLen(0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
+  fromNum.setFixedLen(0);                            // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len,
+                                                     // where 0 means empty
   fromNum.setMaxLen(4);
   fromNum.setCccdWriteCallback(onCccd); // Optionally capture CCCD updates
   // We don't yet need to hook the fromNum auth callback
@@ -181,7 +182,8 @@ void setupMeshService(void) {
   fromRadio.setMaxLen(sizeof(fromRadioBytes));
   fromRadio.setReadAuthorizeCallback(onFromRadioAuthorize,
                                      false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
-  fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
+  fromRadio.setBuffer(fromRadioBytes,
+                      sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
   // for two copies
   fromRadio.begin();
 
@@ -308,7 +310,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
   meshtastic::BluetoothStatus newStatus(textkey);
   bluetoothStatus->updateStatus(&newStatus);
 
-#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and
+                                                      // observe bluetoothStatus
   if (screen) {
     screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
       char btPIN[16] = "888888";
@@ -349,8 +352,9 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 }
 
 // Actively refuse new BLE pairings
-// After clearing bonds (at factory reset), clients seem initially able to attempt to re-pair, even with advertising disabled.
-// On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
+// After clearing bonds (at factory reset), clients seem initially able to attempt to re-pair, even with advertising
+// disabled. On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any
+// connection attempts.
 bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request) {
   NRF52Bluetooth::disconnect();
   return false;

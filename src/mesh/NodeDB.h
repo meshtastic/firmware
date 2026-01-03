@@ -207,15 +207,16 @@ public:
   // @return last byte of a NodeNum, 0xFF if it ended at 0x00
   uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }
 
-  /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
+  /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay
+  /// for use
   // bool handleWantNodeNum(NodeNum n);
 
   /* void handleDenyNodeNum(NodeNum FIXME read mesh proto docs, perhaps picking a random node num is not a great idea
-  and instead we should use a special 'im unconfigured node number' and include our desired node number in the wantnum message.
-  the unconfigured node num would only be used while initially joining the mesh so low odds of conflicting (especially if we
-  randomly select from a small number of nodenums which can be used temporarily for this operation).  figure out what the lower
-  level mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast
-  their denial?)
+  and instead we should use a special 'im unconfigured node number' and include our desired node number in the wantnum
+  message. the unconfigured node num would only be used while initially joining the mesh so low odds of conflicting
+  (especially if we randomly select from a small number of nodenums which can be used temporarily for this operation).
+  figure out what the lower level mesh sw does if it does conflict?  would it be better for people who are replying with
+  denynode num to just broadcast their denial?)
   */
 
   // get channel channel index we heard a nodeNum on, defaults to 0 if not found
@@ -240,35 +241,6 @@ public:
   meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x) {
     assert(x < numMeshNodes);
     return &meshNodes->at(x);
-  }
-
-  virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
-  size_t getNumMeshNodes() { return numMeshNodes; }
-
-  UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
-
-  size_t getMaxNodesAllocatedSize() {
-    meshtastic_NodeDatabase emptyNodeDatabase;
-    emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
-    size_t nodeDatabaseSize;
-    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-    return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
-  }
-
-  // returns true if the maximum number of nodes is reached or we are running low on memory
-  bool isFull();
-
-  void clearLocalPosition();
-
-  void setLocalPosition(meshtastic_Position position, bool timeOnly = false) {
-    if (timeOnly) {
-      LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
-      localPosition.time = position.time;
-      localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
-      return;
-    }
-    LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i, position.time, position.timestamp);
-    localPosition = position;
   }
 
   virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);

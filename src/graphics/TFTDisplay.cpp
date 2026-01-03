@@ -42,8 +42,8 @@ public:
       // configure SPI
       cfg.spi_host = ST7735_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
       cfg.spi_mode = 0;
-      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                          // 80MHz by an integer)
+      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by
+                                          // dividing 80MHz by an integer)
       cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
       cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
       cfg.use_lock = true;                // Set to true to use transaction locking
@@ -306,8 +306,8 @@ public:
       // configure SPI
       cfg.spi_host = ILI9488_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
       cfg.spi_mode = 0;
-      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                          // 80MHz by an integer)
+      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by
+                                          // dividing 80MHz by an integer)
       cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
       cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
       cfg.use_lock = true;                // Set to true to use transaction locking
@@ -483,8 +483,8 @@ public:
       // SPI
       cfg.spi_host = ST7789_SPI_HOST;
       cfg.spi_mode = 0;
-      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                          // 80MHz by an integer)
+      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by
+                                          // dividing 80MHz by an integer)
       cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
       cfg.spi_3wire = false;
       cfg.use_lock = true;               // Set to true to use transaction locking
@@ -615,8 +615,8 @@ public:
       // SPI
       cfg.spi_host = ST7796_SPI_HOST;
       cfg.spi_mode = 0;
-      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                          // 80MHz by an integer)
+      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by
+                                          // dividing 80MHz by an integer)
       cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
       cfg.spi_3wire = false;
       cfg.use_lock = true;               // Set to true to use transaction locking
@@ -710,8 +710,8 @@ public:
       cfg.spi_host = ILI9342_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
 #endif
       cfg.spi_mode = 0;
-      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                          // 80MHz by an integer)
+      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by
+                                          // dividing 80MHz by an integer)
       cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
       cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
       cfg.use_lock = true;                // Set to true to use transaction locking
@@ -908,8 +908,8 @@ public:
 
       cfg.spi_host = HX8357_SPI_HOST;
       cfg.spi_mode = 0;
-      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                          // 80MHz by an integer)
+      cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by
+                                          // dividing 80MHz by an integer)
       cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
       cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
       cfg.use_lock = true;                // Set to true to use transaction locking
@@ -1123,7 +1123,8 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 
   if (!TFT_BACKLIGHT_ON) { // Need to invert the pin before hardware
     auto virtPin = new GpioVirtPin();
-    new GpioNotTransformer(virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+    new GpioNotTransformer(virtPin,
+                           p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
     p = virtPin;
   }
 #else

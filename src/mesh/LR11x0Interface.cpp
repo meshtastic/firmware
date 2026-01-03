@@ -18,8 +18,8 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 };
 #endif
 
-// Particular boards might define a different max power based on what their hardware can do, default to max power output if not
-// specified (may be dangerous if using external PA and LR11x0 power config forgotten)
+// Particular boards might define a different max power based on what their hardware can do, default to max power output
+// if not specified (may be dangerous if using external PA and LR11x0 power config forgotten)
 #if ARCH_PORTDUINO
 #define LR1110_MAX_POWER portduino_config.lr1110_max_power
 #endif
@@ -236,7 +236,8 @@ template <typename T> void LR11x0Interface<T>::startReceive() {
 
   RadioLibInterface::startReceive();
 
-  // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+  // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
+  // bits
   enableInterrupt(isrRxLevel0);
 #endif
 }

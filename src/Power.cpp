@@ -1,11 +1,11 @@
 /**
  * @file Power.cpp
- * @brief This file contains the implementation of the Power class, which is responsible for managing power-related functionality
- * of the device. It includes battery level sensing, power management unit (PMU) control, and power state machine management. The
- * Power class is used by the main device class to manage power-related functionality.
+ * @brief This file contains the implementation of the Power class, which is responsible for managing power-related
+ * functionality of the device. It includes battery level sensing, power management unit (PMU) control, and power state
+ * machine management. The Power class is used by the main device class to manage power-related functionality.
  *
- * The file also includes implementations of various battery level sensors, such as the AnalogBatteryLevel class, which assumes
- * the battery voltage is attached via a voltage-divider to an analog input.
+ * The file also includes implementations of various battery level sensors, such as the AnalogBatteryLevel class, which
+ * assumes the battery voltage is attached via a voltage-divider to an analog input.
  *
  * This file is part of the Meshtastic project.
  * For more information, see: https://meshtastic.org/
@@ -745,7 +745,8 @@ void Power::shutdown() {
 #ifdef T_DECK_PRO
     screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
 #elif defined(USE_EINK)
-    screen->showSimpleBanner("Shutting Down...", 2250); // dismiss after 3 seconds to avoid the banner on the sleep screen
+    screen->showSimpleBanner("Shutting Down...",
+                             2250); // dismiss after 3 seconds to avoid the banner on the sleep screen
 #else
     screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
 #endif
@@ -753,6 +754,10 @@ void Power::shutdown() {
 #endif
 #if !defined(ARCH_STM32WL)
   playShutdownMelody();
+#endif
+  nodeDB->saveToDisk();
+#if HAS_SCREEN
+  messageStore.saveToFlash();
 #endif
   nodeDB->saveToDisk();
 
@@ -804,12 +809,11 @@ void Power::readPowerStatus() {
     }
   }
 
-// FIXME: IMO we shouldn't be littering our code with all these ifdefs.  Way better instead to make a Nrf52IsUsbPowered subclass
-// (which shares a superclass with the BatteryLevel stuff)
-// that just provides a few methods.  But in the interest of fixing this bug I'm going to follow current
-// practice.
-#ifdef NRF_APM // Section of code detects USB power on the RAK4631 and updates the power states.  Takes 20 seconds or so to detect
-               // changes.
+// FIXME: IMO we shouldn't be littering our code with all these ifdefs.  Way better instead to make a Nrf52IsUsbPowered
+// subclass (which shares a superclass with the BatteryLevel stuff) that just provides a few methods.  But in the
+// interest of fixing this bug I'm going to follow current practice.
+#ifdef NRF_APM // Section of code detects USB power on the RAK4631 and updates the power states.  Takes 20 seconds or so
+               // to detect changes.
 
   nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
   // LOG_DEBUG("NRF Power %d", nrf_usb_state);
@@ -957,9 +961,9 @@ int32_t Power::runOnce() {
  *
  * axp192 power
     DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the
- axp192 share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this
- on!) LDO1 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of
- days), can not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
+ axp192 share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep
+ this on!) LDO1 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for
+ a couple of days), can not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
  *
  */
 bool Power::axpChipInit() {
@@ -1004,8 +1008,8 @@ bool Power::axpChipInit() {
   if (!PMU) {
     /*
      * In XPowersLib, if the XPowersAXPxxx object is released, Wire.end() will be called at the same time.
-     * In order not to affect other devices, if the initialization of the PMU fails, Wire needs to be re-initialized once,
-     * if there are multiple devices sharing the bus.
+     * In order not to affect other devices, if the initialization of the PMU fails, Wire needs to be re-initialized
+     * once, if there are multiple devices sharing the bus.
      * * */
 #ifndef PMU_USE_WIRE1
     w->begin(I2C_SDA, I2C_SCL);

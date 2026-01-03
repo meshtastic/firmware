@@ -32,7 +32,8 @@
  * Eventually there should be once instance of this class for each live connection (because it has a bit of state
  * for that connection)
  */
-class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
+class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use
+                                           // CallbackObserver as a member
 {
   enum State {
     STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
@@ -62,8 +63,8 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
    */
   uint32_t fromRadioNum = 0;
 
-  /// We temporarily keep the packet here between the call to available and getFromRadio.  We will free it after the phone
-  /// downloads it
+  /// We temporarily keep the packet here between the call to available and getFromRadio.  We will free it after the
+  /// phone downloads it
   meshtastic_MeshPacket *packetForPhone = NULL;
 
   // file transfer packets destined for phone. Push it to the queue then free it.

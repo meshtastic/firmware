@@ -13,7 +13,8 @@ public:
   explicit RotaryEncoderInterruptBase(const char *name);
   void init(uint8_t pinA, uint8_t pinB, uint8_t pinPress, input_broker_event eventCw, input_broker_event eventCcw, input_broker_event eventPressed,
             input_broker_event eventPressedLong,
-            //        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress);
+            //        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)>
+            //        onIntPress);
             void (*onIntA)(), void (*onIntB)(), void (*onIntPress)());
   void intPressHandler();
   void intAHandler();

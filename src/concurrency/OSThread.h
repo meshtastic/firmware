@@ -17,7 +17,8 @@ extern InterruptableDelay mainDelay;
 /**
  * @brief Base threading
  *
- * This is a pseudo threading layer that is super easy to port, well suited to our slow network and very ram & power efficient.
+ * This is a pseudo threading layer that is super easy to port, well suited to our slow network and very ram & power
+ * efficient.
  *
  * TODO FIXME @geeksville
  *

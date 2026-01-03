@@ -575,9 +575,9 @@ void InkHUD::MenuApplet::populateAppletPage() {
   }
 }
 
-// Dynamically create MenuItem entries for selecting which applets will automatically come to foreground when they have new data
-// We only populate this menu page with applets which are actually active
-// We use the MenuItem::checkState pointer to toggle the setting in MenuApplet::execute. Bit of a hack, but convenient.
+// Dynamically create MenuItem entries for selecting which applets will automatically come to foreground when they have
+// new data We only populate this menu page with applets which are actually active We use the MenuItem::checkState
+// pointer to toggle the setting in MenuApplet::execute. Bit of a hack, but convenient.
 void InkHUD::MenuApplet::populateAutoshowPage() {
   assert(items.size() == 0);
 

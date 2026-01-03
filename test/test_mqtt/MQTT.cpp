@@ -200,8 +200,8 @@ public:
   std::set<std::string> subscriptions_; // Topics that the pubSub client has subscribed to.
   std::list<std::pair<std::string, std::variant<std::string,
                                                 DecodedServiceEnvelope>>>
-      published_; // Messages published from the pubSub client. Each list element is a pair containing the topic name and either
-                  // a text message (if from the kTextTopic topic) or a DecodedServiceEnvelope.
+      published_; // Messages published from the pubSub client. Each list element is a pair containing the topic name
+                  // and either a text message (if from the kTextTopic topic) or a DecodedServiceEnvelope.
 };
 
 // Instances of our mocks.

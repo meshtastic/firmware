@@ -103,8 +103,9 @@ void DEPG0290BNS800::detachFromUpdate() {
 // The display does also work just fine with the generic SSD16XX method, though.
 void DEPG0290BNS800::finalizeUpdate() {
   // Put a copy of the image into the "old memory".
-  // Used with differential refreshes (e.g. FAST update), to determine which px need to move, and which can remain in place
-  // We need to keep the "old memory" up to date, because don't know whether next refresh will be FULL or FAST etc.
+  // Used with differential refreshes (e.g. FAST update), to determine which px need to move, and which can remain in
+  // place We need to keep the "old memory" up to date, because don't know whether next refresh will be FULL or FAST
+  // etc.
   if (updateType != FULL) {
     // writeNewImage(); // Not required for this display
     writeOldImage();

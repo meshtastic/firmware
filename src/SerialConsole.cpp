@@ -75,7 +75,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 
 int32_t SerialConsole::runOnce() {
 #ifdef HELTEC_MESH_SOLAR
-  // After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
+  // After enabling the mesh solar serial port module configuration, command processing is handled by the serial port
+  // module.
   if (moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port &&
       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG) {
     return 250;
@@ -100,7 +101,8 @@ void SerialConsole::onNowHasData(uint32_t fromRadioNum) { setIntervalFromNow(0);
 // trigger rx of serial data
 void SerialConsole::rxInt() { setIntervalFromNow(0); }
 
-// For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
+// For the serial port we can't really detect if any client is on the other side, so instead just look for recent
+// messages
 bool SerialConsole::checkIsConnected() { return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT); }
 
 /**

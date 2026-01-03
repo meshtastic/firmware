@@ -179,11 +179,11 @@ the start of the SoftDevice (without MBR)*/
  * @{ */
 #define NRF_FAULT_ID_SD_ASSERT (NRF_FAULT_ID_SD_RANGE_START + 1) /**< SoftDevice assertion. The info parameter is reserved for future used. */
 #define NRF_FAULT_ID_APP_MEMACC                                                                                                                      \
-  (NRF_FAULT_ID_APP_RANGE_START + 1) /**< Application invalid memory access. The info parameter will contain 0x00000000,                             \
-                                          in case of SoftDevice RAM access violation. In case of SoftDevice peripheral                               \
-                                          register violation the info parameter will contain the sub-region number of                                \
-                                          PREGION[0], on whose address range the disallowed write access caused the                                  \
-                                          memory access fault. */
+  (NRF_FAULT_ID_APP_RANGE_START + 1) /**< Application invalid memory access. The info parameter will contain                                         \
+                                        0x00000000, in case of SoftDevice RAM access violation. In case of SoftDevice                                \
+                                        peripheral register violation the info parameter will contain the sub-region                                 \
+                                        number of PREGION[0], on whose address range the disallowed write access                                     \
+                                        caused the memory access fault. */
 /**@} */
 
 /** @} */
@@ -286,9 +286,9 @@ typedef struct {
  * @param[in] pc The program counter of the instruction that triggered the fault.
  * @param[in] info Optional additional information regarding the fault. Refer to each Fault identifier for details.
  *
- * @note When id is set to @ref NRF_FAULT_ID_APP_MEMACC, pc will contain the address of the instruction being executed at the time
- * when the fault is detected by the CPU. The CPU program counter may have advanced up to 2 instructions (no branching) after the
- * one that triggered the fault.
+ * @note When id is set to @ref NRF_FAULT_ID_APP_MEMACC, pc will contain the address of the instruction being executed
+ * at the time when the fault is detected by the CPU. The CPU program counter may have advanced up to 2 instructions (no
+ * branching) after the one that triggered the fault.
  */
 typedef void (*nrf_fault_handler_t)(uint32_t id, uint32_t pc, uint32_t info);
 
@@ -316,15 +316,16 @@ typedef void (*nrf_fault_handler_t)(uint32_t id, uint32_t pc, uint32_t info);
  *
  * @param p_clock_lf_cfg Low frequency clock source and accuracy.
                          If NULL the clock will be configured as an RC source with rc_ctiv = 16 and .rc_temp_ctiv = 2
-                         In the case of XTAL source, the PPM accuracy of the chosen clock source must be greater than or equal to
- the actual characteristics of your XTAL clock.
+                         In the case of XTAL source, the PPM accuracy of the chosen clock source must be greater than or
+ equal to the actual characteristics of your XTAL clock.
  * @param fault_handler Callback to be invoked in case of fault, cannot be NULL.
  *
  * @retval ::NRF_SUCCESS
  * @retval ::NRF_ERROR_INVALID_ADDR  Invalid or NULL pointer supplied.
- * @retval ::NRF_ERROR_INVALID_STATE SoftDevice is already enabled, and the clock source and fault handler cannot be updated.
- * @retval ::NRF_ERROR_SDM_INCORRECT_INTERRUPT_CONFIGURATION SoftDevice interrupt is already enabled, or an enabled interrupt has
- an illegal priority level.
+ * @retval ::NRF_ERROR_INVALID_STATE SoftDevice is already enabled, and the clock source and fault handler cannot be
+ updated.
+ * @retval ::NRF_ERROR_SDM_INCORRECT_INTERRUPT_CONFIGURATION SoftDevice interrupt is already enabled, or an enabled
+ interrupt has an illegal priority level.
  * @retval ::NRF_ERROR_SDM_LFCLK_SOURCE_UNKNOWN Unknown low frequency clock source selected.
  * @retval ::NRF_ERROR_INVALID_PARAM Invalid clock source configuration supplied in p_clock_lf_cfg.
  */

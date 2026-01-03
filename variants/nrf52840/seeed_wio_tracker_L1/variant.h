@@ -104,7 +104,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // TCXO supply voltage
 #define SX126X_RXEN D5               // RX enable control
 #define SX126X_TXEN RADIOLIB_NC
-#define SX126X_DIO2_AS_RF_SWITCH // This Line is really necessary for SX1262  to work with RF switch or will loss TX power
+#define SX126X_DIO2_AS_RF_SWITCH // This Line is really necessary for SX1262  to work with RF switch or will loss TX
+                                 // power
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -37,7 +37,6 @@ public:
     FOCUS_DEFAULT,  // No specific frame
     FOCUS_PRESERVE, // Return to the previous frame
     FOCUS_FAULT,
-    FOCUS_TEXTMESSAGE,
     FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
     FOCUS_CLOCK,
     FOCUS_SYSTEM,
@@ -52,8 +51,6 @@ public:
   void startFirmwareUpdateScreen() {}
   void increaseBrightness() {}
   void decreaseBrightness() {}
-  void setFunctionSymbol(std::string) {}
-  void removeFunctionSymbol(std::string) {}
   void startAlert(const char *) {}
   void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
   void showOverlayBanner(BannerOverlayOptions) {}
@@ -163,6 +160,8 @@ public:
 
 namespace graphics {
 
+enum class FrameDirection { NEXT, PREVIOUS };
+
 // Forward declarations
 class Screen;
 
@@ -200,8 +199,6 @@ class Screen : public concurrency::OSThread {
       CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
   CallbackObserver<Screen, const meshtastic::Status *> nodeStatusObserver =
       CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
-  CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
-      CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
   CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
       CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent); // Sent by Mesh Modules
   CallbackObserver<Screen, const InputEvent *> inputObserver = CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
@@ -211,6 +208,10 @@ class Screen : public concurrency::OSThread {
 public:
   OLEDDisplay *getDisplayDevice() { return dispdev; }
   explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+
+  // Screen dimension accessors
+  inline int getHeight() const { return displayHeight; }
+  inline int getWidth() const { return displayWidth; }
   size_t frameCount = 0; // Total number of active frames
   ~Screen();
 
@@ -219,7 +220,6 @@ public:
     FOCUS_DEFAULT,  // No specific frame
     FOCUS_PRESERVE, // Return to the previous frame
     FOCUS_FAULT,
-    FOCUS_TEXTMESSAGE,
     FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
     FOCUS_CLOCK,
     FOCUS_SYSTEM,
@@ -267,6 +267,7 @@ public:
   void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
   void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
   void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
+  void showFrame(FrameDirection direction);
 
   // generic alert start
   void startAlert(FrameCallback _alertFrame) {
@@ -326,9 +327,6 @@ public:
   // functions for display brightness
   void increaseBrightness();
   void decreaseBrightness();
-
-  void setFunctionSymbol(std::string sym);
-  void removeFunctionSymbol(std::string sym);
 
   /// Stops showing the boot screen.
   void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
@@ -415,8 +413,8 @@ public:
       return (uint8_t)(ch | 0xC0);
     }
     // map UTF-8 cyrillic chars to it Windows-1251 (CP-1251) ASCII codes
-    // note: in this case we must use compatible font - provided ArialMT_Plain_10/16/24 by 'ThingPulse/esp8266-oled-ssd1306'
-    // library have empty chars for non-latin ASCII symbols
+    // note: in this case we must use compatible font - provided ArialMT_Plain_10/16/24 by
+    // 'ThingPulse/esp8266-oled-ssd1306' library have empty chars for non-latin ASCII symbols
     case 0xD0: {
       SKIPREST = false;
       if (ch == 132)
@@ -541,14 +539,14 @@ public:
 
 #endif
 
-    // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
-    // rest of it
+    // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs
+    // for the rest of it
     if (SKIPREST)
       return (uint8_t)0;
     SKIPREST = true;
 
-    return (uint8_t)191; // otherwise: return ¿ if character can't be converted (note that the font map we're using doesn't
-                         // stick to standard EASCII codes)
+    return (uint8_t)191; // otherwise: return ¿ if character can't be converted (note that the font map we're using
+                         // doesn't stick to standard EASCII codes)
   }
 
   /// Returns a handle to the DebugInfo screen.
@@ -558,7 +556,7 @@ public:
 
   // Handle observer events
   int handleStatusUpdate(const meshtastic::Status *arg);
-  int handleTextMessage(const meshtastic_MeshPacket *arg);
+  int handleTextMessage(const meshtastic_MeshPacket *packet);
   int handleUIFrameEvent(const UIFrameEvent *arg);
   int handleInputEvent(const InputEvent *arg);
   int handleAdminMessage(AdminModule_ObserverData *arg);
@@ -568,9 +566,6 @@ public:
 
   /// Draws our SSL cert screen during boot (called from WebServer)
   void setSSLFrames();
-
-  // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
-  void hideCurrentFrame();
 
   // Menu-driven Show / Hide Toggle
   void toggleFrameVisibility(const std::string &frameName);
@@ -618,8 +613,6 @@ private:
   // Implementations of various commands, called from doTask().
   void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
   void handleOnPress();
-  void handleShowNextFrame();
-  void handleShowPrevFrame();
   void handleStartFirmwareUpdateScreen();
 
   // Info collected by setFrames method.
@@ -639,7 +632,8 @@ private:
       uint8_t gps = 255;
       uint8_t home = 255;
       uint8_t textMessage = 255;
-      uint8_t nodelist = 255;
+      uint8_t nodelist_nodes = 255;
+      uint8_t nodelist_location = 255;
       uint8_t nodelist_lastheard = 255;
       uint8_t nodelist_hopsignal = 255;
       uint8_t nodelist_distance = 255;
@@ -662,7 +656,8 @@ private:
     bool home = false;
     bool clock = false;
 #ifndef USE_EINK
-    bool nodelist = false;
+    bool nodelist_nodes = false;
+    bool nodelist_location = false;
 #endif
 #ifdef USE_EINK
     bool nodelist_lastheard = false;
@@ -670,7 +665,9 @@ private:
     bool nodelist_distance = false;
 #endif
 #if HAS_GPS
+#ifdef USE_EINK
     bool nodelist_bearings = false;
+#endif
     bool gps = false;
 #endif
     bool lora = false;

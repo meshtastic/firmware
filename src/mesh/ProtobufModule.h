@@ -24,7 +24,8 @@ protected:
    * Handle a received message, the data field in the message is already decoded and is provided
    *
    * In general decoded will always be !NULL.  But in some special applications (where you have handling packets
-   * for multiple port numbers, decoding will ONLY be attempted for packets where the portnum matches our expected ourPortNum.
+   * for multiple port numbers, decoding will ONLY be attempted for packets where the portnum matches our expected
+   * ourPortNum.
    */
   virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, T *decoded) = 0;
 
@@ -66,8 +67,8 @@ protected:
 private:
   /** Called to handle a particular incoming message
 
-  @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
-  it
+  @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be
+  considered for it
   */
   virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override {
     // FIXME - we currently update position data in the DB only if the message was a broadcast or destined to us

@@ -3,8 +3,8 @@
 
 // Use the 'live' config flag to figure out if we should be showing this message
 bool PowerMon::is_power_enabled(uint64_t m) {
-  // FIXME: VERY STRANGE BUG: if I or in "force_enabled || " the flashed image on a rak4631 is not accepted by the bootloader as
-  // valid!!!  Possibly a linker/gcc/bootloader bug somewhere?
+  // FIXME: VERY STRANGE BUG: if I or in "force_enabled || " the flashed image on a rak4631 is not accepted by the
+  // bootloader as valid!!!  Possibly a linker/gcc/bootloader bug somewhere?
   return ((m & config.power.powermon_enables) ? true : false);
 }
 

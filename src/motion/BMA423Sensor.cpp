@@ -52,8 +52,7 @@ int32_t BMA423Sensor::runOnce() {
       return 500;
     }
   }
-}
-return MOTION_SENSOR_CHECK_INTERVAL_MS;
+  return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }
 
 #endif

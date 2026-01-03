@@ -120,7 +120,8 @@ void EInkDynamicDisplay::endOrDetach() {
     // Fallback - If using an unmodified version of GxEPD2 for some reason
 #else
   if (previousRefresh == FULL || previousRefresh == FAST) { // If refresh wasn't skipped (on unspecified..)
-    LOG_WARN("GxEPD2 version has not been modified to support async refresh; using fallback behavior. Please update lib_deps in "
+    LOG_WARN("GxEPD2 version has not been modified to support async refresh; using fallback behavior. Please update "
+             "lib_deps in "
              "variant's platformio.ini file");
     EInkDisplay::endUpdate();
   }

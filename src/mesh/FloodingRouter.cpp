@@ -25,7 +25,8 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p) {
 
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p) {
   bool wasUpgraded = false;
-  bool seenRecently = wasSeenRecently(p, true, nullptr, nullptr, &wasUpgraded); // Updates history; returns false when an upgrade is detected
+  bool seenRecently = wasSeenRecently(p, true, nullptr, nullptr,
+                                      &wasUpgraded); // Updates history; returns false when an upgrade is detected
 
   // Handle hop_limit upgrade scenario for rebroadcasters
   if (wasUpgraded && perhapsHandleUpgradedPacket(p)) {
@@ -36,8 +37,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p) {
     printPacket("Ignore dupe incoming msg", p);
     rxDupe++;
 
-    /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
-    the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
+    /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission,
+    e.g., when the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
     bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
     if (isRepeated) {
       LOG_DEBUG("Repeated reliable tx");

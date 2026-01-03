@@ -72,8 +72,8 @@ extern "C" {
  * @{ */
 
 #define __NRF_NVIC_NVMC_IRQn                                                                                                                         \
-  (30) /**< The peripheral ID of the NVMC. IRQ numbers are used to identify peripherals, but the NVMC doesn't have an IRQ                            \
-          number in the MDK. */
+  (30) /**< The peripheral ID of the NVMC. IRQ numbers are used to identify peripherals, but the NVMC doesn't have an                                \
+          IRQ number in the MDK. */
 
 #define __NRF_NVIC_ISER_COUNT (2) /**< The number of ISER/ICER registers in the NVIC that are used. */
 
@@ -161,7 +161,8 @@ __STATIC_INLINE uint32_t __sd_nvic_is_app_accessible_priority(uint32_t priority)
  *
  * @retval ::NRF_SUCCESS The interrupt was enabled.
  * @retval ::NRF_ERROR_SOC_NVIC_INTERRUPT_NOT_AVAILABLE The interrupt is not available for the application.
- * @retval ::NRF_ERROR_SOC_NVIC_INTERRUPT_PRIORITY_NOT_ALLOWED The interrupt has a priority not available for the application.
+ * @retval ::NRF_ERROR_SOC_NVIC_INTERRUPT_PRIORITY_NOT_ALLOWED The interrupt has a priority not available for the
+ * application.
  */
 __STATIC_INLINE uint32_t sd_nvic_EnableIRQ(IRQn_Type IRQn);
 
@@ -225,7 +226,8 @@ __STATIC_INLINE uint32_t sd_nvic_ClearPendingIRQ(IRQn_Type IRQn);
  *
  * @retval ::NRF_SUCCESS The interrupt and priority level is available for the application.
  * @retval ::NRF_ERROR_SOC_NVIC_INTERRUPT_NOT_AVAILABLE IRQn is not available for the application.
- * @retval ::NRF_ERROR_SOC_NVIC_INTERRUPT_PRIORITY_NOT_ALLOWED The interrupt priority is not available for the application.
+ * @retval ::NRF_ERROR_SOC_NVIC_INTERRUPT_PRIORITY_NOT_ALLOWED The interrupt priority is not available for the
+ * application.
  */
 __STATIC_INLINE uint32_t sd_nvic_SetPriority(IRQn_Type IRQn, uint32_t priority);
 
@@ -252,8 +254,8 @@ __STATIC_INLINE uint32_t sd_nvic_SystemReset(void);
 /**@brief Enter critical region.
  *
  * @post Application interrupts will be disabled.
- * @note sd_nvic_critical_region_enter() and ::sd_nvic_critical_region_exit() must be called in matching pairs inside each
- * execution context
+ * @note sd_nvic_critical_region_enter() and ::sd_nvic_critical_region_exit() must be called in matching pairs inside
+ * each execution context
  * @sa sd_nvic_critical_region_exit
  *
  * @param[out] p_is_nested_critical_region If 1, the application is now in a nested critical region.

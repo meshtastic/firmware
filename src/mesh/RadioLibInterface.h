@@ -68,11 +68,11 @@ protected:
   }
 
   /**
-   * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
-   * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
+   * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very
+   * old loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
    *
-   * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with
-   * this code for a long time.
+   * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying
+   * with this code for a long time.
    */
   const uint8_t syncWord = 0x2b;
 
@@ -154,8 +154,8 @@ public:
   virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
 private:
-  /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
-   * doing the transmit */
+  /** if we have something waiting to send, start a short (random) timer so we can come check for collision before
+   * actually doing the transmit */
   void setTransmitDelay();
 
   /**
@@ -253,7 +253,8 @@ protected:
   void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
 
   /**
-   * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+   * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better
+   * version
    * @return Whether a pending packet was removed
    */
 

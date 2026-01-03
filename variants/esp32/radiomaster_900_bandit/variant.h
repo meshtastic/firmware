@@ -59,10 +59,10 @@
 #define NEOPIXEL_DATA 15                     // GPIO pin used to send data to the neopixels
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // Type of neopixels in use
 #define ENABLE_AMBIENTLIGHTING               // Turn on Ambient Lighting
-// #define BUTTON1_COLOR 0xFF0000               // Background light for Button 1 in HEX RGB Color (RadioMaster Bandit only).
-// #define BUTTON1_COLOR_INDEX 0                // NeoPixel Index ID for Button 1
-// #define BUTTON2_COLOR 0x0000FF               // Background light for Button 2 in HEX RGB Color (RadioMaster Bandit only).
-// #define BUTTON2_COLOR_INDEX 1                // NeoPixel Index ID for Button 2
+// #define BUTTON1_COLOR 0xFF0000               // Background light for Button 1 in HEX RGB Color (RadioMaster Bandit
+// only). #define BUTTON1_COLOR_INDEX 0                // NeoPixel Index ID for Button 1 #define BUTTON2_COLOR 0x0000FF
+// // Background light for Button 2 in HEX RGB Color (RadioMaster Bandit only). #define BUTTON2_COLOR_INDEX 1 //
+// NeoPixel Index ID for Button 2
 
 /*
   It has 1 x five-way and 2 x normal buttons.

@@ -4,8 +4,9 @@
 
 A notification which might be displayed by the NotificationApplet
 
-An instance of this class is offered to Applets via Applet::approveNotification, in case they want to veto the notification.
-An Applet should veto a notification if it is already displaying the same info which the notification would convey.
+An instance of this class is offered to Applets via Applet::approveNotification, in case they want to veto the
+notification. An Applet should veto a notification if it is already displaying the same info which the notification
+would convey.
 
 */
 

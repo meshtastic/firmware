@@ -11,11 +11,16 @@ public:
   bool isConnected();
   int getRssi();
   void sendLog(const uint8_t *logMessage, size_t length);
+#if defined(NIMBLE_TWO)
   void startAdvertising();
+#endif
   bool isDeInit = false;
 
 private:
   void setupService();
+#if !defined(NIMBLE_TWO)
+  void startAdvertising();
+#endif
 };
 
 void setBluetoothEnable(bool enable);

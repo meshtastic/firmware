@@ -50,9 +50,9 @@
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
 
-/// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
-/// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want
-/// a change.
+/// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved'
+/// word instead. Also, to make setting work correctly, if someone tries to set a string to this reserved value we
+/// assume they don't really want a change.
 static const char *secretReserved = "sekrit";
 
 /// If buf is the reserved secret word, replace the buffer with currentVal
@@ -726,10 +726,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c) {
       LOG_WARN("Invalid bandwidth %d, setting to default", originalBandwidth);
     }
 
-    if (!RadioInterface::validateModemConfig(validatedLora)) {
-      return;
-    }
-
     // If no lora radio parameters change, don't need to reboot
     if (oldLoraConfig.use_preset == validatedLora.use_preset && oldLoraConfig.region == validatedLora.region &&
         oldLoraConfig.modem_preset == validatedLora.modem_preset && oldLoraConfig.bandwidth == validatedLora.bandwidth &&
@@ -780,7 +776,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c) {
 #endif
       config.lora.tx_enabled = true;
       initRegion();
-      if (getEffectiveDutyCycle() < 100) {
+      if (myRegion->dutyCycle < 100) {
         config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
       }
       //  Compare the entire string, we are sure of the length as a topic has never been set

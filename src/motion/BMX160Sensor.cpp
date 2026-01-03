@@ -61,8 +61,8 @@ int32_t BMX160Sensor::runOnce() {
         screen->endAlert();
     }
 
-    // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
-    // lowestY, highestY, lowestZ, highestZ);
+    // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX,
+    // highestX, lowestY, highestY, lowestZ, highestZ);
   }
 
   int highestRealX = highestX - (highestX + lowestX) / 2;

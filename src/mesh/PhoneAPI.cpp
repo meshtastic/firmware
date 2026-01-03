@@ -480,10 +480,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf) {
       // Just in case we stored a different user.id in the past, but should never happen going forward
       sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
 
-      // Logging this really slows down sending nodes on initial connection because the serial console is so slow, so only
-      // uncomment if you really need to:
-      // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
-      // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
+      // Logging this really slows down sending nodes on initial connection because the serial console is so slow, so
+      // only uncomment if you really need to: LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s",
+      // nodeInfoForPhone.num, nodeInfoForPhone.last_heard, nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
 
       // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
       if (readIndex == 2 || readIndex % 20 == 0) {
@@ -791,7 +790,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p) {
     meshtastic_QueueStatus qs = router->getQueueStatus();
     service->sendQueueStatusToPhone(qs, 0, p.id);
     service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
-    // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
+    // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2
+    // seconds");
     return false;
   }
 
@@ -808,8 +808,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p) {
 
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue) {
-  bool timeout = checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version
-                                           // doesn't call this from idle)
+  bool timeout = checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE
+                                           // version doesn't call this from idle)
 
   if (state == STATE_SEND_PACKETS) {
     LOG_INFO("Tell client we have new packets %u", newValue);

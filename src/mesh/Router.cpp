@@ -37,8 +37,8 @@
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
-// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
-// For now, make it dynamic again.
+// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this
+// statically. For now, make it dynamic again.
 #define MAX_PACKETS                                                                                                                                  \
   (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                                            \
    2) // max number of packets which can be in flight (either queued from reception or queued for sending)
@@ -78,8 +78,7 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p) {
   // First hop MUST always decrement to prevent retry issues
-  bool isFirstHop = (p->hop_start != 0 && p->hop_start == p->hop_limit);
-  if (isFirstHop) {
+  if (getHopsAway(*p) == 0) {
     return true; // Always decrement on first hop
   }
 
@@ -141,8 +140,8 @@ int32_t Router::runOnce() {
 }
 
 /**
- * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
- * freeing the packet
+ * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible
+ * for freeing the packet
  */
 void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p) {
   // Try enqueue until successful
@@ -276,11 +275,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p) {
   } // should have already been handled by sendLocal
 
   // Abort sending if we are violating the duty cycle
-  float effectiveDutyCycle = getEffectiveDutyCycle();
-  if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
+  if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
     float hourlyTxPercent = airTime->utilizationTXPercent();
-    if (hourlyTxPercent > effectiveDutyCycle) {
-      uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
+    if (hourlyTxPercent > myRegion->dutyCycle) {
+      uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
 
       LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
 
@@ -303,15 +301,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p) {
   }
 
   // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
-  // assert(!nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with
-  // assert
+  // assert(!nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that
+  // assumption with assert
 
   // Never set the want_ack flag on broadcast packets sent over the air.
   if (isBroadcast(p->to))
     p->want_ack = false;
 
-  // Up until this point we might have been using 0 for the from address (if it started with the phone), but when we send over
-  // the lora we need to make sure we have replaced it with our local address
+  // Up until this point we might have been using 0 for the from address (if it started with the phone), but when we
+  // send over the lora we need to make sure we have replaced it with our local address
   p->from = getFrom(p);
 
   p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
@@ -574,9 +572,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-    // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
-    // is not in the local nodedb
-    // First, only PKC encrypt packets we are originating
+    // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the
+    // node is not in the local nodedb First, only PKC encrypt packets we are originating
     if (isFromUs(p) &&
 #if ARCH_PORTDUINO
         // Sim radio via the cli flag skips PKC
@@ -694,7 +691,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src) {
         !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP,
                    meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP, meshtastic_PortNum_TELEMETRY_APP,
                    meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_KEY_VERIFICATION_APP,
-                   meshtastic_PortNum_WAYPOINT_APP, meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP)) {
+                   meshtastic_PortNum_WAYPOINT_APP, meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP,
+                   meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP)) {
       LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");
       cancelSending(p->from, p->id);
       skipHandle = true;
@@ -709,14 +707,19 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src) {
     MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
-    // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
-    // us (because we would be able to decrypt it)
-    if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 && !isBroadcast(p->to) &&
-        !isToUs(p))
-      p_encrypted->pki_encrypted = true;
-    // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-    if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
-      mqtt->onSend(*p_encrypted, *p, p->channel);
+    if (p_encrypted == nullptr) {
+      LOG_WARN("p_encrypted is null, skipping MQTT publish");
+    } else {
+      // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM
+      // not to us (because we would be able to decrypt it)
+      if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 && !isBroadcast(p->to) &&
+          !isToUs(p))
+        p_encrypted->pki_encrypted = true;
+      // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the
+      // packet
+      if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
+        mqtt->onSend(*p_encrypted, *p, p->channel);
+    }
 #endif
   }
 
@@ -768,8 +771,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p) {
     return;
   }
 
-  // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
-  // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
+  // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides
+  // might cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
   handleReceived(p);
   packetPool.release(p);
 }

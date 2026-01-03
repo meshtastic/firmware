@@ -1,12 +1,13 @@
 #include "configuration.h"
 #include <core_cm4.h>
 
-// Based on reading/modifying https://blog.feabhas.com/2013/02/developing-a-generic-hard-fault-handler-for-arm-cortex-m3cortex-m4/
+// Based on reading/modifying
+// https://blog.feabhas.com/2013/02/developing-a-generic-hard-fault-handler-for-arm-cortex-m3cortex-m4/
 
 enum { r0, r1, r2, r3, r12, lr, pc, psr };
 
-// we can't use the regular LOG_DEBUG for these crash dumps because it depends on threading still being running.  Instead use the
-// segger in memory tool
+// we can't use the regular LOG_DEBUG for these crash dumps because it depends on threading still being running. Instead
+// use the segger in memory tool
 #define FAULT_MSG(...) SEGGER_MSG(__VA_ARGS__)
 
 // Per http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0552a/Cihcfefj.html

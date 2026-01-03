@@ -27,7 +27,8 @@ int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen) {
  */
 int32_t StreamAPI::readStream(char *buf, uint16_t bufLen) {
   if (bufLen < 1) {
-    // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
+    // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a
+    // long time
     bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
     return recentRx ? 5 : 250;
   } else {
@@ -105,7 +106,8 @@ int32_t StreamAPI::handleRecStream(char *buf, uint16_t bufLen) {
  */
 int32_t StreamAPI::readStream() {
   if (!stream->available()) {
-    // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
+    // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a
+    // long time
     bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
     return recentRx ? 5 : 250;
   } else {

@@ -28,8 +28,8 @@ public:
 
   int numUsed() { return uxQueueMessagesWaiting(h); }
 
-  /** euqueue a packet.  Also, maxWait used to default to portMAX_DELAY, but we now want to callers to THINK about what blocking
-   * they want */
+  /** euqueue a packet.  Also, maxWait used to default to portMAX_DELAY, but we now want to callers to THINK about what
+   * blocking they want */
   bool enqueue(T x, TickType_t maxWait) {
     if (reader) {
       reader->setInterval(0);
@@ -98,7 +98,8 @@ public:
     return true;
   }
 
-  // bool enqueueFromISR(T x, BaseType_t *higherPriWoken) { return xQueueSendToBackFromISR(h, &x, higherPriWoken) == pdTRUE; }
+  // bool enqueueFromISR(T x, BaseType_t *higherPriWoken) { return xQueueSendToBackFromISR(h, &x, higherPriWoken) ==
+  // pdTRUE; }
 
   bool dequeue(T *p, TickType_t maxWait = portMAX_DELAY) {
     if (isEmpty())

@@ -22,17 +22,17 @@ bool EInk::supports(UpdateTypes type) {
 
 // Begins using the OSThread to detect when a display update is complete
 // This allows the refresh operation to run "asynchronously".
-// Rather than blocking execution waiting for the update to complete, we are periodically checking the hardware's BUSY pin
-// The expectedDuration argument allows us to delay the start of this checking, if we know "roughly" how long an update takes.
-// Potentially, a display without hardware BUSY could rely entirely on "expectedDuration",
-// provided its isUpdateDone() override always returns true.
+// Rather than blocking execution waiting for the update to complete, we are periodically checking the hardware's BUSY
+// pin The expectedDuration argument allows us to delay the start of this checking, if we know "roughly" how long an
+// update takes. Potentially, a display without hardware BUSY could rely entirely on "expectedDuration", provided its
+// isUpdateDone() override always returns true.
 void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration) {
   updateRunning = true;
   pollingInterval = interval;
   pollingBegunAt = millis();
 
-  // To minimize load, we can choose to delay polling for a few seconds, if we know roughly how long the update will take
-  // By default, expectedDuration is 0, and we'll start polling immediately
+  // To minimize load, we can choose to delay polling for a few seconds, if we know roughly how long the update will
+  // take By default, expectedDuration is 0, and we'll start polling immediately
   OSThread::setIntervalFromNow(expectedDuration);
   OSThread::enabled = true;
 }

@@ -1,11 +1,11 @@
 /**
  * @file FSCommon.cpp
- * @brief This file contains functions for common filesystem operations such as copying, renaming, listing and deleting files and
- * directories.
+ * @brief This file contains functions for common filesystem operations such as copying, renaming, listing and deleting
+ * files and directories.
  *
- * The functions in this file are used to perform common filesystem operations such as copying, renaming, listing and deleting
- * files and directories. These functions are used in the Meshtastic-device project to manage files and directories on the
- * device's filesystem.
+ * The functions in this file are used to perform common filesystem operations such as copying, renaming, listing and
+ * deleting files and directories. These functions are used in the Meshtastic-device project to manage files and
+ * directories on the device's filesystem.
  *
  */
 #include "FSCommon.h"
@@ -171,7 +171,8 @@ void listDir(const char *dirname, uint8_t levels, bool del) {
   }
 
   File file = root.openNextFile();
-  while (file && file.name()[0]) { // This file.name() check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+  while (file && file.name()[0]) { // This file.name() check is a workaround for a bug in the Adafruit LittleFS nrf52
+                                   // glue (see issue 4395)
     if (file.isDirectory() && !String(file.name()).endsWith(".")) {
       if (levels) {
 #ifdef ARCH_ESP32

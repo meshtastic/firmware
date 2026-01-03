@@ -48,9 +48,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
   c.error_reason = err;
   c.which_variant = meshtastic_Routing_error_reason_tag;
 
-  // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a RoutingModule
-  // So we manually call pb_encode_to_bytes and specify routing port number
-  // auto p = allocDataProtobuf(c);
+  // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a
+  // RoutingModule So we manually call pb_encode_to_bytes and specify routing port number auto p = allocDataProtobuf(c);
   meshtastic_MeshPacket *p = router->allocForSending();
   p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
   p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);
@@ -118,8 +117,8 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src) {
       /// Is the channel this packet arrived on acceptable? (security check)
       /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel modules
 
-      /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and
-      /// it needs to to be able to fetch the initial admin packets without yet knowing any channels.
+      /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED
+      /// and it needs to to be able to fetch the initial admin packets without yet knowing any channels.
 
       bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (ch && strcasecmp(ch->settings.name, pi.boundChannel) == 0);
 
@@ -142,7 +141,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src) {
         // considered
 
         // NOTE: we send a reply *even if the (non broadcast) request was from us* which is unfortunate but necessary
-        // because currently when the phone sends things, it sends things using the local node ID as the from address.  A
+        // because currently when the phone sends things, it sends things using the local node ID as the from address. A
         // better solution (FIXME) would be to let phones have their own distinct addresses and we 'route' to them like
         // any other node.
         if (isDecoded && mp.decoded.want_response && toUs && (!isFromUs(&mp) || isToUs(&mp)) && !currentReply) {
@@ -176,17 +175,16 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src) {
       service->sendToMesh(currentReply);
       currentReply = NULL;
     } else if (mp.from != ourNodeNum && !ignoreRequest) {
-      // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send a
-      // no response reply
+      // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send
+      // a no response reply
 
       // No one wanted to reply to this request, tell the requster that happened
       LOG_DEBUG("No one responded, send a nak");
 
       // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
-      // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
-      // bad.
-      routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
-                                routingModule->getHopLimitForResponse(mp.hop_start, mp.hop_limit));
+      // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good"
+      // vs bad.
+      routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel, routingModule->getHopLimitForResponse(mp));
     }
   }
 
@@ -223,7 +221,7 @@ void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to) {
   assert(p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // Should already be set by now
   p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
   p->channel = to.channel; // Use the same channel that the request came in on
-  p->hop_limit = routingModule->getHopLimitForResponse(to.hop_start, to.hop_limit);
+  p->hop_limit = routingModule->getHopLimitForResponse(to);
 
   // No need for an ack if we are just delivering locally (it just generates an ignored ack)
   p->want_ack = (to.from != 0) ? to.want_ack : false;

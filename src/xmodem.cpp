@@ -2,14 +2,14 @@
  * @file xmodem.cpp
  * @brief Implementation of XMODEM protocol for Meshtastic devices.
  *
- * This file contains the implementation of the XMODEM protocol for Meshtastic devices. It is based on the XMODEM implementation
- * by Georges Menie (www.menie.org) and has been adapted for protobuf encapsulation.
+ * This file contains the implementation of the XMODEM protocol for Meshtastic devices. It is based on the XMODEM
+ * implementation by Georges Menie (www.menie.org) and has been adapted for protobuf encapsulation.
  *
- * The XMODEM protocol is used for reliable transmission of binary data over a serial connection. This implementation supports
- * both sending and receiving of data.
+ * The XMODEM protocol is used for reliable transmission of binary data over a serial connection. This implementation
+ * supports both sending and receiving of data.
  *
- * The XModemAdapter class provides the main functionality for the protocol, including CRC calculation, packet handling, and
- * control signal sending.
+ * The XModemAdapter class provides the main functionality for the protocol, including CRC calculation, packet handling,
+ * and control signal sending.
  *
  * @copyright Copyright (c) 2001-2019 Georges Menie
  * @author

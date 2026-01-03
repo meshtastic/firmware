@@ -59,8 +59,8 @@
 
 // enum {USX_ALPHA = 0, USX_SYM, USX_NUM, USX_DICT, USX_DELTA};
 
-/// Default Horizontal codes. When composition of text is know beforehand, the other hcodes in this section can be used to achieve
-/// more compression.
+/// Default Horizontal codes. When composition of text is know beforehand, the other hcodes in this section can be used
+/// to achieve more compression.
 #define USX_HCODES_DFLT                                                                                                                              \
   (const unsigned char[]) { 0x00, 0x40, 0x80, 0xC0, 0xE0 }
 /// Length of each default hcode
@@ -141,8 +141,8 @@ extern const char *USX_FREQ_SEQ_HTML[];
 extern const char *USX_FREQ_SEQ_XML[];
 extern const char *USX_TEMPLATES[];
 
-/// Default preset parameter set. When composition of text is know beforehand, the other parameter sets in this section can be
-/// used to achieve more compression.
+/// Default preset parameter set. When composition of text is know beforehand, the other parameter sets in this section
+/// can be used to achieve more compression.
 #define USX_PSET_DFLT USX_HCODES_DFLT, USX_HCODE_LENS_DFLT, USX_FREQ_SEQ_DFLT, USX_TEMPLATES
 /// Preset parameter set for English Alphabet only content
 #define USX_PSET_ALPHA_ONLY USX_HCODES_ALPHA_ONLY, USX_HCODE_LENS_ALPHA_ONLY, USX_FREQ_SEQ_TXT, USX_TEMPLATES

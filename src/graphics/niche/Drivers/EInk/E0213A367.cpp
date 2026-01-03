@@ -17,8 +17,8 @@ void E0213A367::configScanning() {
 void E0213A367::configWaveform() {
   // This command (0x37) is poorly documented
   // As of July 2025, the datasheet for this display's controller IC is unavailable
-  // The values are supplied by Heltec, who presumably have privileged access to information from the display manufacturer
-  // Datasheet for the similar SSD1680 IC hints at the function of this command:
+  // The values are supplied by Heltec, who presumably have privileged access to information from the display
+  // manufacturer Datasheet for the similar SSD1680 IC hints at the function of this command:
 
   // "Spare VCOM OTP selection":
   // Unclear why 0x40 is set. Sane values for related SSD1680 seem to be 0x80 or 0x00.
@@ -26,7 +26,8 @@ void E0213A367::configWaveform() {
   // We'll leave it set to 0x40, following Heltec's lead, just in case.
 
   // "Display Mode"
-  // Seems to specify whether a waveform stored in OTP should use display mode 1 or 2 (full refresh or differential refresh)
+  // Seems to specify whether a waveform stored in OTP should use display mode 1 or 2 (full refresh or differential
+  // refresh)
 
   // Unusual that waveforms are programmed to OTP, but this meta information is not ..?
 

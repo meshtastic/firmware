@@ -43,8 +43,8 @@ size_t SafeFile::write(const uint8_t *buffer, size_t size) {
   for (size_t i = 0; i < size; i++) {
     hash ^= buffer[i];
   }
-  return f.write((uint8_t const *)buffer, size); // This nasty cast is _IMPORTANT_ otherwise the correct adafruit method does
-                                                 // not get used (they made a mistake in their typing)
+  return f.write((uint8_t const *)buffer, size); // This nasty cast is _IMPORTANT_ otherwise the correct adafruit method
+                                                 // does not get used (they made a mistake in their typing)
 }
 
 /**

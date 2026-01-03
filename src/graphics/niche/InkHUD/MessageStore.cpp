@@ -21,8 +21,8 @@ InkHUD::MessageStore::MessageStore(std::string label) {
 }
 
 // Write the contents of the MessageStore::messages object to flash
-// Takes the firmware's SPI lock during FS operations. Implemented for consistency, but only relevant when using SD card.
-// Need to lock and unlock around specific FS methods, as the SafeFile class takes the lock for itself internally
+// Takes the firmware's SPI lock during FS operations. Implemented for consistency, but only relevant when using SD
+// card. Need to lock and unlock around specific FS methods, as the SafeFile class takes the lock for itself internally
 void InkHUD::MessageStore::saveToFlash() {
   assert(!filename.empty());
 
@@ -71,7 +71,8 @@ void InkHUD::MessageStore::saveToFlash() {
 
 // Attempt to load the previous contents of the MessageStore:message deque from flash.
 // Filename is controlled by the "label" parameter
-// Takes the firmware's SPI lock during FS operations. Implemented for consistency, but only relevant when using SD card.
+// Takes the firmware's SPI lock during FS operations. Implemented for consistency, but only relevant when using SD
+// card.
 void InkHUD::MessageStore::loadFromFlash() {
   // Hopefully redundant. Initial intention is to only load / save once per boot.
   messages.clear();

@@ -42,7 +42,7 @@ extern "C" char *__wrap_strerror(int) { return &empty; }
 #ifdef MESHTASTIC_EXCLUDE_TZ
 struct _reent;
 
-// Even if you don't use timezones, mktime will try to set the timezone anyway with _tzset_unlocked(), which pulls in scanf and
-// friends. The timezone is initialized to UTC by default.
+// Even if you don't use timezones, mktime will try to set the timezone anyway with _tzset_unlocked(), which pulls in
+// scanf and friends. The timezone is initialized to UTC by default.
 extern "C" void __wrap__tzset_unlocked_r(struct _reent *reent_ptr) { return; }
 #endif

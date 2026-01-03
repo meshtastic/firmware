@@ -380,7 +380,8 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis) 
 /**
  * @brief
  * @note   New method, this method can wait for the specified class and message ID, and return the payload
- * @param  *buffer: The message buffer, if there is a response payload message, it will be returned through the buffer parameter
+ * @param  *buffer: The message buffer, if there is a response payload message, it will be returned through the buffer
+ * parameter
  * @param  size:    size of buffer
  * @param  requestedClass:  request class constant
  * @param  requestedID:     request message ID constant
@@ -1293,7 +1294,8 @@ GnssModel_t GPS::probe(int serialSpeed) {
   }
   case 2: {
     std::vector<ChipInfo> atgm = {{"ATGM336H", "$GPTXT,01,01,02,HW=ATGM336H", GNSS_MODEL_ATGM336H},
-                                  /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS)) based on AT6558 */
+                                  /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS),
+                                     -71-0(GPS+BDS+GLONASS)) based on AT6558 */
                                   {"ATGM332D", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H}};
     PROBE_FAMILY("ATGM33xx Family", "$PCAS06,1*1A", atgm, 500);
     currentDelay = 20;
@@ -1612,8 +1614,8 @@ bool GPS::lookForTime() {
   auto d = reader.date;
   if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
     /* Convert to unix time
-The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1,
-1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January
+1, 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
 */
     struct tm t;
     t.tm_sec = ti.second() + round(ti.age() / 1000);

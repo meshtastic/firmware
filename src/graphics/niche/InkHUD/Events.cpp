@@ -306,7 +306,8 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet) {
 
   // Determine whether the message is broadcast or a DM
   // Store this info to prevent confusion after a reboot
-  // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
+  // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not
+  // set
   inkhud->persistence->latestMessage.wasBroadcast = isBroadcast(packet->to);
 
   // Pick the appropriate variable to store the message in
@@ -352,7 +353,8 @@ int InkHUD::Events::onAdminMessage(AdminModule_ObserverData *data) {
 #ifdef ARCH_ESP32
 // Callback for lightSleepObserver
 // Make sure the display is not partway through an update when we begin light sleep
-// This is because some displays require active input from us to terminate the update process, and protect the panel hardware
+// This is because some displays require active input from us to terminate the update process, and protect the panel
+// hardware
 int InkHUD::Events::beforeLightSleep(void *unused) {
   inkhud->awaitUpdate();
   return 0; // No special status to report. Ignored anyway by this Observable

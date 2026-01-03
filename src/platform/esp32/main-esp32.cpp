@@ -234,8 +234,8 @@ void cpuDeepSleep(uint32_t msecToWake) {
 #endif
 
   // Not needed because both of the current boards have external pullups
-  // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
-  // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+  // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons
+  // (instead of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #ifdef ESP32S3_WAKE_TYPE
   esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);

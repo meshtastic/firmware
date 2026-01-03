@@ -140,8 +140,8 @@ public:
 
   /**
    *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
-   * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep
-   * a reference
+   * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can
+   * not keep a reference
    */
   void handleToRadio(meshtastic_MeshPacket &p);
 
@@ -153,17 +153,17 @@ public:
   /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
   void reloadOwner(bool shouldSave = true);
 
-  /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
-  /// sends our nodeinfo
-  /// returns true if we sent a position
+  /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise
+  /// at least sends our nodeinfo returns true if we sent a position
   bool trySendPosition(NodeNum dest, bool wantReplies = false);
 
-  /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
-  /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
-  /// cache
+  /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool
+  /// after sending. This is the ONLY function you should use for sending messages into the mesh, because it also
+  /// updates the nodedb cache
   void sendToMesh(meshtastic_MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false);
 
-  /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
+  /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could
+   * cancel */
   bool cancelSending(PacketId id);
 
   /// Pull the latest power and time info into my nodeinfo

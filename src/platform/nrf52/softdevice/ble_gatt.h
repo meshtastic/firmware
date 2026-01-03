@@ -102,17 +102,19 @@ extern "C" {
 
 /** @defgroup BLE_GATT_STATUS_CODES GATT Status Codes
  * @{ */
-#define BLE_GATT_STATUS_SUCCESS 0x0000                       /**< Success. */
-#define BLE_GATT_STATUS_UNKNOWN 0x0001                       /**< Unknown or not applicable status. */
-#define BLE_GATT_STATUS_ATTERR_INVALID 0x0100                /**< ATT Error: Invalid Error Code. */
-#define BLE_GATT_STATUS_ATTERR_INVALID_HANDLE 0x0101         /**< ATT Error: Invalid Attribute Handle. */
-#define BLE_GATT_STATUS_ATTERR_READ_NOT_PERMITTED 0x0102     /**< ATT Error: Read not permitted. */
-#define BLE_GATT_STATUS_ATTERR_WRITE_NOT_PERMITTED 0x0103    /**< ATT Error: Write not permitted. */
-#define BLE_GATT_STATUS_ATTERR_INVALID_PDU 0x0104            /**< ATT Error: Used in ATT as Invalid PDU. */
-#define BLE_GATT_STATUS_ATTERR_INSUF_AUTHENTICATION 0x0105   /**< ATT Error: Authenticated link required. */
-#define BLE_GATT_STATUS_ATTERR_REQUEST_NOT_SUPPORTED 0x0106  /**< ATT Error: Used in ATT as Request Not Supported. */
-#define BLE_GATT_STATUS_ATTERR_INVALID_OFFSET 0x0107         /**< ATT Error: Offset specified was past the end of the attribute. */
-#define BLE_GATT_STATUS_ATTERR_INSUF_AUTHORIZATION 0x0108    /**< ATT Error: Used in ATT as Insufficient Authorization. */
+#define BLE_GATT_STATUS_SUCCESS 0x0000                      /**< Success. */
+#define BLE_GATT_STATUS_UNKNOWN 0x0001                      /**< Unknown or not applicable status. */
+#define BLE_GATT_STATUS_ATTERR_INVALID 0x0100               /**< ATT Error: Invalid Error Code. */
+#define BLE_GATT_STATUS_ATTERR_INVALID_HANDLE 0x0101        /**< ATT Error: Invalid Attribute Handle. */
+#define BLE_GATT_STATUS_ATTERR_READ_NOT_PERMITTED 0x0102    /**< ATT Error: Read not permitted. */
+#define BLE_GATT_STATUS_ATTERR_WRITE_NOT_PERMITTED 0x0103   /**< ATT Error: Write not permitted. */
+#define BLE_GATT_STATUS_ATTERR_INVALID_PDU 0x0104           /**< ATT Error: Used in ATT as Invalid PDU. */
+#define BLE_GATT_STATUS_ATTERR_INSUF_AUTHENTICATION 0x0105  /**< ATT Error: Authenticated link required. */
+#define BLE_GATT_STATUS_ATTERR_REQUEST_NOT_SUPPORTED 0x0106 /**< ATT Error: Used in ATT as Request Not Supported. */
+#define BLE_GATT_STATUS_ATTERR_INVALID_OFFSET 0x0107        /**< ATT Error: Offset specified was past the end of the attribute. */
+#define BLE_GATT_STATUS_ATTERR_INSUF_AUTHORIZATION                                                                                                   \
+  0x0108                                                     /**< ATT Error: Used in ATT as Insufficient Authorization.                              \
+                                                              */
 #define BLE_GATT_STATUS_ATTERR_PREPARE_QUEUE_FULL 0x0109     /**< ATT Error: Used in ATT as Prepare Queue Full. */
 #define BLE_GATT_STATUS_ATTERR_ATTRIBUTE_NOT_FOUND 0x010A    /**< ATT Error: Used in ATT as Attribute not found. */
 #define BLE_GATT_STATUS_ATTERR_ATTRIBUTE_NOT_LONG 0x010B     /**< ATT Error: Attribute cannot be read or written using read/write blob requests. */
@@ -134,7 +136,8 @@ extern "C" {
   0x01FC /**< ATT Common Profile and Service Error: Write request rejected.                                                                          \
           */
 #define BLE_GATT_STATUS_ATTERR_CPS_CCCD_CONFIG_ERROR                                                                                                 \
-  0x01FD /**< ATT Common Profile and Service Error: Client Characteristic Configuration Descriptor improperly configured. */
+  0x01FD /**< ATT Common Profile and Service Error: Client Characteristic Configuration Descriptor improperly                                        \
+            configured. */
 #define BLE_GATT_STATUS_ATTERR_CPS_PROC_ALR_IN_PROG 0x01FE /**< ATT Common Profile and Service Error: Procedure Already in Progress. */
 #define BLE_GATT_STATUS_ATTERR_CPS_OUT_OF_RANGE 0x01FF     /**< ATT Common Profile and Service Error: Out Of Range. */
 /** @} */

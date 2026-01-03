@@ -597,7 +597,8 @@ void setup() {
   power = new Power();
   power->setStatusHandler(powerStatus);
   powerStatus->observe(&power->newStatus);
-  power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+  power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial
+                  // configuration
 
 #if !MESHTASTIC_EXCLUDE_I2C
   // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
@@ -1453,7 +1454,9 @@ void setup() {
 #endif
 
 #if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+#ifndef HAS_PHYSICAL_KEYBOARD
   osk_found = true;
+#endif
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -1485,7 +1488,8 @@ void setup() {
   }
 
   // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
-  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
+  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking
+                    // from SDS
   powerFSMthread = new PowerFSMThread();
 
 #if !HAS_TFT

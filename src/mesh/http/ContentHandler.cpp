@@ -82,8 +82,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer) {
 
   ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
   //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
-  //    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
-  //    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
+  //    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST",
+  //    &handleAdminSettingsApply); ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
   //    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
   //    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
 

@@ -82,9 +82,9 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     bool force = false;
 
 #ifdef T_WATCH_S3
-    // The T-Watch appears to "pause" its RTC when shut down, such that the time it reads upon powering on is the same as when
-    // it was shut down. So we need to force the update here, since otherwise RTC::perhapsSetRTC will ignore it because it
-    // will always be an equivalent or lesser RTCQuality (RTCQualityNTP or RTCQualityNet).
+    // The T-Watch appears to "pause" its RTC when shut down, such that the time it reads upon powering on is the same
+    // as when it was shut down. So we need to force the update here, since otherwise RTC::perhapsSetRTC will ignore it
+    // because it will always be an equivalent or lesser RTCQuality (RTCQualityNTP or RTCQualityNet).
     force = true;
 #endif
     // Set from phone RTC Quality to RTCQualityNTP since it should be approximately so
@@ -404,47 +404,13 @@ int32_t PositionModule::runOnce() {
     return RUNONCE_INTERVAL;
   }
 
-  if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-    if (nodeDB->hasValidPosition(node)) {
-      lastGpsSend = now;
-
-      lastGpsLatitude = node->position.latitude_i;
-      lastGpsLongitude = node->position.longitude_i;
-
-      sendOurPosition();
-      if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
-        sendLostAndFoundText();
-      }
-    }
-  } else if (config.position.position_broadcast_smart_enabled) {
-    const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
-
-    if (nodeDB->hasValidPosition(node2)) {
-      // The minimum time (in seconds) that would pass before we are able to send a new position packet.
-
-      auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
-      msSinceLastSend = now - lastGpsSend;
-
-      if (smartPosition.hasTraveledOverThreshold && Throttle::execute(
-                                                        &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },
-                                                        []() { LOG_DEBUG("Skip send smart broadcast due to time throttling"); })) {
-
-        LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
-                  "minTimeInterval=%ims)",
-                  localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold, msSinceLastSend, minimumTimeThreshold);
-
-        // Set the current coords as our last ones, after we've compared distance with current and decided to send
-        lastGpsLatitude = node->position.latitude_i;
-        lastGpsLongitude = node->position.longitude_i;
-      }
-    }
-  }
-
   bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
 
   if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
     if (waitingForFreshPosition) {
+#ifdef GPS_DEBUG
       LOG_DEBUG("Skip initial position send; no fresh position since boot");
+#endif
     } else if (nodeDB->hasValidPosition(node)) {
       lastGpsSend = now;
 

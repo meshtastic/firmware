@@ -129,9 +129,9 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::prioritize(Drivers::EInk::Upda
 // If significant FULL-refresh debt has accumulated, we will occasionally run FULL refreshes unprovoked.
 // This prevents gradual build-up of debt,
 // in case we aren't doing enough UNSPECIFIED refreshes to pay the debt back organically.
-// The first refresh takes place shortly after user finishes interacting with the device; this does the bulk of the restoration
-// Subsequent refreshes take place *much* less frequently.
-// Hopefully an applet will want to render before this, meaning we can cancel the maintenance.
+// The first refresh takes place shortly after user finishes interacting with the device; this does the bulk of the
+// restoration Subsequent refreshes take place *much* less frequently. Hopefully an applet will want to render before
+// this, meaning we can cancel the maintenance.
 int32_t InkHUD::DisplayHealth::runOnce() {
   if (debt > 0.0) {
     LOG_DEBUG("debt=%f: performing maintenance", debt);

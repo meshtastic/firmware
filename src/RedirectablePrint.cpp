@@ -63,8 +63,8 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
   size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
   va_end(copy);
 
-  // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the
-  // return value
+  // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted
+  // for the return value
 
   if (len > sizeof(printBuf) - 1) {
     len = sizeof(printBuf) - 1;

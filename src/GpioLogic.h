@@ -3,8 +3,9 @@
 #include "configuration.h"
 
 /**This is a set of classes to mediate access to GPIOs in a structured way.  Most usage of GPIOs do not
-    require these classes!  But if your hardware has a GPIO that is 'shared' between multiple devices (i.e. a shared power enable)
-    then using these classes might be able to let you cleanly turn on that enable when either dependent device is needed.
+    require these classes!  But if your hardware has a GPIO that is 'shared' between multiple devices (i.e. a shared
+   power enable) then using these classes might be able to let you cleanly turn on that enable when either dependent
+   device is needed.
 
     Note: these classes are intended to be 99% inline for the common case so should have minimal impact on flash or RAM
    requirements.
@@ -55,8 +56,8 @@ private:
 #include <assert.h>
 
 /**
- * A 'smart' trigger that can depend in a fake GPIO and if that GPIO changes, drive some other downstream GPIO to change.
- * notably: the set method is not public (because it always is calculated by a subclass)
+ * A 'smart' trigger that can depend in a fake GPIO and if that GPIO changes, drive some other downstream GPIO to
+ * change. notably: the set method is not public (because it always is calculated by a subclass)
  */
 class GpioTransformer {
 public:

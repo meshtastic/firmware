@@ -79,8 +79,8 @@ int32_t SerialKeyboard::runOnce() {
       quickPress = 0;
     }
 
-    if (keys < prevKeys) { // a new key has been pressed (and not released), doesn't works for multiple presses at once but
-                           // shouldn't be a limitation
+    if (keys < prevKeys) { // a new key has been pressed (and not released), doesn't works for multiple presses at once
+                           // but shouldn't be a limitation
       InputEvent e = {};
       e.inputEvent = INPUT_BROKER_NONE;
       e.source = this->_originName;

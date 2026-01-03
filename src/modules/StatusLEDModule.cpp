@@ -18,7 +18,7 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg) {
   switch (arg->getStatusType()) {
   case STATUS_TYPE_POWER: {
     meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)arg;
-    if (powerStatus->getHasUSB()) {
+    if (powerStatus->getHasUSB() || powerStatus->getIsCharging()) {
       power_state = charging;
       if (powerStatus->getBatteryChargePercent() >= 100) {
         power_state = charged;
@@ -32,13 +32,31 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg) {
     }
     break;
   }
+  case STATUS_TYPE_BLUETOOTH: {
+    meshtastic::BluetoothStatus *bluetoothStatus = (meshtastic::BluetoothStatus *)arg;
+    switch (bluetoothStatus->getConnectionState()) {
+    case meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED: {
+      ble_state = unpaired;
+      PAIRING_LED_starttime = millis();
+      break;
+    }
+    case meshtastic::BluetoothStatus::ConnectionState::PAIRING: {
+      ble_state = pairing;
+      PAIRING_LED_starttime = millis();
+      break;
+    }
+    case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
+      ble_state = connected;
+      PAIRING_LED_starttime = millis();
+      break;
+    }
+    }
 
-  break;
+    break;
   }
-}
-return 0;
-}
-;
+  }
+  return 0;
+};
 
 int32_t StatusLEDModule::runOnce() {
   my_interval = 1000;
@@ -79,23 +97,16 @@ int32_t StatusLEDModule::runOnce() {
   } else if (ble_state == pairing) {
     PAIRING_LED_state = !PAIRING_LED_state;
   } else {
-    slowTrack = true;
+    PAIRING_LED_state = LED_STATE_ON;
   }
-}
-else if (ble_state == pairing) {
-  PAIRING_LED_state = !PAIRING_LED_state;
-}
-else {
-  PAIRING_LED_state = LED_STATE_ON;
-}
 
 #ifdef LED_CHARGE
-digitalWrite(LED_CHARGE, CHARGE_LED_state);
+  digitalWrite(LED_CHARGE, CHARGE_LED_state);
 #endif
-// digitalWrite(green_LED_PIN, LED_STATE_OFF);
+  // digitalWrite(green_LED_PIN, LED_STATE_OFF);
 #ifdef LED_PAIRING
-digitalWrite(LED_PAIRING, PAIRING_LED_state);
+  digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
 
-return (my_interval);
+  return (my_interval);
 }

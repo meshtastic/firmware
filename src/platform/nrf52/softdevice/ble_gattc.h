@@ -80,29 +80,32 @@ enum BLE_GATTC_SVCS {
  * @brief GATT Client Event IDs.
  */
 enum BLE_GATTC_EVTS {
-  BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP = BLE_GATTC_EVT_BASE, /**< Primary Service Discovery Response event.          \n See @ref
-                                                            ble_gattc_evt_prim_srvc_disc_rsp_t.          */
-  BLE_GATTC_EVT_REL_DISC_RSP,              /**< Relationship Discovery Response event.             \n See @ref ble_gattc_evt_rel_disc_rsp_t.
-                                            */
-  BLE_GATTC_EVT_CHAR_DISC_RSP,             /**< Characteristic Discovery Response event.           \n See @ref
-                                              ble_gattc_evt_char_disc_rsp_t.               */
-  BLE_GATTC_EVT_DESC_DISC_RSP,             /**< Descriptor Discovery Response event.               \n See @ref
-                                              ble_gattc_evt_desc_disc_rsp_t.               */
-  BLE_GATTC_EVT_ATTR_INFO_DISC_RSP,        /**< Attribute Information Response event.              \n See @ref
-                                              ble_gattc_evt_attr_info_disc_rsp_t. */
-  BLE_GATTC_EVT_CHAR_VAL_BY_UUID_READ_RSP, /**< Read By UUID Response event.                       \n See @ref
-                                              ble_gattc_evt_char_val_by_uuid_read_rsp_t.   */
-  BLE_GATTC_EVT_READ_RSP,                  /**< Read Response event.                               \n See @ref ble_gattc_evt_read_rsp_t. */
-  BLE_GATTC_EVT_CHAR_VALS_READ_RSP,        /**< Read multiple Response event.                      \n See @ref
-                                              ble_gattc_evt_char_vals_read_rsp_t.          */
-  BLE_GATTC_EVT_WRITE_RSP,                 /**< Write Response event.                              \n See @ref ble_gattc_evt_write_rsp_t. */
-  BLE_GATTC_EVT_HVX,                       /**< Handle Value Notification or Indication event.     \n Confirm indication with @ref
-                                              sd_ble_gattc_hv_confirm.  \n See @ref ble_gattc_evt_hvx_t. */
-  BLE_GATTC_EVT_EXCHANGE_MTU_RSP,          /**< Exchange MTU Response event.                       \n See @ref
-                                              ble_gattc_evt_exchange_mtu_rsp_t.            */
-  BLE_GATTC_EVT_TIMEOUT,                   /**< Timeout event.                                     \n See @ref ble_gattc_evt_timeout_t. */
-  BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE      /**< Write without Response transmission complete.      \n See @ref
-                                              ble_gattc_evt_write_cmd_tx_complete_t.       */
+  BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP = BLE_GATTC_EVT_BASE, /**< Primary Service Discovery Response event.          \n See
+                                                            @ref ble_gattc_evt_prim_srvc_disc_rsp_t.          */
+  BLE_GATTC_EVT_REL_DISC_RSP,                            /**< Relationship Discovery Response event.             \n See @ref
+                                                          * ble_gattc_evt_rel_disc_rsp_t.
+                                                          */
+  BLE_GATTC_EVT_CHAR_DISC_RSP,                           /**< Characteristic Discovery Response event.           \n See @ref
+                                                            ble_gattc_evt_char_disc_rsp_t.               */
+  BLE_GATTC_EVT_DESC_DISC_RSP,                           /**< Descriptor Discovery Response event.               \n See @ref
+                                                            ble_gattc_evt_desc_disc_rsp_t.               */
+  BLE_GATTC_EVT_ATTR_INFO_DISC_RSP,                      /**< Attribute Information Response event.              \n See @ref
+                                                            ble_gattc_evt_attr_info_disc_rsp_t. */
+  BLE_GATTC_EVT_CHAR_VAL_BY_UUID_READ_RSP,               /**< Read By UUID Response event.                       \n See @ref
+                                                            ble_gattc_evt_char_val_by_uuid_read_rsp_t.   */
+  BLE_GATTC_EVT_READ_RSP,                                /**< Read Response event.                               \n See @ref ble_gattc_evt_read_rsp_t.
+                                                          */
+  BLE_GATTC_EVT_CHAR_VALS_READ_RSP,                      /**< Read multiple Response event.                      \n See @ref
+                                                            ble_gattc_evt_char_vals_read_rsp_t.          */
+  BLE_GATTC_EVT_WRITE_RSP,                               /**< Write Response event.                              \n See @ref
+                                                            ble_gattc_evt_write_rsp_t. */
+  BLE_GATTC_EVT_HVX,                                     /**< Handle Value Notification or Indication event.     \n Confirm indication with @ref
+                                                            sd_ble_gattc_hv_confirm.  \n See @ref ble_gattc_evt_hvx_t. */
+  BLE_GATTC_EVT_EXCHANGE_MTU_RSP,                        /**< Exchange MTU Response event.                       \n See @ref
+                                                            ble_gattc_evt_exchange_mtu_rsp_t.            */
+  BLE_GATTC_EVT_TIMEOUT,              /**< Timeout event.                                     \n See @ref ble_gattc_evt_timeout_t. */
+  BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE /**< Write without Response transmission complete.      \n See @ref
+                                         ble_gattc_evt_write_cmd_tx_complete_t.       */
 };
 
 /**@brief GATTC Option IDs.
@@ -204,33 +207,33 @@ typedef struct {
 /**@brief Event structure for @ref BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP. */
 typedef struct {
   uint16_t count;                  /**< Service count. */
-  ble_gattc_service_t services[1]; /**< Service data. @note This is a variable length array. The size of 1 indicated is only a
-                                      placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use
-                                      event structures with variable length array members. */
+  ble_gattc_service_t services[1]; /**< Service data. @note This is a variable length array. The size of 1 indicated is
+                                      only a placeholder for compilation. See @ref sd_ble_evt_get for more information
+                                      on how to use event structures with variable length array members. */
 } ble_gattc_evt_prim_srvc_disc_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_REL_DISC_RSP. */
 typedef struct {
   uint16_t count;                  /**< Include count. */
-  ble_gattc_include_t includes[1]; /**< Include data. @note This is a variable length array. The size of 1 indicated is only a
-                                      placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use
-                                      event structures with variable length array members. */
+  ble_gattc_include_t includes[1]; /**< Include data. @note This is a variable length array. The size of 1 indicated is
+                                      only a placeholder for compilation. See @ref sd_ble_evt_get for more information
+                                      on how to use event structures with variable length array members. */
 } ble_gattc_evt_rel_disc_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_CHAR_DISC_RSP. */
 typedef struct {
   uint16_t count;            /**< Characteristic count. */
-  ble_gattc_char_t chars[1]; /**< Characteristic data. @note This is a variable length array. The size of 1 indicated is only a
-                                placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use event
-                                structures with variable length array members. */
+  ble_gattc_char_t chars[1]; /**< Characteristic data. @note This is a variable length array. The size of 1 indicated is
+                                only a placeholder for compilation. See @ref sd_ble_evt_get for more information on how
+                                to use event structures with variable length array members. */
 } ble_gattc_evt_char_disc_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_DESC_DISC_RSP. */
 typedef struct {
   uint16_t count;            /**< Descriptor count. */
-  ble_gattc_desc_t descs[1]; /**< Descriptor data. @note This is a variable length array. The size of 1 indicated is only a
-                                placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use event
-                                structures with variable length array members. */
+  ble_gattc_desc_t descs[1]; /**< Descriptor data. @note This is a variable length array. The size of 1 indicated is
+                                only a placeholder for compilation. See @ref sd_ble_evt_get for more information on how
+                                to use event structures with variable length array members. */
 } ble_gattc_evt_desc_disc_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_ATTR_INFO_DISC_RSP. */
@@ -263,8 +266,8 @@ typedef struct {
   uint8_t handle_value[1]; /**< Handle-Value(s) list. To iterate through the list use @ref
                               sd_ble_gattc_evt_char_val_by_uuid_read_rsp_iter.
                                 @note This is a variable length array. The size of 1 indicated is only a placeholder for
-                              compilation. See @ref sd_ble_evt_get for more information on how to use event structures with
-                              variable length array members. */
+                              compilation. See @ref sd_ble_evt_get for more information on how to use event structures
+                              with variable length array members. */
 } ble_gattc_evt_char_val_by_uuid_read_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_READ_RSP. */
@@ -272,17 +275,17 @@ typedef struct {
   uint16_t handle; /**< Attribute Handle. */
   uint16_t offset; /**< Offset of the attribute data. */
   uint16_t len;    /**< Attribute data length. */
-  uint8_t data[1]; /**< Attribute data. @note This is a variable length array. The size of 1 indicated is only a placeholder for
-                      compilation. See @ref sd_ble_evt_get for more information on how to use event structures with variable
-                      length array members. */
+  uint8_t data[1]; /**< Attribute data. @note This is a variable length array. The size of 1 indicated is only a
+                      placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use event
+                      structures with variable length array members. */
 } ble_gattc_evt_read_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_CHAR_VALS_READ_RSP. */
 typedef struct {
   uint16_t len;      /**< Concatenated Attribute values length. */
-  uint8_t values[1]; /**< Attribute values. @note This is a variable length array. The size of 1 indicated is only a placeholder
-                        for compilation. See @ref sd_ble_evt_get for more information on how to use event structures with
-                        variable length array members. */
+  uint8_t values[1]; /**< Attribute values. @note This is a variable length array. The size of 1 indicated is only a
+                        placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use event
+                        structures with variable length array members. */
 } ble_gattc_evt_char_vals_read_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_WRITE_RSP. */
@@ -292,8 +295,8 @@ typedef struct {
   uint16_t offset;  /**< Data offset. */
   uint16_t len;     /**< Data length. */
   uint8_t data[1];  /**< Data. @note This is a variable length array. The size of 1 indicated is only a placeholder for
-                       compilation.  See @ref sd_ble_evt_get for more information on how to use event structures with variable
-                       length array members. */
+                       compilation.  See @ref sd_ble_evt_get for more information on how to use event structures with
+                       variable  length array members. */
 } ble_gattc_evt_write_rsp_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_HVX. */
@@ -301,9 +304,9 @@ typedef struct {
   uint16_t handle; /**< Handle to which the HVx operation applies. */
   uint8_t type;    /**< Indication or Notification, see @ref BLE_GATT_HVX_TYPES. */
   uint16_t len;    /**< Attribute data length. */
-  uint8_t data[1]; /**< Attribute data. @note This is a variable length array. The size of 1 indicated is only a placeholder for
-                      compilation. See @ref sd_ble_evt_get for more information on how to use event structures with variable
-                      length array members. */
+  uint8_t data[1]; /**< Attribute data. @note This is a variable length array. The size of 1 indicated is only a
+                      placeholder for compilation. See @ref sd_ble_evt_get for more information on how to use event
+                      structures with variable length array members. */
 } ble_gattc_evt_hvx_t;
 
 /**@brief Event structure for @ref BLE_GATTC_EVT_EXCHANGE_MTU_RSP. */
@@ -325,7 +328,8 @@ typedef struct {
 typedef struct {
   uint16_t conn_handle;  /**< Connection Handle on which event occurred. */
   uint16_t gatt_status;  /**< GATT status code for the operation, see @ref BLE_GATT_STATUS_CODES. */
-  uint16_t error_handle; /**< In case of error: The handle causing the error. In all other cases @ref BLE_GATT_HANDLE_INVALID. */
+  uint16_t error_handle; /**< In case of error: The handle causing the error. In all other cases @ref
+                            BLE_GATT_HANDLE_INVALID. */
   union {
     ble_gattc_evt_prim_srvc_disc_rsp_t prim_srvc_disc_rsp;               /**< Primary Service Discovery Response Event Parameters. */
     ble_gattc_evt_rel_disc_rsp_t rel_disc_rsp;                           /**< Relationship Discovery Response Event Parameters. */
@@ -366,7 +370,8 @@ typedef struct {
  *
  */
 typedef struct {
-  uint8_t auto_add_vs_enable : 1; /**< Set to 1 to enable (or 0 to disable) automatic insertion of discovered 128-bit UUIDs. */
+  uint8_t auto_add_vs_enable : 1; /**< Set to 1 to enable (or 0 to disable) automatic insertion of discovered 128-bit
+                                     UUIDs. */
 } ble_gattc_opt_uuid_disc_t;
 
 /**@brief Option structure for GATTC options. */
@@ -382,8 +387,8 @@ typedef union {
 /**@brief Initiate or continue a GATT Primary Service Discovery procedure.
  *
  * @details This function initiates or resumes a Primary Service discovery procedure, starting from the supplied handle.
- *          If the last service has not been reached, this function must be called again with an updated start handle value to
- * continue the search. See also @ref ble_gattc_opt_uuid_disc_t.
+ *          If the last service has not been reached, this function must be called again with an updated start handle
+ * value to continue the search. See also @ref ble_gattc_opt_uuid_disc_t.
  *
  * @events
  * @event{@ref BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP}
@@ -410,8 +415,8 @@ SVCALL(SD_BLE_GATTC_PRIMARY_SERVICES_DISCOVER, uint32_t,
 
 /**@brief Initiate or continue a GATT Relationship Discovery procedure.
  *
- * @details This function initiates or resumes the Find Included Services sub-procedure. If the last included service has not been
- * reached, this must be called again with an updated handle range to continue the search. See also @ref
+ * @details This function initiates or resumes the Find Included Services sub-procedure. If the last included service
+ * has not been reached, this must be called again with an updated handle range to continue the search. See also @ref
  * ble_gattc_opt_uuid_disc_t.
  *
  * @events
@@ -439,8 +444,8 @@ SVCALL(SD_BLE_GATTC_RELATIONSHIPS_DISCOVER, uint32_t,
 
 /**@brief Initiate or continue a GATT Characteristic Discovery procedure.
  *
- * @details This function initiates or resumes a Characteristic discovery procedure. If the last Characteristic has not been
- * reached, this must be called again with an updated handle range to continue the discovery. See also @ref
+ * @details This function initiates or resumes a Characteristic discovery procedure. If the last Characteristic has not
+ * been reached, this must be called again with an updated handle range to continue the discovery. See also @ref
  * ble_gattc_opt_uuid_disc_t.
  *
  * @events
@@ -467,8 +472,8 @@ SVCALL(SD_BLE_GATTC_CHARACTERISTICS_DISCOVER, uint32_t,
 
 /**@brief Initiate or continue a GATT Characteristic Descriptor Discovery procedure.
  *
- * @details This function initiates or resumes a Characteristic Descriptor discovery procedure. If the last Descriptor has not
- * been reached, this must be called again with an updated handle range to continue the discovery. See also @ref
+ * @details This function initiates or resumes a Characteristic Descriptor discovery procedure. If the last Descriptor
+ * has not been reached, this must be called again with an updated handle range to continue the discovery. See also @ref
  * ble_gattc_opt_uuid_disc_t.
  *
  * @events
@@ -495,8 +500,8 @@ SVCALL(SD_BLE_GATTC_DESCRIPTORS_DISCOVER, uint32_t,
 
 /**@brief Initiate or continue a GATT Read using Characteristic UUID procedure.
  *
- * @details This function initiates or resumes a Read using Characteristic UUID procedure. If the last Characteristic has not been
- * reached, this must be called again with an updated handle range to continue the discovery.
+ * @details This function initiates or resumes a Read using Characteristic UUID procedure. If the last Characteristic
+ * has not been reached, this must be called again with an updated handle range to continue the discovery.
  *
  * @events
  * @event{@ref BLE_GATTC_EVT_CHAR_VAL_BY_UUID_READ_RSP}
@@ -523,9 +528,9 @@ SVCALL(SD_BLE_GATTC_CHAR_VALUE_BY_UUID_READ, uint32_t,
 
 /**@brief Initiate or continue a GATT Read (Long) Characteristic or Descriptor procedure.
  *
- * @details This function initiates or resumes a GATT Read (Long) Characteristic or Descriptor procedure. If the Characteristic or
- * Descriptor to be read is longer than ATT_MTU - 1, this function must be called multiple times with appropriate offset to read
- * the complete value.
+ * @details This function initiates or resumes a GATT Read (Long) Characteristic or Descriptor procedure. If the
+ * Characteristic or Descriptor to be read is longer than ATT_MTU - 1, this function must be called multiple times with
+ * appropriate offset to read the complete value.
  *
  * @events
  * @event{@ref BLE_GATTC_EVT_READ_RSP}
@@ -575,8 +580,8 @@ SVCALL(SD_BLE_GATTC_READ, uint32_t, sd_ble_gattc_read(uint16_t conn_handle, uint
 SVCALL(SD_BLE_GATTC_CHAR_VALUES_READ, uint32_t,
        sd_ble_gattc_char_values_read(uint16_t conn_handle, uint16_t const *p_handles, uint16_t handle_count));
 
-/**@brief Perform a Write (Characteristic Value or Descriptor, with or without response, signed or not, long or reliable)
- * procedure.
+/**@brief Perform a Write (Characteristic Value or Descriptor, with or without response, signed or not, long or
+ * reliable) procedure.
  *
  * @details This function can perform all write procedures described in GATT.
  *
@@ -586,17 +591,17 @@ SVCALL(SD_BLE_GATTC_CHAR_VALUES_READ, uint32_t,
  *          A @ref BLE_GATTC_EVT_WRITE_RSP event will be issued as soon as the write response arrives from the peer.
  *
  * @note    The number of Write without Response that can be queued is configured by @ref
- * ble_gattc_conn_cfg_t::write_cmd_tx_queue_size When the queue is full, the function call will return @ref NRF_ERROR_RESOURCES.
- *          A @ref BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE event will be issued as soon as the transmission of the write without
- * response is complete.
+ * ble_gattc_conn_cfg_t::write_cmd_tx_queue_size When the queue is full, the function call will return @ref
+ * NRF_ERROR_RESOURCES. A @ref BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE event will be issued as soon as the transmission of
+ * the write without response is complete.
  *
- * @note    The application can keep track of the available queue element count for writes without responses by following the
- * procedure below:
+ * @note    The application can keep track of the available queue element count for writes without responses by
+ * following the procedure below:
  *          - Store initial queue element count in a variable.
- *          - Decrement the variable, which stores the currently available queue element count, by one when a call to this
- * function returns @ref NRF_SUCCESS.
- *          - Increment the variable, which stores the current available queue element count, by the count variable in @ref
- * BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE event.
+ *          - Decrement the variable, which stores the currently available queue element count, by one when a call to
+ * this function returns @ref NRF_SUCCESS.
+ *          - Increment the variable, which stores the current available queue element count, by the count variable in
+ * @ref BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE event.
  *
  * @events
  * @event{@ref BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE, Write without response transmission complete.}
@@ -619,8 +624,8 @@ SVCALL(SD_BLE_GATTC_CHAR_VALUES_READ, uint32_t,
  * @retval ::NRF_ERROR_INVALID_ADDR Invalid pointer supplied.
  * @retval ::NRF_ERROR_INVALID_PARAM Invalid parameter(s) supplied.
  * @retval ::NRF_ERROR_DATA_SIZE Invalid data size(s) supplied.
- * @retval ::NRF_ERROR_BUSY For write with response, procedure already in progress. Wait for a @ref BLE_GATTC_EVT_WRITE_RSP event
- * and retry.
+ * @retval ::NRF_ERROR_BUSY For write with response, procedure already in progress. Wait for a @ref
+ * BLE_GATTC_EVT_WRITE_RSP event and retry.
  * @retval ::NRF_ERROR_RESOURCES Too many writes without responses queued.
  *                               Wait for a @ref BLE_GATTC_EVT_WRITE_CMD_TX_COMPLETE event and retry.
  * @retval ::NRF_ERROR_TIMEOUT There has been a GATT procedure timeout. No new GATT procedure can be performed without
@@ -649,7 +654,8 @@ SVCALL(SD_BLE_GATTC_HV_CONFIRM, uint32_t, sd_ble_gattc_hv_confirm(uint16_t conn_
 /**@brief Discovers information about a range of attributes on a GATT server.
  *
  * @events
- * @event{@ref BLE_GATTC_EVT_ATTR_INFO_DISC_RSP, Generated when information about a range of attributes has been received.}
+ * @event{@ref BLE_GATTC_EVT_ATTR_INFO_DISC_RSP, Generated when information about a range of attributes has been
+ * received.}
  * @endevents
  *
  * @param[in] conn_handle    The connection handle identifying the connection to perform this procedure on.
@@ -687,7 +693,8 @@ SVCALL(SD_BLE_GATTC_ATTR_INFO_DISCOVER, uint32_t,
  *                           - The minimum value is @ref BLE_GATT_ATT_MTU_DEFAULT.
  *                           - The maximum value is @ref ble_gatt_conn_cfg_t::att_mtu in the connection configuration
                                used for this connection.
- *                           - The value must be equal to Server RX MTU size given in @ref sd_ble_gatts_exchange_mtu_reply
+ *                           - The value must be equal to Server RX MTU size given in @ref
+ sd_ble_gatts_exchange_mtu_reply
  *                             if an ATT_MTU exchange has already been performed in the other direction.
  *
  * @retval ::NRF_SUCCESS Successfully sent request to the server.

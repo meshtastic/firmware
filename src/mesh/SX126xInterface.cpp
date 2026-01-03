@@ -9,8 +9,8 @@
 
 #include "Throttle.h"
 
-// Particular boards might define a different max power based on what their hardware can do, default to max power output if not
-// specified (may be dangerous if using external PA and SX126x power config forgotten)
+// Particular boards might define a different max power based on what their hardware can do, default to max power output
+// if not specified (may be dangerous if using external PA and SX126x power config forgotten)
 #if ARCH_PORTDUINO
 #define SX126X_MAX_POWER portduino_config.sx126x_max_power
 #endif
@@ -30,22 +30,22 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 /// \return true if initialisation succeeded.
 template <typename T> bool SX126xInterface<T>::init() {
 
-// Typically, the RF switch on SX126x boards is controlled by two signals, which are negations of each other (switched RFIO
-// paths). The negation is usually performed in hardware, or (suboptimal design) TXEN and RXEN are the two inputs to this style of
-// RF switch. On some boards, there is no hardware negation between CTRL and ¬CTRL, but CTRL is internally connected to DIO2, and
-// DIO2's switching is done by the SX126X itself, so the MCU can't control ¬CTRL at exactly the same time. One solution would be
-// to set ¬CTRL as SX126X_TXEN or SX126X_RXEN, but they may already be used for another purpose, such as controlling another
-// PA/LNA. Keeping ¬CTRL high seems to work, as long CTRL=1, ¬CTRL=1 has the opposite and stable RF path effect as CTRL=0 and
-// ¬CTRL=1, this depends on the RF switch, but it seems this usually works. Better hardware design, which is done most the time,
-// means this workaround is not necessary.
-#ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
-                     // used and not part of the 'default' set of pin definitions.
+// Typically, the RF switch on SX126x boards is controlled by two signals, which are negations of each other (switched
+// RFIO paths). The negation is usually performed in hardware, or (suboptimal design) TXEN and RXEN are the two inputs
+// to this style of RF switch. On some boards, there is no hardware negation between CTRL and ¬CTRL, but CTRL is
+// internally connected to DIO2, and DIO2's switching is done by the SX126X itself, so the MCU can't control ¬CTRL at
+// exactly the same time. One solution would be to set ¬CTRL as SX126X_TXEN or SX126X_RXEN, but they may already be used
+// for another purpose, such as controlling another PA/LNA. Keeping ¬CTRL high seems to work, as long CTRL=1, ¬CTRL=1
+// has the opposite and stable RF path effect as CTRL=0 and ¬CTRL=1, this depends on the RF switch, but it seems this
+// usually works. Better hardware design, which is done most the time, means this workaround is not necessary.
+#ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not
+                     // commonly used and not part of the 'default' set of pin definitions.
   digitalWrite(SX126X_ANT_SW, HIGH);
   pinMode(SX126X_ANT_SW, OUTPUT);
 #endif
 
-#ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
-                       // used and not part of the 'default' set of pin definitions.
+#ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not
+                       // commonly used and not part of the 'default' set of pin definitions.
   digitalWrite(SX126X_POWER_EN, HIGH);
   pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
@@ -93,13 +93,13 @@ template <typename T> bool SX126xInterface<T>::init() {
   LOG_INFO("Power output set to %d", power);
 
   // Overriding current limit
-  // (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85) using
-  // value in SX126xInterface.h (currently 140 mA) It may or may not be necessary, depending on how RadioLib functions, from
-  // SX1261/2 datasheet: OCP after setting DeviceSel with SetPaConfig(): SX1261 - 60 mA, SX1262 - 140 mA For the SX1268 the IC
-  // defaults to 140mA no matter the set power level, but RadioLib set it lower, this would need further checking Default values
-  // are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
-  // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it
-  // if using SX1262 or SX1268
+  // (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85)
+  // using value in SX126xInterface.h (currently 140 mA) It may or may not be necessary, depending on how RadioLib
+  // functions, from SX1261/2 datasheet: OCP after setting DeviceSel with SetPaConfig(): SX1261 - 60 mA, SX1262 - 140 mA
+  // For the SX1268 the IC defaults to 140mA no matter the set power level, but RadioLib set it lower, this would need
+  // further checking Default values are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
+  // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably
+  // only do it if using SX1262 or SX1268
   res = lora.setCurrentLimit(currentLimit);
   LOG_DEBUG("Current limit set to %f", currentLimit);
   LOG_DEBUG("Current limit set result %d", res);
@@ -119,8 +119,8 @@ template <typename T> bool SX126xInterface<T>::init() {
     LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
   }
 
-// If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
-// no effect
+// If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as
+// it has no effect
 #if ARCH_PORTDUINO
   if (res == RADIOLIB_ERR_NONE) {
     LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", portduino_config.lora_rxen_pin.pin,
@@ -287,7 +287,8 @@ template <typename T> void SX126xInterface<T>::startReceive() {
 
   RadioLibInterface::startReceive();
 
-  // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+  // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
+  // bits
   enableInterrupt(isrRxLevel0);
 #endif
 }

@@ -17,8 +17,8 @@
 #endif
 
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
-// In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
-// if you set power to something higher than 17 or 20 you might fry your board.
+// In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG
+// WARNING if you set power to something higher than 17 or 20 you might fry your board.
 
 #if defined(RADIOMASTER_900_BANDIT_NANO) || defined(RADIOMASTER_900_BANDIT)
 // Structure to hold DAC and DB values
@@ -139,8 +139,9 @@ bool RF95Interface::init() {
 #endif
 
   /*
-  #define RF95_TXEN (22) // If defined, this pin should be set high prior to transmit (controls an external analog switch)
-  #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external analog switch)
+  #define RF95_TXEN (22) // If defined, this pin should be set high prior to transmit (controls an external analog
+  switch) #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external
+  analog switch)
   */
 
 #ifdef RF95_TXEN

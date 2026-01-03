@@ -9,8 +9,8 @@
 
 /*
     AudioModule
-        A interface to send raw codec2 audio data over the mesh network. Based on the example code from the ESP32_codec2 project.
-        https://github.com/deulis/ESP32_Codec2
+        A interface to send raw codec2 audio data over the mesh network. Based on the example code from the ESP32_codec2
+   project. https://github.com/deulis/ESP32_Codec2
 
         Codec 2 is a low-bitrate speech audio codec (speech coding)
         that is patent free and open source develop by David Grant Rowe.
@@ -19,8 +19,8 @@
     Basic Usage:
         1) Enable the module by setting audio.codec2_enabled to 1.
         2) Set the pins for the I2S interface. Recommended on TLora is I2S_WS 13/I2S_SD 15/I2S_SIN 2/I2S_SCK 14
-        3) Set audio.bitrate to the desired codec2 rate (CODEC2_3200, CODEC2_2400, CODEC2_1600, CODEC2_1400, CODEC2_1300,
-   CODEC2_1200, CODEC2_700, CODEC2_700B)
+        3) Set audio.bitrate to the desired codec2 rate (CODEC2_3200, CODEC2_2400, CODEC2_1600, CODEC2_1400,
+   CODEC2_1300, CODEC2_1200, CODEC2_700, CODEC2_700B)
 
     KNOWN PROBLEMS
         * Half Duplex

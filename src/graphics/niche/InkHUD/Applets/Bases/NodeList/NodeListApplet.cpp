@@ -37,7 +37,8 @@ bool InkHUD::NodeListApplet::wantPacket(const meshtastic_MeshPacket *p) {
 // Derived applet might also need to keep other tallies (active nodes count?)
 ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacket &mp) {
   // Abort if applet fully deactivated
-  // Already handled by wantPacket in this case, but good practice for all applets, as some *do* require this early return
+  // Already handled by wantPacket in this case, but good practice for all applets, as some *do* require this early
+  // return
   if (!isActive())
     return ProcessMessage::CONTINUE;
 

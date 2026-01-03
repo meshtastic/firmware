@@ -147,7 +147,8 @@ void InkHUD::LogoApplet::onShutdown() {
   textTitle = parseShortName(ourNode);
   fontTitle = fontMedium;
 
-  // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
+  // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is
+  // complete
 }
 
 void InkHUD::LogoApplet::onReboot() {

@@ -77,7 +77,8 @@ static void initBrownout() {
   err_code = sd_power_pof_threshold_set(vccthresh);
   assert(err_code == NRF_SUCCESS);
 
-  // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
+  // We don't bother with setting up brownout if soft device is disabled - because during production we always use
+  // softdevice
 }
 
 // This is a public global so that the debugger can set it to false automatically from our gdbinit
@@ -179,8 +180,8 @@ extern "C" void lfs_assert(const char *reason) {
   }
   LOG_INFO("Rebooting to format LittleFS");
   delay(500); // Give the serial port a bit of time to output that last message.
-  // Try setting GPREGRET with the SoftDevice first. If that fails (perhaps because the SD hasn't been initialize yet) then set
-  // NRF_POWER->GPREGRET directly.
+  // Try setting GPREGRET with the SoftDevice first. If that fails (perhaps because the SD hasn't been initialize yet)
+  // then set NRF_POWER->GPREGRET directly.
   if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
     NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
   }

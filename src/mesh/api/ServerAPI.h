@@ -21,8 +21,8 @@ public:
   virtual void close();
 
 protected:
-  /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
-  /// stay in the POWERED state to prevent disabling wifi)
+  /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the
+  /// board to stay in the POWERED state to prevent disabling wifi)
   virtual void onConnectionChanged(bool connected) override {}
 
   virtual int32_t runOnce() override; // Check for dropped client connections
@@ -37,8 +37,8 @@ protected:
 template <class T, class U> class APIServerPort : public U, private concurrency::OSThread {
   /** The currently open port
    *
-   * FIXME: We currently only allow one open TCP connection at a time, because we depend on the loop() call in this class to
-   * delegate to the worker.  Once coroutines are implemented we can relax this restriction.
+   * FIXME: We currently only allow one open TCP connection at a time, because we depend on the loop() call in this
+   * class to delegate to the worker.  Once coroutines are implemented we can relax this restriction.
    */
   T *openAPI = NULL;
 #if defined(RAK_4631) || defined(RAK11310)

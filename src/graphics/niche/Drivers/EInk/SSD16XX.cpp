@@ -230,8 +230,9 @@ bool SSD16XX::isUpdateDone() {
 
 void SSD16XX::finalizeUpdate() {
   // Put a copy of the image into the "old memory".
-  // Used with differential refreshes (e.g. FAST update), to determine which px need to move, and which can remain in place
-  // We need to keep the "old memory" up to date, because don't know whether next refresh will be FULL or FAST etc.
+  // Used with differential refreshes (e.g. FAST update), to determine which px need to move, and which can remain in
+  // place We need to keep the "old memory" up to date, because don't know whether next refresh will be FULL or FAST
+  // etc.
   if (updateType != FULL) {
     writeNewImage(); // Only required by some controller variants. Todo: Override just for GDEY0154D678?
     writeOldImage();

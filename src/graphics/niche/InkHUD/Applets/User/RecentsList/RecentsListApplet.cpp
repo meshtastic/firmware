@@ -67,7 +67,8 @@ void InkHUD::RecentsListApplet::handleParsed(CardInfo c) {
 }
 
 // Record the time (millis, right now) that we hear a node
-// If we do not hear from a node for a while, its card and age info will be removed by the purge method, which runs regularly
+// If we do not hear from a node for a while, its card and age info will be removed by the purge method, which runs
+// regularly
 void InkHUD::RecentsListApplet::seenNow(NodeNum nodeNum) {
   // If we're updating an existing entry, remove the old one. Will reinsert at front
   for (auto it = ages.begin(); it != ages.end(); ++it) {

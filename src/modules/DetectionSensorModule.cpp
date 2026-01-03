@@ -80,7 +80,8 @@ int32_t DetectionSensorModule::runOnce() {
     return setStartDelay();
   }
 
-  // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
+  // LOG_DEBUG("Detection Sensor Module: Current pin state: %i",
+  // digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
   if (!Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
     bool isDetected = hasDetectionEvent();
@@ -98,8 +99,8 @@ int32_t DetectionSensorModule::runOnce() {
     }
   }
   // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
-  // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
-  // change detections.
+  // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only
+  // broadcast state change detections.
   if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
       !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                                       default_telemetry_broadcast_interval_secs))) {

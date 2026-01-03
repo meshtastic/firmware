@@ -27,8 +27,8 @@
 #define MAX_MQTT_QUEUE 16
 
 /**
- * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol implementation from
- * the two components that use it: MQTTPlugin and MQTTSimInterface.
+ * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol
+ * implementation from the two components that use it: MQTTPlugin and MQTTSimInterface.
  */
 class MQTT : private concurrency::OSThread {
 public:
@@ -40,8 +40,8 @@ public:
    * @param mp_decoded the decrypted packet to publish
    * @param chIndex the index of the channel for this message
    *
-   * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
-   * can not forward those messages to the cloud - because no way to find a global channel ID.
+   * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the
+   * keys), we can not forward those messages to the cloud - because no way to find a global channel ID.
    */
   void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 

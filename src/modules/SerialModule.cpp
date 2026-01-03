@@ -119,7 +119,8 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio") {
  *
  * @return true if the serial connection is established, false otherwise.
  *
- * For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent messages
+ * For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent
+ * messages
  */
 bool SerialModule::checkIsConnected() { return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT); }
 

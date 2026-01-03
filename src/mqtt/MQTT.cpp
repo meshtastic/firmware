@@ -563,7 +563,8 @@ int32_t MQTT::runOnce() {
 
   perhapsReportToMap();
 
-  // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact server
+  // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact
+  // server
   if (moduleConfig.mqtt.proxy_to_client_enabled) {
     publishQueuedMessages();
     return 200;
@@ -724,7 +725,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
       return;
     }
   }
-  // Either encrypted packet (we couldn't decrypt) is marked as pki_encrypted, or we could decode the PKI encrypted packet
+  // Either encrypted packet (we couldn't decrypt) is marked as pki_encrypted, or we could decode the PKI encrypted
+  // packet
   bool isPKIEncrypted = mp_encrypted.pki_encrypted || mp_decoded.pki_encrypted;
   // If it was to a channel, check uplink enabled, else must be pki_encrypted
   if (!(ch.settings.uplink_enabled || isPKIEncrypted))

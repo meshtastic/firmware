@@ -31,16 +31,16 @@ public:
 
     \param cr %LoRa link coding rate denominator. Allowed values range from 5 to 8.
 
-    \param syncWord %LoRa sync word. Can be used to distinguish different networks. Note that value 0x34 is reserved for LoRaWAN
-    networks.
+    \param syncWord %LoRa sync word. Can be used to distinguish different networks. Note that value 0x34 is reserved for
+    LoRaWAN networks.
 
     \param power Transmission output power in dBm. Allowed values range from 2 to 17 dBm.
 
-    \param preambleLength Length of %LoRa transmission preamble in symbols. The actual preamble length is 4.25 symbols longer
-    than the set number. Allowed values range from 6 to 65535.
+    \param preambleLength Length of %LoRa transmission preamble in symbols. The actual preamble length is 4.25 symbols
+    longer than the set number. Allowed values range from 6 to 65535.
 
-    \param gain Gain of receiver LNA (low-noise amplifier). Can be set to any integer in range 1 to 6 where 1 is the highest
-    gain. Set to 0 to enable automatic gain control (recommended).
+    \param gain Gain of receiver LNA (low-noise amplifier). Can be set to any integer in range 1 to 6 where 1 is the
+    highest gain. Set to 0 to enable automatic gain control (recommended).
 
     \returns \ref status_codes
   */

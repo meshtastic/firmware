@@ -93,8 +93,8 @@ enum NRF_MBR_SVCS {
 enum NRF_MBR_COMMANDS {
   SD_MBR_COMMAND_COPY_BL,               /**< Copy a new BootLoader. @see ::sd_mbr_command_copy_bl_t*/
   SD_MBR_COMMAND_COPY_SD,               /**< Copy a new SoftDevice. @see ::sd_mbr_command_copy_sd_t*/
-  SD_MBR_COMMAND_INIT_SD,               /**< Initialize forwarding interrupts to SD, and run reset function in SD. Does not require any
-                                           parameters in ::sd_mbr_command_t params.*/
+  SD_MBR_COMMAND_INIT_SD,               /**< Initialize forwarding interrupts to SD, and run reset function in SD. Does not require
+                                           any parameters in ::sd_mbr_command_t params.*/
   SD_MBR_COMMAND_COMPARE,               /**< This command works like memcmp. @see ::sd_mbr_command_compare_t*/
   SD_MBR_COMMAND_VECTOR_TABLE_BASE_SET, /**< Change the address the MBR starts after a reset. @see
                                            ::sd_mbr_command_vector_table_base_set_t*/
@@ -117,7 +117,8 @@ enum NRF_MBR_COMMANDS {
  * The user of this function is responsible for setting the BPROT registers.
  *
  * @retval ::NRF_SUCCESS indicates that the contents of the memory blocks where copied correctly.
- * @retval ::NRF_ERROR_INTERNAL indicates that the contents of the memory blocks where not verified correctly after copying.
+ * @retval ::NRF_ERROR_INTERNAL indicates that the contents of the memory blocks where not verified correctly after
+ * copying.
  */
 typedef struct {
   uint32_t *src; /**< Pointer to the source of data to be copied.*/

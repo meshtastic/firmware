@@ -47,13 +47,14 @@ public:
 
 /*
   Router for direct messages, which only relays if it is the next hop for a packet. The next hop is set by the current
-  relayer of a packet, which bases this on information from a previous successful delivery to the destination via flooding.
-  Namely, in the PacketHistory, we keep track of (up to 3) relayers of a packet. When the ACK is delivered back to us via a node
-  that also relayed the original packet, we use that node as next hop for the destination from then on. This makes sure that only
-  when there’s a two-way connection, we assign a next hop. Both the ReliableRouter and NextHopRouter will do retransmissions (the
-  NextHopRouter only 1 time). For the final retry, if no one actually relayed the packet, it will reset the next hop in order to
-  fall back to the FloodingRouter again. Note that thus also intermediate hops will do a single retransmission if the intended
-  next-hop didn’t relay, in order to fix changes in the middle of the route.
+  relayer of a packet, which bases this on information from a previous successful delivery to the destination via
+  flooding. Namely, in the PacketHistory, we keep track of (up to 3) relayers of a packet. When the ACK is delivered
+  back to us via a node that also relayed the original packet, we use that node as next hop for the destination from
+  then on. This makes sure that only when there’s a two-way connection, we assign a next hop. Both the ReliableRouter
+  and NextHopRouter will do retransmissions (the NextHopRouter only 1 time). For the final retry, if no one actually
+  relayed the packet, it will reset the next hop in order to fall back to the FloodingRouter again. Note that thus also
+  intermediate hops will do a single retransmission if the intended next-hop didn’t relay, in order to fix changes in
+  the middle of the route.
 */
 class NextHopRouter : public FloodingRouter {
 public:

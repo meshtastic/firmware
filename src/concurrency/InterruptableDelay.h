@@ -15,7 +15,8 @@ namespace concurrency {
 /**
  * An object that provides delay(msec) like functionality, but can be interrupted by calling interrupt().
  *
- * Useful for they top level loop() delay call to keep the CPU powered down until our next scheduled event or some external event.
+ * Useful for they top level loop() delay call to keep the CPU powered down until our next scheduled event or some
+ * external event.
  *
  * This is implemented for FreeRTOS but should be easy to port to other operating systems.
  */

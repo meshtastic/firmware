@@ -44,6 +44,7 @@ struct UIFrameEvent {
     REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
     REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
     REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, Attempt to remain on the same frame throughout
+    SWITCH_TO_TEXTMESSAGE           // Jump directly to the Text Message screen
   } action = REDRAW_ONLY;
 
   // We might want to pass additional data inside this struct at some point
@@ -53,8 +54,8 @@ struct UIFrameEvent {
  *
  * A module allows you to add new features to meshtastic device code, without needing to know messaging details.
  *
- * A key concept for this is that your module should use a particular "portnum" for each message type you want to receive
- * and handle.
+ * A key concept for this is that your module should use a particular "portnum" for each message type you want to
+ * receive and handle.
  *
  * Internally we use modules to implement the core meshtastic text messaging and gps position sharing features.  You
  * can use these classes as examples for how to write your own custom module.  See here: (FIXME)
@@ -86,9 +87,9 @@ public:
 protected:
   const char *name;
 
-  /** Most modules only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
-  recipient) But some plugs might want to 'sniff' packets that are merely being routed (passing through the current node). Those
-  modules can set this to true and their handleReceived() will be called for every packet.
+  /** Most modules only care about packets that are destined for their node (i.e. broadcasts or has their node as the
+  specific recipient) But some plugs might want to 'sniff' packets that are merely being routed (passing through the
+  current node). Those modules can set this to true and their handleReceived() will be called for every packet.
   */
   bool isPromiscuous = false;
 
@@ -96,8 +97,8 @@ protected:
    *  this setting disabled - see issue #877 */
   bool loopbackOk = false;
 
-  /** Most modules only understand decrypted packets.  For modules that also want to see encrypted packets, they should set this
-   * flag */
+  /** Most modules only understand decrypted packets.  For modules that also want to see encrypted packets, they should
+   * set this flag */
   bool encryptedOk = false;
 
   /* We allow modules to ignore a request without sending an error if they have a specific reason for it. */
@@ -127,7 +128,8 @@ protected:
   int32_t setStartDelay();
 
   /**
-   * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response handling.
+   * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response
+   * handling.
    */
   meshtastic_MeshPacket *myReply = NULL;
 
@@ -144,8 +146,8 @@ protected:
 
   /** Called to handle a particular incoming message
 
-  @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
-  it
+  @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be
+  considered for it
   */
   virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) { return ProcessMessage::CONTINUE; }
 
@@ -157,8 +159,8 @@ protected:
   /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
    * so that subclasses can (optionally) send a response back to the original sender.
    *
-   * Note: most implementers don't need to override this, instead: If while handling a request you have a reply, just set
-   * the protected reply field in this instance.
+   * Note: most implementers don't need to override this, instead: If while handling a request you have a reply, just
+   * set the protected reply field in this instance.
    * */
   virtual meshtastic_MeshPacket *allocReply();
 

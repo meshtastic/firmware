@@ -362,7 +362,8 @@ void InkHUD::WindowManager::autoshow() {
 
       // Check if autoshown applet shows the same information as notification intended to
       // In this case, we can dismiss the notification before it is shown
-      // Note: we are re-running the approval process. This normally occurs when the notification is initially triggered.
+      // Note: we are re-running the approval process. This normally occurs when the notification is initially
+      // triggered.
       if (notificationApplet->isForeground() && !notificationApplet->isApproved())
         notificationApplet->dismiss();
 

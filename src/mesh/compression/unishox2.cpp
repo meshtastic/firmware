@@ -48,8 +48,8 @@ const char *USX_TEMPLATES[] = {"tfff-of-tfTtf:rf:rf.fffZ", "tfff-of-tf", "(fff) 
 /// possible horizontal sets and states
 enum { USX_ALPHA = 0, USX_SYM, USX_NUM, USX_DICT, USX_DELTA, USX_NUM_TEMP };
 
-/// This 2D array has the characters for the sets USX_ALPHA, USX_SYM and USX_NUM. Where a character cannot fit into a uint8_t, 0
-/// is used and handled in code.
+/// This 2D array has the characters for the sets USX_ALPHA, USX_SYM and USX_NUM. Where a character cannot fit into a
+/// uint8_t, 0 is used and handled in code.
 uint8_t usx_sets[][28] = {
     {0, ' ', 'e', 't', 'a', 'o', 'i', 'n', 's', 'r', 'l', 'c', 'd', 'h', 'u', 'p', 'm', 'b', 'g', 'w', 'f', 'y', 'v', 'k', 'q', 'j', 'x', 'z'},
     {'"', '{', '}', '_', '<', '>', ':', '\n', 0, '[', ']', '\\', ';', '\'', '\t', '@', '*', '&', '?', '!', '^', '|', '\r', '~', '`', 0, 0, 0},
@@ -67,8 +67,8 @@ uint8_t usx_vcodes[] = {0x00, 0x40, 0x60, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0x
 /// Length of each veritical code
 uint8_t usx_vcode_lens[] = {2, 3, 3, 4, 4, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
 
-/// Vertical Codes and Set number for frequent sequences in sets USX_SYM and USX_NUM. First 3 bits indicate set (USX_SYM/USX_NUM)
-/// and rest are vcode positions
+/// Vertical Codes and Set number for frequent sequences in sets USX_SYM and USX_NUM. First 3 bits indicate set
+/// (USX_SYM/USX_NUM) and rest are vcode positions
 uint8_t usx_freq_codes[] = {(1 << 5) + 25, (1 << 5) + 26, (1 << 5) + 27, (2 << 5) + 23, (2 << 5) + 24, (2 << 5) + 25};
 
 /// Not used
@@ -354,8 +354,8 @@ int matchOccurance(const char *in, int len, int l, char *out, int olen, int *ol,
   if (longest_len) {
     SAFE_APPEND_BITS(*ol = append_switch_code(out, olen, *ol, *state));
     SAFE_APPEND_BITS(*ol = append_bits(out, olen, *ol, usx_hcodes[USX_DICT], usx_hcode_lens[USX_DICT]));
-    // printf("Len:%d / Dist:%d/%.*s\n", longest_len, longest_dist, longest_len + NICE_LEN, in + l - longest_dist - NICE_LEN +
-    // 1);
+    // printf("Len:%d / Dist:%d/%.*s\n", longest_len, longest_dist, longest_len + NICE_LEN, in + l - longest_dist -
+    // NICE_LEN + 1);
     SAFE_APPEND_BITS(*ol = encodeCount(out, olen, *ol, longest_len));
     SAFE_APPEND_BITS(*ol = encodeCount(out, olen, *ol, longest_dist));
     l += (longest_len + NICE_LEN);
@@ -468,7 +468,8 @@ int append_nibble_escape(char *out, int olen, int ol, uint8_t state, const uint8
 /// Returns minimum value of two longs
 long min_of(long c, long i) { return c > i ? i : c; }
 
-/// Appends the terminator code depending on the state, preset and whether full terminator needs to be encoded to out or not \n
+/// Appends the terminator code depending on the state, preset and whether full terminator needs to be encoded to out or
+/// not \n
 int append_final_bits(char *const out, const int olen, int ol, const uint8_t state, const uint8_t is_all_upper, const uint8_t usx_hcodes[],
                       const uint8_t usx_hcode_lens[]) {
   if (usx_hcode_lens[USX_ALPHA]) {

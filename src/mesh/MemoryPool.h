@@ -24,8 +24,8 @@ public:
     return p;
   }
 
-  /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably
-  /// don't want this version).
+  /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you
+  /// probably don't want this version).
   T *allocZeroed(TickType_t maxWait) {
     T *p = alloc(maxWait);
 
@@ -51,9 +51,8 @@ public:
   /// Return a queable object which has been prefilled with zeros.
   /// std::unique_ptr wrapped variant of allocZeroed().
   UniqueAllocation allocUniqueZeroed() { return UniqueAllocation(allocZeroed(), deleter); }
-  /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you probably
-  /// don't want this version).
-  /// std::unique_ptr wrapped variant of allocZeroed(TickType_t maxWait).
+  /// Return a queable object which has been prefilled with zeros - allow timeout to wait for available buffers (you
+  /// probably don't want this version). std::unique_ptr wrapped variant of allocZeroed(TickType_t maxWait).
   UniqueAllocation allocUniqueZeroed(TickType_t maxWait) { return UniqueAllocation(allocZeroed(maxWait), deleter); }
   /// Return a queable object which is a copy of some other object
   /// std::unique_ptr wrapped variant of allocCopy(const T &src, TickType_t maxWait).

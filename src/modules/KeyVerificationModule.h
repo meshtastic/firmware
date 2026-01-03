@@ -15,7 +15,8 @@ enum KeyVerificationState {
 class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> //, private concurrency::OSThread //
 {
   // CallbackObserver<KeyVerificationModule, const meshtastic::Status *> nodeStatusObserver =
-  //     CallbackObserver<KeyVerificationModule, const meshtastic::Status *>(this, &KeyVerificationModule::handleStatusUpdate);
+  //     CallbackObserver<KeyVerificationModule, const meshtastic::Status *>(this,
+  //     &KeyVerificationModule::handleStatusUpdate);
 
 public:
   KeyVerificationModule();

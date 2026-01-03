@@ -66,13 +66,14 @@ public:
   NodeNum getNodeNum();
 
   /** Wake up the router thread ASAP, because we just queued a message for it.
-   * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this queue'
+   * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this
+   * queue'
    */
   void setReceivedMessage();
 
   /**
-   * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
-   * freeing the packet
+   * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now
+   * responsible for freeing the packet
    */
   virtual void enqueueReceivedMessage(meshtastic_MeshPacket *p);
 
@@ -86,8 +87,8 @@ public:
   virtual ErrorCode send(meshtastic_MeshPacket *p);
   virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
-  /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
-      before us */
+  /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone
+     did it before us */
   uint32_t rxDupe = 0, txRelayCanceled = 0;
 
   // pointer to the encrypted packet

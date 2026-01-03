@@ -27,7 +27,8 @@ public:
   virtual void onReboot() { onShutdown(); } // - handle reboot specially
 
   // Other system applets may take precedence over our own system applet though
-  // The order an applet is passed to WindowManager::addSystemApplet determines this hierarchy (added earlier = higher rank)
+  // The order an applet is passed to WindowManager::addSystemApplet determines this hierarchy (added earlier = higher
+  // rank)
 
 private:
   // System applets are always running (active), but may not be visible (foreground)

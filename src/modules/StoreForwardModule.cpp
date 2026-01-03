@@ -2,12 +2,13 @@
  * @file StoreForwardModule.cpp
  * @brief Implementation of the StoreForwardModule class.
  *
- * This file contains the implementation of the StoreForwardModule class, which is responsible for managing the store and forward
- * functionality of the Meshtastic device. The class provides methods for sending and receiving messages, as well as managing the
- * message history queue. It also initializes and manages the data structures used for storing the message history.
+ * This file contains the implementation of the StoreForwardModule class, which is responsible for managing the store
+ * and forward functionality of the Meshtastic device. The class provides methods for sending and receiving messages, as
+ * well as managing the message history queue. It also initializes and manages the data structures used for storing the
+ * message history.
  *
- * The StoreForwardModule class is used by the MeshService class to provide store and forward functionality to the Meshtastic
- * device.
+ * The StoreForwardModule class is used by the MeshService class to provide store and forward functionality to the
+ * Meshtastic device.
  *
  * @author Jm Casler
  * @date [Insert Date]

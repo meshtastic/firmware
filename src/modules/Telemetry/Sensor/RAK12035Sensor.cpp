@@ -78,8 +78,8 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement) {
   // TODO:: read and send metrics for up to 2 additional soil monitors if present.
   //  -- how to do this.. this could get a little complex..
   //     ie - 1> we combine them into an average and send that, 2> we send them as separate metrics
-  //      ^-- these scenarios would require different handling of the metrics in the receiving end and maybe a setting in the
-  //      device ui and an additional proto for that?
+  //      ^-- these scenarios would require different handling of the metrics in the receiving end and maybe a setting
+  //      in the device ui and an additional proto for that?
   measurement->variant.environment_metrics.has_soil_temperature = true;
   measurement->variant.environment_metrics.has_soil_moisture = true;
 

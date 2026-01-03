@@ -62,9 +62,10 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const
  *  8 Horizontal Dilution of precision (meters)
  *  9 Antenna Altitude above/below mean-sea-level (geoid) (in meters)
  * 10 Units of antenna altitude, meters
- * 11 Geoidal separation, the difference between the WGS-84 earth ellipsoid and mean-sea-level (geoid), "-" means mean-sea-level
- * below ellipsoid 12 Units of geoidal separation, meters 13 Age of differential GPS data, time in seconds since last SC104 type 1
- * or 9 update, null field when DGPS is not used 14 Differential reference station ID, 0000-1023 15 Checksum
+ * 11 Geoidal separation, the difference between the WGS-84 earth ellipsoid and mean-sea-level (geoid), "-" means
+ * mean-sea-level below ellipsoid 12 Units of geoidal separation, meters 13 Age of differential GPS data, time in
+ * seconds since last SC104 type 1 or 9 update, null field when DGPS is not used 14 Differential reference station ID,
+ * 0000-1023 15 Checksum
  * -------------------------------------------
  */
 

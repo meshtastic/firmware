@@ -118,8 +118,8 @@ void assertIsSetup() {
   /**
    * Dear developer comrade - If this assert fails() that means you need to fix the following:
    *
-   * This flag is set **only** when setup() starts, to provide a way for us to check for sloppy static constructor calls.
-   * Call assertIsSetup() to force a crash if someone tries to create an instance too early.
+   * This flag is set **only** when setup() starts, to provide a way for us to check for sloppy static constructor
+   * calls. Call assertIsSetup() to force a crash if someone tries to create an instance too early.
    *
    * it is super important to never allocate those object statically.  instead, you should explicitly
    *  new them at a point where you are guaranteed that other objects that this instance

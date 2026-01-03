@@ -163,7 +163,8 @@ std::string InkHUD::AppletFont::decodeUTF8(std::string encoded) {
 // Re-encode a single UTF-8 character to extended ASCII
 // Target encoding depends on the font
 char InkHUD::AppletFont::applyEncoding(std::string utf8) {
-  // ##################################################### Syntactic Sugar #####################################################
+  // ##################################################### Syntactic Sugar
+  // #####################################################
 #define REMAP(in, out)                                                                                                                               \
   case in:                                                                                                                                           \
     return out;
