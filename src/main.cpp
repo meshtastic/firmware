@@ -107,6 +107,10 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
+#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
+static bool touchBacklightWasOn = false;
+static bool touchBacklightActive = false;
+#endif
 #endif
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
@@ -205,7 +209,7 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 /// The I2C address of our Air Quality Indicator (if found)
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
 Adafruit_DRV2605 drv;
 #endif
 
@@ -788,7 +792,6 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
-
 #if HAS_TFT
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();
@@ -834,7 +837,12 @@ void setup()
 #endif
 #endif
 
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
+#if defined(PIN_DRV_EN)
+    pinMode(PIN_DRV_EN, OUTPUT);
+    digitalWrite(PIN_DRV_EN, HIGH);
+    delay(10);
+#endif
     drv.begin();
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
@@ -870,7 +878,7 @@ void setup()
     SPI.begin();
 #endif
 #else
-        // ESP32
+// ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -1039,6 +1047,24 @@ void setup()
     };
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
+#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
+    // On T-Echo Plus the touch pad should only drive the backlight, not UI navigation/sounds
+    touchConfig.longPress = INPUT_BROKER_NONE;
+    touchConfig.suppressLeadUpSound = true;
+    touchConfig.onPress = []() {
+        touchBacklightWasOn = uiconfig.screen_brightness == 1;
+        if (!touchBacklightWasOn) {
+            digitalWrite(PIN_EINK_EN, HIGH);
+        }
+        touchBacklightActive = true;
+    };
+    touchConfig.onRelease = []() {
+        if (touchBacklightActive && !touchBacklightWasOn) {
+            digitalWrite(PIN_EINK_EN, LOW);
+        }
+        touchBacklightActive = false;
+    };
+#endif
     TouchButtonThread->initButton(touchConfig);
 #endif
 
