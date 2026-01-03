@@ -231,7 +231,7 @@ const RegionInfo regions[] = {
     /*
         HAM 433MHz band
     */
-    RDEF(HAM_US433, 432.40f, 433.0f, 100, 0, 99, true, false, false, true, NARROW_FAST, PRESETS_HAM),
+    RDEF(HAM_US433, 430.00f, 450.0f, 100, 0, 99, true, false, false, true, NARROW_FAST, PRESETS_HAM),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
@@ -609,9 +609,9 @@ ModemConfig settingsForPreset(bool wide, meshtastic_Config_LoRaConfig_ModemPrese
         cfg.sf = 8;
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST:
-        cfg.bw = 500;
+        cfg.bw = 62.5;
         cfg.cr = 5;
-        cfg.sf = 7;
+        cfg.sf = 8;
         break;
     }
 
