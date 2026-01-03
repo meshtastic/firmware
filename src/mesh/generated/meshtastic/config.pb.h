@@ -288,9 +288,9 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
     /* EU 866MHz RFID band (ETSI EN 302 208) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_866 = 27,
-    /* EU 866MHz RFID band (ETSI EN 302 208) */
+    /* EU 868MHz band, with narrow presets */
     meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 = 28,
-    /* EU 866MHz RFID band (ETSI EN 302 208) */
+    /* US 433MHz Amateur Use band */
     meshtastic_Config_LoRaConfig_RegionCode_HAM_US433 = 29
 } meshtastic_Config_LoRaConfig_RegionCode;
 
@@ -338,11 +338,7 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Narrow Slow
  Moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
  Comparable link budget and data rate to LONG_FAST. */
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13,
-    /* Ham Fast
- Short range preset optimized for 433MHz band with wide bandwidth.
- Intended for use in amateur radio bands. */
-    meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST = 14
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -720,8 +716,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_HAM_US433+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN

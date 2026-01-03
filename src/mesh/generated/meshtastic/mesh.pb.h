@@ -92,8 +92,8 @@ typedef enum _meshtastic_HardwareModel {
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
     meshtastic_HardwareModel_LORA_RELAY_V1 = 32,
-    /* TODO: REPLACE */
-    meshtastic_HardwareModel_NRF52840DK = 33,
+    /* T-Echo Plus device from LilyGo */
+    meshtastic_HardwareModel_T_ECHO_PLUS = 33,
     /* TODO: REPLACE */
     meshtastic_HardwareModel_PPR = 34,
     /* TODO: REPLACE */
@@ -475,7 +475,10 @@ typedef enum _meshtastic_Routing_Error {
     meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37,
     /* Airtime fairness rate limit exceeded for a packet
  This typically enforced per portnum and is used to prevent a single node from monopolizing airtime */
-    meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38
+    meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38,
+    /* PKI encryption failed, due to no public key for the remote node
+ This is different from PKI_UNKNOWN_PUBKEY which indicates a failure upon receiving a packet */
+    meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY = 39
 } meshtastic_Routing_Error;
 
 /* Enum of message types */
@@ -822,6 +825,8 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     uint32_t encapsulated_from;
     /* The receive time of the message in question */
     uint32_t encapsulated_rxtime;
+    /* Used in a LINK_REQUEST to specify the message X spots back from head */
+    uint32_t chain_count;
 } meshtastic_StoreForwardPlusPlus;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
@@ -1349,8 +1354,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY+1))
 
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
@@ -1428,7 +1433,7 @@ extern "C" {
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
-#define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0}
+#define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
@@ -1460,7 +1465,7 @@ extern "C" {
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
-#define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0}
+#define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
@@ -1548,6 +1553,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_encapsulated_to_tag 7
 #define meshtastic_StoreForwardPlusPlus_encapsulated_from_tag 8
 #define meshtastic_StoreForwardPlusPlus_encapsulated_rxtime_tag 9
+#define meshtastic_StoreForwardPlusPlus_chain_count_tag 10
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1773,7 +1779,8 @@ X(a, STATIC,   SINGULAR, BYTES,    message,           5) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_id,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_to,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_from,   8) \
-X(a, STATIC,   SINGULAR, UINT32,   encapsulated_rxtime,   9)
+X(a, STATIC,   SINGULAR, UINT32,   encapsulated_rxtime,   9) \
+X(a, STATIC,   SINGULAR, UINT32,   chain_count,      10)
 #define meshtastic_StoreForwardPlusPlus_CALLBACK NULL
 #define meshtastic_StoreForwardPlusPlus_DEFAULT NULL
 
@@ -2143,7 +2150,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
-#define meshtastic_StoreForwardPlusPlus_size     371
+#define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
 #define meshtastic_Waypoint_size                 165
