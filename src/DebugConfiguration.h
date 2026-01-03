@@ -190,6 +190,7 @@ class Syslog
     void enable();
     void disable();
     bool isEnabled();
+    bool isConnected();
 
     bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
     bool vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));

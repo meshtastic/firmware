@@ -570,13 +570,13 @@ void MQTT::sendSubscriptions()
             hasDownlink = true;
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribe to %s", topic.c_str());
-            pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
+            pubSub.subscribe(topic.c_str(), 1); // QoS 1 - at-least-once, mesh handles dedup
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
                 LOG_INFO("Subscribe to %s", topicDecoded.c_str());
-                pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
+                pubSub.subscribe(topicDecoded.c_str(), 1); // QoS 1 - at-least-once, mesh handles dedup
             }
 #endif // ARCH_NRF52 NRF52_USE_JSON
         }
