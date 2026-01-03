@@ -30,8 +30,8 @@ meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {meshtastic_Config_LoR
 meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
                                                              meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW};
 
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST,
-                                                          meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
+// Same as Narrow presets, but separate so that extra ham settings can be added later.
+meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
                                                           meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW};
 
 meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST};
@@ -231,7 +231,7 @@ const RegionInfo regions[] = {
     /*
         HAM 433MHz band
     */
-    RDEF(HAM_US433, 430.00f, 450.0f, 100, 0, 99, true, false, false, true, NARROW_FAST, PRESETS_HAM),
+    RDEF(HAM_US433, 430.00f, 450.0f, 100, 0, 99, true, false, false, true, NARROW_SLOW, PRESETS_HAM),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
@@ -606,11 +606,6 @@ ModemConfig settingsForPreset(bool wide, meshtastic_Config_LoRaConfig_ModemPrese
     case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
         cfg.bw = 62.5;
         cfg.cr = 6;
-        cfg.sf = 8;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST:
-        cfg.bw = 62.5;
-        cfg.cr = 5;
         cfg.sf = 8;
         break;
     }
