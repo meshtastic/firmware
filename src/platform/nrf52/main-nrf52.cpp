@@ -313,6 +313,23 @@ void nrf52Setup()
 
     r = nrfx_wdt_channel_alloc(&nrfx_wdt, &nrfx_wdt_channel_id_nrf52_main);
     assert(r == NRFX_SUCCESS);
+
+
+    // print LFCLK debug info
+
+  //  const char *clkSource = NULL;
+
+   // switch (NRF_CLOCK->LFCLKSRC & 0x03){
+   //     case CLOCK_LFCLKSRC_SRC_Xtal:
+   //         clkSource = "XTAL";
+   //         break;
+   //     case CLOCK_LFCLKSRC_SRC_RC:
+   ///         clkSource = "RC";
+   //         break;
+   // }
+
+    //LOG_DEBUG("LFCLK source: %s", clkSource);
+
 }
 
 void cpuDeepSleep(uint32_t msecToWake)
