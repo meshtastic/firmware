@@ -330,7 +330,7 @@ void setup()
 
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, LOW);
+    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
