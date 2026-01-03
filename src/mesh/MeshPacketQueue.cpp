@@ -1,6 +1,7 @@
 #include "MeshPacketQueue.h"
 #include "NodeDB.h"
 #include "configuration.h"
+#include "modules/RoutingStatsModule.h"
 #include <assert.h>
 
 #include <algorithm>
@@ -76,6 +77,7 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p, bool *dropped)
         if (dropped) {
             *dropped = true;
         }
+        routingStats->logEvent(RoutingEvent::TX_DROP);
         return replaced;
     }
 
@@ -86,6 +88,7 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p, bool *dropped)
     // Find the correct position using upper_bound to maintain a stable order
     auto it = std::upper_bound(queue.begin(), queue.end(), p, CompareMeshPacketFunc);
     queue.insert(it, p); // Insert packet at the found position
+    routingStats->logEvent(RoutingEvent::TX_HWM, NULL, queue.size());
     return true;
 }
 
