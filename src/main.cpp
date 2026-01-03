@@ -107,6 +107,10 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
+#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
+static bool touchBacklightWasOn = false;
+static bool touchBacklightActive = false;
+#endif
 #endif
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
@@ -1043,6 +1047,24 @@ void setup()
     };
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
+#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
+    // On T-Echo Plus the touch pad should only drive the backlight, not UI navigation/sounds
+    touchConfig.longPress = INPUT_BROKER_NONE;
+    touchConfig.suppressLeadUpSound = true;
+    touchConfig.onPress = []() {
+        touchBacklightWasOn = uiconfig.screen_brightness == 1;
+        if (!touchBacklightWasOn) {
+            digitalWrite(PIN_EINK_EN, HIGH);
+        }
+        touchBacklightActive = true;
+    };
+    touchConfig.onRelease = []() {
+        if (touchBacklightActive && !touchBacklightWasOn) {
+            digitalWrite(PIN_EINK_EN, LOW);
+        }
+        touchBacklightActive = false;
+    };
+#endif
     TouchButtonThread->initButton(touchConfig);
 #endif
 
