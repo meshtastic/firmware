@@ -108,6 +108,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "US",
                                          "EU_433",
                                          "EU_868",
+                                         "EU_866",
+                                         "NARROW_868",
                                          "CN",
                                          "JP",
                                          "ANZ",
@@ -133,8 +135,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "KZ_863",
                                          "NP_865",
                                          "BR_902",
-                                         "EU_866",
-                                         "NARROW_868",
                                          "HAM_US433"};
     BannerOverlayOptions bannerOptions;
 #if defined(M5STACK_UNITC6L)
@@ -244,9 +244,7 @@ void menuHandler::RadioPresetPicker()
         {"LiteFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST},
         {"LiteSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW},
         {"NarrowFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST},
-        {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW},
-        {"HamFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_HAM_FAST},
-    };
+        {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW}};
 
     constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
     static std::array<const char *, presetCount> presetLabels{};
