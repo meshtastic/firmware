@@ -128,8 +128,15 @@ void Graph::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
 }
 
 void Graph::ageEdges(uint32_t currentTime) {
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+
     // Age individual edges
     for (auto& pair : adjacencyList) {
+        // Never remove edges for our own node
+        if (pair.first == myNode) {
+            continue;
+        }
+
         auto& edges = pair.second;
         edges.erase(
             std::remove_if(edges.begin(), edges.end(),
@@ -141,6 +148,12 @@ void Graph::ageEdges(uint32_t currentTime) {
 
     // Clear empty adjacency lists (nodes with no edges), but keep nodes that are still active
     for (auto it = adjacencyList.begin(); it != adjacencyList.end();) {
+        // Never remove our own node
+        if (it->first == myNode) {
+            ++it;
+            continue;
+        }
+
         if (it->second.empty()) {
             // Check if this node is still marked as active
             auto activityIt = nodeActivity.find(it->first);

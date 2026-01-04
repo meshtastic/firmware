@@ -36,6 +36,16 @@ public:
     bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p);
 
     /**
+     * Update node activity timestamp for received packets
+     */
+    void updateNodeActivityForPacket(NodeNum nodeId);
+
+    /**
+     * Update node activity for both sender and relay node (if present)
+     */
+    void updateNodeActivityForPacketAndRelay(const meshtastic_MeshPacket *p);
+
+    /**
      * Check if we should relay a broadcast packet
      * Uses graph-based coverage calculation to coordinate with other nodes
      */
@@ -113,8 +123,8 @@ private:
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_SECS = 300; // 300 seconds
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000; // 15 seconds
-    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 240;    // 4 minutes for active nodes
-    static constexpr uint32_t MUTE_NODE_TTL_SECS = 960;     // 16 minutes for mute/inactive nodes
+    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 300;    // 5 minutes for active nodes (2 SR packets delay + 1min buffer)
+    static constexpr uint32_t MUTE_NODE_TTL_SECS = 1800;    // 30 minutes for mute/inactive nodes
     static constexpr uint32_t CAPABILITY_TTL_SECS = 300;     // Fallback for legacy compatibility
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
 

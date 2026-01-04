@@ -182,8 +182,16 @@ void GraphLite::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
 
 void GraphLite::ageEdges(uint32_t currentTimeSecs)
 {
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+
     for (uint8_t n = 0; n < nodeCount;) {
         NodeEdgesLite *node = &nodes[n];
+
+        // Never age out our own node
+        if (node->nodeId == myNode) {
+            n++;
+            continue;
+        }
 
         // Check if entire node is stale (no recent updates)
         if (currentTimeSecs - node->lastFullUpdate > EDGE_AGING_TIMEOUT_SECS) {
