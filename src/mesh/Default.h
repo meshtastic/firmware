@@ -38,47 +38,43 @@
 #define default_mqtt_encryption_enabled true
 #define default_mqtt_tls_enabled false
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
-    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
-class Default
-{
-  public:
-    static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
-    static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
-    static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
-    // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
-    // even though internal node counts use uint16_t (max 65535 nodes)
-    static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
-    static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
-    static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
+class Default {
+public:
+  static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
+  static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
+  static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
+  // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
+  // even though internal node counts use uint16_t (max 65535 nodes)
+  static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
+  static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
+  static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 
-  private:
-    // Note: Kept as uint32_t to match the public API parameter type
-    static float congestionScalingCoefficient(uint32_t numOnlineNodes)
-    {
-        if (numOnlineNodes <= 40) {
-            return 1.0;
-        } else {
-            float throttlingFactor = 0.075;
-            if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
-                throttlingFactor = 0.04;
-            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
-                throttlingFactor = 0.02;
-            else if (config.lora.use_preset &&
-                     IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
-                throttlingFactor = 0.01;
+private:
+  // Note: Kept as uint32_t to match the public API parameter type
+  static float congestionScalingCoefficient(uint32_t numOnlineNodes) {
+    if (numOnlineNodes <= 40) {
+      return 1.0;
+    } else {
+      float throttlingFactor = 0.075;
+      if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
+        throttlingFactor = 0.04;
+      else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
+        throttlingFactor = 0.02;
+      else if (config.lora.use_preset &&
+               IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+                         meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
+        throttlingFactor = 0.01;
 
 #if USERPREFS_EVENT_MODE
-            // If we are in event mode, scale down the throttling factor
-            throttlingFactor = 0.04;
+      // If we are in event mode, scale down the throttling factor
+      throttlingFactor = 0.04;
 #endif
 
-            // Scaling up traffic based on number of nodes over 40
-            int nodesOverForty = (numOnlineNodes - 40);
-            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
-        }
+      // Scaling up traffic based on number of nodes over 40
+      int nodesOverForty = (numOnlineNodes - 40);
+      return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
     }
+  }
 };

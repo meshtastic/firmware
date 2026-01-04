@@ -8,20 +8,19 @@
 #include "VoltageSensor.h"
 #include <Adafruit_INA219.h>
 
-class INA219Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
-{
-  private:
-    Adafruit_INA219 ina219;
+class INA219Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor {
+private:
+  Adafruit_INA219 ina219;
 
-  protected:
-    virtual void setup() override;
+protected:
+  virtual void setup() override;
 
-  public:
-    INA219Sensor();
-    virtual int32_t runOnce() override;
-    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-    virtual uint16_t getBusVoltageMv() override;
-    virtual int16_t getCurrentMa() override;
+public:
+  INA219Sensor();
+  virtual int32_t runOnce() override;
+  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+  virtual uint16_t getBusVoltageMv() override;
+  virtual int16_t getCurrentMa() override;
 };
 
 #endif

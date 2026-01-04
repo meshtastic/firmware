@@ -7,14 +7,13 @@ KbMatrixImpl *kbMatrixImpl;
 
 KbMatrixImpl::KbMatrixImpl() : KbMatrixBase("matrixKB") {}
 
-void KbMatrixImpl::init()
-{
-    if (!INPUTBROKER_MATRIX_TYPE) {
-        disable();
-        return;
-    }
+void KbMatrixImpl::init() {
+  if (!INPUTBROKER_MATRIX_TYPE) {
+    disable();
+    return;
+  }
 
-    inputBroker->registerSource(this);
+  inputBroker->registerSource(this);
 }
 
 #endif // INPUTBROKER_MATRIX_TYPE

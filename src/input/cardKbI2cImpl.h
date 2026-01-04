@@ -8,11 +8,10 @@
  *      to your device as you wish, but you always need to have separate event
  *      handlers, thus you need to have a RotaryEncoderInterrupt implementation.
  */
-class CardKbI2cImpl : public KbI2cBase
-{
-  public:
-    CardKbI2cImpl();
-    void init();
+class CardKbI2cImpl : public KbI2cBase {
+public:
+  CardKbI2cImpl();
+  void init();
 };
 
 extern CardKbI2cImpl *cardKbI2cImpl;

@@ -22,26 +22,24 @@ to know when a new message has arrived, and trigger the update.
 
 #include "modules/TextMessageModule.h"
 
-namespace NicheGraphics::InkHUD
-{
+namespace NicheGraphics::InkHUD {
 
 class Applet;
 
-class DMApplet : public Applet
-{
-  public:
-    void onRender() override;
+class DMApplet : public Applet {
+public:
+  void onRender() override;
 
-    void onActivate() override;
-    void onDeactivate() override;
-    int onReceiveTextMessage(const meshtastic_MeshPacket *p);
+  void onActivate() override;
+  void onDeactivate() override;
+  int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 
-    bool approveNotification(Notification &n) override; // Which notifications to suppress
+  bool approveNotification(Notification &n) override; // Which notifications to suppress
 
-  protected:
-    // Used to register our text message callback
-    CallbackObserver<DMApplet, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<DMApplet, const meshtastic_MeshPacket *>(this, &DMApplet::onReceiveTextMessage);
+protected:
+  // Used to register our text message callback
+  CallbackObserver<DMApplet, const meshtastic_MeshPacket *> textMessageObserver =
+      CallbackObserver<DMApplet, const meshtastic_MeshPacket *>(this, &DMApplet::onReceiveTextMessage);
 };
 
 } // namespace NicheGraphics::InkHUD

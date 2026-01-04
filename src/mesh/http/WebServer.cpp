@@ -62,21 +62,19 @@ static HTTPServer *insecureServer;
 volatile bool isWebServerReady;
 volatile bool isCertReady;
 
-static void handleWebResponse()
-{
-    if (isWifiAvailable()) {
+static void handleWebResponse() {
+  if (isWifiAvailable()) {
 
-        if (isWebServerReady) {
-            if (secureServer)
-                secureServer->loop();
-            insecureServer->loop();
-        }
+    if (isWebServerReady) {
+      if (secureServer)
+        secureServer->loop();
+      insecureServer->loop();
     }
+  }
 }
 
-static void taskCreateCert(void *parameter)
-{
-    prefs.begin("MeshtasticHTTPS", false);
+static void taskCreateCert(void *parameter) {
+  prefs.begin("MeshtasticHTTPS", false);
 
 #if 0
     // Delete the saved certs (used in debugging)
@@ -86,165 +84,156 @@ static void taskCreateCert(void *parameter)
     prefs.remove("cert");
 #endif
 
-    LOG_INFO("Checking if we have a saved SSL Certificate");
+  LOG_INFO("Checking if we have a saved SSL Certificate");
 
-    size_t pkLen = prefs.getBytesLength("PK");
-    size_t certLen = prefs.getBytesLength("cert");
+  size_t pkLen = prefs.getBytesLength("PK");
+  size_t certLen = prefs.getBytesLength("cert");
 
-    if (pkLen && certLen) {
-        LOG_INFO("Existing SSL Certificate found!");
+  if (pkLen && certLen) {
+    LOG_INFO("Existing SSL Certificate found!");
 
-        uint8_t *pkBuffer = new uint8_t[pkLen];
-        prefs.getBytes("PK", pkBuffer, pkLen);
+    uint8_t *pkBuffer = new uint8_t[pkLen];
+    prefs.getBytes("PK", pkBuffer, pkLen);
 
-        uint8_t *certBuffer = new uint8_t[certLen];
-        prefs.getBytes("cert", certBuffer, certLen);
+    uint8_t *certBuffer = new uint8_t[certLen];
+    prefs.getBytes("cert", certBuffer, certLen);
 
-        cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
+    cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
 
-        LOG_DEBUG("Retrieved Private Key: %d Bytes", cert->getPKLength());
-        LOG_DEBUG("Retrieved Certificate: %d Bytes", cert->getCertLength());
+    LOG_DEBUG("Retrieved Private Key: %d Bytes", cert->getPKLength());
+    LOG_DEBUG("Retrieved Certificate: %d Bytes", cert->getCertLength());
+  } else {
+
+    LOG_INFO("Creating the certificate. This may take a while. Please wait");
+    yield();
+    cert = new SSLCert();
+    yield();
+    int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US", "20190101000000", "20300101000000");
+    yield();
+
+    if (createCertResult != 0) {
+      LOG_ERROR("Creating the certificate failed");
     } else {
+      LOG_INFO("Creating the certificate was successful");
 
-        LOG_INFO("Creating the certificate. This may take a while. Please wait");
-        yield();
-        cert = new SSLCert();
-        yield();
-        int createCertResult = createSelfSignedCert(*cert, KEYSIZE_2048, "CN=meshtastic.local,O=Meshtastic,C=US",
-                                                    "20190101000000", "20300101000000");
-        yield();
+      LOG_DEBUG("Created Private Key: %d Bytes", cert->getPKLength());
 
-        if (createCertResult != 0) {
-            LOG_ERROR("Creating the certificate failed");
-        } else {
-            LOG_INFO("Creating the certificate was successful");
+      LOG_DEBUG("Created Certificate: %d Bytes", cert->getCertLength());
 
-            LOG_DEBUG("Created Private Key: %d Bytes", cert->getPKLength());
-
-            LOG_DEBUG("Created Certificate: %d Bytes", cert->getCertLength());
-
-            prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
-            prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
-        }
+      prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
+      prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
     }
+  }
 
-    isCertReady = true;
+  isCertReady = true;
 
-    // Must delete self, can't just fall out
-    vTaskDelete(NULL);
+  // Must delete self, can't just fall out
+  vTaskDelete(NULL);
 }
 
-void createSSLCert()
-{
-    if (isWifiAvailable() && !isCertReady) {
-        bool runLoop = false;
+void createSSLCert() {
+  if (isWifiAvailable() && !isCertReady) {
+    bool runLoop = false;
 
-        // Create a new process just to handle creating the cert.
-        //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
-        //  jm@casler.org (Oct 2020)
-        xTaskCreate(taskCreateCert, /* Task function. */
-                    "createCert",   /* String with name of task. */
-                    // 16384,          /* Stack size in bytes. */
-                    8192,  /* Stack size in bytes. */
-                    NULL,  /* Parameter passed as input of the task */
-                    16,    /* Priority of the task. */
-                    NULL); /* Task handle. */
+    // Create a new process just to handle creating the cert.
+    //   This is a workaround for Bug: https://github.com/fhessel/esp32_https_server/issues/48
+    //  jm@casler.org (Oct 2020)
+    xTaskCreate(taskCreateCert, /* Task function. */
+                "createCert",   /* String with name of task. */
+                // 16384,          /* Stack size in bytes. */
+                8192,  /* Stack size in bytes. */
+                NULL,  /* Parameter passed as input of the task */
+                16,    /* Priority of the task. */
+                NULL); /* Task handle. */
 
-        LOG_DEBUG("Waiting for SSL Cert to be generated");
-        while (!isCertReady) {
-            if ((millis() / 500) % 2) {
-                if (runLoop) {
-                    LOG_DEBUG(".");
+    LOG_DEBUG("Waiting for SSL Cert to be generated");
+    while (!isCertReady) {
+      if ((millis() / 500) % 2) {
+        if (runLoop) {
+          LOG_DEBUG(".");
 
-                    yield();
-                    esp_task_wdt_reset();
+          yield();
+          esp_task_wdt_reset();
 #if HAS_SCREEN
-                    if (millis() / 1000 >= 3) {
-                        if (screen)
-                            screen->setSSLFrames();
-                    }
+          if (millis() / 1000 >= 3) {
+            if (screen)
+              screen->setSSLFrames();
+          }
 #endif
-                }
-                runLoop = false;
-            } else {
-                runLoop = true;
-            }
         }
-        LOG_INFO("SSL Cert Ready!");
+        runLoop = false;
+      } else {
+        runLoop = true;
+      }
     }
+    LOG_INFO("SSL Cert Ready!");
+  }
 }
 
 WebServerThread *webServerThread;
 
-WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
-{
-    if (!config.network.wifi_enabled && !config.network.eth_enabled) {
-        disable();
-    }
-    lastActivityTime = millis();
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServer") {
+  if (!config.network.wifi_enabled && !config.network.eth_enabled) {
+    disable();
+  }
+  lastActivityTime = millis();
 }
 
-void WebServerThread::markActivity()
-{
-    lastActivityTime = millis();
+void WebServerThread::markActivity() { lastActivityTime = millis(); }
+
+int32_t WebServerThread::getAdaptiveInterval() {
+  uint32_t currentTime = millis();
+  uint32_t timeSinceActivity;
+
+  if (currentTime >= lastActivityTime) {
+    timeSinceActivity = currentTime - lastActivityTime;
+  } else {
+    timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
+  }
+
+  if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
+    return ACTIVE_INTERVAL_MS;
+  } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
+    return MEDIUM_INTERVAL_MS;
+  } else {
+    return IDLE_INTERVAL_MS;
+  }
 }
 
-int32_t WebServerThread::getAdaptiveInterval()
-{
-    uint32_t currentTime = millis();
-    uint32_t timeSinceActivity;
+int32_t WebServerThread::runOnce() {
+  if (!config.network.wifi_enabled && !config.network.eth_enabled) {
+    disable();
+  }
 
-    if (currentTime >= lastActivityTime) {
-        timeSinceActivity = currentTime - lastActivityTime;
-    } else {
-        timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
-    }
+  handleWebResponse();
 
-    if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
-        return ACTIVE_INTERVAL_MS;
-    } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
-        return MEDIUM_INTERVAL_MS;
-    } else {
-        return IDLE_INTERVAL_MS;
-    }
+  if (requestRestart && (millis() / 1000) > requestRestart) {
+    ESP.restart();
+  }
+
+  return getAdaptiveInterval();
 }
 
-int32_t WebServerThread::runOnce()
-{
-    if (!config.network.wifi_enabled && !config.network.eth_enabled) {
-        disable();
-    }
+void initWebServer() {
+  LOG_DEBUG("Init Web Server");
 
-    handleWebResponse();
+  // We can now use the new certificate to setup our server as usual.
+  secureServer = new HTTPSServer(cert);
+  insecureServer = new HTTPServer();
 
-    if (requestRestart && (millis() / 1000) > requestRestart) {
-        ESP.restart();
-    }
+  registerHandlers(insecureServer, secureServer);
 
-    return getAdaptiveInterval();
-}
-
-void initWebServer()
-{
-    LOG_DEBUG("Init Web Server");
-
-    // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert);
-    insecureServer = new HTTPServer();
-
-    registerHandlers(insecureServer, secureServer);
-
-    if (secureServer) {
-        LOG_INFO("Start Secure Web Server");
-        secureServer->start();
-    }
-    LOG_INFO("Start Insecure Web Server");
-    insecureServer->start();
-    if (insecureServer->isRunning()) {
-        LOG_INFO("Web Servers Ready! :-) ");
-        isWebServerReady = true;
-    } else {
-        LOG_ERROR("Web Servers Failed! ;-( ");
-    }
+  if (secureServer) {
+    LOG_INFO("Start Secure Web Server");
+    secureServer->start();
+  }
+  LOG_INFO("Start Insecure Web Server");
+  insecureServer->start();
+  if (insecureServer->isRunning()) {
+    LOG_INFO("Web Servers Ready! :-) ");
+    isWebServerReady = true;
+  } else {
+    LOG_ERROR("Web Servers Failed! ;-( ");
+  }
 }
 #endif

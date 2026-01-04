@@ -30,14 +30,13 @@ const uint32_t g_ADigitalPinMap[] = {
     // P1
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
-void initVariant()
-{
-    pinMode(LED_CHARGE, OUTPUT);
-    ledOff(LED_CHARGE);
+void initVariant() {
+  pinMode(LED_CHARGE, OUTPUT);
+  ledOff(LED_CHARGE);
 
-    pinMode(LED_PAIRING, OUTPUT);
-    ledOff(LED_PAIRING);
+  pinMode(LED_PAIRING, OUTPUT);
+  ledOff(LED_PAIRING);
 
-    pinMode(VDD_FLASH_EN, OUTPUT);
-    digitalWrite(VDD_FLASH_EN, HIGH);
+  pinMode(VDD_FLASH_EN, OUTPUT);
+  digitalWrite(VDD_FLASH_EN, HIGH);
 }

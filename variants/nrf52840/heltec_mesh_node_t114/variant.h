@@ -145,8 +145,7 @@ No longer populated on PCB
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define PIN_SPI1_MISO                                                                                                            \
-    ST7789_MISO // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
+#define PIN_SPI1_MISO ST7789_MISO // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
 #define PIN_SPI1_MOSI ST7789_SDA
 #define PIN_SPI1_SCK ST7789_SCK
 

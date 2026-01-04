@@ -5,10 +5,8 @@
 #include <string>
 #include <vector>
 
-namespace graphics
-{
-namespace MessageRenderer
-{
+namespace graphics {
+namespace MessageRenderer {
 
 // Text and emote rendering
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
@@ -23,8 +21,8 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes);
 
 // Function to render the message content
-void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,
-                          int yOffset, int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold);
+void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x, int yOffset,
+                          int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold);
 
 } // namespace MessageRenderer
 } // namespace graphics

@@ -15,15 +15,13 @@ to avoid re-implementing them every time we need to add a new SSD1682-based disp
 
 #include "./SSD16XX.h"
 
-namespace NicheGraphics::Drivers
-{
+namespace NicheGraphics::Drivers {
 
-class SSD1682 : public SSD16XX
-{
-  public:
-    SSD1682(uint16_t width, uint16_t height, EInk::UpdateTypes supported, uint8_t bufferOffsetX = 0);
-    virtual void configFullscreen(); // Select memory region on controller IC
-    virtual void deepSleep() {}      // Not usable (image memory not retained)
+class SSD1682 : public SSD16XX {
+public:
+  SSD1682(uint16_t width, uint16_t height, EInk::UpdateTypes supported, uint8_t bufferOffsetX = 0);
+  virtual void configFullscreen(); // Select memory region on controller IC
+  virtual void deepSleep() {}      // Not usable (image memory not retained)
 };
 
 } // namespace NicheGraphics::Drivers

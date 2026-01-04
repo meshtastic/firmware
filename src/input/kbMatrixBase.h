@@ -3,18 +3,17 @@
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
 
-class KbMatrixBase : public Observable<const InputEvent *>, public concurrency::OSThread
-{
-  public:
-    explicit KbMatrixBase(const char *name);
+class KbMatrixBase : public Observable<const InputEvent *>, public concurrency::OSThread {
+public:
+  explicit KbMatrixBase(const char *name);
 
-  protected:
-    virtual int32_t runOnce() override;
+protected:
+  virtual int32_t runOnce() override;
 
-  private:
-    const char *_originName;
-    bool firstTime = 1;
-    int shift = 0;
-    char key = 0;
-    char prevkey = 0;
+private:
+  const char *_originName;
+  bool firstTime = 1;
+  int shift = 0;
+  char key = 0;
+  char prevkey = 0;
 };

@@ -15,44 +15,42 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
 const char *get_filename_ext(const char *path);
 
 struct _file_config {
-    char *files_path;
-    char *url_prefix;
-    struct _u_map mime_types;
-    struct _u_map map_header;
-    char *redirect_on_404;
-    char *rootPath;
+  char *files_path;
+  char *url_prefix;
+  struct _u_map mime_types;
+  struct _u_map map_header;
+  char *redirect_on_404;
+  char *rootPath;
 };
 
-class HttpAPI : public PhoneAPI
-{
+class HttpAPI : public PhoneAPI {
 
-  public:
-    HttpAPI() { api_type = TYPE_HTTP; }
+public:
+  HttpAPI() { api_type = TYPE_HTTP; }
 
-  private:
-    // Nothing here yet
+private:
+  // Nothing here yet
 
-  protected:
-    /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
+protected:
+  /// Check the current underlying physical link to see if the client is currently connected
+  virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
 
-class PiWebServerThread
-{
-  private:
-    char *key_pem = NULL;
-    char *cert_pem = NULL;
-    // struct _u_map mime_types;
-    std::string webrootpath;
-    HttpAPI webAPI;
+class PiWebServerThread {
+private:
+  char *key_pem = NULL;
+  char *cert_pem = NULL;
+  // struct _u_map mime_types;
+  std::string webrootpath;
+  HttpAPI webAPI;
 
-  public:
-    PiWebServerThread();
-    ~PiWebServerThread();
-    int CreateSSLCertificate();
-    int CheckSSLandLoad();
-    uint32_t requestRestart = 0;
-    struct _u_instance instanceWeb;
+public:
+  PiWebServerThread();
+  ~PiWebServerThread();
+  int CreateSSLCertificate();
+  int CheckSSLandLoad();
+  uint32_t requestRestart = 0;
+  struct _u_instance instanceWeb;
 };
 
 extern PiWebServerThread *piwebServerThread;

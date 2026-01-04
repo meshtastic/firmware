@@ -7,20 +7,20 @@
 
 // Map from old region names to new region enums
 struct RegionInfo {
-    meshtastic_Config_LoRaConfig_RegionCode code;
-    float freqStart;
-    float freqEnd;
-    float dutyCycle;
-    float spacing;
-    uint8_t powerLimit; // Or zero for not set
-    bool audioPermitted;
-    bool freqSwitching;
-    bool wideLora;
-    bool licensedOnly; // Only allow in HAM mode
-    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
-    // static list of available presets
-    const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
-    const char *name; // EU433 etc
+  meshtastic_Config_LoRaConfig_RegionCode code;
+  float freqStart;
+  float freqEnd;
+  float dutyCycle;
+  float spacing;
+  uint8_t powerLimit; // Or zero for not set
+  bool audioPermitted;
+  bool freqSwitching;
+  bool wideLora;
+  bool licensedOnly; // Only allow in HAM mode
+  meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
+  // static list of available presets
+  const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
+  const char *name; // EU433 etc
 };
 
 extern const RegionInfo regions[];

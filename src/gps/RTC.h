@@ -10,29 +10,29 @@
 
 enum RTCQuality {
 
-    /// We haven't had our RTC set yet
-    RTCQualityNone = 0,
+  /// We haven't had our RTC set yet
+  RTCQualityNone = 0,
 
-    /// We got time from an onboard peripheral after boot.
-    RTCQualityDevice = 1,
+  /// We got time from an onboard peripheral after boot.
+  RTCQualityDevice = 1,
 
-    /// Some other node gave us a time we can use
-    RTCQualityFromNet = 2,
+  /// Some other node gave us a time we can use
+  RTCQualityFromNet = 2,
 
-    /// Our time is based on NTP
-    RTCQualityNTP = 3,
+  /// Our time is based on NTP
+  RTCQualityNTP = 3,
 
-    /// Our time is based on our own GPS
-    RTCQualityGPS = 4
+  /// Our time is based on our own GPS
+  RTCQualityGPS = 4
 };
 
 /// The RTC set result codes
 /// Used to indicate the result of an attempt to set the RTC.
 enum RTCSetResult {
-    RTCSetResultNotSet = 0,      ///< RTC was set successfully
-    RTCSetResultSuccess = 1,     ///< RTC was set successfully
-    RTCSetResultInvalidTime = 3, ///< The provided time was invalid (e.g., before the build epoch)
-    RTCSetResultError = 4        ///< An error occurred while setting the RTC
+  RTCSetResultNotSet = 0,      ///< RTC was set successfully
+  RTCSetResultSuccess = 1,     ///< RTC was set successfully
+  RTCSetResultInvalidTime = 3, ///< The provided time was invalid (e.g., before the build epoch)
+  RTCSetResultError = 4        ///< An error occurred while setting the RTC
 };
 
 RTCQuality getRTCQuality();

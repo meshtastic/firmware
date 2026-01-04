@@ -26,9 +26,9 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH // Internally the module hooks the SX1262-DIO2 in to control the TX/RX switch
-#define SX126X_MAX_POWER                                                                                                         \
-    16 // Ensure the PA does not exceed the saturation output power. More
-       // Info:https://uniteng.com/wiki/doku.php?id=meshtastic:station#rf_design_-_lora_station_edition_g1
+#define SX126X_MAX_POWER                                                                                                                             \
+  16 // Ensure the PA does not exceed the saturation output power. More
+     // Info:https://uniteng.com/wiki/doku.php?id=meshtastic:station#rf_design_-_lora_station_edition_g1
 #endif
 
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage

@@ -19,24 +19,22 @@ E-Ink display driver
 
 #include "./SSD16XX.h"
 
-namespace NicheGraphics::Drivers
-{
-class GDEY0213B74 : public SSD16XX
-{
-    // Display properties
-  private:
-    static constexpr uint32_t width = 122;
-    static constexpr uint32_t height = 250;
-    static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
+namespace NicheGraphics::Drivers {
+class GDEY0213B74 : public SSD16XX {
+  // Display properties
+private:
+  static constexpr uint32_t width = 122;
+  static constexpr uint32_t height = 250;
+  static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
-  public:
-    GDEY0213B74() : SSD16XX(width, height, supported) {}
+public:
+  GDEY0213B74() : SSD16XX(width, height, supported) {}
 
-  protected:
-    virtual void configScanning() override;
-    virtual void configWaveform() override;
-    virtual void configUpdateSequence() override;
-    void detachFromUpdate() override;
+protected:
+  virtual void configScanning() override;
+  virtual void configWaveform() override;
+  virtual void configUpdateSequence() override;
+  void detachFromUpdate() override;
 };
 
 } // namespace NicheGraphics::Drivers

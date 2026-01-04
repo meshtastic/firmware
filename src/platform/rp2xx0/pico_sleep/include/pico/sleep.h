@@ -42,18 +42,12 @@ void sleep_run_from_dormant_source(dormant_source_t dormant_source);
 /*! \brief Set the dormant clock source to be the crystal oscillator
  *  \ingroup hardware_sleep
  */
-static inline void sleep_run_from_xosc(void)
-{
-    sleep_run_from_dormant_source(DORMANT_SOURCE_XOSC);
-}
+static inline void sleep_run_from_xosc(void) { sleep_run_from_dormant_source(DORMANT_SOURCE_XOSC); }
 
 /*! \brief Set the dormant clock source to be the ring oscillator
  *  \ingroup hardware_sleep
  */
-static inline void sleep_run_from_rosc(void)
-{
-    sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC);
-}
+static inline void sleep_run_from_rosc(void) { sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC); }
 
 /*! \brief Send system to sleep until the specified time
  *  \ingroup hardware_sleep
@@ -83,10 +77,7 @@ void sleep_goto_dormant_until_pin(uint gpio_pin, bool edge, bool high);
  *
  * \param gpio_pin The pin to provide the wake up
  */
-static inline void sleep_goto_dormant_until_edge_high(uint gpio_pin)
-{
-    sleep_goto_dormant_until_pin(gpio_pin, true, true);
-}
+static inline void sleep_goto_dormant_until_edge_high(uint gpio_pin) { sleep_goto_dormant_until_pin(gpio_pin, true, true); }
 
 /*! \brief Send system to sleep until a high level is detected on GPIO
  *  \ingroup hardware_sleep
@@ -95,10 +86,7 @@ static inline void sleep_goto_dormant_until_edge_high(uint gpio_pin)
  *
  * \param gpio_pin The pin to provide the wake up
  */
-static inline void sleep_goto_dormant_until_level_high(uint gpio_pin)
-{
-    sleep_goto_dormant_until_pin(gpio_pin, false, true);
-}
+static inline void sleep_goto_dormant_until_level_high(uint gpio_pin) { sleep_goto_dormant_until_pin(gpio_pin, false, true); }
 
 #ifdef __cplusplus
 }

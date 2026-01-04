@@ -34,62 +34,61 @@ class JSON;
 
 enum JSONType { JSONType_Null, JSONType_String, JSONType_Bool, JSONType_Number, JSONType_Array, JSONType_Object };
 
-class JSONValue
-{
-    friend class JSON;
+class JSONValue {
+  friend class JSON;
 
-  public:
-    JSONValue(/*NULL*/);
-    explicit JSONValue(const char *m_char_value);
-    explicit JSONValue(const std::string &m_string_value);
-    explicit JSONValue(bool m_bool_value);
-    explicit JSONValue(double m_number_value);
-    explicit JSONValue(int m_integer_value);
-    explicit JSONValue(unsigned int m_integer_value);
-    explicit JSONValue(const JSONArray &m_array_value);
-    explicit JSONValue(const JSONObject &m_object_value);
-    explicit JSONValue(const JSONValue &m_source);
-    ~JSONValue();
+public:
+  JSONValue(/*NULL*/);
+  explicit JSONValue(const char *m_char_value);
+  explicit JSONValue(const std::string &m_string_value);
+  explicit JSONValue(bool m_bool_value);
+  explicit JSONValue(double m_number_value);
+  explicit JSONValue(int m_integer_value);
+  explicit JSONValue(unsigned int m_integer_value);
+  explicit JSONValue(const JSONArray &m_array_value);
+  explicit JSONValue(const JSONObject &m_object_value);
+  explicit JSONValue(const JSONValue &m_source);
+  ~JSONValue();
 
-    bool IsNull() const;
-    bool IsString() const;
-    bool IsBool() const;
-    bool IsNumber() const;
-    bool IsArray() const;
-    bool IsObject() const;
+  bool IsNull() const;
+  bool IsString() const;
+  bool IsBool() const;
+  bool IsNumber() const;
+  bool IsArray() const;
+  bool IsObject() const;
 
-    const std::string &AsString() const;
-    bool AsBool() const;
-    double AsNumber() const;
-    const JSONArray &AsArray() const;
-    const JSONObject &AsObject() const;
+  const std::string &AsString() const;
+  bool AsBool() const;
+  double AsNumber() const;
+  const JSONArray &AsArray() const;
+  const JSONObject &AsObject() const;
 
-    std::size_t CountChildren() const;
-    bool HasChild(std::size_t index) const;
-    JSONValue *Child(std::size_t index);
-    bool HasChild(const char *name) const;
-    JSONValue *Child(const char *name);
-    std::vector<std::string> ObjectKeys() const;
+  std::size_t CountChildren() const;
+  bool HasChild(std::size_t index) const;
+  JSONValue *Child(std::size_t index);
+  bool HasChild(const char *name) const;
+  JSONValue *Child(const char *name);
+  std::vector<std::string> ObjectKeys() const;
 
-    std::string Stringify(bool const prettyprint = false) const;
+  std::string Stringify(bool const prettyprint = false) const;
 
-  protected:
-    static JSONValue *Parse(const char **data);
+protected:
+  static JSONValue *Parse(const char **data);
 
-  private:
-    static std::string StringifyString(const std::string &str);
-    std::string StringifyImpl(size_t const indentDepth) const;
-    static std::string Indent(size_t depth);
+private:
+  static std::string StringifyString(const std::string &str);
+  std::string StringifyImpl(size_t const indentDepth) const;
+  static std::string Indent(size_t depth);
 
-    JSONType type;
+  JSONType type;
 
-    union {
-        bool bool_value;
-        double number_value;
-        std::string *string_value;
-        JSONArray *array_value;
-        JSONObject *object_value;
-    };
+  union {
+    bool bool_value;
+    double number_value;
+    std::string *string_value;
+    JSONArray *array_value;
+    JSONObject *object_value;
+  };
 };
 
 #endif

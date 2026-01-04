@@ -68,22 +68,15 @@ uint rosc_find_freq(uint32_t low_mhz, uint32_t high_mhz);
 
 void rosc_set_div(uint32_t div);
 
-inline static void rosc_clear_bad_write(void)
-{
-    hw_clear_bits(&rosc_hw->status, ROSC_STATUS_BADWRITE_BITS);
-}
+inline static void rosc_clear_bad_write(void) { hw_clear_bits(&rosc_hw->status, ROSC_STATUS_BADWRITE_BITS); }
 
-inline static bool rosc_write_okay(void)
-{
-    return !(rosc_hw->status & ROSC_STATUS_BADWRITE_BITS);
-}
+inline static bool rosc_write_okay(void) { return !(rosc_hw->status & ROSC_STATUS_BADWRITE_BITS); }
 
-inline static void rosc_write(io_rw_32 *addr, uint32_t value)
-{
-    rosc_clear_bad_write();
-    assert(rosc_write_okay());
-    *addr = value;
-    assert(rosc_write_okay());
+inline static void rosc_write(io_rw_32 *addr, uint32_t value) {
+  rosc_clear_bad_write();
+  assert(rosc_write_okay());
+  *addr = value;
+  assert(rosc_write_okay());
 };
 
 #ifdef __cplusplus

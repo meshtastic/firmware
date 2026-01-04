@@ -30,35 +30,34 @@ const uint32_t g_ADigitalPinMap[] = {
     // P1
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
-void initVariant()
-{
-    // LED1 & LED2
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
+void initVariant() {
+  // LED1 & LED2
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
 
-    pinMode(PIN_3V3_EN, OUTPUT);
-    digitalWrite(PIN_3V3_EN, HIGH);
+  pinMode(PIN_3V3_EN, OUTPUT);
+  digitalWrite(PIN_3V3_EN, HIGH);
 
-    pinMode(PIN_3V3_ACC_EN, OUTPUT);
-    digitalWrite(PIN_3V3_ACC_EN, HIGH);
+  pinMode(PIN_3V3_ACC_EN, OUTPUT);
+  digitalWrite(PIN_3V3_ACC_EN, HIGH);
 
-    pinMode(BUZZER_EN_PIN, OUTPUT);
-    digitalWrite(BUZZER_EN_PIN, HIGH);
+  pinMode(BUZZER_EN_PIN, OUTPUT);
+  digitalWrite(BUZZER_EN_PIN, HIGH);
 
-    pinMode(PIN_GPS_EN, OUTPUT);
-    digitalWrite(PIN_GPS_EN, LOW);
+  pinMode(PIN_GPS_EN, OUTPUT);
+  digitalWrite(PIN_GPS_EN, LOW);
 
-    pinMode(GPS_VRTC_EN, OUTPUT);
-    digitalWrite(GPS_VRTC_EN, HIGH);
+  pinMode(GPS_VRTC_EN, OUTPUT);
+  digitalWrite(GPS_VRTC_EN, HIGH);
 
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, LOW);
+  pinMode(PIN_GPS_RESET, OUTPUT);
+  digitalWrite(PIN_GPS_RESET, LOW);
 
-    pinMode(GPS_SLEEP_INT, OUTPUT);
-    digitalWrite(GPS_SLEEP_INT, HIGH);
+  pinMode(GPS_SLEEP_INT, OUTPUT);
+  digitalWrite(GPS_SLEEP_INT, HIGH);
 
-    pinMode(GPS_RTC_INT, OUTPUT);
-    digitalWrite(GPS_RTC_INT, LOW);
+  pinMode(GPS_RTC_INT, OUTPUT);
+  digitalWrite(GPS_RTC_INT, LOW);
 
-    pinMode(GPS_RESETB_OUT, INPUT);
+  pinMode(GPS_RESETB_OUT, INPUT);
 }

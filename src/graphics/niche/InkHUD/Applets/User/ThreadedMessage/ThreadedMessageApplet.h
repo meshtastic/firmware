@@ -25,32 +25,30 @@ Suggest a max of two channel, to minimize fs usage?
 
 #include "modules/TextMessageModule.h"
 
-namespace NicheGraphics::InkHUD
-{
+namespace NicheGraphics::InkHUD {
 
 class Applet;
 
-class ThreadedMessageApplet : public Applet, public SinglePortModule
-{
-  public:
-    explicit ThreadedMessageApplet(uint8_t channelIndex);
-    ThreadedMessageApplet() = delete;
+class ThreadedMessageApplet : public Applet, public SinglePortModule {
+public:
+  explicit ThreadedMessageApplet(uint8_t channelIndex);
+  ThreadedMessageApplet() = delete;
 
-    void onRender() override;
+  void onRender() override;
 
-    void onActivate() override;
-    void onDeactivate() override;
-    void onShutdown() override;
-    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+  void onActivate() override;
+  void onDeactivate() override;
+  void onShutdown() override;
+  ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-    bool approveNotification(Notification &n) override; // Which notifications to suppress
+  bool approveNotification(Notification &n) override; // Which notifications to suppress
 
-  protected:
-    void saveMessagesToFlash();
-    void loadMessagesFromFlash();
+protected:
+  void saveMessagesToFlash();
+  void loadMessagesFromFlash();
 
-    MessageStore *store; // Messages, held in RAM for use, ready to save to flash on shutdown
-    uint8_t channelIndex = 0;
+  MessageStore *store; // Messages, held in RAM for use, ready to save to flash on shutdown
+  uint8_t channelIndex = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

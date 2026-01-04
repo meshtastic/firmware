@@ -5,8 +5,7 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-namespace graphics
-{
+namespace graphics {
 
 /// Forward declarations
 class Screen;
@@ -17,8 +16,7 @@ class Screen;
  * Contains all functions related to drawing node lists and individual node entries
  * including last heard, hop signal, distance, and compass views.
  */
-namespace NodeListRenderer
-{
+namespace NodeListRenderer {
 // Entry renderer function types
 typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
 typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int, float, double, double);
@@ -27,9 +25,8 @@ typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int
 enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
 
 // Main node list screen function
-void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                        EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0,
-                        double lon = 0);
+void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title, EntryRenderer renderer,
+                        NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0, double lon = 0);
 
 // Entry renderers
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
@@ -39,8 +36,8 @@ void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
 
 // Extras renderers
-void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
-                      double userLat, double userLon);
+void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading, double userLat,
+                      double userLon);
 
 // Screen frame functions
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

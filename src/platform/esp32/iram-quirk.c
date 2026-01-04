@@ -8,10 +8,7 @@
 
 #define IRAM_SECTION section(".iram1.stub")
 
-IRAM_ATTR esp_err_t stub_probe(esp_flash_t *chip, uint32_t flash_id)
-{
-    return ESP_ERR_NOT_FOUND;
-}
+IRAM_ATTR esp_err_t stub_probe(esp_flash_t *chip, uint32_t flash_id) { return ESP_ERR_NOT_FOUND; }
 
 const spi_flash_chip_t stub_flash_chip __attribute__((IRAM_SECTION)) = {
     .name = "stub",

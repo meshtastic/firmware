@@ -70,26 +70,26 @@ extern "C" {
  * @brief Common API SVC numbers.
  */
 enum BLE_COMMON_SVCS {
-    SD_BLE_ENABLE = BLE_SVC_BASE, /**< Enable and initialize the BLE stack */
-    SD_BLE_EVT_GET,               /**< Get an event from the pending events queue. */
-    SD_BLE_UUID_VS_ADD,           /**< Add a Vendor Specific base UUID. */
-    SD_BLE_UUID_DECODE,           /**< Decode UUID bytes. */
-    SD_BLE_UUID_ENCODE,           /**< Encode UUID bytes. */
-    SD_BLE_VERSION_GET,    /**< Get the local version information (company ID, Link Layer Version, Link Layer Subversion). */
-    SD_BLE_USER_MEM_REPLY, /**< User Memory Reply. */
-    SD_BLE_OPT_SET,        /**< Set a BLE option. */
-    SD_BLE_OPT_GET,        /**< Get a BLE option. */
-    SD_BLE_CFG_SET,        /**< Add a configuration to the BLE stack. */
-    SD_BLE_UUID_VS_REMOVE, /**< Remove a Vendor Specific base UUID. */
+  SD_BLE_ENABLE = BLE_SVC_BASE, /**< Enable and initialize the BLE stack */
+  SD_BLE_EVT_GET,               /**< Get an event from the pending events queue. */
+  SD_BLE_UUID_VS_ADD,           /**< Add a Vendor Specific base UUID. */
+  SD_BLE_UUID_DECODE,           /**< Decode UUID bytes. */
+  SD_BLE_UUID_ENCODE,           /**< Encode UUID bytes. */
+  SD_BLE_VERSION_GET,           /**< Get the local version information (company ID, Link Layer Version, Link Layer Subversion). */
+  SD_BLE_USER_MEM_REPLY,        /**< User Memory Reply. */
+  SD_BLE_OPT_SET,               /**< Set a BLE option. */
+  SD_BLE_OPT_GET,               /**< Get a BLE option. */
+  SD_BLE_CFG_SET,               /**< Add a configuration to the BLE stack. */
+  SD_BLE_UUID_VS_REMOVE,        /**< Remove a Vendor Specific base UUID. */
 };
 
 /**
  * @brief BLE Module Independent Event IDs.
  */
 enum BLE_COMMON_EVTS {
-    BLE_EVT_USER_MEM_REQUEST = BLE_EVT_BASE + 0, /**< User Memory request. See @ref ble_evt_user_mem_request_t
-                                                   \n Reply with @ref sd_ble_user_mem_reply. */
-    BLE_EVT_USER_MEM_RELEASE = BLE_EVT_BASE + 1, /**< User Memory release. See @ref ble_evt_user_mem_release_t */
+  BLE_EVT_USER_MEM_REQUEST = BLE_EVT_BASE + 0, /**< User Memory request. See @ref ble_evt_user_mem_request_t
+                                                 \n Reply with @ref sd_ble_user_mem_reply. */
+  BLE_EVT_USER_MEM_RELEASE = BLE_EVT_BASE + 1, /**< User Memory release. See @ref ble_evt_user_mem_release_t */
 };
 
 /**@brief BLE Connection Configuration IDs.
@@ -97,11 +97,11 @@ enum BLE_COMMON_EVTS {
  * IDs that uniquely identify a connection configuration.
  */
 enum BLE_CONN_CFGS {
-    BLE_CONN_CFG_GAP = BLE_CONN_CFG_BASE + 0,   /**< BLE GAP specific connection configuration. */
-    BLE_CONN_CFG_GATTC = BLE_CONN_CFG_BASE + 1, /**< BLE GATTC specific connection configuration. */
-    BLE_CONN_CFG_GATTS = BLE_CONN_CFG_BASE + 2, /**< BLE GATTS specific connection configuration. */
-    BLE_CONN_CFG_GATT = BLE_CONN_CFG_BASE + 3,  /**< BLE GATT specific connection configuration. */
-    BLE_CONN_CFG_L2CAP = BLE_CONN_CFG_BASE + 4, /**< BLE L2CAP specific connection configuration. */
+  BLE_CONN_CFG_GAP = BLE_CONN_CFG_BASE + 0,   /**< BLE GAP specific connection configuration. */
+  BLE_CONN_CFG_GATTC = BLE_CONN_CFG_BASE + 1, /**< BLE GATTC specific connection configuration. */
+  BLE_CONN_CFG_GATTS = BLE_CONN_CFG_BASE + 2, /**< BLE GATTS specific connection configuration. */
+  BLE_CONN_CFG_GATT = BLE_CONN_CFG_BASE + 3,  /**< BLE GATT specific connection configuration. */
+  BLE_CONN_CFG_L2CAP = BLE_CONN_CFG_BASE + 4, /**< BLE L2CAP specific connection configuration. */
 };
 
 /**@brief BLE Common Configuration IDs.
@@ -109,16 +109,16 @@ enum BLE_CONN_CFGS {
  * IDs that uniquely identify a common configuration.
  */
 enum BLE_COMMON_CFGS {
-    BLE_COMMON_CFG_VS_UUID = BLE_CFG_BASE, /**< Vendor specific base UUID configuration */
+  BLE_COMMON_CFG_VS_UUID = BLE_CFG_BASE, /**< Vendor specific base UUID configuration */
 };
 
 /**@brief Common Option IDs.
  * IDs that uniquely identify a common option.
  */
 enum BLE_COMMON_OPTS {
-    BLE_COMMON_OPT_PA_LNA = BLE_OPT_BASE + 0,          /**< PA and LNA options */
-    BLE_COMMON_OPT_CONN_EVT_EXT = BLE_OPT_BASE + 1,    /**< Extended connection events option */
-    BLE_COMMON_OPT_EXTENDED_RC_CAL = BLE_OPT_BASE + 2, /**< Extended RC calibration option */
+  BLE_COMMON_OPT_PA_LNA = BLE_OPT_BASE + 0,          /**< PA and LNA options */
+  BLE_COMMON_OPT_CONN_EVT_EXT = BLE_OPT_BASE + 1,    /**< Extended connection events option */
+  BLE_COMMON_OPT_EXTENDED_RC_CAL = BLE_OPT_BASE + 2, /**< Extended RC calibration option */
 };
 
 /** @} */
@@ -138,8 +138,8 @@ enum BLE_COMMON_OPTS {
  * @note The highest value used for @ref ble_gatt_conn_cfg_t::att_mtu in any connection configuration shall be used as a
  * parameter. If that value has not been configured for any connections then @ref BLE_GATT_ATT_MTU_DEFAULT must be used instead.
  */
-#define BLE_EVT_LEN_MAX(ATT_MTU)                                                                                                 \
-    (offsetof(ble_evt_t, evt.gattc_evt.params.prim_srvc_disc_rsp.services) + ((ATT_MTU)-1) / 4 * sizeof(ble_gattc_service_t))
+#define BLE_EVT_LEN_MAX(ATT_MTU)                                                                                                                     \
+  (offsetof(ble_evt_t, evt.gattc_evt.params.prim_srvc_disc_rsp.services) + ((ATT_MTU)-1) / 4 * sizeof(ble_gattc_service_t))
 
 /** @defgroup BLE_USER_MEM_TYPES User Memory Types
  * @{ */
@@ -168,67 +168,66 @@ enum BLE_COMMON_OPTS {
 
 /**@brief User Memory Block. */
 typedef struct {
-    uint8_t *p_mem; /**< Pointer to the start of the user memory block. */
-    uint16_t len;   /**< Length in bytes of the user memory block. */
+  uint8_t *p_mem; /**< Pointer to the start of the user memory block. */
+  uint16_t len;   /**< Length in bytes of the user memory block. */
 } ble_user_mem_block_t;
 
 /**@brief Event structure for @ref BLE_EVT_USER_MEM_REQUEST. */
 typedef struct {
-    uint8_t type; /**< User memory type, see @ref BLE_USER_MEM_TYPES. */
+  uint8_t type; /**< User memory type, see @ref BLE_USER_MEM_TYPES. */
 } ble_evt_user_mem_request_t;
 
 /**@brief Event structure for @ref BLE_EVT_USER_MEM_RELEASE. */
 typedef struct {
-    uint8_t type;                   /**< User memory type, see @ref BLE_USER_MEM_TYPES. */
-    ble_user_mem_block_t mem_block; /**< User memory block */
+  uint8_t type;                   /**< User memory type, see @ref BLE_USER_MEM_TYPES. */
+  ble_user_mem_block_t mem_block; /**< User memory block */
 } ble_evt_user_mem_release_t;
 
 /**@brief Event structure for events not associated with a specific function module. */
 typedef struct {
-    uint16_t conn_handle; /**< Connection Handle on which this event occurred. */
-    union {
-        ble_evt_user_mem_request_t user_mem_request; /**< User Memory Request Event Parameters. */
-        ble_evt_user_mem_release_t user_mem_release; /**< User Memory Release Event Parameters. */
-    } params;                                        /**< Event parameter union. */
+  uint16_t conn_handle; /**< Connection Handle on which this event occurred. */
+  union {
+    ble_evt_user_mem_request_t user_mem_request; /**< User Memory Request Event Parameters. */
+    ble_evt_user_mem_release_t user_mem_release; /**< User Memory Release Event Parameters. */
+  } params;                                      /**< Event parameter union. */
 } ble_common_evt_t;
 
 /**@brief BLE Event header. */
 typedef struct {
-    uint16_t evt_id;  /**< Value from a BLE_<module>_EVT series. */
-    uint16_t evt_len; /**< Length in octets including this header. */
+  uint16_t evt_id;  /**< Value from a BLE_<module>_EVT series. */
+  uint16_t evt_len; /**< Length in octets including this header. */
 } ble_evt_hdr_t;
 
 /**@brief Common BLE Event type, wrapping the module specific event reports. */
 typedef struct {
-    ble_evt_hdr_t header; /**< Event header. */
-    union {
-        ble_common_evt_t common_evt; /**< Common Event, evt_id in BLE_EVT_* series. */
-        ble_gap_evt_t gap_evt;       /**< GAP originated event, evt_id in BLE_GAP_EVT_* series. */
-        ble_gattc_evt_t gattc_evt;   /**< GATT client originated event, evt_id in BLE_GATTC_EVT* series. */
-        ble_gatts_evt_t gatts_evt;   /**< GATT server originated event, evt_id in BLE_GATTS_EVT* series. */
-        ble_l2cap_evt_t l2cap_evt;   /**< L2CAP originated event, evt_id in BLE_L2CAP_EVT* series. */
-    } evt;                           /**< Event union. */
+  ble_evt_hdr_t header; /**< Event header. */
+  union {
+    ble_common_evt_t common_evt; /**< Common Event, evt_id in BLE_EVT_* series. */
+    ble_gap_evt_t gap_evt;       /**< GAP originated event, evt_id in BLE_GAP_EVT_* series. */
+    ble_gattc_evt_t gattc_evt;   /**< GATT client originated event, evt_id in BLE_GATTC_EVT* series. */
+    ble_gatts_evt_t gatts_evt;   /**< GATT server originated event, evt_id in BLE_GATTS_EVT* series. */
+    ble_l2cap_evt_t l2cap_evt;   /**< L2CAP originated event, evt_id in BLE_L2CAP_EVT* series. */
+  } evt;                         /**< Event union. */
 } ble_evt_t;
 
 /**
  * @brief Version Information.
  */
 typedef struct {
-    uint8_t version_number; /**< Link Layer Version number. See
-                               https://www.bluetooth.org/en-us/specification/assigned-numbers/link-layer for assigned values. */
-    uint16_t company_id;    /**< Company ID, Nordic Semiconductor's company ID is 89 (0x0059)
-                               (https://www.bluetooth.org/apps/content/Default.aspx?doc_id=49708). */
-    uint16_t
-        subversion_number; /**< Link Layer Sub Version number, corresponds to the SoftDevice Config ID or Firmware ID (FWID). */
+  uint8_t version_number;     /**< Link Layer Version number. See
+                                 https://www.bluetooth.org/en-us/specification/assigned-numbers/link-layer for assigned values. */
+  uint16_t company_id;        /**< Company ID, Nordic Semiconductor's company ID is 89 (0x0059)
+                                 (https://www.bluetooth.org/apps/content/Default.aspx?doc_id=49708). */
+  uint16_t subversion_number; /**< Link Layer Sub Version number, corresponds to the SoftDevice Config ID or Firmware ID (FWID). */
 } ble_version_t;
 
 /**
  * @brief Configuration parameters for the PA and LNA.
  */
 typedef struct {
-    uint8_t enable : 1;      /**< Enable toggling for this amplifier */
-    uint8_t active_high : 1; /**< Set the pin to be active high */
-    uint8_t gpio_pin : 6;    /**< The GPIO pin to toggle for this amplifier */
+  uint8_t enable : 1;      /**< Enable toggling for this amplifier */
+  uint8_t active_high : 1; /**< Set the pin to be active high */
+  uint8_t gpio_pin : 6;    /**< The GPIO pin to toggle for this amplifier */
 } ble_pa_lna_cfg_t;
 
 /**
@@ -245,12 +244,12 @@ typedef struct {
  * and must be avoided by the application.
  */
 typedef struct {
-    ble_pa_lna_cfg_t pa_cfg;  /**< Power Amplifier configuration */
-    ble_pa_lna_cfg_t lna_cfg; /**< Low Noise Amplifier configuration */
+  ble_pa_lna_cfg_t pa_cfg;  /**< Power Amplifier configuration */
+  ble_pa_lna_cfg_t lna_cfg; /**< Low Noise Amplifier configuration */
 
-    uint8_t ppi_ch_id_set; /**< PPI channel used for radio pin setting */
-    uint8_t ppi_ch_id_clr; /**< PPI channel used for radio pin clearing */
-    uint8_t gpiote_ch_id;  /**< GPIOTE channel used for radio pin toggling */
+  uint8_t ppi_ch_id_set; /**< PPI channel used for radio pin setting */
+  uint8_t ppi_ch_id_clr; /**< PPI channel used for radio pin clearing */
+  uint8_t gpiote_ch_id;  /**< GPIOTE channel used for radio pin toggling */
 } ble_common_opt_pa_lna_t;
 
 /**
@@ -265,7 +264,7 @@ typedef struct {
  * @note @ref sd_ble_opt_get is not supported for this option.
  */
 typedef struct {
-    uint8_t enable : 1; /**< Enable extended BLE connection events, disabled by default. */
+  uint8_t enable : 1; /**< Enable extended BLE connection events, disabled by default. */
 } ble_common_opt_conn_evt_ext_t;
 
 /**
@@ -284,21 +283,21 @@ typedef struct {
  * @note @ref sd_ble_opt_get is not supported for this option.
  */
 typedef struct {
-    uint8_t enable : 1; /**< Enable extended RC calibration, enabled by default. */
+  uint8_t enable : 1; /**< Enable extended RC calibration, enabled by default. */
 } ble_common_opt_extended_rc_cal_t;
 
 /**@brief Option structure for common options. */
 typedef union {
-    ble_common_opt_pa_lna_t pa_lna;                   /**< Parameters for controlling PA and LNA pin toggling. */
-    ble_common_opt_conn_evt_ext_t conn_evt_ext;       /**< Parameters for enabling extended connection events. */
-    ble_common_opt_extended_rc_cal_t extended_rc_cal; /**< Parameters for enabling extended RC calibration. */
+  ble_common_opt_pa_lna_t pa_lna;                   /**< Parameters for controlling PA and LNA pin toggling. */
+  ble_common_opt_conn_evt_ext_t conn_evt_ext;       /**< Parameters for enabling extended connection events. */
+  ble_common_opt_extended_rc_cal_t extended_rc_cal; /**< Parameters for enabling extended RC calibration. */
 } ble_common_opt_t;
 
 /**@brief Common BLE Option type, wrapping the module specific options. */
 typedef union {
-    ble_common_opt_t common_opt; /**< COMMON options, opt_id in @ref BLE_COMMON_OPTS series. */
-    ble_gap_opt_t gap_opt;       /**< GAP option, opt_id in @ref BLE_GAP_OPTS series. */
-    ble_gattc_opt_t gattc_opt;   /**< GATTC option, opt_id in @ref BLE_GATTC_OPTS series. */
+  ble_common_opt_t common_opt; /**< COMMON options, opt_id in @ref BLE_COMMON_OPTS series. */
+  ble_gap_opt_t gap_opt;       /**< GAP option, opt_id in @ref BLE_GAP_OPTS series. */
+  ble_gattc_opt_t gattc_opt;   /**< GATTC option, opt_id in @ref BLE_GATTC_OPTS series. */
 } ble_opt_t;
 
 /**@brief BLE connection configuration type, wrapping the module specific configurations, set with
@@ -319,17 +318,17 @@ typedef union {
 
  */
 typedef struct {
-    uint8_t conn_cfg_tag; /**< The application chosen tag it can use with the
-                               @ref sd_ble_gap_adv_start() and @ref sd_ble_gap_connect() calls
-                               to select this configuration when creating a connection.
-                               Must be different for all connection configurations added and not @ref BLE_CONN_CFG_TAG_DEFAULT. */
-    union {
-        ble_gap_conn_cfg_t gap_conn_cfg;     /**< GAP connection configuration, cfg_id is @ref BLE_CONN_CFG_GAP. */
-        ble_gattc_conn_cfg_t gattc_conn_cfg; /**< GATTC connection configuration, cfg_id is @ref BLE_CONN_CFG_GATTC. */
-        ble_gatts_conn_cfg_t gatts_conn_cfg; /**< GATTS connection configuration, cfg_id is @ref BLE_CONN_CFG_GATTS. */
-        ble_gatt_conn_cfg_t gatt_conn_cfg;   /**< GATT connection configuration, cfg_id is @ref BLE_CONN_CFG_GATT. */
-        ble_l2cap_conn_cfg_t l2cap_conn_cfg; /**< L2CAP connection configuration, cfg_id is @ref BLE_CONN_CFG_L2CAP. */
-    } params;                                /**< Connection configuration union. */
+  uint8_t conn_cfg_tag; /**< The application chosen tag it can use with the
+                             @ref sd_ble_gap_adv_start() and @ref sd_ble_gap_connect() calls
+                             to select this configuration when creating a connection.
+                             Must be different for all connection configurations added and not @ref BLE_CONN_CFG_TAG_DEFAULT. */
+  union {
+    ble_gap_conn_cfg_t gap_conn_cfg;     /**< GAP connection configuration, cfg_id is @ref BLE_CONN_CFG_GAP. */
+    ble_gattc_conn_cfg_t gattc_conn_cfg; /**< GATTC connection configuration, cfg_id is @ref BLE_CONN_CFG_GATTC. */
+    ble_gatts_conn_cfg_t gatts_conn_cfg; /**< GATTS connection configuration, cfg_id is @ref BLE_CONN_CFG_GATTS. */
+    ble_gatt_conn_cfg_t gatt_conn_cfg;   /**< GATT connection configuration, cfg_id is @ref BLE_CONN_CFG_GATT. */
+    ble_l2cap_conn_cfg_t l2cap_conn_cfg; /**< L2CAP connection configuration, cfg_id is @ref BLE_CONN_CFG_L2CAP. */
+  } params;                              /**< Connection configuration union. */
 } ble_conn_cfg_t;
 
 /**
@@ -338,22 +337,22 @@ typedef struct {
  * @retval ::NRF_ERROR_INVALID_PARAM Too many UUIDs configured.
  */
 typedef struct {
-    uint8_t vs_uuid_count; /**< Number of 128-bit Vendor Specific base UUID bases to allocate memory for.
-                                Default value is @ref BLE_UUID_VS_COUNT_DEFAULT. Maximum value is
-                                @ref BLE_UUID_VS_COUNT_MAX. */
+  uint8_t vs_uuid_count; /**< Number of 128-bit Vendor Specific base UUID bases to allocate memory for.
+                              Default value is @ref BLE_UUID_VS_COUNT_DEFAULT. Maximum value is
+                              @ref BLE_UUID_VS_COUNT_MAX. */
 } ble_common_cfg_vs_uuid_t;
 
 /**@brief Common BLE Configuration type, wrapping the common configurations. */
 typedef union {
-    ble_common_cfg_vs_uuid_t vs_uuid_cfg; /**< Vendor Specific base UUID configuration, cfg_id is @ref BLE_COMMON_CFG_VS_UUID. */
+  ble_common_cfg_vs_uuid_t vs_uuid_cfg; /**< Vendor Specific base UUID configuration, cfg_id is @ref BLE_COMMON_CFG_VS_UUID. */
 } ble_common_cfg_t;
 
 /**@brief BLE Configuration type, wrapping the module specific configurations. */
 typedef union {
-    ble_conn_cfg_t conn_cfg;     /**< Connection specific configurations, cfg_id in @ref BLE_CONN_CFGS series. */
-    ble_common_cfg_t common_cfg; /**< Global common configurations, cfg_id in @ref BLE_COMMON_CFGS series. */
-    ble_gap_cfg_t gap_cfg;       /**< Global GAP configurations, cfg_id in @ref BLE_GAP_CFGS series. */
-    ble_gatts_cfg_t gatts_cfg;   /**< Global GATTS configuration, cfg_id in @ref BLE_GATTS_CFGS series. */
+  ble_conn_cfg_t conn_cfg;     /**< Connection specific configurations, cfg_id in @ref BLE_CONN_CFGS series. */
+  ble_common_cfg_t common_cfg; /**< Global common configurations, cfg_id in @ref BLE_COMMON_CFGS series. */
+  ble_gap_cfg_t gap_cfg;       /**< Global GAP configurations, cfg_id in @ref BLE_GAP_CFGS series. */
+  ble_gatts_cfg_t gatts_cfg;   /**< Global GATTS configuration, cfg_id in @ref BLE_GATTS_CFGS series. */
 } ble_cfg_t;
 
 /** @} */

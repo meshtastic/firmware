@@ -4,10 +4,9 @@
 
 #pragma once
 
-class CurrentSensor
-{
-  public:
-    virtual int16_t getCurrentMa() = 0;
+class CurrentSensor {
+public:
+  virtual int16_t getCurrentMa() = 0;
 };
 
 #endif

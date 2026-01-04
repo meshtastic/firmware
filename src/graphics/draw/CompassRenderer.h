@@ -5,8 +5,7 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-namespace graphics
-{
+namespace graphics {
 
 /// Forward declarations
 class Screen;
@@ -17,8 +16,7 @@ class Screen;
  * Contains all functions related to drawing compass elements, headings,
  * navigation arrows, and location-based UI components.
  */
-namespace CompassRenderer
-{
+namespace CompassRenderer {
 // Compass drawing functions
 void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading, int16_t radius);
 void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);

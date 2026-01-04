@@ -73,8 +73,8 @@
 
 #define BATTERY_PIN 34 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO34_CHANNEL
-#define ADC_ATTENUATION                                                                                                          \
-    ADC_ATTEN_DB_2_5       // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
+#define ADC_ATTENUATION                                                                                                                              \
+  ADC_ATTEN_DB_2_5         // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
                            // ESP32-S2/C3/S3 are different
                            // lower dB for lower voltage rnage
 #define ADC_MULTIPLIER 5.0 // VBATT---10k--pin34---2.5K---GND
@@ -115,10 +115,10 @@
 // FIXME: confirm that the linked lines below are actually only called when using the SX126x or SX128x and no other modules
 // then use SX126X_DIO1 and SX128X_DIO1 respectively for that purpose, removing the need for RF95-style LORA_* definitions when
 // the RF95 isn't used
-#define LORA_DIO1                                                                                                                \
-    SX126X_DIO1 // The old name is used in
-                // https://github.com/meshtastic/firmware/blob/7eff5e7bcb2084499b723c5e3846c15ee089e36d/src/sleep.cpp#L298, so
-                // must also define the old name
+#define LORA_DIO1                                                                                                                                    \
+  SX126X_DIO1 // The old name is used in
+              // https://github.com/meshtastic/firmware/blob/7eff5e7bcb2084499b723c5e3846c15ee089e36d/src/sleep.cpp#L298, so
+              // must also define the old name
 // LORA_DIO2 value is never used in src (as we are not using RF95), so no need to define, and if DIO2_AS_RF_SWITCH is set then it
 // cannot serve any extra function even if requested to LORA_DIO3 value is never used in src (as we are not using RF95), so no
 // need to define, and DIO3_AS_TCXO_AT_1V8 is set so it cannot serve any extra function even if requested to (from 13.3.2.1

@@ -6,14 +6,13 @@
 #include <Arduino.h>
 #include <functional>
 
-class SystemCommandsModule
-{
-    CallbackObserver<SystemCommandsModule, const InputEvent *> inputObserver =
-        CallbackObserver<SystemCommandsModule, const InputEvent *>(this, &SystemCommandsModule::handleInputEvent);
+class SystemCommandsModule {
+  CallbackObserver<SystemCommandsModule, const InputEvent *> inputObserver =
+      CallbackObserver<SystemCommandsModule, const InputEvent *>(this, &SystemCommandsModule::handleInputEvent);
 
-  public:
-    SystemCommandsModule();
-    int handleInputEvent(const InputEvent *event);
+public:
+  SystemCommandsModule();
+  int handleInputEvent(const InputEvent *event);
 };
 
 extern SystemCommandsModule *systemCommandsModule;

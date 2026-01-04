@@ -6,16 +6,13 @@
 #include <stdint.h>
 
 /// C++ v17+ clamp function, limits a given value to a range defined by lo and hi
-template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi)
-{
-    return (v < lo) ? lo : (hi < v) ? hi : v;
-}
+template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi) { return (v < lo) ? lo : (hi < v) ? hi : v; }
 
 #if HAS_SCREEN
-#define IF_SCREEN(X)                                                                                                             \
-    if (screen) {                                                                                                                \
-        X;                                                                                                                       \
-    }
+#define IF_SCREEN(X)                                                                                                                                 \
+  if (screen) {                                                                                                                                      \
+    X;                                                                                                                                               \
+  }
 #else
 #define IF_SCREEN(...)
 #endif

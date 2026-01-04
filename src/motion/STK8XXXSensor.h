@@ -10,24 +10,22 @@
 
 #include <stk8baxx.h>
 
-class STK8XXXSensor : public MotionSensor
-{
-  private:
-    STK8xxx sensor;
+class STK8XXXSensor : public MotionSensor {
+private:
+  STK8xxx sensor;
 
-  public:
-    explicit STK8XXXSensor(ScanI2C::FoundDevice foundDevice);
-    virtual bool init() override;
-    virtual int32_t runOnce() override;
+public:
+  explicit STK8XXXSensor(ScanI2C::FoundDevice foundDevice);
+  virtual bool init() override;
+  virtual int32_t runOnce() override;
 };
 
 #else
 
 // Stub
-class STK8XXXSensor : public MotionSensor
-{
-  public:
-    explicit STK8XXXSensor(ScanI2C::FoundDevice foundDevice);
+class STK8XXXSensor : public MotionSensor {
+public:
+  explicit STK8XXXSensor(ScanI2C::FoundDevice foundDevice);
 };
 
 #endif

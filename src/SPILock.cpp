@@ -5,8 +5,7 @@
 
 concurrency::Lock *spiLock;
 
-void initSPI()
-{
-    assert(!spiLock);
-    spiLock = new concurrency::Lock();
+void initSPI() {
+  assert(!spiLock);
+  spiLock = new concurrency::Lock();
 }

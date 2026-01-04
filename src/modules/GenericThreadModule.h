@@ -6,16 +6,15 @@
 #include <Arduino.h>
 #include <functional>
 
-class GenericThreadModule : private concurrency::OSThread
-{
-    bool firstTime = 1;
+class GenericThreadModule : private concurrency::OSThread {
+  bool firstTime = 1;
 
-  public:
-    GenericThreadModule();
+public:
+  GenericThreadModule();
 
-  protected:
-    unsigned int my_interval = 10000; // interval in millisconds
-    virtual int32_t runOnce() override;
+protected:
+  unsigned int my_interval = 10000; // interval in millisconds
+  virtual int32_t runOnce() override;
 };
 
 extern GenericThreadModule *genericThreadModule;

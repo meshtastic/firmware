@@ -22,31 +22,29 @@ The necessary interaction with the AdminModule is done as an observer.
 
 #include "modules/AdminModule.h"
 
-namespace NicheGraphics
-{
+namespace NicheGraphics {
 
-class CannedMessageStore
-{
-  public:
-    static CannedMessageStore *getInstance(); // Create or get the singleton instance
-    const std::string &at(uint8_t i);         // Get canned message at index
-    uint8_t size();                           // Get total number of canned messages
+class CannedMessageStore {
+public:
+  static CannedMessageStore *getInstance(); // Create or get the singleton instance
+  const std::string &at(uint8_t i);         // Get canned message at index
+  uint8_t size();                           // Get total number of canned messages
 
-    int onAdminMessage(AdminModule_ObserverData *data); // Handle incoming admin messages
+  int onAdminMessage(AdminModule_ObserverData *data); // Handle incoming admin messages
 
-  private:
-    CannedMessageStore(); // Constructor made private: force use of CannedMessageStore::instance()
+private:
+  CannedMessageStore(); // Constructor made private: force use of CannedMessageStore::instance()
 
-    void load(); // Load from flash, and parse
+  void load(); // Load from flash, and parse
 
-    void handleSet(const meshtastic_AdminMessage *request); // Client API changing the canned messages
-    void handleGet(meshtastic_AdminMessage *response);      // Client API wants to know current canned messages
+  void handleSet(const meshtastic_AdminMessage *request); // Client API changing the canned messages
+  void handleGet(meshtastic_AdminMessage *response);      // Client API wants to know current canned messages
 
-    std::vector<std::string> messages;
+  std::vector<std::string> messages;
 
-    // Get notified of incoming admin messages, to get / set canned messages
-    CallbackObserver<CannedMessageStore, AdminModule_ObserverData *> adminMessageObserver =
-        CallbackObserver<CannedMessageStore, AdminModule_ObserverData *>(this, &CannedMessageStore::onAdminMessage);
+  // Get notified of incoming admin messages, to get / set canned messages
+  CallbackObserver<CannedMessageStore, AdminModule_ObserverData *> adminMessageObserver =
+      CallbackObserver<CannedMessageStore, AdminModule_ObserverData *>(this, &CannedMessageStore::onAdminMessage);
 };
 
 }; // namespace NicheGraphics

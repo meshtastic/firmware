@@ -30,27 +30,26 @@ const uint32_t g_ADigitalPinMap[] = {
     // P1
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
-void initVariant()
-{
-    // LEDs
-    pinMode(PIN_LED1, OUTPUT);
-    ledOff(PIN_LED1);
+void initVariant() {
+  // LEDs
+  pinMode(PIN_LED1, OUTPUT);
+  ledOff(PIN_LED1);
 
-    pinMode(PIN_LED2, OUTPUT);
-    ledOff(PIN_LED2);
+  pinMode(PIN_LED2, OUTPUT);
+  ledOff(PIN_LED2);
 
-    pinMode(PIN_LED3, OUTPUT);
-    ledOff(PIN_LED3);
+  pinMode(PIN_LED3, OUTPUT);
+  ledOff(PIN_LED3);
 
-    // Turn on power to the GPS and LoRa
-    pinMode(PIN_PWR_EN, OUTPUT);
-    digitalWrite(PIN_PWR_EN, HIGH);
+  // Turn on power to the GPS and LoRa
+  pinMode(PIN_PWR_EN, OUTPUT);
+  digitalWrite(PIN_PWR_EN, HIGH);
 
-    // Pull the GPS out of reset
-    pinMode(GPS_RESET_PIN, OUTPUT);
-    digitalWrite(GPS_RESET_PIN, HIGH);
+  // Pull the GPS out of reset
+  pinMode(GPS_RESET_PIN, OUTPUT);
+  digitalWrite(GPS_RESET_PIN, HIGH);
 
-    // Pull the LoRa out of reset
-    pinMode(LORA_RF_PWR, OUTPUT);
-    digitalWrite(LORA_RF_PWR, HIGH);
+  // Pull the LoRa out of reset
+  pinMode(LORA_RF_PWR, OUTPUT);
+  digitalWrite(LORA_RF_PWR, HIGH);
 }

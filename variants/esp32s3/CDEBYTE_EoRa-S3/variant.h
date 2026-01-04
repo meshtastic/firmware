@@ -19,9 +19,9 @@
 // Battery voltage monitoring - TODO: test, currently untested, copied from T3S3 variant
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
-#define ADC_MULTIPLIER                                                                                                           \
-    2.11 // ratio of voltage divider = 2.0 (R10=1M, R13=1M), plus some undervoltage correction - TODO: this was carried over from
-         // the T3S3, test to see if the undervoltage correction is needed.
+#define ADC_MULTIPLIER                                                                                                                               \
+  2.11 // ratio of voltage divider = 2.0 (R10=1M, R13=1M), plus some undervoltage correction - TODO: this was carried over from
+       // the T3S3, test to see if the undervoltage correction is needed.
 
 // Display - OLED connected via I2C by the default hardware configuration
 #define HAS_SCREEN 1
@@ -53,9 +53,9 @@
 #define SX126X_DIO2_AS_RF_SWITCH // All switching is performed with DIO2, it is automatically inverted using circuitry.
 // CDEBYTE EoRa-S3 uses an XTAL, thus we do not need DIO3 as TCXO voltage reference. Don't define SX126X_DIO3_TCXO_VOLTAGE for
 // simplicity rather than defining it as 0.
-#define SX126X_MAX_POWER                                                                                                         \
-    22 // E22-900MM22S and E22-400MM22S have a raw SX1262 or SX1268 respsectively, they are rated to output up and including 22
-       // dBm out of their SX126x IC.
+#define SX126X_MAX_POWER                                                                                                                             \
+  22 // E22-900MM22S and E22-400MM22S have a raw SX1262 or SX1268 respsectively, they are rated to output up and including 22
+     // dBm out of their SX126x IC.
 
 // Compatibility with old variant.h file structure - FIXME: this should be done in the respective radio interface modules to clean
 // up all variants.

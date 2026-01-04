@@ -10,8 +10,7 @@
 #define BinarySemaphore BinarySemaphorePosix
 #endif
 
-namespace concurrency
-{
+namespace concurrency {
 
 /**
  * An object that provides delay(msec) like functionality, but can be interrupted by calling interrupt().
@@ -20,22 +19,21 @@ namespace concurrency
  *
  * This is implemented for FreeRTOS but should be easy to port to other operating systems.
  */
-class InterruptableDelay
-{
-    BinarySemaphore semaphore;
+class InterruptableDelay {
+  BinarySemaphore semaphore;
 
-  public:
-    InterruptableDelay();
-    ~InterruptableDelay();
+public:
+  InterruptableDelay();
+  ~InterruptableDelay();
 
-    /**
-     * Returns false if we were interrupted
-     */
-    bool delay(uint32_t msec);
+  /**
+   * Returns false if we were interrupted
+   */
+  bool delay(uint32_t msec);
 
-    void interrupt();
+  void interrupt();
 
-    void interruptFromISR(BaseType_t *pxHigherPriorityTaskWoken);
+  void interruptFromISR(BaseType_t *pxHigherPriorityTaskWoken);
 };
 
 } // namespace concurrency

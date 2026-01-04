@@ -10,10 +10,8 @@
  * You must change the channel if you get `Critical Error #3` with this module.
  * ⚠️⚠️⚠️
  */
-class LLCC68Interface : public SX126xInterface<LLCC68>
-{
-  public:
-    LLCC68Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
-                    RADIOLIB_PIN_TYPE busy);
+class LLCC68Interface : public SX126xInterface<LLCC68> {
+public:
+  LLCC68Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy);
 };
 #endif

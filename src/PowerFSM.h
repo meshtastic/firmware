@@ -29,21 +29,19 @@
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
 
 #if MESHTASTIC_EXCLUDE_POWER_FSM
-class FakeFsm
-{
-  public:
-    void trigger(int event)
-    {
-        if (event == EVENT_SERIAL_CONNECTED) {
-            serialConnected = true;
-        } else if (event == EVENT_SERIAL_DISCONNECTED) {
-            serialConnected = false;
-        }
-    };
-    bool getState() { return serialConnected; };
+class FakeFsm {
+public:
+  void trigger(int event) {
+    if (event == EVENT_SERIAL_CONNECTED) {
+      serialConnected = true;
+    } else if (event == EVENT_SERIAL_DISCONNECTED) {
+      serialConnected = false;
+    }
+  };
+  bool getState() { return serialConnected; };
 
-  private:
-    bool serialConnected = false;
+private:
+  bool serialConnected = false;
 };
 extern FakeFsm powerFSM;
 void PowerFSM_setup();

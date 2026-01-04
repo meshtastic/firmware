@@ -20,23 +20,21 @@ E-Ink display driver
 
 #include "./SSD16XX.h"
 
-namespace NicheGraphics::Drivers
-{
-class HINK_E042A87 : public SSD16XX
-{
-    // Display properties
-  private:
-    static constexpr uint32_t width = 400;
-    static constexpr uint32_t height = 300;
-    static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
+namespace NicheGraphics::Drivers {
+class HINK_E042A87 : public SSD16XX {
+  // Display properties
+private:
+  static constexpr uint32_t width = 400;
+  static constexpr uint32_t height = 300;
+  static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
-  public:
-    HINK_E042A87() : SSD16XX(width, height, supported) {}
+public:
+  HINK_E042A87() : SSD16XX(width, height, supported) {}
 
-  protected:
-    void configWaveform() override;
-    void configUpdateSequence() override;
-    void detachFromUpdate() override;
+protected:
+  void configWaveform() override;
+  void configUpdateSequence() override;
+  void detachFromUpdate() override;
 };
 
 } // namespace NicheGraphics::Drivers

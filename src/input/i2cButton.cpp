@@ -31,65 +31,63 @@ extern void i2c_write_byte(uint8_t addr, uint8_t reg, uint8_t value);
 #define PI4IO_REG_IN_STA 0x0F
 #define PI4IO_REG_CHIP_RESET 0x01
 
-i2cButtonThread::i2cButtonThread(const char *name) : OSThread(name)
-{
-    _originName = name;
-    if (inputBroker)
-        inputBroker->registerSource(this);
+i2cButtonThread::i2cButtonThread(const char *name) : OSThread(name) {
+  _originName = name;
+  if (inputBroker)
+    inputBroker->registerSource(this);
 }
 
-int32_t i2cButtonThread::runOnce()
-{
-    static bool btn1_pressed = false;
-    static uint32_t press_start_time = 0;
-    const uint32_t LONG_PRESS_TIME = 1000;
-    static bool long_press_triggered = false;
+int32_t i2cButtonThread::runOnce() {
+  static bool btn1_pressed = false;
+  static uint32_t press_start_time = 0;
+  const uint32_t LONG_PRESS_TIME = 1000;
+  static bool long_press_triggered = false;
 
-    uint8_t in_data;
-    i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, &in_data);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, in_data);
-    if (getbit(in_data, 0)) {
-        uint8_t input_state;
-        i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IN_STA, &input_state);
+  uint8_t in_data;
+  i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, &in_data);
+  i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, in_data);
+  if (getbit(in_data, 0)) {
+    uint8_t input_state;
+    i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IN_STA, &input_state);
 
-        if (!getbit(input_state, 0)) {
-            if (!btn1_pressed) {
-                btn1_pressed = true;
-                press_start_time = millis();
-                long_press_triggered = false;
-            }
-        } else {
-            if (btn1_pressed) {
-                btn1_pressed = false;
-                uint32_t press_duration = millis() - press_start_time;
-                if (long_press_triggered) {
-                    long_press_triggered = false;
-                    return 50;
-                }
-
-                if (press_duration < LONG_PRESS_TIME) {
-                    InputEvent evt;
-                    evt.source = "UserButton";
-                    evt.inputEvent = INPUT_BROKER_USER_PRESS;
-                    evt.kbchar = 0;
-                    evt.touchX = 0;
-                    evt.touchY = 0;
-                    this->notifyObservers(&evt);
-                }
-            }
+    if (!getbit(input_state, 0)) {
+      if (!btn1_pressed) {
+        btn1_pressed = true;
+        press_start_time = millis();
+        long_press_triggered = false;
+      }
+    } else {
+      if (btn1_pressed) {
+        btn1_pressed = false;
+        uint32_t press_duration = millis() - press_start_time;
+        if (long_press_triggered) {
+          long_press_triggered = false;
+          return 50;
         }
-    }
 
-    if (btn1_pressed && !long_press_triggered && (millis() - press_start_time >= LONG_PRESS_TIME)) {
-        long_press_triggered = true;
-        InputEvent evt;
-        evt.source = "UserButton";
-        evt.inputEvent = INPUT_BROKER_SELECT;
-        evt.kbchar = 0;
-        evt.touchX = 0;
-        evt.touchY = 0;
-        this->notifyObservers(&evt);
+        if (press_duration < LONG_PRESS_TIME) {
+          InputEvent evt;
+          evt.source = "UserButton";
+          evt.inputEvent = INPUT_BROKER_USER_PRESS;
+          evt.kbchar = 0;
+          evt.touchX = 0;
+          evt.touchY = 0;
+          this->notifyObservers(&evt);
+        }
+      }
     }
-    return 50;
+  }
+
+  if (btn1_pressed && !long_press_triggered && (millis() - press_start_time >= LONG_PRESS_TIME)) {
+    long_press_triggered = true;
+    InputEvent evt;
+    evt.source = "UserButton";
+    evt.inputEvent = INPUT_BROKER_SELECT;
+    evt.kbchar = 0;
+    evt.touchX = 0;
+    evt.touchY = 0;
+    this->notifyObservers(&evt);
+  }
+  return 50;
 }
 #endif

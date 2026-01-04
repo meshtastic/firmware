@@ -22,8 +22,7 @@ E-Ink display driver
 
 #include "./GDEY0154D67.h"
 
-namespace NicheGraphics::Drivers
-{
+namespace NicheGraphics::Drivers {
 
 typedef GDEY0154D67 ZJY200200_0154DAAMFGN;
 

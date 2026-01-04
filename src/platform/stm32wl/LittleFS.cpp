@@ -55,96 +55,92 @@
 // LFS Disk IO
 //--------------------------------------------------------------------+
 
-static int _internal_flash_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size)
-{
-    LFS_UNUSED(c);
+static int _internal_flash_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size) {
+  LFS_UNUSED(c);
 
-    if (!buffer || !size) {
-        _LFS_DBG("%s Invalid parameter!\r\n", __func__);
-        return LFS_ERR_INVAL;
-    }
+  if (!buffer || !size) {
+    _LFS_DBG("%s Invalid parameter!\r\n", __func__);
+    return LFS_ERR_INVAL;
+  }
 
-    lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
+  lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
 
-    memcpy(buffer, (void *)address, size);
+  memcpy(buffer, (void *)address, size);
 
-    return LFS_ERR_OK;
+  return LFS_ERR_OK;
 }
 
 // Program a region in a block. The block must have previously
 // been erased. Negative error codes are propogated to the user.
 // May return LFS_ERR_CORRUPT if the block should be considered bad.
-static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size)
-{
-    lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
-    HAL_StatusTypeDef hal_rc = HAL_OK;
-    uint32_t dw_count = size / 8;
-    uint64_t *bufp = (uint64_t *)buffer;
+static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size) {
+  lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
+  HAL_StatusTypeDef hal_rc = HAL_OK;
+  uint32_t dw_count = size / 8;
+  uint64_t *bufp = (uint64_t *)buffer;
 
-    LFS_UNUSED(c);
+  LFS_UNUSED(c);
 
-    _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
-    if (HAL_FLASH_Unlock() != HAL_OK) {
-        return LFS_ERR_IO;
+  _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
+  if (HAL_FLASH_Unlock() != HAL_OK) {
+    return LFS_ERR_IO;
+  }
+  for (uint32_t i = 0; i < dw_count; i++) {
+    if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
+      _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x.\n", address);
+      HAL_FLASH_Lock();
+      return LFS_ERR_INVAL;
     }
-    for (uint32_t i = 0; i < dw_count; i++) {
-        if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
-            _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x.\n", address);
-            HAL_FLASH_Lock();
-            return LFS_ERR_INVAL;
-        }
-        hal_rc = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address, *bufp);
-        if (hal_rc != HAL_OK) {
-            /* Error occurred while writing data in Flash memory.
-             * User can add here some code to deal with this error.
-             */
-            _LFS_DBG("Program error at (0x%08x), 0x%X, error: 0x%08x\n", address, hal_rc, HAL_FLASH_GetError());
-        }
-        address += 8;
-        bufp += 1;
+    hal_rc = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address, *bufp);
+    if (hal_rc != HAL_OK) {
+      /* Error occurred while writing data in Flash memory.
+       * User can add here some code to deal with this error.
+       */
+      _LFS_DBG("Program error at (0x%08x), 0x%X, error: 0x%08x\n", address, hal_rc, HAL_FLASH_GetError());
     }
-    if (HAL_FLASH_Lock() != HAL_OK) {
-        return LFS_ERR_IO;
-    }
+    address += 8;
+    bufp += 1;
+  }
+  if (HAL_FLASH_Lock() != HAL_OK) {
+    return LFS_ERR_IO;
+  }
 
-    return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
+  return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
 }
 
 // Erase a block. A block must be erased before being programmed.
 // The state of an erased block is undefined. Negative error codes
 // are propogated to the user.
 // May return LFS_ERR_CORRUPT if the block should be considered bad.
-static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block)
-{
-    lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE);
-    HAL_StatusTypeDef hal_rc;
-    FLASH_EraseInitTypeDef EraseInitStruct = {.TypeErase = FLASH_TYPEERASE_PAGES, .Page = 0, .NbPages = 1};
-    uint32_t PAGEError = 0;
+static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block) {
+  lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE);
+  HAL_StatusTypeDef hal_rc;
+  FLASH_EraseInitTypeDef EraseInitStruct = {.TypeErase = FLASH_TYPEERASE_PAGES, .Page = 0, .NbPages = 1};
+  uint32_t PAGEError = 0;
 
-    LFS_UNUSED(c);
+  LFS_UNUSED(c);
 
-    if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
-        _LFS_DBG("Wanted to erase out of bound of FLASH: 0x%08x.\n", address);
-        return LFS_ERR_INVAL;
-    }
-    /* calculate the absolute page, i.e. what the ST wants */
-    EraseInitStruct.Page = (address - STM32WL_FLASH_BASE) / STM32WL_PAGE_SIZE;
-    _LFS_DBG("Erasing block %d at 0x%08x... ", block, address);
-    HAL_FLASH_Unlock();
-    hal_rc = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
-    HAL_FLASH_Lock();
+  if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
+    _LFS_DBG("Wanted to erase out of bound of FLASH: 0x%08x.\n", address);
+    return LFS_ERR_INVAL;
+  }
+  /* calculate the absolute page, i.e. what the ST wants */
+  EraseInitStruct.Page = (address - STM32WL_FLASH_BASE) / STM32WL_PAGE_SIZE;
+  _LFS_DBG("Erasing block %d at 0x%08x... ", block, address);
+  HAL_FLASH_Unlock();
+  hal_rc = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
+  HAL_FLASH_Lock();
 
-    return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
+  return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
 }
 
 // Sync the state of the underlying block device. Negative error codes
 // are propogated to the user.
-static int _internal_flash_sync(const struct lfs_config *c)
-{
-    LFS_UNUSED(c);
-    // write function performs no caching.  No need for sync.
+static int _internal_flash_sync(const struct lfs_config *c) {
+  LFS_UNUSED(c);
+  // write function performs no caching.  No need for sync.
 
-    return LFS_ERR_OK;
+  return LFS_ERR_OK;
 }
 
 static struct lfs_config _InternalFSConfig = {.context = NULL,
@@ -173,26 +169,25 @@ LittleFS InternalFS;
 
 LittleFS::LittleFS(void) : STM32_LittleFS(&_InternalFSConfig) {}
 
-bool LittleFS::begin(void)
-{
-    if (FLASH_BASE >= LFS_FLASH_ADDR_BASE) {
-        /* There is not enough space on this device for a filesystem. */
-        return false;
-    }
-    // failed to mount, erase all pages then format and mount again
-    if (!STM32_LittleFS::begin()) {
-        // Erase all pages of internal flash region for Filesystem.
-        for (uint32_t addr = LFS_FLASH_ADDR_BASE; addr < (LFS_FLASH_ADDR_END + 1); addr += STM32WL_PAGE_SIZE) {
-            _internal_flash_erase(&_InternalFSConfig, (addr - LFS_FLASH_ADDR_BASE) / STM32WL_PAGE_SIZE);
-        }
-
-        // lfs format
-        this->format();
-
-        // mount again if still failed, give up
-        if (!STM32_LittleFS::begin())
-            return false;
+bool LittleFS::begin(void) {
+  if (FLASH_BASE >= LFS_FLASH_ADDR_BASE) {
+    /* There is not enough space on this device for a filesystem. */
+    return false;
+  }
+  // failed to mount, erase all pages then format and mount again
+  if (!STM32_LittleFS::begin()) {
+    // Erase all pages of internal flash region for Filesystem.
+    for (uint32_t addr = LFS_FLASH_ADDR_BASE; addr < (LFS_FLASH_ADDR_END + 1); addr += STM32WL_PAGE_SIZE) {
+      _internal_flash_erase(&_InternalFSConfig, (addr - LFS_FLASH_ADDR_BASE) / STM32WL_PAGE_SIZE);
     }
 
-    return true;
+    // lfs format
+    this->format();
+
+    // mount again if still failed, give up
+    if (!STM32_LittleFS::begin())
+      return false;
+  }
+
+  return true;
 }

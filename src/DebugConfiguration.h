@@ -74,13 +74,13 @@ extern MemGet memGet;
 
 // Macro-based heap debugging
 #define DEBUG_HEAP_BEFORE auto heapBefore = memGet.getFreeHeap();
-#define DEBUG_HEAP_AFTER(context, ptr)                                                                                           \
-    do {                                                                                                                         \
-        auto heapAfter = memGet.getFreeHeap();                                                                                   \
-        if (heapBefore != heapAfter) {                                                                                           \
-            LOG_HEAP("Alloc in %s pointer 0x%x, size: %u, free: %u", context, ptr, heapBefore - heapAfter, heapAfter);           \
-        }                                                                                                                        \
-    } while (0)
+#define DEBUG_HEAP_AFTER(context, ptr)                                                                                                               \
+  do {                                                                                                                                               \
+    auto heapAfter = memGet.getFreeHeap();                                                                                                           \
+    if (heapBefore != heapAfter) {                                                                                                                   \
+      LOG_HEAP("Alloc in %s pointer 0x%x, size: %u, free: %u", context, ptr, heapBefore - heapAfter, heapAfter);                                     \
+    }                                                                                                                                                \
+  } while (0)
 
 #else
 #define LOG_HEAP(...)
@@ -162,37 +162,36 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #if HAS_NETWORKING
 
-class Syslog
-{
-  private:
-    UDP *_client;
-    IPAddress _ip;
-    const char *_server;
-    uint16_t _port;
-    const char *_deviceHostname;
-    const char *_appName;
-    uint16_t _priDefault;
-    uint8_t _priMask = 0xff;
-    bool _enabled = false;
+class Syslog {
+private:
+  UDP *_client;
+  IPAddress _ip;
+  const char *_server;
+  uint16_t _port;
+  const char *_deviceHostname;
+  const char *_appName;
+  uint16_t _priDefault;
+  uint8_t _priMask = 0xff;
+  bool _enabled = false;
 
-    bool _sendLog(uint16_t pri, const char *appName, const char *message);
+  bool _sendLog(uint16_t pri, const char *appName, const char *message);
 
-  public:
-    explicit Syslog(UDP &client);
+public:
+  explicit Syslog(UDP &client);
 
-    Syslog &server(const char *server, uint16_t port);
-    Syslog &server(IPAddress ip, uint16_t port);
-    Syslog &deviceHostname(const char *deviceHostname);
-    Syslog &appName(const char *appName);
-    Syslog &defaultPriority(uint16_t pri = LOGLEVEL_KERN);
-    Syslog &logMask(uint8_t priMask);
+  Syslog &server(const char *server, uint16_t port);
+  Syslog &server(IPAddress ip, uint16_t port);
+  Syslog &deviceHostname(const char *deviceHostname);
+  Syslog &appName(const char *appName);
+  Syslog &defaultPriority(uint16_t pri = LOGLEVEL_KERN);
+  Syslog &logMask(uint8_t priMask);
 
-    void enable();
-    void disable();
-    bool isEnabled();
+  void enable();
+  void disable();
+  bool isEnabled();
 
-    bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
-    bool vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
+  bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
+  bool vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
 };
 
 #endif // HAS_NETWORKING

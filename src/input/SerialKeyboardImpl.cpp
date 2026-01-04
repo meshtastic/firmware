@@ -8,14 +8,13 @@ SerialKeyboardImpl *aSerialKeyboardImpl;
 
 SerialKeyboardImpl::SerialKeyboardImpl() : SerialKeyboard("serialKB") {}
 
-void SerialKeyboardImpl::init()
-{
-    if (!INPUTBROKER_SERIAL_TYPE) {
-        disable();
-        return;
-    }
+void SerialKeyboardImpl::init() {
+  if (!INPUTBROKER_SERIAL_TYPE) {
+    disable();
+    return;
+  }
 
-    inputBroker->registerSource(this);
+  inputBroker->registerSource(this);
 }
 
 #endif // INPUTBROKER_SERIAL_TYPE

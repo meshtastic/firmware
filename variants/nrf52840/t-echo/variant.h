@@ -135,8 +135,7 @@ External serial flash WP25R1635FZUIL0
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-#define SX1262_DIO3                                                                                                              \
-    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
+#define SX1262_DIO3 (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
 // CPU?
 #define SX126X_BUSY (0 + 17)
 #define SX126X_RESET (0 + 25)
@@ -167,8 +166,7 @@ External serial flash WP25R1635FZUIL0
 #define PIN_POWER_EN (0 + 12)
 // #define PIN_POWER_EN1 (0 + 13)
 
-#define PIN_SPI1_MISO                                                                                                            \
-    (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
+#define PIN_SPI1_MISO (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 

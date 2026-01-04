@@ -34,6 +34,6 @@
 #define SX126X_BUSY 1004
 
 #if !defined(DEBUG_MUTE) && !defined(PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_PRINTF)
-#error                                                                                                                           \
+#error                                                                                                                                               \
     "You MUST enable PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_PRINTF if debug prints are enabled. printf will print uninitialized garbage instead of floats."
 #endif

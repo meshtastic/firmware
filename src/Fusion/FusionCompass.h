@@ -17,8 +17,7 @@
 //------------------------------------------------------------------------------
 // Function declarations
 
-float FusionCompassCalculateHeading(const FusionConvention convention, const FusionVector accelerometer,
-                                    const FusionVector magnetometer);
+float FusionCompassCalculateHeading(const FusionConvention convention, const FusionVector accelerometer, const FusionVector magnetometer);
 
 #endif
 
