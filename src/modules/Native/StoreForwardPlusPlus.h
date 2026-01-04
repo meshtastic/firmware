@@ -123,6 +123,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *maybeAddPeerStmt;
     sqlite3_stmt *getPeerStmt;
     sqlite3_stmt *updatePeerStmt;
+    sqlite3_stmt *clearChainStmt;
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -228,6 +229,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void pruneScratchQueue();
 
     void trimOldestLink(uint8_t *, size_t);
+
+    void clearChain(uint8_t *, size_t);
 
     // given a link object with a payload and other fields, recalculates the message hash
     // returns true if a match

@@ -178,6 +178,7 @@ extern struct portduino_config_struct {
     int sfpp_hops = 3;
     int sfpp_announce_interval = 5; // minutes
     uint32_t sfpp_max_chain = 1000;
+    uint32_t sfpp_backlog_limit = 100;
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
@@ -511,6 +512,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "InitialSync" << YAML::Value << sfpp_initial_sync;
             out << YAML::Key << "Hops" << YAML::Value << sfpp_hops;
             out << YAML::Key << "AnnounceInterval" << YAML::Value << sfpp_announce_interval;
+            out << YAML::Key << "BacklogLimit" << YAML::Value << sfpp_backlog_limit;
             out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
             out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
             out << YAML::EndMap; // StoreAndForward
