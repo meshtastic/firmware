@@ -304,6 +304,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         memcpy(storeforward.root_hash.bytes, root_hash_bytes, SFPP_HASH_SIZE);
 
         storeforward.encapsulated_rxtime = 0;
+        storeforward.chain_count = chain_end.counter;
         // storeforward.
         meshtastic_MeshPacket *p = allocDataProtobuf(storeforward);
         p->to = NODENUM_BROADCAST;
