@@ -1099,6 +1099,9 @@ void SignalRoutingModule::logNetworkTopology()
             char neighborName[48]; // Reduced buffer size for stack safety
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
 
+            CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
+            const char* prefix = (neighborStatus == CapabilityStatus::Capable) ? "[SR] " : "";
+
             float etx = edge.getEtx();
             const char* quality;
             if (etx < 2.0f) quality = "excellent";
@@ -1114,8 +1117,8 @@ void SignalRoutingModule::logNetworkTopology()
                 snprintf(ageBuf, sizeof(ageBuf), "%d", age);
             }
 
-            LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %s sec ago)",
-                    neighborName, quality, etx, ageBuf);
+            LOG_INFO("[SR] |  +- %s%s: %s link (ETX=%.1f, %s sec ago)",
+                    prefix, neighborName, quality, etx, ageBuf);
         }
     }
 
@@ -1208,6 +1211,9 @@ void SignalRoutingModule::logNetworkTopology()
             char neighborName[64];
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
 
+            CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
+            const char* prefix = (neighborStatus == CapabilityStatus::Capable) ? "[SR] " : "";
+
             const char* quality;
             if (edge.etx < 2.0f) quality = "excellent";
             else if (edge.etx < 4.0f) quality = "good";
@@ -1222,8 +1228,8 @@ void SignalRoutingModule::logNetworkTopology()
                 snprintf(ageBuf, sizeof(ageBuf), "%d", age);
             }
 
-            LOG_INFO("[SR] |  +- %s: %s link (ETX=%.1f, %s sec ago)",
-                    neighborName, quality, edge.etx, ageBuf);
+            LOG_INFO("[SR] |  +- %s%s: %s link (ETX=%.1f, %s sec ago)",
+                    prefix, neighborName, quality, edge.etx, ageBuf);
         }
     }
 
@@ -2016,11 +2022,6 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     LOG_INFO("[SR] Broadcast from %s (heard via %s): %s relay (%s)",
              sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT",
              shouldRelay ? decisionReason : "No relay needed");
-
-    // If SR coordination required relay, the source node is actively participating in SignalRouting
-    if (srCoordinationRequiresRelay) {
-        trackNodeCapability(sourceNode, CapabilityStatus::Capable);
-    }
 
     if (shouldRelay) {
         routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
