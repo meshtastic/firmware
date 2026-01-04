@@ -451,14 +451,14 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     int64_t links_behind = 0;
                     if (t->chain_count != 0) {
                         links_behind = t->chain_count - chain_end.counter;
-                    }
-                    LOG_DEBUG("StoreForwardpp Links behind: %ld", links_behind);
-                    if (links_behind > portduino_config.sfpp_backlog_limit) {
-                        LOG_INFO("StoreForwardpp Chain behind limit, dumping DB");
-                        clearChain(t->root_hash.bytes, t->root_hash.size);
-                        return true;
-                    }
 
+                        LOG_DEBUG("StoreForwardpp Links behind: %ld", links_behind);
+                        if (links_behind > portduino_config.sfpp_backlog_limit) {
+                            LOG_INFO("StoreForwardpp Chain behind limit, dumping DB");
+                            clearChain(t->root_hash.bytes, t->root_hash.size);
+                            return true;
+                        }
+                    }
                     // We just got an end of chain announce, checking if we have seen this message and have it in scratch.
                     if (isInScratch(t->message_hash.bytes, t->message_hash.size)) {
                         link_object scratch_object = getFromScratch(t->message_hash.bytes, t->message_hash.size);
@@ -648,12 +648,13 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     int64_t links_behind = 0;
                     if (t->chain_count != 0) {
                         links_behind = t->chain_count - chain_end.counter;
-                    }
-                    LOG_DEBUG("StoreForwardpp Links behind: %ld", links_behind);
-                    if (links_behind > portduino_config.sfpp_backlog_limit) {
-                        LOG_INFO("StoreForwardpp Chain behind limit, dumping DB");
-                        clearChain(t->root_hash.bytes, t->root_hash.size);
-                        return true;
+
+                        LOG_DEBUG("StoreForwardpp observed link that is link ahead of us: %ld", links_behind);
+                        if (links_behind > portduino_config.sfpp_backlog_limit) {
+                            LOG_INFO("StoreForwardpp Chain behind limit, dumping DB");
+                            clearChain(t->root_hash.bytes, t->root_hash.size);
+                            return true;
+                        }
                     }
                 }
                 requestNextMessage(incoming_link.root_hash, incoming_link.root_hash_len, incoming_link.commit_hash,
