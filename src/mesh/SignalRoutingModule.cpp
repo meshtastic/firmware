@@ -2017,6 +2017,11 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
              sourceName, heardFromName, shouldRelay ? "SHOULD" : "should NOT",
              shouldRelay ? decisionReason : "No relay needed");
 
+    // If SR coordination required relay, the source node is actively participating in SignalRouting
+    if (srCoordinationRequiresRelay) {
+        trackNodeCapability(sourceNode, CapabilityStatus::Capable);
+    }
+
     if (shouldRelay) {
         routingGraph->recordNodeTransmission(myNode, p->id, currentTime);
         setRgbLed(255, 128, 0);  // Orange for relaying
@@ -2506,9 +2511,14 @@ void SignalRoutingModule::handleNodeInfoPacket(const meshtastic_MeshPacket &mp)
         return;
     }
 
-    CapabilityStatus status = capabilityFromRole(user.role);
-    if (status != CapabilityStatus::Unknown) {
-        trackNodeCapability(mp.from, status);
+    // Only update capability status if the node is not already known to be SR-capable
+    // NodeInfo packets don't contain SR capability info, so don't downgrade from Capable to Unknown
+    CapabilityStatus currentStatus = getCapabilityStatus(mp.from);
+    if (currentStatus != CapabilityStatus::Capable) {
+        CapabilityStatus status = capabilityFromRole(user.role);
+        if (status != CapabilityStatus::Unknown) {
+            trackNodeCapability(mp.from, status);
+        }
     }
 
     if (user.has_is_unmessagable && user.is_unmessagable) {
@@ -2807,9 +2817,17 @@ void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus s
 
 void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
 {
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: remove stale entries by swapping with last
     for (uint8_t i = 0; i < capabilityRecordCount;) {
+        // Never prune our own node's capability record
+        if (capabilityRecords[i].nodeId == myNode) {
+            i++;
+            continue;
+        }
+
         uint32_t ttl = getNodeTtlSeconds(capabilityRecords[i].record.status);
         if ((nowSecs - capabilityRecords[i].record.lastUpdated) > ttl) {
             if (i < capabilityRecordCount - 1) {
@@ -2822,6 +2840,12 @@ void SignalRoutingModule::pruneCapabilityCache(uint32_t nowSecs)
     }
 #else
     for (auto it = capabilityRecords.begin(); it != capabilityRecords.end();) {
+        // Never prune our own node's capability record
+        if (it->first == myNode) {
+            ++it;
+            continue;
+        }
+
         uint32_t ttl = getNodeTtlSeconds(it->second.status);
         if ((nowSecs - it->second.lastUpdated) > ttl) {
             it = capabilityRecords.erase(it);
@@ -2936,10 +2960,17 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
         return CapabilityStatus::Capable;
     }
 
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: linear search
     for (uint8_t i = 0; i < capabilityRecordCount; i++) {
         if (capabilityRecords[i].nodeId == nodeId) {
+            // Never return Unknown for our own node
+            if (capabilityRecords[i].nodeId == myNode) {
+                return capabilityRecords[i].record.status;
+            }
+
             uint32_t ttl = getNodeTtlSeconds(capabilityRecords[i].record.status);
             if ((now - capabilityRecords[i].record.lastUpdated) > ttl) {
                 return CapabilityStatus::Unknown;
@@ -2952,6 +2983,11 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
     auto it = capabilityRecords.find(nodeId);
     if (it == capabilityRecords.end()) {
         return CapabilityStatus::Unknown;
+    }
+
+    // Never return Unknown for our own node
+    if (it->first == myNode) {
+        return it->second.status;
     }
 
     uint32_t ttl = getNodeTtlSeconds(it->second.status);
