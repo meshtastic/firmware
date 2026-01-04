@@ -231,6 +231,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                        "total_count=?, average_hops=? WHERE nodenum=?;",
                        -1, &updatePeerStmt, NULL);
 
+    sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE substr(root_hash,1,?)=?;", -1, &clearChainStmt, NULL);
+
     encryptedOk = true;
 
     this->setInterval(portduino_config.sfpp_announce_interval * 60 * 1000);
@@ -437,14 +439,23 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             // get tip of chain for this channel
             link_object chain_end = getLinkFromCount(0, t->root_hash.bytes, t->root_hash.size);
 
-            // get chain tip
             if (chain_end.rx_time != 0) {
                 if (t->commit_hash.size >= SFPP_SHORT_HASH_SIZE &&
                     memcmp(chain_end.commit_hash, t->commit_hash.bytes, t->commit_hash.size) == 0) {
                     LOG_DEBUG("StoreForwardpp End of chain matches!");
                     sendFromScratch(chain_end.root_hash);
                 } else {
-                    LOG_DEBUG("StoreForwardpp End of chain does not match!");
+                    LOG_DEBUG("StoreForwardpp End of chain does not match! Checking distance behind.");
+                    int64_t links_behind = 0;
+                    if (t->chain_count != 0) {
+                        links_behind = t->chain_count - chain_end.counter;
+                    }
+                    LOG_DEBUG("StoreForwardpp Links behind: %ld", links_behind);
+                    if (links_behind > portduino_config.sfpp_backlog_limit) {
+                        LOG_INFO("StoreForwardpp Chain behind limit, dumping DB");
+                        clearChain(t->root_hash.bytes, t->root_hash.size);
+                        return true;
+                    }
 
                     // We just got an end of chain announce, checking if we have seen this message and have it in scratch.
                     if (isInScratch(t->message_hash.bytes, t->message_hash.size)) {
@@ -837,6 +848,7 @@ void StoreForwardPlusPlusModule::broadcastLink(uint8_t *_commit_hash, size_t _co
 
     lo.root_hash_len = 8;
     memcpy(lo.root_hash, _root_hash, lo.root_hash_len);
+    lo.counter = sqlite3_column_int(getLinkStmt, 8);
 
     sqlite3_reset(getLinkStmt);
 
@@ -881,6 +893,7 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit
     memcpy(storeforward.message.bytes, lo.encrypted_bytes, storeforward.message.size);
 
     storeforward.encapsulated_rxtime = lo.rx_time;
+    storeforward.chain_count = lo.counter;
 
     if (lo.commit_hash_len >= 8) {
         // If we're sending a first link to a remote, that isn't actually the first on the chain
@@ -986,7 +999,11 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
         commit_hash.update(lo.message_hash, SFPP_HASH_SIZE);
         commit_hash.finalize(lo.commit_hash, SFPP_HASH_SIZE);
     }
-    lo.counter = chain_end.counter + 1;
+    // if we get an official counter, use it. Otherwise, just increment.
+    if (lo.counter == 0) {
+        lo.counter = chain_end.counter + 1;
+    }
+
     // push a message into the local chain DB
     // destination
     sqlite3_bind_int(chain_insert_stmt, 1, lo.to);
@@ -1292,6 +1309,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
     lo.from = t->encapsulated_from;
     lo.id = t->encapsulated_id;
     lo.rx_time = t->encapsulated_rxtime;
+    lo.counter = t->chain_count;
 
     // What if we don't have this root hash? Should drop this packet before this point.
     lo.channel_hash = getChannelHashFromRoot(t->root_hash.bytes, t->root_hash.size);
@@ -1463,6 +1481,18 @@ void StoreForwardPlusPlusModule::trimOldestLink(uint8_t *root_hash, size_t root_
         LOG_ERROR("StoreForwardpp Trim Oldest Link sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
     }
     sqlite3_reset(trimOldestLinkStmt);
+}
+
+void StoreForwardPlusPlusModule::clearChain(uint8_t *root_hash, size_t root_hash_len)
+{
+    sqlite3_bind_int(clearChainStmt, 1, root_hash_len);
+    sqlite3_bind_blob(clearChainStmt, 2, root_hash, root_hash_len, NULL);
+    int res = sqlite3_step(clearChainStmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE) {
+        LOG_ERROR("StoreForwardpp Clear Chain sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    }
+    sqlite3_reset(clearChainStmt);
+    setChainCount(root_hash, root_hash_len, 0);
 }
 
 bool StoreForwardPlusPlusModule::recalculateHash(StoreForwardPlusPlusModule::link_object &lo, uint8_t *_root_hash_bytes,
