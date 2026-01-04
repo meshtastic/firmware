@@ -3,6 +3,7 @@
 #include "architecture.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#include "EphemeralKeyManager.h"
 #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
@@ -82,7 +83,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
   long extraNonceTmp = random();
   auth = bytesOut + numBytes;
   memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-         sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+         sizeof(uint32_t)); // do not use dereference on potential non aligned
+                            // pointers : *extraNonce = extraNonceTmp;
   LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
   if (remotePublic.size == 0) {
     LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -100,7 +102,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
   aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
              auth); // this can write up to 15 bytes longer than numbytes past bytesOut
   memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-         sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+         sizeof(uint32_t)); // do not use dereference on potential non aligned
+                            // pointers : *extraNonce = extraNonceTmp;
   return true;
 }
 
@@ -120,7 +123,8 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
   const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
   uint32_t extraNonce;                         // pointer was not really used
   memcpy(&extraNonce, auth + 8,
-         sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
+         sizeof(uint32_t)); // do not use dereference on potential non aligned
+                            // pointers : (uint32_t *)(auth + 8);
   LOG_INFO("Random nonce value: %d", extraNonce);
 
   if (remotePublic.size == 0) {
@@ -178,13 +182,176 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey) {
   uint8_t local_priv[32];
   memcpy(shared_key, pubKey, 32);
   memcpy(local_priv, private_key, 32);
-  // Calculate the shared secret with the specified node's public key and our private key
-  // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
+  // Calculate the shared secret with the specified node's public key and our
+  // private key This includes an internal weak key check, which among other
+  // things looks for an all 0 public key and shared key.
   if (!Curve25519::dh2(shared_key, local_priv)) {
     LOG_WARN("Curve25519DH step 2 failed!");
     return false;
   }
   return true;
+}
+
+/**
+ * Derive a session key using Triple-DH for Perfect Forward Secrecy.
+ * DH1 = DH(identity_local, ephemeral_remote)
+ * DH2 = DH(ephemeral_local, identity_remote)
+ * DH3 = DH(ephemeral_local, ephemeral_remote)
+ * Session key = SHA256(DH1 || DH2 || DH3)
+ */
+bool CryptoEngine::deriveTripleDHSessionKey(const uint8_t *remoteIdentityPub, const uint8_t *remoteEphemeralPub, const uint8_t *localEphemeralPriv,
+                                            uint8_t *sessionKeyOut) {
+  uint8_t dh1[32], dh2[32], dh3[32];
+  uint8_t combined[96];
+
+  // DH1: Our identity private key with their ephemeral public key
+  memcpy(dh1, remoteEphemeralPub, 32);
+  if (!Curve25519::dh2(dh1, private_key)) {
+    LOG_WARN("Triple-DH: DH1 failed");
+    return false;
+  }
+
+  // DH2: Our ephemeral private key with their identity public key
+  memcpy(dh2, remoteIdentityPub, 32);
+  uint8_t localEphPrivCopy[32];
+  memcpy(localEphPrivCopy, localEphemeralPriv, 32);
+  if (!Curve25519::dh2(dh2, localEphPrivCopy)) {
+    LOG_WARN("Triple-DH: DH2 failed");
+    return false;
+  }
+
+  // DH3: Our ephemeral private key with their ephemeral public key
+  memcpy(dh3, remoteEphemeralPub, 32);
+  memcpy(localEphPrivCopy, localEphemeralPriv, 32);
+  if (!Curve25519::dh2(dh3, localEphPrivCopy)) {
+    LOG_WARN("Triple-DH: DH3 failed");
+    return false;
+  }
+
+  // Combine and hash: session_key = SHA256(DH1 || DH2 || DH3)
+  memcpy(combined, dh1, 32);
+  memcpy(combined + 32, dh2, 32);
+  memcpy(combined + 64, dh3, 32);
+
+  SHA256 sha;
+  sha.reset();
+  sha.update(combined, 96);
+  sha.finalize(sessionKeyOut, 32);
+
+  // Clear intermediate values
+  memset(dh1, 0, 32);
+  memset(dh2, 0, 32);
+  memset(dh3, 0, 32);
+  memset(combined, 0, 96);
+  memset(localEphPrivCopy, 0, 32);
+
+  LOG_DEBUG("Triple-DH session key derived");
+  return true;
+}
+
+/**
+ * Encrypt with Perfect Forward Secrecy using Triple-DH derived session key.
+ */
+bool CryptoEngine::encryptWithPFS(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey,
+                                  const uint8_t *remoteEphemeralKey, uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut) {
+  extern EphemeralKeyManager *ephemeralKeyMgr;
+  if (!ephemeralKeyMgr || !ephemeralKeyMgr->isInitialized()) {
+    LOG_WARN("PFS encryption failed: EphemeralKeyManager not initialized");
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+  }
+
+  const uint8_t *localEphemeralPrivKey = ephemeralKeyMgr->getPrivateKey();
+  if (!localEphemeralPrivKey) {
+    LOG_WARN("PFS encryption failed: no local ephemeral private key");
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+  }
+
+  if (!remoteEphemeralKey) {
+    LOG_DEBUG("Remote node doesn't support PFS, falling back to standard encryption");
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+  }
+
+  // Derive session key using Triple-DH
+  uint8_t sessionKey[32];
+  if (!deriveTripleDHSessionKey(remoteIdentityKey.bytes, remoteEphemeralKey, localEphemeralPrivKey, sessionKey)) {
+    LOG_WARN("Triple-DH key derivation failed, falling back to standard encryption");
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+  }
+
+  // Encrypt using the PFS-derived session key
+  uint8_t *auth;
+  long extraNonceTmp = random();
+  auth = bytesOut + numBytes;
+  memcpy((uint8_t *)(auth + 8), &extraNonceTmp, sizeof(uint32_t));
+
+  initNonce(fromNode, packetNum, extraNonceTmp);
+  printBytes("PFS encrypt with nonce: ", nonce, 13);
+
+  aes_ccm_ae(sessionKey, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+  memcpy((uint8_t *)(auth + 8), &extraNonceTmp, sizeof(uint32_t));
+
+  // Increment message count for rotation tracking
+  ephemeralKeyMgr->incrementMessageCount();
+
+  // Clear session key
+  memset(sessionKey, 0, 32);
+
+  LOG_INFO("Encrypted with PFS for node %08x", toNode);
+  return true;
+}
+
+/**
+ * Decrypt with Perfect Forward Secrecy using Triple-DH derived session key.
+ *
+ * Note: Only call when we know the sender used PFS. If decryption fails,
+ * there's no fallback since the packet was encrypted with a PFS-derived key.
+ */
+bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey, const uint8_t *remoteEphemeralKey,
+                                  uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut) {
+  extern EphemeralKeyManager *ephemeralKeyMgr;
+  if (!ephemeralKeyMgr || !ephemeralKeyMgr->isInitialized()) {
+    LOG_WARN("PFS decryption failed: EphemeralKeyManager not initialized");
+    return false;
+  }
+
+  const uint8_t *localEphemeralPrivKey = ephemeralKeyMgr->getPrivateKey();
+  if (!localEphemeralPrivKey) {
+    LOG_WARN("PFS decryption failed: no local ephemeral private key");
+    return false;
+  }
+
+  if (!remoteEphemeralKey) {
+    LOG_WARN("PFS decryption failed: no remote ephemeral key provided");
+    return false;
+  }
+
+  // Derive session key using Triple-DH
+  uint8_t sessionKey[32];
+  if (!deriveTripleDHSessionKey(remoteIdentityKey.bytes, remoteEphemeralKey, localEphemeralPrivKey, sessionKey)) {
+    LOG_WARN("PFS decryption failed: Triple-DH key derivation error");
+    return false;
+  }
+
+  // Extract nonce from ciphertext
+  const uint8_t *auth = bytes + numBytes - 12;
+  uint32_t extraNonce;
+  memcpy(&extraNonce, auth + 8, sizeof(uint32_t));
+
+  initNonce(fromNode, packetNum, extraNonce);
+  printBytes("PFS decrypt with nonce: ", nonce, 13);
+
+  bool result = aes_ccm_ad(sessionKey, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
+
+  // Clear session key
+  memset(sessionKey, 0, 32);
+
+  if (result) {
+    LOG_INFO("Decrypted with PFS from node %08x", fromNode);
+  } else {
+    LOG_WARN("PFS decryption failed: AES-CCM authentication error from node %08x", fromNode);
+  }
+
+  return result;
 }
 
 #endif
@@ -228,7 +395,8 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
   static uint8_t scratch[MAX_BLOCKSIZE];
   memcpy(scratch, bytes, numBytes);
   memset(scratch + numBytes, 0,
-         sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
+         sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case
+                                      // cypher looks at it)
 
   ctr->setIV(_nonce, 16);
   ctr->setCounterSize(4);

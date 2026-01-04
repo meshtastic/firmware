@@ -10,6 +10,7 @@
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
+#include "mesh/EphemeralKeyManager.h"
 
 #include "FSCommon.h"
 #include "Led.h"
@@ -151,7 +152,8 @@ UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
 #if defined(TCXO_OPTIONAL)
-float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
+float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be
+                                              // changed further down.
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -222,11 +224,13 @@ bool pauseBluetoothLogging = false;
 bool pmu_found;
 
 #if !MESHTASTIC_EXCLUDE_I2C
-// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
+// Array map of sensor types with i2c address and wire as we'll find in the i2c
+// scan
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 #endif
 
-Router *router = NULL; // Users of router don't care what sort of subclass implements that API
+Router *router = NULL; // Users of router don't care what sort of subclass
+                       // implements that API
 
 const char *firmware_version = optstr(APP_VERSION_SHORT);
 
@@ -238,7 +242,8 @@ const char *getDeviceName() {
   // Meshtastic_ab3c or Shortname_abcd
   static char name[20];
   snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
-  // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
+  // if the shortname exists and is NOT the new default of ab3c, use it for BLE
+  // name.
   if (strcmp(owner.short_name, name) != 0) {
     snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
   } else {
@@ -248,8 +253,8 @@ const char *getDeviceName() {
 }
 
 static int32_t ledBlinker() {
-  // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
-  // config.device.led_heartbeat_disabled is changed
+  // Still set up the blinking (heartbeat) interval but skip code path below, so
+  // LED will blink if config.device.led_heartbeat_disabled is changed
   if (config.device.led_heartbeat_disabled)
     return 1000;
 
@@ -258,7 +263,8 @@ static int32_t ledBlinker() {
 
   ledBlink.set(ledOn);
 
-  // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
+  // have a very sparse duty cycle of LED being on, unless charging, then blink
+  // 0.5Hz square wave rate to indicate that
   return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
 
@@ -274,7 +280,8 @@ RadioLibHal *RadioLibHAL = NULL;
 #endif
 
 /**
- * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
+ * Some platforms (nrf52) might provide an alterate version that suppresses
+ * calling delay from sleep.
  */
 __attribute__((weak, noinline)) bool loopCanSleep() { return true; }
 
@@ -338,12 +345,13 @@ void setup() {
   // Turn on peripheral power immediately after MUC starts.
   // If some boards are turned on late, ESP32 will reset due to low voltage.
   // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-  // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
+  // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) ,
+  // ES7210(Decoder)
   pinMode(KB_POWERON, OUTPUT);
   digitalWrite(KB_POWERON, HIGH);
-  // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-  // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-  // e.g. when detecting the SD card
+  // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same
+  // SPI bus We need to initialize all CS pins in advance otherwise there will
+  // be SPI communication issues e.g. when detecting the SD card
   pinMode(LORA_CS, OUTPUT);
   digitalWrite(LORA_CS, HIGH);
   pinMode(SDCARD_CS, OUTPUT);
@@ -500,8 +508,8 @@ void setup() {
   bool sensor_detected = false;
 #endif
 #ifdef PERIPHERAL_WARMUP_MS
-  // Some peripherals may require additional time to stabilize after power is connected
-  // e.g. I2C on Heltec Vision Master
+  // Some peripherals may require additional time to stabilize after power is
+  // connected e.g. I2C on Heltec Vision Master
   LOG_INFO("Wait for peripherals to stabilize");
   delay(PERIPHERAL_WARMUP_MS);
 #endif
@@ -513,10 +521,12 @@ void setup() {
 #ifdef BUTTON_NEED_PULLUP
   pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
 #else
-  pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+  pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN,
+          INPUT); // default to BUTTON_PIN
 #endif
 #else
-  pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+  pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN,
+          INPUT); // default to BUTTON_PIN
 #ifdef BUTTON_NEED_PULLUP
   gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
   delay(10);
@@ -587,7 +597,8 @@ void setup() {
 #endif
 
 #ifdef AQ_SET_PIN
-  // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
+  // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3
+  // seconds, so we need to rescan later
   pinMode(AQ_SET_PIN, OUTPUT);
   digitalWrite(AQ_SET_PIN, HIGH);
 #endif
@@ -597,12 +608,12 @@ void setup() {
   power = new Power();
   power->setStatusHandler(powerStatus);
   powerStatus->observe(&power->newStatus);
-  power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial
-                  // configuration
+  power->setup(); // Must be after status handler is installed, so that handler
+                  // gets notified of the initial configuration
 
 #if !MESHTASTIC_EXCLUDE_I2C
-  // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
-  // accessories
+  // We need to scan here to decide if we have a screen for nodeDB.init() and
+  // because power has been applied to accessories
   auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
   LOG_INFO("Scan for i2c devices");
@@ -634,7 +645,8 @@ void setup() {
   }
 
 #ifdef ARCH_ESP32
-  // Don't init display if we don't have one or we are waking headless due to a timer event
+  // Don't init display if we don't have one or we are waking headless due to a
+  // timer event
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
     LOG_DEBUG("suppress screen wake because this is a headless timer wakeup");
     i2cScanner->setSuppressScreen();
@@ -707,9 +719,9 @@ void setup() {
   aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? aqiInfo.address : ScanI2C::ADDRESS_NONE;
 
 /*
- * There are a bunch of sensors that have no further logic than to be found and stuffed into the
- * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
- * "found".
+ * There are a bunch of sensors that have no further logic than to be found and
+ * stuffed into the nodeTelemetrySensorsMap singleton. This wraps that logic in
+ * a temporary scope to declare the temporary field "found".
  */
 
 // Two supported RGB LED currently
@@ -718,8 +730,8 @@ void setup() {
 #endif
 
 #ifdef HAS_TPS65233
-  // TPS65233 is a power management IC for satellite modems, used in the Dreamcatcher
-  // We are switching it off here since we don't use an LNB.
+  // TPS65233 is a power management IC for satellite modems, used in the
+  // Dreamcatcher We are switching it off here since we don't use an LNB.
   if (i2cScanner->exists(ScanI2C::DeviceType::TPS65233)) {
     Wire.beginTransmission(TPS65233_ADDR);
     Wire.write(0);   // Register 0
@@ -785,8 +797,15 @@ void setup() {
 #endif
 
   // We do this as early as possible because this loads preferences from flash
-  // but we need to do this after main cpu init (esp32setup), because we need the random seed set
+  // but we need to do this after main cpu init (esp32setup), because we need
+  // the random seed set
   nodeDB = new NodeDB;
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+  // Initialize Perfect Forward Secrecy key manager
+  ephemeralKeyMgr = new EphemeralKeyManager();
+  ephemeralKeyMgr->init();
+#endif
 
 #if HAS_TFT
   if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
@@ -808,12 +827,14 @@ void setup() {
     screen_model = config.display.oled;
 
 #if defined(USE_SH1107)
-  screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+  screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of
+                                                                       // 128x128
   screen_geometry = GEOMETRY_128_128;
 #endif
 
 #if defined(USE_SH1107_128_64)
-  screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+  screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of
+                                                                       // 128x64
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -880,7 +901,8 @@ void setup() {
 #endif
 #endif
 
-  // Initialize the screen first so we can show the logo while we start up everything else.
+  // Initialize the screen first so we can show the logo while we start up
+  // everything else.
 #if HAS_SCREEN
   if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
@@ -902,7 +924,8 @@ void setup() {
 
   // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-  LOG_DEBUG("Use compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string
+  LOG_DEBUG("Use compiled/slipstreamed %s",
+            slipstreamTZString); // important, removing this clobbers our magic string
   if (*config.device.tzdef && config.device.tzdef[0] != 0) {
     LOG_DEBUG("Saved TZ: %s ", config.device.tzdef);
     setenv("TZ", config.device.tzdef, 1);
@@ -918,7 +941,8 @@ void setup() {
   LOG_DEBUG("Set Timezone to %s", getenv("TZ"));
 #endif
 
-  readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
+  readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS
+                 // time)
 
 #if !MESHTASTIC_EXCLUDE_GPS
   // If we're taking on the repeater role, ignore GPS
@@ -952,8 +976,8 @@ void setup() {
   LOG_DEBUG("Start multicast thread");
   udpHandler = new UdpMulticastHandler();
 #ifdef ARCH_PORTDUINO
-  // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
-  // onNetworkConnected there
+  // FIXME: portduino does not ever call onNetworkConnected so call it here
+  // because I don't know what happen if I call onNetworkConnected there
   if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
     udpHandler->start();
   }
@@ -988,7 +1012,8 @@ void setup() {
 #if HAS_BUTTON
   int pullup_sense = 0;
 #ifdef INPUT_PULLUP_SENSE
-  // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+  // Some platforms (nrf52) have a SENSE variant which allows wake from sleep -
+  // override what OneButton did
 #ifdef BUTTON_SENSE_TYPE
   pullup_sense = BUTTON_SENSE_TYPE;
 #else
@@ -1096,7 +1121,8 @@ void setup() {
 #endif
 
   // Buttons. Moved here cause we need NodeDB to be initialized
-  // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
+  // If your variant.h has a BUTTON_PIN defined, go ahead and define
+  // BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
   UserButtonThread = new ButtonThread("UserButton");
   if (screen) {
     ButtonConfig userConfig;
@@ -1155,7 +1181,8 @@ void setup() {
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
   if (!pmu_found)
-    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for
+                                                                  // missing hardware
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -1230,7 +1257,8 @@ void setup() {
   LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
 #endif
 
-  // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
+  // radio init MUST BE AFTER service.init, so we have our radio config settings
+  // (from nodedb init)
 #if defined(USE_STM32WLx)
   if (!rIf) {
     rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
@@ -1294,7 +1322,8 @@ void setup() {
   }
 
   if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-    // If specified TCXO voltage fails, attempt to use DIO3 as a reference instead
+    // If specified TCXO voltage fails, attempt to use DIO3 as a reference
+    // instead
     rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
     if (!rIf->init()) {
       LOG_WARN("No SX1262 radio with XTAL, Vref 0.0V");
@@ -1422,7 +1451,8 @@ void setup() {
     }
   }
 
-  lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+  lateInitVariant(); // Do board specific init (see extra_variants/README.md for
+                     // documentation)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
   mqttInit();
@@ -1482,9 +1512,10 @@ void setup() {
               (float(meshtastic_Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) * 1000);
   }
 
-  // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
-  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking
-                    // from SDS
+  // This must be _after_ service.init because we need our preferences loaded
+  // from flash to have proper timeout values
+  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME,
+                    // only do this for cold boots, not waking from SDS
   powerFSMthread = new PowerFSMThread();
 
 #if !HAS_TFT
@@ -1501,11 +1532,14 @@ void setup() {
 }
 
 #endif
-uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
-uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
+uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to
+                         // reboot shortly after the update completes)
+uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to
+                         // shutdown from python or mobile client)
 
-// If a thread does something that might need for it to be rescheduled ASAP it can set this flag
-// This will suppress the current delay and instead try to run ASAP.
+// If a thread does something that might need for it to be rescheduled ASAP it
+// can set this flag This will suppress the current delay and instead try to run
+// ASAP.
 bool runASAP;
 
 extern meshtastic_DeviceMetadata getDeviceMetadata() {
@@ -1527,19 +1561,22 @@ extern meshtastic_DeviceMetadata getDeviceMetadata() {
 #if MESHTASTIC_EXCLUDE_AUDIO
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
-// Option to explicitly include canned messages for edge cases, e.g. niche graphics
+// Option to explicitly include canned messages for edge cases, e.g. niche
+// graphics
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
-// Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
-// We'll have to macro guard against those targets potentially
+// Only edge case here is if we apply this a device with built in Accelerometer
+// and want to detect interrupts We'll have to macro guard against those targets
+// potentially
 #if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
-// If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
+// If we don't have any GPIO and we don't have GPS OR we don't want too - no
+// purpose in having serial config
 #if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
@@ -1552,12 +1589,14 @@ extern meshtastic_DeviceMetadata getDeviceMetadata() {
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
-// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
+// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth
+// stacks integrated yet.
 #if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(CONFIG_IDF_TARGET_ESP32C6)
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
-#if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
+#if defined(ARCH_NRF52) && !HAS_ETHERNET                                        // nrf52 doesn't have network unless it's a RAK ethernet
+                                                                                // gateway currently
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
 #elif defined(ARCH_RP2040) && !HAS_WIFI && !HAS_ETHERNET
   deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040

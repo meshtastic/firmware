@@ -1,6 +1,7 @@
 #include "Router.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "EphemeralKeyManager.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -23,33 +24,38 @@
 #include "serialization/MeshPacketSerializer.h"
 #endif
 
-#define MAX_RX_FROMRADIO 4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
+#define MAX_RX_FROMRADIO                                                                                                                             \
+  4 // max number of packets destined to our queue, we dispatch packets quickly
+    // so it doesn't need to be big
 
-// I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
-// And every TX packet might have a retransmission packet or an ack alive at any moment
+// I think this is right, one packet for each of the three fifos + one packet
+// being currently assembled for TX or RX And every TX packet might have a
+// retransmission packet or an ack alive at any moment
 
 #ifdef ARCH_PORTDUINO
-// Portduino (native) targets can use dynamic memory pools with runtime-configurable sizes
+// Portduino (native) targets can use dynamic memory pools with
+// runtime-configurable sizes
 #define MAX_PACKETS                                                                                                                                  \
-  (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                                            \
-   2) // max number of packets which can be in flight (either queued from reception or queued for sending)
+  (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE + 2) // max number of packets which can be in flight (either queued from
+                                                             // reception or queued for sending)
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
-// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this
-// statically. For now, make it dynamic again.
+// On STM32 and boards with PSRAM, there isn't enough heap left over for the
+// rest of the firmware if we allocate this statically. For now, make it dynamic
+// again.
 #define MAX_PACKETS                                                                                                                                  \
-  (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                                            \
-   2) // max number of packets which can be in flight (either queued from reception or queued for sending)
+  (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE + 2) // max number of packets which can be in flight (either queued from
+                                                             // reception or queued for sending)
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
 #define MAX_PACKETS_STATIC                                                                                                                           \
-  (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                                            \
-   2) // max number of packets which can be in flight (either queued from reception or queued for sending)
+  (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE + 2) // max number of packets which can be in flight (either queued from
+                                                             // reception or queued for sending)
 
 static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
@@ -63,7 +69,8 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
  * Currently we only allow one interface, that may change in the future
  */
 Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRADIO) {
-  // This is called pre main(), don't touch anything here, the following code is not safe
+  // This is called pre main(), don't touch anything here, the following code is
+  // not safe
 
   /* LOG_DEBUG("Size of NodeInfo %d", sizeof(NodeInfo));
   LOG_DEBUG("Size of SubPacket %d", sizeof(SubPacket));
@@ -82,7 +89,8 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p) {
     return true; // Always decrement on first hop
   }
 
-  // Check if both local device and previous relay are routers (including CLIENT_BASE)
+  // Check if both local device and previous relay are routers (including
+  // CLIENT_BASE)
   bool localIsRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
 
@@ -136,12 +144,13 @@ int32_t Router::runOnce() {
   }
 
   // LOG_DEBUG("Sleep forever!");
-  return INT32_MAX; // Wait a long time - until we get woken for the message queue
+  return INT32_MAX; // Wait a long time - until we get woken for the message
+                    // queue
 }
 
 /**
- * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible
- * for freeing the packet
+ * RadioInterface calls this to queue up packets that have been received from
+ * the radio.  The router is now responsible for freeing the packet
  */
 void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p) {
   // Try enqueue until successful
@@ -153,21 +162,24 @@ void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p) {
       packetPool.release(old_p);
     }
   }
-  // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
+  // Nasty hack because our threading is primitive.  interfaces shouldn't need
+  // to know about routers FIXME
   setReceivedMessage();
 }
 
 /// Generate a unique packet id
 // FIXME, move this someplace better
 PacketId generatePacketId() {
-  static uint32_t rollingPacketId; // Note: trying to keep this in noinit didn't help for working across reboots
+  static uint32_t rollingPacketId; // Note: trying to keep this in noinit didn't
+                                   // help for working across reboots
   static bool didInit = false;
 
   if (!didInit) {
     didInit = true;
 
-    // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
-    // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
+    // pick a random initial sequence number at boot (to prevent repeated
+    // reboots always starting at 0) Note: we mask the high order bit to ensure
+    // that we never pass a 'negative' number to random
     rollingPacketId = random(UINT32_MAX & 0x7fffffff);
     LOG_DEBUG("Initial packet id %u", rollingPacketId);
   }
@@ -188,7 +200,8 @@ meshtastic_MeshPacket *Router::allocForSending() {
   p->to = NODENUM_BROADCAST;
   p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
   p->id = generatePacketId();
-  p->rx_time = getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
+  p->rx_time = getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make
+                                                // sure it has a valid timestamp
 
   return p;
 }
@@ -236,13 +249,15 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src) {
 
     return ERRNO_NO_INTERFACES;
   } else {
-    // If we are sending a broadcast, we also treat it as if we just received it ourself
-    // this allows local apps (and PCs) to see broadcasts sourced locally
+    // If we are sending a broadcast, we also treat it as if we just received it
+    // ourself this allows local apps (and PCs) to see broadcasts sourced
+    // locally
     if (isBroadcast(p->to)) {
       handleReceived(p, src);
     }
 
-    // don't override if a channel was requested and no need to set it when PKI is enforced
+    // don't override if a channel was requested and no need to set it when PKI
+    // is enforced
     if (!p->channel && !p->pki_encrypted && !isBroadcast(p->to)) {
       meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->to);
       if (node) {
@@ -258,7 +273,8 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src) {
  * Send a packet on a suitable interface.
  */
 ErrorCode Router::rawSend(meshtastic_MeshPacket *p) {
-  assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+  assert(iface); // This should have been detected already in sendLocal (or we
+                 // just received a packet from outside)
   return iface->send(p);
 }
 
@@ -280,7 +296,9 @@ ErrorCode Router::send(meshtastic_MeshPacket *p) {
     if (hourlyTxPercent > myRegion->dutyCycle) {
       uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
 
-      LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
+      LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send "
+               "again in %d mins",
+               silentMinutes);
 
       meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
       cn->has_reply_id = true;
@@ -300,16 +318,18 @@ ErrorCode Router::send(meshtastic_MeshPacket *p) {
     }
   }
 
-  // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
-  // assert(!nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that
+  // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ?
+  // p->decoded.ackVariant.fail_id : 0; assert(!nakId); // I don't think we ever
+  // send 0hop naks over the wire (other than to the phone), test that
   // assumption with assert
 
   // Never set the want_ack flag on broadcast packets sent over the air.
   if (isBroadcast(p->to))
     p->want_ack = false;
 
-  // Up until this point we might have been using 0 for the from address (if it started with the phone), but when we
-  // send over the lora we need to make sure we have replaced it with our local address
+  // Up until this point we might have been using 0 for the from address (if it
+  // started with the phone), but when we send over the lora we need to make
+  // sure we have replaced it with our local address
   p->from = getFrom(p);
 
   p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
@@ -317,7 +337,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p) {
   if (isFromUs(p))
     p->hop_start = p->hop_limit;
 
-  // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
+  // If the packet hasn't yet been encrypted, do so now (it might already be
+  // encrypted if we are just forwarding it)
 
   if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag || p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
     return meshtastic_Routing_Error_BAD_REQUEST;
@@ -355,11 +376,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p) {
   }
 #endif
 
-  assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+  assert(iface); // This should have been detected already in sendLocal (or we
+                 // just received a packet from outside)
   return iface->send(p);
 }
 
-/** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+/** Attempt to cancel a previously sent packet.  Returns true if a packet was
+ * found we could cancel */
 bool Router::cancelSending(NodeNum from, PacketId id) {
   if (iface && iface->cancelSending(from, id)) {
     // We are not a relayer of this packet anymore
@@ -369,12 +392,14 @@ bool Router::cancelSending(NodeNum from, PacketId id) {
   return false;
 }
 
-/** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+/** Attempt to find a packet in the TxQueue. Returns true if the packet was
+ * found. */
 bool Router::findInTxQueue(NodeNum from, PacketId id) { return iface->findInTxQueue(from, id); }
 
 /**
- * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
- * update routing tables etc... based on what we overhear (even for messages not destined to our node)
+ * Every (non duplicate) packet this node receives will be passed through this
+ * method.  This allows subclasses to update routing tables etc... based on what
+ * we overhear (even for messages not destined to our node)
  */
 void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) {
   // FIXME, update nodedb here for any packet that passes through us
@@ -385,12 +410,15 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p) {
 
   if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
       (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
-    LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
+    LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will "
+              "ignore packet",
+              p->from);
     return DecodeState::DECODE_FAILURE;
   }
 
   if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
-    return DecodeState::DECODE_SUCCESS; // If packet was already decoded just return
+    return DecodeState::DECODE_SUCCESS; // If packet was already decoded just
+                                        // return
 
   size_t rawSize = p->encrypted.size;
   if (rawSize > sizeof(bytes)) {
@@ -406,9 +434,29 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p) {
       rawSize > MESHTASTIC_PKC_OVERHEAD) {
     LOG_DEBUG("Attempt PKI decryption");
 
-    if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes, bytes)) {
-      LOG_INFO("PKI Decryption worked!");
+    bool pki_decrypted = false;
 
+    // Try standard PKI decryption first (works for legacy and stock firmware)
+    pki_decrypted = crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes, bytes);
+
+    if (pki_decrypted) {
+      LOG_INFO("PKI Decryption worked (legacy)!");
+    } else {
+      // Legacy decryption failed - try PFS if sender supports it
+      if (ephemeralKeyMgr && ephemeralKeyMgr->isInitialized()) {
+        const RemoteEphemeralKey *senderEphKey = ephemeralKeyMgr->getRemoteKey(p->from);
+        if (senderEphKey && ephemeralKeyMgr->nodeSuportsPFS(p->from)) {
+          LOG_DEBUG("Legacy decrypt failed, attempting PFS from node %08x", p->from);
+          pki_decrypted = crypto->decryptWithPFS(p->from, nodeDB->getMeshNode(p->from)->user.public_key, senderEphKey->pubkey, p->id, rawSize,
+                                                 p->encrypted.bytes, bytes);
+          if (pki_decrypted) {
+            LOG_INFO("PFS Decryption worked!");
+          }
+        }
+      }
+    }
+
+    if (pki_decrypted) {
       meshtastic_Data decodedtmp;
       memset(&decodedtmp, 0, sizeof(decodedtmp));
       rawSize -= MESHTASTIC_PKC_OVERHEAD;
@@ -436,15 +484,17 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p) {
     for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
       // Try to use this hash/channel pair
       if (channels.decryptForHash(chIndex, p->channel)) {
-        // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
-        // fresh copy for each decrypt attempt.
+        // we have to copy into a scratch buffer, because these bytes are a
+        // union with the decoded protobuf. Create a fresh copy for each decrypt
+        // attempt.
         memcpy(bytes, p->encrypted.bytes, rawSize);
         // Try to decrypt the packet if we can
         crypto->decrypt(p->from, p->id, rawSize, bytes);
 
         // printBytes("plaintext", bytes, p->encrypted.size);
 
-        // Take those raw bytes and convert them back into a well structured protobuf we can understand
+        // Take those raw bytes and convert them back into a well structured
+        // protobuf we can understand
         meshtastic_Data decodedtmp;
         memset(&decodedtmp, 0, sizeof(decodedtmp));
         if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
@@ -480,16 +530,19 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p) {
         char decompressed_out[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
         int decompressed_len;
 
-        memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
+        memcpy(compressed_in, p->decoded.payload.bytes,
+    p->decoded.payload.size);
 
-        decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
+        decompressed_len = unishox2_decompress_simple(compressed_in,
+    p->decoded.payload.size, decompressed_out);
 
         // LOG_DEBUG("**Decompressed length - %d ", decompressed_len);
 
         memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
 
-        // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
-        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to
+    PortNum_TEXT_MESSAGE_APP p->decoded.portnum =
+    meshtastic_PortNum_TEXT_MESSAGE_APP;
     } */
 
     printPacket("decoded message", p);
@@ -533,19 +586,22 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
     if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
 
         char original_payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
-        memcpy(original_payload, p->decoded.payload.bytes, p->decoded.payload.size);
+        memcpy(original_payload, p->decoded.payload.bytes,
+    p->decoded.payload.size);
 
         char compressed_out[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
 
         int compressed_len;
-        compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
+        compressed_len = unishox2_compress_simple(original_payload,
+    p->decoded.payload.size, compressed_out);
 
         LOG_DEBUG("Original length - %d ", p->decoded.payload.size);
         LOG_DEBUG("Compressed length - %d ", compressed_len);
         LOG_DEBUG("Original message - %s ", p->decoded.payload.bytes);
 
-        // If the compressed length is greater than or equal to the original size, don't use the compressed form
-        if (compressed_len >= p->decoded.payload.size) {
+        // If the compressed length is greater than or equal to the original
+    size, don't use the compressed form if (compressed_len >=
+    p->decoded.payload.size) {
 
             LOG_DEBUG("Not using compressing message");
             // Set the uncompressed payload variant anyway. Shouldn't hurt?
@@ -572,8 +628,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-    // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the
-    // node is not in the local nodedb First, only PKC encrypt packets we are originating
+    // We may want to retool things so we can send a PKC packet when the client
+    // specifies a key and nodenum, even if the node is not in the local nodedb
+    // First, only PKC encrypt packets we are originating
     if (isFromUs(p) &&
 #if ARCH_PORTDUINO
         // Sim radio via the cli flag skips PKC
@@ -581,7 +638,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
 #endif
         // Don't use PKC with Ham mode
         !owner.is_licensed &&
-        // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
+        // Don't use PKC on 'serial' or 'gpio' channels unless explicitly
+        // requested
         !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
                                        strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
         // Check for valid keys and single node destination
@@ -595,10 +653,27 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
       if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
         return meshtastic_Routing_Error_TOO_LARGE;
       if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) && memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
-        LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes, *node->user.public_key.bytes);
+        LOG_WARN("Client public key differs from requested: 0x%02x, stored key "
+                 "begins 0x%02x",
+                 *p->public_key.bytes, *node->user.public_key.bytes);
         return meshtastic_Routing_Error_PKI_FAILED;
       }
-      crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+
+      // Try PFS encryption if remote node supports it
+      bool encrypted = false;
+      if (ephemeralKeyMgr && ephemeralKeyMgr->isInitialized()) {
+        const RemoteEphemeralKey *remoteEphKey = ephemeralKeyMgr->getRemoteKey(p->to);
+        if (remoteEphKey && ephemeralKeyMgr->nodeSuportsPFS(p->to)) {
+          LOG_DEBUG("Using PFS encryption for node %08x", p->to);
+          encrypted =
+              crypto->encryptWithPFS(p->to, getFrom(p), node->user.public_key, remoteEphKey->pubkey, p->id, numbytes, bytes, p->encrypted.bytes);
+        }
+      }
+
+      // Fallback to standard PKI if PFS not available or failed
+      if (!encrypted) {
+        crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+      }
       numbytes += MESHTASTIC_PKC_OVERHEAD;
       p->channel = 0;
       p->pki_encrypted = true;
@@ -609,7 +684,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
       }
       hash = channels.setActiveByIndex(chIndex);
 
-      // Now that we are encrypting the packet channel should be the hash (no longer the index)
+      // Now that we are encrypting the packet channel should be the hash (no
+      // longer the index)
       p->channel = hash;
       if (hash < 0) {
         // No suitable channel could be found for
@@ -625,7 +701,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p) {
     }
     hash = channels.setActiveByIndex(chIndex);
 
-    // Now that we are encrypting the packet channel should be the hash (no longer the index)
+    // Now that we are encrypting the packet channel should be the hash (no
+    // longer the index)
     p->channel = hash;
     if (hash < 0) {
       // No suitable channel could be found for
@@ -647,11 +724,13 @@ NodeNum Router::getNodeNum() { return nodeDB->getNodeNum(); }
 
 /**
  * Handle any packet that is received by an interface on this node.
- * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
+ * Note: some packets may merely being passed through this node and will be
+ * forwarded elsewhere.
  */
 void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src) {
   bool skipHandle = false;
-  // Also, we should set the time from the ISR and it should have msec level resolution
+  // Also, we should set the time from the ISR and it should have msec level
+  // resolution
   p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
   // Store a copy of encrypted packet for MQTT
@@ -659,7 +738,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src) {
   p_encrypted = packetPool.allocCopy(*p);
   DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
-  // Take those raw bytes and convert them back into a well structured protobuf we can understand
+  // Take those raw bytes and convert them back into a well structured protobuf
+  // we can understand
   auto decodedState = perhapsDecode(p);
   if (decodedState == DecodeState::DECODE_FATAL) {
     // Fatal decoding error, we can't do anything with this packet
@@ -710,13 +790,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src) {
     if (p_encrypted == nullptr) {
       LOG_WARN("p_encrypted is null, skipping MQTT publish");
     } else {
-      // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM
-      // not to us (because we would be able to decrypt it)
+      // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
+      // to us (because we would be able to decrypt it)
       if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 && !isBroadcast(p->to) &&
           !isToUs(p))
         p_encrypted->pki_encrypted = true;
-      // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the
-      // packet
+      // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
       if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
         mqtt->onSend(*p_encrypted, *p, p->channel);
     }
@@ -771,8 +850,9 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p) {
     return;
   }
 
-  // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides
-  // might cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
+  // Note: we avoid calling shouldFilterReceived if we are supposed to ignore
+  // certain nodes - because some overrides might cache/learn of the existence
+  // of nodes (i.e. FloodRouter) that they should not
   handleReceived(p);
   packetPool.release(p);
 }
