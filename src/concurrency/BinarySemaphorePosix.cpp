@@ -3,7 +3,8 @@
 
 #ifndef HAS_FREE_RTOS
 
-namespace concurrency {
+namespace concurrency
+{
 
 BinarySemaphorePosix::BinarySemaphorePosix() {}
 
@@ -12,9 +13,10 @@ BinarySemaphorePosix::~BinarySemaphorePosix() {}
 /**
  * Returns false if we timed out
  */
-bool BinarySemaphorePosix::take(uint32_t msec) {
-  delay(msec); // FIXME
-  return false;
+bool BinarySemaphorePosix::take(uint32_t msec)
+{
+    delay(msec); // FIXME
+    return false;
 }
 
 void BinarySemaphorePosix::give() {}

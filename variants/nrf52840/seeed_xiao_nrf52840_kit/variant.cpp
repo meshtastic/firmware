@@ -78,18 +78,19 @@ const uint32_t g_ADigitalPinMap[] = {
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-void initVariant() {
-  // Set BQ25101 ISET to 100mA instead of 50mA
-  pinMode(HICHG, OUTPUT);
-  digitalWrite(HICHG, LOW);
+void initVariant()
+{
+    // Set BQ25101 ISET to 100mA instead of 50mA
+    pinMode(HICHG, OUTPUT);
+    digitalWrite(HICHG, LOW);
 
-  // LEDs
-  pinMode(PIN_LED1, OUTPUT);
-  ledOff(PIN_LED1);
+    // LEDs
+    pinMode(PIN_LED1, OUTPUT);
+    ledOff(PIN_LED1);
 
-  pinMode(PIN_LED2, OUTPUT);
-  ledOff(PIN_LED2);
+    pinMode(PIN_LED2, OUTPUT);
+    ledOff(PIN_LED2);
 
-  pinMode(PIN_LED3, OUTPUT);
-  ledOff(PIN_LED3);
+    pinMode(PIN_LED3, OUTPUT);
+    ledOff(PIN_LED3);
 }

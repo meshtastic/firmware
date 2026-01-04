@@ -7,14 +7,15 @@
 #include "TelemetrySensor.h"
 #include <BH1750_WE.h>
 
-class BH1750Sensor : public TelemetrySensor {
-private:
-  BH1750_WE bh1750;
+class BH1750Sensor : public TelemetrySensor
+{
+  private:
+    BH1750_WE bh1750;
 
-public:
-  BH1750Sensor();
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+  public:
+    BH1750Sensor();
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

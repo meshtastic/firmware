@@ -10,43 +10,46 @@
 
 DFRobotGravitySensor::DFRobotGravitySensor() : TelemetrySensor(meshtastic_TelemetrySensorType_DFROBOT_RAIN, "DFROBOT_RAIN") {}
 
-DFRobotGravitySensor::~DFRobotGravitySensor() {
-  if (gravity) {
+DFRobotGravitySensor::~DFRobotGravitySensor()
+{
+    if (gravity) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
-    delete gravity;
+        delete gravity;
 #pragma GCC diagnostic pop
-    gravity = nullptr;
-  }
+        gravity = nullptr;
+    }
 }
 
-bool DFRobotGravitySensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) {
-  LOG_INFO("Init sensor: %s", sensorName);
+bool DFRobotGravitySensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
+{
+    LOG_INFO("Init sensor: %s", sensorName);
 
-  gravity = new DFRobot_RainfallSensor_I2C(bus);
-  status = gravity->begin();
+    gravity = new DFRobot_RainfallSensor_I2C(bus);
+    status = gravity->begin();
 
-  LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity->vid, gravity->pid, gravity->getFirmwareVersion().c_str());
+    LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity->vid, gravity->pid, gravity->getFirmwareVersion().c_str());
 
-  initI2CSensor();
-  return status;
+    initI2CSensor();
+    return status;
 }
 
-bool DFRobotGravitySensor::getMetrics(meshtastic_Telemetry *measurement) {
-  if (!gravity) {
-    LOG_ERROR("DFRobotGravitySensor not initialized");
-    return false;
-  }
+bool DFRobotGravitySensor::getMetrics(meshtastic_Telemetry *measurement)
+{
+    if (!gravity) {
+        LOG_ERROR("DFRobotGravitySensor not initialized");
+        return false;
+    }
 
-  measurement->variant.environment_metrics.has_rainfall_1h = true;
-  measurement->variant.environment_metrics.has_rainfall_24h = true;
+    measurement->variant.environment_metrics.has_rainfall_1h = true;
+    measurement->variant.environment_metrics.has_rainfall_24h = true;
 
-  measurement->variant.environment_metrics.rainfall_1h = gravity->getRainfall(1);
-  measurement->variant.environment_metrics.rainfall_24h = gravity->getRainfall(24);
+    measurement->variant.environment_metrics.rainfall_1h = gravity->getRainfall(1);
+    measurement->variant.environment_metrics.rainfall_24h = gravity->getRainfall(24);
 
-  LOG_INFO("Rain 1h: %f mm", measurement->variant.environment_metrics.rainfall_1h);
-  LOG_INFO("Rain 24h: %f mm", measurement->variant.environment_metrics.rainfall_24h);
-  return true;
+    LOG_INFO("Rain 1h: %f mm", measurement->variant.environment_metrics.rainfall_1h);
+    LOG_INFO("Rain 24h: %f mm", measurement->variant.environment_metrics.rainfall_24h);
+    return true;
 }
 
 #endif

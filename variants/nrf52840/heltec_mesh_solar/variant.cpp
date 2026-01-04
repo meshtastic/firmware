@@ -30,10 +30,11 @@ const uint32_t g_ADigitalPinMap[] = {
     // P1
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
-void initVariant() {
-  pinMode(BQ4050_EMERGENCY_SHUTDOWN_PIN, INPUT);
+void initVariant()
+{
+    pinMode(BQ4050_EMERGENCY_SHUTDOWN_PIN, INPUT);
 #if defined(PIN_SCREEN_VDD_CTL)
-  pinMode(PIN_SCREEN_VDD_CTL, OUTPUT);
-  digitalWrite(PIN_SCREEN_VDD_CTL, LOW); // Start with power on
+    pinMode(PIN_SCREEN_VDD_CTL, OUTPUT);
+    digitalWrite(PIN_SCREEN_VDD_CTL, LOW); // Start with power on
 #endif
 }

@@ -30,24 +30,25 @@ const uint32_t g_ADigitalPinMap[] = {
     // P1
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
-void initVariant() {
-  // LED1 & LED2
-  pinMode(PIN_LED1, OUTPUT);
-  ledOff(PIN_LED1);
+void initVariant()
+{
+    // LED1 & LED2
+    pinMode(PIN_LED1, OUTPUT);
+    ledOff(PIN_LED1);
 
-  pinMode(PIN_LED2, OUTPUT);
-  ledOff(PIN_LED2);
+    pinMode(PIN_LED2, OUTPUT);
+    ledOff(PIN_LED2);
 
-  // 3V3 Power Rail
-  pinMode(PIN_3V3_EN, OUTPUT);
-  digitalWrite(PIN_3V3_EN, HIGH);
+    // 3V3 Power Rail
+    pinMode(PIN_3V3_EN, OUTPUT);
+    digitalWrite(PIN_3V3_EN, HIGH);
 
-  // Initialize Encoder pins
-  pinMode(INPUTDRIVER_ENCODER_UP, INPUT_PULLUP);
-  pinMode(INPUTDRIVER_ENCODER_DOWN, INPUT_PULLUP);
-  pinMode(INPUTDRIVER_ENCODER_BTN, INPUT_PULLUP);
+    // Initialize Encoder pins
+    pinMode(INPUTDRIVER_ENCODER_UP, INPUT_PULLUP);
+    pinMode(INPUTDRIVER_ENCODER_DOWN, INPUT_PULLUP);
+    pinMode(INPUTDRIVER_ENCODER_BTN, INPUT_PULLUP);
 
-  // Initialize Buzzer pin
-  pinMode(PIN_BUZZER, OUTPUT);
-  digitalWrite(PIN_BUZZER, LOW);
+    // Initialize Buzzer pin
+    pinMode(PIN_BUZZER, OUTPUT);
+    digitalWrite(PIN_BUZZER, LOW);
 }

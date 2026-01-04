@@ -30,8 +30,9 @@
 #define USE_TFTDISPLAY 1
 
 // pin 3 is Vext on v1.1 - HIGH enables LDO for Vext rail which goes to:
-// GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through
-// 10kR GPS LNA SW7125DE:    VCC(4), pulls up SHDN(5) through 10kR LED:                 VDD, LEDA (through diode)
+// GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through 10kR
+// GPS LNA SW7125DE:    VCC(4), pulls up SHDN(5) through 10kR
+// LED:                 VDD, LEDA (through diode)
 
 #define VEXT_ENABLE 3 // active HIGH - powers the GPS, GPS LNA and OLED
 #define VEXT_ON_VALUE HIGH
@@ -50,8 +51,8 @@
 #define GPS_TX_PIN 34
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
-// #define PIN_GPS_EN 3    // Uncomment to power off the GPS with triple-click on Tracker v1.1, though we'll also lose
-// the display.
+// #define PIN_GPS_EN 3    // Uncomment to power off the GPS with triple-click on Tracker v1.1, though we'll also lose the
+// display.
 
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580

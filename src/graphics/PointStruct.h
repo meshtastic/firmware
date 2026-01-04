@@ -1,4 +1,4 @@
 struct PointStruct {
-  int x;
-  int y;
+    int x;
+    int y;
 };

@@ -24,34 +24,36 @@ In variants/<your device>/nicheGraphics.h:
 
 #include "mesh/SinglePortModule.h"
 
-namespace NicheGraphics::InkHUD {
+namespace NicheGraphics::InkHUD
+{
 
-class NewMsgExampleApplet : public Applet, public SinglePortModule {
-public:
-  // The MeshModule API requires us to have a constructor, to specify that we're interested in Text Messages.
-  NewMsgExampleApplet() : SinglePortModule("NewMsgExampleApplet", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
+class NewMsgExampleApplet : public Applet, public SinglePortModule
+{
+  public:
+    // The MeshModule API requires us to have a constructor, to specify that we're interested in Text Messages.
+    NewMsgExampleApplet() : SinglePortModule("NewMsgExampleApplet", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
 
-  // All drawing happens here
-  void onRender() override;
+    // All drawing happens here
+    void onRender() override;
 
-  // Your applet might also want to use some of these
-  // Useful for setting up or tidying up
+    // Your applet might also want to use some of these
+    // Useful for setting up or tidying up
 
-  /*
-  void onActivate();   // When started
-  void onDeactivate(); // When stopped
-  void onForeground(); // When shown by short-press
-  void onBackground(); // When hidden by short-press
-  */
+    /*
+    void onActivate();   // When started
+    void onDeactivate(); // When stopped
+    void onForeground(); // When shown by short-press
+    void onBackground(); // When hidden by short-press
+    */
 
-private:
-  // Called when we receive new text messages
-  // Part of the MeshModule API
-  ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+  private:
+    // Called when we receive new text messages
+    // Part of the MeshModule API
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-  // Store info from handleReceived
-  bool haveMessage = false;
-  NodeNum fromWho = 0;
+    // Store info from handleReceived
+    bool haveMessage = false;
+    NodeNum fromWho = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -11,11 +11,9 @@
 // Tricky macro to let you find the sizeof a type member
 #define member_size(type, member) sizeof(((type *)0)->member)
 
-/// max number of packets which can be waiting for delivery to android - note, this value comes from mesh.options
-/// protobuf
-// FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big
-// array in RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState,
-// receive_queue[0]))
+/// max number of packets which can be waiting for delivery to android - note, this value comes from mesh.options protobuf
+// FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
+// RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
 #if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
 #define MAX_RX_TOPHONE 8
@@ -51,15 +49,16 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #define MAX_NUM_NODES 80
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #include "Esp.h"
-static inline int get_max_num_nodes() {
-  uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
-  if (flash_size >= 15) {
-    return 250;
-  } else if (flash_size >= 7) {
-    return 200;
-  } else {
-    return 100;
-  }
+static inline int get_max_num_nodes()
+{
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
+    if (flash_size >= 15) {
+        return 250;
+    } else if (flash_size >= 7) {
+        return 200;
+    } else {
+        return 100;
+    }
 }
 #define MAX_NUM_NODES get_max_num_nodes()
 #else
