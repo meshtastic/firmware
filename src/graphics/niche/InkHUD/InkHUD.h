@@ -51,18 +51,28 @@ public:
   // Handle user-button press
   // - connected to an input source, in variant nicheGraphics.h
 
-  void shortpress();
-  void longpress();
+    void shortpress();
+    void longpress();
+    void exitShort();
+    void exitLong();
+    void navUp();
+    void navDown();
+    void navLeft();
+    void navRight();
 
   // Trigger UI changes
   // - called by various InkHUD components
   // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
 
-  void nextApplet();
-  void openMenu();
-  void nextTile();
-  void rotate();
-  void toggleBatteryIcon();
+    void nextApplet();
+    void prevApplet();
+    void openMenu();
+    void openAlignStick();
+    void nextTile();
+    void prevTile();
+    void rotate();
+    void rotateJoystick(uint8_t angle = 1); // rotate 90 deg by default
+    void toggleBatteryIcon();
 
   // Updating the display
   // - called by various InkHUD components

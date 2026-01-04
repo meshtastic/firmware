@@ -13,6 +13,7 @@ public:
     SCREEN_ST7567,
     RTC_RV3028,
     RTC_PCF8563,
+    RTC_PCF85063,
     RTC_RX8130CE,
     CARDKB,
     TDECKKB,

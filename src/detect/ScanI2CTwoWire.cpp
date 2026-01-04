@@ -193,18 +193,22 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize) {
         SCAN_SIMPLE_CASE(RX8130CE_RTC, RTC_RX8130CE, "RX8130CE", (uint8_t)addr.address)
 #endif
 
-      case CARDKB_ADDR:
-        // Do we have the RAK14006 instead?
-        registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
-        if (registerValue == 0x02) {
-          // KEYPAD_VERSION
-          logFoundDevice("RAK14004", (uint8_t)addr.address);
-          type = RAK14004;
-        } else {
-          logFoundDevice("M5 cardKB", (uint8_t)addr.address);
-          type = CARDKB;
-        }
-        break;
+#ifdef PCF85063_RTC
+                SCAN_SIMPLE_CASE(PCF85063_RTC, RTC_PCF85063, "PCF85063", (uint8_t)addr.address)
+#endif
+
+            case CARDKB_ADDR:
+                // Do we have the RAK14006 instead?
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
+                if (registerValue == 0x02) {
+                    // KEYPAD_VERSION
+                    logFoundDevice("RAK14004", (uint8_t)addr.address);
+                    type = RAK14004;
+                } else {
+                    logFoundDevice("M5 cardKB", (uint8_t)addr.address);
+                    type = CARDKB;
+                }
+                break;
 
       case TDECK_KB_ADDR:
         // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?

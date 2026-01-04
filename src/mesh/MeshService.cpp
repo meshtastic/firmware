@@ -262,10 +262,21 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies) {
 
   if (nodeDB->hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
-    if (positionModule) {
-      LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-      positionModule->sendOurPosition(dest, wantReplies, node->channel);
-      return true;
+        if (positionModule) {
+            if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+                LOG_DEBUG("Skip position ping; no fresh position since boot");
+                return false;
+            }
+            LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            positionModule->sendOurPosition(dest, wantReplies, node->channel);
+            return true;
+        }
+    } else {
+#endif
+        if (nodeInfoModule) {
+            LOG_INFO("Send nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
+        }
     }
   } else {
 #endif

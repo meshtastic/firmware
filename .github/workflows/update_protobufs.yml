@@ -16,7 +16,7 @@ jobs:
           submodules: true
 
       - name: Update submodule
-        if: ${{ github.ref == 'refs/heads/master' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop' }}
         run: |
           git submodule update --remote protobufs
 

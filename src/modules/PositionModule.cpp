@@ -331,10 +331,16 @@ void PositionModule::sendOurPosition() {
   }
 }
 
-void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel) {
-  // cancel any not yet sent (now stale) position packets
-  if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
-    service->cancelSending(prevPacketId);
+void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
+{
+    if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+        LOG_DEBUG("Skip position send; no fresh position since boot");
+        return;
+    }
+
+    // cancel any not yet sent (now stale) position packets
+    if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
+        service->cancelSending(prevPacketId);
 
   // Set's the class precision value for this particular packet
   if (channels.getByIndex(channel).settings.has_module_settings) {
@@ -435,7 +441,49 @@ int32_t PositionModule::runOnce() {
     }
   }
 
-  return RUNONCE_INTERVAL; // to save power only wake for our callback occasionally
+    bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
+
+    if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
+        if (waitingForFreshPosition) {
+            LOG_DEBUG("Skip initial position send; no fresh position since boot");
+        } else if (nodeDB->hasValidPosition(node)) {
+            lastGpsSend = now;
+
+            lastGpsLatitude = node->position.latitude_i;
+            lastGpsLongitude = node->position.longitude_i;
+
+            sendOurPosition();
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+                sendLostAndFoundText();
+            }
+        }
+    } else if (config.position.position_broadcast_smart_enabled) {
+        const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
+
+        if (nodeDB->hasValidPosition(node2)) {
+            // The minimum time (in seconds) that would pass before we are able to send a new position packet.
+
+            auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+            msSinceLastSend = now - lastGpsSend;
+
+            if (smartPosition.hasTraveledOverThreshold &&
+                Throttle::execute(
+                    &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },
+                    []() { LOG_DEBUG("Skip send smart broadcast due to time throttling"); })) {
+
+                LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
+                          "minTimeInterval=%ims)",
+                          localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold,
+                          msSinceLastSend, minimumTimeThreshold);
+
+                // Set the current coords as our last ones, after we've compared distance with current and decided to send
+                lastGpsLatitude = node->position.latitude_i;
+                lastGpsLongitude = node->position.longitude_i;
+            }
+        }
+    }
+
+    return RUNONCE_INTERVAL; // to save power only wake for our callback occasionally
 }
 
 void PositionModule::sendLostAndFoundText() {

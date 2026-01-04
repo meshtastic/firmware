@@ -54,6 +54,7 @@ extern "C" {
 #define LED_POWER red_LED_PIN
 #define LED_CHARGE LED_POWER // Signals the Status LED Module to handle this LED
 #define green_LED_PIN 35
+#define PIN_LED2 green_LED_PIN
 #define LED_BLUE 37
 #define LED_PAIRING LED_BLUE // Signals the Status LED Module to handle this LED
 

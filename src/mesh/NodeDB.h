@@ -271,7 +271,43 @@ public:
     localPosition = position;
   }
 
-  bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    size_t getNumMeshNodes() { return numMeshNodes; }
+
+    UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
+
+    size_t getMaxNodesAllocatedSize()
+    {
+        meshtastic_NodeDatabase emptyNodeDatabase;
+        emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
+        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+    }
+
+    // returns true if the maximum number of nodes is reached or we are running low on memory
+    bool isFull();
+
+    void clearLocalPosition();
+
+    void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
+    {
+        if (timeOnly) {
+            LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
+            localPosition.time = position.time;
+            localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
+            return;
+        }
+        LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
+                  position.time, position.timestamp);
+        localPosition = position;
+        if (position.latitude_i != 0 || position.longitude_i != 0) {
+            localPositionUpdatedSinceBoot = true;
+        }
+    }
+
+    bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+    bool hasLocalPositionSinceBoot() const { return localPositionUpdatedSinceBoot; }
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
   bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
@@ -288,13 +324,14 @@ public:
     newStatus.notifyObservers(&status);
   }
 
-private:
-  bool duplicateWarned = false;
-  uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
-  uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
-  uint32_t lastSort = 0;          // When last sorted the nodeDB
-  /// Find a node in our DB, create an empty NodeInfoLite if missing
-  meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+  private:
+    bool duplicateWarned = false;
+    bool localPositionUpdatedSinceBoot = false;
+    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
+    uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
+    uint32_t lastSort = 0;          // When last sorted the nodeDB
+    /// Find a node in our DB, create an empty NodeInfoLite if missing
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
   /*
    * Internal boolean to track sorting paused

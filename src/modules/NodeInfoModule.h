@@ -1,5 +1,6 @@
 #pragma once
 #include "ProtobufModule.h"
+#include <map>
 
 /**
  * NodeInfo module for sending/receiving NodeInfos into the mesh
@@ -38,9 +39,13 @@ protected:
   /** Does our periodic broadcast */
   virtual int32_t runOnce() override;
 
-private:
-  uint32_t lastSentToMesh = 0; // Last time we sent our NodeInfo to the mesh
-  bool shorterTimeout = false;
+  private:
+    uint32_t lastSentToMesh = 0; // Last time we sent our NodeInfo to the mesh
+    bool shorterTimeout = false;
+    bool suppressReplyForCurrentRequest = false;
+    std::map<NodeNum, uint32_t> lastNodeInfoSeen;
+
+    void pruneLastNodeInfoCache();
 };
 
 extern NodeInfoModule *nodeInfoModule;

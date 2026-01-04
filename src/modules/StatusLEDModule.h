@@ -29,9 +29,11 @@ private:
   bool CHARGE_LED_state = LED_STATE_OFF;
   bool PAIRING_LED_state = LED_STATE_OFF;
 
-  uint32_t PAIRING_LED_starttime = 0;
+    uint32_t PAIRING_LED_starttime = 0;
+    uint32_t POWER_LED_starttime = 0;
+    bool doing_fast_blink = false;
 
-  enum PowerState { discharging, charging, charged };
+    enum PowerState { discharging, charging, charged, critical };
 
   PowerState power_state = discharging;
 
