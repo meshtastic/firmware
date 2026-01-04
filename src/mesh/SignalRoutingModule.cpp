@@ -227,6 +227,9 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
     LOG_INFO("[SR] SENDING: Broadcasting %d neighbors from %s (capable=%s) to network",
              info.neighbors_count, ourName, info.signal_based_capable ? "yes" : "no");
 
+    // Update our own capability before sending
+    trackNodeCapability(nodeDB->getNodeNum(), info.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
+
     service->sendToMesh(p);
     lastBroadcast = millis();
 
@@ -1235,6 +1238,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     // We'll turn it off when this RTOS task completes
     // For now, use a neutral color - will be overridden by specific operations
     setRgbLed(255, 255, 255);  // White for SR active
+
+    // Update node activity for ANY packet reception to keep nodes in graph
+    updateNodeActivityForPacketAndRelay(&mp);
 
     // Update NodeDB with packet information like FloodingRouter does
     if (nodeDB) {
@@ -2394,6 +2400,33 @@ bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) const
     return status == CapabilityStatus::Capable;
 }
 
+void SignalRoutingModule::updateNodeActivityForPacket(NodeNum nodeId)
+{
+    if (routingGraph) {
+        routingGraph->updateNodeActivity(nodeId, millis() / 1000);
+    }
+}
+
+void SignalRoutingModule::updateNodeActivityForPacketAndRelay(const meshtastic_MeshPacket *p)
+{
+    if (!routingGraph || !nodeDB) return;
+
+    uint32_t currentTime = millis() / 1000;
+    NodeNum ourNodeId = nodeDB->getNodeNum();
+
+    // Update original sender activity
+    routingGraph->updateNodeActivity(p->from, currentTime);
+
+    // Update relay node activity if this is a relayed packet
+    // Only update if relay node is not us and not the sender (safety checks)
+    if (p->relay_node != 0) {
+        NodeNum relayNodeId = resolveRelayIdentity(p->relay_node);
+        if (relayNodeId != 0 && relayNodeId != ourNodeId && relayNodeId != p->from) {
+            routingGraph->updateNodeActivity(relayNodeId, currentTime);
+        }
+    }
+}
+
 float SignalRoutingModule::getSignalBasedCapablePercentage() const
 {
     if (!nodeDB) {
@@ -2577,9 +2610,9 @@ void SignalRoutingModule::handleTelemetryPacket(const meshtastic_MeshPacket &mp)
     }
 
     CapabilityStatus currentStatus = getCapabilityStatus(mp.from);
-    if (currentStatus == CapabilityStatus::Unknown) {
-        trackNodeCapability(mp.from, CapabilityStatus::Legacy);
-    } else {
+    if (currentStatus != CapabilityStatus::Unknown) {
+        // Only refresh timestamp for nodes with known capability status
+        // Unknown nodes stay unknown until they prove their capability via SR packets
         trackNodeCapability(mp.from, currentStatus);
     }
 }
