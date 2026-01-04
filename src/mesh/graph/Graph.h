@@ -59,8 +59,8 @@ public:
     static constexpr int EDGE_NEW = 1;
     static constexpr int EDGE_SIGNIFICANT_CHANGE = 2;
 
-    // Threshold for significant ETX change (20%)
-    static constexpr float ETX_CHANGE_THRESHOLD = 0.20f;
+    // Threshold for significant ETX change (50% - increased to reduce false positives from coarse ETX calculation)
+    static constexpr float ETX_CHANGE_THRESHOLD = 0.50f;
 
     // Memory management - dynamic limits based on available heap
     static constexpr size_t MAX_EDGES_PER_NODE = 10;              // Max edges (neighbors) per node
