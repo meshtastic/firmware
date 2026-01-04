@@ -22,75 +22,74 @@
  * turn radio back on - currently with both on spi bus is fucked? or are we leaving chip select asserted?
  * Suggestion: perhaps similar to HELTEC_WIRELESS_PAPER issue, which resolved with rtc_gpio_hold_dis()
  */
-class EInkDisplay : public OLEDDisplay
-{
-    /// How often should we update the display
-    /// thereafter we do once per 5 minutes
-    uint32_t slowUpdateMsec = 5 * 60 * 1000;
+class EInkDisplay : public OLEDDisplay {
+  /// How often should we update the display
+  /// thereafter we do once per 5 minutes
+  uint32_t slowUpdateMsec = 5 * 60 * 1000;
 
-  public:
-    /* constructor
-    FIXME - the parameters are not used, just a temporary hack to keep working like the old displays
-    */
-    EInkDisplay(uint8_t, int, int, OLEDDISPLAY_GEOMETRY, HW_I2C);
+public:
+  /* constructor
+  FIXME - the parameters are not used, just a temporary hack to keep working like the old displays
+  */
+  EInkDisplay(uint8_t, int, int, OLEDDISPLAY_GEOMETRY, HW_I2C);
 
-    // Write the buffer to the display memory (for eink we only do this occasionally)
-    virtual void display(void) override;
+  // Write the buffer to the display memory (for eink we only do this occasionally)
+  virtual void display(void) override;
 
-    /**
-     * Force a display update if we haven't drawn within the specified msecLimit
-     *
-     * @return true if we did draw the screen
-     */
-    virtual bool forceDisplay(uint32_t msecLimit = 1000);
+  /**
+   * Force a display update if we haven't drawn within the specified msecLimit
+   *
+   * @return true if we did draw the screen
+   */
+  virtual bool forceDisplay(uint32_t msecLimit = 1000);
 
-    /**
-     * Run any code needed to complete an update, after the physical refresh has completed.
-     * Split from forceDisplay(), to enable async refresh in derived EInkDynamicDisplay class.
-     *
-     */
-    virtual void endUpdate();
+  /**
+   * Run any code needed to complete an update, after the physical refresh has completed.
+   * Split from forceDisplay(), to enable async refresh in derived EInkDynamicDisplay class.
+   *
+   */
+  virtual void endUpdate();
 
-    /**
-     * shim to make the abstraction happy
-     *
-     */
-    void setDetected(uint8_t detected);
+  /**
+   * shim to make the abstraction happy
+   *
+   */
+  void setDetected(uint8_t detected);
 
-  protected:
-    // the header size of the buffer used, e.g. for the SPI command header
-    virtual int getBufferOffset(void) override { return 0; }
+protected:
+  // the header size of the buffer used, e.g. for the SPI command header
+  virtual int getBufferOffset(void) override { return 0; }
 
-    // Send a command to the display (low level function)
-    virtual void sendCommand(uint8_t com) override;
+  // Send a command to the display (low level function)
+  virtual void sendCommand(uint8_t com) override;
 
-    // Connect to the display
-    virtual bool connect() override;
+  // Connect to the display
+  virtual bool connect() override;
 
 #ifdef GXEPD2_DRIVER_0
-    // AdafruitGFX display object - wrapper for multiple drivers
-    // Allows runtime detection of multiple displays
-    // Avoid this situation if possible!
-    GxEPD2_Multi<GXEPD2_DRIVER_0, GXEPD2_DRIVER_1> *adafruitDisplay = NULL;
+  // AdafruitGFX display object - wrapper for multiple drivers
+  // Allows runtime detection of multiple displays
+  // Avoid this situation if possible!
+  GxEPD2_Multi<GXEPD2_DRIVER_0, GXEPD2_DRIVER_1> *adafruitDisplay = NULL;
 #else
-    // AdafruitGFX display object (for single display model) - instantiated in connect(), variant specific
-    GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
+  // AdafruitGFX display object (for single display model) - instantiated in connect(), variant specific
+  GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
 #endif
 
-    // If display uses HSPI
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
-    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
+  // If display uses HSPI
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||                                   \
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                                       \
     defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(ELECROW_ThinkNode_M5)
-    SPIClass *hspi = NULL;
+  SPIClass *hspi = NULL;
 #endif
 
 #if defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK) || defined(HELTEC_MESH_SOLAR_EINK)
-    SPIClass *spi1 = NULL;
+  SPIClass *spi1 = NULL;
 #endif
 
-  private:
-    // FIXME quick hack to limit drawing to a very slow rate
-    uint32_t lastDrawMsec = 0;
+private:
+  // FIXME quick hack to limit drawing to a very slow rate
+  uint32_t lastDrawMsec = 0;
 };
 
 #endif

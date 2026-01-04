@@ -11,20 +11,19 @@
 
 VEML7700Sensor::VEML7700Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_VEML7700, "VEML7700") {}
 
-bool VEML7700Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
-{
-    LOG_INFO("Init sensor: %s", sensorName);
-    status = veml7700.begin(bus);
-    if (!status) {
-        return status;
-    }
-
-    veml7700.setLowThreshold(10000);
-    veml7700.setHighThreshold(20000);
-    veml7700.interruptEnable(true);
-
-    initI2CSensor();
+bool VEML7700Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) {
+  LOG_INFO("Init sensor: %s", sensorName);
+  status = veml7700.begin(bus);
+  if (!status) {
     return status;
+  }
+
+  veml7700.setLowThreshold(10000);
+  veml7700.setHighThreshold(20000);
+  veml7700.interruptEnable(true);
+
+  initI2CSensor();
+  return status;
 }
 
 /*!
@@ -33,35 +32,29 @@ bool VEML7700Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
  *    @param corrected if true, apply non-linear correction
  *    @return lux value
  */
-float VEML7700Sensor::computeLux(uint16_t rawALS, bool corrected)
-{
-    float lux = getResolution() * rawALS;
-    if (corrected)
-        lux = (((6.0135e-13 * lux - 9.3924e-9) * lux + 8.1488e-5) * lux + 1.0023) * lux;
-    return lux;
+float VEML7700Sensor::computeLux(uint16_t rawALS, bool corrected) {
+  float lux = getResolution() * rawALS;
+  if (corrected)
+    lux = (((6.0135e-13 * lux - 9.3924e-9) * lux + 8.1488e-5) * lux + 1.0023) * lux;
+  return lux;
 }
 
 /*!
  *    @brief Determines resolution for current gain and integration time
  * settings.
  */
-float VEML7700Sensor::getResolution(void)
-{
-    return MAX_RES * (IT_MAX / veml7700.getIntegrationTimeValue()) * (GAIN_MAX / veml7700.getGainValue());
-}
+float VEML7700Sensor::getResolution(void) { return MAX_RES * (IT_MAX / veml7700.getIntegrationTimeValue()) * (GAIN_MAX / veml7700.getGainValue()); }
 
-bool VEML7700Sensor::getMetrics(meshtastic_Telemetry *measurement)
-{
-    measurement->variant.environment_metrics.has_lux = true;
-    measurement->variant.environment_metrics.has_white_lux = true;
+bool VEML7700Sensor::getMetrics(meshtastic_Telemetry *measurement) {
+  measurement->variant.environment_metrics.has_lux = true;
+  measurement->variant.environment_metrics.has_white_lux = true;
 
-    int16_t white;
-    measurement->variant.environment_metrics.lux = veml7700.readLux(VEML_LUX_AUTO);
-    white = veml7700.readWhite(true);
-    measurement->variant.environment_metrics.white_lux = computeLux(white, white > 100);
-    LOG_INFO("white lux %f, als lux %f", measurement->variant.environment_metrics.white_lux,
-             measurement->variant.environment_metrics.lux);
+  int16_t white;
+  measurement->variant.environment_metrics.lux = veml7700.readLux(VEML_LUX_AUTO);
+  white = veml7700.readWhite(true);
+  measurement->variant.environment_metrics.white_lux = computeLux(white, white > 100);
+  LOG_INFO("white lux %f, als lux %f", measurement->variant.environment_metrics.white_lux, measurement->variant.environment_metrics.lux);
 
-    return true;
+  return true;
 }
 #endif

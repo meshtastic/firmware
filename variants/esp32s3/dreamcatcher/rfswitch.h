@@ -5,8 +5,7 @@
 // DIO6 -> RFSW1_V2
 // DIO7 -> ANT_CTRL_ON + ESP_IO9/LR_GPS_ANT_DC_EN -> RFI_GPS (Bias-T GPS)
 
-static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7, RADIOLIB_NC,
-                                             RADIOLIB_NC};
+static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7, RADIOLIB_NC, RADIOLIB_NC};
 
 static const Module::RfSwitchMode_t rfswitch_table[] = {
     // mode                  DIO5  DIO6  DIO7
