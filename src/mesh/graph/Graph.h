@@ -260,14 +260,14 @@ public:
      * @return true if we should relay, false otherwise
      */
     bool shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
-                           uint32_t currentTime, uint32_t packetId) const;
+                           uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime = 0) const;
 
     /**
      * Conservative version of shouldRelayEnhanced that defers to stock gateways
      * @return true if we should relay, false otherwise
      */
     bool shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
-                           uint32_t currentTime, uint32_t packetId) const;
+                           uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime = 0) const;
 
 private:
     std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;

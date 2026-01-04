@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
-GraphLite::GraphLite() : nodeCount(0), relayStateCount(0), routeCacheTime(0) {}
+GraphLite::GraphLite() : nodeCount(0), relayStateCount(0), routeCacheCount(0) {}
 
 NodeEdgesLite *GraphLite::findNode(NodeNum nodeId)
 {
@@ -44,8 +44,11 @@ NodeEdgesLite *GraphLite::findOrCreateNode(NodeNum nodeId)
     }
 
     // Graph full - find the node with fewest edges to evict
+    // But prefer evicting older nodes that haven't been active recently
+    uint32_t currentTime = millis() / 1000;
     uint8_t minEdges = 255;
     uint8_t evictIdx = 0;
+    uint32_t oldestTime = UINT32_MAX;
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
 
     for (uint8_t i = 0; i < nodeCount; i++) {
@@ -53,10 +56,24 @@ NodeEdgesLite *GraphLite::findOrCreateNode(NodeNum nodeId)
         if (nodes[i].nodeId == myNode) {
             continue;
         }
-        if (nodes[i].edgeCount < minEdges) {
+
+        // Don't evict nodes that have been active in the last 2 minutes
+        if (currentTime - nodes[i].lastFullUpdate < 120) {
+            continue;
+        }
+
+        // Prefer evicting older nodes, then by fewest edges
+        if (nodes[i].lastFullUpdate < oldestTime ||
+            (nodes[i].lastFullUpdate == oldestTime && nodes[i].edgeCount < minEdges)) {
+            oldestTime = nodes[i].lastFullUpdate;
             minEdges = nodes[i].edgeCount;
             evictIdx = i;
         }
+    }
+
+    // If no suitable node found to evict (all are recent), don't add new node
+    if (oldestTime == UINT32_MAX) {
+        return nullptr;
     }
 
     // Evict and reuse
@@ -249,8 +266,9 @@ uint8_t GraphLite::getNeighborCount(NodeNum node) const
 RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter)
 {
     // Check cache first
-    if (routeCache.destination == destination && (currentTime - routeCacheTime) < ROUTE_CACHE_TIMEOUT_SECS) {
-        return routeCache;
+    RouteLite cached = getCachedRoute(destination, currentTime);
+    if (cached.nextHop != 0) {
+        return cached;
     }
 
     RouteLite result;
@@ -271,8 +289,12 @@ RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime, s
             if (myEdges->edges[i].to == destination) {
                 result.nextHop = destination;
                 result.costFixed = myEdges->edges[i].etxFixed;
-                routeCache = result;
-                routeCacheTime = currentTime;
+                // Add to cache
+                if (routeCacheCount < GRAPH_LITE_MAX_CACHED_ROUTES) {
+                    routeCache[routeCacheCount++] = result;
+                } else {
+                    routeCache[0] = result; // Replace oldest
+                }
                 return result;
             }
         }
@@ -304,11 +326,371 @@ RouteLite GraphLite::calculateRoute(NodeNum destination, uint32_t currentTime, s
     }
 
     if (result.nextHop != 0) {
-        routeCache = result;
-        routeCacheTime = currentTime;
+        // Add to cache (simple replacement - replace oldest or add if space)
+        if (routeCacheCount < GRAPH_LITE_MAX_CACHED_ROUTES) {
+            routeCache[routeCacheCount++] = result;
+        } else {
+            // Replace oldest (index 0)
+            routeCache[0] = result;
+        }
     }
 
     return result;
+}
+
+RouteLite GraphLite::getCachedRoute(NodeNum destination, uint32_t currentTime)
+{
+    for (uint8_t i = 0; i < routeCacheCount; i++) {
+        if (routeCache[i].destination == destination &&
+            (currentTime - routeCache[i].timestamp) < ROUTE_CACHE_TIMEOUT_SECS) {
+            return routeCache[i];
+        }
+    }
+    return RouteLite(); // Return empty route if not found
+}
+
+void GraphLite::clearCache()
+{
+    routeCacheCount = 0;
+}
+
+void GraphLite::updateStability(NodeNum from, NodeNum to, float newStability)
+{
+    NodeEdgesLite *nodeEdges = findNode(from);
+    if (!nodeEdges) return;
+
+    EdgeLite *edge = findEdge(nodeEdges, to);
+    if (edge) {
+        edge->setStability(newStability);
+    }
+}
+
+size_t GraphLite::getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, size_t maxNodes, const NodeNum *alreadyCovered, size_t alreadyCoveredCount) const
+{
+    if (!coveredNodes || maxNodes == 0) return 0;
+
+    size_t coveredCount = 0;
+    const NodeEdgesLite *relayEdges = findNode(relay);
+    if (!relayEdges) return 0;
+
+    // Add all nodes that this relay can reach
+    for (uint8_t i = 0; i < relayEdges->edgeCount && coveredCount < maxNodes; i++) {
+        NodeNum target = relayEdges->edges[i].to;
+
+        // Check if already covered
+        bool isAlreadyCovered = false;
+        for (size_t j = 0; j < alreadyCoveredCount; j++) {
+            if (alreadyCovered[j] == target) {
+                isAlreadyCovered = true;
+                break;
+            }
+        }
+
+        if (!isAlreadyCovered) {
+            coveredNodes[coveredCount++] = target;
+        }
+    }
+
+    return coveredCount;
+}
+
+NodeNum GraphLite::findBestRelay(const NodeNum *alreadyCovered, size_t alreadyCoveredCount,
+                                const NodeNum *candidates, size_t candidateCount, uint32_t currentTime) const
+{
+    if (!candidates || candidateCount == 0) return 0;
+
+    NodeNum bestRelay = 0;
+    size_t bestCoverage = 0;
+    float bestAvgCost = std::numeric_limits<float>::max();
+
+    // Evaluate each candidate
+    for (size_t i = 0; i < candidateCount; i++) {
+        NodeNum candidate = candidates[i];
+
+        // Skip if already covered
+        bool isAlreadyCovered = false;
+        for (size_t j = 0; j < alreadyCoveredCount; j++) {
+            if (alreadyCovered[j] == candidate) {
+                isAlreadyCovered = true;
+                break;
+            }
+        }
+        if (isAlreadyCovered) continue;
+
+        // Calculate coverage this candidate would provide
+        NodeNum newCoverage[GRAPH_LITE_MAX_NODES];
+        size_t coverageCount = getCoverageIfRelays(candidate, newCoverage, GRAPH_LITE_MAX_NODES,
+                                                   alreadyCovered, alreadyCoveredCount);
+
+        if (coverageCount == 0) continue;
+
+        // Calculate average cost to reach those nodes
+        float totalCost = 0;
+        size_t validCosts = 0;
+
+        const NodeEdgesLite *candidateEdges = findNode(candidate);
+        if (candidateEdges) {
+            for (size_t j = 0; j < coverageCount; j++) {
+                const EdgeLite *edge = findEdge(candidateEdges, newCoverage[j]);
+                if (edge) {
+                    totalCost += edge->getEtx();
+                    validCosts++;
+                }
+            }
+        }
+
+        float avgCost = validCosts > 0 ? totalCost / validCosts : std::numeric_limits<float>::max();
+
+        // Prefer candidates with more coverage, then lower cost
+        if (coverageCount > bestCoverage ||
+            (coverageCount == bestCoverage && avgCost < bestAvgCost)) {
+            bestCoverage = coverageCount;
+            bestAvgCost = avgCost;
+            bestRelay = candidate;
+        }
+    }
+
+    return bestRelay;
+}
+
+RelayCandidateLite GraphLite::findBestRelayCandidate(const std::unordered_set<NodeNum>& candidates,
+                                                   const std::unordered_set<NodeNum>& alreadyCovered,
+                                                   uint32_t currentTime, uint32_t packetId) const {
+    RelayCandidateLite bestCandidate(0, 0, 0, 0);
+
+    for (NodeNum candidate : candidates) {
+        // Skip candidates that have already transmitted for this packet
+        if (hasNodeTransmitted(candidate, packetId, currentTime)) {
+            continue;
+        }
+
+        // Calculate coverage this candidate would provide
+        NodeNum newCoverage[GRAPH_LITE_MAX_NODES];
+        size_t coverageCount = getCoverageIfRelays(candidate, newCoverage, GRAPH_LITE_MAX_NODES,
+                                                   nullptr, 0);
+
+        // Filter out already covered nodes
+        size_t uniqueCoverageCount = 0;
+        for (size_t i = 0; i < coverageCount; i++) {
+            if (alreadyCovered.find(newCoverage[i]) == alreadyCovered.end()) {
+                newCoverage[uniqueCoverageCount++] = newCoverage[i];
+            }
+        }
+
+        if (uniqueCoverageCount == 0) {
+            continue;
+        }
+
+        // Calculate average cost to covered nodes
+        float totalCost = 0;
+        size_t validCosts = 0;
+
+        const NodeEdgesLite *candidateEdges = findNode(candidate);
+        if (candidateEdges) {
+            for (size_t j = 0; j < uniqueCoverageCount; j++) {
+                const EdgeLite *edge = findEdge(candidateEdges, newCoverage[j]);
+                if (edge) {
+                    totalCost += edge->getEtx();
+                    validCosts++;
+                }
+            }
+        }
+
+        if (validCosts == 0) continue;
+
+        float avgCost = totalCost / validCosts;
+        uint16_t avgCostFixed = static_cast<uint16_t>(avgCost * 100);
+
+        // Prefer candidates with more coverage, then lower cost
+        if (uniqueCoverageCount > bestCandidate.coverageCount ||
+            (uniqueCoverageCount == bestCandidate.coverageCount && avgCostFixed < bestCandidate.avgCostFixed)) {
+            bestCandidate = RelayCandidateLite(candidate, uniqueCoverageCount, avgCostFixed, 0);
+        }
+    }
+
+    return bestCandidate;
+}
+
+bool GraphLite::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const {
+    // Simplified gateway detection for GraphLite
+    // A node is considered a gateway if it has neighbors that aren't reachable from the source
+    // through other paths (i.e., it bridges otherwise disconnected components)
+
+    const NodeEdgesLite *nodeEdges = findNode(nodeId);
+    const NodeEdgesLite *sourceEdges = findNode(sourceNode);
+
+    if (!nodeEdges || nodeEdges->edgeCount == 0) {
+        return false;
+    }
+
+    // Check if this node connects to nodes that the source doesn't connect to
+    for (uint8_t i = 0; i < nodeEdges->edgeCount; i++) {
+        NodeNum neighbor = nodeEdges->edges[i].to;
+        if (neighbor == sourceNode) continue;  // Skip direct connection to source
+
+        // Check if source has this neighbor
+        bool sourceHasNeighbor = false;
+        if (sourceEdges) {
+            for (uint8_t j = 0; j < sourceEdges->edgeCount; j++) {
+                if (sourceEdges->edges[j].to == neighbor) {
+                    sourceHasNeighbor = true;
+                    break;
+                }
+            }
+        }
+
+        if (!sourceHasNeighbor) {
+            // This neighbor forms a potential bridge
+            // Check if this neighbor has other connections forming a separate component
+            const NodeEdgesLite *neighborEdges = findNode(neighbor);
+            if (neighborEdges && neighborEdges->edgeCount > 1) {  // Has connections besides this one
+                return true;  // This node bridges to a separate component
+            }
+        }
+    }
+
+    return false;
+}
+
+bool GraphLite::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime) const
+{
+    // Only consider nodes that directly heard the transmitting node (heardFrom)
+    // This ensures we only evaluate relay candidates who actually received this transmission
+
+    // Build set of nodes that have already received this packet
+    std::unordered_set<NodeNum> alreadyCovered;
+    alreadyCovered.insert(sourceNode);  // Source always covered
+    alreadyCovered.insert(heardFrom);   // The transmitting node is covered
+
+    // Add all nodes that the transmitting node (heardFrom) can reach directly
+    // Only these nodes directly heard the transmission we're considering
+    const NodeEdgesLite *transmittingEdges = findNode(heardFrom);
+    if (transmittingEdges) {
+        for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
+            alreadyCovered.insert(transmittingEdges->edges[i].to);
+        }
+    }
+
+    // Get all nodes that heard this transmission directly (only transmitting node's neighbors)
+    std::unordered_set<NodeNum> candidates;
+    if (transmittingEdges) {
+        for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
+            candidates.insert(transmittingEdges->edges[i].to);
+        }
+    }
+
+    // Iterative loop: keep trying candidates until we decide to relay or run out of candidates
+    while (!candidates.empty()) {
+        // Find the best candidate from current candidate list
+        RelayCandidateLite bestCandidate = findBestRelayCandidate(candidates, alreadyCovered, currentTime, packetId);
+
+        if (bestCandidate.nodeId == 0) {
+            break; // No valid candidates in current list
+        }
+
+        // If we're the best candidate, relay immediately
+        if (bestCandidate.nodeId == myNode) {
+            return true;
+        }
+
+        // Check if we're a gateway node (higher priority than waiting for others)
+        if (isGatewayNode(myNode, sourceNode)) {
+            return true;
+        }
+
+        // Wait for the best candidate to relay within contention window
+        bool bestHasTransmitted = hasNodeTransmitted(bestCandidate.nodeId, packetId, currentTime);
+
+        if (!bestHasTransmitted) {
+            // Check if we've waited too long for the best candidate
+            if (packetRxTime > 0) {
+                uint32_t timeSinceRx = currentTime - packetRxTime;
+                uint32_t contentionWindowMs = getContentionWindowMs();
+                if (timeSinceRx > (contentionWindowMs + 500)) {  // +500ms grace period
+                    // Best candidate failed to transmit within contention window
+                    // Remove them from candidates and try the next best
+                    candidates.erase(bestCandidate.nodeId);
+                    continue;  // Try next candidate in the loop
+                }
+            }
+            // Best candidate hasn't transmitted yet - wait for them
+            return false; // Don't relay yet, wait for best candidate
+        }
+
+        // Best candidate has transmitted - check for unique coverage
+        // Get coverage provided by the best candidate (and any previously relaying candidates)
+        std::unordered_set<NodeNum> relayCoverage;
+        for (NodeNum candidate : candidates) {
+            if (hasNodeTransmitted(candidate, packetId, currentTime)) {
+                const NodeEdgesLite *candidateEdges = findNode(candidate);
+                if (candidateEdges) {
+                    for (uint8_t i = 0; i < candidateEdges->edgeCount; i++) {
+                        relayCoverage.insert(candidateEdges->edges[i].to);
+                    }
+                }
+            }
+        }
+
+        // Check if we have unique coverage (neighbors who can hear us but not any relaying candidates)
+        const NodeEdgesLite *myEdges = findNode(myNode);
+        if (myEdges) {
+            bool haveUniqueCoverage = false;
+            for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                NodeNum neighbor = myEdges->edges[i].to;
+                if (alreadyCovered.find(neighbor) == alreadyCovered.end() &&
+                    relayCoverage.find(neighbor) == relayCoverage.end()) {
+                        haveUniqueCoverage = true;
+                        break;
+                }
+            }
+
+            if (haveUniqueCoverage) {
+                return true;
+            }
+        }
+
+        // Best candidate relayed but we don't have unique coverage
+        // Remove the best candidate from the list and try the next best
+        candidates.erase(bestCandidate.nodeId);
+    }
+
+    // We've exhausted all candidates without finding a reason to relay
+    // Final fallback: if we have any neighbors at all, relay to ensure the packet gets out
+    // This prevents packet loss when coordinated relaying fails
+    const NodeEdgesLite *myEdges = findNode(myNode);
+    if (myEdges && myEdges->edgeCount > 0) {
+        return true;  // We have neighbors - relay to ensure packet propagation
+    }
+
+    // No neighbors at all - no point relaying
+    return false;
+}
+
+bool GraphLite::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime) const
+{
+    // For conservative mode, check if we have stock gateway neighbors
+    // If so, be more conservative about relaying to let gateways handle it
+
+    const NodeEdgesLite *myEdges = findNode(myNode);
+    if (!myEdges) return false;
+
+    // Check if any of our neighbors look like stock gateways (high connectivity)
+    bool hasStockGateways = false;
+    for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+        const NodeEdgesLite *neighborEdges = findNode(myEdges->edges[i].to);
+        if (neighborEdges && neighborEdges->edgeCount >= 8) {  // Arbitrary threshold for "gateway-like"
+            hasStockGateways = true;
+            break;
+        }
+    }
+
+    // If we have stock gateways, use simple conservative logic
+    if (hasStockGateways) {
+        return shouldRelaySimpleConservative(myNode, sourceNode, heardFrom, currentTime);
+    }
+
+    // Otherwise use full enhanced logic
+    return shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, packetId, packetRxTime);
 }
 
 bool GraphLite::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const
@@ -536,10 +918,17 @@ void GraphLite::removeNode(NodeNum nodeId)
             }
             nodeCount--;
 
-            // Also clear route cache if it was for this node
-            if (routeCache.destination == nodeId) {
-                routeCache.destination = 0;
-                routeCacheTime = 0;
+            // Also clear route cache entries that involve this node
+            for (uint8_t i = 0; i < routeCacheCount; ) {
+                if (routeCache[i].destination == nodeId || routeCache[i].nextHop == nodeId) {
+                    // Remove this entry by shifting the rest
+                    for (uint8_t j = i; j < routeCacheCount - 1; j++) {
+                        routeCache[j] = routeCache[j + 1];
+                    }
+                    routeCacheCount--;
+                } else {
+                    i++;
+                }
             }
             return;
         }
@@ -570,10 +959,17 @@ void GraphLite::clearEdgesForNode(NodeNum nodeId)
         otherNode->edgeCount = writeIdx;
     }
 
-    // Clear route cache if it involves this node
-    if (routeCache.destination == nodeId) {
-        routeCache.destination = 0;
-        routeCacheTime = 0;
+    // Clear route cache entries that involve this node
+    for (uint8_t i = 0; i < routeCacheCount; ) {
+        if (routeCache[i].destination == nodeId || routeCache[i].nextHop == nodeId) {
+            // Remove this entry by shifting the rest
+            for (uint8_t j = i; j < routeCacheCount - 1; j++) {
+                routeCache[j] = routeCache[j + 1];
+            }
+            routeCacheCount--;
+        } else {
+            i++;
+        }
     }
 }
 
