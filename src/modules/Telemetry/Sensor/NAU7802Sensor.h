@@ -7,24 +7,23 @@
 #include "TelemetrySensor.h"
 #include <SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>
 
-class NAU7802Sensor : public TelemetrySensor
-{
-  private:
-    NAU7802 nau7802;
+class NAU7802Sensor : public TelemetrySensor {
+private:
+  NAU7802 nau7802;
 
-  protected:
-    const char *nau7802ConfigFileName = "/prefs/nau7802.dat";
-    bool saveCalibrationData();
-    bool loadCalibrationData();
+protected:
+  const char *nau7802ConfigFileName = "/prefs/nau7802.dat";
+  bool saveCalibrationData();
+  bool loadCalibrationData();
 
-  public:
-    NAU7802Sensor();
-    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
-    void tare();
-    void calibrate(float weight);
-    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
-                                                meshtastic_AdminMessage *response) override;
+public:
+  NAU7802Sensor();
+  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+  void tare();
+  void calibrate(float weight);
+  AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                              meshtastic_AdminMessage *response) override;
 };
 
 #endif

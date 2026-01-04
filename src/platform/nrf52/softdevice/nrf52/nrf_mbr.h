@@ -86,21 +86,21 @@ This is the offset where the first byte of the SoftDevice hex file is written. *
 
 /**@brief nRF Master Boot Record API SVC numbers. */
 enum NRF_MBR_SVCS {
-    SD_MBR_COMMAND = MBR_SVC_BASE, /**< ::sd_mbr_command */
+  SD_MBR_COMMAND = MBR_SVC_BASE, /**< ::sd_mbr_command */
 };
 
 /**@brief Possible values for ::sd_mbr_command_t.command */
 enum NRF_MBR_COMMANDS {
-    SD_MBR_COMMAND_COPY_BL, /**< Copy a new BootLoader. @see ::sd_mbr_command_copy_bl_t*/
-    SD_MBR_COMMAND_COPY_SD, /**< Copy a new SoftDevice. @see ::sd_mbr_command_copy_sd_t*/
-    SD_MBR_COMMAND_INIT_SD, /**< Initialize forwarding interrupts to SD, and run reset function in SD. Does not require any
-                               parameters in ::sd_mbr_command_t params.*/
-    SD_MBR_COMMAND_COMPARE, /**< This command works like memcmp. @see ::sd_mbr_command_compare_t*/
-    SD_MBR_COMMAND_VECTOR_TABLE_BASE_SET, /**< Change the address the MBR starts after a reset. @see
-                                             ::sd_mbr_command_vector_table_base_set_t*/
-    SD_MBR_COMMAND_RESERVED,
-    SD_MBR_COMMAND_IRQ_FORWARD_ADDRESS_SET, /**< Start forwarding all interrupts to this address. @see
-                                               ::sd_mbr_command_irq_forward_address_set_t*/
+  SD_MBR_COMMAND_COPY_BL,               /**< Copy a new BootLoader. @see ::sd_mbr_command_copy_bl_t*/
+  SD_MBR_COMMAND_COPY_SD,               /**< Copy a new SoftDevice. @see ::sd_mbr_command_copy_sd_t*/
+  SD_MBR_COMMAND_INIT_SD,               /**< Initialize forwarding interrupts to SD, and run reset function in SD. Does not require
+                                           any parameters in ::sd_mbr_command_t params.*/
+  SD_MBR_COMMAND_COMPARE,               /**< This command works like memcmp. @see ::sd_mbr_command_compare_t*/
+  SD_MBR_COMMAND_VECTOR_TABLE_BASE_SET, /**< Change the address the MBR starts after a reset. @see
+                                           ::sd_mbr_command_vector_table_base_set_t*/
+  SD_MBR_COMMAND_RESERVED,
+  SD_MBR_COMMAND_IRQ_FORWARD_ADDRESS_SET, /**< Start forwarding all interrupts to this address. @see
+                                             ::sd_mbr_command_irq_forward_address_set_t*/
 };
 
 /** @} */
@@ -117,12 +117,13 @@ enum NRF_MBR_COMMANDS {
  * The user of this function is responsible for setting the BPROT registers.
  *
  * @retval ::NRF_SUCCESS indicates that the contents of the memory blocks where copied correctly.
- * @retval ::NRF_ERROR_INTERNAL indicates that the contents of the memory blocks where not verified correctly after copying.
+ * @retval ::NRF_ERROR_INTERNAL indicates that the contents of the memory blocks where not verified correctly after
+ * copying.
  */
 typedef struct {
-    uint32_t *src; /**< Pointer to the source of data to be copied.*/
-    uint32_t *dst; /**< Pointer to the destination where the content is to be copied.*/
-    uint32_t len;  /**< Number of 32 bit words to copy. Must be a multiple of @ref MBR_PAGE_SIZE_IN_WORDS words.*/
+  uint32_t *src; /**< Pointer to the source of data to be copied.*/
+  uint32_t *dst; /**< Pointer to the destination where the content is to be copied.*/
+  uint32_t len;  /**< Number of 32 bit words to copy. Must be a multiple of @ref MBR_PAGE_SIZE_IN_WORDS words.*/
 } sd_mbr_command_copy_sd_t;
 
 /**@brief This command works like memcmp, but takes the length in words.
@@ -131,9 +132,9 @@ typedef struct {
  * @retval ::NRF_ERROR_NULL indicates that the contents of the memory blocks are not equal.
  */
 typedef struct {
-    uint32_t *ptr1; /**< Pointer to block of memory. */
-    uint32_t *ptr2; /**< Pointer to block of memory. */
-    uint32_t len;   /**< Number of 32 bit words to compare.*/
+  uint32_t *ptr1; /**< Pointer to block of memory. */
+  uint32_t *ptr2; /**< Pointer to block of memory. */
+  uint32_t len;   /**< Number of 32 bit words to compare.*/
 } sd_mbr_command_compare_t;
 
 /**@brief This command copies a new BootLoader.
@@ -159,8 +160,8 @@ typedef struct {
  * @retval ::NRF_ERROR_NO_MEM No MBR parameter page is provided. See @ref sd_mbr_command.
  */
 typedef struct {
-    uint32_t *bl_src; /**< Pointer to the source of the bootloader to be be copied.*/
-    uint32_t bl_len;  /**< Number of 32 bit words to copy for BootLoader. */
+  uint32_t *bl_src; /**< Pointer to the source of the bootloader to be be copied.*/
+  uint32_t bl_len;  /**< Number of 32 bit words to copy for BootLoader. */
 } sd_mbr_command_copy_bl_t;
 
 /**@brief Change the address the MBR starts after a reset
@@ -186,7 +187,7 @@ typedef struct {
  * @retval ::NRF_ERROR_NO_MEM No MBR parameter page is provided. See @ref sd_mbr_command.
  */
 typedef struct {
-    uint32_t address; /**< The base address of the interrupt vector table for forwarded interrupts.*/
+  uint32_t address; /**< The base address of the interrupt vector table for forwarded interrupts.*/
 } sd_mbr_command_vector_table_base_set_t;
 
 /**@brief Sets the base address of the interrupt vector table for interrupts forwarded from the MBR
@@ -197,7 +198,7 @@ typedef struct {
  * @retval ::NRF_SUCCESS
  */
 typedef struct {
-    uint32_t address; /**< The base address of the interrupt vector table for forwarded interrupts.*/
+  uint32_t address; /**< The base address of the interrupt vector table for forwarded interrupts.*/
 } sd_mbr_command_irq_forward_address_set_t;
 
 /**@brief Input structure containing data used when calling ::sd_mbr_command
@@ -207,14 +208,14 @@ typedef struct {
  * @ref SD_MBR_COMMAND_INIT_SD is set, it is not necessary to set any values under params.
  */
 typedef struct {
-    uint32_t command; /**< Type of command to be issued. See @ref NRF_MBR_COMMANDS. */
-    union {
-        sd_mbr_command_copy_sd_t copy_sd;                /**< Parameters for copy SoftDevice.*/
-        sd_mbr_command_compare_t compare;                /**< Parameters for verify.*/
-        sd_mbr_command_copy_bl_t copy_bl;                /**< Parameters for copy BootLoader. Requires parameter page. */
-        sd_mbr_command_vector_table_base_set_t base_set; /**< Parameters for vector table base set. Requires parameter page.*/
-        sd_mbr_command_irq_forward_address_set_t irq_forward_address_set; /**< Parameters for irq forward address set*/
-    } params;                                                             /**< Command parameters. */
+  uint32_t command; /**< Type of command to be issued. See @ref NRF_MBR_COMMANDS. */
+  union {
+    sd_mbr_command_copy_sd_t copy_sd;                                 /**< Parameters for copy SoftDevice.*/
+    sd_mbr_command_compare_t compare;                                 /**< Parameters for verify.*/
+    sd_mbr_command_copy_bl_t copy_bl;                                 /**< Parameters for copy BootLoader. Requires parameter page. */
+    sd_mbr_command_vector_table_base_set_t base_set;                  /**< Parameters for vector table base set. Requires parameter page.*/
+    sd_mbr_command_irq_forward_address_set_t irq_forward_address_set; /**< Parameters for irq forward address set*/
+  } params;                                                           /**< Command parameters. */
 } sd_mbr_command_t;
 
 /** @} */

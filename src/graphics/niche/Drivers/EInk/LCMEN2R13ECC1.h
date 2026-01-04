@@ -16,24 +16,22 @@ E-Ink display driver
 
 #include "./SSD16XX.h"
 
-namespace NicheGraphics::Drivers
-{
-class LCMEN2R13ECC1 : public SSD16XX
-{
-    // Display properties
-  private:
-    static constexpr uint32_t width = 122;
-    static constexpr uint32_t height = 250;
-    static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
+namespace NicheGraphics::Drivers {
+class LCMEN2R13ECC1 : public SSD16XX {
+  // Display properties
+private:
+  static constexpr uint32_t width = 122;
+  static constexpr uint32_t height = 250;
+  static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
-  public:
-    LCMEN2R13ECC1() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
+public:
+  LCMEN2R13ECC1() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
 
-  protected:
-    virtual void configScanning() override;
-    virtual void configWaveform() override;
-    virtual void configUpdateSequence() override;
-    void detachFromUpdate() override;
+protected:
+  virtual void configScanning() override;
+  virtual void configWaveform() override;
+  virtual void configUpdateSequence() override;
+  void detachFromUpdate() override;
 };
 
 } // namespace NicheGraphics::Drivers

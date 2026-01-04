@@ -14,15 +14,14 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_AHTX0.h>
 
-class AHT10Sensor : public TelemetrySensor
-{
-  private:
-    Adafruit_AHTX0 aht10;
+class AHT10Sensor : public TelemetrySensor {
+private:
+  Adafruit_AHTX0 aht10;
 
-  public:
-    AHT10Sensor();
-    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+public:
+  AHT10Sensor();
+  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

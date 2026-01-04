@@ -182,8 +182,8 @@ Important for successful SX1262 initialization:
 * Setup DIO2 to control the antenna switch
 * Setup DIO3 to control the TCXO power supply
 * Setup the SX1262 to use it's DCDC regulator and not the LDO
-* RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do the
-control of the antenna switch
+* RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do
+the control of the antenna switch
 
 SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 

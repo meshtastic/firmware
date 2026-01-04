@@ -57,27 +57,26 @@ const uint32_t g_ADigitalPinMap[] = {
     47,
 };
 
-void initVariant()
-{
-    // Initialize the digital pins as inputs or outputs
-    pinMode(PIN_LED1, OUTPUT);
-    digitalWrite(PIN_LED1, HIGH);
+void initVariant() {
+  // Initialize the digital pins as inputs or outputs
+  pinMode(PIN_LED1, OUTPUT);
+  digitalWrite(PIN_LED1, HIGH);
 
-    pinMode(PIN_LED2, OUTPUT);
-    digitalWrite(PIN_LED2, HIGH);
+  pinMode(PIN_LED2, OUTPUT);
+  digitalWrite(PIN_LED2, HIGH);
 
-    // Initialize LoRa pins
-    pinMode(SX126X_RESET, OUTPUT);
-    digitalWrite(SX126X_RESET, HIGH);
+  // Initialize LoRa pins
+  pinMode(SX126X_RESET, OUTPUT);
+  digitalWrite(SX126X_RESET, HIGH);
 
-    pinMode(SX126X_CS, OUTPUT);
-    digitalWrite(SX126X_CS, HIGH);
+  pinMode(SX126X_CS, OUTPUT);
+  digitalWrite(SX126X_CS, HIGH);
 
-    pinMode(GPS_EN_GPIO, OUTPUT);
-    digitalWrite(GPS_EN_GPIO, HIGH); // GPS on initially
+  pinMode(GPS_EN_GPIO, OUTPUT);
+  digitalWrite(GPS_EN_GPIO, HIGH); // GPS on initially
 
-    pinMode(SCREEN_12V_ENABLE, OUTPUT);
-    digitalWrite(SCREEN_12V_ENABLE, LOW); //
+  pinMode(SCREEN_12V_ENABLE, OUTPUT);
+  digitalWrite(SCREEN_12V_ENABLE, LOW); //
 
-    pinMode(BATTERY_CHARGING_INV, INPUT);
+  pinMode(BATTERY_CHARGING_INV, INPUT);
 }

@@ -10,19 +10,18 @@ GenericThreadModule *genericThreadModule;
 
 GenericThreadModule::GenericThreadModule() : concurrency::OSThread("GenericThreadModule") {}
 
-int32_t GenericThreadModule::runOnce()
-{
+int32_t GenericThreadModule::runOnce() {
 
-    bool enabled = true;
-    if (!enabled)
-        return disable();
+  bool enabled = true;
+  if (!enabled)
+    return disable();
 
-    if (firstTime) {
-        // do something the first time we run
-        firstTime = 0;
-        LOG_INFO("first time GenericThread running");
-    }
+  if (firstTime) {
+    // do something the first time we run
+    firstTime = 0;
+    LOG_INFO("first time GenericThread running");
+  }
 
-    LOG_INFO("GenericThread executing");
-    return (my_interval);
+  LOG_INFO("GenericThread executing");
+  return (my_interval);
 }
