@@ -19,23 +19,25 @@ E-Ink display driver
 
 #include "./SSD16XX.h"
 
-namespace NicheGraphics::Drivers {
-class DEPG0213BNS800 : public SSD16XX {
-  // Display properties
-private:
-  static constexpr uint32_t width = 122;
-  static constexpr uint32_t height = 250;
-  static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
+namespace NicheGraphics::Drivers
+{
+class DEPG0213BNS800 : public SSD16XX
+{
+    // Display properties
+  private:
+    static constexpr uint32_t width = 122;
+    static constexpr uint32_t height = 250;
+    static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
-public:
-  DEPG0213BNS800() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
+  public:
+    DEPG0213BNS800() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
 
-protected:
-  void configVoltages() override;
-  void configWaveform() override;
-  void configUpdateSequence() override;
-  void detachFromUpdate() override;
-  void finalizeUpdate() override; // Only overriden for a slight optimization
+  protected:
+    void configVoltages() override;
+    void configWaveform() override;
+    void configUpdateSequence() override;
+    void detachFromUpdate() override;
+    void finalizeUpdate() override; // Only overriden for a slight optimization
 };
 
 } // namespace NicheGraphics::Drivers

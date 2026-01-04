@@ -136,8 +136,8 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // SX126X CONFIG
 #define SX126X_CS (32 + 13)      // P1.13 FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 10)     // P0.10 IRQ
-#define SX126X_DIO2_AS_RF_SWITCH // Note for E22 modules: DIO2 is not attached internally to TXEN for automatic TX/RX
-                                 // switching, so it needs connecting externally if it is used in this way
+#define SX126X_DIO2_AS_RF_SWITCH // Note for E22 modules: DIO2 is not attached internally to TXEN for automatic TX/RX switching,
+                                 // so it needs connecting externally if it is used in this way
 #define SX126X_BUSY (0 + 29)     // P0.29
 #define SX126X_RESET (0 + 9)     // P0.09
 #define SX126X_RXEN (0 + 17)     // P0.17
@@ -159,8 +159,8 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // #define SX126X_MAX_POWER 8 set this if using a high-power board!
 
 /*
-On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL
-to try both settings.
+On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL to try both
+settings.
 
 | Mfr          | Module           | TCXO | RF Switch | Notes                                 |
 | ------------ | ---------------- | ---- | --------- | ------------------------------------- |

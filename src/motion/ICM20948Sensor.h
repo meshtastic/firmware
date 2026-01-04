@@ -46,56 +46,59 @@
 extern ScanI2C::DeviceAddress accelerometer_found;
 
 // Singleton wrapper for the Sparkfun ICM_20948_I2C class
-class ICM20948Singleton : public ICM_20948_I2C {
-private:
-  static ICM20948Singleton *pinstance;
+class ICM20948Singleton : public ICM_20948_I2C
+{
+  private:
+    static ICM20948Singleton *pinstance;
 
-protected:
-  ICM20948Singleton();
-  ~ICM20948Singleton();
+  protected:
+    ICM20948Singleton();
+    ~ICM20948Singleton();
 
-public:
-  // Create a singleton instance (not thread safe)
-  static ICM20948Singleton *GetInstance();
+  public:
+    // Create a singleton instance (not thread safe)
+    static ICM20948Singleton *GetInstance();
 
-  // Singletons should not be cloneable.
-  ICM20948Singleton(ICM20948Singleton &other) = delete;
+    // Singletons should not be cloneable.
+    ICM20948Singleton(ICM20948Singleton &other) = delete;
 
-  // Singletons should not be assignable.
-  void operator=(const ICM20948Singleton &) = delete;
+    // Singletons should not be assignable.
+    void operator=(const ICM20948Singleton &) = delete;
 
-  // Initialise the motion sensor singleton for normal operation
-  bool init(ScanI2C::FoundDevice device);
+    // Initialise the motion sensor singleton for normal operation
+    bool init(ScanI2C::FoundDevice device);
 
-  // Enable Wake on Motion interrupts (sensor must be initialised first)
-  bool setWakeOnMotion();
+    // Enable Wake on Motion interrupts (sensor must be initialised first)
+    bool setWakeOnMotion();
 
 #ifdef ICM_20948_DMP_IS_ENABLED
-  // Initialise the motion sensor singleton for digital motion processing
-  bool initDMP();
+    // Initialise the motion sensor singleton for digital motion processing
+    bool initDMP();
 #endif
 };
 
-class ICM20948Sensor : public MotionSensor {
-private:
-  ICM20948Singleton *sensor = nullptr;
-  bool showingScreen = false;
+class ICM20948Sensor : public MotionSensor
+{
+  private:
+    ICM20948Singleton *sensor = nullptr;
+    bool showingScreen = false;
 #ifdef MUZI_BASE
-  bool isAsleep = false;
-  float highestX = 449.000000, lowestX = -140.000000, highestY = 422.000000, lowestY = -232.000000, highestZ = 749.000000, lowestZ = 98.000000;
+    bool isAsleep = false;
+    float highestX = 449.000000, lowestX = -140.000000, highestY = 422.000000, lowestY = -232.000000, highestZ = 749.000000,
+          lowestZ = 98.000000;
 #else
-  float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 #endif
 
-public:
-  explicit ICM20948Sensor(ScanI2C::FoundDevice foundDevice);
+  public:
+    explicit ICM20948Sensor(ScanI2C::FoundDevice foundDevice);
 
-  // Initialise the motion sensor
-  virtual bool init() override;
+    // Initialise the motion sensor
+    virtual bool init() override;
 
-  // Called each time our sensor gets a chance to run
-  virtual int32_t runOnce() override;
-  virtual void calibrate(uint16_t forSeconds) override;
+    // Called each time our sensor gets a chance to run
+    virtual int32_t runOnce() override;
+    virtual void calibrate(uint16_t forSeconds) override;
 };
 
 #endif

@@ -57,7 +57,8 @@ static const uint8_t SCK = 33;
 #define LORA_RESET WB_IO4     // RST for SX1276, and for SX1262/SX1268
 #define LORA_DIO1 WB_IO6      // IRQ for SX1262/SX1268
 #define LORA_DIO2 WB_IO5      // BUSY for SX1262/SX1268
-#define LORA_DIO3 RADIOLIB_NC // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
+#define LORA_DIO3                                                                                                                \
+    RADIOLIB_NC // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
 #undef LORA_SCK
 #define LORA_SCK SCK

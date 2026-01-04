@@ -14,7 +14,8 @@
 
 #include <GFX.h> // GFXRoot drawing lib
 
-namespace NicheGraphics::InkHUD {
+namespace NicheGraphics::InkHUD
+{
 
 // An AdafruitGFX font, bundled with precalculated dimensions which are used frequently by InkHUD
 class AppletFont

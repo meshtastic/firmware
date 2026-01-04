@@ -7,17 +7,18 @@
 #include "TelemetrySensor.h"
 #include <ClosedCube_OPT3001.h>
 
-class OPT3001Sensor : public TelemetrySensor {
-private:
-  ClosedCube_OPT3001 opt3001;
+class OPT3001Sensor : public TelemetrySensor
+{
+  private:
+    ClosedCube_OPT3001 opt3001;
 
-public:
-  OPT3001Sensor();
+  public:
+    OPT3001Sensor();
 #if WIRE_INTERFACES_COUNT > 1
-  virtual bool onlyWire1() { return true; }
+    virtual bool onlyWire1() { return true; }
 #endif
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

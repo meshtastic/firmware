@@ -12,33 +12,34 @@ const uint8_t bsec_config[] = {
 #include "config/bme680/bme680_iaq_33v_3s_4d/bsec_iaq.txt"
 };
 
-class BME680Sensor : public TelemetrySensor {
-private:
-  Bsec2 bme680;
+class BME680Sensor : public TelemetrySensor
+{
+  private:
+    Bsec2 bme680;
 
-protected:
-  const char *bsecConfigFileName = "/prefs/bsec.dat";
-  uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
-  uint8_t accuracy = 0;
-  uint16_t stateUpdateCounter = 0;
-  bsecSensor sensorList[9] = {BSEC_OUTPUT_IAQ,
-                              BSEC_OUTPUT_RAW_TEMPERATURE,
-                              BSEC_OUTPUT_RAW_PRESSURE,
-                              BSEC_OUTPUT_RAW_HUMIDITY,
-                              BSEC_OUTPUT_RAW_GAS,
-                              BSEC_OUTPUT_STABILIZATION_STATUS,
-                              BSEC_OUTPUT_RUN_IN_STATUS,
-                              BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
-                              BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY};
-  void loadState();
-  void updateState();
-  void checkStatus(const char *functionName);
+  protected:
+    const char *bsecConfigFileName = "/prefs/bsec.dat";
+    uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
+    uint8_t accuracy = 0;
+    uint16_t stateUpdateCounter = 0;
+    bsecSensor sensorList[9] = {BSEC_OUTPUT_IAQ,
+                                BSEC_OUTPUT_RAW_TEMPERATURE,
+                                BSEC_OUTPUT_RAW_PRESSURE,
+                                BSEC_OUTPUT_RAW_HUMIDITY,
+                                BSEC_OUTPUT_RAW_GAS,
+                                BSEC_OUTPUT_STABILIZATION_STATUS,
+                                BSEC_OUTPUT_RUN_IN_STATUS,
+                                BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+                                BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY};
+    void loadState();
+    void updateState();
+    void checkStatus(const char *functionName);
 
-public:
-  BME680Sensor();
-  virtual int32_t runOnce() override;
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+  public:
+    BME680Sensor();
+    virtual int32_t runOnce() override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

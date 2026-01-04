@@ -11,17 +11,18 @@
 
 #define SEESAW_ADDR 0x36
 
-class SeesawRotary : public Observable<const InputEvent *>, public concurrency::OSThread {
-public:
-  const char *_originName;
-  bool init();
-  SeesawRotary(const char *name);
-  int32_t runOnce() override;
+class SeesawRotary : public Observable<const InputEvent *>, public concurrency::OSThread
+{
+  public:
+    const char *_originName;
+    bool init();
+    SeesawRotary(const char *name);
+    int32_t runOnce() override;
 
-private:
-  Adafruit_seesaw ss;
-  int32_t encoder_position;
-  bool wasPressed = false;
+  private:
+    Adafruit_seesaw ss;
+    int32_t encoder_position;
+    bool wasPressed = false;
 };
 
 extern SeesawRotary *seesawRotary;

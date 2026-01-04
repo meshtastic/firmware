@@ -20,38 +20,42 @@ void test_telemetry_environment_metrics_unset_fields();
 void test_encrypted_packet_serialization();
 void test_empty_encrypted_packet();
 
-void setup() {
-  UNITY_BEGIN();
+void setup()
+{
+    UNITY_BEGIN();
 
-  // Text message tests
-  RUN_TEST(test_text_message_serialization);
-  RUN_TEST(test_text_message_serialization_null);
-  RUN_TEST(test_text_message_serialization_long_text);
-  RUN_TEST(test_text_message_serialization_oversized);
-  RUN_TEST(test_text_message_serialization_invalid_utf8);
+    // Text message tests
+    RUN_TEST(test_text_message_serialization);
+    RUN_TEST(test_text_message_serialization_null);
+    RUN_TEST(test_text_message_serialization_long_text);
+    RUN_TEST(test_text_message_serialization_oversized);
+    RUN_TEST(test_text_message_serialization_invalid_utf8);
 
-  // Position tests
-  RUN_TEST(test_position_serialization);
+    // Position tests
+    RUN_TEST(test_position_serialization);
 
-  // Nodeinfo tests
-  RUN_TEST(test_nodeinfo_serialization);
+    // Nodeinfo tests
+    RUN_TEST(test_nodeinfo_serialization);
 
-  // Waypoint tests
-  RUN_TEST(test_waypoint_serialization);
+    // Waypoint tests
+    RUN_TEST(test_waypoint_serialization);
 
-  // Telemetry tests
-  RUN_TEST(test_telemetry_device_metrics_serialization);
-  RUN_TEST(test_telemetry_environment_metrics_serialization);
-  RUN_TEST(test_telemetry_environment_metrics_comprehensive);
-  RUN_TEST(test_telemetry_environment_metrics_missing_fields);
-  RUN_TEST(test_telemetry_environment_metrics_complete_coverage);
-  RUN_TEST(test_telemetry_environment_metrics_unset_fields);
+    // Telemetry tests
+    RUN_TEST(test_telemetry_device_metrics_serialization);
+    RUN_TEST(test_telemetry_environment_metrics_serialization);
+    RUN_TEST(test_telemetry_environment_metrics_comprehensive);
+    RUN_TEST(test_telemetry_environment_metrics_missing_fields);
+    RUN_TEST(test_telemetry_environment_metrics_complete_coverage);
+    RUN_TEST(test_telemetry_environment_metrics_unset_fields);
 
-  // Encrypted packet test
-  RUN_TEST(test_encrypted_packet_serialization);
-  RUN_TEST(test_empty_encrypted_packet);
+    // Encrypted packet test
+    RUN_TEST(test_encrypted_packet_serialization);
+    RUN_TEST(test_empty_encrypted_packet);
 
-  UNITY_END();
+    UNITY_END();
 }
 
-void loop() { delay(1000); }
+void loop()
+{
+    delay(1000);
+}

@@ -19,14 +19,16 @@ In variants/<your device>/nicheGraphics.h:
 
 #include "graphics/niche/InkHUD/Applet.h"
 
-namespace NicheGraphics::InkHUD {
+namespace NicheGraphics::InkHUD
+{
 
-class BasicExampleApplet : public Applet {
-public:
-  // You must have an onRender() method
-  // All drawing happens here
+class BasicExampleApplet : public Applet
+{
+  public:
+    // You must have an onRender() method
+    // All drawing happens here
 
-  void onRender() override;
+    void onRender() override;
 };
 
 } // namespace NicheGraphics::InkHUD

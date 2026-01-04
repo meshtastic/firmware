@@ -2,25 +2,27 @@
 
 #include "../freertosinc.h"
 
-namespace concurrency {
+namespace concurrency
+{
 
 #ifdef HAS_FREE_RTOS
 
-class BinarySemaphoreFreeRTOS {
-  SemaphoreHandle_t semaphore;
+class BinarySemaphoreFreeRTOS
+{
+    SemaphoreHandle_t semaphore;
 
-public:
-  BinarySemaphoreFreeRTOS();
-  ~BinarySemaphoreFreeRTOS();
+  public:
+    BinarySemaphoreFreeRTOS();
+    ~BinarySemaphoreFreeRTOS();
 
-  /**
-   * Returns false if we timed out
-   */
-  bool take(uint32_t msec);
+    /**
+     * Returns false if we timed out
+     */
+    bool take(uint32_t msec);
 
-  void give();
+    void give();
 
-  void giveFromISR(BaseType_t *pxHigherPriorityTaskWoken);
+    void giveFromISR(BaseType_t *pxHigherPriorityTaskWoken);
 };
 
 #endif

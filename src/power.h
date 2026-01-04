@@ -93,42 +93,43 @@ extern RAK9154Sensor rak9154Sensor;
 extern XPowersLibInterface *PMU;
 #endif
 
-class Power : private concurrency::OSThread {
+class Power : private concurrency::OSThread
+{
 
-public:
-  Observable<const meshtastic::PowerStatus *> newStatus;
+  public:
+    Observable<const meshtastic::PowerStatus *> newStatus;
 
-  Power();
+    Power();
 
-  void powerCommandsCheck();
-  void readPowerStatus();
-  virtual bool setup();
-  virtual int32_t runOnce() override;
-  void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
-  const uint16_t OCV[11] = {OCV_ARRAY};
+    void powerCommandsCheck();
+    void readPowerStatus();
+    virtual bool setup();
+    virtual int32_t runOnce() override;
+    void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
+    const uint16_t OCV[11] = {OCV_ARRAY};
 
-protected:
-  meshtastic::PowerStatus *statusHandler;
+  protected:
+    meshtastic::PowerStatus *statusHandler;
 
-  /// Setup a xpowers chip axp192/axp2101, return true if found
-  bool axpChipInit();
-  /// Setup a simple ADC input based battery sensor
-  bool analogInit();
-  /// Setup a Lipo battery level sensor
-  bool lipoInit();
-  /// Setup a Lipo charger
-  bool lipoChargerInit();
-  /// Setup a meshSolar battery sensor
-  bool meshSolarInit();
+    /// Setup a xpowers chip axp192/axp2101, return true if found
+    bool axpChipInit();
+    /// Setup a simple ADC input based battery sensor
+    bool analogInit();
+    /// Setup a Lipo battery level sensor
+    bool lipoInit();
+    /// Setup a Lipo charger
+    bool lipoChargerInit();
+    /// Setup a meshSolar battery sensor
+    bool meshSolarInit();
 
-private:
-  void shutdown();
-  void reboot();
-  // open circuit voltage lookup table
-  uint8_t low_voltage_counter;
-  uint32_t lastLogTime = 0;
+  private:
+    void shutdown();
+    void reboot();
+    // open circuit voltage lookup table
+    uint8_t low_voltage_counter;
+    uint32_t lastLogTime = 0;
 #ifdef DEBUG_HEAP
-  uint32_t lastheap;
+    uint32_t lastheap;
 #endif
 };
 
