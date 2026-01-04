@@ -791,7 +791,7 @@ bool Graph::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const {
 }
 
 bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
-                               uint32_t currentTime, uint32_t packetId) const {
+                               uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime) const {
     LOG_DEBUG("Graph: === Relay decision for node %08x, source %08x, heard from %08x, packet %08x ===",
               myNode, sourceNode, heardFrom, packetId);
 
@@ -852,6 +852,18 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
         bool bestHasTransmitted = hasNodeTransmitted(bestCandidate.nodeId, packetId, currentTime);
 
         if (!bestHasTransmitted) {
+            // Check if we've waited too long for the best candidate
+            if (packetRxTime > 0) {
+                uint32_t timeSinceRx = currentTime - packetRxTime;
+                uint32_t contentionWindowMs = getContentionWindowMs();
+                if (timeSinceRx > (contentionWindowMs + 500)) {  // +500ms grace period
+                    // Best candidate failed to transmit within contention window
+                    // Remove them from candidates and try the next best
+                    LOG_DEBUG("Graph: Best candidate %08x timed out, removing from candidates", bestCandidate.nodeId);
+                    candidates.erase(bestCandidate.nodeId);
+                    continue;  // Try next candidate in the loop
+                }
+            }
             // Best candidate hasn't transmitted yet - wait for them
             LOG_DEBUG("Graph: Waiting for best candidate %08x to relay (contention window: %u ms)",
                       bestCandidate.nodeId, contentionWindowMs);
@@ -896,28 +908,20 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
     }
 
     // We've exhausted all candidates without finding a reason to relay
-    // Check if we have neighbors who didn't hear the packet at all
+    // Final fallback: if we have any neighbors at all, relay to ensure the packet gets out
+    // This prevents packet loss when coordinated relaying fails
     auto myNeighbors = getDirectNeighbors(myNode);
-    bool haveUncoveredNeighbors = false;
-    for (NodeNum neighbor : myNeighbors) {
-        if (alreadyCovered.find(neighbor) == alreadyCovered.end()) {
-            haveUncoveredNeighbors = true;
-            LOG_DEBUG("Graph: Have uncovered neighbor %08x", neighbor);
-            break;
-        }
-    }
-
-    if (haveUncoveredNeighbors) {
-        LOG_DEBUG("Graph: Have uncovered neighbors after exhausting candidates - TRANSMITTING");
+    if (!myNeighbors.empty()) {
+        LOG_DEBUG("Graph: Have neighbors after exhausting candidates - TRANSMITTING to ensure propagation");
         return true;
     }
 
-    LOG_DEBUG("Graph: No relay condition met - NOT relaying");
+    LOG_DEBUG("Graph: No neighbors - NOT relaying");
     return false;
 }
 
 bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
-                                          uint32_t currentTime, uint32_t packetId) const {
+                                          uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime) const {
     LOG_DEBUG("Graph: === CONSERVATIVE Relay decision for node %08x, source %08x, heard from %08x, packet %08x ===",
               myNode, sourceNode, heardFrom, packetId);
 

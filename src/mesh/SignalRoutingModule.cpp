@@ -382,7 +382,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
 #endif
 }
 
-void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPacket *p)
+void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPacket *p, uint32_t packetReceivedTimestamp)
 {
     if (!routingGraph || !p) return;
 
@@ -408,8 +408,8 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     // Add edges from each neighbor TO the sender
     // The RSSI/SNR describes how well the sender hears the neighbor,
     // which characterizes the neighbor→sender transmission quality
-    // Use packet rx_time since SignalNeighbor doesn't have last_rx_time
-    uint32_t rxTime = p->rx_time ? p->rx_time : getTime();
+    // Use reliable time-from-boot passed from caller
+    uint32_t rxTime = packetReceivedTimestamp;
     for (pb_size_t i = 0; i < info.neighbors_count; i++) {
         const meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
         trackNodeCapability(neighbor.node_id,
@@ -500,9 +500,9 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     // Add edges from each neighbor TO the sender
     // The RSSI/SNR describes how well the sender hears the neighbor,
     // which characterizes the neighbor→sender transmission quality
-    // Use packet rx_time since SignalNeighbor doesn't have last_rx_time
+    // Use reliable time-from-boot for internal timing
     // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
-    uint32_t rxTime = mp.rx_time ? mp.rx_time : getTime();
+    uint32_t rxTime = millis() / 1000;
     for (pb_size_t i = 0; i < p->neighbors_count; i++) {
         const meshtastic_SignalNeighbor& neighbor = p->neighbors[i];
 
@@ -1507,6 +1507,14 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
 
+    // GATEWAY OVERRIDE: If we are the gateway for the destination, ALWAYS relay
+    // This ensures downstream nodes that are exclusively connected to us can be reached
+    NodeNum gatewayForDest = getGatewayFor(destination);
+    if (gatewayForDest == myNode) {
+        LOG_INFO("[SR] UNICAST RELAY: We are gateway for %s - ALWAYS relay to ensure reachability", destName);
+        return true;
+    }
+
     // Check if the sending node (heardFrom) has a direct connection to the destination
     // If so, the destination should have already received this packet directly, so don't relay
 #ifdef SIGNAL_ROUTING_LITE_MODE
@@ -1875,22 +1883,27 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         return true;
     }
 
+    // Compute packet received timestamp once for all SignalRouting operations
+    uint32_t packetReceivedTimestamp = millis() / 1000;
+
     // Only access decoded fields if packet is actually decoded
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         p->decoded.portnum == meshtastic_PortNum_SIGNAL_ROUTING_APP) {
-        preProcessSignalRoutingPacket(p);
+        preProcessSignalRoutingPacket(p, packetReceivedTimestamp);
     }
 
     NodeNum myNode = nodeDB->getNodeNum();
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
-    // Gateway awareness: only force relay if WE are the recorded gateway for the source
+    // Gateway awareness: check if WE are the recorded gateway for the source or destination
     NodeNum gatewayForSource = getGatewayFor(sourceNode);
-    bool weAreGateway = (gatewayForSource != 0 && gatewayForSource == myNode);
-    size_t downstreamCount = weAreGateway ? getGatewayDownstreamCount(myNode) : 0;
+    NodeNum gatewayForDest = getGatewayFor(p->to);
+    bool weAreGatewayForSource = (gatewayForSource != 0 && gatewayForSource == myNode);
+    bool weAreGatewayForDest = (gatewayForDest != 0 && gatewayForDest == myNode);
+    size_t downstreamCount = (weAreGatewayForSource || weAreGatewayForDest) ? getGatewayDownstreamCount(myNode) : 0;
 
-    uint32_t currentTime = getTime();
+    uint32_t currentTime = packetReceivedTimestamp; // Use the packet received timestamp computed above
 
     // Check for stock gateway nodes that can be heard directly
     // If we have stock nodes that could serve as gateways, be conservative with SR relaying
@@ -1929,12 +1942,12 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     }
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    bool shouldRelay = routingGraph->shouldRelaySimple(myNode, sourceNode, heardFrom, currentTime);
+    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
 
     // Apply conservative logic only when NOT required for branch coverage
     if (shouldRelay && hasStockGateways && !mustRelayForBranchCoverage) {
         LOG_DEBUG("[SR] Applying conservative relay logic (stock gateways present, not from gateway)");
-        shouldRelay = routingGraph->shouldRelaySimpleConservative(myNode, sourceNode, heardFrom, currentTime);
+        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
         if (!shouldRelay) {
             LOG_DEBUG("[SR] Suppressed SR relay - stock gateway can handle external transmission");
         } else {
@@ -1942,12 +1955,12 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         }
     }
 #else
-    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id);
+    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
 
     // Apply conservative logic only when NOT required for branch coverage
     if (shouldRelay && hasStockGateways && !mustRelayForBranchCoverage) {
         LOG_DEBUG("[SR] Applying conservative relay logic (stock gateways present, not from gateway)");
-        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, currentTime, p->id);
+        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
         if (!shouldRelay) {
             LOG_DEBUG("[SR] Suppressed SR relay - stock gateway provides better external coverage");
         } else {
@@ -1956,8 +1969,10 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     }
 #endif
 
-    if (!shouldRelay && weAreGateway) {
-        LOG_INFO("[SR] We are gateway for %08x (downstream=%u) -> force relay", sourceNode, static_cast<unsigned int>(downstreamCount));
+    // Gateway override: force relay if we are gateway for source OR destination
+    if (!shouldRelay && (weAreGatewayForSource || weAreGatewayForDest)) {
+        NodeNum forcedFor = weAreGatewayForSource ? sourceNode : p->to;
+        LOG_INFO("[SR] We are gateway for %08x (downstream=%u) -> force relay", forcedFor, static_cast<unsigned int>(downstreamCount));
         shouldRelay = true;
     }
 
@@ -2879,6 +2894,11 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
 SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(NodeNum nodeId) const
 {
     uint32_t now = getTime();
+
+    // Special case: local node is always SR-capable if module is active
+    if (nodeDB && nodeId == nodeDB->getNodeNum() && signalBasedRoutingEnabled) {
+        return CapabilityStatus::Capable;
+    }
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: linear search

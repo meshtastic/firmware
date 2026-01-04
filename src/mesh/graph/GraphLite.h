@@ -19,15 +19,23 @@
 
 // Compile-time configuration for constrained devices
 #ifndef GRAPH_LITE_MAX_NODES
-#define GRAPH_LITE_MAX_NODES 100 // Maximum nodes in graph
+#define GRAPH_LITE_MAX_NODES 120 // Maximum nodes in graph
 #endif
 
 #ifndef GRAPH_LITE_MAX_EDGES_PER_NODE
-#define GRAPH_LITE_MAX_EDGES_PER_NODE 8 // Maximum neighbors per node
+#define GRAPH_LITE_MAX_EDGES_PER_NODE 12 // Maximum neighbors per node
 #endif
 
 #ifndef GRAPH_LITE_MAX_RELAY_STATES
 #define GRAPH_LITE_MAX_RELAY_STATES 16 // Track recent transmissions
+#endif
+
+#ifndef GRAPH_LITE_MAX_CACHED_ROUTES
+#define GRAPH_LITE_MAX_CACHED_ROUTES 32 // Maximum cached routes
+#endif
+
+#ifndef GRAPH_LITE_MAX_RELAY_TIERS
+#define GRAPH_LITE_MAX_RELAY_TIERS 3 // Maximum relay tiers for coordination
 #endif
 
 struct EdgeLite {
@@ -37,12 +45,16 @@ struct EdgeLite {
     uint16_t etxFixed;     // ETX * 100 (fixed-point, range 1.00-655.35)
     uint16_t lastUpdateLo; // Lower 16 bits of timestamp (wraps every ~65s)
     uint8_t variance;      // Position variance (0-255, scaled)
+    uint8_t stability;     // Stability * 100 (1.0 = 100, lower = less stable)
     Source source;
 
-    EdgeLite() : to(0), etxFixed(100), lastUpdateLo(0), variance(0), source(Source::Mirrored) {}
+    EdgeLite() : to(0), etxFixed(100), lastUpdateLo(0), variance(0), stability(100), source(Source::Mirrored) {}
 
     float getEtx() const { return etxFixed / 100.0f; }
     void setEtx(float etx) { etxFixed = static_cast<uint16_t>(etx * 100.0f); }
+
+    float getStability() const { return stability / 100.0f; }
+    void setStability(float s) { stability = static_cast<uint8_t>(s * 100.0f); }
 };
 
 struct NodeEdgesLite {
@@ -65,6 +77,26 @@ struct RouteLite {
     float getCost() const { return costFixed / 100.0f; }
 };
 
+struct RelayCandidateLite {
+    NodeNum nodeId;
+    uint8_t coverageCount; // Number of new nodes covered
+    uint16_t avgCostFixed; // Average cost to reach covered nodes * 100
+    uint8_t tier;          // 0 = primary, 1 = backup, etc.
+
+    RelayCandidateLite() : nodeId(0), coverageCount(0), avgCostFixed(0), tier(0) {}
+    RelayCandidateLite(NodeNum node, uint8_t coverage, uint16_t cost, uint8_t t)
+        : nodeId(node), coverageCount(coverage), avgCostFixed(cost), tier(t) {}
+
+    float getAvgCost() const { return avgCostFixed / 100.0f; }
+
+    // Sort by tier first (lower is better), then coverage (higher is better), then cost (lower is better)
+    bool operator<(const RelayCandidateLite& other) const {
+        if (tier != other.tier) return tier < other.tier;
+        if (coverageCount != other.coverageCount) return coverageCount > other.coverageCount;
+        return avgCostFixed < other.avgCostFixed;
+    }
+};
+
 struct RelayStateLite {
     NodeNum nodeId;
     uint32_t packetId;
@@ -76,7 +108,7 @@ struct RelayStateLite {
 class GraphLite {
   public:
     static uint32_t getContentionWindowMs();
-    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 300;
+    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 600; // 10 minutes for GraphLite (more conservative)
 
     GraphLite();
 
@@ -133,6 +165,27 @@ class GraphLite {
     bool shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
 
     /**
+     * Enhanced relay decision with coverage analysis and contention window support
+     */
+    bool shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime = 0) const;
+
+    /**
+     * Conservative version of shouldRelayEnhanced that defers to stock gateways
+     */
+    bool shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId, uint32_t packetRxTime = 0) const;
+
+    /**
+     * Calculate which nodes would be covered if a specific relay rebroadcasts
+     */
+    size_t getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, size_t maxNodes, const NodeNum *alreadyCovered, size_t alreadyCoveredCount) const;
+
+    /**
+     * Find the best relay node to cover uncovered nodes
+     */
+    NodeNum findBestRelay(const NodeNum *alreadyCovered, size_t alreadyCoveredCount,
+                         const NodeNum *candidates, size_t candidateCount, uint32_t currentTime) const;
+
+    /**
      * Relay decision with basic contention window support for SR nodes
      */
     bool shouldRelayWithContention(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t packetId, uint32_t currentTime) const;
@@ -148,9 +201,31 @@ class GraphLite {
     bool hasNodeTransmitted(NodeNum nodeId, uint32_t packetId, uint32_t currentTime) const;
 
     /**
+     * Find the best relay candidate from a set of potential candidates
+     */
+    RelayCandidateLite findBestRelayCandidate(const std::unordered_set<NodeNum>& candidates,
+                                             const std::unordered_set<NodeNum>& alreadyCovered,
+                                             uint32_t currentTime, uint32_t packetId) const;
+
+    /**
+     * Check if a node is a gateway node for a given source
+     */
+    bool isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const;
+
+    /**
      * Get count of nodes in graph
      */
     size_t getNodeCount() const { return nodeCount; }
+
+    /**
+     * Get cached route if still valid
+     */
+    RouteLite getCachedRoute(NodeNum destination, uint32_t currentTime);
+
+    /**
+     * Clear all cached routes
+     */
+    void clearCache();
 
     /**
      * Get all node IDs (fills provided array, returns count)
@@ -162,6 +237,11 @@ class GraphLite {
      * @param nodeId Node to remove
      */
     void removeNode(NodeNum nodeId);
+
+    /**
+     * Update stability weighting for an edge
+     */
+    void updateStability(NodeNum from, NodeNum to, float newStability);
 
     /**
      * Clear all edges to/from a specific node (used for graph merging)
@@ -183,9 +263,9 @@ class GraphLite {
     RelayStateLite relayStates[GRAPH_LITE_MAX_RELAY_STATES];
     uint8_t relayStateCount;
 
-    RouteLite routeCache;
-    uint32_t routeCacheTime;
-    static constexpr uint32_t ROUTE_CACHE_TIMEOUT_SECS = 60;
+    RouteLite routeCache[GRAPH_LITE_MAX_CACHED_ROUTES];
+    uint8_t routeCacheCount;
+    static constexpr uint32_t ROUTE_CACHE_TIMEOUT_SECS = 300;
 
     // Find or create node entry (returns nullptr if full)
     NodeEdgesLite *findOrCreateNode(NodeNum nodeId);
