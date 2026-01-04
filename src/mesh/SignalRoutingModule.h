@@ -88,7 +88,7 @@ public:
      * Pre-process a SignalRoutingInfo packet to update graph BEFORE relay decision
      * This ensures we have up-to-date neighbor data when deciding whether to relay
      */
-    void preProcessSignalRoutingPacket(const meshtastic_MeshPacket *p);
+    void preProcessSignalRoutingPacket(const meshtastic_MeshPacket *p, uint32_t packetReceivedTimestamp = 0);
 
 protected:
     /** Called to handle received SignalRoutingInfo protobuf */
