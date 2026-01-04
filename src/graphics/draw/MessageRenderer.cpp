@@ -813,7 +813,7 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         } else {
             word += ch;
             std::string test = line + word;
-#if defined(OLED_UA) || defined(OLED_RU)
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
             uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
 #else
             uint16_t strWidth = display->getStringWidth(test.c_str());
