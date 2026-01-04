@@ -18,40 +18,38 @@ Feature should be optional; enable disable via on-screen menu
 
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
-namespace NicheGraphics::InkHUD
-{
+namespace NicheGraphics::InkHUD {
 
-class NotificationApplet : public SystemApplet
-{
-  public:
-    NotificationApplet();
+class NotificationApplet : public SystemApplet {
+public:
+  NotificationApplet();
 
-    void onRender() override;
-    void onForeground() override;
-    void onBackground() override;
-    void onButtonShortPress() override;
-    void onButtonLongPress() override;
-    void onExitShort() override;
-    void onExitLong() override;
-    void onNavUp() override;
-    void onNavDown() override;
-    void onNavLeft() override;
-    void onNavRight() override;
+  void onRender() override;
+  void onForeground() override;
+  void onBackground() override;
+  void onButtonShortPress() override;
+  void onButtonLongPress() override;
+  void onExitShort() override;
+  void onExitLong() override;
+  void onNavUp() override;
+  void onNavDown() override;
+  void onNavLeft() override;
+  void onNavRight() override;
 
-    int onReceiveTextMessage(const meshtastic_MeshPacket *p);
+  int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 
-    bool isApproved(); // Does a foreground applet make notification redundant?
-    void dismiss();    // Close the Notification Popup
+  bool isApproved(); // Does a foreground applet make notification redundant?
+  void dismiss();    // Close the Notification Popup
 
-  protected:
-    // Get notified when a new text message arrives
-    CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *>(this, &NotificationApplet::onReceiveTextMessage);
+protected:
+  // Get notified when a new text message arrives
+  CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *> textMessageObserver =
+      CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *>(this, &NotificationApplet::onReceiveTextMessage);
 
-    std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
+  std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
-    bool hasNotification = false;                      // Only used for assert. Todo: remove?
-    Notification currentNotification = Notification(); // Set when something notification-worthy happens. Used by render()
+  bool hasNotification = false;                      // Only used for assert. Todo: remove?
+  Notification currentNotification = Notification(); // Set when something notification-worthy happens. Used by render()
 };
 
 } // namespace NicheGraphics::InkHUD

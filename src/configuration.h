@@ -68,8 +68,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error APP_VERSION must be set by the build environment
 #endif
 
-// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old versioning
-// system.
+// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old
+// versioning system.
 #ifndef HW_VERSION
 #define HW_VERSION "1.0"
 #endif

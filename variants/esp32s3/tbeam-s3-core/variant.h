@@ -11,8 +11,8 @@
 
 #define LED_STATE_ON 0 // State when LED is lit
 
-// TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
-// not found then probe for SX1262
+// TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for
+// RF95 and if not found then probe for SX1262
 #define USE_SX1262
 #define USE_SX1268
 #define USE_LR1121
@@ -31,8 +31,8 @@
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-// code)
+// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the
+// sx1262interface code)
 #endif
 
 // LR1121

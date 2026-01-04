@@ -71,8 +71,8 @@ extern "C" {
 0x11 Unsupported Feature or Parameter Value*/
 #define BLE_HCI_STATUS_CODE_INVALID_BTLE_COMMAND_PARAMETERS 0x12 /**< Invalid BLE Command Parameters. */
 #define BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION 0x13           /**< Remote User Terminated Connection. */
-#define BLE_HCI_REMOTE_DEV_TERMINATION_DUE_TO_LOW_RESOURCES                                                                      \
-    0x14                                                     /**< Remote Device Terminated Connection due to low                 \
+#define BLE_HCI_REMOTE_DEV_TERMINATION_DUE_TO_LOW_RESOURCES                                                                                          \
+  0x14                                                       /**< Remote Device Terminated Connection due to low                                     \
                                                                 resources.*/
 #define BLE_HCI_REMOTE_DEV_TERMINATION_DUE_TO_POWER_OFF 0x15 /**< Remote Device Terminated Connection due to power off. */
 #define BLE_HCI_LOCAL_HOST_TERMINATED_CONNECTION 0x16        /**< Local Host Terminated Connection. */

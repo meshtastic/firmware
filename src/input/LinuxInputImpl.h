@@ -11,11 +11,10 @@
  *      handlers, thus you need to have a RotaryEncoderInterrupt implementation.
  */
 
-class LinuxInputImpl : public LinuxInput
-{
-  public:
-    LinuxInputImpl();
-    void init();
+class LinuxInputImpl : public LinuxInput {
+public:
+  LinuxInputImpl();
+  void init();
 };
 extern LinuxInputImpl *aLinuxInputImpl;
 #endif

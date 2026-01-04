@@ -9,16 +9,15 @@
 #include <SensorBMA423.hpp>
 #include <Wire.h>
 
-class BMA423Sensor : public MotionSensor
-{
-  private:
-    SensorBMA423 sensor;
-    volatile bool BMA_IRQ = false;
+class BMA423Sensor : public MotionSensor {
+private:
+  SensorBMA423 sensor;
+  volatile bool BMA_IRQ = false;
 
-  public:
-    explicit BMA423Sensor(ScanI2C::FoundDevice foundDevice);
-    virtual bool init() override;
-    virtual int32_t runOnce() override;
+public:
+  explicit BMA423Sensor(ScanI2C::FoundDevice foundDevice);
+  virtual bool init() override;
+  virtual int32_t runOnce() override;
 };
 
 #endif

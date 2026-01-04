@@ -25,54 +25,53 @@
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router
-{
-  public:
-    /**
-     * Constructor
-     *
-     */
-    FloodingRouter();
+class FloodingRouter : public Router {
+public:
+  /**
+   * Constructor
+   *
+   */
+  FloodingRouter();
 
-    /**
-     * Send a packet on a suitable interface.  This routine will
-     * later free() the packet to pool.  This routine is not allowed to stall.
-     * If the txmit queue is full it might return an error
-     */
-    virtual ErrorCode send(meshtastic_MeshPacket *p) override;
+  /**
+   * Send a packet on a suitable interface.  This routine will
+   * later free() the packet to pool.  This routine is not allowed to stall.
+   * If the txmit queue is full it might return an error
+   */
+  virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
-  protected:
-    /**
-     * Should this incoming filter be dropped?
-     *
-     * Called immediately on reception, before any further processing.
-     * @return true to abandon the packet
-     */
-    virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
+protected:
+  /**
+   * Should this incoming filter be dropped?
+   *
+   * Called immediately on reception, before any further processing.
+   * @return true to abandon the packet
+   */
+  virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
 
-    /**
-     * Look for broadcasts we need to rebroadcast
-     */
-    virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
+  /**
+   * Look for broadcasts we need to rebroadcast
+   */
+  virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
 
-    /* Check if we should rebroadcast this packet, and do so if needed */
-    virtual bool perhapsRebroadcast(const meshtastic_MeshPacket *p) = 0;
+  /* Check if we should rebroadcast this packet, and do so if needed */
+  virtual bool perhapsRebroadcast(const meshtastic_MeshPacket *p) = 0;
 
-    /* Check if we should handle an upgraded packet (with higher hop_limit)
-     * @return true if we handled it (so stop processing)
-     */
-    bool perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p);
+  /* Check if we should handle an upgraded packet (with higher hop_limit)
+   * @return true if we handled it (so stop processing)
+   */
+  bool perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p);
 
-    /* Call when we receive a packet that needs some reprocessing, but afterwards should be filtered */
-    void reprocessPacket(const meshtastic_MeshPacket *p);
+  /* Call when we receive a packet that needs some reprocessing, but afterwards should be filtered */
+  void reprocessPacket(const meshtastic_MeshPacket *p);
 
-    // Return false for roles like ROUTER which should always rebroadcast even when we've heard another rebroadcast of
-    // the same packet
-    bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
+  // Return false for roles like ROUTER which should always rebroadcast even when we've heard another rebroadcast of
+  // the same packet
+  bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
 
-    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
-    void perhapsCancelDupe(const meshtastic_MeshPacket *p);
+  /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
+  void perhapsCancelDupe(const meshtastic_MeshPacket *p);
 
-    // Return true if we are a rebroadcaster
-    bool isRebroadcaster();
+  // Return true if we are a rebroadcaster
+  bool isRebroadcaster();
 };

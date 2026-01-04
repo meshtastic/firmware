@@ -18,93 +18,86 @@ extern ExtensionIOXL9555 io;
 
 #define AUDIO_THREAD_INTERVAL_MS 100
 
-class AudioThread : public concurrency::OSThread
-{
-  public:
-    AudioThread() : OSThread("Audio") { initOutput(); }
+class AudioThread : public concurrency::OSThread {
+public:
+  AudioThread() : OSThread("Audio") { initOutput(); }
 
-    void beginRttl(const void *data, uint32_t len)
-    {
+  void beginRttl(const void *data, uint32_t len) {
 #ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
-        setCPUFast(true);
-        rtttlFile = new AudioFileSourcePROGMEM(data, len);
-        i2sRtttl = new AudioGeneratorRTTTL();
-        i2sRtttl->begin(rtttlFile, audioOut);
+    setCPUFast(true);
+    rtttlFile = new AudioFileSourcePROGMEM(data, len);
+    i2sRtttl = new AudioGeneratorRTTTL();
+    i2sRtttl->begin(rtttlFile, audioOut);
+  }
+
+  // Also handles actually playing the RTTTL, needs to be called in loop
+  bool isPlaying() {
+    if (i2sRtttl != nullptr) {
+      return i2sRtttl->isRunning() && i2sRtttl->loop();
+    }
+    return false;
+  }
+
+  void stop() {
+    if (i2sRtttl != nullptr) {
+      i2sRtttl->stop();
+      delete i2sRtttl;
+      i2sRtttl = nullptr;
     }
 
-    // Also handles actually playing the RTTTL, needs to be called in loop
-    bool isPlaying()
-    {
-        if (i2sRtttl != nullptr) {
-            return i2sRtttl->isRunning() && i2sRtttl->loop();
-        }
-        return false;
+    if (rtttlFile != nullptr) {
+      delete rtttlFile;
+      rtttlFile = nullptr;
     }
 
-    void stop()
-    {
-        if (i2sRtttl != nullptr) {
-            i2sRtttl->stop();
-            delete i2sRtttl;
-            i2sRtttl = nullptr;
-        }
-
-        if (rtttlFile != nullptr) {
-            delete rtttlFile;
-            rtttlFile = nullptr;
-        }
-
-        setCPUFast(false);
+    setCPUFast(false);
 #ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+    io.digitalWrite(EXPANDS_AMP_EN, LOW);
 #endif
-    }
+  }
 
-    void readAloud(const char *text)
-    {
-        if (i2sRtttl != nullptr) {
-            i2sRtttl->stop();
-            delete i2sRtttl;
-            i2sRtttl = nullptr;
-        }
+  void readAloud(const char *text) {
+    if (i2sRtttl != nullptr) {
+      i2sRtttl->stop();
+      delete i2sRtttl;
+      i2sRtttl = nullptr;
+    }
 
 #ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
-        ESP8266SAM *sam = new ESP8266SAM;
-        sam->Say(audioOut, text);
-        delete sam;
-        setCPUFast(false);
+    ESP8266SAM *sam = new ESP8266SAM;
+    sam->Say(audioOut, text);
+    delete sam;
+    setCPUFast(false);
 #ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+    io.digitalWrite(EXPANDS_AMP_EN, LOW);
 #endif
-    }
+  }
 
-  protected:
-    int32_t runOnce() override
-    {
-        canSleep = true; // Assume we should not keep the board awake
+protected:
+  int32_t runOnce() override {
+    canSleep = true; // Assume we should not keep the board awake
 
-        // if (i2sRtttl != nullptr && i2sRtttl->isRunning()) {
-        //     i2sRtttl->loop();
-        // }
-        return AUDIO_THREAD_INTERVAL_MS;
-    }
+    // if (i2sRtttl != nullptr && i2sRtttl->isRunning()) {
+    //     i2sRtttl->loop();
+    // }
+    return AUDIO_THREAD_INTERVAL_MS;
+  }
 
-  private:
-    void initOutput()
-    {
-        audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
-        audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
-        audioOut->SetGain(0.2);
-    };
+private:
+  void initOutput() {
+    audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
+    audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
+    audioOut->SetGain(0.2);
+  };
 
-    AudioGeneratorRTTTL *i2sRtttl = nullptr;
-    AudioOutputI2S *audioOut = nullptr;
+  AudioGeneratorRTTTL *i2sRtttl = nullptr;
+  AudioOutputI2S *audioOut = nullptr;
 
-    AudioFileSourcePROGMEM *rtttlFile = nullptr;
+  AudioFileSourcePROGMEM *rtttlFile = nullptr;
 };
 
 #endif
