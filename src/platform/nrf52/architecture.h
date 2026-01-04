@@ -51,8 +51,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP
 #elif defined(WISMESH_TAG)
 #define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAG
-#elif defined(GAT562_MESH_TRIAL_TRACKER)
-#define HW_VENDOR meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER
 #elif defined(NOMADSTAR_METEOR_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
 #elif defined(R1_NEO)
