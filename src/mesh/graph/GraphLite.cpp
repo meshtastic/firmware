@@ -645,13 +645,13 @@ bool GraphLite::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum 
             }
 
             if (haveUniqueCoverage) {
-                return true;
+                return true;  // We have unique coverage - relay!
             }
         }
 
         // Best candidate relayed but we don't have unique coverage
-        // Remove the best candidate from the list and try the next best
-        candidates.erase(bestCandidate.nodeId);
+        // The transmission is already adequately covered - end the process
+        return false;  // No need to continue checking other candidates
     }
 
     // We've exhausted all candidates without finding a reason to relay

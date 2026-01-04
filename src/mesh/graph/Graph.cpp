@@ -902,9 +902,9 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
         }
 
         // Best candidate relayed but we don't have unique coverage
-        // Remove the best candidate from the list and try the next best
-        LOG_DEBUG("Graph: No unique coverage over %08x, removing from candidates and trying next best", bestCandidate.nodeId);
-        candidates.erase(bestCandidate.nodeId);
+        // The transmission is already adequately covered - end the process
+        LOG_DEBUG("Graph: No unique coverage over %08x - transmission adequately covered", bestCandidate.nodeId);
+        return false;
     }
 
     // We've exhausted all candidates without finding a reason to relay
