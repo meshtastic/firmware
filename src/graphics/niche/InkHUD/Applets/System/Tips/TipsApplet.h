@@ -30,11 +30,11 @@ protected:
 public:
   TipsApplet();
 
-    void onRender() override;
-    void onForeground() override;
-    void onBackground() override;
-    void onButtonShortPress() override;
-    void onExitShort() override;
+  void onRender() override;
+  void onForeground() override;
+  void onBackground() override;
+  void onButtonShortPress() override;
+  void onExitShort() override;
 
 protected:
   void renderWelcome(); // Very first screen of tutorial

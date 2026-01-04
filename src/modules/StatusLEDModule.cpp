@@ -14,87 +14,88 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule") {
   powerStatusObserver.observe(&powerStatus->onNewStatus);
 }
 
-int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
-{
-    switch (arg->getStatusType()) {
-    case STATUS_TYPE_POWER: {
-        meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)arg;
-        if (powerStatus->getHasUSB()) {
-            power_state = charging;
-            if (powerStatus->getBatteryChargePercent() >= 100) {
-                power_state = charged;
-            }
-        } else {
-            if (powerStatus->getBatteryChargePercent() > 5) {
-                power_state = discharging;
-            } else {
-                power_state = critical;
-            }
-        }
-        break;
+int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg) {
+  switch (arg->getStatusType()) {
+  case STATUS_TYPE_POWER: {
+    meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)arg;
+    if (powerStatus->getHasUSB()) {
+      power_state = charging;
+      if (powerStatus->getBatteryChargePercent() >= 100) {
+        power_state = charged;
+      }
+    } else {
+      if (powerStatus->getBatteryChargePercent() > 5) {
+        power_state = discharging;
+      } else {
+        power_state = critical;
+      }
     }
-
     break;
   }
+
+  break;
   }
-  return 0;
-};
+}
+return 0;
+}
+;
 
-int32_t StatusLEDModule::runOnce()
-{
-    my_interval = 1000;
+int32_t StatusLEDModule::runOnce() {
+  my_interval = 1000;
 
-    if (power_state == charging) {
-        CHARGE_LED_state = !CHARGE_LED_state;
-    } else if (power_state == charged) {
-        CHARGE_LED_state = LED_STATE_ON;
-    } else if (power_state == critical) {
-        if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
-            doing_fast_blink = true;
-            POWER_LED_starttime = millis();
-        }
-        if (doing_fast_blink) {
-            PAIRING_LED_state = LED_STATE_OFF;
-            CHARGE_LED_state = !CHARGE_LED_state;
-            my_interval = 250;
-            if (POWER_LED_starttime + 2000 < millis()) {
-                doing_fast_blink = false;
-            }
-        } else {
-            CHARGE_LED_state = LED_STATE_OFF;
-        }
-
+  if (power_state == charging) {
+    CHARGE_LED_state = !CHARGE_LED_state;
+  } else if (power_state == charged) {
+    CHARGE_LED_state = LED_STATE_ON;
+  } else if (power_state == critical) {
+    if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
+      doing_fast_blink = true;
+      POWER_LED_starttime = millis();
+    }
+    if (doing_fast_blink) {
+      PAIRING_LED_state = LED_STATE_OFF;
+      CHARGE_LED_state = !CHARGE_LED_state;
+      my_interval = 250;
+      if (POWER_LED_starttime + 2000 < millis()) {
+        doing_fast_blink = false;
+      }
     } else {
-        CHARGE_LED_state = LED_STATE_OFF;
+      CHARGE_LED_state = LED_STATE_OFF;
     }
 
-    if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
-        PAIRING_LED_state = LED_STATE_OFF;
-    } else if (ble_state == unpaired) {
-        if (slowTrack) {
-            PAIRING_LED_state = !PAIRING_LED_state;
-            slowTrack = false;
-        } else {
-            slowTrack = true;
-        }
-    } else if (ble_state == pairing) {
-        PAIRING_LED_state = !PAIRING_LED_state;
+  } else {
+    CHARGE_LED_state = LED_STATE_OFF;
+  }
+
+  if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
+    PAIRING_LED_state = LED_STATE_OFF;
+  } else if (ble_state == unpaired) {
+    if (slowTrack) {
+      PAIRING_LED_state = !PAIRING_LED_state;
+      slowTrack = false;
     } else {
       slowTrack = true;
     }
   } else if (ble_state == pairing) {
     PAIRING_LED_state = !PAIRING_LED_state;
   } else {
-    PAIRING_LED_state = LED_STATE_ON;
+    slowTrack = true;
   }
+}
+else if (ble_state == pairing) {
+  PAIRING_LED_state = !PAIRING_LED_state;
+}
+else {
+  PAIRING_LED_state = LED_STATE_ON;
+}
 
 #ifdef LED_CHARGE
-  digitalWrite(LED_CHARGE, CHARGE_LED_state);
+digitalWrite(LED_CHARGE, CHARGE_LED_state);
 #endif
-  // digitalWrite(green_LED_PIN, LED_STATE_OFF);
+// digitalWrite(green_LED_PIN, LED_STATE_OFF);
 #ifdef LED_PAIRING
-  digitalWrite(LED_PAIRING, PAIRING_LED_state);
+digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
 
-  return (my_interval);
+return (my_interval);
 }

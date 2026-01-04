@@ -80,20 +80,20 @@ public:
 
   // Event handlers
 
-    virtual void onRender() = 0; // All drawing happens here
-    virtual void onActivate() {}
-    virtual void onDeactivate() {}
-    virtual void onForeground() {}
-    virtual void onBackground() {}
-    virtual void onShutdown() {}
-    virtual void onButtonShortPress() {}
-    virtual void onButtonLongPress() {}
-    virtual void onExitShort() {}
-    virtual void onExitLong() {}
-    virtual void onNavUp() {}
-    virtual void onNavDown() {}
-    virtual void onNavLeft() {}
-    virtual void onNavRight() {}
+  virtual void onRender() = 0; // All drawing happens here
+  virtual void onActivate() {}
+  virtual void onDeactivate() {}
+  virtual void onForeground() {}
+  virtual void onBackground() {}
+  virtual void onShutdown() {}
+  virtual void onButtonShortPress() {}
+  virtual void onButtonLongPress() {}
+  virtual void onExitShort() {}
+  virtual void onExitLong() {}
+  virtual void onNavUp() {}
+  virtual void onNavDown() {}
+  virtual void onNavLeft() {}
+  virtual void onNavRight() {}
 
   virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 

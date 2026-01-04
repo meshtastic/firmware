@@ -25,14 +25,14 @@ public:
 
   // - call these to make stuff change
 
-    void nextTile();
-    void prevTile();
-    void openMenu();
-    void openAlignStick();
-    void nextApplet();
-    void prevApplet();
-    void rotate();
-    void toggleBatteryIcon();
+  void nextTile();
+  void prevTile();
+  void openMenu();
+  void openAlignStick();
+  void nextApplet();
+  void prevApplet();
+  void rotate();
+  void toggleBatteryIcon();
 
   // - call these to manifest changes already made to the relevant Persistence::Settings values
 

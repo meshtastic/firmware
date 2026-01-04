@@ -780,11 +780,11 @@ void NodeDB::installDefaultModuleConfig() {
   moduleConfig.external_notification.nag_timeout = 2;
 #endif
 #if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
-    // Default to PIN_LED2 for external notification output (LED color depends on device variant)
-    moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.output = PIN_LED2;
+  // Default to PIN_LED2 for external notification output (LED color depends on device variant)
+  moduleConfig.external_notification.enabled = true;
+  moduleConfig.external_notification.output = PIN_LED2;
 #if defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
-    moduleConfig.external_notification.active = false;
+  moduleConfig.external_notification.active = false;
 #else
   moduleConfig.external_notification.active = true;
 #endif
@@ -940,110 +940,102 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role) {
   }
 }
 
-void NodeDB::installDefaultChannels()
-{
-    LOG_INFO("Install default ChannelFile");
-    memset(&channelFile, 0, sizeof(meshtastic_ChannelFile));
-    channelFile.version = DEVICESTATE_CUR_VER;
+void NodeDB::installDefaultChannels() {
+  LOG_INFO("Install default ChannelFile");
+  memset(&channelFile, 0, sizeof(meshtastic_ChannelFile));
+  channelFile.version = DEVICESTATE_CUR_VER;
 }
 
-void NodeDB::resetNodes(bool keepFavorites)
-{
-    if (!config.position.fixed_position)
-        clearLocalPosition();
-    numMeshNodes = 1;
-    if (keepFavorites) {
-        LOG_INFO("Clearing node database - preserving favorites");
-        for (size_t i = 0; i < meshNodes->size(); i++) {
-            meshtastic_NodeInfoLite &node = meshNodes->at(i);
-            if (i > 0 && !node.is_favorite) {
-                node = meshtastic_NodeInfoLite();
-            } else {
-                numMeshNodes += 1;
-            }
-        };
-    } else {
-        LOG_INFO("Clearing node database - removing favorites");
-        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
-    }
-    devicestate.has_rx_text_message = false;
-    devicestate.has_rx_waypoint = false;
-    saveNodeDatabaseToDisk();
-    saveDeviceStateToDisk();
-    if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
-        neighborInfoModule->resetNeighbors();
+void NodeDB::resetNodes(bool keepFavorites) {
+  if (!config.position.fixed_position)
+    clearLocalPosition();
+  numMeshNodes = 1;
+  if (keepFavorites) {
+    LOG_INFO("Clearing node database - preserving favorites");
+    for (size_t i = 0; i < meshNodes->size(); i++) {
+      meshtastic_NodeInfoLite &node = meshNodes->at(i);
+      if (i > 0 && !node.is_favorite) {
+        node = meshtastic_NodeInfoLite();
+      } else {
+        numMeshNodes += 1;
+      }
+    };
+  } else {
+    LOG_INFO("Clearing node database - removing favorites");
+    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+  }
+  devicestate.has_rx_text_message = false;
+  devicestate.has_rx_waypoint = false;
+  saveNodeDatabaseToDisk();
+  saveDeviceStateToDisk();
+  if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
+    neighborInfoModule->resetNeighbors();
 }
 
-void NodeDB::removeNodeByNum(NodeNum nodeNum)
-{
-    int newPos = 0, removed = 0;
-    for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).num != nodeNum)
-            meshNodes->at(newPos++) = meshNodes->at(i);
-        else
-            removed++;
-    }
-    numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
-              meshtastic_NodeInfoLite());
-    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
-    saveNodeDatabaseToDisk();
+void NodeDB::removeNodeByNum(NodeNum nodeNum) {
+  int newPos = 0, removed = 0;
+  for (int i = 0; i < numMeshNodes; i++) {
+    if (meshNodes->at(i).num != nodeNum)
+      meshNodes->at(newPos++) = meshNodes->at(i);
+    else
+      removed++;
+  }
+  numMeshNodes -= removed;
+  std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1, meshtastic_NodeInfoLite());
+  LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
+  saveNodeDatabaseToDisk();
 }
 
-void NodeDB::clearLocalPosition()
-{
-    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
-    node->position.latitude_i = 0;
-    node->position.longitude_i = 0;
-    node->position.altitude = 0;
-    node->position.time = 0;
-    setLocalPosition(meshtastic_Position_init_default);
-    localPositionUpdatedSinceBoot = false;
+void NodeDB::clearLocalPosition() {
+  meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
+  node->position.latitude_i = 0;
+  node->position.longitude_i = 0;
+  node->position.altitude = 0;
+  node->position.time = 0;
+  setLocalPosition(meshtastic_Position_init_default);
+  localPositionUpdatedSinceBoot = false;
 }
 
-void NodeDB::cleanupMeshDB()
-{
-    int newPos = 0, removed = 0;
-    for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user) {
-            if (meshNodes->at(i).user.public_key.size > 0) {
-                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
-                    meshNodes->at(i).user.public_key.size = 0;
-                }
-            }
-            if (newPos != i)
-                meshNodes->at(newPos++) = meshNodes->at(i);
-            else
-                newPos++;
-        } else {
-            removed++;
+void NodeDB::cleanupMeshDB() {
+  int newPos = 0, removed = 0;
+  for (int i = 0; i < numMeshNodes; i++) {
+    if (meshNodes->at(i).has_user) {
+      if (meshNodes->at(i).user.public_key.size > 0) {
+        if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
+          meshNodes->at(i).user.public_key.size = 0;
         }
+      }
+      if (newPos != i)
+        meshNodes->at(newPos++) = meshNodes->at(i);
+      else
+        newPos++;
+    } else {
+      removed++;
     }
-    numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
-              meshtastic_NodeInfoLite());
-    LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
+  }
+  numMeshNodes -= removed;
+  std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed, meshtastic_NodeInfoLite());
+  LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
-void NodeDB::installDefaultDeviceState()
-{
-    LOG_INFO("Install default DeviceState");
-    // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
+void NodeDB::installDefaultDeviceState() {
+  LOG_INFO("Install default DeviceState");
+  // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
-    // init our devicestate with valid flags so protobuf writing/reading will work
-    devicestate.has_my_node = true;
-    devicestate.has_owner = true;
-    devicestate.version = DEVICESTATE_CUR_VER;
-    devicestate.receive_queue_count = 0; // Not yet implemented FIXME
-    devicestate.has_rx_waypoint = false;
-    devicestate.has_rx_text_message = false;
+  // init our devicestate with valid flags so protobuf writing/reading will work
+  devicestate.has_my_node = true;
+  devicestate.has_owner = true;
+  devicestate.version = DEVICESTATE_CUR_VER;
+  devicestate.receive_queue_count = 0; // Not yet implemented FIXME
+  devicestate.has_rx_waypoint = false;
+  devicestate.has_rx_text_message = false;
 
-    generatePacketId(); // FIXME - ugly way to init current_packet_id;
+  generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
-    // Set default owner name
-    pickNewNodeNum(); // based on macaddr now
+  // Set default owner name
+  pickNewNodeNum(); // based on macaddr now
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
-    snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
+  snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
   moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif

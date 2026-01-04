@@ -53,37 +53,37 @@ RTCSetResult readFromRTC() {
     }
 #endif
 
-        LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
-                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        if (currentQuality == RTCQualityNone) {
-            timeStartMsec = now;
-            zeroOffsetSecs = tv.tv_sec;
-            currentQuality = RTCQualityDevice;
-        }
-        return RTCSetResultSuccess;
+    LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
+              t.tm_min, t.tm_sec, printableEpoch);
+    if (currentQuality == RTCQualityNone) {
+      timeStartMsec = now;
+      zeroOffsetSecs = tv.tv_sec;
+      currentQuality = RTCQualityDevice;
     }
+    return RTCSetResultSuccess;
+  }
 #elif defined(PCF8563_RTC)
-    if (rtc_found.address == PCF8563_RTC) {
-        uint32_t now = millis();
-        PCF8563_Class rtc;
+  if (rtc_found.address == PCF8563_RTC) {
+    uint32_t now = millis();
+    PCF8563_Class rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
     rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-        rtc.begin();
+    rtc.begin();
 #endif
 
-        auto tc = rtc.getDateTime();
-        tm t;
-        t.tm_year = tc.year - 1900;
-        t.tm_mon = tc.month - 1;
-        t.tm_mday = tc.day;
-        t.tm_hour = tc.hour;
-        t.tm_min = tc.minute;
-        t.tm_sec = tc.second;
-        tv.tv_sec = gm_mktime(&t);
-        tv.tv_usec = 0;
-        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+    auto tc = rtc.getDateTime();
+    tm t;
+    t.tm_year = tc.year - 1900;
+    t.tm_mon = tc.month - 1;
+    t.tm_mday = tc.day;
+    t.tm_hour = tc.hour;
+    t.tm_min = tc.minute;
+    t.tm_sec = tc.second;
+    tv.tv_sec = gm_mktime(&t);
+    tv.tv_usec = 0;
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
@@ -95,15 +95,15 @@ RTCSetResult readFromRTC() {
     }
 #endif
 
-        LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
-                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        if (currentQuality == RTCQualityNone) {
-            timeStartMsec = now;
-            zeroOffsetSecs = tv.tv_sec;
-            currentQuality = RTCQualityDevice;
-        }
-        return RTCSetResultSuccess;
+    LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
+              t.tm_min, t.tm_sec, printableEpoch);
+    if (currentQuality == RTCQualityNone) {
+      timeStartMsec = now;
+      zeroOffsetSecs = tv.tv_sec;
+      currentQuality = RTCQualityDevice;
     }
+    return RTCSetResultSuccess;
+  }
 #elif defined(RX8130CE_RTC)
   if (rtc_found.address == RX8130CE_RTC) {
     uint32_t now = millis();
@@ -221,25 +221,25 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
       rtc.initI2C();
 #endif
-            tm *t = gmtime(&tv->tv_sec);
-            rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
-        }
+      tm *t = gmtime(&tv->tv_sec);
+      rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+      LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min,
+                t->tm_sec, printableEpoch);
+    }
 #elif defined(PCF8563_RTC)
-        if (rtc_found.address == PCF8563_RTC) {
-            PCF8563_Class rtc;
+    if (rtc_found.address == PCF8563_RTC) {
+      PCF8563_Class rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
       rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-            rtc.begin();
+      rtc.begin();
 #endif
-            tm *t = gmtime(&tv->tv_sec);
-            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
-        }
+      tm *t = gmtime(&tv->tv_sec);
+      rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+      LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min,
+                t->tm_sec, printableEpoch);
+    }
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
 #ifdef MUZI_BASE

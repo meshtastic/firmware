@@ -58,96 +58,10 @@ void InkHUD::TipsApplet::onRender() {
     cursorY += fontSmall.lineHeight() * 1.2;
     printAt(0, cursorY, "- connect a client app");
 
-        // Only if region not set
-        if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- set region");
-        }
-
-        // Only if tz not set
-        if (!(*config.device.tzdef && config.device.tzdef[0] != 0)) {
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- set timezone");
-        }
-
-        cursorY += fontSmall.lineHeight() * 1.5;
-        printAt(0, cursorY, "More info at meshtastic.org");
-
-        setFont(fontSmall);
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
-    } break;
-
-    case Tip::SAFE_SHUTDOWN: {
-        setFont(fontMedium);
-        printAt(0, 0, "Tip: Shutdown");
-
-        setFont(fontSmall);
-        std::string shutdown;
-        shutdown += "Before removing power, please shut down from InkHUD menu, or a client app. \n";
-        shutdown += "\n";
-        shutdown += "This ensures data is saved.";
-        printWrapped(0, fontMedium.lineHeight() * 1.5, width(), shutdown);
-
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
-
-    } break;
-
-    case Tip::CUSTOMIZATION: {
-        setFont(fontMedium);
-        printAt(0, 0, "Tip: Customization");
-
-        setFont(fontSmall);
-        printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
-                     "Configure & control display with the InkHUD menu. Optional features, layout, rotation, and more.");
-
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
-    } break;
-
-    case Tip::BUTTONS: {
-        setFont(fontMedium);
-        printAt(0, 0, "Tip: Buttons");
-
-        setFont(fontSmall);
-        int16_t cursorY = fontMedium.lineHeight() * 1.5;
-
-        if (!settings->joystick.enabled) {
-            printAt(0, cursorY, "User Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- short press: next");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- long press: select / open menu");
-        } else {
-            printAt(0, cursorY, "Joystick");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- open menu / select");
-            cursorY += fontSmall.lineHeight() * 1.5;
-            printAt(0, cursorY, "Exit Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- switch tile / close menu");
-        }
-
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
-    } break;
-
-    case Tip::ROTATION: {
-        setFont(fontMedium);
-        printAt(0, 0, "Tip: Rotation");
-
-        setFont(fontSmall);
-        if (!settings->joystick.enabled) {
-            printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
-                         "To rotate the display, use the InkHUD menu. Long-press the user button > Options > Rotate.");
-        } else {
-            printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
-                         "To rotate the display, use the InkHUD menu. Press the user button > Options > Rotate.");
-        }
-
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
-
-        // Revert the "flip screen" setting, preventing this message showing again
-        config.display.flip_screen = false;
-        nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
-    } break;
+    // Only if region not set
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+      cursorY += fontSmall.lineHeight() * 1.2;
+      printAt(0, cursorY, "- set region");
     }
 
     // Only if tz not set
@@ -196,12 +110,21 @@ void InkHUD::TipsApplet::onRender() {
     setFont(fontSmall);
     int16_t cursorY = fontMedium.lineHeight() * 1.5;
 
-    printAt(0, cursorY, "User Button");
-    cursorY += fontSmall.lineHeight() * 1.2;
-    printAt(0, cursorY, "- short press: next");
-    cursorY += fontSmall.lineHeight() * 1.2;
-    printAt(0, cursorY, "- long press: select / open menu");
-    cursorY += fontSmall.lineHeight() * 1.5;
+    if (!settings->joystick.enabled) {
+      printAt(0, cursorY, "User Button");
+      cursorY += fontSmall.lineHeight() * 1.2;
+      printAt(0, cursorY, "- short press: next");
+      cursorY += fontSmall.lineHeight() * 1.2;
+      printAt(0, cursorY, "- long press: select / open menu");
+    } else {
+      printAt(0, cursorY, "Joystick");
+      cursorY += fontSmall.lineHeight() * 1.2;
+      printAt(0, cursorY, "- open menu / select");
+      cursorY += fontSmall.lineHeight() * 1.5;
+      printAt(0, cursorY, "Exit Button");
+      cursorY += fontSmall.lineHeight() * 1.2;
+      printAt(0, cursorY, "- switch tile / close menu");
+    }
 
     printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
   } break;
@@ -211,8 +134,13 @@ void InkHUD::TipsApplet::onRender() {
     printAt(0, 0, "Tip: Rotation");
 
     setFont(fontSmall);
-    printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
-                 "To rotate the display, use the InkHUD menu. Long-press the user button > Options > Rotate.");
+    if (!settings->joystick.enabled) {
+      printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
+                   "To rotate the display, use the InkHUD menu. Long-press the user button > Options > Rotate.");
+    } else {
+      printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
+                   "To rotate the display, use the InkHUD menu. Press the user button > Options > Rotate.");
+    }
 
     printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
 
@@ -221,6 +149,79 @@ void InkHUD::TipsApplet::onRender() {
     nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
   } break;
   }
+
+  // Only if tz not set
+  if (!(*config.device.tzdef && config.device.tzdef[0] != 0)) {
+    cursorY += fontSmall.lineHeight() * 1.2;
+    printAt(0, cursorY, "- set timezone");
+  }
+
+  cursorY += fontSmall.lineHeight() * 1.5;
+  printAt(0, cursorY, "More info at meshtastic.org");
+
+  setFont(fontSmall);
+  printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+}
+break;
+
+case Tip::SAFE_SHUTDOWN: {
+  setFont(fontMedium);
+  printAt(0, 0, "Tip: Shutdown");
+
+  setFont(fontSmall);
+  std::string shutdown;
+  shutdown += "Before removing power, please shut down from InkHUD menu, or a client app. \n";
+  shutdown += "\n";
+  shutdown += "This ensures data is saved.";
+  printWrapped(0, fontMedium.lineHeight() * 1.5, width(), shutdown);
+
+  printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+
+} break;
+
+case Tip::CUSTOMIZATION: {
+  setFont(fontMedium);
+  printAt(0, 0, "Tip: Customization");
+
+  setFont(fontSmall);
+  printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
+               "Configure & control display with the InkHUD menu. Optional features, layout, rotation, and more.");
+
+  printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+} break;
+
+case Tip::BUTTONS: {
+  setFont(fontMedium);
+  printAt(0, 0, "Tip: Buttons");
+
+  setFont(fontSmall);
+  int16_t cursorY = fontMedium.lineHeight() * 1.5;
+
+  printAt(0, cursorY, "User Button");
+  cursorY += fontSmall.lineHeight() * 1.2;
+  printAt(0, cursorY, "- short press: next");
+  cursorY += fontSmall.lineHeight() * 1.2;
+  printAt(0, cursorY, "- long press: select / open menu");
+  cursorY += fontSmall.lineHeight() * 1.5;
+
+  printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+} break;
+
+case Tip::ROTATION: {
+  setFont(fontMedium);
+  printAt(0, 0, "Tip: Rotation");
+
+  setFont(fontSmall);
+  printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
+               "To rotate the display, use the InkHUD menu. Long-press the user button > Options > Rotate.");
+
+  printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+
+  // Revert the "flip screen" setting, preventing this message showing again
+  config.display.flip_screen = false;
+  nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
+} break;
+}
 }
 
 // This tip has its own render method, only because it's a big block of code
@@ -313,9 +314,6 @@ void InkHUD::TipsApplet::onButtonShortPress() {
 }
 
 // Functions the same as the user button in this instance
-void InkHUD::TipsApplet::onExitShort()
-{
-    onButtonShortPress();
-}
+void InkHUD::TipsApplet::onExitShort() { onButtonShortPress(); }
 
 #endif

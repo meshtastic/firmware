@@ -25,9 +25,9 @@ public:
   static constexpr uint8_t MAX_TILES_GLOBAL = 4;
   static constexpr uint8_t MAX_USERAPPLETS_GLOBAL = 16;
 
-    // Used to invalidate old settings, if needed
-    // Version 0 is reserved for testing, and will always load defaults
-    static constexpr uint32_t SETTINGS_VERSION = 3;
+  // Used to invalidate old settings, if needed
+  // Version 0 is reserved for testing, and will always load defaults
+  static constexpr uint32_t SETTINGS_VERSION = 3;
 
   struct Settings {
     struct Meta {
@@ -94,23 +94,23 @@ public:
       bool safeShutdownSeen = false;
     } tips;
 
-        // Joystick settings for enabling and aligning to the screen
-        struct Joystick {
-            // Modifies the UI for joystick use
-            bool enabled = false;
+    // Joystick settings for enabling and aligning to the screen
+    struct Joystick {
+      // Modifies the UI for joystick use
+      bool enabled = false;
 
-            // gets set to true when AlignStick applet is completed
-            bool aligned = false;
+      // gets set to true when AlignStick applet is completed
+      bool aligned = false;
 
-            // Rotation of the joystick
-            // Multiples of 90 degrees clockwise
-            uint8_t alignment = 0;
-        } joystick;
+      // Rotation of the joystick
+      // Multiples of 90 degrees clockwise
+      uint8_t alignment = 0;
+    } joystick;
 
-        // Rotation of the display
-        // Multiples of 90 degrees clockwise
-        // Most commonly: rotation is 0 when flex connector is oriented below display
-        uint8_t rotation = 0;
+    // Rotation of the display
+    // Multiples of 90 degrees clockwise
+    // Most commonly: rotation is 0 when flex connector is oriented below display
+    uint8_t rotation = 0;
 
     // How long do we consider another node to be "active"?
     // Used when applets want to filter for "active nodes" only

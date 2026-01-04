@@ -104,21 +104,19 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p) {
   return true;
 }
 
-void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
-{
-    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
-        if (Router::cancelSending(p->from, p->id))
-            txRelayCanceled++;
-    }
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
-        iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
-    }
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB &&
-        nodeDB->isFromOrToFavoritedNode(*p)) {
-        iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
-    }
+void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p) {
+  if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
+    // cancel rebroadcast of this message *if* there was already one, unless we're a router!
+    // But only LoRa packets should be able to trigger this.
+    if (Router::cancelSending(p->from, p->id))
+      txRelayCanceled++;
+  }
+  if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+    iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+  }
+  if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB && nodeDB->isFromOrToFavoritedNode(*p)) {
+    iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+  }
 }
 
 bool FloodingRouter::isRebroadcaster() {
