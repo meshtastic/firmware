@@ -9,10 +9,11 @@
  *      to your device as you wish, but you always need to have separate event
  *      handlers, thus you need to have a RotaryEncoderInterrupt implementation.
  */
-class KbMatrixImpl : public KbMatrixBase {
-public:
-  KbMatrixImpl();
-  void init();
+class KbMatrixImpl : public KbMatrixBase
+{
+  public:
+    KbMatrixImpl();
+    void init();
 };
 
 extern KbMatrixImpl *kbMatrixImpl;

@@ -7,17 +7,18 @@
 
 #define MLX90614_EMISSIVITY 0.98 // human skin
 
-class MLX90614Sensor : public TelemetrySensor {
-private:
-  Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+class MLX90614Sensor : public TelemetrySensor
+{
+  private:
+    Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 
-protected:
-  virtual void setup() override;
+  protected:
+    virtual void setup() override;
 
-public:
-  MLX90614Sensor();
-  virtual int32_t runOnce() override;
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+  public:
+    MLX90614Sensor();
+    virtual int32_t runOnce() override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
 
 #endif

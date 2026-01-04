@@ -1,6 +1,5 @@
 // Unlike many other InkHUD variants, this environment does require its own variant.h file
-// This is because the default T114 variant maps SPI1 pins to the optional TFT display, and those pins are not broken
-// out
+// This is because the default T114 variant maps SPI1 pins to the optional TFT display, and those pins are not broken out
 
 #ifndef _VARIANT_HELTEC_NRF_
 #define _VARIANT_HELTEC_NRF_
@@ -43,8 +42,8 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON1 (32 + 10)
-// #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a
-// regular GPIO
+// #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular
+// GPIO
 
 /*
 No longer populated on PCB

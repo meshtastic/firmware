@@ -9,8 +9,10 @@
 #include <string>
 #include <vector>
 
-namespace graphics {
-namespace MessageRenderer {
+namespace graphics
+{
+namespace MessageRenderer
+{
 
 // Thread filter modes
 enum class ThreadMode { ALL, CHANNEL, DIRECT };
@@ -43,7 +45,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth);
 
 // Function to calculate heights for each line
-std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes, const std::vector<bool> &isHeaderVec);
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
+                                      const std::vector<bool> &isHeaderVec);
 
 // Reset scroll state when new messages arrive
 void resetScrollState();

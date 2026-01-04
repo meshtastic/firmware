@@ -19,11 +19,11 @@ extern "C" {
  *
  * Ring Oscillator (ROSC) API
  *
- * A Ring Oscillator is an on-chip oscillator that requires no external crystal. Instead, the output is generated from a
- * series of inverters that are chained together to create a feedback loop. RP2040 boots from the ring oscillator
- * initially, meaning the first stages of the bootrom, including booting from SPI flash, will be clocked by the ring
- * oscillator. If your design has a crystal oscillator, you’ll likely want to switch to this as your reference clock as
- * soon as possible, because the frequency is more accurate than the ring oscillator.
+ * A Ring Oscillator is an on-chip oscillator that requires no external crystal. Instead, the output is generated from a series of
+ * inverters that are chained together to create a feedback loop. RP2040 boots from the ring oscillator initially, meaning the
+ * first stages of the bootrom, including booting from SPI flash, will be clocked by the ring oscillator. If your design has a
+ * crystal oscillator, you’ll likely want to switch to this as your reference clock as soon as possible, because the frequency is
+ * more accurate than the ring oscillator.
  */
 
 /*! \brief  Set frequency of the Ring Oscillator
@@ -68,15 +68,22 @@ uint rosc_find_freq(uint32_t low_mhz, uint32_t high_mhz);
 
 void rosc_set_div(uint32_t div);
 
-inline static void rosc_clear_bad_write(void) { hw_clear_bits(&rosc_hw->status, ROSC_STATUS_BADWRITE_BITS); }
+inline static void rosc_clear_bad_write(void)
+{
+    hw_clear_bits(&rosc_hw->status, ROSC_STATUS_BADWRITE_BITS);
+}
 
-inline static bool rosc_write_okay(void) { return !(rosc_hw->status & ROSC_STATUS_BADWRITE_BITS); }
+inline static bool rosc_write_okay(void)
+{
+    return !(rosc_hw->status & ROSC_STATUS_BADWRITE_BITS);
+}
 
-inline static void rosc_write(io_rw_32 *addr, uint32_t value) {
-  rosc_clear_bad_write();
-  assert(rosc_write_okay());
-  *addr = value;
-  assert(rosc_write_okay());
+inline static void rosc_write(io_rw_32 *addr, uint32_t value)
+{
+    rosc_clear_bad_write();
+    assert(rosc_write_okay());
+    *addr = value;
+    assert(rosc_write_okay());
 };
 
 #ifdef __cplusplus

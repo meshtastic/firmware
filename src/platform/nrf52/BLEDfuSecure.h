@@ -41,14 +41,15 @@
 #include "BLECharacteristic.h"
 #include "BLEService.h"
 
-class BLEDfuSecure : public BLEService {
-protected:
-  BLECharacteristic _chr_control;
+class BLEDfuSecure : public BLEService
+{
+  protected:
+    BLECharacteristic _chr_control;
 
-public:
-  BLEDfuSecure(void);
+  public:
+    BLEDfuSecure(void);
 
-  virtual err_t begin(void);
+    virtual err_t begin(void);
 };
 
 #endif /* BLEDFUSECURE_H_ */

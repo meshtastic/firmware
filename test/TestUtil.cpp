@@ -4,14 +4,15 @@
 
 #include "TestUtil.h"
 
-void initializeTestEnvironment() {
-  concurrency::hasBeenSetup = true;
-  consoleInit();
+void initializeTestEnvironment()
+{
+    concurrency::hasBeenSetup = true;
+    consoleInit();
 #if ARCH_PORTDUINO
-  struct timeval tv;
-  tv.tv_sec = time(NULL);
-  tv.tv_usec = 0;
-  perhapsSetRTC(RTCQualityNTP, &tv);
+    struct timeval tv;
+    tv.tv_sec = time(NULL);
+    tv.tv_usec = 0;
+    perhapsSetRTC(RTCQualityNTP, &tv);
 #endif
-  concurrency::OSThread::setup();
+    concurrency::OSThread::setup();
 }
