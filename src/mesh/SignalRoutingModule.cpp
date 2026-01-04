@@ -2452,7 +2452,7 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
         if (!node || node->num == nodeDB->getNodeNum()) {
             continue;
         }
-        if (node->last_heard == 0 || (now - (node->last_heard / 1000)) > ACTIVE_NODE_TTL_SECS) {
+        if (node->last_heard == 0 || (now - node->last_heard) > ACTIVE_NODE_TTL_SECS) {
             continue;
         }
         total++;
@@ -2780,7 +2780,7 @@ void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus s
         return;
     }
 
-    uint32_t now = getTime();
+    uint32_t now = millis() / 1000;  // Use monotonic time for TTL calculations
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: linear search in fixed array
@@ -2954,7 +2954,7 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
 
 SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(NodeNum nodeId) const
 {
-    uint32_t now = getTime();
+    uint32_t now = millis() / 1000;  // Use monotonic time for TTL calculations
 
     // Special case: local node is always SR-capable if module is active
     if (nodeDB && nodeId == nodeDB->getNodeNum() && signalBasedRoutingEnabled) {
@@ -3519,7 +3519,7 @@ void SignalRoutingModule::clearGatewayRelationsFor(NodeNum node)
 
 uint32_t SignalRoutingModule::getNodeLastActivityTime(NodeNum nodeId) const
 {
-    uint32_t now = getTime();
+    uint32_t now = millis() / 1000;  // Use monotonic time for TTL calculations
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
     // Lite mode: linear search
