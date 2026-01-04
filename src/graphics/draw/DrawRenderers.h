@@ -13,7 +13,8 @@
 #include "graphics/draw/NodeListRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 
-namespace graphics {
+namespace graphics
+{
 
 /**
  * @brief Collection of all draw renderers
@@ -21,7 +22,8 @@ namespace graphics {
  * This namespace provides access to all the specialized rendering
  * functions organized by category.
  */
-namespace DrawRenderers {
+namespace DrawRenderers
+{
 // Re-export all renderer namespaces for convenience
 using namespace ClockRenderer;
 using namespace CompassRenderer;

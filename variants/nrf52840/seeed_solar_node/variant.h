@@ -98,15 +98,14 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // TCXO supply voltage
 #define SX126X_RXEN D5               // RX enable control
 #define SX126X_TXEN RADIOLIB_NC
-#define SX126X_DIO2_AS_RF_SWITCH // This Line is really necessary for SX1262  to work with RF switch or will loss TX
-                                 // power
+#define SX126X_DIO2_AS_RF_SWITCH // This Line is really necessary for SX1262  to work with RF switch or will loss TX power
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define BAT_READ                                                                                                                                     \
-  D19 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO
-      // and is program pin 32 / or P0.31)
+#define BAT_READ                                                                                                                 \
+    D19 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO and is
+        // program pin 32 / or P0.31)
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define ADC_MULTIPLIER 3.3
 #define BATTERY_PIN PIN_VBAT // PIN_A7

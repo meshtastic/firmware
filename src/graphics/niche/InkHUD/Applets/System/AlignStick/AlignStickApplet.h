@@ -15,32 +15,34 @@ and not aligned to the screen
 
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
-namespace NicheGraphics::InkHUD {
+namespace NicheGraphics::InkHUD
+{
 
-class AlignStickApplet : public SystemApplet {
-public:
-  AlignStickApplet();
+class AlignStickApplet : public SystemApplet
+{
+  public:
+    AlignStickApplet();
 
-  void onRender() override;
-  void onForeground() override;
-  void onBackground() override;
-  void onButtonLongPress() override;
-  void onExitLong() override;
-  void onNavUp() override;
-  void onNavDown() override;
-  void onNavLeft() override;
-  void onNavRight() override;
+    void onRender() override;
+    void onForeground() override;
+    void onBackground() override;
+    void onButtonLongPress() override;
+    void onExitLong() override;
+    void onNavUp() override;
+    void onNavDown() override;
+    void onNavLeft() override;
+    void onNavRight() override;
 
-protected:
-  enum Direction {
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT,
-  };
+  protected:
+    enum Direction {
+        UP,
+        DOWN,
+        LEFT,
+        RIGHT,
+    };
 
-  void drawStick(uint16_t centerX, uint16_t centerY, uint16_t width);
-  void drawDirection(uint16_t pointX, uint16_t pointY, Direction direction, uint16_t size, uint16_t chamfer, Color color);
+    void drawStick(uint16_t centerX, uint16_t centerY, uint16_t width);
+    void drawDirection(uint16_t pointX, uint16_t pointY, Direction direction, uint16_t size, uint16_t chamfer, Color color);
 };
 
 } // namespace NicheGraphics::InkHUD

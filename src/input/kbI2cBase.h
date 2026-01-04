@@ -8,21 +8,22 @@
 
 class TCA8418KeyboardBase;
 
-class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread {
-public:
-  explicit KbI2cBase(const char *name);
-  void toggleBacklight(bool on);
+class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
+{
+  public:
+    explicit KbI2cBase(const char *name);
+    void toggleBacklight(bool on);
 
-protected:
-  virtual int32_t runOnce() override;
+  protected:
+    virtual int32_t runOnce() override;
 
-private:
-  const char *_originName;
+  private:
+    const char *_originName;
 
-  TwoWire *i2cBus = 0;
+    TwoWire *i2cBus = 0;
 
-  BBQ10Keyboard Q10keyboard;
-  MPR121Keyboard MPRkeyboard;
-  TCA8418KeyboardBase &TCAKeyboard;
-  bool is_sym = false;
+    BBQ10Keyboard Q10keyboard;
+    MPR121Keyboard MPRkeyboard;
+    TCA8418KeyboardBase &TCAKeyboard;
+    bool is_sym = false;
 };

@@ -9,60 +9,65 @@
 
 LTR390UVSensor::LTR390UVSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_LTR390UV, "LTR390UV") {}
 
-bool LTR390UVSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) {
-  LOG_INFO("Init sensor: %s", sensorName);
+bool LTR390UVSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
+{
+    LOG_INFO("Init sensor: %s", sensorName);
 
-  status = ltr390uv.begin(bus);
-  if (!status) {
+    status = ltr390uv.begin(bus);
+    if (!status) {
+        return status;
+    }
+
+    ltr390uv.setMode(LTR390_MODE_UVS);
+    ltr390uv.setGain(LTR390_GAIN_18);                // Datasheet default
+    ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Datasheet default
+
+    initI2CSensor();
     return status;
-  }
-
-  ltr390uv.setMode(LTR390_MODE_UVS);
-  ltr390uv.setGain(LTR390_GAIN_18);                // Datasheet default
-  ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Datasheet default
-
-  initI2CSensor();
-  return status;
 }
 
-bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement) {
-  LOG_DEBUG("LTR390UV getMetrics");
+bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement)
+{
+    LOG_DEBUG("LTR390UV getMetrics");
 
-  // Because the sensor does not measure Lux and UV at the same time, we need to read them in two passes.
-  if (ltr390uv.newDataAvailable()) {
-    measurement->variant.environment_metrics.has_lux = true;
-    measurement->variant.environment_metrics.has_uv_lux = true;
+    // Because the sensor does not measure Lux and UV at the same time, we need to read them in two passes.
+    if (ltr390uv.newDataAvailable()) {
+        measurement->variant.environment_metrics.has_lux = true;
+        measurement->variant.environment_metrics.has_uv_lux = true;
 
-    if (ltr390uv.getMode() == LTR390_MODE_ALS) {
-      lastLuxReading = 0.6 * ltr390uv.readALS() / (1 * 4); // Datasheet page 23 for gain x1 and 20bit resolution
-      LOG_DEBUG("LTR390UV Lux reading: %f", lastLuxReading);
+        if (ltr390uv.getMode() == LTR390_MODE_ALS) {
+            lastLuxReading = 0.6 * ltr390uv.readALS() / (1 * 4); // Datasheet page 23 for gain x1 and 20bit resolution
+            LOG_DEBUG("LTR390UV Lux reading: %f", lastLuxReading);
 
-      measurement->variant.environment_metrics.lux = lastLuxReading;
-      measurement->variant.environment_metrics.uv_lux = lastUVReading;
+            measurement->variant.environment_metrics.lux = lastLuxReading;
+            measurement->variant.environment_metrics.uv_lux = lastUVReading;
 
-      ltr390uv.setGain(LTR390_GAIN_18); // Recommended for UVI - x18. Do not change, 2300 UV Sensitivity only specified for x18 gain
-      ltr390uv.setMode(LTR390_MODE_UVS);
+            ltr390uv.setGain(
+                LTR390_GAIN_18); // Recommended for UVI - x18. Do not change, 2300 UV Sensitivity only specified for x18 gain
+            ltr390uv.setMode(LTR390_MODE_UVS);
 
-      return true;
+            return true;
 
-    } else if (ltr390uv.getMode() == LTR390_MODE_UVS) {
-      lastUVReading = ltr390uv.readUVS() / 2300.f; // Datasheet page 23 and page 6, only characterisation for gain x18 and 20bit resolution
-      LOG_DEBUG("LTR390UV UV reading: %f", lastUVReading);
+        } else if (ltr390uv.getMode() == LTR390_MODE_UVS) {
+            lastUVReading = ltr390uv.readUVS() /
+                            2300.f; // Datasheet page 23 and page 6, only characterisation for gain x18 and 20bit resolution
+            LOG_DEBUG("LTR390UV UV reading: %f", lastUVReading);
 
-      measurement->variant.environment_metrics.lux = lastLuxReading;
-      measurement->variant.environment_metrics.uv_lux = lastUVReading;
+            measurement->variant.environment_metrics.lux = lastLuxReading;
+            measurement->variant.environment_metrics.uv_lux = lastUVReading;
 
-      ltr390uv.setGain(LTR390_GAIN_1); // x1 gain will already max out the sensor at direct sunlight, so no need to increase it
-      ltr390uv.setMode(LTR390_MODE_ALS);
+            ltr390uv.setGain(
+                LTR390_GAIN_1); // x1 gain will already max out the sensor at direct sunlight, so no need to increase it
+            ltr390uv.setMode(LTR390_MODE_ALS);
 
-      return true;
+            return true;
+        }
     }
-  }
 
-  // In case we fail to read the sensor mode, set the has_lux and has_uv_lux back to false
-  measurement->variant.environment_metrics.has_lux = false;
-  measurement->variant.environment_metrics.has_uv_lux = false;
+    // In case we fail to read the sensor mode, set the has_lux and has_uv_lux back to false
+    measurement->variant.environment_metrics.has_lux = false;
+    measurement->variant.environment_metrics.has_uv_lux = false;
 
-  return false;
+    return false;
 }
 #endif
