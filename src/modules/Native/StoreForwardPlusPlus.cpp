@@ -1368,7 +1368,8 @@ void StoreForwardPlusPlusModule::rebroadcastLinkObject(link_object &lo)
     p->encrypted.size = lo.encrypted_len;
     memcpy(p->encrypted.bytes, lo.encrypted_bytes, lo.encrypted_len);
     p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA; // only a tiny white lie
-    service->sendToMesh(p, RX_SRC_RADIO, true);                                       // Send to mesh, cc to phone
+    // Send to mesh, but don't cc the phone, to avoid a double message.
+    service->sendToMesh(p, RX_SRC_RADIO, false);
 }
 
 bool StoreForwardPlusPlusModule::checkCommitHash(StoreForwardPlusPlusModule::link_object &lo, uint8_t *commit_hash_bytes,
