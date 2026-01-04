@@ -4,7 +4,6 @@
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
 FROM python:3.14-slim-trixie AS builder
-ARG PIO_ENV=native
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
@@ -16,14 +15,14 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
         libx11-dev libinput-dev libxkbcommon-x11-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir -U platformio \
-    && mkdir /tmp/firmware
+    && pip install --no-cache-dir -U platformio
 
 # Copy source code
 WORKDIR /tmp/firmware
 COPY . /tmp/firmware
 
 # Build
+ARG PIO_ENV=native
 RUN bash ./bin/build-native.sh "$PIO_ENV" && \
     cp "/tmp/firmware/release/meshtasticd_linux_$(uname -m)" "/tmp/firmware/release/meshtasticd"
 
@@ -55,7 +54,6 @@ RUN apt-get update && apt-get --no-install-recommends -y install \
         liborcania2.3 libulfius2.7t64 libssl3t64 \
         libx11-6 libinput10 libxkbcommon-x11-0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
     && mkdir -p /etc/meshtasticd/ssl
 
