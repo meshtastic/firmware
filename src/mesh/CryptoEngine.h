@@ -9,10 +9,10 @@
 extern concurrency::Lock *cryptLock;
 
 struct CryptoKey {
-  uint8_t bytes[32];
+    uint8_t bytes[32];
 
-  /// # of bytes, or -1 to mean "invalid key - do not use"
-  int8_t length;
+    /// # of bytes, or -1 to mean "invalid key - do not use"
+    int8_t length;
 };
 
 /**
@@ -24,27 +24,28 @@ struct CryptoKey {
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for
                                   // testing keys
 
-class CryptoEngine {
-public:
+class CryptoEngine
+{
+  public:
 #if !(MESHTASTIC_EXCLUDE_PKI)
-  uint8_t public_key[32] = {0};
+    uint8_t public_key[32] = {0};
 #endif
 
-  virtual ~CryptoEngine() {}
+    virtual ~CryptoEngine() {}
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-  virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
-  virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+    virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+    virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
 
 #endif
-  void clearKeys();
-  void setDHPrivateKey(uint8_t *_private_key);
-  virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
-                                 size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-  virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum, size_t numBytes,
-                                 const uint8_t *bytes, uint8_t *bytesOut);
-  virtual bool setDHPublicKey(uint8_t *publicKey);
-  virtual void hash(uint8_t *bytes, size_t numBytes);
+    void clearKeys();
+    void setDHPrivateKey(uint8_t *_private_key);
+    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
+                                   uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+                                   size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+    virtual bool setDHPublicKey(uint8_t *publicKey);
+    virtual void hash(uint8_t *bytes, size_t numBytes);
 
   // Perfect Forward Secrecy methods
   virtual bool deriveTripleDHSessionKey(const uint8_t *remoteIdentityPub, const uint8_t *remoteEphemeralPub, const uint8_t *localEphemeralPriv,
@@ -56,8 +57,8 @@ public:
 
   virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
-  virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-  AESSmall256 *aes = NULL;
+    virtual void aesEncrypt(uint8_t *in, uint8_t *out);
+    AESSmall256 *aes = NULL;
 
 #endif
 
@@ -73,34 +74,34 @@ public:
    */
   virtual void setKey(const CryptoKey &k);
 
-  /**
-   * Encrypt a packet
-   *
-   * @param bytes is updated in place
-   */
-  virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-  virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-  virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
+    /**
+     * Encrypt a packet
+     *
+     * @param bytes is updated in place
+     */
+    virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
 #ifndef PIO_UNIT_TESTING
-protected:
+  protected:
 #endif
-  /** Our per packet nonce */
-  uint8_t nonce[16] = {0};
-  CryptoKey key = {};
-  CTRCommon *ctr = NULL;
+    /** Our per packet nonce */
+    uint8_t nonce[16] = {0};
+    CryptoKey key = {};
+    CTRCommon *ctr = NULL;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-  uint8_t shared_key[32] = {0};
-  uint8_t private_key[32] = {0};
+    uint8_t shared_key[32] = {0};
+    uint8_t private_key[32] = {0};
 #endif
-  /**
-   * Init our 128 bit nonce for a new packet
-   *
-   * The NONCE is constructed by concatenating (from MSB to LSB):
-   * a 64 bit packet number (stored in little endian order)
-   * a 32 bit sending node number (stored in little endian order)
-   * a 32 bit block counter (starts at zero)
-   */
-  void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
+    /**
+     * Init our 128 bit nonce for a new packet
+     *
+     * The NONCE is constructed by concatenating (from MSB to LSB):
+     * a 64 bit packet number (stored in little endian order)
+     * a 32 bit sending node number (stored in little endian order)
+     * a 32 bit block counter (starts at zero)
+     */
+    void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
 };
 
 extern CryptoEngine *crypto;

@@ -9,8 +9,8 @@
 #define AES_keyExpSize 240
 
 struct AES_ctx {
-  uint8_t RoundKey[AES_keyExpSize];
-  uint8_t Iv[AES_BLOCKLEN];
+    uint8_t RoundKey[AES_keyExpSize];
+    uint8_t Iv[AES_BLOCKLEN];
 };
 
 void AES_init_ctx(struct AES_ctx *ctx, const uint8_t *key);

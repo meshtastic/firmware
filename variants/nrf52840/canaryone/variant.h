@@ -148,8 +148,7 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SPI_MOSI (GPIO_PORT0 + 22)
 #define PIN_SPI_SCK (GPIO_PORT0 + 19)
 
-// #define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be
-// defined,
+// #define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be defined,
 //  pick an used GPIO #define PIN_SPI1_MOSI (GPIO_PORT1 + 8) #define PIN_SPI1_SCK (GPIO_PORT1 + 9)
 
 #define PIN_PWR_EN (GPIO_PORT0 + 12)

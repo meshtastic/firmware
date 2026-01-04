@@ -6,14 +6,15 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_SHT31.h>
 
-class SHT31Sensor : public TelemetrySensor {
-private:
-  Adafruit_SHT31 sht31;
+class SHT31Sensor : public TelemetrySensor
+{
+  private:
+    Adafruit_SHT31 sht31;
 
-public:
-  SHT31Sensor();
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+  public:
+    SHT31Sensor();
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

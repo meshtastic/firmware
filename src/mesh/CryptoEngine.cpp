@@ -22,19 +22,20 @@
  * @param pubKey The destination for the public key.
  * @param privKey The destination for the private key.
  */
-void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey) {
-  // Mix in any randomness we can, to make key generation stronger.
-  CryptRNG.begin(optstr(APP_VERSION));
-  if (myNodeInfo.device_id.size == 16) {
-    CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
-  }
-  auto noise = random();
-  CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
+void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
+{
+    // Mix in any randomness we can, to make key generation stronger.
+    CryptRNG.begin(optstr(APP_VERSION));
+    if (myNodeInfo.device_id.size == 16) {
+        CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
+    }
+    auto noise = random();
+    CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
 
-  LOG_DEBUG("Generate Curve25519 keypair");
-  Curve25519::dh1(public_key, private_key);
-  memcpy(pubKey, public_key, sizeof(public_key));
-  memcpy(privKey, private_key, sizeof(private_key));
+    LOG_DEBUG("Generate Curve25519 keypair");
+    Curve25519::dh1(public_key, private_key);
+    memcpy(pubKey, public_key, sizeof(public_key));
+    memcpy(privKey, private_key, sizeof(private_key));
 }
 
 /**
@@ -43,26 +44,28 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey) {
  * @param pubKey The destination for the public key.
  * @param privKey The source for the private key.
  */
-bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) {
-  if (!memfll(privKey, 0, sizeof(private_key))) {
-    Curve25519::eval(pubKey, privKey, 0);
-    if (Curve25519::isWeakPoint(pubKey)) {
-      LOG_ERROR("PKI key generation failed. Specified private key results in a weak");
-      memset(pubKey, 0, 32);
-      return false;
+bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
+{
+    if (!memfll(privKey, 0, sizeof(private_key))) {
+        Curve25519::eval(pubKey, privKey, 0);
+        if (Curve25519::isWeakPoint(pubKey)) {
+            LOG_ERROR("PKI key generation failed. Specified private key results in a weak");
+            memset(pubKey, 0, 32);
+            return false;
+        }
+        memcpy(private_key, privKey, sizeof(private_key));
+        memcpy(public_key, pubKey, sizeof(public_key));
+    } else {
+        LOG_WARN("X25519 key generation failed due to blank private key");
+        return false;
     }
-    memcpy(private_key, privKey, sizeof(private_key));
-    memcpy(public_key, pubKey, sizeof(public_key));
-  } else {
-    LOG_WARN("X25519 key generation failed due to blank private key");
-    return false;
-  }
-  return true;
+    return true;
 }
 #endif
-void CryptoEngine::clearKeys() {
-  memset(public_key, 0, sizeof(public_key));
-  memset(private_key, 0, sizeof(private_key));
+void CryptoEngine::clearKeys()
+{
+    memset(public_key, 0, sizeof(public_key));
+    memset(private_key, 0, sizeof(private_key));
 }
 
 /**
@@ -144,7 +147,10 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
   return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
-void CryptoEngine::setDHPrivateKey(uint8_t *_private_key) { memcpy(private_key, _private_key, 32); }
+void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
+{
+    memcpy(private_key, _private_key, 32);
+}
 
 /**
  * Hash arbitrary data using SHA256.
@@ -152,28 +158,35 @@ void CryptoEngine::setDHPrivateKey(uint8_t *_private_key) { memcpy(private_key, 
  * @param bytes
  * @param numBytes
  */
-void CryptoEngine::hash(uint8_t *bytes, size_t numBytes) {
-  SHA256 hash;
-  size_t posn;
-  uint8_t size = numBytes;
-  uint8_t inc = 16;
-  hash.reset();
-  for (posn = 0; posn < size; posn += inc) {
-    size_t len = size - posn;
-    if (len > inc)
-      len = inc;
-    hash.update(bytes + posn, len);
-  }
-  hash.finalize(bytes, 32);
+void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
+{
+    SHA256 hash;
+    size_t posn;
+    uint8_t size = numBytes;
+    uint8_t inc = 16;
+    hash.reset();
+    for (posn = 0; posn < size; posn += inc) {
+        size_t len = size - posn;
+        if (len > inc)
+            len = inc;
+        hash.update(bytes + posn, len);
+    }
+    hash.finalize(bytes, 32);
 }
 
-void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len) {
-  delete aes;
-  aes = nullptr;
-  if (key_len != 0) {
-    aes = new AESSmall256();
-    aes->setKey(key_bytes, key_len);
-  }
+void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
+{
+    delete aes;
+    aes = nullptr;
+    if (key_len != 0) {
+        aes = new AESSmall256();
+        aes->setKey(key_bytes, key_len);
+    }
+}
+
+void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
+{
+    aes->encryptBlock(out, in);
 }
 
 void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out) { aes->encryptBlock(out, in); }
@@ -357,9 +370,10 @@ bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_
 #endif
 concurrency::Lock *cryptLock;
 
-void CryptoEngine::setKey(const CryptoKey &k) {
-  LOG_DEBUG("Use AES%d key!", k.length * 8);
-  key = k;
+void CryptoEngine::setKey(const CryptoKey &k)
+{
+    LOG_DEBUG("Use AES%d key!", k.length * 8);
+    key = k;
 }
 
 /**
@@ -367,20 +381,22 @@ void CryptoEngine::setKey(const CryptoKey &k) {
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) {
-  if (key.length > 0) {
-    initNonce(fromNode, packetId);
-    if (numBytes <= MAX_BLOCKSIZE) {
-      encryptAESCtr(key, nonce, numBytes, bytes);
-    } else {
-      LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
+void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+{
+    if (key.length > 0) {
+        initNonce(fromNode, packetId);
+        if (numBytes <= MAX_BLOCKSIZE) {
+            encryptAESCtr(key, nonce, numBytes, bytes);
+        } else {
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
+        }
     }
-  }
 }
 
-void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) {
-  // For CTR, the implementation is the same
-  encryptPacket(fromNode, packetId, numBytes, bytes);
+void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+{
+    // For CTR, the implementation is the same
+    encryptPacket(fromNode, packetId, numBytes, bytes);
 }
 
 // Generic implementation of AES-CTR encryption.
@@ -406,14 +422,15 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
 /**
  * Init our 128 bit nonce for a new packet
  */
-void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce) {
-  memset(nonce, 0, sizeof(nonce));
+void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce)
+{
+    memset(nonce, 0, sizeof(nonce));
 
-  // use memcpy to avoid breaking strict-aliasing
-  memcpy(nonce, &packetId, sizeof(uint64_t));
-  memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
-  if (extraNonce)
-    memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    // use memcpy to avoid breaking strict-aliasing
+    memcpy(nonce, &packetId, sizeof(uint64_t));
+    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
+    if (extraNonce)
+        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;

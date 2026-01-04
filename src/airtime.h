@@ -39,50 +39,51 @@ void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
 uint32_t *airtimeReport(reportTypes reportType);
 
-class AirTime : private concurrency::OSThread {
+class AirTime : private concurrency::OSThread
+{
 
-public:
-  AirTime();
+  public:
+    AirTime();
 
-  void logAirtime(reportTypes reportType, uint32_t airtime_ms);
-  float channelUtilizationPercent();
-  float utilizationTXPercent();
+    void logAirtime(reportTypes reportType, uint32_t airtime_ms);
+    float channelUtilizationPercent();
+    float utilizationTXPercent();
 
-  float UtilizationPercentTX();
-  uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0};
-  uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};
+    float UtilizationPercentTX();
+    uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0};
+    uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};
 
-  void airtimeRotatePeriod();
-  uint8_t getPeriodsToLog();
-  uint32_t getSecondsPerPeriod();
-  uint32_t getSecondsSinceBoot();
-  uint32_t *airtimeReport(reportTypes reportType);
-  uint8_t getSilentMinutes(float txPercent, float dutyCycle);
-  bool isTxAllowedChannelUtil(bool polite = false);
-  bool isTxAllowedAirUtil();
+    void airtimeRotatePeriod();
+    uint8_t getPeriodsToLog();
+    uint32_t getSecondsPerPeriod();
+    uint32_t getSecondsSinceBoot();
+    uint32_t *airtimeReport(reportTypes reportType);
+    uint8_t getSilentMinutes(float txPercent, float dutyCycle);
+    bool isTxAllowedChannelUtil(bool polite = false);
+    bool isTxAllowedAirUtil();
 
-private:
-  bool firstTime = true;
-  uint8_t lastUtilPeriod = 0;
-  uint8_t lastUtilPeriodTX = 0;
-  uint32_t secSinceBoot = 0;
-  uint8_t max_channel_util_percent = 40;
-  uint8_t polite_channel_util_percent = 25;
-  uint8_t polite_duty_cycle_percent = 50; // half of Duty Cycle allowance is ok for metadata
+  private:
+    bool firstTime = true;
+    uint8_t lastUtilPeriod = 0;
+    uint8_t lastUtilPeriodTX = 0;
+    uint32_t secSinceBoot = 0;
+    uint8_t max_channel_util_percent = 40;
+    uint8_t polite_channel_util_percent = 25;
+    uint8_t polite_duty_cycle_percent = 50; // half of Duty Cycle allowance is ok for metadata
 
-  struct airtimeStruct {
-    uint32_t periodTX[PERIODS_TO_LOG];     // AirTime transmitted
-    uint32_t periodRX[PERIODS_TO_LOG];     // AirTime received and repeated (Only valid mesh packets)
-    uint32_t periodRX_ALL[PERIODS_TO_LOG]; // AirTime received regardless of valid mesh packet. Could include noise.
-    uint8_t lastPeriodIndex;
-  } airtimes;
+    struct airtimeStruct {
+        uint32_t periodTX[PERIODS_TO_LOG];     // AirTime transmitted
+        uint32_t periodRX[PERIODS_TO_LOG];     // AirTime received and repeated (Only valid mesh packets)
+        uint32_t periodRX_ALL[PERIODS_TO_LOG]; // AirTime received regardless of valid mesh packet. Could include noise.
+        uint8_t lastPeriodIndex;
+    } airtimes;
 
-  uint8_t getPeriodUtilMinute();
-  uint8_t getPeriodUtilHour();
-  uint8_t currentPeriodIndex();
+    uint8_t getPeriodUtilMinute();
+    uint8_t getPeriodUtilHour();
+    uint8_t currentPeriodIndex();
 
-protected:
-  virtual int32_t runOnce() override;
+  protected:
+    virtual int32_t runOnce() override;
 };
 
 extern AirTime *airTime;
