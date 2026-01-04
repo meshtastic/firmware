@@ -622,7 +622,6 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
         return false; // Already resolved to a different node
     }
 
-    LOG_INFO("[SR] Resolved placeholder %08x -> real node %08x", placeholderId, realNodeId);
 
     // Update relay identity cache - this ensures future relay resolutions work
     rememberRelayIdentity(realNodeId, relayId);
@@ -690,6 +689,8 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
 
         // Remove the placeholder node from the graph now that edges are transferred
         routingGraph->removeNode(placeholderId);
+
+        LOG_INFO("[SR] Resolved placeholder %08x -> real node %08x", placeholderId, realNodeId);
         LOG_DEBUG("[SR] Removed placeholder node %08x from graph", placeholderId);
     }
 
@@ -1289,8 +1290,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         NodeNum placeholderId = getPlaceholderForRelay(fromLastByte);
         if (isPlaceholderNode(placeholderId)) {
             // This sender matches a placeholder - resolve it
-            LOG_INFO("[SR] Direct contact: resolving placeholder %08x with node %08x", placeholderId, mp.from);
-            resolvePlaceholder(placeholderId, mp.from);
+            if (resolvePlaceholder(placeholderId, mp.from)) {
+                LOG_INFO("[SR] Direct contact: resolved placeholder %08x with node %08x", placeholderId, mp.from);
+            }
         }
 
         rememberRelayIdentity(mp.from, fromLastByte);
@@ -1305,11 +1307,12 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 #else
             Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
 #endif
-        LOG_INFO("[SR] Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
-                 senderName, mp.rx_rssi, mp.rx_snr, etx);
 
         // Remove this node from ALL gateway relationships since we can hear it directly
         clearDownstreamFromAllGateways(mp.from);
+
+        LOG_INFO("[SR] Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
+                 senderName, mp.rx_rssi, mp.rx_snr, etx);
 
         // Purple for direct packet received (operation start)
         setRgbLed(128, 0, 128);
