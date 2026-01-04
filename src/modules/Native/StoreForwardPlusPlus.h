@@ -170,7 +170,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool addToScratch(link_object &);
 
     // sends a CANON_ANNOUNCE message, specifying the given root and commit hashes
-    void canonAnnounce(uint8_t *, uint8_t *, uint8_t *, uint32_t);
+    void canonAnnounce(link_object &, uint8_t *, uint8_t *, uint8_t *, uint32_t);
 
     // checks if the message hash is present in the canonical chain database
     bool isInDB(uint8_t *, size_t);
