@@ -1,4 +1,4 @@
-#include "CryptoEngine.h"
+﻿#include "CryptoEngine.h"
 // #include "NodeDB.h"
 #include "architecture.h"
 
@@ -22,20 +22,19 @@
  * @param pubKey The destination for the public key.
  * @param privKey The destination for the private key.
  */
-void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
-{
-    // Mix in any randomness we can, to make key generation stronger.
-    CryptRNG.begin(optstr(APP_VERSION));
-    if (myNodeInfo.device_id.size == 16) {
-        CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
-    }
-    auto noise = random();
-    CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
+void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey) {
+  // Mix in any randomness we can, to make key generation stronger.
+  CryptRNG.begin(optstr(APP_VERSION));
+  if (myNodeInfo.device_id.size == 16) {
+    CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
+  }
+  auto noise = random();
+  CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
 
-    LOG_DEBUG("Generate Curve25519 keypair");
-    Curve25519::dh1(public_key, private_key);
-    memcpy(pubKey, public_key, sizeof(public_key));
-    memcpy(privKey, private_key, sizeof(private_key));
+  LOG_DEBUG("Generate Curve25519 keypair");
+  Curve25519::dh1(public_key, private_key);
+  memcpy(pubKey, public_key, sizeof(public_key));
+  memcpy(privKey, private_key, sizeof(private_key));
 }
 
 /**
@@ -44,28 +43,27 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
  * @param pubKey The destination for the public key.
  * @param privKey The source for the private key.
  */
-bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
-{
-    if (!memfll(privKey, 0, sizeof(private_key))) {
-        Curve25519::eval(pubKey, privKey, 0);
-        if (Curve25519::isWeakPoint(pubKey)) {
-            LOG_ERROR("PKI key generation failed. Specified private key results in a weak");
-            memset(pubKey, 0, 32);
-            return false;
-        }
-        memcpy(private_key, privKey, sizeof(private_key));
-        memcpy(public_key, pubKey, sizeof(public_key));
-    } else {
-        LOG_WARN("X25519 key generation failed due to blank private key");
-        return false;
+bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) {
+  if (!memfll(privKey, 0, sizeof(private_key))) {
+    Curve25519::eval(pubKey, privKey, 0);
+    if (Curve25519::isWeakPoint(pubKey)) {
+      LOG_ERROR(
+          "PKI key generation failed. Specified private key results in a weak");
+      memset(pubKey, 0, 32);
+      return false;
     }
-    return true;
+    memcpy(private_key, privKey, sizeof(private_key));
+    memcpy(public_key, pubKey, sizeof(public_key));
+  } else {
+    LOG_WARN("X25519 key generation failed due to blank private key");
+    return false;
+  }
+  return true;
 }
 #endif
-void CryptoEngine::clearKeys()
-{
-    memset(public_key, 0, sizeof(public_key));
-    memset(private_key, 0, sizeof(private_key));
+void CryptoEngine::clearKeys() {
+  memset(public_key, 0, sizeof(public_key));
+  memset(private_key, 0, sizeof(private_key));
 }
 
 /**
@@ -80,8 +78,10 @@ void CryptoEngine::clearKeys()
  * @param bytes Buffer containing plaintext input.
  * @param bytesOut Output buffer to be populated with encrypted ciphertext.
  */
-bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
-                                     size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut) {
+bool CryptoEngine::encryptCurve25519(
+    uint32_t toNode, uint32_t fromNode,
+    meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut) {
   uint8_t *auth;
   long extraNonceTmp = random();
   auth = bytesOut + numBytes;
@@ -102,8 +102,9 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
   // Calculate the shared secret with the destination node and encrypt
   printBytes("Attempt encrypt with nonce: ", nonce, 13);
   printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
-  aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
-             auth); // this can write up to 15 bytes longer than numbytes past bytesOut
+  aes_ccm_ae(
+      shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
+      auth); // this can write up to 15 bytes longer than numbytes past bytesOut
   memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
          sizeof(uint32_t)); // do not use dereference on potential non aligned
                             // pointers : *extraNonce = extraNonceTmp;
@@ -121,8 +122,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
  * @param bytes Buffer containing ciphertext input.
  * @param bytesOut Output buffer to be populated with decrypted plaintext.
  */
-bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum, size_t numBytes,
-                                     const uint8_t *bytes, uint8_t *bytesOut) {
+bool CryptoEngine::decryptCurve25519(
+    uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
+    uint64_t packetNum, size_t numBytes, const uint8_t *bytes,
+    uint8_t *bytesOut) {
   const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
   uint32_t extraNonce;                         // pointer was not really used
   memcpy(&extraNonce, auth + 8,
@@ -144,12 +147,12 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
   initNonce(fromNode, packetNum, extraNonce);
   printBytes("Attempt decrypt with nonce: ", nonce, 13);
   printBytes("Attempt decrypt with shared_key starting with: ", shared_key, 8);
-  return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
+  return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0,
+                    auth, bytesOut);
 }
 
-void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
-{
-    memcpy(private_key, _private_key, 32);
+void CryptoEngine::setDHPrivateKey(uint8_t *_private_key) {
+  memcpy(private_key, _private_key, 32);
 }
 
 /**
@@ -158,38 +161,33 @@ void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
  * @param bytes
  * @param numBytes
  */
-void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
-{
-    SHA256 hash;
-    size_t posn;
-    uint8_t size = numBytes;
-    uint8_t inc = 16;
-    hash.reset();
-    for (posn = 0; posn < size; posn += inc) {
-        size_t len = size - posn;
-        if (len > inc)
-            len = inc;
-        hash.update(bytes + posn, len);
-    }
-    hash.finalize(bytes, 32);
+void CryptoEngine::hash(uint8_t *bytes, size_t numBytes) {
+  SHA256 hash;
+  size_t posn;
+  uint8_t size = numBytes;
+  uint8_t inc = 16;
+  hash.reset();
+  for (posn = 0; posn < size; posn += inc) {
+    size_t len = size - posn;
+    if (len > inc)
+      len = inc;
+    hash.update(bytes + posn, len);
+  }
+  hash.finalize(bytes, 32);
 }
 
-void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
-{
-    delete aes;
-    aes = nullptr;
-    if (key_len != 0) {
-        aes = new AESSmall256();
-        aes->setKey(key_bytes, key_len);
-    }
+void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len) {
+  delete aes;
+  aes = nullptr;
+  if (key_len != 0) {
+    aes = new AESSmall256();
+    aes->setKey(key_bytes, key_len);
+  }
 }
 
-void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
-{
-    aes->encryptBlock(out, in);
+void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out) {
+  aes->encryptBlock(out, in);
 }
-
-void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out) { aes->encryptBlock(out, in); }
 
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey) {
   uint8_t local_priv[32];
@@ -212,7 +210,9 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey) {
  * DH3 = DH(ephemeral_local, ephemeral_remote)
  * Session key = SHA256(DH1 || DH2 || DH3)
  */
-bool CryptoEngine::deriveTripleDHSessionKey(const uint8_t *remoteIdentityPub, const uint8_t *remoteEphemeralPub, const uint8_t *localEphemeralPriv,
+bool CryptoEngine::deriveTripleDHSessionKey(const uint8_t *remoteIdentityPub,
+                                            const uint8_t *remoteEphemeralPub,
+                                            const uint8_t *localEphemeralPriv,
                                             uint8_t *sessionKeyOut) {
   uint8_t dh1[32], dh2[32], dh3[32];
   uint8_t combined[96];
@@ -265,30 +265,40 @@ bool CryptoEngine::deriveTripleDHSessionKey(const uint8_t *remoteIdentityPub, co
 /**
  * Encrypt with Perfect Forward Secrecy using Triple-DH derived session key.
  */
-bool CryptoEngine::encryptWithPFS(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey,
-                                  const uint8_t *remoteEphemeralKey, uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut) {
+bool CryptoEngine::encryptWithPFS(
+    uint32_t toNode, uint32_t fromNode,
+    meshtastic_UserLite_public_key_t remoteIdentityKey,
+    const uint8_t *remoteEphemeralKey, uint64_t packetNum, size_t numBytes,
+    const uint8_t *bytes, uint8_t *bytesOut) {
   extern EphemeralKeyManager *ephemeralKeyMgr;
   if (!ephemeralKeyMgr || !ephemeralKeyMgr->isInitialized()) {
     LOG_WARN("PFS encryption failed: EphemeralKeyManager not initialized");
-    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum,
+                             numBytes, bytes, bytesOut);
   }
 
   const uint8_t *localEphemeralPrivKey = ephemeralKeyMgr->getPrivateKey();
   if (!localEphemeralPrivKey) {
     LOG_WARN("PFS encryption failed: no local ephemeral private key");
-    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum,
+                             numBytes, bytes, bytesOut);
   }
 
   if (!remoteEphemeralKey) {
-    LOG_DEBUG("Remote node doesn't support PFS, falling back to standard encryption");
-    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+    LOG_DEBUG(
+        "Remote node doesn't support PFS, falling back to standard encryption");
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum,
+                             numBytes, bytes, bytesOut);
   }
 
   // Derive session key using Triple-DH
   uint8_t sessionKey[32];
-  if (!deriveTripleDHSessionKey(remoteIdentityKey.bytes, remoteEphemeralKey, localEphemeralPrivKey, sessionKey)) {
-    LOG_WARN("Triple-DH key derivation failed, falling back to standard encryption");
-    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum, numBytes, bytes, bytesOut);
+  if (!deriveTripleDHSessionKey(remoteIdentityKey.bytes, remoteEphemeralKey,
+                                localEphemeralPrivKey, sessionKey)) {
+    LOG_WARN(
+        "Triple-DH key derivation failed, falling back to standard encryption");
+    return encryptCurve25519(toNode, fromNode, remoteIdentityKey, packetNum,
+                             numBytes, bytes, bytesOut);
   }
 
   // Encrypt using the PFS-derived session key
@@ -300,7 +310,8 @@ bool CryptoEngine::encryptWithPFS(uint32_t toNode, uint32_t fromNode, meshtastic
   initNonce(fromNode, packetNum, extraNonceTmp);
   printBytes("PFS encrypt with nonce: ", nonce, 13);
 
-  aes_ccm_ae(sessionKey, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+  aes_ccm_ae(sessionKey, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
+             auth);
   memcpy((uint8_t *)(auth + 8), &extraNonceTmp, sizeof(uint32_t));
 
   // Increment message count for rotation tracking
@@ -319,8 +330,10 @@ bool CryptoEngine::encryptWithPFS(uint32_t toNode, uint32_t fromNode, meshtastic
  * Note: Only call when we know the sender used PFS. If decryption fails,
  * there's no fallback since the packet was encrypted with a PFS-derived key.
  */
-bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey, const uint8_t *remoteEphemeralKey,
-                                  uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut) {
+bool CryptoEngine::decryptWithPFS(
+    uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey,
+    const uint8_t *remoteEphemeralKey, uint64_t packetNum, size_t numBytes,
+    const uint8_t *bytes, uint8_t *bytesOut) {
   extern EphemeralKeyManager *ephemeralKeyMgr;
   if (!ephemeralKeyMgr || !ephemeralKeyMgr->isInitialized()) {
     LOG_WARN("PFS decryption failed: EphemeralKeyManager not initialized");
@@ -340,7 +353,8 @@ bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_
 
   // Derive session key using Triple-DH
   uint8_t sessionKey[32];
-  if (!deriveTripleDHSessionKey(remoteIdentityKey.bytes, remoteEphemeralKey, localEphemeralPrivKey, sessionKey)) {
+  if (!deriveTripleDHSessionKey(remoteIdentityKey.bytes, remoteEphemeralKey,
+                                localEphemeralPrivKey, sessionKey)) {
     LOG_WARN("PFS decryption failed: Triple-DH key derivation error");
     return false;
   }
@@ -353,7 +367,8 @@ bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_
   initNonce(fromNode, packetNum, extraNonce);
   printBytes("PFS decrypt with nonce: ", nonce, 13);
 
-  bool result = aes_ccm_ad(sessionKey, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
+  bool result = aes_ccm_ad(sessionKey, 32, nonce, 8, bytes, numBytes - 12,
+                           nullptr, 0, auth, bytesOut);
 
   // Clear session key
   memset(sessionKey, 0, 32);
@@ -361,7 +376,9 @@ bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_
   if (result) {
     LOG_INFO("Decrypted with PFS from node %08x", fromNode);
   } else {
-    LOG_WARN("PFS decryption failed: AES-CCM authentication error from node %08x", fromNode);
+    LOG_WARN(
+        "PFS decryption failed: AES-CCM authentication error from node %08x",
+        fromNode);
   }
 
   return result;
@@ -370,10 +387,9 @@ bool CryptoEngine::decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_
 #endif
 concurrency::Lock *cryptLock;
 
-void CryptoEngine::setKey(const CryptoKey &k)
-{
-    LOG_DEBUG("Use AES%d key!", k.length * 8);
-    key = k;
+void CryptoEngine::setKey(const CryptoKey &k) {
+  LOG_DEBUG("Use AES%d key!", k.length * 8);
+  key = k;
 }
 
 /**
@@ -381,26 +397,28 @@ void CryptoEngine::setKey(const CryptoKey &k)
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
-{
-    if (key.length > 0) {
-        initNonce(fromNode, packetId);
-        if (numBytes <= MAX_BLOCKSIZE) {
-            encryptAESCtr(key, nonce, numBytes, bytes);
-        } else {
-            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
-        }
+void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId,
+                                 size_t numBytes, uint8_t *bytes) {
+  if (key.length > 0) {
+    initNonce(fromNode, packetId);
+    if (numBytes <= MAX_BLOCKSIZE) {
+      encryptAESCtr(key, nonce, numBytes, bytes);
+    } else {
+      LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!",
+                numBytes);
     }
+  }
 }
 
-void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
-{
-    // For CTR, the implementation is the same
-    encryptPacket(fromNode, packetId, numBytes, bytes);
+void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId,
+                           size_t numBytes, uint8_t *bytes) {
+  // For CTR, the implementation is the same
+  encryptPacket(fromNode, packetId, numBytes, bytes);
 }
 
 // Generic implementation of AES-CTR encryption.
-void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes) {
+void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce,
+                                 size_t numBytes, uint8_t *bytes) {
   delete ctr;
   ctr = nullptr;
   if (_key.length == 16)
@@ -422,15 +440,15 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
 /**
  * Init our 128 bit nonce for a new packet
  */
-void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce)
-{
-    memset(nonce, 0, sizeof(nonce));
+void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId,
+                             uint32_t extraNonce) {
+  memset(nonce, 0, sizeof(nonce));
 
-    // use memcpy to avoid breaking strict-aliasing
-    memcpy(nonce, &packetId, sizeof(uint64_t));
-    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
-    if (extraNonce)
-        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+  // use memcpy to avoid breaking strict-aliasing
+  memcpy(nonce, &packetId, sizeof(uint64_t));
+  memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
+  if (extraNonce)
+    memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
