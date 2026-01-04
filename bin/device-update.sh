@@ -20,6 +20,17 @@ else
     exit 1
 fi
 
+# esptool v5 supports commands with dashes and deprecates commands with
+# underscores. Prior versions only support commands with underscores
+if ${ESPTOOL_CMD} | grep --quiet write-flash
+then
+    ESPTOOL_WRITE_FLASH=write-flash
+    ESPTOOL_READ_FLASH_STATUS=read-flash-status
+else
+    ESPTOOL_WRITE_FLASH=write_flash
+    ESPTOOL_READ_FLASH_STATUS=read_flash_status
+fi
+
 # Usage info
 show_help() {
 cat << EOF
@@ -69,7 +80,7 @@ done
 shift "$((OPTIND-1))"
 
 if [ "$CHANGE_MODE" = true ]; then
-	$ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
+    $ESPTOOL_CMD --baud $RESET_BAUD --after no_reset ${ESPTOOL_READ_FLASH_STATUS}
     exit 0
 fi
 
@@ -80,7 +91,7 @@ fi
 
 if [[ -f "$FILENAME" && "$FILENAME" != *.factory.bin ]]; then
     echo "Trying to flash update ${FILENAME}"
-    $ESPTOOL_CMD --baud $FLASH_BAUD write-flash $UPDATE_OFFSET "${FILENAME}"
+    $ESPTOOL_CMD --baud $FLASH_BAUD ${ESPTOOL_WRITE_FLASH} $UPDATE_OFFSET "${FILENAME}"
 else
     show_help
     echo "Invalid file: ${FILENAME}"
