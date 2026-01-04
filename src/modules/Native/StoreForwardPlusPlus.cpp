@@ -304,7 +304,6 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         memcpy(storeforward.root_hash.bytes, root_hash_bytes, SFPP_HASH_SIZE);
 
         storeforward.encapsulated_rxtime = 0;
-        storeforward.chain_count = chain_end.counter;
         // storeforward.
         meshtastic_MeshPacket *p = allocDataProtobuf(storeforward);
         p->to = NODENUM_BROADCAST;
@@ -320,7 +319,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     }
 
     // broadcast the tip of the chain
-    canonAnnounce(chain_end.message_hash, chain_end.commit_hash, root_hash_bytes, chain_end.rx_time);
+    // todo just send the link object
+    canonAnnounce(chain_end, chain_end.message_hash, chain_end.commit_hash, root_hash_bytes, chain_end.rx_time);
 
     // eventually timeout things on the scratch queue
     return portduino_config.sfpp_announce_interval * 60 * 1000;
@@ -1079,8 +1079,8 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
     return true;
 }
 
-void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *_commit_hash, uint8_t *_root_hash,
-                                               uint32_t _rx_time)
+void StoreForwardPlusPlusModule::canonAnnounce(link_object &lo, uint8_t *_message_hash, uint8_t *_commit_hash,
+                                               uint8_t *_root_hash, uint32_t _rx_time)
 {
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE;
@@ -1100,6 +1100,7 @@ void StoreForwardPlusPlusModule::canonAnnounce(uint8_t *_message_hash, uint8_t *
     memcpy(storeforward.root_hash.bytes, _root_hash, SFPP_HASH_SIZE);
 
     storeforward.encapsulated_rxtime = _rx_time;
+    storeforward.chain_count = lo.counter;
     // storeforward.
     meshtastic_MeshPacket *p = allocDataProtobuf(storeforward);
     p->to = NODENUM_BROADCAST;
