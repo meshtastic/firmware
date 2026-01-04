@@ -403,6 +403,11 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
     link_object incoming_link;
     incoming_link.validObject = false;
+    link_object chain_end;
+
+    // get tip of chain for this channel
+    if (t->root_hash.size >= SFPP_SHORT_HASH_SIZE)
+        chain_end = getLinkFromCount(0, t->root_hash.bytes, t->root_hash.size);
 
     updatePeers(mp, t->sfpp_message_type);
 
@@ -435,9 +440,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 LOG_DEBUG("StoreForwardpp No encapsulated time, conclude the chain is empty");
                 return true;
             }
-
-            // get tip of chain for this channel
-            link_object chain_end = getLinkFromCount(0, t->root_hash.bytes, t->root_hash.size);
 
             if (chain_end.rx_time != 0) {
                 if (t->commit_hash.size >= SFPP_SHORT_HASH_SIZE &&
@@ -620,7 +622,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 // if this packet is new to us, we rebroadcast it
                 rebroadcastLinkObject(incoming_link);
             } else {
-                LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was &u",
+                LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was %u",
                           incoming_link.rx_time);
             }
 
@@ -638,8 +640,20 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
                         rebroadcastLinkObject(incoming_link);
                     } else {
-                        LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was &u",
+                        LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was %u",
                                   incoming_link.rx_time);
+                    }
+                }
+                if (chain_end.rx_time != 0) {
+                    int64_t links_behind = 0;
+                    if (t->chain_count != 0) {
+                        links_behind = t->chain_count - chain_end.counter;
+                    }
+                    LOG_DEBUG("StoreForwardpp Links behind: %ld", links_behind);
+                    if (links_behind > portduino_config.sfpp_backlog_limit) {
+                        LOG_INFO("StoreForwardpp Chain behind limit, dumping DB");
+                        clearChain(t->root_hash.bytes, t->root_hash.size);
+                        return true;
                     }
                 }
                 requestNextMessage(incoming_link.root_hash, incoming_link.root_hash_len, incoming_link.commit_hash,
