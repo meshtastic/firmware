@@ -619,9 +619,14 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
     char err_string[160];
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
-    if (newRegion->licensedOnly == true && !devicestate.owner.is_licensed) {
-        LOG_WARN("Region code %d not permitted without license, reverting", config.lora.region);
-        // Phaseloop: I don't know how to return that this is invalid. Help!
+    if (!newRegion) { // copilot said I had to check for null pointer
+        LOG_ERROR("Invalid region code %d", loraConfig.region);
+        return false;
+    }
+
+    if (newRegion->licensedOnly && !devicestate.owner.is_licensed) {
+        LOG_WARN("Region code %s not permitted without license, reverting", newRegion->name);
+        return false;
     }
 
     auto cfg = settingsForPreset(newRegion->wideLora, loraConfig.modem_preset);
@@ -630,7 +635,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
     if (loraConfig.use_preset) {
         bool preset_valid = false;
 
-        for (int i = 0; i < sizeof(newRegion->availablePresets); i++) {
+        for (int i = 0; i < sizeof(newRegion->availablePresets); i++) { // copilot says int should be size_t or auto : preset ???
             if (loraConfig.modem_preset == newRegion->availablePresets[i]) {
                 preset_valid = true;
                 break;
