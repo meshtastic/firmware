@@ -450,7 +450,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 } else {
                     LOG_DEBUG("StoreForwardpp End of chain does not match! Checking distance behind.");
                     int64_t links_behind = 0;
-                    if (t->chain_count != 0) {
+                    if (t->chain_count != 0 && t->chain_count > chain_end.counter) {
                         links_behind = t->chain_count - chain_end.counter;
 
                         LOG_DEBUG("StoreForwardpp Links behind: %ld", links_behind);
