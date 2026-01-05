@@ -192,7 +192,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
                 display->drawString(cursorX + 1, fontY, textChunk.c_str());
             }
             display->drawString(cursorX, fontY, textChunk.c_str());
-#if defined(OLED_UA) || defined(OLED_RU)
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
             cursorX += display->getStringWidth(textChunk.c_str(), textChunk.length(), true);
 #else
             cursorX += display->getStringWidth(textChunk.c_str());
@@ -216,7 +216,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
                 display->drawString(cursorX + 1, fontY, remaining.c_str());
             }
             display->drawString(cursorX, fontY, remaining.c_str());
-#if defined(OLED_UA) || defined(OLED_RU)
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
             cursorX += display->getStringWidth(remaining.c_str(), remaining.length(), true);
 #else
             cursorX += display->getStringWidth(remaining.c_str());
@@ -843,14 +843,13 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 
     return lines;
 }
-
 std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
                                       const std::vector<bool> &isHeaderVec)
 {
     // Tunables for layout control
-    constexpr int HEADER_UNDERLINE_GAP = 0; // space between underline and first body line
+    constexpr int HEADER_UNDERLINE_GAP = 1; // space between underline and first body line
     constexpr int HEADER_UNDERLINE_PIX = 1; // underline thickness (1px row drawn)
-    constexpr int BODY_LINE_LEADING = -4;   // default vertical leading for normal body lines
+    constexpr int BODY_LINE_LEADING = -3;   // default vertical leading for normal body lines
     constexpr int MESSAGE_BLOCK_GAP = 4;    // gap after a message block before a new header
     constexpr int EMOTE_PADDING_ABOVE = 4;  // space above emote line (added to line above)
     constexpr int EMOTE_PADDING_BELOW = 3;  // space below emote line (added to emote line)
