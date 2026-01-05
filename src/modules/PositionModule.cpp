@@ -349,6 +349,11 @@ void PositionModule::sendOurPosition()
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
 {
+    if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+        LOG_DEBUG("Skip position send; no fresh position since boot");
+        return;
+    }
+
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
@@ -420,8 +425,14 @@ int32_t PositionModule::runOnce()
         return RUNONCE_INTERVAL;
     }
 
+    bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
+
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-        if (nodeDB->hasValidPosition(node)) {
+        if (waitingForFreshPosition) {
+#ifdef GPS_DEBUG
+            LOG_DEBUG("Skip initial position send; no fresh position since boot");
+#endif
+        } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
             lastGpsLatitude = node->position.latitude_i;

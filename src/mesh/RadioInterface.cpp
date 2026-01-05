@@ -198,7 +198,7 @@ const RegionInfo regions[] = {
                                 https://github.com/meshtastic/firmware/issues/7204
     */
     RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false, false, 0, LONG_FAST, PRESETS_STD),
-    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true, false, 0, LONG_FAST, PRESETS_STD),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, false, false, 0, LONG_FAST, PRESETS_STD),
 
     /*
         Nepal
@@ -609,7 +609,11 @@ ModemConfig settingsForPreset(bool wide, meshtastic_Config_LoRaConfig_ModemPrese
         cfg.sf = 8;
         break;
     }
-
+    // If custom CR is being used already, continue to use it
+    if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cfg.cr) {
+        cfg.cr = loraConfig.coding_rate;
+        LOG_INFO("Using custom Coding Rate %u", cfg.cr);
+    }
     return cfg;
 }
 

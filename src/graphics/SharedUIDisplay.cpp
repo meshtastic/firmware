@@ -8,6 +8,7 @@
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OLEDDisplay.h>
 #include <graphics/images.h>
@@ -15,27 +16,48 @@
 namespace graphics
 {
 
-void determineResolution(int16_t screenheight, int16_t screenwidth)
+ScreenResolution determineScreenResolution(int16_t screenheight, int16_t screenwidth)
 {
 
 #ifdef FORCE_LOW_RES
-    isHighResolution = false;
-    return;
-#endif
-
-    if (screenwidth > 128) {
-        isHighResolution = true;
+    return ScreenResolution::Low;
+#else
+    // Unit C6L and other ultra low res screens
+    if (screenwidth <= 64 || screenheight <= 48) {
+        return ScreenResolution::UltraLow;
     }
 
+    // Standard OLED screens
     if (screenwidth > 128 && screenheight <= 64) {
-        isHighResolution = false;
+        return ScreenResolution::Low;
     }
+
+    // High Resolutions screens like T114, TDeck, TLora Pager, etc
+    if (screenwidth > 128) {
+        return ScreenResolution::High;
+    }
+
+    // Default to low resolution
+    return ScreenResolution::Low;
+#endif
+}
+
+void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second)
+{
+    hour = 0;
+    minute = 0;
+    second = 0;
+    if (rtc_sec == 0)
+        return;
+    uint32_t hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
+    hour = hms / SEC_PER_HOUR;
+    minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+    second = hms % SEC_PER_MIN;
 }
 
 // === Shared External State ===
 bool hasUnreadMessage = false;
-bool isMuted = false;
-bool isHighResolution = false;
+ScreenResolution currentResolution = ScreenResolution::Low;
 
 // === Internal State ===
 bool isBoltVisibleShared = true;
@@ -91,7 +113,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             display->setColor(BLACK);
             display->fillRect(0, 0, screenW, highlightHeight + 2);
             display->setColor(WHITE);
-            if (isHighResolution) {
+            if (currentResolution == ScreenResolution::High) {
                 display->drawLine(0, 20, screenW, 20);
             } else {
                 display->drawLine(0, 14, screenW, 14);
@@ -129,7 +151,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     }
 #endif
 
-    bool useHorizontalBattery = (isHighResolution && screenW >= screenH);
+    bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     int batteryX = 1;
@@ -139,7 +161,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     if (usbPowered && !isCharging) { // This is a basic check to determine USB Powered is flagged but not charging
         batteryX += 1;
         batteryY += 2;
-        if (isHighResolution) {
+        if (currentResolution == ScreenResolution::High) {
             display->drawXbm(batteryX, batteryY, 19, 12, imgUSB_HighResolution);
             batteryX += 20; // Icon + 1 pixel
         } else {
@@ -200,8 +222,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     if (rtc_sec > 0) {
         // === Build Time String ===
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
-        int hour = hms / SEC_PER_HOUR;
-        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int hour, minute, second;
+        graphics::decomposeTime(rtc_sec, hour, minute, second);
         snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
 
         // === Build Date String ===
@@ -209,7 +231,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
         char dateLine[40];
 
-        if (isHighResolution) {
+        if (currentResolution == ScreenResolution::High) {
             snprintf(dateLine, sizeof(dateLine), "%s", datetimeStr);
         } else {
             if (hasUnreadMessage) {
@@ -284,8 +306,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (isMuted) {
-            if (isHighResolution) {
+        } else if (externalNotificationModule->getMute()) {
+            if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
 
@@ -303,7 +325,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
 
-                if (isInverted) {
+                if (isInverted && !force_no_invert) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mute_symbol_width + 2, mute_symbol_height + 2);
                     display->setColor(BLACK);
@@ -361,8 +383,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (isMuted) {
-            if (isHighResolution) {
+        } else if (externalNotificationModule->getMute()) {
+            if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
                 display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
@@ -381,7 +403,7 @@ const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
-    if (isHighResolution) {
+    if (currentResolution == ScreenResolution::High) {
         textPositions[0] = textZeroLine;
         textPositions[1] = textFirstLine_medium;
         textPositions[2] = textSecondLine_medium;
@@ -414,8 +436,12 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     if (drawConnectionState) {
-        if (isHighResolution) {
-            const int scale = 2;
+        const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
+        display->setColor(BLACK);
+        display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
+                          (connection_icon_height * scale) + (2 * scale));
+        display->setColor(WHITE);
+        if (currentResolution == ScreenResolution::High) {
             const int bytesPerRow = (connection_icon_width + 7) / 8;
             int iconX = 0;
             int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
@@ -444,18 +470,49 @@ bool isAllowedPunctuation(char c)
     return allowed.find(c) != std::string::npos;
 }
 
+static void replaceAll(std::string &s, const std::string &from, const std::string &to)
+{
+    if (from.empty())
+        return;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+
 std::string sanitizeString(const std::string &input)
 {
     std::string output;
     bool inReplacement = false;
 
-    for (char c : input) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
+    // Make a mutable copy so we can normalize UTF-8 “smart punctuation” into ASCII first.
+    std::string s = input;
+
+    // Curly single quotes: ‘ ’
+    replaceAll(s, "\xE2\x80\x98", "'"); // U+2018
+    replaceAll(s, "\xE2\x80\x99", "'"); // U+2019
+
+    // Curly double quotes: “ ”
+    replaceAll(s, "\xE2\x80\x9C", "\""); // U+201C
+    replaceAll(s, "\xE2\x80\x9D", "\""); // U+201D
+
+    // En dash / Em dash: – —
+    replaceAll(s, "\xE2\x80\x93", "-"); // U+2013
+    replaceAll(s, "\xE2\x80\x94", "-"); // U+2014
+
+    // Non-breaking space
+    replaceAll(s, "\xC2\xA0", " "); // U+00A0
+
+    // Now do your original sanitize pass over the normalized string.
+    for (unsigned char uc : s) {
+        char c = static_cast<char>(uc);
+        if (std::isalnum(uc) || isAllowedPunctuation(c)) {
             output += c;
             inReplacement = false;
         } else {
             if (!inReplacement) {
-                output += 0xbf; // ISO-8859-1 for inverted question mark
+                output += static_cast<char>(0xBF); // ISO-8859-1 for inverted question mark
                 inReplacement = true;
             }
         }
