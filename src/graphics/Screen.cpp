@@ -649,7 +649,7 @@ void Screen::setup()
     }
 #endif
 
-#ifdef OLED_CJK
+#if (defined(OLED_CJK) && OLED_CJK==1)
     #if OLED_CJK_SIZE==12
     dispdev->setUtf8Font(&utf8_12x12_font);
     #elif OLED_CJK_SIZE==16
