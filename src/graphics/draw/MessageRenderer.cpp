@@ -818,7 +818,7 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 #if defined(OLED_CJK)
             if(ch >= 0x80)
             {
-                strWidth = ch + OLED_CJK_SIZE;
+                strWidth = strWidth + OLED_CJK_SIZE;
             }
 #endif
 #else
