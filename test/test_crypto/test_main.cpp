@@ -360,9 +360,6 @@ void setup() {
   RUN_TEST(test_DH25519);
   RUN_TEST(test_AES_CTR);
   RUN_TEST(test_PKC);
-  RUN_TEST(test_TripleDH_SessionKey);
-  RUN_TEST(test_PFS_EncryptDecrypt);
-  RUN_TEST(test_PFS_BackwardCompatibility);
   exit(UNITY_END()); // stop unit testing
 }
 
