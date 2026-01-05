@@ -8,11 +8,9 @@
 #include "../TestUtil.h"
 #include <unity.h>
 
-// Mock millis() for testing
-static uint32_t mockMillis = 0;
-uint32_t millis() { return mockMillis; }
-
-void setUp(void) { mockMillis = 0; }
+void setUp(void) {
+  // set stuff up here
+}
 
 void tearDown(void) {
   // clean stuff up here
