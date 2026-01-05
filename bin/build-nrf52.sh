@@ -21,13 +21,14 @@ rm -f $BUILDDIR/firmware*
 export APP_VERSION=$VERSION
 
 basename=firmware-$1-$VERSION
+ota_basename=${basename}-ota
 
-pio run --environment $1 # -v
+pio run --environment $1 -t mtjson # -v
 
 cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
 
 echo "Copying NRF52 dfu (OTA) file"
-cp $BUILDDIR/$basename.zip $OUTDIR/$basename.zip
+cp $BUILDDIR/$basename.zip $OUTDIR/$ota_basename.zip
 
 echo "Copying NRF52 UF2 file"
 cp $BUILDDIR/$basename.uf2 $OUTDIR/$basename.uf2
@@ -47,8 +48,5 @@ if (echo $1 | grep -q "rak4631"); then
 	cp $SRCHEX $OUTDIR/
 fi
 
-# Generate the manifest file
-echo "Generating Meshtastic manifest"
-TIMEFORMAT="Generated manifest in %E seconds"
-time pio run --environment $1 -t mtjson --silent --disable-auto-clean
+echo "Copying manifest"
 cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
