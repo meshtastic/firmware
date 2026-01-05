@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/AckBatcher.h"
 
 RoutingModule *routingModule;
 
@@ -50,6 +51,13 @@ meshtastic_MeshPacket *RoutingModule::allocReply()
 void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
                                bool ackWantsAck)
 {
+    // Queue non-urgent ACKs for batching
+    if (ackBatcher && ackBatcher->isEnabled() && !ackWantsAck &&
+        err == meshtastic_Routing_Error_NONE) {
+        ackBatcher->queueAck(to, idFrom, chIndex, hopLimit, err);
+        return;
+    }
+
     auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit);
 
     // Allow the caller to set want_ack on this ACK packet if it's important that the ACK be delivered reliably
