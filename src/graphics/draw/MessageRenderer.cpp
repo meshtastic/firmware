@@ -896,8 +896,11 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
                 lineHeight = desiredBody + overshoot + EMOTE_PADDING_BELOW;
             } else {
                 // Regular line: no emote → standard spacing
+                #if defined(OLED_CJK)
+                lineHeight = desiredBody + 3;
+                #else
                 lineHeight = desiredBody;
-
+                #endif
                 // If next line has an emote → add top padding *here*
                 if (nextHasEmote) {
                     lineHeight += EMOTE_PADDING_ABOVE;
