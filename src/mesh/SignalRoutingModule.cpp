@@ -165,6 +165,9 @@ int32_t SignalRoutingModule::runOnce()
         timeToBroadcast = (SIGNAL_ROUTING_BROADCAST_SECS * 1000) - (nowMs - lastBroadcast);
     }
 
+    // Process unicast relay contention windows
+    processContentionWindows(nowMs);
+
     // Turn off LED when RTOS task completes
     turnOffRgbLed();
 
@@ -1242,6 +1245,13 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         nodeDB->updateFrom(mp);
     }
 
+    // Handle ACK reception for unicast coordination
+    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.request_id != 0 &&
+        mp.to == nodeDB->getNodeNum()) {
+        // Clear unicast relay exclusions when ACK is received - coordination successful
+        clearRelayExclusionsForPacket(mp.decoded.request_id);
+    }
+
 
     // Only track DIRECT neighbors - packets heard directly over radio with no relays
     // Conditions for a direct neighbor:
@@ -1504,187 +1514,51 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
 
-    // GATEWAY OVERRIDE: If we are the gateway for the destination, ALWAYS relay
-    // This ensures downstream nodes that are exclusively connected to us can be reached
-    NodeNum gatewayForDest = getGatewayFor(destination);
-    if (gatewayForDest == myNode) {
-        LOG_INFO("[SR] UNICAST RELAY: We are gateway for %s - ALWAYS relay to ensure reachability", destName);
-        return true;
-    }
+    // UNICAST RELAY COORDINATION: Use broadcast-style algorithm
+    // Calculate what my next hop would be to reach the destination
+    NodeNum myNextHop = getNextHop(destination, sourceNode, heardFrom, false);
 
-    // Check if the broadcasting node has direct connectivity to our calculated next hop or the target
-    // If so, the broadcasting node should have sent directly instead of broadcasting for coordination
-    NodeNum nextHop = getNextHop(destination, sourceNode, heardFrom, false);
-    if (nextHop != 0) {
-        // Check if broadcasting node has direct connectivity to our next hop
-        if (hasDirectConnectivity(heardFrom, nextHop)) {
-            char broadcastingName[64], nextHopName[64];
-            getNodeDisplayName(heardFrom, broadcastingName, sizeof(broadcastingName));
-            getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
-            LOG_DEBUG("[SR] UNICAST RELAY: Broadcasting node %s has direct connection to next hop %s - broadcasting node should have sent directly",
-                     broadcastingName, nextHopName);
-            return false; // Don't relay - broadcasting node should have handled this directly
-        }
-
-        // Check if broadcasting node has direct connectivity to the target
-        if (hasDirectConnectivity(heardFrom, destination)) {
-            char broadcastingName[64], destName[64];
-            getNodeDisplayName(heardFrom, broadcastingName, sizeof(broadcastingName));
-            getNodeDisplayName(destination, destName, sizeof(destName));
-            LOG_DEBUG("[SR] UNICAST RELAY: Broadcasting node %s has direct connection to target %s - broadcasting node should have sent directly",
-                     broadcastingName, destName);
-            return false; // Don't relay - broadcasting node should have handled this directly
-        }
-    }
-
-    // Check if the sending node (heardFrom) has a direct connection to the destination
-    // If so, the destination should have already received this packet directly, so don't relay
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    const NodeEdgesLite* senderEdges = routingGraph->getEdgesFrom(heardFrom);
-    if (senderEdges) {
-        for (uint8_t i = 0; i < senderEdges->edgeCount; i++) {
-            if (senderEdges->edges[i].to == destination) {
-                LOG_DEBUG("[SR] UNICAST RELAY: Sender %08x has direct connection to %s (ETX=%.2f) - destination already received directly",
-                         heardFrom, destName, senderEdges->edges[i].getEtx());
-                return false; // Don't relay - destination should have received it directly
-            }
-        }
-    }
-#else
-    const std::vector<Edge>* senderEdges = routingGraph->getEdgesFrom(heardFrom);
-    if (senderEdges) {
-        for (const Edge& edge : *senderEdges) {
-            if (edge.to == destination) {
-                LOG_DEBUG("[SR] UNICAST RELAY: Sender %08x has direct connection to %s (ETX=%.2f) - destination already received directly",
-                         heardFrom, destName, edge.etx);
-                return false; // Don't relay - destination should have received it directly
-            }
-        }
-    }
-#endif
-
-    // Check if destination is a downstream node of relays we can hear directly
-    // If so, broadcast the unicast for relay coordination to ensure delivery
-    if (isDownstreamOfHeardRelay(destination, myNode)) {
-        LOG_INFO("[SR] UNICAST RELAY: Broadcasting unicast to %s - downstream of relay we can hear", destName);
-        return true; // Broadcast for coordination
-    }
-
-    // Check if any legacy routers that heard this packet should relay instead
-    // Legacy routers/repeaters get priority as they are meant to always rebroadcast
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    const NodeEdgesLite* transmittingEdges = routingGraph->getEdgesFrom(heardFrom);
-    if (transmittingEdges) {
-        for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
-            NodeNum candidate = transmittingEdges->edges[i].to;
-            if (candidate != myNode && isLegacyRouter(candidate)) {
-                // Check if this legacy router can reach the destination
-                RouteLite route = routingGraph->calculateRoute(destination, millis() / 1000,
-                    [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
-                if (route.nextHop != 0) {
-                    char legacyName[64];
-                    getNodeDisplayName(candidate, legacyName, sizeof(legacyName));
-                    LOG_DEBUG("[SR] Legacy router %s should relay unicast to %s instead of us", legacyName, destName);
-                    return false; // Let the legacy router handle it
-                }
-            }
-        }
-    }
-#else
-    auto transmittingEdges = routingGraph->getEdgesFrom(heardFrom);
-    if (transmittingEdges) {
-        for (const Edge& edge : *transmittingEdges) {
-            NodeNum candidate = edge.to;
-            if (candidate != myNode && isLegacyRouter(candidate)) {
-                // Check if this legacy router can reach the destination
-                Route route = routingGraph->calculateRoute(destination, millis() / 1000,
-                    [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
-                if (route.nextHop != 0) {
-                    char legacyName[64];
-                    getNodeDisplayName(candidate, legacyName, sizeof(legacyName));
-                    LOG_DEBUG("[SR] Legacy router %s should relay unicast to %s instead of us", legacyName, destName);
-                    return false; // Let the legacy router handle it
-                }
-            }
-        }
-    }
-#endif
-
-    // Calculate our route cost to the destination
-    float ourRouteCost = 0.0f;
-    bool haveRoute = false;
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    RouteLite ourRoute = routingGraph->calculateRoute(destination, millis() / 1000,
-                        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
-    haveRoute = ourRoute.nextHop != 0;
-    ourRouteCost = ourRoute.getCost();
-#else
-    Route ourRoute = routingGraph->calculateRoute(destination, millis() / 1000,
-                      [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
-    haveRoute = ourRoute.nextHop != 0;
-    ourRouteCost = ourRoute.cost;
-#endif
-
-    if (!haveRoute) {
-        LOG_DEBUG("[SR] No route to unicast destination %s - not relaying", destName);
+    if (myNextHop == 0) {
+        // I don't have a route to the destination, so I can't be part of the relay chain
+        LOG_DEBUG("[SR] UNICAST RELAY: No route to %s - cannot participate in relay coordination", destName);
         return false;
     }
 
-    LOG_DEBUG("[SR] Our route cost to %s: %.2f", destName, ourRouteCost);
-
-    // Check if the node we heard this from has a better route to the destination
-    // If they do, they should relay instead of us
-    if (heardFrom != sourceNode && heardFrom != myNode) {
-        // Check if heardFrom has a direct connection to destination with better ETX
-        bool heardFromHasBetterDirect = false;
-        float heardFromDirectEtx = 1e9f;
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-        const NodeEdgesLite* heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
-        if (heardFromEdges) {
-            for (uint8_t i = 0; i < heardFromEdges->edgeCount; i++) {
-                if (heardFromEdges->edges[i].to == destination) {
-                    heardFromDirectEtx = heardFromEdges->edges[i].getEtx();
-                    if (heardFromDirectEtx < ourRouteCost - 1.0f) {
-                        heardFromHasBetterDirect = true;
-                    }
-                    break;
-                }
-            }
-        }
-#else
-        auto heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
-        if (heardFromEdges) {
-            for (const Edge& e : *heardFromEdges) {
-                if (e.to == destination) {
-                    heardFromDirectEtx = e.etx;
-                    if (heardFromDirectEtx < ourRouteCost - 1.0f) {
-                        heardFromHasBetterDirect = true;
-                    }
-                    break;
-                }
-            }
-        }
-#endif
-
-        if (heardFromHasBetterDirect) {
-            char heardFromName[64];
-            getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
-            LOG_DEBUG("[SR] Node %s has better direct connection (ETX=%.2f) to %s than our route (%.2f) - not relaying",
-                     heardFromName, heardFromDirectEtx, destName, ourRouteCost);
-            return false;
-        }
+    // If I'm the next hop in the route, I should relay this unicast
+    if (myNextHop == myNode) {
+        LOG_INFO("[SR] UNICAST RELAY: I am the next hop to %s - relaying unicast", destName);
+        return true;
     }
 
-    // We're the best positioned node, so we should relay
-    LOG_DEBUG("[SR] We are best positioned for unicast to %s - relaying", destName);
+    // Check if the calculated next hop node has already been tried and failed
+    // This implements the iterative candidate removal like broadcasts
+    if (hasNodeBeenExcludedFromRelay(myNextHop, p->id)) {
+        LOG_DEBUG("[SR] UNICAST RELAY: Next hop %08x has been excluded for packet %08x - trying alternative route",
+                 myNextHop, p->id);
 
-    // Turn off LED when RTOS task completes
-    turnOffRgbLed();
-    return true;
+        // Try opportunistic routing as fallback
+        NodeNum opportunisticNextHop = getNextHop(destination, sourceNode, heardFrom, true);
+        if (opportunisticNextHop == myNode) {
+            LOG_INFO("[SR] UNICAST RELAY: Using opportunistic routing - I am next hop to %s", destName);
+            return true;
+        }
+
+        // If I still can't find a route that makes me the next hop, don't relay
+        LOG_DEBUG("[SR] UNICAST RELAY: No alternative route makes me next hop to %s", destName);
+        return false;
+    }
+
+    // I'm not the next hop, so I should wait for the next hop node to relay
+    // This is the contention window waiting period like broadcasts
+    char nextHopName[64];
+    getNodeDisplayName(myNextHop, nextHopName, sizeof(nextHopName));
+    LOG_DEBUG("[SR] UNICAST RELAY: Waiting for next hop %s to relay to %s", nextHopName, destName);
+
+    // Set up contention window monitoring - if next hop doesn't relay within timeout, exclude it
+    scheduleContentionWindowCheck(myNextHop, p->id, destination, p);
+
+    return false; // Don't relay yet - wait for the proper next hop
 }
-
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p)
 {
     if (!p || !signalBasedRoutingEnabled || !routingGraph || !nodeDB) {
@@ -1812,32 +1686,59 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
-    // For unicast with healthy topology, don't allow opportunistic forwarding
-    // Only allow opportunistic forwarding when topology is unhealthy
-    NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom, !topologyHealthy);
+    // Iterative unicast route selection - try multiple strategies like broadcast fallback
+    NodeNum nextHop = 0;
 
-    if (nextHop == 0) {
-        // For unicast packets where topology is healthy (destination exists),
-        // don't relay if we can't find a route. Assume other nodes will handle it.
-        // Only do opportunistic forwarding for broadcast or when topology is unhealthy.
+    // Check if this appears to be a retransmitted packet (simple heuristic)
+    bool isRetry = (p->hop_start > 0 && p->hop_start == p->hop_limit) ||
+                   (p->rx_rssi != 0 && p->rx_snr != 0); // Packets from our own retransmission
+    int strategyLevel = isRetry ? 1 : 0; // Start at higher strategy level for retries
 
-        // Check if another node is the designated gateway for this destination
-        NodeNum designatedGateway = getGatewayFor(p->to);
-        if (designatedGateway != 0 && designatedGateway != nodeDB->getNodeNum()) {
-            char gwName[64];
-            getNodeDisplayName(designatedGateway, gwName, sizeof(gwName));
-            LOG_INFO("[SR] Not relaying to %s - %s is the designated gateway", destName, gwName);
+    // Try strategies in order of increasing permissiveness (like broadcast candidate selection)
+    for (int attempt = strategyLevel; attempt < 4 && nextHop == 0; attempt++) {
+        switch (attempt) {
+            case 0: // Strategy 1: Best calculated route, restrictive opportunistic forwarding
+                nextHop = getNextHop(p->to, sourceNode, heardFrom, !topologyHealthy);
+                if (nextHop != 0) {
+                    LOG_DEBUG("[SR] UNICAST Strategy 1: Using calculated route via %08x", nextHop);
+                }
+                break;
 
-            // Cancel any pending transmission that traditional routing might have queued
-            if (router) {
-                router->cancelSending(p->from, p->id);
-            }
+            case 1: // Strategy 2: Best calculated route with opportunistic forwarding enabled
+                nextHop = getNextHop(p->to, sourceNode, heardFrom, true);
+                if (nextHop != 0) {
+                    LOG_DEBUG("[SR] UNICAST Strategy 2: Using opportunistic route via %08x", nextHop);
+                }
+                break;
 
-            return false; // Don't use SR - designated gateway should handle this packet
-        } else {
-            LOG_DEBUG("[SR] No route found to destination - allowing traditional routing to attempt delivery");
-            return false; // Don't use SR - allow traditional routing/flooding for this unicast packet
+            case 2: // Strategy 3: Try gateway routing if destination has a designated gateway
+                {
+                    NodeNum designatedGateway = getGatewayFor(p->to);
+                    if (designatedGateway != 0 && designatedGateway != nodeDB->getNodeNum()) {
+                        char gwName[64];
+                        getNodeDisplayName(designatedGateway, gwName, sizeof(gwName));
+                        LOG_INFO("[SR] UNICAST Strategy 3: Using designated gateway %s for %s", gwName, destName);
+
+                        // Cancel any pending transmission that traditional routing might have queued
+                        if (router) {
+                            router->cancelSending(p->from, p->id);
+                        }
+
+                        return false; // Don't use SR - designated gateway should handle this packet
+                    }
+                }
+                break;
+
+            case 3: // Strategy 4: No SR route found, fall back to traditional routing
+                LOG_DEBUG("[SR] UNICAST Strategy 4: No SR route found after all attempts - using traditional routing");
+                return false; // Allow traditional routing/flooding
         }
+    }
+
+    // If we get here, nextHop should be set by one of the strategies
+    if (nextHop == 0) {
+        LOG_DEBUG("[SR] UNICAST: Unexpected - all strategies exhausted but nextHop is 0");
+        return false;
     }
 
     // Gateway preference: if we know the destination is behind a gateway we can reach directly, prefer that
@@ -3603,6 +3504,146 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
     }
 
     return sourceNode;
+}
+
+uint64_t SignalRoutingModule::makeSpeculativeKey(NodeNum origin, uint32_t packetId)
+{
+    return (static_cast<uint64_t>(origin) << 32) | packetId;
+}
+
+bool SignalRoutingModule::hasNodeBeenExcludedFromRelay(NodeNum nodeId, PacketId packetId)
+{
+    uint64_t packetKey = makeSpeculativeKey(0, packetId); // Use 0 as origin since we just need packet ID
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t i = 0; i < relayExclusionCount; i++) {
+        if (relayExclusions[i].packetKey == packetKey) {
+            for (uint8_t j = 0; j < relayExclusions[i].exclusionCount; j++) {
+                if (relayExclusions[i].excludedNodes[j] == nodeId) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    return false;
+#else
+    auto it = relayExclusions.find(packetKey);
+    if (it != relayExclusions.end()) {
+        return it->second.find(nodeId) != it->second.end();
+    }
+    return false;
+#endif
+}
+
+void SignalRoutingModule::scheduleContentionWindowCheck(NodeNum expectedRelay, PacketId packetId, NodeNum destination, const meshtastic_MeshPacket *packet)
+{
+    // Calculate dynamic contention window based on radio factors (similar to retransmission timeout)
+    uint32_t contentionWindowMs = router->getRadioInterface()->getContentionWindowMsec(packet);
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    if (contentionCheckCount >= 4) {
+        return; // No room for more checks
+    }
+
+    ContentionCheck& check = contentionChecks[contentionCheckCount++];
+    check.expectedRelay = expectedRelay;
+    check.packetId = packetId;
+    check.destination = destination;
+    check.expiryMs = millis() + contentionWindowMs;
+#else
+    ContentionCheck check;
+    check.expectedRelay = expectedRelay;
+    check.packetId = packetId;
+    check.destination = destination;
+    check.expiryMs = millis() + contentionWindowMs;
+    contentionChecks.push_back(check);
+#endif
+}
+
+void SignalRoutingModule::excludeNodeFromRelay(NodeNum nodeId, PacketId packetId)
+{
+    uint64_t packetKey = makeSpeculativeKey(0, packetId);
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    // Find existing exclusion record or create new one
+    for (uint8_t i = 0; i < relayExclusionCount; i++) {
+        if (relayExclusions[i].packetKey == packetKey) {
+            if (relayExclusions[i].exclusionCount < 4) {
+                relayExclusions[i].excludedNodes[relayExclusions[i].exclusionCount++] = nodeId;
+            }
+            return;
+        }
+    }
+
+    // Create new exclusion record
+    if (relayExclusionCount < 4) {
+        RelayExclusion& exclusion = relayExclusions[relayExclusionCount++];
+        exclusion.packetKey = packetKey;
+        exclusion.excludedNodes[0] = nodeId;
+        exclusion.exclusionCount = 1;
+    }
+#else
+    relayExclusions[packetKey].insert(nodeId);
+#endif
+}
+
+void SignalRoutingModule::clearRelayExclusionsForPacket(PacketId packetId)
+{
+    uint64_t packetKey = makeSpeculativeKey(0, packetId);
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t i = 0; i < relayExclusionCount; i++) {
+        if (relayExclusions[i].packetKey == packetKey) {
+            // Remove this exclusion by shifting the rest
+            if (i < relayExclusionCount - 1) {
+                relayExclusions[i] = relayExclusions[relayExclusions[i].exclusionCount - 1];
+            }
+            relayExclusionCount--;
+            return;
+        }
+    }
+#else
+    relayExclusions.erase(packetKey);
+#endif
+}
+
+void SignalRoutingModule::processContentionWindows(uint32_t nowMs)
+{
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    for (uint8_t i = 0; i < contentionCheckCount;) {
+        if (nowMs >= contentionChecks[i].expiryMs) {
+            // Contention window expired - exclude the expected relay from future attempts
+            excludeNodeFromRelay(contentionChecks[i].expectedRelay, contentionChecks[i].packetId);
+
+            LOG_DEBUG("[SR] Contention window expired for relay %08x on packet %08x to %08x - excluding from future attempts",
+                     contentionChecks[i].expectedRelay, contentionChecks[i].packetId, contentionChecks[i].destination);
+
+            // Remove this check by shifting the rest
+            if (i < contentionCheckCount - 1) {
+                contentionChecks[i] = contentionChecks[contentionCheckCount - 1];
+            }
+            contentionCheckCount--;
+        } else {
+            i++;
+        }
+    }
+#else
+    // Process expired contention checks
+    for (auto it = contentionChecks.begin(); it != contentionChecks.end();) {
+        if (nowMs >= it->expiryMs) {
+            // Contention window expired - exclude the expected relay from future attempts
+            excludeNodeFromRelay(it->expectedRelay, it->packetId);
+
+            LOG_DEBUG("[SR] Contention window expired for relay %08x on packet %08x to %08x - excluding from future attempts",
+                     it->expectedRelay, it->packetId, it->destination);
+
+            it = contentionChecks.erase(it);
+        } else {
+            ++it;
+        }
+    }
+#endif
 }
 
 bool SignalRoutingModule::hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB)
