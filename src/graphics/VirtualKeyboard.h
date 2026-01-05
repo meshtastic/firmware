@@ -4,6 +4,7 @@
 #include <OLEDDisplay.h>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace graphics
 {
@@ -43,6 +44,9 @@ class VirtualKeyboard
     void resetTimeout();
     bool isTimedOut() const;
 
+    // Chinese IME
+    void toggleIME();
+
   private:
     static const uint8_t KEYBOARD_ROWS = 4;
     static const uint8_t KEYBOARD_COLS = 11;
@@ -58,6 +62,15 @@ class VirtualKeyboard
 
     uint8_t cursorRow;
     uint8_t cursorCol;
+
+    enum _IMEStatus { ACTIVE, INACTIVE } IMEStatus = INACTIVE;
+    uint8_t processedWords = 0;
+    uint8_t selectableChars = 0;
+    int selectListfulllen = 0;
+    int selectListOffset = 0;
+    std::string selectList = "";
+    std::vector<uint8_t> inputTextLayout = {};
+    std::vector<uint8_t> selectListLayout = {};
 
     // Timeout management for auto-exit
     uint32_t lastActivityTime;
@@ -75,6 +88,10 @@ class VirtualKeyboard
     void insertCharacter(char c);
     void deleteCharacter();
     void submitText();
+    uint8_t getUtf8Length(const char *c, uint8_t pos);
+    uint8_t getChineseChar(uint8_t c);
+    void selectChineseChar(uint8_t chridx);
+    void showNextSelection();
 };
 
 } // namespace graphics

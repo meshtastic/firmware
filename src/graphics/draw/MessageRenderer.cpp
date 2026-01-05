@@ -412,7 +412,7 @@ static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &
         }
         if (!matched) {
             size_t charLen = utf8CharLen(static_cast<uint8_t>(normalized[i]));
-#if defined(OLED_UA) || defined(OLED_RU)
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
             totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str(), charLen, true);
 #else
             totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
