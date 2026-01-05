@@ -143,18 +143,21 @@ bool EInkDisplay::connect()
 #ifdef ELECROW_ThinkNode_M1
     // ThinkNode M1 has a hardware dimmable backlight. Start enabled
     digitalWrite(PIN_EINK_EN, HIGH);
+#elif ELECROW_ThinkNode_M8
+    uiconfig.screen_brightness = 128;
+    analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
 #else
     digitalWrite(PIN_EINK_EN, LOW);
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M8)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
-#if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
+#if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M8)
         adafruitDisplay->setRotation(4);
 #else
         adafruitDisplay->setRotation(3);

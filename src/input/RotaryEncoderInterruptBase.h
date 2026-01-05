@@ -5,8 +5,11 @@
 #include "mesh/NodeDB.h"
 
 enum RotaryEncoderInterruptBaseStateType { ROTARY_EVENT_OCCURRED, ROTARY_EVENT_CLEARED };
-
+#if defined(ELECROW_ThinkNode_M8)
+enum RotaryEncoderInterruptBaseActionType { ROTARY_ACTION_NONE, ROTARY_ACTION_PRESSED, ROTARY_ACTION_CW, ROTARY_ACTION_CCW, ROTARY_ACTION_PRESSED_CW, ROTARY_ACTION_PRESSED_CCW};
+#else
 enum RotaryEncoderInterruptBaseActionType { ROTARY_ACTION_NONE, ROTARY_ACTION_PRESSED, ROTARY_ACTION_CW, ROTARY_ACTION_CCW };
+#endif
 
 class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
@@ -31,6 +34,9 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public
     volatile int rotaryLevelA = LOW;
     volatile int rotaryLevelB = LOW;
     volatile RotaryEncoderInterruptBaseActionType action = ROTARY_ACTION_NONE;
+#if defined(ELECROW_ThinkNode_M8)
+    volatile RotaryEncoderInterruptBaseActionType Combination_action = ROTARY_ACTION_NONE;
+#endif
 
   private:
     // pins and events

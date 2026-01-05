@@ -92,18 +92,23 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     if (config.shortLong != INPUT_BROKER_NONE) {
         _shortLong = config.shortLong;
     }
+#if defined(ELECROW_ThinkNode_M8)
+    userButton.setDebounceMs(1);
+    userButton.setClickMs(BUTTON_CLICK_MS);
+    userButton.setPressMs(_longPressTime);
+#else
 #ifdef USE_EINK
     userButton.setDebounceMs(0);
 #else
     userButton.setDebounceMs(1);
 #endif
     userButton.setPressMs(_longPressTime);
-
     if (screen) {
         userButton.setClickMs(20);
     } else {
         userButton.setClickMs(BUTTON_CLICK_MS);
     }
+#endif
     attachButtonInterrupts();
 #ifdef ARCH_ESP32
     // Register callbacks for before and after lightsleep
@@ -216,7 +221,13 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
             LOG_INFO("Double press!");
-
+#if defined(ELECROW_ThinkNode_M8)
+            if(config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
+            else if(config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
+                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
+            service->reloadConfig(SEGMENT_CONFIG);
+#endif
             // Reset combination tracking
             waitingForLongPress = false;
 

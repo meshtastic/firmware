@@ -108,7 +108,9 @@
 #if !MESHTASTIC_EXCLUDE_DROPZONE
 #include "modules/DropzoneModule.h"
 #endif
-
+#if ELECROW_ThinkNode_M8
+#include "modules/PresetMessageModule.h"
+#endif
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -240,6 +242,9 @@ void setupModules()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         cannedMessageModule = new CannedMessageModule();
     }
+#endif
+#if HAS_SCREEN && ELECROW_ThinkNode_M8
+    presetmessagemodule = new PresetMessageModule();
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
