@@ -557,8 +557,14 @@ void menuHandler::replyMenu()
     optionsArray[options] = "With Preset";
     optionsEnumArray[options++] = ReplyPreset;
 
-    // Freetext reply (only when keyboard exists)
-    if (kb_found) {
+    // Freetext reply (only when keyboard exists or BUTTON_PIN is defined)
+#if defined(BUTTON_PIN)
+    bool hasInput = true;
+#else
+    bool hasInput = kb_found;
+#endif
+
+    if (hasInput) {
         optionsArray[options] = "With Freetext";
         optionsEnumArray[options++] = ReplyFreetext;
     }
@@ -937,7 +943,7 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
-            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, 0, true);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -957,7 +963,12 @@ void menuHandler::textMessageBaseMenu()
     int options = 1;
     optionsArray[options] = "New Preset Msg";
     optionsEnumArray[options++] = Preset;
-    if (kb_found) {
+#if defined(BUTTON_PIN)
+    bool hasInput = true;
+#else
+    bool hasInput = kb_found;
+#endif
+    if (hasInput) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
@@ -971,7 +982,7 @@ void menuHandler::textMessageBaseMenu()
         if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
-            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, 0, true);
         }
     };
     screen->showOverlayBanner(bannerOptions);

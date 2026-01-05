@@ -60,7 +60,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     void LaunchWithDestination(NodeNum, uint8_t newChannel = 0);
     void LaunchRepeatDestination();
-    void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0);
+    void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0, bool forceSelectDest = false);
 
     // === Emote Picker navigation ===
     int emotePickerIndex = 0; // Tracks currently selected emote in the picker
