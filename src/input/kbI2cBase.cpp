@@ -17,19 +17,19 @@ extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
-    : concurrency::OSThread(name)
-{
-#if HAS_TCA8418_KEYBOARD
+    : concurrency::OSThread(name),
 #if defined(T_DECK_PRO)
-    TCAKeyboard = TDeckProKeyboard();
+      TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
-    TCAKeyboard = TLoraPagerKeyboard();
+      TCAKeyboard(*(new TLoraPagerKeyboard()))
 #elif defined(HACKADAY_COMMUNICATOR)
-    TCAKeyboard = HackadayCommunicatorKeyboard();
+      TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
+#elif HAS_TCA8418_KEYBOARD
+      TCAKeyboard(*(new TCA8418Keyboard()))
 #else
-    TCAKeyboard = TCA8418Keyboard();
+      TCAKeyboard(*(new TCA8418KeyboardBase(0, 0)))
 #endif
-#endif
+{
     this->_originName = name;
 }
 

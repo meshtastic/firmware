@@ -28,8 +28,6 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
 #if HAS_MPR121_KEYBOARD
     MPR121Keyboard MPRkeyboard;
 #endif
-#if HAS_TCA8418_KEYBOARD
     TCA8418KeyboardBase &TCAKeyboard;
-#endif
     bool is_sym = false;
 };
