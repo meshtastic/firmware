@@ -93,7 +93,7 @@ SignalRoutingModule::SignalRoutingModule()
         return;
     }
 
-    trackNodeCapability(nodeDB->getNodeNum(), CapabilityStatus::Capable);
+    trackNodeCapability(nodeDB->getNodeNum(), CapabilityStatus::SRactive);
 
     // We want to see all packets for signal quality updates
     isPromiscuous = true;
@@ -209,7 +209,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 {
     // Allow mute nodes to broadcast their direct neighbors to help active SR nodes
     // make better unicast routing decisions, even though mute nodes don't participate in relaying
-    if (!isActiveRoutingRole() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+    if (!canSendTopology()) {
         return;
     }
 
@@ -228,7 +228,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
              info.neighbors_count, ourName, info.signal_based_capable ? "yes" : "no");
 
     // Update our own capability before sending
-    trackNodeCapability(nodeDB->getNodeNum(), info.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy);
+    trackNodeCapability(nodeDB->getNodeNum(), info.signal_based_capable ? CapabilityStatus::SRactive : CapabilityStatus::SRinactive);
 
     service->sendToMesh(p);
     lastBroadcast = millis();
@@ -243,7 +243,7 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
 void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &info)
 {
     info.node_id = nodeDB->getNodeNum();
-    info.signal_based_capable = isSignalRoutingCapable();
+    info.signal_based_capable = isActiveRoutingRole();
     info.routing_version = SIGNAL_ROUTING_VERSION;
     info.neighbors_count = 0;
 
@@ -308,7 +308,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         neighbor.position_variance = edge.variance; // Already uint8, 0-255 scaled
         // Mark neighbor based on local knowledge of their SR capability
         CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
-        neighbor.signal_based_capable = (neighborStatus == CapabilityStatus::Capable);
+        neighbor.signal_based_capable = (neighborStatus == CapabilityStatus::SRactive);
 
         int32_t rssi32, snr32;
         GraphLite::etxToSignal(edge.getEtx(), rssi32, snr32);
@@ -379,7 +379,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
         neighbor.position_variance = scaledVar > 255 ? 255 : static_cast<uint8_t>(scaledVar);
         // Mark neighbor based on local knowledge of their SR capability
         CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
-        neighbor.signal_based_capable = (neighborStatus == CapabilityStatus::Capable);
+        neighbor.signal_based_capable = (neighborStatus == CapabilityStatus::SRactive);
 
         int32_t rssi32, snr32;
         Graph::etxToSignal(edge.etx, rssi32, snr32);
@@ -408,10 +408,10 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     // Mark sender based on their claimed SR capability
     // signal_based_capable=true means they can be used for routing (SR-active)
     // signal_based_capable=false means they are SR-aware but not for routing
-    CapabilityStatus senderStatus = info.signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy;
+    CapabilityStatus senderStatus = info.signal_based_capable ? CapabilityStatus::SRactive : CapabilityStatus::SRinactive;
     LOG_DEBUG("[SR] Processing broadcast from %08x: signal_based_capable=%d, marking as %s",
               p->from, info.signal_based_capable,
-              senderStatus == CapabilityStatus::Capable ? "SR-active" : "SR-aware-only");
+              senderStatus == CapabilityStatus::SRactive ? "SR-active" : "SR-inactive");
     trackNodeCapability(p->from, senderStatus);
 
     char senderName[64];
@@ -468,7 +468,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
     // Mark sender based on their claimed SR capability
-    CapabilityStatus newStatus = p->signal_based_capable ? CapabilityStatus::Capable : CapabilityStatus::Legacy;
+    CapabilityStatus newStatus = p->signal_based_capable ? CapabilityStatus::SRactive : CapabilityStatus::SRinactive;
     CapabilityStatus oldStatus = getCapabilityStatus(mp.from);
     trackNodeCapability(mp.from, newStatus);
 
@@ -480,7 +480,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     if (p->neighbors_count == 0) {
         LOG_INFO("[SR] %s is online (SR v%d, %s) - no neighbors detected yet",
                  senderName, p->routing_version,
-                 p->signal_based_capable ? "SR-capable" : "legacy mode");
+                 p->signal_based_capable ? "SR-active" : "SR-inactive");
 
         // Clear gateway relationships for SR-capable nodes with no neighbors - they can't be gateways
         if (p->signal_based_capable) {
@@ -492,16 +492,16 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
     LOG_INFO("[SR] RECEIVED: %s reports %d neighbors (SR v%d, %s)",
              senderName, p->neighbors_count, p->routing_version,
-             p->signal_based_capable ? "SR-capable" : "legacy mode");
+             p->signal_based_capable ? "SR-active" : "SR-inactive");
 
     // Set cyan for network topology update (operation start)
     setRgbLed(0, 255, 255);
 
-    // For mute nodes (signal_based_capable = false), we still need to store their edges for direct connection checks
-    // Active nodes use these edges to determine if a mute node has direct connections to destinations
-    // However, routing algorithms must not consider paths through mute nodes since they don't relay
+    // For SR-inactive nodes (signal_based_capable = false), we still need to store their edges for direct connection checks
+    // Active nodes use these edges to determine if a SR-inactive node has direct connections to destinations
+    // However, routing algorithms must not consider paths through SR-inactive nodes since they don't relay
     if (!p->signal_based_capable) {
-        LOG_DEBUG("[SR] Received topology from non-SR capable node %08x - storing edges for direct connection detection", mp.from);
+        LOG_DEBUG("[SR] Received topology from SR-inactive node %08x - storing edges for direct connection detection", mp.from);
     }
 
     // Clear all existing edges for this node before adding the new ones from the broadcast
@@ -556,6 +556,10 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
                                  Edge::Source::Mirrored);
 #endif
 
+        // Note: Neighbor nodes from topology broadcasts are not automatically added to NodeDB
+        // They remain "unknown" for unicast routing unless heard directly
+        // This is by design to avoid filling NodeDB with remote nodes
+
         // Log topology if this is a new edge or significant change
         if (edgeChange == Graph::EDGE_NEW || edgeChange == Graph::EDGE_SIGNIFICANT_CHANGE) {
             logNetworkTopology();
@@ -570,7 +574,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
 
         LOG_INFO("  ├── %s: %s link (%s, ETX=%.1f, var=%u)",
                  neighborName,
-                 neighbor.signal_based_capable ? "SR-node" : "legacy",
+                 neighbor.signal_based_capable ? "SR-active" : "SR-inactive",
                  quality, etx,
                  neighbor.position_variance);
 
@@ -1079,12 +1083,13 @@ void SignalRoutingModule::logNetworkTopology()
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
         CapabilityStatus status = getCapabilityStatus(nodeId);
-        const char* prefix = (status == CapabilityStatus::Capable || status == CapabilityStatus::Legacy) ? "[SR] " : "";
+        const char* prefix = (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) ? "[SR] " : "";
 
         const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->edgeCount == 0) {
-            const char* statusStr = (status == CapabilityStatus::Capable) ? "SR-active" :
-                                   (status == CapabilityStatus::Legacy) ? "SR-aware" : "unknown";
+            const char* statusStr = (status == CapabilityStatus::SRactive) ? "SR-active" :
+                                   (status == CapabilityStatus::SRinactive) ? "SR-inactive" :
+                                   (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
             LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
             continue;
         }
@@ -1112,7 +1117,7 @@ void SignalRoutingModule::logNetworkTopology()
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
 
             CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
-            const char* prefix = (neighborStatus == CapabilityStatus::Capable || neighborStatus == CapabilityStatus::Legacy) ? "[SR] " : "";
+            const char* prefix = (neighborStatus == CapabilityStatus::SRactive || neighborStatus == CapabilityStatus::SRinactive) ? "[SR] " : "";
 
             float etx = edge.getEtx();
             const char* quality;
@@ -1176,12 +1181,13 @@ void SignalRoutingModule::logNetworkTopology()
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
         CapabilityStatus status = getCapabilityStatus(nodeId);
-        const char* prefix = (status == CapabilityStatus::Capable || status == CapabilityStatus::Legacy) ? "[SR] " : "";
+        const char* prefix = (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) ? "[SR] " : "";
 
         const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeId);
         if (!edges || edges->empty()) {
-            const char* statusStr = (status == CapabilityStatus::Capable) ? "SR-active" :
-                                   (status == CapabilityStatus::Legacy) ? "SR-aware" : "unknown";
+            const char* statusStr = (status == CapabilityStatus::SRactive) ? "SR-active" :
+                                   (status == CapabilityStatus::SRinactive) ? "SR-inactive" :
+                                   (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
             LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
             continue;
         }
@@ -1224,7 +1230,7 @@ void SignalRoutingModule::logNetworkTopology()
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
 
             CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
-            const char* prefix = (neighborStatus == CapabilityStatus::Capable || neighborStatus == CapabilityStatus::Legacy) ? "[SR] " : "";
+            const char* prefix = (neighborStatus == CapabilityStatus::SRactive || neighborStatus == CapabilityStatus::SRinactive) ? "[SR] " : "";
 
             const char* quality;
             if (edge.etx < 2.0f) quality = "excellent";
@@ -1400,13 +1406,11 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             LOG_DEBUG("[SR] Inferred connectivity: %08x -> %08x (relayed via %02x)",
                      mp.from, inferredRelayer, mp.relay_node);
 
-            // For placeholders, add a synthetic graph edge with default ETX
-            if (isPlaceholderNode(inferredRelayer)) {
-                // Use ETX=2.0 for inferred placeholder connections (corresponds to poor connectivity)
-                routingGraph->updateEdge(mp.from, inferredRelayer, 2.0f, millis() / 1000);
-                LOG_DEBUG("[SR] Added synthetic edge: %08x -> %08x (ETX=2.0, placeholder)",
-                         mp.from, inferredRelayer);
-            }
+            // Add a synthetic graph edge to show inferred connectivity through relay
+            // Use ETX=2.0 for inferred connections (corresponds to poor connectivity)
+            routingGraph->updateEdge(mp.from, inferredRelayer, 2.0f, millis() / 1000);
+            LOG_DEBUG("[SR] Added synthetic edge: %08x -> %08x (ETX=2.0%s)",
+                     mp.from, inferredRelayer, isPlaceholderNode(inferredRelayer) ? ", placeholder" : "");
 
             // Track that both the original sender and relayer are active
             trackNodeCapability(mp.from, CapabilityStatus::Unknown);
@@ -1495,7 +1499,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     }
 
     // Periodic graph maintenance with stability safeguards (CLIENT_MUTE maintains direct neighbors, others do full maintenance)
-    if (routingGraph && isSignalRoutingCapable()) {
+    if (routingGraph && canSendTopology()) {
         // Use monotonic time (seconds since boot) for aging to avoid RTC sync issues
         uint32_t currentTime = millis() / 1000;
         if (currentTime - lastGraphUpdate > GRAPH_UPDATE_INTERVAL_SECS) {
@@ -1748,7 +1752,8 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
                         char neighborName[64];
                         getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
                         LOG_INFO("[SR] Neighbor %s: status=%s", neighborName,
-                                status == CapabilityStatus::Capable ? "SR-capable" :
+                                status == CapabilityStatus::SRactive ? "SR-active" :
+                                status == CapabilityStatus::SRinactive ? "SR-inactive" :
                                 status == CapabilityStatus::Legacy ? "legacy" : "unknown");
                     }
                 }
@@ -1780,14 +1785,18 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 #ifdef SIGNAL_ROUTING_LITE_MODE
     RouteLite route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
                         [this](NodeNum nodeId) { return isNodeRoutable(nodeId); }) : RouteLite();
-    haveGoodRoute = route.nextHop != 0 && route.getCost() < 5.0f; // Consider routes with cost < 5 as "good"
-    routeCost = route.getCost();
 #else
     Route route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
                       [this](NodeNum nodeId) { return isNodeRoutable(nodeId); }) : Route();
-    haveGoodRoute = route.nextHop != 0 && route.cost < 5.0f; // Consider routes with cost < 5 as "good"
-    routeCost = route.cost;
 #endif
+
+    if (route.nextHop != 0) {
+        routeCost = route.getCost();
+        haveGoodRoute = routeCost < 5.0f; // Consider routes with cost < 5 as "good"
+    } else {
+        haveGoodRoute = false;
+        routeCost = 0.0f;
+    }
 
     if (haveGoodRoute) {
         LOG_DEBUG("[SR] We have good route to %s (cost: %.2f) - broadcasting for relay coordination", destName, routeCost);
@@ -1817,6 +1826,17 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     // For unicast with healthy topology, don't allow opportunistic forwarding
     // Only allow opportunistic forwarding when topology is unhealthy
     NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom, !topologyHealthy);
+
+    // If the chosen next hop has direct connectivity to the sender, it should have received
+    // the packet directly and doesn't need us to forward it
+    if (nextHop != 0 && hasDirectConnectivity(nextHop, sourceNode)) {
+        char nextHopName[64];
+        getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
+        LOG_INFO("[SR] Not forwarding unicast from %s to %s - %s has direct connectivity to sender",
+                 senderName, destName, nextHopName);
+        return false; // Don't use SR - next hop should have received it directly
+    }
+
     if (nextHop == 0) {
         // For unicast packets where topology is healthy (destination exists),
         // don't relay if we can't find a route. Assume other nodes will handle it.
@@ -2064,12 +2084,12 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
 #ifdef SIGNAL_ROUTING_LITE_MODE
     RouteLite route = routingGraph->calculateRoute(destination, currentTime,
                         [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
-    float routeCost = route.getCost();
 #else
     Route route = routingGraph->calculateRoute(destination, currentTime,
                       [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
-    float routeCost = route.cost;
 #endif
+
+    float routeCost = route.getCost();
 
     if (route.nextHop != 0) {
         char nextHopName[64];
@@ -2422,7 +2442,7 @@ bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) const
     }
 
     CapabilityStatus status = getCapabilityStatus(nodeId);
-    return status == CapabilityStatus::Capable;
+    return status == CapabilityStatus::SRactive;
 }
 
 void SignalRoutingModule::updateNodeActivityForPacket(NodeNum nodeId)
@@ -2472,7 +2492,7 @@ float SignalRoutingModule::getSignalBasedCapablePercentage() const
             continue;
         }
         total++;
-        if (getCapabilityStatus(node->num) == CapabilityStatus::Capable) {
+        if (getCapabilityStatus(node->num) == CapabilityStatus::SRactive) {
             capable++;
         }
     }
@@ -2529,9 +2549,9 @@ void SignalRoutingModule::handleNodeInfoPacket(const meshtastic_MeshPacket &mp)
     }
 
     // Only update capability status if the node is not already known to be SR-capable
-    // NodeInfo packets don't contain SR capability info, so don't downgrade from Capable to Unknown
+    // NodeInfo packets don't contain SR capability info, so don't downgrade from SR-active/inactive to Unknown
     CapabilityStatus currentStatus = getCapabilityStatus(mp.from);
-    if (currentStatus != CapabilityStatus::Capable) {
+    if (currentStatus != CapabilityStatus::SRactive && currentStatus != CapabilityStatus::SRinactive) {
         CapabilityStatus status = capabilityFromRole(user.role);
         if (status != CapabilityStatus::Unknown) {
             trackNodeCapability(mp.from, status);
@@ -2773,10 +2793,10 @@ bool SignalRoutingModule::isActiveRoutingRole() const
     }
 }
 
-bool SignalRoutingModule::isSignalRoutingCapable() const
+bool SignalRoutingModule::canSendTopology() const
 {
-    // Returns true if this node can send SR broadcasts (is SR-aware)
-    // This includes active routing roles plus CLIENT_MUTE (which is SR-aware but doesn't relay)
+    // Returns true if this node can send topology broadcasts
+    // This includes active routing roles plus CLIENT_MUTE
     return isActiveRoutingRole() || config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE;
 }
 
@@ -2810,8 +2830,8 @@ void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus s
     for (uint8_t i = 0; i < capabilityRecordCount; i++) {
         if (capabilityRecords[i].nodeId == nodeId) {
             capabilityRecords[i].record.lastUpdated = now;
-            if (status == CapabilityStatus::Capable) {
-                capabilityRecords[i].record.status = CapabilityStatus::Capable;
+            if (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) {
+                capabilityRecords[i].record.status = status;
             } else if (status == CapabilityStatus::Legacy) {
                 capabilityRecords[i].record.status = CapabilityStatus::Legacy;
             }
@@ -2829,12 +2849,12 @@ void SignalRoutingModule::trackNodeCapability(NodeNum nodeId, CapabilityStatus s
     auto &record = capabilityRecords[nodeId];
     record.lastUpdated = now;
 
-    if (status == CapabilityStatus::Capable) {
-        record.status = CapabilityStatus::Capable;
+    if (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) {
+        record.status = status;
     } else if (status == CapabilityStatus::Legacy) {
         record.status = CapabilityStatus::Legacy;
     } else if (record.status == CapabilityStatus::Unknown) {
-        record.status = CapabilityStatus::Unknown;
+        record.status = status;
     }
 #endif
 }
@@ -2979,12 +2999,20 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
 {
     uint32_t now = millis() / 1000;  // Use monotonic time for TTL calculations
 
-    // Special case: local node is always SR-capable if module is active
-    if (nodeDB && nodeId == nodeDB->getNodeNum() && signalBasedRoutingEnabled) {
-        return CapabilityStatus::Capable;
-    }
+    // Special case: local node capability based on its role
+    if (nodeDB && nodeId == nodeDB->getNodeNum()) {
+        if (!signalBasedRoutingEnabled) {
+            return CapabilityStatus::Legacy;  // SR module disabled
+        }
 
-    LOG_DEBUG("[SR] Checking capability for node %08x", nodeId);
+        if (isActiveRoutingRole()) {
+            return CapabilityStatus::SRactive;  // Active routing roles are SR-active
+        } else if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            return CapabilityStatus::SRinactive;  // CLIENT_MUTE is SR-aware but doesn't relay
+        } else {
+            return CapabilityStatus::Legacy;  // Fully mute roles don't participate in SR
+        }
+    }
 
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
 
@@ -3068,8 +3096,9 @@ bool SignalRoutingModule::isNodeRoutable(NodeNum nodeId) const {
     // For remote nodes, we use the capability tracking
     CapabilityStatus status = getCapabilityStatus(nodeId);
     if (status == CapabilityStatus::Legacy) {
-        // Legacy nodes (including mute nodes) don't participate in SR routing
-        return false;
+        // Legacy nodes participate in SR routing only if they are routers/repeaters
+        // that will actually relay packets
+        return isLegacyRouter(nodeId);
     }
 
     return true;
@@ -3097,7 +3126,7 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
     for (uint8_t i = 0; i < nodeEdges->edgeCount; i++) {
         NodeNum to = nodeEdges->edges[i].to;
         CapabilityStatus status = getCapabilityStatus(to);
-        if (status == CapabilityStatus::Capable || status == CapabilityStatus::Unknown) {
+        if (status == CapabilityStatus::SRactive || status == CapabilityStatus::Unknown) {
             capableNeighbors++;
         } else if (isLegacyRouter(to)) {
             capableNeighbors++;
@@ -3115,7 +3144,7 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
     size_t capableNeighbors = 0;
     for (const Edge& edge : *edges) {
         CapabilityStatus status = getCapabilityStatus(edge.to);
-        if (status == CapabilityStatus::Capable || status == CapabilityStatus::Unknown) {
+        if (status == CapabilityStatus::SRactive || status == CapabilityStatus::Unknown) {
             capableNeighbors++;
         } else if (isLegacyRouter(edge.to)) {
             capableNeighbors++;
@@ -3133,17 +3162,53 @@ bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
         return false;
     }
 
-    // For unicast, we mainly care that we know about the destination
-    // The actual next-hop capability is checked in shouldUseSignalBasedRouting
-    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(destination);
-    if (!node || node->last_heard == 0) {
+    // For unicast, we need to know that the destination is reachable through the topology graph
+    // The NodeDB check is unreliable due to RTC sync issues (last_heard may be 0)
+    // If we can find ANY route to the destination, consider it reachable
+
+    NodeNum myNode = nodeDB->getNodeNum();
+    if (myNode == 0) {
         return false;
     }
 
-    uint32_t now = millis() / 1000;  // Use monotonic time
-    // For SR module consistency, treat last_heard as monotonic time
-    // This assumes last_heard values are reasonable for TTL calculations
-    return (now - node->last_heard) < ACTIVE_NODE_TTL_SECS;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    RouteLite route = routingGraph->calculateRoute(destination, millis() / 1000,
+        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
+#else
+    Route route = routingGraph->calculateRoute(destination, millis() / 1000,
+        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
+#endif
+
+    if (route.nextHop != 0) {
+        LOG_DEBUG("[SR] Node %08x is reachable through topology (nextHop=%08x, cost=%.2f)",
+                 destination, route.nextHop, route.getCost());
+        return true;
+    }
+
+    // Fallback: Check if destination is reachable via a gateway
+    NodeNum gateway = getGatewayFor(destination);
+    if (gateway != 0) {
+        // Check if we can reach the gateway (gateway must be routable)
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        RouteLite gatewayRoute = routingGraph->calculateRoute(gateway, millis() / 1000,
+            [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
+        if (gatewayRoute.nextHop != 0) {
+            LOG_DEBUG("[SR] Node %08x is reachable via gateway %08x (nextHop=%08x, cost=%.2f)",
+                     destination, gateway, gatewayRoute.nextHop, gatewayRoute.getCost());
+            return true;
+        }
+#else
+        Route gatewayRoute = routingGraph->calculateRoute(gateway, millis() / 1000,
+            [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
+        if (gatewayRoute.nextHop != 0) {
+            LOG_DEBUG("[SR] Node %08x is reachable via gateway %08x (nextHop=%08x, cost=%.2f)",
+                     destination, gateway, gatewayRoute.nextHop, gatewayRoute.cost);
+            return true;
+        }
+#endif
+    }
+
+    return false;
 }
 
 void SignalRoutingModule::rememberRelayIdentity(NodeNum nodeId, uint8_t relayId)
@@ -3694,4 +3759,34 @@ void SignalRoutingModule::cancelSpeculativeRetransmit(NodeNum origin, uint32_t p
 uint64_t SignalRoutingModule::makeSpeculativeKey(NodeNum origin, uint32_t packetId)
 {
     return (static_cast<uint64_t>(origin) << 32) | packetId;
+}
+
+bool SignalRoutingModule::hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB)
+{
+    if (!routingGraph || !nodeDB) {
+        return false;
+    }
+
+    // Check if nodeA has a direct edge to nodeB
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeA);
+    if (edges) {
+        for (uint8_t i = 0; i < edges->edgeCount; i++) {
+            if (edges->edges[i].to == nodeB) {
+                return true;
+            }
+        }
+    }
+#else
+    auto edges = routingGraph->getEdgesFrom(nodeA);
+    if (edges) {
+        for (const auto& edge : *edges) {
+            if (edge.to == nodeB) {
+                return true;
+            }
+        }
+    }
+#endif
+
+    return false;
 }
