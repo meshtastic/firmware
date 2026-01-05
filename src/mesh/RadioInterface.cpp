@@ -827,6 +827,9 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("numChannels: %d x %.3fkHz", numChannels, bw);
+    if (myRegion->overrideSlot != 0) {
+        LOG_INFO("Using region override slot: %d", myRegion->overrideSlot);
+    }
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
