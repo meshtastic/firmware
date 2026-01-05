@@ -792,54 +792,58 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         lines.push_back(std::string(headerStr));
     }
 
-    std::string line, word;
-    for (int i = 0; messageBuf[i]; ++i) {
-        char ch = messageBuf[i];
+    // Character-wrap (UTF-8 aware). This avoids the "single very long word" edge-case
+    // that creates an extra line with only one CJK character.
+    std::string line;
+    for (size_t i = 0; messageBuf[i];) {
+        std::string glyph;
+
+        // Replace U+2019 (E2 80 99) with ASCII apostrophe for font compatibility
         if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
             (unsigned char)messageBuf[i + 2] == 0x99) {
-            ch = '\''; // plain apostrophe
-            i += 2;    // skip over the extra UTF-8 bytes
-        }
-        if (ch == '\n') {
-            if (!word.empty())
-                line += word;
-            if (!line.empty())
-                lines.push_back(line);
-            line.clear();
-            word.clear();
-        } else if (ch == ' ') {
-            line += word + ' ';
-            word.clear();
+            glyph = "'";
+            i += 3;
         } else {
-            word += ch;
-            std::string test = line + word;
-#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
-            uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
-#if defined(OLED_CJK)
-            if(ch >= 0x80)
-            {
-                strWidth = strWidth + OLED_CJK_SIZE;
-            }
-#endif
-#else
-            uint16_t strWidth = display->getStringWidth(test.c_str());
-#endif
-            if (strWidth > textWidth) {
+            char ch = messageBuf[i];
+            if (ch == '\n') {
                 if (!line.empty())
                     lines.push_back(line);
-                line = word;
-                word.clear();
+                line.clear();
+                ++i;
+                continue;
             }
+
+            size_t len = utf8CharLen((uint8_t)ch);
+            glyph.assign(messageBuf + i, len);
+            i += len;
+        }
+
+        // Avoid leading spaces after wrapping
+        if (glyph == " " && line.empty())
+            continue;
+
+        std::string test = line + glyph;
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
+        uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
+#else
+        uint16_t strWidth = display->getStringWidth(test.c_str());
+#endif
+
+        if (strWidth > textWidth) {
+            if (!line.empty())
+                lines.push_back(line);
+            line = (glyph == " ") ? "" : glyph;
+        } else {
+            line = std::move(test);
         }
     }
 
-    if (!word.empty())
-        line += word;
     if (!line.empty())
         lines.push_back(line);
 
     return lines;
 }
+
 std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
                                       const std::vector<bool> &isHeaderVec)
 {
