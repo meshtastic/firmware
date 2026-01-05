@@ -31,7 +31,10 @@ ScanI2C::FoundDevice ScanI2C::firstRTC() const
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 {
-    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004, MPR121KB, TCA8418KB};
+    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, RAK14004, MPR121KB, TCA8418KB};
+#if HAS_BBQ10_KEYBOARD
+    types[2] = BBQ10KB;
+#endif
     return firstOfOrNONE(6, types);
 }
 

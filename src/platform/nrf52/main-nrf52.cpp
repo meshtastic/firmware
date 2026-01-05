@@ -55,7 +55,9 @@ bool loopCanSleep()
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
+#ifdef DEBUG
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
+#endif
     // debugger_break(); FIXME doesn't work, possibly not for segger
     // Reboot cpu
     NVIC_SystemReset();
@@ -493,3 +495,4 @@ void enterDfuMode()
     enterUf2Dfu();
 #endif
 }
+

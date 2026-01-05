@@ -17,17 +17,19 @@ extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
-    : concurrency::OSThread(name),
-#if defined(T_DECK_PRO)
-      TCAKeyboard(*(new TDeckProKeyboard()))
-#elif defined(T_LORA_PAGER)
-      TCAKeyboard(*(new TLoraPagerKeyboard()))
-#elif defined(HACKADAY_COMMUNICATOR)
-      TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
-#else
-      TCAKeyboard(*(new TCA8418Keyboard()))
-#endif
+    : concurrency::OSThread(name)
 {
+#if HAS_TCA8418_KEYBOARD
+#if defined(T_DECK_PRO)
+    TCAKeyboard = TDeckProKeyboard();
+#elif defined(T_LORA_PAGER)
+    TCAKeyboard = TLoraPagerKeyboard();
+#elif defined(HACKADAY_COMMUNICATOR)
+    TCAKeyboard = HackadayCommunicatorKeyboard();
+#else
+    TCAKeyboard = TCA8418Keyboard();
+#endif
+#endif
     this->_originName = name;
 }
 
@@ -56,31 +58,43 @@ int32_t KbI2cBase::runOnce()
 #if WIRE_INTERFACES_COUNT == 2
             LOG_DEBUG("Use I2C Bus 1 (the second one)");
             i2cBus = &Wire1;
+#if HAS_BBQ10_KEYBOARD
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
                 Q10keyboard.setBacklight(0);
             }
+#endif
+#if HAS_MPR121_KEYBOARD
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
             }
+#endif
+#if HAS_TCA8418_KEYBOARD
             if (cardkb_found.address == TCA8418_KB_ADDR) {
                 TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire1);
             }
+#endif
             break;
 #endif
         case ScanI2C::WIRE:
             LOG_DEBUG("Use I2C Bus 0 (the first one)");
             i2cBus = &Wire;
+#if HAS_BBQ10_KEYBOARD
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
                 Q10keyboard.setBacklight(0);
             }
+#endif
+#if HAS_MPR121_KEYBOARD
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
             }
+#endif
+#if HAS_TCA8418_KEYBOARD
             if (cardkb_found.address == TCA8418_KB_ADDR) {
                 TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire);
             }
+#endif
             break;
         case ScanI2C::NO_I2C:
         default:
@@ -89,6 +103,7 @@ int32_t KbI2cBase::runOnce()
     }
 
     switch (kb_model) {
+#if HAS_BBQ10_KEYBOARD
     case 0x11: { // BB Q10
         int keyCount = Q10keyboard.keyCount();
         while (keyCount--) {
@@ -189,6 +204,8 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
+#endif
+#if HAS_MPR121_KEYBOARD
     case 0x37: { // MPR121
         MPRkeyboard.trigger();
         InputEvent e = {};
@@ -252,6 +269,8 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
+#endif
+#if HAS_TCA8418_KEYBOARD
     case 0x84: { // Adafruit TCA8418
         TCAKeyboard.trigger();
         InputEvent e = {};
@@ -340,6 +359,7 @@ int32_t KbI2cBase::runOnce()
         TCAKeyboard.clearInt();
         break;
     }
+#endif
     case 0x02: {
         // RAK14004
         uint8_t rDataBuf[8] = {0};

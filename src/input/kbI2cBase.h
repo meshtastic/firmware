@@ -22,8 +22,14 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
 
     TwoWire *i2cBus = 0;
 
+#if HAS_BBQ10_KEYBOARD
     BBQ10Keyboard Q10keyboard;
+#endif
+#if HAS_MPR121_KEYBOARD
     MPR121Keyboard MPRkeyboard;
+#endif
+#if HAS_TCA8418_KEYBOARD
     TCA8418KeyboardBase &TCAKeyboard;
+#endif
     bool is_sym = false;
 };

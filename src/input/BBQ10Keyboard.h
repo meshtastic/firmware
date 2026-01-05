@@ -1,4 +1,5 @@
 // Based on arturo182 arduino_bbq10kbd library https://github.com/arturo182/arduino_bbq10kbd
+#pragma once
 
 #include "configuration.h"
 #include <Wire.h>

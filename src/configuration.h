@@ -200,6 +200,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MPR121_KB_ADDR 0x5A
 #define TCA8418_KB_ADDR 0x34
 
+// BBQ10Keyboard support
+#ifndef HAS_BBQ10_KEYBOARD
+#define HAS_BBQ10_KEYBOARD 1
+#endif
+
+// MPR121Keyboard support
+#ifndef HAS_MPR121_KEYBOARD
+#define HAS_MPR121_KEYBOARD 1
+#endif
+
+// TCA8418Keyboard support
+#ifndef HAS_TCA8418_KEYBOARD
+#define HAS_TCA8418_KEYBOARD 1
+#endif
+
 // -----------------------------------------------------------------------------
 // SENSOR
 // -----------------------------------------------------------------------------
