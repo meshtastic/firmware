@@ -32,6 +32,8 @@ struct Route {
     Route() : destination(0), nextHop(0), cost(0), timestamp(0) {}
     Route(NodeNum dest, NodeNum hop, float c, uint32_t ts)
         : destination(dest), nextHop(hop), cost(c), timestamp(ts) {}
+
+    float getCost() const { return cost; }
 };
 
 struct RelayCandidate {
