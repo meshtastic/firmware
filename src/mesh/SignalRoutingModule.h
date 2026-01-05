@@ -281,6 +281,11 @@ private:
     uint32_t getNodeLastActivityTime(NodeNum nodeId) const;
 
     bool isActiveRoutingRole() const;
+
+    /**
+     * Check if this node can send signal routing broadcasts (is SR-aware)
+     */
+    bool isSignalRoutingCapable() const;
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;
     void handleSniffedPayload(const meshtastic_MeshPacket &mp, bool isDirectNeighbor);
