@@ -126,7 +126,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
-    // mappings table -- connects the root hashes to channel hashes and DM identifiers
+    // peers table, tracking nodes we've heard SFPP traffic from
     res = sqlite3_exec(ppDb, "         \
         CREATE TABLE IF NOT EXISTS     \
         peers(                      \
@@ -540,6 +540,10 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE) {
         LOG_DEBUG("StoreForwardpp Link Provide received!");
+        if (t->message_hash.size >= 8 && isInDB(t->message_hash.bytes, t->message_hash.size)) {
+            LOG_INFO("StoreForwardpp Received link already in chain");
+            return true;
+        }
 
         incoming_link = ingestLinkMessage(t);
     } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_FIRSTHALF) {
@@ -649,7 +653,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 }
                 if (chain_end.rx_time != 0) {
                     int64_t links_behind = 0;
-                    if (t->chain_count != 0) {
+                    if (t->chain_count != 0 && t->chain_count > chain_end.counter) {
                         links_behind = t->chain_count - chain_end.counter;
 
                         LOG_DEBUG("StoreForwardpp observed link that is link ahead of us: %ld", links_behind);
