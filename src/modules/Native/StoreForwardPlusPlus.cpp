@@ -389,8 +389,10 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
     } else if (mp.decoded.portnum == portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
                                                                       : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP) {
         meshtastic_StoreForwardPlusPlus scratch;
-        pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StoreForwardPlusPlus_fields, &scratch);
-        handleReceivedProtobuf(mp, &scratch);
+        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StoreForwardPlusPlus_fields,
+                                 &scratch)) {
+            handleReceivedProtobuf(mp, &scratch);
+        }
         return ProcessMessage::CONTINUE;
     }
     return ProcessMessage::CONTINUE;
