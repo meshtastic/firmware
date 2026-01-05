@@ -21,9 +21,6 @@
 // Broadcast interval for signal routing info (2 minutes)
 #define SIGNAL_ROUTING_BROADCAST_SECS 120
 
-// Speculative retransmit timeout (600ms)
-#define SPECULATIVE_RETRANSMIT_TIMEOUT_MS 600
-
 class SignalRoutingModule : public ProtobufModule<meshtastic_SignalRoutingInfo>, private concurrency::OSThread
 {
 public:
@@ -77,10 +74,6 @@ public:
      */
     void updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance = 0);
 
-    /**
-     * Handle speculative retransmit for unicast packets
-     */
-    void handleSpeculativeRetransmit(const meshtastic_MeshPacket *p);
 
     /**
      * Send our signal routing info to the mesh
@@ -195,20 +188,12 @@ private:
         uint32_t lastHeardMs = 0;
     };
 
-    struct SpeculativeRetransmitEntry {
-        uint64_t key = 0;
-        NodeNum origin = 0;
-        uint32_t packetId = 0;
-        uint32_t expiryMs = 0;
-        meshtastic_MeshPacket *packetCopy = nullptr;
-    };
 
     // Data structures depend on SIGNAL_ROUTING_LITE_MODE
     #ifdef SIGNAL_ROUTING_LITE_MODE
         // Lite mode structures: fixed-size arrays
         static constexpr size_t MAX_CAPABILITY_RECORDS = 24;
         static constexpr size_t MAX_RELAY_IDENTITY_ENTRIES = 16;
-        static constexpr size_t MAX_SPECULATIVE_RETRANSMITS = 4;
         static constexpr size_t MAX_GATEWAY_RELATIONS = 24;
         static constexpr size_t MAX_GATEWAY_DOWNSTREAM = 8;
 
@@ -227,8 +212,6 @@ private:
         RelayIdentityCacheEntry relayIdentityCache[MAX_RELAY_IDENTITY_ENTRIES];
         uint8_t relayIdentityCacheCount = 0;
 
-        SpeculativeRetransmitEntry speculativeRetransmits[MAX_SPECULATIVE_RETRANSMITS];
-        uint8_t speculativeRetransmitCount = 0;
 
         struct GatewayRelation {
             NodeNum gateway = 0;
@@ -250,7 +233,6 @@ private:
         // Full mode structures: dynamic hash maps
         std::unordered_map<NodeNum, CapabilityRecord> capabilityRecords;
         std::unordered_map<uint8_t, std::vector<RelayIdentityEntry>> relayIdentityCache;
-        std::unordered_map<uint64_t, SpeculativeRetransmitEntry> speculativeRetransmits;
         struct GatewayRelationEntry {
             NodeNum gateway;
             uint32_t lastSeen;
@@ -270,8 +252,6 @@ private:
     void pruneRelayIdentityCache(uint32_t nowMs);
     NodeNum resolveRelayIdentity(uint8_t relayId) const;
     NodeNum resolveHeardFrom(const meshtastic_MeshPacket *p, NodeNum sourceNode) const;
-    void processSpeculativeRetransmits(uint32_t nowMs);
-    void cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId);
     static uint64_t makeSpeculativeKey(NodeNum origin, uint32_t packetId);
     void recordGatewayRelation(NodeNum gateway, NodeNum downstream);
     void removeGatewayRelationship(NodeNum gateway, NodeNum downstream);

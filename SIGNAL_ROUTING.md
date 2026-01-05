@@ -2,19 +2,62 @@
 
 ## Overview
 
-SignalRouting is an advanced mesh networking protocol for Meshtastic that replaces traditional SNR-based flooding delays with graph-based topology awareness and coordinated packet forwarding. It uses Expected Transmission Count (ETX) metrics to make intelligent routing decisions, significantly improving network efficiency and reliability over both random and SNR-based flooding approaches.
+SignalRouting (SR) is an advanced mesh networking protocol for Meshtastic that fundamentally transforms packet routing from traditional flooding-based approaches to intelligent, graph-based coordination. Unlike stock firmware's simple broadcast flooding or basic next-hop forwarding, SR maintains a comprehensive network topology graph using Expected Transmission Count (ETX) metrics to make optimal routing decisions.
+
+### Key Differentiators from Stock Routing
+
+**Stock Firmware Behavior:**
+- **Broadcasts**: SNR-based flooding with duplicate suppression - nodes retransmit with random delays, but cancel retransmissions when hearing others transmit first
+- **Unicasts**: Simple next-hop forwarding based on learned routes or direct connectivity
+- **Coordination**: Limited duplicate detection prevents some redundancy, but still allows broadcast storms in dense networks
+
+**SignalRouting Behavior:**
+- **Broadcasts**: Intelligent relay coordination to prevent redundant transmissions while ensuring coverage
+- **Unicasts**: Graph-based multi-hop routing with ETX optimization, plus coordinated relay selection through overhearing
+- **Coordination**: Distributed algorithm where nodes compete for relay responsibilities based on network position
+
+### SR's Dual Nature
+
+SR operates in two complementary modes:
+
+1. **Intelligent Routing**: Uses Dijkstra algorithm on ETX-weighted topology graphs for optimal path selection
+2. **Coordinated Relay Selection**: For both broadcasts and unicasts, SR may broadcast packets to coordinate which nodes should relay them, preventing the redundant transmissions that plague traditional flooding approaches
+
+This dual approach provides the reliability of coordinated networking with the efficiency of graph-based routing, significantly improving network performance over both random flooding and simple forwarding schemes.
 
 ## Comparison with Other Routing Approaches
 
 ### vs Stock Flooding (FloodingRouter)
-- **Flooding**: Every node rebroadcasts received packets with SNR-based delays (poorer links = shorter delays)
-- **SignalRouting**: Coordinates relays to prevent redundant transmissions while ensuring coverage
-- **Advantage**: Reduces broadcast storms and provides more reliable delivery than SNR-based prioritization
+
+**Stock Flooding Problems:**
+- **Residual Redundancy**: Despite duplicate suppression, broadcast storms still occur in dense networks due to timing windows and SNR variations
+- **Inefficiency**: Limited coordination means wasted transmissions when multiple nodes retransmit before suppression takes effect
+- **Unpredictability**: SNR-based delays provide basic prioritization but don't account for overall network topology or coverage optimization
+- **No Learning**: Static behavior regardless of network conditions
+
+**SignalRouting Solution:**
+- **Coordination**: Distributed algorithm determines optimal relay nodes based on coverage analysis
+- **Topology Awareness**: Uses ETX metrics and graph knowledge to select best relay candidates
+- **Iterative Selection**: Nodes compete for relay responsibilities with timeout-based fallback
+- **Legacy Integration**: Prioritizes existing ROUTER/REPEATER nodes for compatibility
+
+**Key Advantage**: Transforms chaotic flooding into orchestrated relay selection, significantly reducing redundant transmissions while maintaining reliable coverage.
 
 ### vs NextHopRouter
-- **NextHopRouter**: Learns single next hop per destination reactively through ACK observations
-- **SignalRouting**: Uses graph-based multi-hop routing with ETX quality metrics
-- **Advantage**: More reliable routes and coordinated broadcast behavior
+
+**NextHopRouter Limitations:**
+- **Reactive Learning**: Only discovers routes through ACK observations, slow convergence
+- **Single Path**: Learns one next-hop per destination, no alternative route awareness
+- **No Coordination**: Each node forwards independently, potential for redundant unicast paths
+- **Link Quality Ignorance**: Doesn't consider ETX or multi-hop path optimization
+
+**SignalRouting Advantages:**
+- **Proactive Topology**: Maintains complete network graph through multiple discovery mechanisms
+- **ETX Optimization**: Uses Expected Transmission Count for true link quality assessment
+- **Multi-hop Intelligence**: Dijkstra algorithm finds optimal paths across the entire network
+- **Coordinated Unicasts**: Enables intelligent relay selection through overhearing unicast transmissions
+
+**Key Advantage**: Transforms unicast routing from simple forwarding to intelligent, network-aware path selection with optional coordination for complex scenarios.
 
 ## Node Role Behavior Comparison
 
@@ -38,7 +81,7 @@ SignalRouting is an advanced mesh networking protocol for Meshtastic that replac
 |-------------|------------------------|-------|
 | **ReliableRouter** | Up to 3 retransmissions | For want_ack packets only |
 | **NextHopRouter** | 2 for intermediate hops, 3 for origin | Route reset on final failure |
-| **SignalRouting** | Adds speculative retransmit (600ms timeout) | For SR-selected unicast routes |
+| **SignalRouting** | Coordinates unicast relays on overhearing nodes | For SR-selected unicast routes |
 
 ### Routing Delays and Timing
 
@@ -123,40 +166,57 @@ bool shouldDeliverDirectToNeighbor(NodeNum destination, NodeNum heardFrom) {
 
 ### Unicast Route Selection Priority
 
-1. **Direct sender coverage check**: If the sending node has direct connection to destination, don't relay (destination already received)
-2. **Direct delivery to neighbors**: For relayed packets where destination didn't hear original transmission
-3. **Calculated multi-hop routes**: Using Dijkstra algorithm with ETX weights
-4. **Gateway routes**: Prefer direct connections to known gateways for extended reach
-5. **Opportunistic forwarding**: When topology incomplete, forward to best direct neighbor
-6. **Broadcast coordination**: Only for known, well-connected destinations to prevent flooding
+When deciding whether to use SR coordination for unicast packets:
+
+1. **Any Route Check**: If we have ANY calculated route to the destination (regardless of cost), use SR coordination
+2. **Topology Health**: Verify destination is known in the network topology
+3. **Gateway Preferences**: Prefer routes through gateways we can reach directly
+4. **Next Hop Capability**: Ensure next hop is SR-capable or legacy router
+5. **Designated Gateway Check**: Defer to designated gateways when applicable
+6. **Opportunistic Forwarding**: Use when topology is unhealthy or routes unavailable
 
 ### Speculative Retransmission
 
-For unicast packets, SignalRouting implements speculative retransmission:
-- Monitors unicast packet transmissions for ACK responses
-- Retransmits after 600ms timeout if no ACK received
-- Helps recover from temporary link failures or interference
+For unicast packets, SignalRouting coordinates relay decisions on overhearing nodes:
+- Intermediate nodes that overhear unicast transmissions participate in relay coordination
+- Determines optimal relay candidates based on coverage analysis and ETX metrics
+- Prevents redundant transmissions through distributed candidate selection
+- Originating node retransmission handled by standard Router mechanisms
 
-### Unicast Broadcast Coordination
+**Unlike broadcast coordination**, unicast relay failures rely on end-to-end retransmission rather than immediate fallback to alternative relays. In multi-hop unicast scenarios, relay failures are only detected when the original sender doesn't receive an ACK from the final destination.
 
-SignalRouting broadcasts unicast packets only when the destination is known and well-connected:
+### Unicast Relay Coordination
+
+SignalRouting fundamentally differs from stock routing in its approach to unicast packets. While stock firmware simply forwards unicasts to the calculated next hop, SR enables intelligent relay coordination through overhearing.
+
+**How SR Coordinates Unicasts:**
+When a unicast packet is transmitted, nodes that overhear the transmission (even if they can't decrypt the payload) can participate in relay coordination:
+
+1. **Overhearing Mechanism**: Unicast packets are transmitted normally with unencrypted headers
+2. **Intermediate Participation**: Non-destination nodes that overhear the unicast can run coordination logic
+3. **Distributed Decision**: Each overhearing node independently calculates if it should relay to the destination
+4. **Optimal Selection**: Best-positioned relays are chosen based on route quality and network topology
+
+**When SR Enables Coordination:**
+SR allows unicast coordination when:
+- ANY route exists to the destination (regardless of cost)
+- Network topology is healthy and destination is known
+- Gateway preferences and designated gateway logic don't override
+- Next hop is SR-capable or legacy router
+
+This allows SR's coordinated delivery algorithm to select the best relay candidates even for challenging routes.
+
+**Overhearing Node Optimization:**
+When nodes overhear a unicast transmission, they check if the original transmitter has direct connectivity to the optimal next hop or destination. If so, the transmitter should have handled the transmission directly rather than relying on coordination. This prevents unnecessary relay coordination when direct paths exist.
 
 ```cpp
 bool shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p) {
-    // Only broadcast unicast packets for known destinations
-    bool topologyHealthy = topologyHealthyForUnicast(p->to);
-    if (!topologyHealthy) {
-        // Don't broadcast unicasts for unknown destinations to prevent flooding
-        return false;
-    }
-
-    // Check if we have a good route to the known destination
-    Route route = routingGraph->calculateRoute(p->to, getTime());
-    if (route.nextHop != 0 && route.cost < 5.0f) {
-        // Broadcast unicast packet for relay coordination
-        return true;
-    }
-    return false; // Use traditional unicast routing
+    // Complex logic including:
+    // - Check if we have ANY route to destination (regardless of cost)
+    // - Verify topology health for destination
+    // - Apply gateway preferences and designated gateway logic
+    // - Ensure next hop is SR-capable or legacy router
+    // Returns true when SR coordination should be used for unicast relay
 }
 ```
 
@@ -167,13 +227,16 @@ This conservative approach prevents network flooding by only coordinating delive
 - **Relayed packet inference**: Inferring connectivity between senders and relays from relayed packets
 - **Placeholder resolution**: Unknown relays are tracked as placeholders until real node identities are discovered
 
-Unicast coordination can occur once a destination is known through any of these discovery methods. Additionally, unicast packets are not relayed if the sending node has a direct connection to the destination, as the destination should have already received the packet directly.
+Unicast coordination can occur once a destination is known through any of these discovery methods. Additionally, unicast relay coordination includes optimizations to prevent unnecessary transmissions:
+
+- **Direct Connectivity Optimization**: If the broadcasting node (that initiated coordination) has direct connectivity to the optimal next hop or destination, other nodes won't relay since the broadcasting node should have handled the transmission directly
+- **Sender-Destination Direct Check**: If the original sender has a direct connection to the destination, no coordination occurs as the destination already received the packet directly
 
 ## Broadcast Routing
 
 ### Iterative Relay Coordination Algorithm
 
-SignalRouting uses an iterative algorithm to coordinate broadcast relays, ensuring coverage while minimizing redundancy. The algorithm prioritizes legacy routers/repeaters and uses timeout-based candidate selection:
+SignalRouting uses an iterative algorithm to coordinate broadcast relays, ensuring coverage while minimizing redundancy. The algorithm prioritizes legacy routers/repeaters and uses timeout-based candidate selection. **Note**: This iterative approach is used only for broadcast coordination, not for unicast relay coordination.
 
 ```cpp
 bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId) {
@@ -268,7 +331,7 @@ Packet from A to BROADCAST:
 ### Improved Deliverability
 
 **Dense Node Scenarios:**
-SignalRouting attempts to coordinate broadcast relays to reduce redundant transmissions. In networks with multiple nodes that can hear the same transmissions, the algorithm identifies which nodes provide unique coverage and prioritizes their relays. However, coordination depends on accurate topology information and may fall back to contention-based approaches when topology is incomplete.
+SignalRouting transforms chaotic broadcast flooding into orchestrated relay selection. In dense networks where multiple nodes hear the same transmissions, SR's iterative coordination algorithm identifies optimal relay nodes based on coverage analysis and ETX metrics. This significantly reduces redundant transmissions compared to traditional SNR-based flooding, while maintaining reliable delivery. Coordination effectiveness depends on topology accuracy, with graceful fallback to contention-based approaches when graph information is incomplete.
 
 ### Mesh Branch Handling
 
@@ -491,40 +554,42 @@ This iterative approach ensures optimal relay selection while handling timeouts 
 
 ### Unicast Relay Logic
 
-SignalRouting implements conservative unicast relaying to prevent unnecessary transmissions:
+SignalRouting implements sophisticated unicast relay coordination to optimize packet delivery:
 
-1. **Direct Sender Coverage Check**: If the sending node has a direct connection to the destination, don't relay (destination already received the packet directly)
-2. **Downstream Relay Check**: If destination is downstream of a relay we can hear, broadcast for coordination
-3. **Legacy Router Priority**: Check if legacy routers that heard the packet should relay instead
-4. **Route Cost Comparison**: Compare our route cost against other nodes that heard the transmission
-5. **Gateway Coordination**: Use gateway relationships for extended network reach
+1. **Gateway Override**: If we are the designated gateway for the destination, always relay to ensure downstream connectivity
+2. **Transmitter Direct Connectivity**: If the original transmitter has direct connectivity to our calculated next hop or the destination, don't relay - the transmitter should have used that direct path instead of relying on coordination
+3. **Sender Direct Connectivity**: If the original sender has direct connection to the destination, don't relay (destination already received directly)
+4. **Downstream Relay Coordination**: If destination is downstream of relays we can hear, coordinate delivery through broadcasting
+5. **Legacy Router Priority**: Give priority to legacy routers/repeaters that can reach the destination (they are designed to always relay)
+6. **Route Cost Comparison**: Compare our route quality against other nodes that heard the transmission to determine best relay positioning
+7. **Better Direct Connection Check**: If another node has a significantly better direct connection to the destination, defer to them
+
+**Note**: Unlike broadcast coordination, unicast relay decisions are made statically based on current topology knowledge without iterative candidate selection or contention window waiting.
 
 ```cpp
-bool shouldRelayUnicastForCoordination(NodeNum destination, NodeNum heardFrom) {
-    // 1. Check if sender has direct connection to destination
-    if (senderHasDirectConnectionTo(heardFrom, destination)) {
-        return false; // Destination already received directly
-    }
-
-    // 2. Check downstream relay coordination...
-    // 3. Check legacy router priorities...
-    // 4. Compare route costs...
+bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p) {
+    // Complex coordination logic including all the above checks
+    // Determines if this node should relay the coordinated unicast packet
 }
 ```
 
 ### Performance Characteristics
 
 **Broadcast Coordination:**
+- Uses iterative candidate selection with contention windows and timeout-based fallback
 - Attempts to minimize redundant transmissions through coverage analysis
-- Uses timeout-based coordination rather than perfect synchronization
 - May still have some redundant relays in dynamic network conditions
 - Effectiveness depends on topology knowledge and node participation
 
-**Unicast Optimization:**
-- Uses ETX-based routing for known destinations
-- Provides basic retransmission recovery for unicast failures
-- May broadcast unicast packets for coordination in well-connected scenarios
+**Unicast Coordination:**
+- Uses static relay decisions based on current topology knowledge
+- Does not implement iterative candidate selection or contention windows
+- Enables intelligent relay selection through overhearing unicast transmissions
+- Includes transmitter direct connectivity optimization to prevent unnecessary coordination
+- Relies on speculative retransmission (600ms timeout) for relay failure recovery
 - Falls back to opportunistic forwarding when routes are unknown
+
+**Key Difference**: Broadcasts use dynamic, iterative coordination with immediate fallback; unicasts use static decisions with end-to-end retransmission recovery.
 
 **Network Adaptation:**
 - Assesses topology health but may not detect sudden changes immediately
@@ -589,8 +654,8 @@ Potential areas for improvement:
 - Legacy routers/repeaters are prioritized and may relay independently
 - This is expected behavior for compatibility with existing infrastructure
 
-**"Broadcast unicasts being sent"**
-- SignalRouting only broadcasts unicast packets for known destinations with good routes
+**"Coordinated unicast relays being used"**
+- SignalRouting only uses coordinated relay selection for unicast packets to known destinations with good routes
 - Unknown destinations use traditional unicast routing to prevent network flooding
 
 SignalRouting provides an alternative to traditional flooding-based mesh networking, offering basic coordination for packet relay decisions. It works alongside existing routing approaches and provides benefits in networks with sufficient SignalRouting-capable nodes, while maintaining compatibility with legacy devices through prioritized relay handling.

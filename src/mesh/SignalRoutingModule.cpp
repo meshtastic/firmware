@@ -132,7 +132,6 @@ int32_t SignalRoutingModule::runOnce()
     pruneCapabilityCache(nowSecs);
     pruneGatewayRelations(nowSecs);
     pruneRelayIdentityCache(nowMs);
-    processSpeculativeRetransmits(nowMs);
 
 #if defined(RGBLED_RED) && defined(RGBLED_GREEN) && defined(RGBLED_BLUE)
     // Turn off heartbeat LED if duration expired (for operation feedback)
@@ -166,39 +165,10 @@ int32_t SignalRoutingModule::runOnce()
         timeToBroadcast = (SIGNAL_ROUTING_BROADCAST_SECS * 1000) - (nowMs - lastBroadcast);
     }
 
-    uint32_t timeToSpeculative = timeToBroadcast;
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    if (speculativeRetransmitCount > 0) {
-        uint32_t soonest = timeToBroadcast;
-        for (uint8_t i = 0; i < speculativeRetransmitCount; i++) {
-            if (speculativeRetransmits[i].expiryMs > nowMs) {
-                soonest = std::min(soonest, speculativeRetransmits[i].expiryMs - nowMs);
-            } else {
-                soonest = 0;
-                break;
-            }
-        }
-        timeToSpeculative = soonest;
-    }
-#else
-    if (!speculativeRetransmits.empty()) {
-        uint32_t soonest = timeToBroadcast;
-        for (const auto& entry : speculativeRetransmits) {
-            if (entry.second.expiryMs > nowMs) {
-                soonest = std::min(soonest, entry.second.expiryMs - nowMs);
-            } else {
-                soonest = 0;
-                break;
-            }
-        }
-        timeToSpeculative = soonest;
-    }
-#endif
-
     // Turn off LED when RTOS task completes
     turnOffRgbLed();
 
-    uint32_t nextDelay = std::min({timeToLedOff, timeToBroadcast, timeToSpeculative});
+    uint32_t nextDelay = std::min({timeToLedOff, timeToBroadcast});
     if (nextDelay < 20) {
         nextDelay = 20;
     }
@@ -1272,10 +1242,6 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         nodeDB->updateFrom(mp);
     }
 
-    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.request_id != 0 &&
-        mp.to == nodeDB->getNodeNum()) {
-        cancelSpeculativeRetransmit(nodeDB->getNodeNum(), mp.decoded.request_id);
-    }
 
     // Only track DIRECT neighbors - packets heard directly over radio with no relays
     // Conditions for a direct neighbor:
@@ -1546,6 +1512,31 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
         return true;
     }
 
+    // Check if the broadcasting node has direct connectivity to our calculated next hop or the target
+    // If so, the broadcasting node should have sent directly instead of broadcasting for coordination
+    NodeNum nextHop = getNextHop(destination, sourceNode, heardFrom, false);
+    if (nextHop != 0) {
+        // Check if broadcasting node has direct connectivity to our next hop
+        if (hasDirectConnectivity(heardFrom, nextHop)) {
+            char broadcastingName[64], nextHopName[64];
+            getNodeDisplayName(heardFrom, broadcastingName, sizeof(broadcastingName));
+            getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
+            LOG_DEBUG("[SR] UNICAST RELAY: Broadcasting node %s has direct connection to next hop %s - broadcasting node should have sent directly",
+                     broadcastingName, nextHopName);
+            return false; // Don't relay - broadcasting node should have handled this directly
+        }
+
+        // Check if broadcasting node has direct connectivity to the target
+        if (hasDirectConnectivity(heardFrom, destination)) {
+            char broadcastingName[64], destName[64];
+            getNodeDisplayName(heardFrom, broadcastingName, sizeof(broadcastingName));
+            getNodeDisplayName(destination, destName, sizeof(destName));
+            LOG_DEBUG("[SR] UNICAST RELAY: Broadcasting node %s has direct connection to target %s - broadcasting node should have sent directly",
+                     broadcastingName, destName);
+            return false; // Don't relay - broadcasting node should have handled this directly
+        }
+    }
+
     // Check if the sending node (heardFrom) has a direct connection to the destination
     // If so, the destination should have already received this packet directly, so don't relay
 #ifdef SIGNAL_ROUTING_LITE_MODE
@@ -1778,9 +1769,10 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
-    // Check if we have a good route to the destination - if so, consider broadcasting for relay coordination
-    bool haveGoodRoute = false;
+    // Check if we have any route to the destination - if so, use SR coordination for unicast relay
+    // SR's coordinated delivery algorithm will determine the best relay candidates
     float routeCost = 0.0f;
+    bool haveAnyRoute = false;
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
     RouteLite route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
@@ -1792,15 +1784,12 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
 
     if (route.nextHop != 0) {
         routeCost = route.getCost();
-        haveGoodRoute = routeCost < 5.0f; // Consider routes with cost < 5 as "good"
-    } else {
-        haveGoodRoute = false;
-        routeCost = 0.0f;
+        haveAnyRoute = true;
     }
 
-    if (haveGoodRoute) {
-        LOG_DEBUG("[SR] We have good route to %s (cost: %.2f) - broadcasting for relay coordination", destName, routeCost);
-        return true; // Broadcast using SR for coordinated delivery to destination
+    if (haveAnyRoute) {
+        LOG_DEBUG("[SR] We have route to %s (cost: %.2f) - using SR coordination for unicast relay", destName, routeCost);
+        return true; // Use SR coordination for unicast relay to destination
     }
 
     bool topologyHealthy = topologyHealthyForUnicast(p->to);
@@ -1808,7 +1797,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
              topologyHealthy ? "HEALTHY" : "unhealthy");
 
     if (!topologyHealthy) {
-        LOG_DEBUG("[SR] Destination node not known - not broadcasting unicast packet to avoid network flooding");
+        LOG_DEBUG("[SR] Destination node not known - not relaying unicast packet to avoid network flooding");
         LOG_DEBUG("[SR] Unknown destination - discovery occurs via broadcasts, direct packets, or relayed packet inference");
 
         // Don't broadcast unicast packets for unknown destinations to prevent flooding
@@ -1826,16 +1815,6 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
     // For unicast with healthy topology, don't allow opportunistic forwarding
     // Only allow opportunistic forwarding when topology is unhealthy
     NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom, !topologyHealthy);
-
-    // If the chosen next hop has direct connectivity to the sender, it should have received
-    // the packet directly and doesn't need us to forward it
-    if (nextHop != 0 && hasDirectConnectivity(nextHop, sourceNode)) {
-        char nextHopName[64];
-        getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
-        LOG_INFO("[SR] Not forwarding unicast from %s to %s - %s has direct connectivity to sender",
-                 senderName, destName, nextHopName);
-        return false; // Don't use SR - next hop should have received it directly
-    }
 
     if (nextHop == 0) {
         // For unicast packets where topology is healthy (destination exists),
@@ -1908,6 +1887,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         return false;
     }
 
+
     LOG_INFO("[SR] Using SR for unicast from %s to %s via %s",
              senderName, destName, nextHopName);
     return true;
@@ -1919,9 +1899,9 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         return true;
     }
 
-    // Special handling for unicast packets that are broadcast for relay coordination
+    // Special handling for unicast packets being relayed with SR coordination
     if (!isBroadcast(p->to)) {
-        // This is a unicast packet being broadcast for coordination
+        // This is a unicast packet being relayed with SR coordination
         // Relay decision should be based on our ability to reach the destination
         return shouldRelayUnicastForCoordination(p);
     }
@@ -2364,72 +2344,6 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
             setIntervalFromNow(EARLY_BROADCAST_DELAY_MS); // Send update soon (configurable)
         }
     }
-}
-
-void SignalRoutingModule::handleSpeculativeRetransmit(const meshtastic_MeshPacket *p)
-{
-    if (!p || !signalBasedRoutingEnabled || !routingGraph) {
-        return;
-    }
-
-    if (!isActiveRoutingRole()) {
-        return;
-    }
-
-    if (isBroadcast(p->to) || p->from != nodeDB->getNodeNum() || p->id == 0) {
-        return;
-    }
-
-    if (!shouldUseSignalBasedRouting(p)) {
-        return;
-    }
-
-    uint64_t key = makeSpeculativeKey(p->from, p->id);
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    // Check if already exists
-    for (uint8_t i = 0; i < speculativeRetransmitCount; i++) {
-        if (speculativeRetransmits[i].key == key) {
-            return;
-        }
-    }
-
-    if (speculativeRetransmitCount >= MAX_SPECULATIVE_RETRANSMITS) {
-        return; // No room
-    }
-
-    meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
-    if (!copy) {
-        return;
-    }
-
-    SpeculativeRetransmitEntry &entry = speculativeRetransmits[speculativeRetransmitCount++];
-    entry.key = key;
-    entry.origin = p->from;
-    entry.packetId = p->id;
-    entry.expiryMs = millis() + SPECULATIVE_RETRANSMIT_TIMEOUT_MS;
-    entry.packetCopy = copy;
-#else
-    if (speculativeRetransmits.find(key) != speculativeRetransmits.end()) {
-        return;
-    }
-
-    meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
-    if (!copy) {
-        return;
-    }
-
-    SpeculativeRetransmitEntry entry;
-    entry.key = key;
-    entry.origin = p->from;
-    entry.packetId = p->id;
-    entry.expiryMs = millis() + SPECULATIVE_RETRANSMIT_TIMEOUT_MS;
-    entry.packetCopy = copy;
-    speculativeRetransmits[key] = entry;
-#endif
-
-    LOG_DEBUG("[SR] Speculative retransmit armed for packet %08x (expires in %ums)", p->id,
-              SPECULATIVE_RETRANSMIT_TIMEOUT_MS);
 }
 
 bool SignalRoutingModule::isSignalBasedCapable(NodeNum nodeId) const
@@ -3691,76 +3605,6 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
     return sourceNode;
 }
 
-void SignalRoutingModule::processSpeculativeRetransmits(uint32_t nowMs)
-{
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    for (uint8_t i = 0; i < speculativeRetransmitCount;) {
-        if (nowMs >= speculativeRetransmits[i].expiryMs) {
-            if (speculativeRetransmits[i].packetCopy) {
-                LOG_INFO("[SR] Speculative retransmit for packet %08x", speculativeRetransmits[i].packetId);
-                service->sendToMesh(speculativeRetransmits[i].packetCopy);
-                speculativeRetransmits[i].packetCopy = nullptr;
-            }
-            // Remove by swapping with last
-            if (i < speculativeRetransmitCount - 1) {
-                speculativeRetransmits[i] = speculativeRetransmits[speculativeRetransmitCount - 1];
-            }
-            speculativeRetransmitCount--;
-        } else {
-            i++;
-        }
-    }
-#else
-    for (auto it = speculativeRetransmits.begin(); it != speculativeRetransmits.end();) {
-        if (nowMs >= it->second.expiryMs) {
-            if (it->second.packetCopy) {
-                LOG_INFO("[SR] Speculative retransmit for packet %08x", it->second.packetId);
-                service->sendToMesh(it->second.packetCopy);
-                it->second.packetCopy = nullptr;
-            }
-            it = speculativeRetransmits.erase(it);
-        } else {
-            ++it;
-        }
-    }
-#endif
-}
-
-void SignalRoutingModule::cancelSpeculativeRetransmit(NodeNum origin, uint32_t packetId)
-{
-    uint64_t key = makeSpeculativeKey(origin, packetId);
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    for (uint8_t i = 0; i < speculativeRetransmitCount; i++) {
-        if (speculativeRetransmits[i].key == key) {
-            if (speculativeRetransmits[i].packetCopy) {
-                packetPool.release(speculativeRetransmits[i].packetCopy);
-            }
-            if (i < speculativeRetransmitCount - 1) {
-                speculativeRetransmits[i] = speculativeRetransmits[speculativeRetransmitCount - 1];
-            }
-            speculativeRetransmitCount--;
-            return;
-        }
-    }
-#else
-    auto it = speculativeRetransmits.find(key);
-    if (it == speculativeRetransmits.end()) {
-        return;
-    }
-
-    if (it->second.packetCopy) {
-        packetPool.release(it->second.packetCopy);
-    }
-    speculativeRetransmits.erase(it);
-#endif
-}
-
-uint64_t SignalRoutingModule::makeSpeculativeKey(NodeNum origin, uint32_t packetId)
-{
-    return (static_cast<uint64_t>(origin) << 32) | packetId;
-}
-
 bool SignalRoutingModule::hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB)
 {
     if (!routingGraph || !nodeDB) {
@@ -3790,3 +3634,4 @@ bool SignalRoutingModule::hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB)
 
     return false;
 }
+
