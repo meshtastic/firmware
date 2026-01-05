@@ -815,6 +815,12 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
             std::string test = line + word;
 #if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
             uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
+#if defined(OLED_CJK)
+            if(ch >= 0x80)
+            {
+                strWidth = ch + OLED_CJK_SIZE;
+            }
+#endif
 #else
             uint16_t strWidth = display->getStringWidth(test.c_str());
 #endif
