@@ -509,6 +509,18 @@ void menuHandler::homeBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Backlight) {
 #if defined(PIN_EINK_EN)
+#if defined(ELECROW_ThinkNode_M8)
+            if (uiconfig.screen_brightness != 0)
+            {
+                uiconfig.screen_brightness = 0;
+                analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+            }
+            else
+            {
+                uiconfig.screen_brightness = 128;
+                analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+            }
+#else
             if (uiconfig.screen_brightness == 1) {
                 uiconfig.screen_brightness = 0;
                 digitalWrite(PIN_EINK_EN, LOW);
@@ -516,6 +528,7 @@ void menuHandler::homeBaseMenu()
                 uiconfig.screen_brightness = 1;
                 digitalWrite(PIN_EINK_EN, HIGH);
             }
+#endif
             saveUIConfig();
 #elif defined(PCA_PIN_EINK_EN)
             if (uiconfig.screen_brightness > 0) {

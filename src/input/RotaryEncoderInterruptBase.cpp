@@ -49,7 +49,82 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
     unsigned long now = millis();
+#if defined(ELECROW_ThinkNode_M8)
+    static bool lock = false;
+    e.kbchar = 0;
+    if (this->action == ROTARY_ACTION_PRESSED) 
+    {
+        bool buttonPressed = !digitalRead(_pinPress);
+        if (!pressDetected && buttonPressed) 
+        {
+            pressDetected = true;
+            pressStartTime = now;
+        }
+        if (pressDetected) 
+        {
+            if(Combination_action != ROTARY_ACTION_NONE)
+                lock = true;
+            if(lock)
+            {
+                if (!buttonPressed) 
+                {
+                    lock = false;
+                    pressDetected = false;
+                    this->action = ROTARY_ACTION_NONE;
+                }
+                else if(Combination_action == ROTARY_ACTION_PRESSED_CW)
+                {
+                    Combination_action = ROTARY_ACTION_NONE;
+                    LOG_DEBUG("Rotary event Press CW");
+                    e.kbchar = INPUT_BROKER_MSG_BRIGHTNESS_UP;
+                }
+                else if(Combination_action == ROTARY_ACTION_PRESSED_CCW)
+                {
+                    Combination_action = ROTARY_ACTION_NONE;
+                    LOG_DEBUG("Rotary event Press CCW");
+                    e.kbchar = INPUT_BROKER_MSG_BRIGHTNESS_DOWN;
+                }
+            }
+            else if(lock == false)
+            {
+                uint32_t duration = now - pressStartTime;
+                if (!buttonPressed) 
+                {
+                    if (duration < 3000 && now - lastPressKeyTime >= pressDebounceMs) 
+                    {
+                        lastPressKeyTime = now;
+                        LOG_DEBUG("Rotary event Press short");
+                        e.inputEvent = this->_eventPressed;
+                    }
+                    else if (duration >= 3000 && this->_eventPressedLong != INPUT_BROKER_NONE) 
+                    {
+                        LOG_DEBUG("Rotary event Press long");
+                        e.inputEvent = this->_eventPressedLong;
+                    }
+                    pressDetected = false;
+                    pressStartTime = 0;
+                    this->action = ROTARY_ACTION_NONE;
+                }
+            }
 
+        }
+    }
+    else if (this->action == ROTARY_ACTION_CW) 
+    {
+        LOG_DEBUG("Rotary event CW");
+        e.inputEvent = this->_eventCw;
+    } 
+    else if (this->action == ROTARY_ACTION_CCW) 
+    {
+        LOG_DEBUG("Rotary event CCW");
+        e.inputEvent = this->_eventCcw;
+    }
+    if ((e.inputEvent != INPUT_BROKER_NONE) ||(e.kbchar != 0))
+        this->notifyObservers(&e);
+    if (!pressDetected) 
+        this->action = ROTARY_ACTION_NONE;
+    return INT32_MAX;
+#else
     // Handle press long/short detection
     if (this->action == ROTARY_ACTION_PRESSED) {
         bool buttonPressed = !digitalRead(_pinPress);
@@ -96,6 +171,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     }
 
     return INT32_MAX;
+#endif
 }
 
 void RotaryEncoderInterruptBase::intPressHandler()
@@ -140,6 +216,34 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
                                                                            RotaryEncoderInterruptBaseStateType state)
 {
     RotaryEncoderInterruptBaseStateType newState = state;
+#if defined(ELECROW_ThinkNode_M8)
+    if (actualPinRaising && (otherPinLevel == LOW)) 
+    {
+        if (state == ROTARY_EVENT_CLEARED) 
+        {
+            newState = ROTARY_EVENT_OCCURRED;
+            if(this->action == ROTARY_ACTION_PRESSED)
+            {
+                if(this->action != action)
+                {
+                    if(action == ROTARY_ACTION_CW)
+                        Combination_action = ROTARY_ACTION_PRESSED_CW;
+                    else if(action == ROTARY_ACTION_CCW)
+                        Combination_action = ROTARY_ACTION_PRESSED_CCW;
+                }
+            }
+            else
+            {
+                if(this->action != action)
+                    this->action = action;
+            }
+        }
+    }
+    else if (!actualPinRaising && (otherPinLevel == HIGH)) {
+        // Logic to prevent bouncing.
+        newState = ROTARY_EVENT_CLEARED;
+    }
+#else
     if (actualPinRaising && (otherPinLevel == LOW)) {
         if (state == ROTARY_EVENT_CLEARED) {
             newState = ROTARY_EVENT_OCCURRED;
@@ -151,6 +255,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
         // Logic to prevent bouncing.
         newState = ROTARY_EVENT_CLEARED;
     }
+#endif
     setIntervalFromNow(ROTARY_DELAY); // TODO: this modifies a non-volatile variable!
 
     return newState;

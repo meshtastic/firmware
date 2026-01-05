@@ -786,7 +786,10 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
-
+#if defined(ELECROW_ThinkNode_M8)
+    config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+#endif
 #if HAS_TFT
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();
@@ -961,7 +964,9 @@ void setup()
 #endif
     service = new MeshService();
     service->init();
-
+#if defined(ELECROW_ThinkNode_M8)
+    service->reloadConfig(SEGMENT_CONFIG);
+#endif
     // Now that the mesh service is created, create any modules
     setupModules();
 
@@ -1094,7 +1099,27 @@ void setup()
 #ifndef BUTTON_ACTIVE_PULLUP
 #define BUTTON_ACTIVE_PULLUP true
 #endif
-
+#if defined(ELECROW_ThinkNode_M8)
+        LOG_DEBUG("ThinkNode_M8 button");
+        UserButtonThread = new ButtonThread("FunctionButton");
+        ButtonConfig userConfig;
+        userConfig.pinNumber = (uint8_t)_pinNum;
+        userConfig.activeLow = BUTTON_ACTIVE_LOW;
+        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfig.pullupSense = pullup_sense;
+        userConfig.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            UserButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfig.singlePress = INPUT_BROKER_SEND_PING;
+        userConfig.longPress = INPUT_BROKER_SHUTDOWN;
+        userConfig.longPressTime = 5000;
+        userConfig.doublePress = INPUT_BROKER_GPS_TOGGLE;
+        UserButtonThread->initButton(userConfig);
+#else
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
@@ -1137,6 +1162,7 @@ void setup()
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
     }
+#endif
 #endif
 
 #endif

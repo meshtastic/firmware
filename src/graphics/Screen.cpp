@@ -449,8 +449,18 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
 #ifdef PIN_EINK_EN
+#if defined(ELECROW_ThinkNode_M8)
+            if (uiconfig.screen_brightness != 0)
+                analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+            else
+            {
+                uiconfig.screen_brightness = 128;
+                analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+            }
+#else
             if (uiconfig.screen_brightness == 1)
                 digitalWrite(PIN_EINK_EN, HIGH);
+#endif
 #elif defined(PCA_PIN_EINK_EN)
             if (uiconfig.screen_brightness > 0)
                 io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
@@ -496,7 +506,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
 #ifdef PIN_EINK_EN
+#if defined(ELECROW_ThinkNode_M8)
+            uiconfig.screen_brightness = 0;
+            analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+#elif
             digitalWrite(PIN_EINK_EN, LOW);
+#endif
 #elif defined(PCA_PIN_EINK_EN)
             io.digitalWrite(PCA_PIN_EINK_EN, LOW);
 #endif
@@ -1370,8 +1385,15 @@ void Screen::blink()
 
 void Screen::increaseBrightness()
 {
+#if defined(ELECROW_ThinkNode_M8)
+    if(uiconfig.screen_brightness >= 248) 
+        uiconfig.screen_brightness = 248;
+    else 
+        uiconfig.screen_brightness += 20;
+    analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+#else
     brightness = ((brightness + 62) > 254) ? brightness : (brightness + 62);
-
+#endif
 #if defined(ST7789_CS)
     // run the setDisplayBrightness function. This works on t-decks
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
@@ -1382,8 +1404,15 @@ void Screen::increaseBrightness()
 
 void Screen::decreaseBrightness()
 {
+#if defined(ELECROW_ThinkNode_M8)
+    if(uiconfig.screen_brightness <= 8) 
+        uiconfig.screen_brightness = 8;
+    else 
+        uiconfig.screen_brightness -= 20;
+    analogWrite(PIN_EINK_EN,uiconfig.screen_brightness);
+#else
     brightness = (brightness < 70) ? brightness : (brightness - 62);
-
+#endif
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
