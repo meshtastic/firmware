@@ -746,7 +746,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             LOG_WARN("Invalid bandwidth %d, setting to default", originalBandwidth);
         }
 
-        if(!RadioInterface::validateModemConfig(validatedLora)) {
+        if (!RadioInterface::validateModemConfig(validatedLora)) {
             return;
         }
 
