@@ -609,11 +609,6 @@ ModemConfig settingsForPreset(bool wide, meshtastic_Config_LoRaConfig_ModemPrese
         cfg.sf = 8;
         break;
     }
-    // If custom CR is being used already, continue to use it
-    if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cfg.cr) {
-        cfg.cr = loraConfig.coding_rate;
-        LOG_INFO("Using custom Coding Rate %u", cfg.cr);
-    }
     return cfg;
 }
 
@@ -735,11 +730,20 @@ void RadioInterface::applyModemConfig()
 
         auto settings = settingsForPreset(myRegion->wideLora, loraConfig.modem_preset);
         sf = settings.sf;
-        cr = settings.cr;
         bw = settings.bw;
-    }
-
-    else {
+        // If custom CR is being used already, check if the new preset is higher
+        if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < settings.cr) {
+            cr = settings.cr;
+            LOG_INFO("Default Coding Rate is higher than custom setting, using %u", cr);
+        }
+        // If the custom CR is higher than the preset, use it
+        else if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate > settings.cr) {
+            cr = loraConfig.coding_rate;
+            LOG_INFO("Using custom Coding Rate %u", cr);
+        } else {
+            cr = settings.cr;
+        }
+    } else {
 
         // fix bandwidth settings and validate
         sf = loraConfig.spread_factor;
