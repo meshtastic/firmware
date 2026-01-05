@@ -465,7 +465,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                         link_object scratch_object = getFromScratch(t->message_hash.bytes, t->message_hash.size);
                         // if this matches, we don't need to request the message
                         // we know exactly what it is
-                        if (t->message_hash.size >= 8 &&
+                        if (t->message_hash.size >= 8 && t->commit_hash.size >= 8 &&
                             checkCommitHash(scratch_object, t->commit_hash.bytes, t->message_hash.size)) {
                             LOG_INFO("StoreForwardpp Found announced message in scratch, adding to chain");
                             scratch_object.rx_time = t->encapsulated_rxtime;
@@ -1143,6 +1143,8 @@ bool StoreForwardPlusPlusModule::isCommitInDB(uint8_t *commit_hash_bytes, size_t
 
 bool StoreForwardPlusPlusModule::isInScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
 {
+    if (message_hash_len < SFPP_SHORT_HASH_SIZE)
+        return false;
     sqlite3_bind_int(checkScratch, 1, message_hash_len);
     sqlite3_bind_blob(checkScratch, 2, message_hash_bytes, message_hash_len, NULL);
     sqlite3_step(checkScratch);
