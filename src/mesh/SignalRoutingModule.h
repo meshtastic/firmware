@@ -133,6 +133,31 @@ private:
     uint32_t lastBroadcast = 0;
 
     /**
+     * Check if a node has been excluded from relaying a specific packet
+     */
+    bool hasNodeBeenExcludedFromRelay(NodeNum nodeId, PacketId packetId);
+
+    /**
+     * Process expired contention windows for unicast relay coordination
+     */
+    void processContentionWindows(uint32_t nowMs);
+
+    /**
+     * Schedule a contention window check for unicast relay coordination
+     */
+    void scheduleContentionWindowCheck(NodeNum expectedRelay, PacketId packetId, NodeNum destination, const meshtastic_MeshPacket *packet);
+
+    /**
+     * Exclude a node from relaying a specific packet (iterative candidate removal)
+     */
+    void excludeNodeFromRelay(NodeNum nodeId, PacketId packetId);
+
+    /**
+     * Clear all relay exclusions for a packet (when ACK received)
+     */
+    void clearRelayExclusionsForPacket(PacketId packetId);
+
+    /**
      * Check if a node is signal-based routing capable
      */
     bool isSignalBasedCapable(NodeNum nodeId) const;
@@ -212,6 +237,25 @@ private:
         RelayIdentityCacheEntry relayIdentityCache[MAX_RELAY_IDENTITY_ENTRIES];
         uint8_t relayIdentityCacheCount = 0;
 
+        // Track nodes excluded from relaying specific packets (unicast coordination)
+        struct RelayExclusion {
+            uint64_t packetKey;
+            NodeNum excludedNodes[4]; // Max 4 excluded nodes per packet
+            uint8_t exclusionCount;
+        };
+        RelayExclusion relayExclusions[4]; // Max 4 packets being coordinated
+        uint8_t relayExclusionCount = 0;
+
+        // Track pending contention window checks
+        struct ContentionCheck {
+            NodeNum expectedRelay;
+            PacketId packetId;
+            NodeNum destination;
+            uint32_t expiryMs;
+        };
+        ContentionCheck contentionChecks[4]; // Max 4 pending checks
+        uint8_t contentionCheckCount = 0;
+
 
         struct GatewayRelation {
             NodeNum gateway = 0;
@@ -239,6 +283,18 @@ private:
         };
         std::unordered_map<NodeNum, GatewayRelationEntry> downstreamGateway; // downstream -> gateway entry
         std::unordered_map<NodeNum, std::unordered_set<NodeNum>> gatewayDownstream; // gateway -> downstream set
+
+        // Track nodes excluded from relaying specific packets (unicast coordination)
+        std::unordered_map<uint64_t, std::unordered_set<NodeNum>> relayExclusions; // packetKey -> excluded nodes
+
+        // Track pending contention window checks
+        struct ContentionCheck {
+            NodeNum expectedRelay;
+            PacketId packetId;
+            NodeNum destination;
+            uint32_t expiryMs;
+        };
+        std::vector<ContentionCheck> contentionChecks;
     #endif
 
     void trackNodeCapability(NodeNum nodeId, CapabilityStatus status);
