@@ -81,7 +81,7 @@ This dual approach provides the reliability of coordinated networking with the e
 |-------------|------------------------|-------|
 | **ReliableRouter** | Up to 3 retransmissions | For want_ack packets only |
 | **NextHopRouter** | 2 for intermediate hops, 3 for origin | Route reset on final failure |
-| **SignalRouting** | Coordinates unicast relays on overhearing nodes | For SR-selected unicast routes |
+| **SignalRouting** | Iterative unicast route selection with fallback strategies | For SR-selected unicast routes |
 
 ### Routing Delays and Timing
 
@@ -187,9 +187,17 @@ For unicast packets, SignalRouting coordinates relay decisions on overhearing no
 
 ### Unicast Relay Coordination
 
-SignalRouting fundamentally differs from stock routing in its approach to unicast packets. While stock firmware simply forwards unicasts to the calculated next hop, SR enables intelligent relay coordination through overhearing.
+SignalRouting fundamentally differs from stock routing in its approach to unicast packets. While stock firmware simply forwards unicasts to the calculated next hop, SR enables intelligent relay coordination through iterative next-hop selection with fallback strategies.
 
-**How SR Coordinates Unicasts:**
+**Iterative Unicast Route Selection:**
+SR tries multiple routing strategies in order of increasing permissiveness, similar to broadcast candidate selection:
+
+1. **Calculated Route**: Best ETX-based route with restrictive opportunistic forwarding
+2. **Opportunistic Route**: Best route with opportunistic forwarding enabled
+3. **Gateway Delegation**: If destination has designated gateway, delegate to traditional routing
+4. **Traditional Fallback**: Allow standard Router/flooding when all SR strategies fail
+
+**Coordination Through Overhearing:**
 When a unicast packet is transmitted, nodes that overhear the transmission (even if they can't decrypt the payload) can participate in relay coordination:
 
 1. **Overhearing Mechanism**: Unicast packets are transmitted normally with unencrypted headers
@@ -564,7 +572,7 @@ SignalRouting implements sophisticated unicast relay coordination to optimize pa
 6. **Route Cost Comparison**: Compare our route quality against other nodes that heard the transmission to determine best relay positioning
 7. **Better Direct Connection Check**: If another node has a significantly better direct connection to the destination, defer to them
 
-**Note**: Unlike broadcast coordination, unicast relay decisions are made statically based on current topology knowledge without iterative candidate selection or contention window waiting.
+**Note**: Unlike broadcast coordination which uses overhearing and contention windows, unicast route selection uses iterative strategy fallback with dynamic contention windows on the originating node to provide robustness when primary routes fail.
 
 ```cpp
 bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p) {
@@ -576,7 +584,7 @@ bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p) {
 ### Performance Characteristics
 
 **Broadcast Coordination:**
-- Uses iterative candidate selection with contention windows and timeout-based fallback
+- Uses iterative candidate selection with dynamic contention windows (based on radio factors) and timeout-based fallback
 - Attempts to minimize redundant transmissions through coverage analysis
 - May still have some redundant relays in dynamic network conditions
 - Effectiveness depends on topology knowledge and node participation
