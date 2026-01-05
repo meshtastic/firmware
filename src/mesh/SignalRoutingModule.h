@@ -68,6 +68,11 @@ public:
     bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p);
 
     /**
+     * Check if two nodes have direct connectivity in the routing graph
+     */
+    bool hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB);
+
+    /**
      * Update neighbor information from a directly received packet
      */
     void updateNeighborInfo(NodeNum nodeId, int32_t rssi, float snr, uint32_t lastRxTime, uint32_t variance = 0);
@@ -175,8 +180,9 @@ private:
 
     enum class CapabilityStatus : uint8_t {
         Unknown = 0,
-        Capable,
-        Legacy
+        SRactive,    // sends SR broadcasts with signal_based_capable = true; considered as relay candidate
+        SRinactive,  // sends SR broadcasts with signal_based_capable = false; SR-aware but excluded from relay calculations
+        Legacy       // stock firmware nodes that don't send SR broadcasts
     };
 
     struct CapabilityRecord {
@@ -283,9 +289,9 @@ private:
     bool isActiveRoutingRole() const;
 
     /**
-     * Check if this node can send signal routing broadcasts (is SR-aware)
+     * Check if this node can send topology broadcasts
      */
-    bool isSignalRoutingCapable() const;
+    bool canSendTopology() const;
     void handleNodeInfoPacket(const meshtastic_MeshPacket &mp);
     CapabilityStatus capabilityFromRole(meshtastic_Config_DeviceConfig_Role role) const;
     void handleSniffedPayload(const meshtastic_MeshPacket &mp, bool isDirectNeighbor);
