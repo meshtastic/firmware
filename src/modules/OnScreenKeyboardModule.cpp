@@ -101,7 +101,7 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
         targetKeyboard->moveCursorLeft();
         return true;
     case INPUT_BROKER_RIGHT:
-    case INPUT_BROKER_USER_PRESS:
+    //case INPUT_BROKER_USER_PRESS:
         targetKeyboard->moveCursorRight();
         return true;
     case INPUT_BROKER_SELECT:
@@ -109,6 +109,9 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
         return true;
     case INPUT_BROKER_SELECT_LONG:
         targetKeyboard->handleLongPress();
+        return true;
+    case INPUT_BROKER_USER_PRESS:
+        targetKeyboard->toggleIME();
         return true;
     default:
         return false;
