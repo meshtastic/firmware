@@ -90,7 +90,7 @@ void test_parseBatchedAck_MultipleEntries(void) {
       0x02, 0x00, 0x00, 0x00, // PacketId = 2
       0x00,                   // Error = NONE
       0x03, 0x00, 0x00, 0x00, // PacketId = 3
-      0x01,                   // Error = TOO_LARGE (1)
+      0x07,                   // Error = TOO_LARGE (7)
   };
   memcpy(p.decoded.payload.bytes, payload, sizeof(payload));
   p.decoded.payload.size = sizeof(payload);
