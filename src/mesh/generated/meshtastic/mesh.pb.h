@@ -1198,9 +1198,12 @@ typedef struct _meshtastic_SignalRoutingInfo {
     /* Whether this node supports signal-based routing */
     bool signal_based_capable;
     /* List of directly heard neighbors with signal quality metrics.
- Optimized to fit up to 14 neighbors in 233 byte payload. */
+ Limited to 14 neighbors for single-packet broadcasts. */
     pb_size_t neighbors_count;
     meshtastic_SignalNeighbor neighbors[14];
+    /* Topology snapshot version (monotonic timestamp).
+ Ensures receivers process topology updates in order and avoid mixing old/new data. */
+    uint8_t topology_version;
 } meshtastic_SignalRoutingInfo;
 
 /* Device metadata response */
@@ -1502,7 +1505,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_SignalRoutingInfo_init_default {0, 0, 0, 0, {meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default}}
+#define meshtastic_SignalRoutingInfo_init_default {0, 0, 0, 0, {meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default, meshtastic_SignalNeighbor_init_default}, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
@@ -1536,7 +1539,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_SignalRoutingInfo_init_zero   {0, 0, 0, 0, {meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero}}
+#define meshtastic_SignalRoutingInfo_init_zero   {0, 0, 0, 0, {meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero, meshtastic_SignalNeighbor_init_zero}, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
 #define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
@@ -1706,6 +1709,7 @@ extern "C" {
 #define meshtastic_SignalRoutingInfo_node_id_tag 2
 #define meshtastic_SignalRoutingInfo_signal_based_capable_tag 3
 #define meshtastic_SignalRoutingInfo_neighbors_tag 4
+#define meshtastic_SignalRoutingInfo_topology_version_tag 5
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
 #define meshtastic_DeviceMetadata_device_state_version_tag 2
 #define meshtastic_DeviceMetadata_canShutdown_tag 3
@@ -2079,7 +2083,8 @@ X(a, STATIC,   SINGULAR, UINT32,   node_broadcast_interval_secs,   4)
 X(a, STATIC,   SINGULAR, UINT32,   routing_version,   1) \
 X(a, STATIC,   SINGULAR, FIXED32,  node_id,           2) \
 X(a, STATIC,   SINGULAR, BOOL,     signal_based_capable,   3) \
-X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         4)
+X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         4) \
+X(a, STATIC,   SINGULAR, UINT32,   topology_version,   5)
 #define meshtastic_SignalRoutingInfo_CALLBACK NULL
 #define meshtastic_SignalRoutingInfo_DEFAULT NULL
 #define meshtastic_SignalRoutingInfo_neighbors_MSGTYPE meshtastic_SignalNeighbor
@@ -2237,7 +2242,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Routing_size                  259
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_SignalNeighbor_size           16
-#define meshtastic_SignalRoutingInfo_size        393
+#define meshtastic_SignalRoutingInfo_size        268
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
 #define meshtastic_Waypoint_size                 165
