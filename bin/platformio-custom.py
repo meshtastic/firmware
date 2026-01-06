@@ -17,6 +17,8 @@ lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
 
 def manifest_gather(source, target, env):
     out = []
+    board_platform = env.BoardConfig().get("platform")
+    needs_ota_suffix = board_platform == "nordicnrf52"
     check_paths = [
         progname,
         f"{progname}.elf",
@@ -32,8 +34,11 @@ def manifest_gather(source, target, env):
     for p in check_paths:
         f = env.File(env.subst(f"$BUILD_DIR/{p}"))
         if f.exists():
+            manifest_name = p
+            if needs_ota_suffix and p == f"{progname}.zip":
+                manifest_name = f"{progname}-ota.zip"
             d = {
-                "name": p,
+                "name": manifest_name,
                 "md5": f.get_content_hash(), # Returns MD5 hash
                 "bytes": f.get_size() # Returns file size in bytes
             }

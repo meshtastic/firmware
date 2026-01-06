@@ -171,7 +171,8 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, false),
 
     /*
         Nepal
@@ -518,6 +519,10 @@ void RadioInterface::applyModemConfig()
                 cr = 8;
                 sf = 12;
                 break;
+            }
+            if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cr) {
+                cr = loraConfig.coding_rate;
+                LOG_INFO("Using custom Coding Rate %u", cr);
             }
         } else {
             sf = loraConfig.spread_factor;
