@@ -1286,7 +1286,7 @@ void SignalRoutingModule::logNetworkTopology()
             else if (etx < 8.0f) quality = "fair";
             else quality = "poor";
 
-            int32_t age = computeAgeSecs(edges->lastFullUpdate, millis() / 1000);
+            int32_t age = computeAgeSecs(edge.lastUpdate, millis() / 1000);
             char ageBuf[16];
             if (age < 0) {
                 snprintf(ageBuf, sizeof(ageBuf), "-");
@@ -2031,7 +2031,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     bool weAreGatewayForDest = (gatewayForDest != 0 && gatewayForDest == myNode);
     size_t downstreamCount = (weAreGatewayForSource || weAreGatewayForDest) ? getGatewayDownstreamCount(myNode) : 0;
 
-    uint32_t currentTime = packetReceivedTimestamp; // Use the packet received timestamp computed above
+    uint32_t relayDecisionTime = packetReceivedTimestamp; // Use the packet received timestamp computed above
 
     // Check for stock gateway nodes that can be heard directly
     // If we have stock nodes that could serve as gateways, be conservative with SR relaying
@@ -2070,12 +2070,12 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     }
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
+    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, relayDecisionTime, p->id, packetReceivedTimestamp);
 
     // Apply conservative logic only when NOT required for branch coverage
     if (shouldRelay && hasStockGateways && !mustRelayForBranchCoverage) {
         LOG_DEBUG("[SR] Applying conservative relay logic (stock gateways present, not from gateway)");
-        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
+        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, relayDecisionTime, p->id, packetReceivedTimestamp);
         if (!shouldRelay) {
             LOG_DEBUG("[SR] Suppressed SR relay - stock gateway can handle external transmission");
         } else {
@@ -2083,12 +2083,12 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         }
     }
 #else
-    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
+    bool shouldRelay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, relayDecisionTime, p->id, packetReceivedTimestamp);
 
     // Apply conservative logic only when NOT required for branch coverage
     if (shouldRelay && hasStockGateways && !mustRelayForBranchCoverage) {
         LOG_DEBUG("[SR] Applying conservative relay logic (stock gateways present, not from gateway)");
-        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, currentTime, p->id, packetReceivedTimestamp);
+        shouldRelay = routingGraph->shouldRelayEnhancedConservative(myNode, sourceNode, heardFrom, relayDecisionTime, p->id, packetReceivedTimestamp);
         if (!shouldRelay) {
             LOG_DEBUG("[SR] Suppressed SR relay - stock gateway provides better external coverage");
         } else {
@@ -2112,7 +2112,7 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 
     if (!srCoordinationRequiresRelay) {
         // Check if stock nodes need guaranteed coverage
-        bool stockCoverageNeeded = shouldRelayForStockNeighbors(myNode, sourceNode, heardFrom, currentTime);
+        bool stockCoverageNeeded = shouldRelayForStockNeighbors(myNode, sourceNode, heardFrom, relayDecisionTime);
         if (stockCoverageNeeded) {
             LOG_INFO("[SR] UNIFIED COVERAGE: SR coordination declined relay, but stock nodes require guaranteed coverage");
             shouldRelay = true;
