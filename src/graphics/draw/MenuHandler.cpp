@@ -517,7 +517,7 @@ void menuHandler::messageResponseMenu()
             auto &chan = channels.getByIndex(chIndex);
             if (chan.settings.has_module_settings) {
                 chan.settings.module_settings.is_muted = !chan.settings.module_settings.is_muted;
-                saveUIConfig();
+                nodeDB->saveToDisk();
             }
 
             // Delete submenu
