@@ -14,7 +14,7 @@ bool Graph::hasMemoryForNewNode() const {
     return freeHeap > (MIN_FREE_HEAP_FOR_GRAPH + estimatedMemory);
 }
 
-int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance, Edge::Source source) {
+int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance, Edge::Source source, bool updateTimestamp) {
     // Check if this is a new node
     bool isNewNode = (adjacencyList.find(from) == adjacencyList.end());
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
@@ -89,7 +89,9 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
 
         // Update existing edge
         it->etx = etx;
-        it->lastUpdate = timestamp;
+        if (updateTimestamp) {
+            it->lastUpdate = timestamp;
+        }
         it->variance = variance;
         it->source = source;
 
@@ -105,7 +107,9 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
                 // Replace worst edge with new better one
                 worstIt->to = to;
                 worstIt->etx = etx;
-                worstIt->lastUpdate = timestamp;
+                if (updateTimestamp) {
+                    worstIt->lastUpdate = timestamp;
+                }
                 worstIt->variance = variance;
                 worstIt->source = source;
                 return EDGE_SIGNIFICANT_CHANGE;

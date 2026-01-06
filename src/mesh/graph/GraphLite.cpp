@@ -109,14 +109,16 @@ const EdgeLite *GraphLite::findEdge(const NodeEdgesLite *node, NodeNum to) const
 }
 
 int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance,
-                          EdgeLite::Source source)
+                          EdgeLite::Source source, bool updateTimestamp)
 {
     NodeEdgesLite *node = findOrCreateNode(from);
     if (!node) {
         return Graph::EDGE_NO_CHANGE;
     }
 
-    node->lastFullUpdate = timestamp;
+    if (updateTimestamp) {
+        node->lastFullUpdate = timestamp;
+    }
 
     EdgeLite *edge = findEdge(node, to);
     if (edge) {
@@ -130,7 +132,9 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         float change = std::abs(etx - oldEtx) / oldEtx;
 
         edge->setEtx(etx);
-        edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
+        if (updateTimestamp) {
+            edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
+        }
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12); // Scale variance
         edge->source = source;
 
@@ -183,6 +187,7 @@ void GraphLite::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
 void GraphLite::ageEdges(uint32_t currentTimeSecs)
 {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    uint16_t currentLo = static_cast<uint16_t>(currentTimeSecs & 0xFFFF);
 
     for (uint8_t n = 0; n < nodeCount;) {
         NodeEdgesLite *node = &nodes[n];
@@ -193,8 +198,15 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs)
             continue;
         }
 
-        // Check if entire node is stale (no recent updates)
+        // Age individual edges within this node
+        // For GraphLite, use a simpler approach: if the node's last update is old,
+        // assume all its edges are stale and clear them
         if (currentTimeSecs - node->lastFullUpdate > EDGE_AGING_TIMEOUT_SECS) {
+            node->edgeCount = 0; // Clear all edges for stale nodes
+        }
+
+        // Check if entire node is stale (no recent updates) or has no edges left
+        if (currentTimeSecs - node->lastFullUpdate > EDGE_AGING_TIMEOUT_SECS || node->edgeCount == 0) {
             // Remove this node by swapping with last
             if (n < nodeCount - 1) {
                 nodes[n] = nodes[nodeCount - 1];
@@ -206,7 +218,6 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs)
     }
 
     // Also age relay states
-    uint16_t currentLo = static_cast<uint16_t>(currentTimeSecs & 0xFFFF);
     for (uint8_t i = 0; i < relayStateCount;) {
         uint16_t age = currentLo - relayStates[i].timestampLo;
         if (age > 2) { // 2 seconds timeout
