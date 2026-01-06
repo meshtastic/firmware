@@ -668,9 +668,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 <<<<<<< HEAD
     defined(USE_ST7796)
 =======
-    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
+            defined(USE_ST7796) ||
+        defined(HACKADAY_COMMUNICATOR)
 >>>>>>> ba9d0e6fa3fe3ad510927155802ec0a3179d3d93
-    bool hasScreen = true;
+        bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
     if (st7789_id == 0xFFFFFF) {
