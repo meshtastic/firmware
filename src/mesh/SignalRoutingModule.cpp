@@ -1509,9 +1509,6 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             uint32_t currentTime = millis() / 1000;  // Use monotonic time
             routingGraph->recordNodeTransmission(mp.from, mp.id, currentTime);
         }
-
-        LOG_DEBUG("[SR] Direct neighbor %s detected (RSSI=%d, SNR=%.1f)",
-                 senderName, mp.rx_rssi, mp.rx_snr);
     } else if (notViaMqtt && !isDirectFromSender && mp.relay_node != 0) {
         // Process relayed packets to infer network topology (skip for inactive roles - they only track direct neighbors)
         if (!isActiveRoutingRole()) {
