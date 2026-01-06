@@ -68,7 +68,7 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
         if (r == 0x08 || r == 0x00) {
             logFoundDevice("SH1106", (uint8_t)addr.address);
             o_probe = SCREEN_SH1106; // SH1106
-        } else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07) {
+        } else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07 || r == 0x05) {
             logFoundDevice("SSD1306", (uint8_t)addr.address);
             o_probe = SCREEN_SSD1306; // SSD1306
         }
