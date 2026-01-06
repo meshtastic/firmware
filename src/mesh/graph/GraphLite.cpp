@@ -133,7 +133,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
 
         edge->setEtx(etx);
         if (updateTimestamp) {
-            edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
+            edge->lastUpdate = timestamp;
         }
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12); // Scale variance
         edge->source = source;
@@ -146,7 +146,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge = &node->edges[node->edgeCount++];
         edge->to = to;
         edge->setEtx(etx);
-        edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
+        edge->lastUpdate = timestamp;
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
         edge->source = source;
         return Graph::EDGE_NEW;
@@ -167,7 +167,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge = &node->edges[worstIdx];
         edge->to = to;
         edge->setEtx(etx);
-        edge->lastUpdateLo = static_cast<uint16_t>(timestamp & 0xFFFF);
+        edge->lastUpdate = timestamp;
         edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
         edge->source = source;
         return Graph::EDGE_SIGNIFICANT_CHANGE;
