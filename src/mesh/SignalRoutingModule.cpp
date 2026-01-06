@@ -1788,7 +1788,7 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         }
         LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% SR-active)",
                  healthy ? "HEALTHY - SR active" : "UNHEALTHY - flooding only",
-                 neighborCount, getSignalBasedActivePercentage());
+                 neighborCount, getDirectNeighborsSignalActivePercentage());
 
         if (!healthy && neighborCount > 0) {
             LOG_INFO("[SR] SR not activated despite having neighbors - checking capability status");
@@ -2480,33 +2480,46 @@ void SignalRoutingModule::updateNodeActivityForPacketAndRelay(const meshtastic_M
     }
 }
 
-float SignalRoutingModule::getSignalBasedActivePercentage() const
+
+float SignalRoutingModule::getDirectNeighborsSignalActivePercentage() const
 {
-    if (!nodeDB) {
+    if (!routingGraph || !nodeDB) {
         return 0.0f;
     }
 
-    uint32_t now = millis() / 1000;
-    size_t total = 1;   // include ourselves
-    size_t capable = 1; // we are always capable
+    // Get our direct neighbors from the graph
+    size_t totalNeighbors = 0;
+    size_t activeNeighbors = 0;
 
-    size_t nodeCount = nodeDB->getNumMeshNodes();
-    for (size_t i = 0; i < nodeCount; ++i) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == nodeDB->getNodeNum()) {
-            continue;
-        }
-        if (node->last_heard == 0 || (now - node->last_heard) > ACTIVE_NODE_TTL_SECS) {
-            continue;
-        }
-        total++;
-        if (getCapabilityStatus(node->num) == CapabilityStatus::SRactive) {
-            capable++;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+    const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (edges) {
+        totalNeighbors = edges->edgeCount;
+        for (uint8_t i = 0; i < edges->edgeCount; i++) {
+            NodeNum neighborId = edges->edges[i].to;
+            if (getCapabilityStatus(neighborId) == CapabilityStatus::SRactive) {
+                activeNeighbors++;
+            }
         }
     }
+#else
+    auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    if (edges) {
+        totalNeighbors = edges->size();
+        for (const Edge& edge : *edges) {
+            if (getCapabilityStatus(edge.to) == CapabilityStatus::SRactive) {
+                activeNeighbors++;
+            }
+        }
+    }
+#endif
 
-    float percentage = (static_cast<float>(capable) * 100.0f) / static_cast<float>(total);
-    LOG_DEBUG("[SR] Capability calculation: %d/%d = %.1f%%", capable, total, percentage);
+    if (totalNeighbors == 0) {
+        return 0.0f;
+    }
+
+    float percentage = (static_cast<float>(activeNeighbors) * 100.0f) / static_cast<float>(totalNeighbors);
+    LOG_DEBUG("[SR] Direct neighbor capability: %d/%d = %.1f%%", activeNeighbors, totalNeighbors, percentage);
     return percentage;
 }
 
