@@ -206,8 +206,8 @@ void SignalRoutingModule::sendSignalRoutingInfo(NodeNum dest)
     char ourName[64];
     getNodeDisplayName(nodeDB->getNodeNum(), ourName, sizeof(ourName));
 
-    LOG_INFO("[SR] SENDING: Broadcasting %zu neighbors in %zu packet(s) from %s (version %u)",
-             totalNeighbors, packetsNeeded, ourName, topologyVersion);
+    LOG_INFO("[SR] SENDING: Broadcasting %u neighbors in %u packet(s) from %s (version %u)",
+             static_cast<unsigned int>(totalNeighbors), static_cast<unsigned int>(packetsNeeded), ourName, topologyVersion);
 
     // Send packets in chunks
     for (size_t packetIndex = 0; packetIndex < packetsNeeded; packetIndex++) {
@@ -338,7 +338,6 @@ void SignalRoutingModule::sendTopologyPacket(NodeNum dest, const std::vector<mes
         routingGraph->recordNodeTransmission(nodeDB->getNodeNum(), p->id, currentTime);
     }
 }
-
 
 void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &info)
 {
@@ -498,6 +497,11 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 
     // Only process SignalRoutingInfo packets
     if (p->decoded.portnum != meshtastic_PortNum_SIGNAL_ROUTING_APP) return;
+    // Reject packets from invalid node IDs (0 is invalid)
+    if (p->from == 0) {
+        LOG_DEBUG("[SR] Ignoring SR broadcast from invalid node ID 0");
+        return;
+    }
 
     // Decode the protobuf to get neighbor data
     meshtastic_SignalRoutingInfo info = meshtastic_SignalRoutingInfo_init_zero;
@@ -532,30 +536,6 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         return;
     }
 
-    // Only process topology from nodes that are somehow connected to our known network
-    // This prevents graph pollution from distant/unreachable nodes
-    bool senderReachable = false;
-    if (routingGraph) {
-        // Check if sender has any direct connections in our graph
-#ifdef SIGNAL_ROUTING_LITE_MODE
-        auto fromNode = routingGraph->getEdgesFrom(p->from);
-        if (fromNode && fromNode->edgeCount > 0) {
-            senderReachable = true;
-        }
-#else
-        auto fromEdges = routingGraph->getEdgesFrom(p->from);
-        if (fromEdges && !fromEdges->empty()) {
-            senderReachable = true;
-        }
-#endif
-        // Note: We could also check reverse edges, but for efficiency we start with direct connections
-        // If a node broadcasts topology to us, they're likely in our local network area
-    }
-
-    if (!senderReachable) {
-        LOG_DEBUG("[SR] Ignoring topology broadcast from unreachable node %08x", p->from);
-        return;
-    }
 
     // Process topology directly from the received packet - no intermediate storage
     LOG_DEBUG("[SR] Processing topology from %08x: %d neighbors (version %u)",
@@ -570,6 +550,12 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     // Process each neighbor directly from the received info - memory efficient
     for (pb_size_t i = 0; i < info.neighbors_count; i++) {
         const meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
+
+        // Reject neighbors with invalid node IDs (0 or placeholders)
+        if (neighbor.node_id == 0 || isPlaceholderNode(neighbor.node_id)) {
+            LOG_DEBUG("[SR] Skipping invalid neighbor node ID: %08x", neighbor.node_id);
+            continue;
+        }
 
         // Create temporary info for this single neighbor (minimal memory usage)
         meshtastic_SignalRoutingInfo tempInfo = meshtastic_SignalRoutingInfo_init_zero;
@@ -594,6 +580,11 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     // Inactive SR roles don't participate in routing decisions - skip processing topology broadcasts from others
     if (!isActiveRoutingRole()) {
         LOG_DEBUG("[SR] Inactive role: Skipping topology broadcast processing from %08x", mp.from);
+        return false;
+    }
+    // Reject packets from invalid node IDs (0 is invalid)
+    if (mp.from == 0) {
+        LOG_DEBUG("[SR] Ignoring SR broadcast from invalid node ID 0");
         return false;
     }
 
@@ -657,6 +648,12 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     uint32_t rxTime = millis() / 1000;
     for (pb_size_t i = 0; i < p->neighbors_count; i++) {
         const meshtastic_SignalNeighbor& neighbor = p->neighbors[i];
+
+        // Reject neighbors with invalid node IDs (0 or placeholders)
+        if (neighbor.node_id == 0 || isPlaceholderNode(neighbor.node_id)) {
+            LOG_DEBUG("[SR] Skipping invalid neighbor node ID: %08x", neighbor.node_id);
+            continue;
+        }
 
         char neighborName[64];
         getNodeDisplayName(neighbor.node_id, neighborName, sizeof(neighborName));
@@ -1766,9 +1763,9 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
             if (edges) neighborCount = edges->size();
 #endif
         }
-        LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% capable)",
+        LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% SR-active)",
                  healthy ? "HEALTHY - SR active" : "UNHEALTHY - flooding only",
-                 neighborCount, getSignalBasedCapablePercentage());
+                 neighborCount, getSignalBasedActivePercentage());
 
         if (!healthy && neighborCount > 0) {
             LOG_INFO("[SR] SR not activated despite having neighbors - checking capability status");
@@ -2451,7 +2448,7 @@ void SignalRoutingModule::updateNodeActivityForPacketAndRelay(const meshtastic_M
     }
 }
 
-float SignalRoutingModule::getSignalBasedCapablePercentage() const
+float SignalRoutingModule::getSignalBasedActivePercentage() const
 {
     if (!nodeDB) {
         return 0.0f;
