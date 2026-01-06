@@ -63,10 +63,7 @@ class MorseInputModule : public concurrency::OSThread, public Observable<const U
     int charPickerSelection = 0;
 
     void commitCharacter();
-    void processMorse();
-    void updateTiming(uint32_t pressDuration);
     char morseToChar(const std::string &code);
-    std::string charToMorse(char c);
     
     // Drawing helpers
     void drawMorseInterface(OLEDDisplay *display, int16_t x, int16_t y);

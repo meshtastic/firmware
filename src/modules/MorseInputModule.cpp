@@ -127,19 +127,18 @@ int32_t MorseInputModule::runOnce()
                 notifyObservers(&e);
             } else if (charPickerOpen) {
                  // Char picker navigation
+                 static const char chars[] = "'!/-()&:;=+\"-_$@";
                  if (duration > 2000) { // Extra long press
                     // Back
                     charPickerOpen = false;
                  } else if (duration > 500) { // Long press
                      // Select
-                     static const char chars[] = "'!/-()&:;=+\"-_$@";
                      if (charPickerSelection >= 0 && charPickerSelection < (int)strlen(chars)) {
                          inputText += chars[charPickerSelection];
                      }
                      charPickerOpen = false;
                  } else {
                      // Next
-                     static const char chars[] = "'!/-()&:;=+\"-_$@";
                      charPickerSelection = (charPickerSelection + 1) % strlen(chars);
                  }
                  UIFrameEvent e;
