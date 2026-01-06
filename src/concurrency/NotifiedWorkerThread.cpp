@@ -31,9 +31,14 @@ IRAM_ATTR bool NotifiedWorkerThread::notifyCommon(uint32_t v, bool overwrite)
         runASAP = true;
 
         notification = v;
-        // Logging removed to save IRAM space and avoid Flash access in ISR
+        if (debugNotification) {
+            LOG_DEBUG("Set notification %d", v);
+        }
         return true;
     } else {
+        if (debugNotification) {
+            LOG_DEBUG("Drop notification %d", v);
+        }
         return false;
     }
 }
