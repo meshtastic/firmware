@@ -48,6 +48,7 @@ class MorseInputModule : public concurrency::OSThread, public Observable<const U
     bool ignoreRelease = false;
     bool waitForRelease = false;
     bool shift = false;
+    int consecutiveDots = 0;
     bool autoShift = true;
     
     // Adaptive timing
