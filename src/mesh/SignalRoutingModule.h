@@ -3,6 +3,7 @@
 #include "concurrency/OSThread.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#include <vector>
 
 // SIGNAL_ROUTING_LITE_MODE:
 // = 1: Use GraphLite (lite mode)
@@ -132,6 +133,12 @@ private:
     // Last time we sent signal routing info
     uint32_t lastBroadcast = 0;
 
+    // Current topology version (0-255, wraps around)
+    uint8_t currentTopologyVersion = 0;
+
+    // Last topology version received from each node (for deduplication)
+    std::unordered_map<NodeNum, uint8_t> lastTopologyVersion;
+
     /**
      * Check if a node has been excluded from relaying a specific packet
      */
@@ -166,6 +173,16 @@ private:
      * Calculate percentage of signal-based capable nodes
      */
     float getSignalBasedCapablePercentage() const;
+
+    /**
+     * Collect all neighbors we want to broadcast in priority order
+     */
+    void collectNeighborsForBroadcast(std::vector<meshtastic_SignalNeighbor> &allNeighbors);
+
+    /**
+     * Send a single topology packet with specified neighbors and version
+     */
+    void sendTopologyPacket(NodeNum dest, const std::vector<meshtastic_SignalNeighbor> &neighbors, uint8_t topologyVersion = 0);
 
     /**
      * Build a SignalRoutingInfo packet with our current neighbor data
