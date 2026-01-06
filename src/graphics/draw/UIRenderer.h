@@ -2,7 +2,7 @@
 
 #include "NodeDB.h"
 #include "graphics/Screen.h"
-#include "graphics/emotes.h"
+// #include "graphics/emotes.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <string>

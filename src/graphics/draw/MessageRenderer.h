@@ -3,7 +3,6 @@
 #if HAS_SCREEN
 #include "OLEDDisplay.h"
 #include "OLEDDisplayUi.h"
-#include "graphics/emotes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // for meshtastic_MeshPacket
 #include <cstdint>
 #include <string>
@@ -35,8 +34,8 @@ const std::vector<uint32_t> &getSeenPeers();
 
 void clearThreadRegistries();
 
-// Text and emote rendering
-void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
+// Text and emote rendering (uses new EmoteFont system)
+void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line);
 
 /// Draws the text message frame for displaying received messages
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -45,7 +44,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth);
 
 // Function to calculate heights for each line
-std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines,
                                       const std::vector<bool> &isHeaderVec);
 
 // Reset scroll state when new messages arrive

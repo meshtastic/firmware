@@ -23,9 +23,12 @@ extern bool hasUnreadMessage;
 extern meshtastic_DeviceState devicestate;
 extern graphics::Screen *screen;
 
-using graphics::Emote;
-using graphics::emotes;
-using graphics::numEmotes;
+// Use new EmoteFont system
+using graphics::emoteFont;
+using graphics::findEmoteIndex;
+using graphics::matchEmoteAt;
+using graphics::getEmoteBitmap;
+using graphics::parseUtf8CodePoint;
 
 namespace graphics
 {
@@ -109,47 +112,27 @@ void scrollDown()
         scrollY = maxScroll;
 }
 
-void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
+void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line)
 {
-    std::string renderLine;
-    for (size_t i = 0; i < line.size();) {
-        uint8_t c = (uint8_t)line[i];
-        size_t len = utf8CharLen(c);
-        if (c == 0xEF && i + 2 < line.size() && (uint8_t)line[i + 1] == 0xB8 && (uint8_t)line[i + 2] == 0x8F) {
-            i += 3;
-            continue;
-        }
-        if (c == 0xF0 && i + 3 < line.size() && (uint8_t)line[i + 1] == 0x9F && (uint8_t)line[i + 2] == 0x8F &&
-            ((uint8_t)line[i + 3] >= 0xBB && (uint8_t)line[i + 3] <= 0xBF)) {
-            i += 4;
-            continue;
-        }
-        renderLine.append(line, i, len);
-        i += len;
-    }
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
+    const int emoteWidth = emoteFont.w;
+    const int emoteHeight = emoteFont.h;
 
-    // Step 1: Find tallest emote in the line
-    int maxIconHeight = fontHeight;
+    // Step 1: Find if line contains any emote (all emotes are same height now)
+    bool hasEmote = false;
     for (size_t i = 0; i < line.length();) {
-        bool matched = false;
-        for (int e = 0; e < emoteCount; ++e) {
-            size_t emojiLen = strlen(emotes[e].label);
-            if (line.compare(i, emojiLen, emotes[e].label) == 0) {
-                if (emotes[e].height > maxIconHeight)
-                    maxIconHeight = emotes[e].height;
-                i += emojiLen;
-                matched = true;
-                break;
-            }
+        size_t consumed = 0;
+        int emoteIdx = matchEmoteAt(line.c_str() + i, &consumed);
+        if (emoteIdx >= 0) {
+            hasEmote = true;
+            break;
         }
-        if (!matched) {
-            i += utf8CharLen(static_cast<uint8_t>(line[i]));
-        }
+        i += (consumed > 0) ? consumed : utf8CharLen(static_cast<uint8_t>(line[i]));
     }
 
     // Step 2: Baseline alignment
+    int maxIconHeight = hasEmote ? emoteHeight : fontHeight;
     int lineHeight = std::max(fontHeight, maxIconHeight);
     int baselineOffset = (lineHeight - fontHeight) / 2;
     int fontY = y + baselineOffset;
@@ -157,72 +140,70 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     // Step 3: Render line in segments
     size_t i = 0;
     bool inBold = false;
+    std::string textBuffer;
 
     while (i < line.length()) {
         // Check for ** start/end for faux bold
         if (line.compare(i, 2, "**") == 0) {
+            // Flush text buffer first
+            if (!textBuffer.empty()) {
+                if (inBold) {
+                    display->drawString(cursorX + 1, fontY, textBuffer.c_str());
+                }
+                display->drawString(cursorX, fontY, textBuffer.c_str());
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
+                cursorX += display->getStringWidth(textBuffer.c_str(), textBuffer.length(), true);
+#else
+                cursorX += display->getStringWidth(textBuffer.c_str());
+#endif
+                textBuffer.clear();
+            }
             inBold = !inBold;
             i += 2;
             continue;
         }
 
-        // Look ahead for the next emote match
-        size_t nextEmotePos = std::string::npos;
-        const Emote *matchedEmote = nullptr;
-        size_t emojiLen = 0;
+        // Try to match emote at current position
+        size_t consumed = 0;
+        int emoteIdx = matchEmoteAt(line.c_str() + i, &consumed);
 
-        for (int e = 0; e < emoteCount; ++e) {
-            size_t pos = line.find(emotes[e].label, i);
-            if (pos != std::string::npos && (nextEmotePos == std::string::npos || pos < nextEmotePos)) {
-                nextEmotePos = pos;
-                matchedEmote = &emotes[e];
-                emojiLen = strlen(emotes[e].label);
-            }
-        }
-
-        // Render normal text segment up to the emote or bold toggle
-        size_t nextControl = std::min(nextEmotePos, line.find("**", i));
-        if (nextControl == std::string::npos)
-            nextControl = line.length();
-
-        if (nextControl > i) {
-            std::string textChunk = line.substr(i, nextControl - i);
-            if (inBold) {
-                // Faux bold: draw twice, offset by 1px
-                display->drawString(cursorX + 1, fontY, textChunk.c_str());
-            }
-            display->drawString(cursorX, fontY, textChunk.c_str());
+        if (emoteIdx >= 0 && consumed > 0) {
+            // Flush text buffer first
+            if (!textBuffer.empty()) {
+                if (inBold) {
+                    display->drawString(cursorX + 1, fontY, textBuffer.c_str());
+                }
+                display->drawString(cursorX, fontY, textBuffer.c_str());
 #if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
-            cursorX += display->getStringWidth(textChunk.c_str(), textChunk.length(), true);
+                cursorX += display->getStringWidth(textBuffer.c_str(), textBuffer.length(), true);
 #else
-            cursorX += display->getStringWidth(textChunk.c_str());
+                cursorX += display->getStringWidth(textBuffer.c_str());
 #endif
-            i = nextControl;
-            continue;
-        }
+                textBuffer.clear();
+            }
 
-        // Render the emote (if found)
-        if (matchedEmote && i == nextEmotePos) {
-            // Vertically center emote relative to font baseline (not just midline)
-            int iconY = fontY + (fontHeight - matchedEmote->height) / 2;
-            display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
-            cursorX += matchedEmote->width + 1;
-            i += emojiLen;
-            continue;
+            // Draw emote
+            const uint8_t* bitmap = getEmoteBitmap(emoteIdx);
+            if (bitmap) {
+                int iconY = fontY + (fontHeight - emoteHeight) / 2;
+                display->drawXbm(cursorX, iconY, emoteWidth, emoteHeight, bitmap);
+                cursorX += emoteWidth + 1;
+            }
+            i += consumed;
         } else {
-            // No more emotes — render the rest of the line
-            std::string remaining = line.substr(i);
-            if (inBold) {
-                display->drawString(cursorX + 1, fontY, remaining.c_str());
-            }
-            display->drawString(cursorX, fontY, remaining.c_str());
-#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
-            cursorX += display->getStringWidth(remaining.c_str(), remaining.length(), true);
-#else
-            cursorX += display->getStringWidth(remaining.c_str());
-#endif
-            break;
+            // Regular character - add to buffer
+            size_t charLen = utf8CharLen(static_cast<uint8_t>(line[i]));
+            textBuffer.append(line, i, charLen);
+            i += charLen;
         }
+    }
+
+    // Flush remaining text
+    if (!textBuffer.empty()) {
+        if (inBold) {
+            display->drawString(cursorX + 1, fontY, textBuffer.c_str());
+        }
+        display->drawString(cursorX, fontY, textBuffer.c_str());
     }
 }
 
@@ -393,32 +374,44 @@ static void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
     display->drawLine(centerX - 1, centerY - 4, centerX + 1, centerY - 4);
 }
 
-static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &line, const Emote *emotes, int emoteCount)
+static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &line)
 {
-    std::string normalized = normalizeEmoji(line);
     int totalWidth = 0;
+    const int emoteWidth = emoteFont.w;
+    std::string textBuffer;
 
     size_t i = 0;
-    while (i < normalized.length()) {
-        bool matched = false;
-        for (int e = 0; e < emoteCount; ++e) {
-            size_t emojiLen = strlen(emotes[e].label);
-            if (normalized.compare(i, emojiLen, emotes[e].label) == 0) {
-                totalWidth += emotes[e].width + 1; // +1 spacing
-                i += emojiLen;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            size_t charLen = utf8CharLen(static_cast<uint8_t>(normalized[i]));
+    while (i < line.length()) {
+        // Try to match emote at current position
+        size_t consumed = 0;
+        int emoteIdx = matchEmoteAt(line.c_str() + i, &consumed);
+
+        if (emoteIdx >= 0 && consumed > 0) {
+            // Flush text buffer width
+            if (!textBuffer.empty()) {
 #if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
-            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str(), charLen, true);
+                totalWidth += display->getStringWidth(textBuffer.c_str(), textBuffer.length(), true);
 #else
-            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
+                totalWidth += display->getStringWidth(textBuffer.c_str());
 #endif
+                textBuffer.clear();
+            }
+            totalWidth += emoteWidth + 1; // +1 spacing
+            i += consumed;
+        } else {
+            size_t charLen = utf8CharLen(static_cast<uint8_t>(line[i]));
+            textBuffer.append(line, i, charLen);
             i += charLen;
         }
+    }
+
+    // Flush remaining text width
+    if (!textBuffer.empty()) {
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
+        totalWidth += display->getStringWidth(textBuffer.c_str(), textBuffer.length(), true);
+#else
+        totalWidth += display->getStringWidth(textBuffer.c_str());
+#endif
     }
     return totalWidth;
 }
@@ -665,7 +658,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Cache lines and heights
     cachedLines = allLines;
-    cachedHeights = calculateLineHeights(cachedLines, emotes, isHeader);
+    cachedHeights = calculateLineHeights(cachedLines, isHeader);
 
     // Scrolling logic (unchanged)
     int totalHeight = 0;
@@ -762,14 +755,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // Render message line
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
-                    int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
+                    int renderedWidth = getRenderedLineWidth(display, cachedLines[i]);
                     int rightX = SCREEN_WIDTH - renderedWidth - SCROLLBAR_WIDTH - RIGHT_MARGIN;
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
 
-                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i]);
                 } else {
-                    drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, x, lineY, cachedLines[i]);
                 }
             }
         }
@@ -843,7 +836,20 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 
     return lines;
 }
-std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes,
+// Helper function to check if a line contains any emote
+static bool lineContainsEmote(const std::string &line) {
+    for (size_t i = 0; i < line.length();) {
+        size_t consumed = 0;
+        int emoteIdx = matchEmoteAt(line.c_str() + i, &consumed);
+        if (emoteIdx >= 0) {
+            return true;
+        }
+        i += (consumed > 0) ? consumed : utf8CharLen(static_cast<uint8_t>(line[i]));
+    }
+    return false;
+}
+
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines,
                                       const std::vector<bool> &isHeaderVec)
 {
     // Tunables for layout control
@@ -854,6 +860,8 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
     constexpr int EMOTE_PADDING_ABOVE = 4;  // space above emote line (added to line above)
     constexpr int EMOTE_PADDING_BELOW = 3;  // space below emote line (added to emote line)
 
+    const int emoteHeight = emoteFont.h;  // All emotes are same height now
+
     std::vector<int> rowHeights;
     rowHeights.reserve(lines.size());
 
@@ -862,23 +870,12 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
         const int baseHeight = FONT_HEIGHT_SMALL;
 
         // Detect if THIS line or NEXT line contains an emote
-        bool hasEmote = false;
-        int tallestEmote = baseHeight;
-        for (int i = 0; i < numEmotes; ++i) {
-            if (line.find(emotes[i].label) != std::string::npos) {
-                hasEmote = true;
-                tallestEmote = std::max(tallestEmote, emotes[i].height);
-            }
-        }
+        bool hasEmote = lineContainsEmote(line);
+        int tallestEmote = hasEmote ? emoteHeight : baseHeight;
 
         bool nextHasEmote = false;
         if (idx + 1 < lines.size()) {
-            for (int i = 0; i < numEmotes; ++i) {
-                if (lines[idx + 1].find(emotes[i].label) != std::string::npos) {
-                    nextHasEmote = true;
-                    break;
-                }
-            }
+            nextHasEmote = lineContainsEmote(lines[idx + 1]);
         }
 
         int lineHeight = baseHeight;

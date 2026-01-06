@@ -45,68 +45,71 @@ extern MessageStore messageStore;
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
-// Tokenize a message string into emote/text segments
+// Tokenize a message string into emote/text segments using new EmoteFont system
 static std::vector<std::pair<bool, String>> tokenizeMessageWithEmotes(const char *msg)
 {
     std::vector<std::pair<bool, String>> tokens;
-    int msgLen = strlen(msg);
-    int pos = 0;
+    size_t msgLen = strlen(msg);
+    size_t pos = 0;
+
     while (pos < msgLen) {
-        const graphics::Emote *foundEmote = nullptr;
-        int foundLen = 0;
-        for (int j = 0; j < graphics::numEmotes; j++) {
-            const char *label = graphics::emotes[j].label;
-            int labelLen = strlen(label);
-            if (labelLen == 0)
-                continue;
-            if (strncmp(msg + pos, label, labelLen) == 0) {
-                if (!foundEmote || labelLen > foundLen) {
-                    foundEmote = &graphics::emotes[j];
-                    foundLen = labelLen;
-                }
-            }
-        }
-        if (foundEmote) {
-            tokens.emplace_back(true, String(foundEmote->label));
-            pos += foundLen;
+        size_t consumed = 0;
+        int emoteIdx = graphics::matchEmoteAt(msg + pos, &consumed);
+
+        if (emoteIdx >= 0 && consumed > 0) {
+            // Found an emote - store the UTF-8 bytes as the "label"
+            tokens.emplace_back(true, String(msg + pos).substring(0, consumed));
+            pos += consumed;
         } else {
-            // Find next emote
-            int nextEmote = msgLen;
-            for (int j = 0; j < graphics::numEmotes; j++) {
-                const char *label = graphics::emotes[j].label;
-                if (!label || !*label)
-                    continue;
-                const char *found = strstr(msg + pos, label);
-                if (found && (found - msg) < nextEmote) {
-                    nextEmote = found - msg;
+            // Not an emote - find next emote or end of string
+            size_t textStart = pos;
+            size_t charLen = 1;
+            uint8_t c = (uint8_t)msg[pos];
+            if ((c & 0x80) == 0) charLen = 1;
+            else if ((c & 0xE0) == 0xC0) charLen = 2;
+            else if ((c & 0xF0) == 0xE0) charLen = 3;
+            else if ((c & 0xF8) == 0xF0) charLen = 4;
+            pos += charLen;
+
+            // Keep accumulating non-emote characters
+            while (pos < msgLen) {
+                size_t nextConsumed = 0;
+                int nextEmote = graphics::matchEmoteAt(msg + pos, &nextConsumed);
+                if (nextEmote >= 0 && nextConsumed > 0) {
+                    break;  // Found next emote
                 }
+                c = (uint8_t)msg[pos];
+                if ((c & 0x80) == 0) charLen = 1;
+                else if ((c & 0xE0) == 0xC0) charLen = 2;
+                else if ((c & 0xF0) == 0xE0) charLen = 3;
+                else if ((c & 0xF8) == 0xF0) charLen = 4;
+                else charLen = 1;
+                pos += charLen;
             }
-            int textLen = (nextEmote > pos) ? (nextEmote - pos) : (msgLen - pos);
-            if (textLen > 0) {
-                tokens.emplace_back(false, String(msg + pos).substring(0, textLen));
-                pos += textLen;
-            } else {
-                break;
+
+            if (pos > textStart) {
+                tokens.emplace_back(false, String(msg + textStart).substring(0, pos - textStart));
             }
         }
     }
     return tokens;
 }
 
-// Render a single emote token centered vertically on a row
+// Render a single emote token centered vertically on a row using new EmoteFont system
 static void renderEmote(OLEDDisplay *display, int &nextX, int lineY, int rowHeight, const String &label)
 {
-    const graphics::Emote *emote = nullptr;
-    for (int j = 0; j < graphics::numEmotes; j++) {
-        if (label == graphics::emotes[j].label) {
-            emote = &graphics::emotes[j];
-            break;
+    size_t consumed = 0;
+    int emoteIdx = graphics::matchEmoteAt(label.c_str(), &consumed);
+
+    if (emoteIdx >= 0) {
+        const uint8_t* bitmap = graphics::getEmoteBitmap(emoteIdx);
+        if (bitmap) {
+            int emoteWidth = graphics::emoteFont.w;
+            int emoteHeight = graphics::emoteFont.h;
+            int emoteYOffset = (rowHeight - emoteHeight) / 2;
+            display->drawXbm(nextX, lineY + emoteYOffset, emoteWidth, emoteHeight, bitmap);
+            nextX += emoteWidth + 2;
         }
-    }
-    if (emote) {
-        int emoteYOffset = (rowHeight - emote->height) / 2; // vertically center the emote
-        display->drawXbm(nextX, lineY + emoteYOffset, emote->width, emote->height, emote->bitmap);
-        nextX += emote->width + 2; // spacing between tokens
     }
 }
 
@@ -942,9 +945,35 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     return false;
 }
 
+// Helper: Convert emote index to UTF-8 string
+static String emoteIndexToUtf8(int index) {
+    if (index < 0 || index >= graphics::emoteFont.count) return "";
+
+    uint16_t compressed = pgm_read_word(&graphics::emoteFont.map[index]);
+    uint32_t codePoint = graphics::decompressCodePoint(compressed);
+
+    char utf8[5] = {0};
+    if (codePoint < 0x80) {
+        utf8[0] = (char)codePoint;
+    } else if (codePoint < 0x800) {
+        utf8[0] = 0xC0 | (codePoint >> 6);
+        utf8[1] = 0x80 | (codePoint & 0x3F);
+    } else if (codePoint < 0x10000) {
+        utf8[0] = 0xE0 | (codePoint >> 12);
+        utf8[1] = 0x80 | ((codePoint >> 6) & 0x3F);
+        utf8[2] = 0x80 | (codePoint & 0x3F);
+    } else {
+        utf8[0] = 0xF0 | (codePoint >> 18);
+        utf8[1] = 0x80 | ((codePoint >> 12) & 0x3F);
+        utf8[2] = 0x80 | ((codePoint >> 6) & 0x3F);
+        utf8[3] = 0x80 | (codePoint & 0x3F);
+    }
+    return String(utf8);
+}
+
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
-    int numEmotes = graphics::numEmotes;
+    int numEmotes = graphics::emoteFont.count;
 
     // Override isDown and isSelect ONLY for emote picker behavior
     bool isUp = isUpEvent(event);
@@ -972,8 +1001,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
     // Select emote: insert into freetext at cursor and return to freetext
     if (isSelect) {
-        String label = graphics::emotes[emotePickerIndex].label;
-        String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
+        String emoteInsert = emoteIndexToUtf8(emotePickerIndex);
         if (cursor == freetext.length()) {
             freetext += emoteInsert;
         } else {
@@ -1775,25 +1803,22 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
 
 void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    const int headerFontHeight = FONT_HEIGHT_SMALL; // Make sure this matches your actual small font height
-    const int headerMargin = 2;                     // Extra pixels below header
+    const int headerFontHeight = FONT_HEIGHT_SMALL;
+    const int headerMargin = 2;
     const int labelGap = 6;
     const int bitmapGapX = 4;
 
-    // Find max emote height (assume all same, or precalculated)
-    int maxEmoteHeight = 0;
-    for (int i = 0; i < graphics::numEmotes; ++i)
-        if (graphics::emotes[i].height > maxEmoteHeight)
-            maxEmoteHeight = graphics::emotes[i].height;
-
-    const int rowHeight = maxEmoteHeight + 2;
+    // All emotes are same size now
+    const int emoteWidth = graphics::emoteFont.w;
+    const int emoteHeight = graphics::emoteFont.h;
+    const int rowHeight = emoteHeight + 2;
 
     // Place header at top, then compute start of emote list
     int headerY = y;
     int listTop = headerY + headerFontHeight + headerMargin;
 
     int _visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
-    int numEmotes = graphics::numEmotes;
+    int numEmotes = graphics::emoteFont.count;
 
     // keep member variable in sync
     this->visibleRows = _visibleRows;
@@ -1823,23 +1848,27 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
         int emoteIdx = topIndex + vis;
         if (emoteIdx >= numEmotes)
             break;
-        const graphics::Emote &emote = graphics::emotes[emoteIdx];
+
         int rowY = listTop + vis * rowHeight;
 
         // Draw highlight box 2px taller than emote (1px margin above and below)
         if (emoteIdx == emotePickerIndex) {
-            display->fillRect(x, rowY, display->getWidth() - 8, emote.height + 2);
+            display->fillRect(x, rowY, display->getWidth() - 8, emoteHeight + 2);
             display->setColor(BLACK);
         }
 
         // Emote bitmap (left), 1px margin from highlight bar top
         int emoteY = rowY + 1;
-        display->drawXbm(x + bitmapGapX, emoteY, emote.width, emote.height, emote.bitmap);
+        const uint8_t* bitmap = graphics::getEmoteBitmap(emoteIdx);
+        if (bitmap) {
+            display->drawXbm(x + bitmapGapX, emoteY, emoteWidth, emoteHeight, bitmap);
+        }
 
-        // Emote label (right of bitmap)
+        // Emote label (right of bitmap) - show UTF-8 character
         display->setFont(FONT_MEDIUM);
         int labelY = rowY + ((rowHeight - FONT_HEIGHT_MEDIUM) / 2);
-        display->drawString(x + bitmapGapX + emote.width + labelGap, labelY, emote.label);
+        String label = emoteIndexToUtf8(emoteIdx);
+        display->drawString(x + bitmapGapX + emoteWidth + labelGap, labelY, label);
 
         if (emoteIdx == emotePickerIndex)
             display->setColor(WHITE);
@@ -2011,14 +2040,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int maxWidth = display->getWidth();
             for (auto &token : tokens) {
                 if (token.first) {
-                    // Emote
-                    int tokenWidth = 0;
-                    for (int j = 0; j < graphics::numEmotes; j++) {
-                        if (token.second == graphics::emotes[j].label) {
-                            tokenWidth = graphics::emotes[j].width + 2;
-                            break;
-                        }
-                    }
+                    // Emote - all emotes are same width now
+                    int tokenWidth = graphics::emoteFont.w + 2;
                     if (lineWidth + tokenWidth > maxWidth && !currentLine.empty()) {
                         lines.push_back(currentLine);
                         currentLine.clear();
@@ -2114,21 +2137,32 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                      : 0;
         int countRows = std::min(messagesCount, _visibleRows);
 
-        // Build per-row max height based on all emotes in line
+        // Build per-row max height based on emotes in line
+        // All emotes are same height now, so just check if line contains any emote
         for (int i = 0; i < countRows; i++) {
             const char *msg = getMessageByIndex(topMsg + i);
-            int maxEmoteHeight = 0;
-            for (int j = 0; j < graphics::numEmotes; j++) {
-                const char *label = graphics::emotes[j].label;
-                if (!label || !*label)
-                    continue;
-                const char *search = msg;
-                while ((search = strstr(search, label))) {
-                    if (graphics::emotes[j].height > maxEmoteHeight)
-                        maxEmoteHeight = graphics::emotes[j].height;
-                    search += strlen(label); // Advance past this emote
+            bool hasEmote = false;
+
+            // Check if message contains any emote
+            size_t msgLen = strlen(msg);
+            for (size_t pos = 0; pos < msgLen;) {
+                size_t consumed = 0;
+                int emoteIdx = graphics::matchEmoteAt(msg + pos, &consumed);
+                if (emoteIdx >= 0 && consumed > 0) {
+                    hasEmote = true;
+                    break;
                 }
+                // Move to next character
+                uint8_t c = (uint8_t)msg[pos];
+                size_t charLen = 1;
+                if ((c & 0x80) == 0) charLen = 1;
+                else if ((c & 0xE0) == 0xC0) charLen = 2;
+                else if ((c & 0xF0) == 0xE0) charLen = 3;
+                else if ((c & 0xF8) == 0xF0) charLen = 4;
+                pos += charLen;
             }
+
+            int maxEmoteHeight = hasEmote ? graphics::emoteFont.h : 0;
             rowHeights.push_back(std::max(baseRowSpacing, maxEmoteHeight + 2));
         }
 
