@@ -17,7 +17,7 @@ class MorseInputModule : public concurrency::OSThread, public Observable<const U
   public:
     static MorseInputModule &instance();
 
-    void start(const char *header, const char *initialText, uint32_t durationMs,
+    void start(const char *header, const char *initialText,
                std::function<void(const std::string &)> callback);
     void stop(bool callEmptyCallback = false);
 
