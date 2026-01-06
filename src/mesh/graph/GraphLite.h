@@ -116,7 +116,7 @@ class GraphLite {
      * Add or update an edge in the graph
      */
     int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0,
-                   EdgeLite::Source source = EdgeLite::Source::Mirrored);
+                   EdgeLite::Source source = EdgeLite::Source::Mirrored, bool updateTimestamp = true);
 
     /**
      * Update node activity timestamp (keeps node in graph without edges)

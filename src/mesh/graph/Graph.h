@@ -83,7 +83,7 @@ public:
      * @return EDGE_NO_CHANGE, EDGE_NEW, or EDGE_SIGNIFICANT_CHANGE
      */
     int updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance = 0,
-                   Edge::Source source = Edge::Source::Mirrored);
+                   Edge::Source source = Edge::Source::Mirrored, bool updateTimestamp = true);
 
     /**
      * Update node activity timestamp (keeps node in graph without edges)
