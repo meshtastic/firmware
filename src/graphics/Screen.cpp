@@ -533,6 +533,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     }
 }
 
+#ifdef PIN_EINK_EN
+uint32_t backlight_peek_time = 0;
+#endif
+
 void Screen::setup()
 {
 
@@ -757,6 +761,18 @@ int32_t Screen::runOnce()
         enabled = false;
         return RUN_SAME;
     }
+#ifdef PIN_EINK_EN
+#ifndef BACKLIGHT_TIMEOUT_MS
+#define BACKLIGHT_TIMEOUT_MS 3000  // Turn off backlight after 3 seconds by default
+#endif
+    // Turn off backlight after timeout
+    if (uiconfig.screen_brightness > 0 && backlight_peek_time != 0 &&
+        millis() - backlight_peek_time > BACKLIGHT_TIMEOUT_MS) {
+        digitalWrite(PIN_EINK_EN, LOW);
+        backlight_peek_time = 0;
+        uiconfig.screen_brightness = 0;
+    }
+#endif
 
     if (displayHeight == 0) {
         displayHeight = dispdev->getHeight();
@@ -1771,6 +1787,16 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_CANCEL) {
                 setOn(false);
+#ifdef PIN_EINK_EN
+            } else if (event->inputEvent == INPUT_BROKER_BACKLIGHT) {
+                digitalWrite(PIN_EINK_EN, HIGH);
+                backlight_peek_time = millis();
+                uiconfig.screen_brightness = 1;
+            } else if (event->inputEvent == INPUT_BROKER_BACKLIGHT_TOGGLE) {
+                uiconfig.screen_brightness = 1 - uiconfig.screen_brightness;
+                digitalWrite(PIN_EINK_EN, uiconfig.screen_brightness == 0 ? LOW : HIGH);
+                backlight_peek_time = 0;
+#endif
             }
         }
     }
