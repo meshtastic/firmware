@@ -175,7 +175,7 @@ private:
     /**
      * Calculate percentage of signal-based ACTIVE nodes (SRactive status only)
      */
-    float getSignalBasedActivePercentage() const;
+    float getDirectNeighborsSignalActivePercentage() const;
 
     /**
      * Collect all neighbors we want to broadcast in priority order
