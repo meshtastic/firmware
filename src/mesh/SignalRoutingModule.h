@@ -170,9 +170,9 @@ private:
     bool isSignalBasedCapable(NodeNum nodeId) const;
 
     /**
-     * Calculate percentage of signal-based capable nodes
+     * Calculate percentage of signal-based ACTIVE nodes (SRactive status only)
      */
-    float getSignalBasedCapablePercentage() const;
+    float getSignalBasedActivePercentage() const;
 
     /**
      * Collect all neighbors we want to broadcast in priority order
