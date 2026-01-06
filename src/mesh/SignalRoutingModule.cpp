@@ -260,6 +260,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     const EdgeLite* filteredSelected[GRAPH_LITE_MAX_EDGES_PER_NODE];
     size_t filteredCount = 0;
     size_t placeholdersFiltered = 0;
+
     for (size_t i = 0; i < selectedCount; i++) {
         if (!isPlaceholderNode(selected[i]->to)) {
             filteredSelected[filteredCount++] = selected[i];
@@ -267,6 +268,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
             placeholdersFiltered++;
         }
     }
+
     if (placeholdersFiltered > 0) {
         LOG_DEBUG("[SR] Filtered %u placeholder nodes from topology broadcast", placeholdersFiltered);
     }
@@ -410,17 +412,72 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         // Scale position_variance from uint8 (0-255) back to full range (0-3000) for graph storage
         uint32_t scaledVariance = static_cast<uint32_t>(neighbor.position_variance) * 12;
         // Edge direction: neighbor → sender (the direction of the transmission that produced the RSSI)
+        // For topology broadcasts: only create edges if they don't exist, don't refresh existing timestamps
+        // since topology broadcasts don't represent actual recent communication
 #ifdef SIGNAL_ROUTING_LITE_MODE
+        // Check if reported edge already exists
+        bool reportedEdgeExists = false;
+        auto fromNode = routingGraph->getEdgesFrom(neighbor.node_id);
+        if (fromNode) {
+            for (uint8_t i = 0; i < fromNode->edgeCount; i++) {
+                if (fromNode->edges[i].to == p->from) {
+                    reportedEdgeExists = true;
+                    break;
+                }
+            }
+        }
+
+        // Always update reported edge (creates if doesn't exist, updates properties if exists)
+        // But only update timestamp for new edges
         routingGraph->updateEdge(neighbor.node_id, p->from, etx, rxTime, scaledVariance,
-                                 EdgeLite::Source::Reported);
-        // Also mirror: sender's view of this neighbor for others to consume
+                                 EdgeLite::Source::Reported, !reportedEdgeExists);
+
+        // Check if mirrored edge already exists
+        bool mirroredEdgeExists = false;
+        auto toNode = routingGraph->getEdgesFrom(p->from);
+        if (toNode) {
+            for (uint8_t i = 0; i < toNode->edgeCount; i++) {
+                if (toNode->edges[i].to == neighbor.node_id) {
+                    mirroredEdgeExists = true;
+                    break;
+                }
+            }
+        }
+
+        // Always update mirrored edge (creates if doesn't exist, updates properties if exists)
+        // But only update timestamp for new edges
         routingGraph->updateEdge(p->from, neighbor.node_id, etx, rxTime, scaledVariance,
-                                 EdgeLite::Source::Mirrored);
+                                 EdgeLite::Source::Mirrored, !mirroredEdgeExists);
 #else
+        // Always update reported edge (creates if doesn't exist, updates properties if exists)
+        // But only update timestamp for new edges
+        bool reportedEdgeExists = false;
+        auto fromEdges = routingGraph->getEdgesFrom(neighbor.node_id);
+        if (fromEdges) {
+            for (const auto& edge : *fromEdges) {
+                if (edge.to == p->from) {
+                    reportedEdgeExists = true;
+                    break;
+                }
+            }
+        }
         routingGraph->updateEdge(neighbor.node_id, p->from, etx, rxTime, scaledVariance,
-                                 Edge::Source::Reported);
+                                 Edge::Source::Reported, !reportedEdgeExists);
+
+        // Always update mirrored edge (creates if doesn't exist, updates properties if exists)
+        // But only update timestamp for new edges
+        bool mirroredEdgeExists = false;
+        auto toEdges = routingGraph->getEdgesFrom(p->from);
+        if (toEdges) {
+            for (const auto& edge : *toEdges) {
+                if (edge.to == neighbor.node_id) {
+                    mirroredEdgeExists = true;
+                    break;
+                }
+            }
+        }
         routingGraph->updateEdge(p->from, neighbor.node_id, etx, rxTime, scaledVariance,
-                                 Edge::Source::Mirrored);
+                                 Edge::Source::Mirrored, !mirroredEdgeExists);
 #endif
     }
 }
