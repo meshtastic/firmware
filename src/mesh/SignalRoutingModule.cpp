@@ -507,6 +507,15 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 {
     if (!routingGraph || !p) return;
 
+    // Skip processing entirely for packets we sent (detected as rebroadcasts)
+    // This prevents topology pollution from our own rebroadcasted packets
+    NodeNum ourNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    uint32_t currentTime = millis() / 1000;
+    if (routingGraph->hasNodeTransmitted(ourNode, p->id, currentTime)) {
+        LOG_DEBUG("[SR] Skipping topology processing for rebroadcast of our packet %08x", p->id);
+        return;
+    }
+
     // Only process SignalRoutingInfo packets
     if (p->decoded.portnum != meshtastic_PortNum_SIGNAL_ROUTING_APP) return;
     // Reject packets from invalid node IDs (0 is invalid)
@@ -1976,6 +1985,15 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
 {
     if (!routingGraph || !nodeDB) {
         return true;
+    }
+
+    // Skip SR processing entirely for packets we sent (detected as rebroadcasts)
+    // This prevents processing our own packets that come back to us
+    NodeNum ourNode = nodeDB->getNodeNum();
+    uint32_t currentTime = millis() / 1000;
+    if (routingGraph->hasNodeTransmitted(ourNode, p->id, currentTime)) {
+        LOG_DEBUG("[SR] Skipping relay decision for rebroadcast of our packet %08x", p->id);
+        return false; // Don't relay our own rebroadcasted packets
     }
 
     // Special handling for unicast packets being relayed with SR coordination
