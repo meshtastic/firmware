@@ -513,10 +513,12 @@ void menuHandler::messageResponseMenu()
             screen->runNow();
 
         } else if (selected == MuteChannel) {
-            int threadChannel = graphics::MessageRenderer::getThreadChannel();
-            const uint8_t chIndex = (threadChannel != 0) ? (uint8_t)threadChannel : channels.getPrimaryIndex();
+            const uint8_t chIndex = (ch != 0) ? (uint8_t)ch : channels.getPrimaryIndex();
             auto &chan = channels.getByIndex(chIndex);
-            chan.settings.module_settings.is_muted = !chan.settings.module_settings.is_muted;
+            if (chan.settings.has_module_settings) {
+                chan.settings.module_settings.is_muted = !chan.settings.module_settings.is_muted;
+                saveUIConfig();
+            }
 
             // Delete submenu
         } else if (selected == 900) {
