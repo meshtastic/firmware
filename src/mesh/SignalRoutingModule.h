@@ -103,6 +103,9 @@ protected:
     /** Called to handle received SignalRoutingInfo protobuf */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_SignalRoutingInfo *p) override;
 
+    /** Update graph with individual neighbor data */
+    void updateGraphWithNeighbor(NodeNum sender, const meshtastic_SignalNeighbor &neighbor);
+
     /** Called to handle any received packet (for updating neighbor info from RSSI/SNR) */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
@@ -215,8 +218,8 @@ private:
 
     enum class CapabilityStatus : uint8_t {
         Unknown = 0,
-        SRactive,    // sends SR broadcasts with signal_based_capable = true; considered as relay candidate
-        SRinactive,  // sends SR broadcasts with signal_based_capable = false; SR-aware but excluded from relay calculations
+        SRactive,    // sends SR broadcasts with signal_routing_active = true; considered as relay candidate
+        SRinactive,  // sends SR broadcasts with signal_routing_active = false; SR-aware but excluded from relay calculations
         Legacy       // stock firmware nodes that don't send SR broadcasts
     };
 
