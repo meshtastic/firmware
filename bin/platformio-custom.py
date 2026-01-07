@@ -272,11 +272,11 @@ if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
     env.AddPreAction(f"$BUILD_DIR/{lfsbin}", load_boot_logo)
 
 board_arch = infer_architecture(env.BoardConfig())
-is_native_env = board_arch is None
+should_skip_manifest = board_arch is None
 
 # For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
-mtjson_deps = [] if is_native_env else ["buildprog"]
-if not is_native_env and platform.name == "espressif32":
+mtjson_deps = [] if should_skip_manifest else ["buildprog"]
+if not should_skip_manifest and platform.name == "espressif32":
     # Build littlefs image as part of mtjson target
     # Equivalent to `pio run -t buildfs`
     target_lfs = env.DataToBin(
@@ -284,7 +284,7 @@ if not is_native_env and platform.name == "espressif32":
     )
     mtjson_deps.append(target_lfs)
 
-if is_native_env:
+if should_skip_manifest:
     def skip_manifest(source, target, env):
         print(f"mtjson: skipped for native environment: {env.get('PIOENV')}")
 
