@@ -121,21 +121,21 @@ def manifest_write(files, env):
     pioenv = env.get("PIOENV")
     device_meta = {}
     device_meta_fields = [
-        ("hwModel", ["custom_meshtastic_hw_model", "meshtastic_hw_model", "custom_device_hw_model"], as_int),
-        ("hwModelSlug", ["custom_meshtastic_hw_model_slug", "meshtastic_hw_model_slug", "custom_device_hw_model_slug"], str),
-        ("architecture", ["custom_meshtastic_architecture", "meshtastic_architecture", "custom_device_architecture"], str),
-        ("activelySupported", ["custom_meshtastic_actively_supported", "meshtastic_actively_supported", "custom_device_actively_supported"], as_bool),
-        ("displayName", ["custom_meshtastic_display_name", "meshtastic_display_name", "custom_device_display_name"], str),
-        ("supportLevel", ["custom_meshtastic_support_level", "meshtastic_support_level", "custom_device_support_level"], as_int),
-        ("images", ["custom_meshtastic_images", "meshtastic_images", "custom_device_images"], as_list),
-        ("tags", ["custom_meshtastic_tags", "meshtastic_tags", "custom_device_tags"], as_list),
-        ("requiresDfu", ["custom_meshtastic_requires_dfu", "meshtastic_requires_dfu", "custom_device_requires_dfu"], as_bool),
-        ("partitionScheme", ["custom_meshtastic_partition_scheme", "meshtastic_partition_scheme", "custom_device_partition_scheme"], str),
-        ("hasMui", ["custom_meshtastic_has_mui", "meshtastic_has_mui", "custom_device_has_mui"], as_bool),
-        ("hasInkHud", ["custom_meshtastic_has_inkhud", "meshtastic_has_inkhud", "custom_device_has_inkhud"], as_bool),
-        ("url", ["custom_meshtastic_url", "meshtastic_url", "custom_device_url"], str),
-        ("key", ["custom_meshtastic_key", "meshtastic_key", "custom_device_key"], str),
-        ("variant", ["custom_meshtastic_variant", "meshtastic_variant", "custom_device_variant"], str),
+        ("hwModel", ["custom_meshtastic_hw_model"], as_int),
+        ("hwModelSlug", ["custom_meshtastic_hw_model_slug"], str),
+        ("architecture", ["custom_meshtastic_architecture"], str),
+        ("activelySupported", ["custom_meshtastic_actively_supported"], as_bool),
+        ("displayName", ["custom_meshtastic_display_name"], str),
+        ("supportLevel", ["custom_meshtastic_support_level"], as_int),
+        ("images", ["custom_meshtastic_images"], as_list),
+        ("tags", ["custom_meshtastic_tags"], as_list),
+        ("requiresDfu", ["custom_meshtastic_requires_dfu"], as_bool),
+        ("partitionScheme", ["custom_meshtastic_partition_scheme"], str),
+        ("hasMui", ["custom_meshtastic_has_mui"], as_bool),
+        ("hasInkHud", ["custom_meshtastic_has_inkhud"], as_bool),
+        ("url", ["custom_meshtastic_url"], str),
+        ("key", ["custom_meshtastic_key"], str),
+        ("variant", ["custom_meshtastic_variant"], str),
     ]
 
     for manifest_key, option_keys, caster in device_meta_fields:
