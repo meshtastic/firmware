@@ -477,11 +477,11 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
     if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE) {
 
         if (portduino_config.sfpp_stratum0) {
-            LOG_WARN("StoreForwardpp Received a CANON_ANNOUNCE while stratum 0");
             uint8_t next_commit_hash[SFPP_HASH_SIZE] = {0};
             if (getNextHash(t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size, next_commit_hash)) {
                 printBytes("StoreForwardpp next chain hash: ", next_commit_hash, SFPP_HASH_SIZE);
                 if (airTime->isTxAllowedChannelUtil(true)) {
+                    LOG_INFO("StoreForwardpp Received a CANON_ANNOUNCE while stratum 0, sending next link.");
                     broadcastLink(next_commit_hash, SFPP_HASH_SIZE);
                 }
             }
@@ -689,11 +689,13 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
             if (isCommitInDB(incoming_link.commit_hash, incoming_link.commit_hash_len) ||
                 isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
-                LOG_INFO("StoreForwardpp Received link already in chain");
                 if (t->commit_hash.size == 0) {
                     link_object link_to_announce =
                         getLinkFromMessageHash(incoming_link.message_hash, incoming_link.message_hash_len);
                     canonAnnounce(link_to_announce);
+                    LOG_INFO("StoreForwardpp Received link already in chain # %u", link_to_announce.counter);
+                } else {
+                    LOG_INFO("StoreForwardpp Received link already in chain");
                 }
                 return true;
             }
