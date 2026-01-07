@@ -17,7 +17,7 @@ void powerHAL_init();
 // platform specific init code if needed to be run early on boot
 void powerHAL_platformInit();
 
-// Return true is current battery level is safe for device operation (for example flash writes).
+// Return true if current battery level is safe for device operation (for example flash writes).
 // This should be reported by power failure comparator (NRF52) or similar circuits on other platforms.
 // Do not use battery ADC as improper ADC configuration may prevent device from booting.
 bool powerHAL_isPowerLevelSafe();
