@@ -15,6 +15,9 @@
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
+#if defined(USE_U8G2_EINK_TEXT)
+#include "graphics/EInkDisplay2.h"
+#endif
 #include <string>
 #include <vector>
 
@@ -35,6 +38,51 @@ namespace MessageRenderer
 static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 static bool manualScrolling = false;
+
+#if defined(USE_U8G2_EINK_TEXT)
+static U8G2_FOR_ADAFRUIT_GFX *getU8g2Fonts(OLEDDisplay *display)
+{
+    auto *u8g2 = static_cast<EInkDisplay *>(display)->getU8g2();
+    if (!u8g2)
+        return nullptr;
+
+    u8g2->setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2->setFontMode(1);
+    u8g2->setForegroundColor(1);
+    u8g2->setBackgroundColor(0);
+    return u8g2;
+}
+#endif
+
+static inline int getTextWidth(OLEDDisplay *display, const std::string &text)
+{
+#if defined(USE_U8G2_EINK_TEXT)
+    if (auto *u8g2 = getU8g2Fonts(display))
+        return u8g2->getUTF8Width(text.c_str());
+#endif
+#if defined(OLED_UA) || defined(OLED_RU)
+    return display->getStringWidth(text.c_str(), text.length(), true);
+#else
+    return display->getStringWidth(text.c_str());
+#endif
+}
+
+static inline int getTextWidth(OLEDDisplay *display, const char *text)
+{
+    return getTextWidth(display, std::string(text));
+}
+
+static inline void drawText(OLEDDisplay *display, int x, int y, const std::string &text)
+{
+#if defined(USE_U8G2_EINK_TEXT)
+    if (auto *u8g2 = getU8g2Fonts(display)) {
+        const int baseline = y + FONT_HEIGHT_SMALL - 1;
+        u8g2->drawUTF8(x, baseline, text.c_str());
+        return;
+    }
+#endif
+    display->drawString(x, y, text.c_str());
+}
 
 // UTF-8 skip helper
 static inline size_t utf8CharLen(uint8_t c)
@@ -189,14 +237,10 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
             std::string textChunk = line.substr(i, nextControl - i);
             if (inBold) {
                 // Faux bold: draw twice, offset by 1px
-                display->drawString(cursorX + 1, fontY, textChunk.c_str());
+                drawText(display, cursorX + 1, fontY, textChunk);
             }
-            display->drawString(cursorX, fontY, textChunk.c_str());
-#if defined(OLED_UA) || defined(OLED_RU)
-            cursorX += display->getStringWidth(textChunk.c_str(), textChunk.length(), true);
-#else
-            cursorX += display->getStringWidth(textChunk.c_str());
-#endif
+            drawText(display, cursorX, fontY, textChunk);
+            cursorX += getTextWidth(display, textChunk);
             i = nextControl;
             continue;
         }
@@ -213,14 +257,10 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
             // No more emotes — render the rest of the line
             std::string remaining = line.substr(i);
             if (inBold) {
-                display->drawString(cursorX + 1, fontY, remaining.c_str());
+                drawText(display, cursorX + 1, fontY, remaining);
             }
-            display->drawString(cursorX, fontY, remaining.c_str());
-#if defined(OLED_UA) || defined(OLED_RU)
-            cursorX += display->getStringWidth(remaining.c_str(), remaining.length(), true);
-#else
-            cursorX += display->getStringWidth(remaining.c_str());
-#endif
+            drawText(display, cursorX, fontY, remaining);
+            cursorX += getTextWidth(display, remaining);
             break;
         }
     }
@@ -412,11 +452,7 @@ static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &
         }
         if (!matched) {
             size_t charLen = utf8CharLen(static_cast<uint8_t>(normalized[i]));
-#if defined(OLED_UA) || defined(OLED_RU)
-            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str(), charLen, true);
-#else
-            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
-#endif
+            totalWidth += getTextWidth(display, normalized.substr(i, charLen));
             i += charLen;
         }
     }
@@ -614,13 +650,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Shrink Sender name if needed
-        int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
-                         display->getStringWidth(" @...") - 10;
+        int availWidth = SCREEN_WIDTH - getTextWidth(display, timeBuf) - getTextWidth(display, chanType) -
+                         getTextWidth(display, " @...") - 10;
         if (availWidth < 0)
             availWidth = 0;
 
         size_t origLen = strlen(senderBuf);
-        while (senderBuf[0] && display->getStringWidth(senderBuf) > availWidth) {
+        while (senderBuf[0] && getTextWidth(display, senderBuf) > availWidth) {
             senderBuf[strlen(senderBuf) - 1] = '\0';
         }
 
@@ -724,7 +760,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
             if (isHeader[i]) {
 
-                int w = display->getStringWidth(cachedLines[i].c_str());
+                int w = getTextWidth(display, cachedLines[i]);
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
@@ -793,38 +829,44 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
     }
 
     std::string line, word;
-    for (int i = 0; messageBuf[i]; ++i) {
-        char ch = messageBuf[i];
-        if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
-            (unsigned char)messageBuf[i + 2] == 0x99) {
-            ch = '\''; // plain apostrophe
-            i += 2;    // skip over the extra UTF-8 bytes
+    for (int i = 0; messageBuf[i];) {
+        uint8_t c = static_cast<uint8_t>(messageBuf[i]);
+        size_t len = utf8CharLen(c);
+
+        // Normalize fancy apostrophe to ASCII
+        if (c == 0xE2 && (uint8_t)messageBuf[i + 1] == 0x80 && (uint8_t)messageBuf[i + 2] == 0x99) {
+            c = '\'';
+            len = 1;
         }
-        if (ch == '\n') {
+
+        if (len == 1 && c == '\n') {
             if (!word.empty())
                 line += word;
             if (!line.empty())
                 lines.push_back(line);
             line.clear();
             word.clear();
-        } else if (ch == ' ') {
+            i += 1;
+            continue;
+        }
+
+        if (len == 1 && c == ' ') {
             line += word + ' ';
             word.clear();
-        } else {
-            word += ch;
-            std::string test = line + word;
-#if defined(OLED_UA) || defined(OLED_RU)
-            uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
-#else
-            uint16_t strWidth = display->getStringWidth(test.c_str());
-#endif
-            if (strWidth > textWidth) {
-                if (!line.empty())
-                    lines.push_back(line);
-                line = word;
-                word.clear();
-            }
+            i += 1;
+            continue;
         }
+
+        word.append(messageBuf + i, len);
+        std::string test = line + word;
+        uint16_t strWidth = getTextWidth(display, test);
+        if (strWidth > textWidth) {
+            if (!line.empty())
+                lines.push_back(line);
+            line = word;
+            word.clear();
+        }
+        i += len;
     }
 
     if (!word.empty())
@@ -932,7 +974,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             availWidth = 0;
 
         size_t origLen = strlen(longName);
-        while (longName[0] && display->getStringWidth(longName) > availWidth) {
+        while (longName[0] && getTextWidth(display, longName) > availWidth) {
             longName[strlen(longName) - 1] = '\0';
         }
         if (strlen(longName) < origLen) {

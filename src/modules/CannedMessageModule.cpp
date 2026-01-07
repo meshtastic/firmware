@@ -34,12 +34,16 @@ extern MessageStore messageStore;
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
 #include "graphics/EInkDynamicDisplay.h" // To select between full and fast refresh on E-Ink displays
 #endif
+#if defined(USE_U8G2_EINK_TEXT)
+#include "graphics/EInkDisplay2.h"
+#endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
 #define INPUTBROKER_MATRIX_TYPE 0
 #endif
 
 #include "graphics/ScreenFonts.h"
+#include <cctype>
 #include <Throttle.h>
 
 // Remove Canned message screen if no action is taken for some milliseconds
@@ -109,6 +113,154 @@ static void renderEmote(OLEDDisplay *display, int &nextX, int lineY, int rowHeig
         nextX += emote->width + 2; // spacing between tokens
     }
 }
+
+#if defined(USE_U8G2_EINK_TEXT)
+struct PinyinEntry {
+    const char *pinyin;
+    const char *candidates;
+};
+
+static const PinyinEntry kPinyinTable[] = {
+    {"a", "啊 阿"},
+    {"ai", "爱 矮 挨"},
+    {"an", "安 按"},
+    {"ba", "吧 八 把"},
+    {"bei", "北 被"},
+    {"bu", "不"},
+    {"da", "大 打"},
+    {"de", "的 得"},
+    {"dian", "点 电"},
+    {"dong", "东 动"},
+    {"dui", "对"},
+    {"er", "二"},
+    {"fa", "发 法"},
+    {"guo", "国 过"},
+    {"hao", "好"},
+    {"he", "和 合"},
+    {"hen", "很"},
+    {"hui", "会 回"},
+    {"jiu", "九 就"},
+    {"kan", "看"},
+    {"la", "了"},
+    {"lai", "来"},
+    {"le", "了"},
+    {"li", "里 理"},
+    {"ma", "吗"},
+    {"me", "么"},
+    {"mei", "没 每"},
+    {"men", "们"},
+    {"ming", "名 明"},
+    {"na", "那 哪"},
+    {"ni", "你 妮"},
+    {"nian", "年"},
+    {"peng", "朋"},
+    {"ren", "人"},
+    {"ri", "日"},
+    {"shi", "是 时 事"},
+    {"shuo", "说"},
+    {"si", "四"},
+    {"tian", "天"},
+    {"wo", "我"},
+    {"wu", "五"},
+    {"xi", "西 喜"},
+    {"xie", "谢"},
+    {"yao", "要"},
+    {"ye", "也"},
+    {"yi", "一 以 已"},
+    {"you", "有 又"},
+    {"zai", "在 再"},
+    {"zhong", "中"},
+    {"guang", "广"},
+    {"guangzhou", "广州"},
+    {"zhongguo", "中国"},
+};
+
+static U8G2_FOR_ADAFRUIT_GFX *getU8g2Fonts(OLEDDisplay *display)
+{
+    auto *u8g2 = static_cast<EInkDisplay *>(display)->getU8g2();
+    if (!u8g2)
+        return nullptr;
+
+    u8g2->setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2->setFontMode(1);
+    u8g2->setForegroundColor(1);
+    u8g2->setBackgroundColor(0);
+    return u8g2;
+}
+
+static int getUiTextWidth(OLEDDisplay *display, const String &text)
+{
+    if (auto *u8g2 = getU8g2Fonts(display))
+        return u8g2->getUTF8Width(text.c_str());
+    return display->getStringWidth(text);
+}
+
+static void drawUiText(OLEDDisplay *display, int x, int y, const String &text)
+{
+    if (auto *u8g2 = getU8g2Fonts(display)) {
+        const int baseline = y + FONT_HEIGHT_SMALL - 1;
+        u8g2->drawUTF8(x, baseline, text.c_str());
+        return;
+    }
+    display->drawString(x, y, text);
+}
+
+static int utf8PrevIndex(const String &text, int pos)
+{
+    if (pos <= 0)
+        return 0;
+
+    int idx = pos - 1;
+    while (idx > 0 && (static_cast<uint8_t>(text[idx]) & 0xC0) == 0x80)
+        idx--;
+    return idx;
+}
+
+static int utf8NextIndex(const String &text, int pos)
+{
+    int len = text.length();
+    if (pos >= len)
+        return len;
+
+    int idx = pos + 1;
+    while (idx < len && (static_cast<uint8_t>(text[idx]) & 0xC0) == 0x80)
+        idx++;
+    return idx;
+}
+
+static void trimToWidth(OLEDDisplay *display, String &text, int maxWidth)
+{
+    while (text.length() > 0 && getUiTextWidth(display, text) > maxWidth) {
+        int prev = utf8PrevIndex(text, text.length());
+        text.remove(prev);
+    }
+}
+#else
+static int getUiTextWidth(OLEDDisplay *display, const String &text)
+{
+    return display->getStringWidth(text);
+}
+
+static void drawUiText(OLEDDisplay *display, int x, int y, const String &text)
+{
+    display->drawString(x, y, text);
+}
+
+static int utf8NextIndex(const String &text, int pos)
+{
+    int len = text.length();
+    if (pos >= len)
+        return len;
+    return pos + 1;
+}
+
+static void trimToWidth(OLEDDisplay *display, String &text, int maxWidth)
+{
+    while (text.length() > 0 && display->getStringWidth(text) > maxWidth) {
+        text.remove(text.length() - 1);
+    }
+}
+#endif
 
 namespace graphics
 {
@@ -784,6 +936,25 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (runState != CANNED_MESSAGE_RUN_STATE_FREETEXT)
         return false;
 
+    LOG_DEBUG("[FREETEXT] inputEvent=%u kbchar=0x%02x src=%s", event->inputEvent, (uint8_t)event->kbchar,
+              event->source ? event->source : "?");
+
+#if defined(USE_U8G2_EINK_TEXT)
+    if (event->kbchar == INPUT_BROKER_MSG_FN_SYMBOL_ON) {
+        imeEnabled = false;
+        resetIme();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+    if (event->kbchar == INPUT_BROKER_MSG_FN_SYMBOL_OFF) {
+        imeEnabled = true;
+        requestFocus();
+        runOnce();
+        return true;
+    }
+#endif
+
 #if defined(USE_VIRTUAL_KEYBOARD)
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
@@ -864,8 +1035,41 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         screen->forceDisplay();
         return true;
     }
+
+#if defined(USE_U8G2_EINK_TEXT)
+    if (imeEnabled && imeBuffer.length() > 0) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            if (!imeCandidates.empty()) {
+                imeCandidateIndex =
+                    (imeCandidateIndex <= 0) ? static_cast<int>(imeCandidates.size()) - 1 : imeCandidateIndex - 1;
+                requestFocus();
+                runOnce();
+                return true;
+            }
+        }
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            if (!imeCandidates.empty()) {
+                imeCandidateIndex = (imeCandidateIndex + 1) % static_cast<int>(imeCandidates.size());
+                requestFocus();
+                runOnce();
+                return true;
+            }
+        }
+    }
+#endif
+
     // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
+#if defined(USE_U8G2_EINK_TEXT)
+    if (imeEnabled && imeBuffer.length() > 0) {
+        if (isSelect) {
+            commitImeCandidate(imeCandidateIndex);
+            requestFocus();
+            runOnce();
+            return true;
+        }
+    }
+#endif
     if (isSelect) {
         LOG_DEBUG("[SELECT] handleFreeTextInput: runState=%d, dest=%u, channel=%d, freetext='%s'", (int)runState, dest, channel,
                   freetext.c_str());
@@ -884,11 +1088,26 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Backspace
+#if defined(USE_U8G2_EINK_TEXT)
+    if (imeEnabled && imeBuffer.length() > 0 && event->inputEvent == INPUT_BROKER_BACK) {
+        int prev = utf8PrevIndex(imeBuffer, imeBuffer.length());
+        imeBuffer.remove(prev);
+        updateImeCandidates();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+#endif
     if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
         lastTouchMillis = millis();
         requestFocus();
         runOnce();
+        return true;
+    }
+
+    if (event->inputEvent == INPUT_BROKER_ANYKEY && event->kbchar == 0) {
+        lastTouchMillis = millis();
         return true;
     }
 
@@ -909,9 +1128,53 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return true;
     }
 
+    // Tab (switch destination)
+    if (event->kbchar == INPUT_BROKER_MSG_TAB) {
+        return handleTabSwitch(event); // Reuse tab logic
+    }
+
+#if defined(USE_U8G2_EINK_TEXT)
+    if (imeEnabled) {
+        if ((event->kbchar >= 'a' && event->kbchar <= 'z') || (event->kbchar >= 'A' && event->kbchar <= 'Z')) {
+            imeBuffer += static_cast<char>(std::tolower(event->kbchar));
+            updateImeCandidates();
+            requestFocus();
+            runOnce();
+            return true;
+        }
+
+        if (imeBuffer.length() > 0) {
+            if (event->kbchar >= '1' && event->kbchar <= '9') {
+                int idx = (event->kbchar - '1');
+                if (commitImeCandidate(idx)) {
+                    requestFocus();
+                    runOnce();
+                    return true;
+                }
+            }
+            if (event->kbchar == ' ') {
+                commitImeCandidate(imeCandidateIndex);
+                requestFocus();
+                runOnce();
+                return true;
+            }
+        }
+    }
+#endif
+
+    // Printable ASCII (add char to draft)
+    if (event->kbchar >= 32 && event->kbchar <= 126) {
+        payload = event->kbchar;
+        lastTouchMillis = millis();
+        runOnce();
+        return true;
+    }
+
+    const bool isPrintable = (event->kbchar >= 32 && event->kbchar <= 126);
+
     // Cancel (dismiss freetext screen)
-    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
-        (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
+    if (!isPrintable && (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
+                         (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0))) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -926,21 +1189,119 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return true;
     }
 
-    // Tab (switch destination)
-    if (event->kbchar == INPUT_BROKER_MSG_TAB) {
-        return handleTabSwitch(event); // Reuse tab logic
-    }
-
-    // Printable ASCII (add char to draft)
-    if (event->kbchar >= 32 && event->kbchar <= 126) {
-        payload = event->kbchar;
-        lastTouchMillis = millis();
-        runOnce();
-        return true;
-    }
-
     return false;
 }
+
+void CannedMessageModule::insertTextAtCursor(const String &text)
+{
+    if (text.length() == 0)
+        return;
+
+    if (this->cursor > this->freetext.length()) {
+        this->cursor = this->freetext.length();
+    }
+
+    this->freetext = this->freetext.substring(0, this->cursor) + text + this->freetext.substring(this->cursor);
+    this->cursor += text.length();
+
+    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+    if (this->freetext.length() > maxChars) {
+        this->freetext = this->freetext.substring(0, maxChars);
+        if (this->cursor > maxChars)
+            this->cursor = maxChars;
+    }
+}
+
+void CannedMessageModule::deleteCharBeforeCursor()
+{
+    if (this->freetext.length() == 0 || this->cursor == 0)
+        return;
+
+#if defined(USE_U8G2_EINK_TEXT)
+    int prev = utf8PrevIndex(this->freetext, this->cursor);
+#else
+    int prev = this->cursor - 1;
+#endif
+
+    this->freetext = this->freetext.substring(0, prev) + this->freetext.substring(this->cursor);
+    this->cursor = prev;
+}
+
+void CannedMessageModule::moveCursorLeftUtf8()
+{
+    if (this->cursor == 0)
+        return;
+
+#if defined(USE_U8G2_EINK_TEXT)
+    this->cursor = utf8PrevIndex(this->freetext, this->cursor);
+#else
+    this->cursor--;
+#endif
+}
+
+void CannedMessageModule::moveCursorRightUtf8()
+{
+    if (this->cursor >= this->freetext.length())
+        return;
+
+#if defined(USE_U8G2_EINK_TEXT)
+    this->cursor = utf8NextIndex(this->freetext, this->cursor);
+#else
+    this->cursor++;
+#endif
+}
+
+#if defined(USE_U8G2_EINK_TEXT)
+void CannedMessageModule::resetIme()
+{
+    imeBuffer = "";
+    imeCandidates.clear();
+    imeCandidateIndex = 0;
+}
+
+void CannedMessageModule::updateImeCandidates()
+{
+    imeCandidates.clear();
+    imeCandidateIndex = 0;
+
+    if (imeBuffer.length() == 0)
+        return;
+
+    for (size_t i = 0; i < (sizeof(kPinyinTable) / sizeof(kPinyinTable[0])); ++i) {
+        if (imeBuffer.equals(kPinyinTable[i].pinyin)) {
+            const char *p = kPinyinTable[i].candidates;
+            while (*p) {
+                while (*p == ' ')
+                    ++p;
+                const char *start = p;
+                while (*p && *p != ' ')
+                    ++p;
+                if (p > start)
+                    imeCandidates.emplace_back(String(start).substring(0, p - start));
+            }
+            break;
+        }
+    }
+}
+
+bool CannedMessageModule::commitImeCandidate(int index)
+{
+    if (imeBuffer.length() == 0)
+        return false;
+
+    String commit;
+    if (index >= 0 && index < static_cast<int>(imeCandidates.size()))
+        commit = imeCandidates[index];
+    else if (!imeCandidates.empty())
+        commit = imeCandidates[0];
+    else
+        commit = imeBuffer;
+
+    insertTextAtCursor(commit);
+    resetIme();
+    return true;
+}
+#endif
 
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
@@ -1296,12 +1657,12 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case INPUT_BROKER_LEFT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
-                this->cursor--;
+                moveCursorLeftUtf8();
             }
             break;
         case INPUT_BROKER_RIGHT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
-                this->cursor++;
+                moveCursorRightUtf8();
             }
             break;
         default:
@@ -1311,18 +1672,7 @@ int32_t CannedMessageModule::runOnce()
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             switch (this->payload) {
             case 0x08: // backspace
-                if (this->freetext.length() > 0) {
-                    if (this->cursor > 0) {
-                        if (this->cursor == this->freetext.length()) {
-                            this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
-                        } else {
-                            this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                             this->freetext.substring(this->cursor, this->freetext.length());
-                        }
-                        this->cursor--;
-                    }
-                } else {
-                }
+                deleteCharBeforeCursor();
                 break;
             case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
                 return 0;
@@ -1333,18 +1683,7 @@ int32_t CannedMessageModule::runOnce()
                 // Only insert ASCII printable characters (32–126)
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
-                    if (this->cursor == this->freetext.length()) {
-                        this->freetext += (char)this->payload;
-                    } else {
-                        this->freetext = this->freetext.substring(0, this->cursor) + (char)this->payload +
-                                         this->freetext.substring(this->cursor);
-                    }
-                    this->cursor++;
-                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
-                    if (this->freetext.length() > maxChars) {
-                        this->cursor = maxChars;
-                        this->freetext = this->freetext.substring(0, maxChars);
-                    }
+                    insertTextAtCursor(String((char)this->payload));
                 }
                 break;
             }
@@ -1910,7 +2249,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
-            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+            drawUiText(display, x + display->getWidth() - getUiTextWidth(display, buffer), y + 0, buffer);
         }
 
 #if INPUTBROKER_SERIAL_TYPE == 1
@@ -1998,6 +2337,23 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setColor(WHITE);
         {
             int inputY = 0 + y + FONT_HEIGHT_SMALL;
+#if defined(USE_U8G2_EINK_TEXT)
+            if (imeEnabled) {
+                String imeLine = "PY: " + imeBuffer;
+                if (!imeCandidates.empty()) {
+                    imeLine += " ";
+                    int maxCandidates = std::min(static_cast<int>(imeCandidates.size()), 9);
+                    for (int i = 0; i < maxCandidates; i++) {
+                        imeLine += String(i + 1) + ":" + imeCandidates[i];
+                        if (i + 1 < maxCandidates)
+                            imeLine += " ";
+                    }
+                }
+                trimToWidth(display, imeLine, display->getWidth());
+                drawUiText(display, x, inputY, imeLine);
+                inputY += FONT_HEIGHT_SMALL;
+            }
+#endif
             String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
 
             // Tokenize input into (isEmote, token) pairs
@@ -2035,7 +2391,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         int spacePos = text.indexOf(' ', pos);
                         int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space
                         String word = text.substring(pos, endPos);
-                        int wordWidth = display->getStringWidth(word);
+                        int wordWidth = getUiTextWidth(display, word);
 
                         if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
                             lines.push_back(currentLine);
@@ -2044,10 +2400,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         }
                         // If word itself too big, split by character
                         if (wordWidth > maxWidth) {
-                            uint16_t charPos = 0;
+                            int charPos = 0;
                             while (charPos < word.length()) {
-                                String oneChar = word.substring(charPos, charPos + 1);
-                                int charWidth = display->getStringWidth(oneChar);
+                                int nextPos = utf8NextIndex(word, charPos);
+                                String oneChar = word.substring(charPos, nextPos);
+                                int charWidth = getUiTextWidth(display, oneChar);
                                 if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
                                     lines.push_back(currentLine);
                                     currentLine.clear();
@@ -2055,7 +2412,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                                 }
                                 currentLine.push_back({false, oneChar});
                                 lineWidth += charWidth;
-                                charPos++;
+                                charPos = nextPos;
                             }
                         } else {
                             currentLine.push_back({false, word});
@@ -2078,8 +2435,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         // Emote rendering centralized in helper
                         renderEmote(display, nextX, yLine, rowHeight, token.second);
                     } else {
-                        display->drawString(nextX, yLine, token.second);
-                        nextX += display->getStringWidth(token.second);
+                        drawUiText(display, nextX, yLine, token.second);
+                        nextX += getUiTextWidth(display, token.second);
                     }
                 }
                 yLine += rowHeight;

@@ -256,7 +256,7 @@ int32_t KbI2cBase::runOnce()
         TCAKeyboard.trigger();
         InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
-            char nextEvent = TCAKeyboard.dequeueEvent();
+            uint8_t nextEvent = static_cast<uint8_t>(TCAKeyboard.dequeueEvent());
             e.inputEvent = INPUT_BROKER_ANYKEY;
             e.kbchar = 0x00;
             e.source = this->_originName;
@@ -320,6 +320,14 @@ int32_t KbI2cBase::runOnce()
             case TCA8418KeyboardBase::TAB:
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
+                break;
+            case INPUT_BROKER_MSG_FN_SYMBOL_ON:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_FN_SYMBOL_ON;
+                break;
+            case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_FN_SYMBOL_OFF;
                 break;
             default:
                 if (nextEvent > 127) {

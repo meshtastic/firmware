@@ -182,6 +182,13 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
 
+#if defined(USE_U8G2_EINK_TEXT)
+    bool imeEnabled = true;
+    String imeBuffer;
+    std::vector<String> imeCandidates;
+    int imeCandidateIndex = 0;
+#endif
+
 #if defined(USE_VIRTUAL_KEYBOARD)
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
@@ -194,6 +201,15 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
+    void insertTextAtCursor(const String &text);
+    void deleteCharBeforeCursor();
+    void moveCursorLeftUtf8();
+    void moveCursorRightUtf8();
+#if defined(USE_U8G2_EINK_TEXT)
+    void resetIme();
+    void updateImeCandidates();
+    bool commitImeCandidate(int index);
+#endif
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},

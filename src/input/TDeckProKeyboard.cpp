@@ -1,6 +1,7 @@
 #if defined(T_DECK_PRO)
 
 #include "TDeckProKeyboard.h"
+#include "input/InputBroker.h"
 
 #define _TCA8418_COLS 10
 #define _TCA8418_ROWS 4
@@ -183,6 +184,7 @@ void TDeckProKeyboard::updateModifierFlag(uint8_t key)
         modifierFlag ^= modifierLeftShift;
     } else if (key == modifierSymKey) {
         modifierFlag ^= modifierSym;
+        queueEvent((modifierFlag & modifierSym) ? INPUT_BROKER_MSG_FN_SYMBOL_ON : INPUT_BROKER_MSG_FN_SYMBOL_OFF);
     } else if (key == modifierAltKey) {
         modifierFlag ^= modifierAlt;
     }
