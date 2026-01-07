@@ -100,7 +100,7 @@ def manifest_write(files, env):
     manifest = {
         "version": verObj["long"],
         "build_epoch": build_epoch,
-        "board": env.get("PIOENV"),
+        "platformioTarget": env.get("PIOENV"),
         "mcu": env.get("BOARD_MCU"),
         "repo": repo_owner,
         "files": files,
@@ -136,6 +136,7 @@ def manifest_write(files, env):
         ("variant", ["custom_meshtastic_variant"], str),
     ]
 
+
     for manifest_key, option_keys, caster in device_meta_fields:
         raw_val = get_project_option_any(option_keys)
         if raw_val is None:
@@ -144,8 +145,10 @@ def manifest_write(files, env):
         if parsed is not None and parsed != "":
             device_meta[manifest_key] = parsed
 
-    # Always use the env name as the emitted platformioTarget unless explicitly overridden later
-    device_meta["platformioTarget"] = pioenv
+    # Always set requiresDfu: true for nrf52840 targets
+    board_arch = device_meta.get("architecture") or infer_architecture(env.BoardConfig())
+    if board_arch == "nrf52840":
+        device_meta["requiresDfu"] = True
 
     if "architecture" not in device_meta:
         board_arch = infer_architecture(env.BoardConfig())
