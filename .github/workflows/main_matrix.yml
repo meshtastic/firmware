@@ -8,7 +8,9 @@ on:
     branches:
       - master
       - develop
+      - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
+      - feature/*
     paths-ignore:
       - "**.md"
       - version.properties
@@ -18,7 +20,9 @@ on:
     branches:
       - master
       - develop
+      - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
+      - feature/*
     paths-ignore:
       - "**.md"
       #- "**.yml"
@@ -77,16 +81,21 @@ jobs:
       fail-fast: false
       matrix:
         check: ${{ fromJson(needs.setup.outputs.check) }}
-
-    runs-on: ubuntu-latest
+    # Use 'arctastic' self-hosted runner pool when checking in the main repo
+    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
     if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
       - uses: actions/checkout@v6
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
       - name: Check ${{ matrix.check.board }}
-        run: bin/check-all.sh ${{ matrix.check.board }}
+        uses: meshtastic/gh-action-firmware@main
+        with:
+          pio_platform: ${{ matrix.check.platform }}
+          pio_env: ${{ matrix.check.board }}
+          pio_target: check
 
   build:
     needs: [setup, version]
@@ -168,7 +177,7 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           path: ./
           pattern: firmware-${{matrix.arch}}-*
@@ -178,7 +187,7 @@ jobs:
         run: ls -R
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
@@ -195,7 +204,7 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -207,14 +216,14 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
@@ -227,6 +236,48 @@ jobs:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           description: "Download firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  shame:
+    if: github.repository == 'meshtastic/firmware'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v6
+        if: github.event_name == 'pull_request_target'
+        with:
+          filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
+          fetch-depth: 0
+      - name: Download the current manifests
+        uses: actions/download-artifact@v7
+        with:
+          path: ./manifests-new/
+          pattern: manifest-*
+          merge-multiple: true
+      - name: Upload combined manifests for later commit and global stats crunching.
+        uses: actions/upload-artifact@v6
+        id: upload-manifest
+        with:
+          name: manifests-${{ github.sha }}
+          overwrite: true
+          path: manifests-new/*.mt.json
+      - name: Find the merge base
+        if: github.event_name == 'pull_request_target'
+        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
+        env:
+          base: ${{ github.base_ref }}
+          head: ${{ github.sha }}
+      # Currently broken (for-loop through EVERY artifact -- rate limiting)
+      # - name: Download the old manifests
+      #   if: github.event_name == 'pull_request_target'
+      #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
+      #   env:
+      #     GH_TOKEN: ${{ github.token }}
+      #     merge_base: ${{ env.MERGE_BASE }}
+      #     repo: ${{ github.repository }}
+      # - name: Do scan and post comment
+      #   if: github.event_name == 'pull_request_target'
+      #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
   release-artifacts:
     runs-on: ubuntu-latest
@@ -255,14 +306,14 @@ jobs:
             Autogenerated by github action, developer should edit as required before publishing...
 
       - name: Download source deb
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: firmware-debian-${{ needs.version.outputs.deb }}~UNRELEASED-src
           merge-multiple: true
           path: ./output/debian-src
 
       - name: Download `native-tft` pio deps
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: platformio-deps-native-tft-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -280,13 +331,13 @@ jobs:
 
       - name: Generate Release manifest
         run: |
-          jq -n --arg ver "${{ needs.version.outputs.long }}" --arg targets "${{ toJson(needs.setup.outputs.all) }}" '{
+          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets ${{ toJson(needs.setup.outputs.all) }} '{
             "version": $ver,
-            "targets": ($targets | fromjson)
+            "targets": $targets
           }' > firmware-${{ needs.version.outputs.long }}.json
 
       - name: Save Release manifest artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: manifest-${{ needs.version.outputs.long }}
           overwrite: true
@@ -327,7 +378,7 @@ jobs:
         with:
           python-version: 3.x
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           pattern: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -338,13 +389,13 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -383,14 +434,14 @@ jobs:
           python-version: 3.x
 
       - name: Get firmware artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./publish
 
       - name: Get manifest artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: manifest-${{ needs.version.outputs.long }}
           path: ./publish

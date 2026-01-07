@@ -87,8 +87,6 @@ static const uint8_t A4 = PIN_A4;
 #define PIN_WIRE_SDA (0 + 17)
 #define PIN_WIRE_SCL (0 + 15)
 
-#define PIN_RTC_INT (0 + 14) // Interrupt from the PCF8563 RTC
-
 /*
 External serial flash W25Q16JV_IQ
 */
@@ -132,16 +130,18 @@ External serial flash W25Q16JV_IQ
 #define GPS_L76K
 
 #define PIN_GPS_STANDBY (0 + 13) // An output to wake GPS, low means allow sleep, high means force wake STANDBY
-#define PIN_GPS_TX (0 + 10)      // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (0 + 9)       // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (0 + 10)      // This is for bits going FROM the CPU
+#define GPS_RX_PIN (0 + 9)       // This is for bits going FROM the GPS
 
 // #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_TX PIN_GPS_TX
-#define PIN_SERIAL1_RX PIN_GPS_RX
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
 // PCF8563 RTC Module
+#define PIN_RTC_INT (0 + 14) // Interrupt from the PCF8563 RTC
 #define PCF8563_RTC 0x51
+#define HAS_RTC 1
 
 /*
  * SPI Interfaces
@@ -168,8 +168,6 @@ External serial flash W25Q16JV_IQ
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
-
-#define HAS_RTC 1
 
 /**
     OLED Screen Model

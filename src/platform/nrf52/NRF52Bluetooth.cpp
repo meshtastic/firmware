@@ -64,20 +64,6 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
-    // negotiate connections params as soon as possible
-    // some phones and laptops seem to ignore GAP preferred settings and treat slave latency as connection disruption
-    // such devices can not connect to the node. This is fixed by forcing parameter negotiation at the start of communication
-
-    ble_gap_conn_params_t newParams;
-    memset(&newParams, 0, sizeof(newParams));
-
-    newParams.min_conn_interval = 24; // in 1.25 ms units = 30 ms
-    newParams.max_conn_interval = 40; // in 1.25 ms units = 50 ms
-    newParams.slave_latency = 5;
-    newParams.conn_sup_timeout = 400; // in 10 ms units, timeout 4s
-
-    sd_ble_gap_conn_param_update(conn_handle, &newParams);
-
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
@@ -133,7 +119,7 @@ void startAdv(void)
     Bluefruit.Advertising.addService(meshBleService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
-     * - Interval:  fast mode = 20 ms, slow mode = 417,5 ms
+     * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
      * - Timeout for fast mode is 30 seconds
      * - Start(timeout) with timeout = 0 will advertise forever (until connected)
      *
@@ -141,7 +127,7 @@ void startAdv(void)
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
@@ -286,23 +272,6 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
-
-    // Set slave latency to 5 to conserve power
-    // Despite name this does not impact data transfer
-    // https://docs.silabs.com/bluetooth/2.13/bluetooth-general-system-and-performance/optimizing-current-consumption-in-bluetooth-low-energy-devices
-
-    // Attention! Same values - latency and intervals (if added here) must also be negotiated inside onConnect method. See comments there.
-    
-    Bluefruit.Periph.setConnSlaveLatency(5);
-
-    // min, max connection intervals are negotiated in onConnect as (24,40) [in 1.25 ms units] -> (30, 50) milliseconds.
-
-    // BLE settings must be so Interval Max * (Slave Latency + 1) ≤ supervision_timeout (some sources says that half the timeout, verify)
-    // so technically we can easily to up to slave latency 30, but this is not recommended as BLE is having some timing issues
-    // on such long delays. AFAIK we can work up safely up to slave_latency = 10 in the future and even tweak max interval to 100 ms to save more power.
-
-
-
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
@@ -331,7 +300,7 @@ void NRF52Bluetooth::setup()
 void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }
