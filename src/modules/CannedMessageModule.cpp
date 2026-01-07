@@ -115,21 +115,106 @@ static void renderEmote(OLEDDisplay *display, int &nextX, int lineY, int rowHeig
 }
 
 #if defined(USE_U8G2_EINK_TEXT)
+static bool isChineseImeAllowed()
+{
+    return config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_CN;
+}
+
+static char mapNumModeChar(char input)
+{
+    const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(input)));
+    switch (c) {
+    case 'w':
+        return '1';
+    case 'e':
+        return '2';
+    case 'r':
+        return '3';
+    case 's':
+        return '4';
+    case 'd':
+        return '5';
+    case 'f':
+        return '6';
+    case 'z':
+        return '7';
+    case 'x':
+        return '8';
+    case 'c':
+        return '9';
+    case 'p':
+        return '@';
+    case 'o':
+        return '+';
+    case 'i':
+        return '-';
+    case 'u':
+        return '_';
+    case 'y':
+        return ')';
+    case 't':
+        return '(';
+    case 'q':
+        return '#';
+    case 'l':
+        return '"';
+    case 'k':
+        return '\'';
+    case 'j':
+        return ';';
+    case 'h':
+        return ':';
+    case 'g':
+        return '/';
+    case 'a':
+        return '*';
+    case 'm':
+        return '.';
+    case 'n':
+        return ',';
+    case 'b':
+        return '!';
+    case 'v':
+        return '?';
+    default:
+        return input;
+    }
+}
+
 void CannedMessageModule::cycleImeMode()
 {
-    switch (imeMode) {
-    case ImeMode::CN:
+    const bool allowCn = isChineseImeAllowed();
+    if (!allowCn && imeMode == ImeMode::CN)
         imeMode = ImeMode::EN;
-        break;
-    case ImeMode::EN:
-        imeMode = ImeMode::NUM;
-        break;
-    case ImeMode::NUM:
-        imeMode = ImeMode::CN;
-        break;
+
+    if (allowCn) {
+        switch (imeMode) {
+        case ImeMode::CN:
+            imeMode = ImeMode::EN;
+            break;
+        case ImeMode::EN:
+            imeMode = ImeMode::NUM;
+            break;
+        case ImeMode::NUM:
+            imeMode = ImeMode::CN;
+            break;
+        }
+    } else {
+        switch (imeMode) {
+        case ImeMode::EN:
+            imeMode = ImeMode::NUM;
+            break;
+        case ImeMode::NUM:
+            imeMode = ImeMode::EN;
+            break;
+        case ImeMode::CN:
+        default:
+            imeMode = ImeMode::EN;
+            break;
+        }
     }
 
-    ime.setEnabled(imeMode == ImeMode::CN);
+    ime.setEnabled(allowCn && imeMode == ImeMode::CN);
     if (imeMode != ImeMode::CN) {
         ime.reset();
     }
@@ -323,6 +408,16 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
+
+#if defined(USE_U8G2_EINK_TEXT)
+    imeMode = ImeMode::EN;
+    ime.setEnabled(false);
+    ime.reset();
+    imePage = 0;
+    imePageSize = 0;
+    imeSelectedOffset = 0;
+    imeCandidateHitCount = 0;
+#endif
 
     runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
     requestFocus();
@@ -1194,7 +1289,12 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
     // Printable ASCII (add char to draft)
     if (event->kbchar >= 32 && event->kbchar <= 126) {
-        payload = event->kbchar;
+        char toInsert = event->kbchar;
+#if defined(USE_U8G2_EINK_TEXT)
+        if (imeMode == ImeMode::NUM)
+            toInsert = mapNumModeChar(event->kbchar);
+#endif
+        payload = toInsert;
         lastTouchMillis = millis();
         runOnce();
         return true;
@@ -2234,8 +2334,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-            uint16_t charsLeft =
-                meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            const uint16_t usedBytes = this->freetext.length();
+            const uint16_t charsLeft = (usedBytes >= maxChars) ? 0 : (maxChars - usedBytes);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             drawUiText(display, x + display->getWidth() - getUiTextWidth(display, buffer), y + 0, buffer);
         }

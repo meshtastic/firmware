@@ -190,7 +190,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
 #if defined(USE_U8G2_EINK_TEXT)
     ChineseIme ime;
-    ImeMode imeMode = ImeMode::CN;
+    ImeMode imeMode = ImeMode::EN;
     int imePage = 0;
     int imePageSize = 0;
     static constexpr int kImeMaxCandidates = 18;

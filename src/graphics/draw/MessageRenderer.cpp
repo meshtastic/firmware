@@ -452,7 +452,17 @@ static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &
         }
         if (!matched) {
             size_t charLen = utf8CharLen(static_cast<uint8_t>(normalized[i]));
-            totalWidth += getTextWidth(display, normalized.substr(i, charLen));
+#if defined(USE_U8G2_EINK_TEXT)
+            if (charLen > 1) {
+                totalWidth += getTextWidth(display, normalized.substr(i, charLen));
+            } else {
+                totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
+            }
+#elif defined(OLED_UA) || defined(OLED_RU)
+            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str(), charLen, true);
+#else
+            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
+#endif
             i += charLen;
         }
     }
@@ -650,13 +660,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Shrink Sender name if needed
-        int availWidth = SCREEN_WIDTH - getTextWidth(display, timeBuf) - getTextWidth(display, chanType) -
-                         getTextWidth(display, " @...") - 10;
+        int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
+                         display->getStringWidth(" @...") - 10;
         if (availWidth < 0)
             availWidth = 0;
 
         size_t origLen = strlen(senderBuf);
-        while (senderBuf[0] && getTextWidth(display, senderBuf) > availWidth) {
+        while (senderBuf[0] && display->getStringWidth(senderBuf) > availWidth) {
             senderBuf[strlen(senderBuf) - 1] = '\0';
         }
 
@@ -760,7 +770,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
             if (isHeader[i]) {
 
-                int w = getTextWidth(display, cachedLines[i]);
+                int w = display->getStringWidth(cachedLines[i].c_str());
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
@@ -802,7 +812,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     int rightX = SCREEN_WIDTH - renderedWidth - SCROLLBAR_WIDTH - RIGHT_MARGIN;
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
-
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
                     drawStringWithEmotes(display, x, lineY, cachedLines[i], emotes, numEmotes);
@@ -859,7 +868,11 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 
         word.append(messageBuf + i, len);
         std::string test = line + word;
-        uint16_t strWidth = getTextWidth(display, test);
+#if defined(OLED_UA) || defined(OLED_RU)
+        uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
+#else
+        uint16_t strWidth = display->getStringWidth(test.c_str());
+#endif
         if (strWidth > textWidth) {
             if (!line.empty())
                 lines.push_back(line);
