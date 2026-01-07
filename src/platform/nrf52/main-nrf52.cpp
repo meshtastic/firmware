@@ -91,7 +91,7 @@ void powerHAL_platformInit()
     NRF_POWER->POFCON =
         ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
 
-    // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in varian definition file
+    // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in variant definition file
 #ifdef VBAT_AR_INTERNAL
     analogReference(VBAT_AR_INTERNAL);
 #else
