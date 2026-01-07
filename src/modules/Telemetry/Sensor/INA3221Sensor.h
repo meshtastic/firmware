@@ -16,44 +16,45 @@
 #define INA3221_BAT_CH INA3221_CH1
 #endif
 
-class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor {
-private:
-  INA3221 ina3221 = INA3221(INA3221_ADDR42_SDA);
+class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
+{
+  private:
+    INA3221 ina3221 = INA3221(INA3221_ADDR42_SDA);
 
-  // channel to report voltage/current for environment metrics
-  static const ina3221_ch_t ENV_CH = INA3221_ENV_CH;
+    // channel to report voltage/current for environment metrics
+    static const ina3221_ch_t ENV_CH = INA3221_ENV_CH;
 
-  // channel to report battery voltage for device_battery_ina_address
-  static const ina3221_ch_t BAT_CH = INA3221_BAT_CH;
+    // channel to report battery voltage for device_battery_ina_address
+    static const ina3221_ch_t BAT_CH = INA3221_BAT_CH;
 
-  // get a single measurement for a channel
-  struct _INA3221Measurement getMeasurement(ina3221_ch_t ch);
+    // get a single measurement for a channel
+    struct _INA3221Measurement getMeasurement(ina3221_ch_t ch);
 
-  // get all measurements for all channels
-  struct _INA3221Measurements getMeasurements();
+    // get all measurements for all channels
+    struct _INA3221Measurements getMeasurements();
 
-  bool getEnvironmentMetrics(meshtastic_Telemetry *measurement);
-  bool getPowerMetrics(meshtastic_Telemetry *measurement);
+    bool getEnvironmentMetrics(meshtastic_Telemetry *measurement);
+    bool getPowerMetrics(meshtastic_Telemetry *measurement);
 
-protected:
-  void setup() override;
+  protected:
+    void setup() override;
 
-public:
-  INA3221Sensor();
-  int32_t runOnce() override;
-  bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual uint16_t getBusVoltageMv() override;
-  virtual int16_t getCurrentMa() override;
+  public:
+    INA3221Sensor();
+    int32_t runOnce() override;
+    bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual uint16_t getBusVoltageMv() override;
+    virtual int16_t getCurrentMa() override;
 };
 
 struct _INA3221Measurement {
-  float voltage;
-  float current;
+    float voltage;
+    float current;
 };
 
 struct _INA3221Measurements {
-  // INA3221 has 3 channels
-  struct _INA3221Measurement measurements[3];
+    // INA3221 has 3 channels
+    struct _INA3221Measurement measurements[3];
 };
 
 #endif

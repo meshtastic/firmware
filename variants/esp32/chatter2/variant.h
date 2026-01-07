@@ -26,9 +26,9 @@
 // Status
 // #define LED_PIN 1
 // External notification
-// FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in
-// the app/preferences #define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we
-// connect an LED to it)
+// FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
+// app/preferences
+// #define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
 
 // Buzzer
 #define PIN_BUZZER 19
@@ -73,8 +73,8 @@
 
 #define BATTERY_PIN 34 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO34_CHANNEL
-#define ADC_ATTENUATION                                                                                                                              \
-  ADC_ATTEN_DB_2_5         // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
+#define ADC_ATTENUATION                                                                                                          \
+    ADC_ATTEN_DB_2_5       // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
                            // ESP32-S2/C3/S3 are different
                            // lower dB for lower voltage rnage
 #define ADC_MULTIPLIER 5.0 // VBATT---10k--pin34---2.5K---GND
@@ -108,20 +108,19 @@
 
 #define LORA_CS SX126X_CS // FIXME: for some reason both are used in /src
 
-// Many of the below values would only be used if USE_RF95 was defined, but it's not as we aren't actually using an
-// RF95, just that the 4 pins above are named like it If they aren't used they don't need to be defined and doing so
-// cause confusion to those adapting this file LORA_RESET value is never used in src (as we are not using RF95), so no
-// need to define LORA_DIO0 is not used in src (as we are not using RF95) as SX1262 does not have it per SX1262
-// datasheet, so no need to define
-// FIXME: confirm that the linked lines below are actually only called when using the SX126x or SX128x and no other
-// modules then use SX126X_DIO1 and SX128X_DIO1 respectively for that purpose, removing the need for RF95-style LORA_*
-// definitions when the RF95 isn't used
-#define LORA_DIO1                                                                                                                                    \
-  SX126X_DIO1 // The old name is used in
-              // https://github.com/meshtastic/firmware/blob/7eff5e7bcb2084499b723c5e3846c15ee089e36d/src/sleep.cpp#L298,
-              // so must also define the old name
-// LORA_DIO2 value is never used in src (as we are not using RF95), so no need to define, and if DIO2_AS_RF_SWITCH is
-// set then it cannot serve any extra function even if requested to LORA_DIO3 value is never used in src (as we are not
-// using RF95), so no need to define, and DIO3_AS_TCXO_AT_1V8 is set so it cannot serve any extra function even if
-// requested to (from 13.3.2.1 DioxMask in SX1262 datasheet: Note that if DIO2 or DIO3 are used to control the RF Switch
-// or the TCXO, the IRQ will not be generated even if it is mapped to the pins.)
+// Many of the below values would only be used if USE_RF95 was defined, but it's not as we aren't actually using an RF95, just
+// that the 4 pins above are named like it If they aren't used they don't need to be defined and doing so cause confusion to those
+// adapting this file LORA_RESET value is never used in src (as we are not using RF95), so no need to define LORA_DIO0 is not used
+// in src (as we are not using RF95) as SX1262 does not have it per SX1262 datasheet, so no need to define
+// FIXME: confirm that the linked lines below are actually only called when using the SX126x or SX128x and no other modules
+// then use SX126X_DIO1 and SX128X_DIO1 respectively for that purpose, removing the need for RF95-style LORA_* definitions when
+// the RF95 isn't used
+#define LORA_DIO1                                                                                                                \
+    SX126X_DIO1 // The old name is used in
+                // https://github.com/meshtastic/firmware/blob/7eff5e7bcb2084499b723c5e3846c15ee089e36d/src/sleep.cpp#L298, so
+                // must also define the old name
+// LORA_DIO2 value is never used in src (as we are not using RF95), so no need to define, and if DIO2_AS_RF_SWITCH is set then it
+// cannot serve any extra function even if requested to LORA_DIO3 value is never used in src (as we are not using RF95), so no
+// need to define, and DIO3_AS_TCXO_AT_1V8 is set so it cannot serve any extra function even if requested to (from 13.3.2.1
+// DioxMask in SX1262 datasheet: Note that if DIO2 or DIO3 are used to control the RF Switch or the TCXO, the IRQ will not be
+// generated even if it is mapped to the pins.)

@@ -8,7 +8,9 @@ on:
     branches:
       - master
       - develop
+      - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
+      - feature/*
     paths-ignore:
       - "**.md"
       - version.properties
@@ -18,7 +20,9 @@ on:
     branches:
       - master
       - develop
+      - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
+      - feature/*
     paths-ignore:
       - "**.md"
       #- "**.yml"

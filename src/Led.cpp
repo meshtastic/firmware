@@ -23,14 +23,16 @@ static GpioPin &ledHwPin = ledRawHwPin;
 /**
  * A GPIO controlled by the PMU
  */
-class GpioPmuPin : public GpioPin {
-public:
-  void set(bool value) {
-    if (pmu_found && PMU) {
-      // blink the axp led
-      PMU->setChargingLedMode(value ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+class GpioPmuPin : public GpioPin
+{
+  public:
+    void set(bool value)
+    {
+        if (pmu_found && PMU) {
+            // blink the axp led
+            PMU->setChargingLedMode(value ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+        }
     }
-  }
 } ledPmuHwPin;
 
 // In some cases we need to drive a PMU LED and a normal LED
@@ -43,17 +45,19 @@ static GpioPin &ledFinalPin = ledHwPin;
 /**
  * We monitor changes to the LED drive output because we use that as a sanity test in our power monitor stuff.
  */
-class MonitoredLedPin : public GpioPin {
-public:
-  void set(bool value) {
-    if (powerMon) {
-      if (value)
-        powerMon->setState(meshtastic_PowerMon_State_LED_On);
-      else
-        powerMon->clearState(meshtastic_PowerMon_State_LED_On);
+class MonitoredLedPin : public GpioPin
+{
+  public:
+    void set(bool value)
+    {
+        if (powerMon) {
+            if (value)
+                powerMon->setState(meshtastic_PowerMon_State_LED_On);
+            else
+                powerMon->clearState(meshtastic_PowerMon_State_LED_On);
+        }
+        ledFinalPin.set(value);
     }
-    ledFinalPin.set(value);
-  }
 } monitoredLedPin;
 #else
 static GpioPin &monitoredLedPin = ledFinalPin;

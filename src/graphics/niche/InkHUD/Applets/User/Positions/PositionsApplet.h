@@ -17,23 +17,25 @@ The node which has most recently sent a position will be labeled.
 
 #include "SinglePortModule.h"
 
-namespace NicheGraphics::InkHUD {
+namespace NicheGraphics::InkHUD
+{
 
-class PositionsApplet : public MapApplet, public SinglePortModule {
-public:
-  PositionsApplet() : SinglePortModule("PositionsApplet", meshtastic_PortNum_POSITION_APP) {}
-  void onRender() override;
+class PositionsApplet : public MapApplet, public SinglePortModule
+{
+  public:
+    PositionsApplet() : SinglePortModule("PositionsApplet", meshtastic_PortNum_POSITION_APP) {}
+    void onRender() override;
 
-protected:
-  ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+  protected:
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-  NodeNum lastFrom = 0; // Sender of most recent (non-local) position packet
-  float lastLat = 0.0;
-  float lastLng = 0.0;
-  float lastHopsAway = 0;
+    NodeNum lastFrom = 0; // Sender of most recent (non-local) position packet
+    float lastLat = 0.0;
+    float lastLng = 0.0;
+    float lastHopsAway = 0;
 
-  float ourLastLat = 0.0; // Info about the most recent (non-local) position packet
-  float ourLastLng = 0.0; // Info about most recent *local* position
+    float ourLastLat = 0.0; // Info about the most recent (non-local) position packet
+    float ourLastLng = 0.0; // Info about most recent *local* position
 };
 
 } // namespace NicheGraphics::InkHUD

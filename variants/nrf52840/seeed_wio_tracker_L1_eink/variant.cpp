@@ -87,16 +87,17 @@ const uint32_t g_ADigitalPinMap[] = {
 };
 }
 
-void initVariant() {
-  pinMode(PIN_QSPI_CS, OUTPUT);
-  digitalWrite(PIN_QSPI_CS, HIGH);
-  // This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.
-  // VBAT_ENABLE
-  pinMode(BAT_READ, OUTPUT);
-  digitalWrite(BAT_READ, HIGH);
+void initVariant()
+{
+    pinMode(PIN_QSPI_CS, OUTPUT);
+    digitalWrite(PIN_QSPI_CS, HIGH);
+    // This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.
+    // VBAT_ENABLE
+    pinMode(BAT_READ, OUTPUT);
+    digitalWrite(BAT_READ, HIGH);
 
-  pinMode(PIN_LED1, OUTPUT);
-  digitalWrite(PIN_LED1, LOW);
-  pinMode(PIN_LED2, OUTPUT);
-  digitalWrite(PIN_LED2, LOW);
+    pinMode(PIN_LED1, OUTPUT);
+    digitalWrite(PIN_LED1, LOW);
+    pinMode(PIN_LED2, OUTPUT);
+    digitalWrite(PIN_LED2, LOW);
 }

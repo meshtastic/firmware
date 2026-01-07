@@ -15,33 +15,35 @@
 
 AHT10Sensor::AHT10Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_AHT10, "AHT10") {}
 
-bool AHT10Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) {
-  LOG_INFO("Init sensor: %s", sensorName);
-  aht10 = Adafruit_AHTX0();
-  status = aht10.begin(bus, 0, dev->address.address);
+bool AHT10Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
+{
+    LOG_INFO("Init sensor: %s", sensorName);
+    aht10 = Adafruit_AHTX0();
+    status = aht10.begin(bus, 0, dev->address.address);
 
-  initI2CSensor();
-  return status;
+    initI2CSensor();
+    return status;
 }
 
-bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement) {
-  LOG_DEBUG("AHT10 getMetrics");
+bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
+{
+    LOG_DEBUG("AHT10 getMetrics");
 
-  sensors_event_t humidity, temp;
-  aht10.getEvent(&humidity, &temp);
+    sensors_event_t humidity, temp;
+    aht10.getEvent(&humidity, &temp);
 
-  // prefer other sensors like bmp280, bmp3xx
-  if (!measurement->variant.environment_metrics.has_temperature) {
-    measurement->variant.environment_metrics.has_temperature = true;
-    measurement->variant.environment_metrics.temperature = temp.temperature + AHT10_TEMP_OFFSET;
-  }
+    // prefer other sensors like bmp280, bmp3xx
+    if (!measurement->variant.environment_metrics.has_temperature) {
+        measurement->variant.environment_metrics.has_temperature = true;
+        measurement->variant.environment_metrics.temperature = temp.temperature + AHT10_TEMP_OFFSET;
+    }
 
-  if (!measurement->variant.environment_metrics.has_relative_humidity) {
-    measurement->variant.environment_metrics.has_relative_humidity = true;
-    measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;
-  }
+    if (!measurement->variant.environment_metrics.has_relative_humidity) {
+        measurement->variant.environment_metrics.has_relative_humidity = true;
+        measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;
+    }
 
-  return true;
+    return true;
 }
 
 #endif

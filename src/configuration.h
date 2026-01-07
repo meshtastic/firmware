@@ -68,8 +68,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error APP_VERSION must be set by the build environment
 #endif
 
-// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old
-// versioning system.
+// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old versioning
+// system.
 #ifndef HW_VERSION
 #define HW_VERSION "1.0"
 #endif
@@ -443,6 +443,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ALT_BUTTON_ACTIVE_PULLUP true
 #endif
 #endif
+
+// BME680 BSEC2 support detection
+#if !defined(MESHTASTIC_BME680_BSEC2_SUPPORTED)
+#if defined(RAK_4631) || defined(TBEAM_V10)
+
+#define MESHTASTIC_BME680_BSEC2_SUPPORTED 1
+#define MESHTASTIC_BME680_HEADER <bsec2.h>
+#else
+#define MESHTASTIC_BME680_BSEC2_SUPPORTED 0
+#define MESHTASTIC_BME680_HEADER <Adafruit_BME680.h>
+#endif // defined(RAK_4631)
+#endif // !defined(MESHTASTIC_BME680_BSEC2_SUPPORTED)
 
 // -----------------------------------------------------------------------------
 // Global switches to turn off features for a minimized build

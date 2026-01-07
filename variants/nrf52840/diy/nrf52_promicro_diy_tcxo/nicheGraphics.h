@@ -29,66 +29,67 @@
 #error If not using a DIY preset, display model and resilience must be set manually
 #endif
 
-void setupNicheGraphics() {
-  using namespace NicheGraphics;
+void setupNicheGraphics()
+{
+    using namespace NicheGraphics;
 
-  // SPI
-  // -----------------------------
-  SPI.begin();
+    // SPI
+    // -----------------------------
+    SPI.begin();
 
-  // Driver
-  // -----------------------------
+    // Driver
+    // -----------------------------
 
-  // Use E-Ink driver
-  Drivers::EInk *driver = new Drivers::INKHUD_BUILDCONF_DRIVER;
-  driver->begin(&SPI, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+    // Use E-Ink driver
+    Drivers::EInk *driver = new Drivers::INKHUD_BUILDCONF_DRIVER;
+    driver->begin(&SPI, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
-  // InkHUD
-  // ----------------------------
+    // InkHUD
+    // ----------------------------
 
-  InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
+    InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
 
-  // Set the driver
-  inkhud->setDriver(driver);
+    // Set the driver
+    inkhud->setDriver(driver);
 
-  // Set how many FAST updates per FULL update.
-  inkhud->setDisplayResilience(INKHUD_BUILDCONF_DISPLAYRESILIENCE); // Suggest roughly ten
+    // Set how many FAST updates per FULL update.
+    inkhud->setDisplayResilience(INKHUD_BUILDCONF_DISPLAYRESILIENCE); // Suggest roughly ten
 
-  // Select fonts
-  InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-  InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
-  InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    // Select fonts
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
-  // Init settings, and customize defaults
-  // Values ignored individually if found saved to flash
-  inkhud->persistence->settings.rotation = (driver->height > driver->width ? 1 : 0); // Rotate 90deg to landscape, if needed
-  inkhud->persistence->settings.userTiles.maxCount = 4;
-  inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+    // Init settings, and customize defaults
+    // Values ignored individually if found saved to flash
+    inkhud->persistence->settings.rotation = (driver->height > driver->width ? 1 : 0); // Rotate 90deg to landscape, if needed
+    inkhud->persistence->settings.userTiles.maxCount = 4;
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
 
-  // Pick applets
-  // Note: order of applets determines priority of "auto-show" feature
-  inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet);
-  inkhud->addApplet("DMs", new InkHUD::DMApplet, true, false, 3);                       // Default on tile 3
-  inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 2); // Default on tile 2
-  inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-  inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false, 1);      // Default on tile 1
-  inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false, 0); // Default on tile 0
-  inkhud->addApplet("Heard", new InkHUD::HeardApplet, true);                        // Background
+    // Pick applets
+    // Note: order of applets determines priority of "auto-show" feature
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet);
+    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, false, 3);                       // Default on tile 3
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 2); // Default on tile 2
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false, 1);      // Default on tile 1
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false, 0); // Default on tile 0
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true);                        // Background
 
-  // Start running InkHUD
-  inkhud->begin();
+    // Start running InkHUD
+    inkhud->begin();
 
-  // Buttons
-  // --------------------------
+    // Buttons
+    // --------------------------
 
-  Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
+    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
 
-  // Setup the main user button
-  buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin(), true); // Internal pull up
-  buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
-  buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+    // Setup the main user button
+    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin(), true); // Internal pull up
+    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
+    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
-  buttons->start();
+    buttons->start();
 }
 
 #endif

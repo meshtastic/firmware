@@ -7,6 +7,9 @@ LinuxInputImpl *aLinuxInputImpl;
 
 LinuxInputImpl::LinuxInputImpl() : LinuxInput("LinuxInput") {}
 
-void LinuxInputImpl::init() { inputBroker->registerSource(this); }
+void LinuxInputImpl::init()
+{
+    inputBroker->registerSource(this);
+}
 
 #endif

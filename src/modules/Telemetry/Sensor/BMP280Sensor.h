@@ -6,14 +6,15 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_BMP280.h>
 
-class BMP280Sensor : public TelemetrySensor {
-private:
-  Adafruit_BMP280 bmp280;
+class BMP280Sensor : public TelemetrySensor
+{
+  private:
+    Adafruit_BMP280 bmp280;
 
-public:
-  BMP280Sensor();
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+  public:
+    BMP280Sensor();
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif
