@@ -329,6 +329,14 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_FN_SYMBOL_OFF;
                 break;
+            case INPUT_BROKER_MSG_IME_PAGE_PREV:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_IME_PAGE_PREV;
+                break;
+            case INPUT_BROKER_MSG_IME_PAGE_NEXT:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_IME_PAGE_NEXT;
+                break;
             default:
                 if (nextEvent > 127) {
                     e.inputEvent = INPUT_BROKER_NONE;

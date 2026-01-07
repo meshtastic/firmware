@@ -180,8 +180,10 @@ void TDeckProKeyboard::updateModifierFlag(uint8_t key)
 {
     if (key == modifierRightShiftKey) {
         modifierFlag ^= modifierRightShift;
+        queueEvent(INPUT_BROKER_MSG_IME_PAGE_NEXT);
     } else if (key == modifierLeftShiftKey) {
         modifierFlag ^= modifierLeftShift;
+        queueEvent(INPUT_BROKER_MSG_IME_PAGE_PREV);
     } else if (key == modifierSymKey) {
         modifierFlag ^= modifierSym;
         queueEvent((modifierFlag & modifierSym) ? INPUT_BROKER_MSG_FN_SYMBOL_ON : INPUT_BROKER_MSG_FN_SYMBOL_OFF);

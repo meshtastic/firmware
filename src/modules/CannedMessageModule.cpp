@@ -115,65 +115,27 @@ static void renderEmote(OLEDDisplay *display, int &nextX, int lineY, int rowHeig
 }
 
 #if defined(USE_U8G2_EINK_TEXT)
-struct PinyinEntry {
-    const char *pinyin;
-    const char *candidates;
-};
+void CannedMessageModule::cycleImeMode()
+{
+    switch (imeMode) {
+    case ImeMode::CN:
+        imeMode = ImeMode::EN;
+        break;
+    case ImeMode::EN:
+        imeMode = ImeMode::NUM;
+        break;
+    case ImeMode::NUM:
+        imeMode = ImeMode::CN;
+        break;
+    }
 
-static const PinyinEntry kPinyinTable[] = {
-    {"a", "啊 阿"},
-    {"ai", "爱 矮 挨"},
-    {"an", "安 按"},
-    {"ba", "吧 八 把"},
-    {"bei", "北 被"},
-    {"bu", "不"},
-    {"da", "大 打"},
-    {"de", "的 得"},
-    {"dian", "点 电"},
-    {"dong", "东 动"},
-    {"dui", "对"},
-    {"er", "二"},
-    {"fa", "发 法"},
-    {"guo", "国 过"},
-    {"hao", "好"},
-    {"he", "和 合"},
-    {"hen", "很"},
-    {"hui", "会 回"},
-    {"jiu", "九 就"},
-    {"kan", "看"},
-    {"la", "了"},
-    {"lai", "来"},
-    {"le", "了"},
-    {"li", "里 理"},
-    {"ma", "吗"},
-    {"me", "么"},
-    {"mei", "没 每"},
-    {"men", "们"},
-    {"ming", "名 明"},
-    {"na", "那 哪"},
-    {"ni", "你 妮"},
-    {"nian", "年"},
-    {"peng", "朋"},
-    {"ren", "人"},
-    {"ri", "日"},
-    {"shi", "是 时 事"},
-    {"shuo", "说"},
-    {"si", "四"},
-    {"tian", "天"},
-    {"wo", "我"},
-    {"wu", "五"},
-    {"xi", "西 喜"},
-    {"xie", "谢"},
-    {"yao", "要"},
-    {"ye", "也"},
-    {"yi", "一 以 已"},
-    {"you", "有 又"},
-    {"zai", "在 再"},
-    {"zhong", "中"},
-    {"guang", "广"},
-    {"guangzhou", "广州"},
-    {"zhongguo", "中国"},
-};
+    ime.setEnabled(imeMode == ImeMode::CN);
+    if (imeMode != ImeMode::CN) {
+        ime.reset();
+    }
+    imePage = 0;
+    imeSelectedOffset = 0;
+}
 
 static U8G2_FOR_ADAFRUIT_GFX *getU8g2Fonts(OLEDDisplay *display)
 {
@@ -203,6 +165,21 @@ static void drawUiText(OLEDDisplay *display, int x, int y, const String &text)
         return;
     }
     display->drawString(x, y, text);
+}
+
+static void drawUiTextInverted(OLEDDisplay *display, int x, int y, const String &text)
+{
+    if (auto *u8g2 = getU8g2Fonts(display)) {
+        const int baseline = y + FONT_HEIGHT_SMALL - 1;
+        u8g2->setForegroundColor(0);
+        u8g2->setBackgroundColor(1);
+        u8g2->drawUTF8(x, baseline, text.c_str());
+        getU8g2Fonts(display);
+        return;
+    }
+    display->setColor(BLACK);
+    display->drawString(x, y, text);
+    display->setColor(WHITE);
 }
 
 static int utf8PrevIndex(const String &text, int pos)
@@ -787,6 +764,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
     // Handle Cancel key: go inactive, clear UI state
     if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
         (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG)) {
+        LOG_DEBUG("[CANNED] cancel -> inactive (event=%u kbchar=0x%02x)", event->inputEvent, (uint8_t)event->kbchar);
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -941,14 +919,34 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
 #if defined(USE_U8G2_EINK_TEXT)
     if (event->kbchar == INPUT_BROKER_MSG_FN_SYMBOL_ON) {
-        imeEnabled = false;
-        resetIme();
+        cycleImeMode();
+        lastTouchMillis = millis();
         requestFocus();
         runOnce();
         return true;
     }
     if (event->kbchar == INPUT_BROKER_MSG_FN_SYMBOL_OFF) {
-        imeEnabled = true;
+        // Ignore key release to avoid double-cycling.
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+    if (event->kbchar == INPUT_BROKER_MSG_IME_PAGE_PREV || event->kbchar == INPUT_BROKER_MSG_IME_PAGE_NEXT) {
+        if (imeMode == ImeMode::CN && ime.hasBuffer() && !ime.candidates().empty()) {
+            int total = static_cast<int>(ime.candidates().size());
+            int pageSize = (imePageSize > 0) ? imePageSize : 5;
+            int pages = (total + pageSize - 1) / pageSize;
+            if (pages > 1) {
+                imePage += (event->kbchar == INPUT_BROKER_MSG_IME_PAGE_NEXT) ? 1 : -1;
+                if (imePage < 0)
+                    imePage = pages - 1;
+                if (imePage >= pages)
+                    imePage = 0;
+                imeSelectedOffset = 0;
+            }
+        }
+        lastTouchMillis = millis();
         requestFocus();
         runOnce();
         return true;
@@ -1037,23 +1035,20 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
 #if defined(USE_U8G2_EINK_TEXT)
-    if (imeEnabled && imeBuffer.length() > 0) {
+    if (imeMode == ImeMode::CN && ime.isEnabled() && ime.hasBuffer()) {
         if (event->inputEvent == INPUT_BROKER_UP) {
-            if (!imeCandidates.empty()) {
-                imeCandidateIndex =
-                    (imeCandidateIndex <= 0) ? static_cast<int>(imeCandidates.size()) - 1 : imeCandidateIndex - 1;
-                requestFocus();
-                runOnce();
-                return true;
-            }
+            ime.moveCandidate(-1);
+            lastTouchMillis = millis();
+            requestFocus();
+            runOnce();
+            return true;
         }
         if (event->inputEvent == INPUT_BROKER_DOWN) {
-            if (!imeCandidates.empty()) {
-                imeCandidateIndex = (imeCandidateIndex + 1) % static_cast<int>(imeCandidates.size());
-                requestFocus();
-                runOnce();
-                return true;
-            }
+            ime.moveCandidate(1);
+            lastTouchMillis = millis();
+            requestFocus();
+            runOnce();
+            return true;
         }
     }
 #endif
@@ -1061,9 +1056,29 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
 #if defined(USE_U8G2_EINK_TEXT)
-    if (imeEnabled && imeBuffer.length() > 0) {
+    if (imeMode == ImeMode::CN && ime.isEnabled() && ime.hasBuffer()) {
         if (isSelect) {
-            commitImeCandidate(imeCandidateIndex);
+            String commitText;
+            int total = static_cast<int>(ime.candidates().size());
+            int pageSize = (imePageSize > 0) ? imePageSize : 5;
+            int start = imePage * pageSize;
+            int end = std::min(start + pageSize, total);
+            int pageCount = end - start;
+            LOG_DEBUG("[IME] select buffer='%s' total=%d page=%d size=%d selected=%d", ime.buffer().c_str(), total, imePage,
+                      pageSize, imeSelectedOffset);
+            if (pageCount > 0 && imeSelectedOffset >= pageCount)
+                imeSelectedOffset = 0;
+            if (total > 0 && pageCount > 0) {
+                int index = start + imeSelectedOffset;
+                if (ime.commitCandidate(index, commitText)) {
+                    insertTextAtCursor(commitText);
+                }
+            } else if (ime.commitActive(commitText)) {
+                insertTextAtCursor(commitText);
+            }
+            imePage = 0;
+            imeSelectedOffset = 0;
+            lastTouchMillis = millis();
             requestFocus();
             runOnce();
             return true;
@@ -1089,10 +1104,11 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
     // Backspace
 #if defined(USE_U8G2_EINK_TEXT)
-    if (imeEnabled && imeBuffer.length() > 0 && event->inputEvent == INPUT_BROKER_BACK) {
-        int prev = utf8PrevIndex(imeBuffer, imeBuffer.length());
-        imeBuffer.remove(prev);
-        updateImeCandidates();
+    if (imeMode == ImeMode::CN && ime.isEnabled() && ime.hasBuffer() && event->inputEvent == INPUT_BROKER_BACK) {
+        ime.backspace();
+        imePage = 0;
+        imeSelectedOffset = 0;
+        lastTouchMillis = millis();
         requestFocus();
         runOnce();
         return true;
@@ -1134,29 +1150,43 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
 #if defined(USE_U8G2_EINK_TEXT)
-    if (imeEnabled) {
+    if (imeMode == ImeMode::CN && ime.isEnabled()) {
         if ((event->kbchar >= 'a' && event->kbchar <= 'z') || (event->kbchar >= 'A' && event->kbchar <= 'Z')) {
-            imeBuffer += static_cast<char>(std::tolower(event->kbchar));
-            updateImeCandidates();
+            ime.appendLetter(static_cast<char>(std::tolower(event->kbchar)));
+            imePage = 0;
+            imeSelectedOffset = 0;
+            lastTouchMillis = millis();
             requestFocus();
             runOnce();
             return true;
         }
 
-        if (imeBuffer.length() > 0) {
+        if (ime.hasBuffer()) {
             if (event->kbchar >= '1' && event->kbchar <= '9') {
-                int idx = (event->kbchar - '1');
-                if (commitImeCandidate(idx)) {
+                String commitText;
+                if (ime.commitCandidate(event->kbchar - '1', commitText)) {
+                    insertTextAtCursor(commitText);
+                }
+                imePage = 0;
+                imeSelectedOffset = 0;
+                lastTouchMillis = millis();
+                requestFocus();
+                runOnce();
+                return true;
+            }
+            if (event->kbchar == ' ') {
+                int total = static_cast<int>(ime.candidates().size());
+                int pageSize = (imePageSize > 0) ? imePageSize : 5;
+                int start = imePage * pageSize;
+                int end = std::min(start + pageSize, total);
+                int pageCount = end - start;
+                if (pageCount > 0) {
+                    imeSelectedOffset = (imeSelectedOffset + 1) % pageCount;
+                    lastTouchMillis = millis();
                     requestFocus();
                     runOnce();
                     return true;
                 }
-            }
-            if (event->kbchar == ' ') {
-                commitImeCandidate(imeCandidateIndex);
-                requestFocus();
-                runOnce();
-                return true;
             }
         }
     }
@@ -1175,6 +1205,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Cancel (dismiss freetext screen)
     if (!isPrintable && (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
                          (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0))) {
+        LOG_DEBUG("[FREETEXT] cancel -> inactive (event=%u kbchar=0x%02x)", event->inputEvent, (uint8_t)event->kbchar);
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -1250,58 +1281,6 @@ void CannedMessageModule::moveCursorRightUtf8()
     this->cursor++;
 #endif
 }
-
-#if defined(USE_U8G2_EINK_TEXT)
-void CannedMessageModule::resetIme()
-{
-    imeBuffer = "";
-    imeCandidates.clear();
-    imeCandidateIndex = 0;
-}
-
-void CannedMessageModule::updateImeCandidates()
-{
-    imeCandidates.clear();
-    imeCandidateIndex = 0;
-
-    if (imeBuffer.length() == 0)
-        return;
-
-    for (size_t i = 0; i < (sizeof(kPinyinTable) / sizeof(kPinyinTable[0])); ++i) {
-        if (imeBuffer.equals(kPinyinTable[i].pinyin)) {
-            const char *p = kPinyinTable[i].candidates;
-            while (*p) {
-                while (*p == ' ')
-                    ++p;
-                const char *start = p;
-                while (*p && *p != ' ')
-                    ++p;
-                if (p > start)
-                    imeCandidates.emplace_back(String(start).substring(0, p - start));
-            }
-            break;
-        }
-    }
-}
-
-bool CannedMessageModule::commitImeCandidate(int index)
-{
-    if (imeBuffer.length() == 0)
-        return false;
-
-    String commit;
-    if (index >= 0 && index < static_cast<int>(imeCandidates.size()))
-        commit = imeCandidates[index];
-    else if (!imeCandidates.empty())
-        commit = imeCandidates[0];
-    else
-        commit = imeBuffer;
-
-    insertTextAtCursor(commit);
-    resetIme();
-    return true;
-}
-#endif
 
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
@@ -1508,6 +1487,7 @@ int32_t CannedMessageModule::runOnce()
         } else {
             // Empty message, just go inactive
             LOG_INFO("Empty freetext detected in delayed processing, returning to inactive state");
+            LOG_DEBUG("[CANNED] sending active -> inactive (empty freetext)");
             this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         }
 
@@ -1525,6 +1505,7 @@ int32_t CannedMessageModule::runOnce()
          this->payload != CANNED_MESSAGE_RUN_STATE_FREETEXT) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION)) {
+        LOG_DEBUG("[CANNED] sending/ack/message selection -> inactive (payload=%d)", this->payload);
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
@@ -1534,6 +1515,7 @@ int32_t CannedMessageModule::runOnce()
     }
     // Handle SENDING_ACTIVE state transition after virtual keyboard message
     else if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == 0) {
+        LOG_DEBUG("[CANNED] sending active -> inactive (payload=0)");
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->currentMessageIndex = -1;
         this->freetext = "";
@@ -1542,6 +1524,7 @@ int32_t CannedMessageModule::runOnce()
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module on inactivity
+        LOG_DEBUG("[CANNED] timeout -> inactive");
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
         this->freetext = "";
@@ -1560,6 +1543,7 @@ int32_t CannedMessageModule::runOnce()
         if (this->payload == 0) {
             // [Exit] button pressed - return to inactive state
             LOG_INFO("Processing [Exit] action - returning to inactive state");
+            LOG_DEBUG("[CANNED] action select -> inactive (exit)");
             this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         } else if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
@@ -1576,10 +1560,12 @@ int32_t CannedMessageModule::runOnce()
                 this->notifyObservers(&e);
 
                 // Now deactivate this module
+                LOG_DEBUG("[CANNED] freetext sent -> inactive");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
                 return INT32_MAX; // don’t fall back into canned list
             } else {
+                LOG_DEBUG("[CANNED] freetext empty -> inactive");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         } else {
@@ -1604,11 +1590,13 @@ int32_t CannedMessageModule::runOnce()
                     this->notifyObservers(&e);
 
                     // Now deactivate this module
+                    LOG_DEBUG("[CANNED] canned message sent -> inactive");
                     this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
                     return INT32_MAX; // don’t fall back into canned list
                 }
             } else {
+                LOG_DEBUG("[CANNED] action select invalid index -> inactive");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
@@ -1669,7 +1657,7 @@ int32_t CannedMessageModule::runOnce()
             break;
         }
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            e.action = UIFrameEvent::Action::REDRAW_ONLY;
             switch (this->payload) {
             case 0x08: // backspace
                 deleteCharBeforeCursor();
@@ -2338,20 +2326,108 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         {
             int inputY = 0 + y + FONT_HEIGHT_SMALL;
 #if defined(USE_U8G2_EINK_TEXT)
-            if (imeEnabled) {
-                String imeLine = "PY: " + imeBuffer;
-                if (!imeCandidates.empty()) {
-                    imeLine += " ";
-                    int maxCandidates = std::min(static_cast<int>(imeCandidates.size()), 9);
-                    for (int i = 0; i < maxCandidates; i++) {
-                        imeLine += String(i + 1) + ":" + imeCandidates[i];
-                        if (i + 1 < maxCandidates)
-                            imeLine += " ";
-                    }
+            {
+                imeCandidateHitCount = 0;
+                imeBarY = y + display->getHeight() - FONT_HEIGHT_SMALL;
+                imeBarHeight = FONT_HEIGHT_SMALL;
+                int imeBufferY = imeBarY - FONT_HEIGHT_SMALL;
+
+                String modeText;
+                switch (imeMode) {
+                case ImeMode::CN:
+                    modeText = "CN";
+                    break;
+                case ImeMode::EN:
+                    modeText = "EN";
+                    break;
+                case ImeMode::NUM:
+                    modeText = "123";
+                    break;
                 }
-                trimToWidth(display, imeLine, display->getWidth());
-                drawUiText(display, x, inputY, imeLine);
-                inputY += FONT_HEIGHT_SMALL;
+
+                String leftArrow = "<";
+                String rightArrow = ">";
+                int leftArrowW = getUiTextWidth(display, leftArrow);
+                int rightArrowW = getUiTextWidth(display, rightArrow);
+                int modeW = getUiTextWidth(display, modeText);
+
+                int leftX = x;
+                int rightX = x + display->getWidth() - rightArrowW;
+                int modeX = leftX + leftArrowW + 2;
+
+                const int arrowPadding = 12;
+                imeArrowLeftX0 = leftX;
+                imeArrowLeftX1 = leftX + leftArrowW + arrowPadding;
+                imeArrowRightX0 = rightX - arrowPadding;
+                imeArrowRightX1 = rightX + rightArrowW;
+
+                drawUiText(display, leftX, imeBarY, leftArrow);
+                drawUiText(display, modeX, imeBarY, modeText);
+
+                int candidatesX0 = modeX + modeW + 6;
+                int candidatesX1 = rightX - 4;
+
+                const auto &candidates = ime.candidates();
+                if (imeMode == ImeMode::CN && !candidates.empty() && candidatesX1 > candidatesX0) {
+                    int total = static_cast<int>(candidates.size());
+                    int available = candidatesX1 - candidatesX0;
+                    int minCandidateW = getUiTextWidth(display, String("汉"));
+                    int spacing = 6;
+                    int maxByWidth = (minCandidateW > 0) ? ((available + spacing) / (minCandidateW + spacing)) : 1;
+                    if (maxByWidth < 1)
+                        maxByWidth = 1;
+                    if (maxByWidth > kImeMaxCandidates)
+                        maxByWidth = kImeMaxCandidates;
+                    imePageSize = maxByWidth;
+                    int pageSize = imePageSize;
+                    int pages = (total + pageSize - 1) / pageSize;
+                    if (imePage >= pages)
+                        imePage = pages - 1;
+                    if (imePage < 0)
+                        imePage = 0;
+
+                    int start = imePage * pageSize;
+                    int end = std::min(start + pageSize, total);
+                    int pageCount = end - start;
+                    if (pageCount > 0 && imeSelectedOffset >= pageCount)
+                        imeSelectedOffset = 0;
+
+                    int drawX = candidatesX0;
+                    int shown = 0;
+                    for (int i = start; i < end; i++) {
+                        if (shown >= pageSize)
+                            break;
+                        String cand = candidates[i];
+                        int candW = getUiTextWidth(display, cand);
+                        if (drawX + candW > candidatesX1)
+                            break;
+                        if (imeSelectedOffset == (i - start)) {
+                            display->setColor(WHITE);
+                            display->fillRect(drawX - 1, imeBarY - 1, candW + 2, FONT_HEIGHT_SMALL);
+                            drawUiTextInverted(display, drawX, imeBarY, cand);
+                        } else {
+                            drawUiText(display, drawX, imeBarY, cand);
+                        }
+                        if (imeCandidateHitCount < kImeMaxCandidates) {
+                            imeCandidateStartX[imeCandidateHitCount] = drawX;
+                            imeCandidateEndX[imeCandidateHitCount] = drawX + candW;
+                            imeCandidateIndexMap[imeCandidateHitCount] = i;
+                            imeCandidateHitCount++;
+                        }
+                        drawX += candW + 6;
+                        shown++;
+                    }
+                } else {
+                    imePageSize = 0;
+                }
+
+                drawUiText(display, rightX, imeBarY, rightArrow);
+
+                if (imeMode == ImeMode::CN && ime.hasBuffer()) {
+                    String bufferLine = ime.buffer();
+                    trimToWidth(display, bufferLine, display->getWidth());
+                    drawUiText(display, x, imeBufferY, bufferLine);
+                }
             }
 #endif
             String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);

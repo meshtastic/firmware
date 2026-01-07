@@ -2,6 +2,9 @@
 #if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
+#if defined(USE_U8G2_EINK_TEXT)
+#include "modules/ChineseIme.h"
+#endif
 
 // ============================
 //        Enums & Defines
@@ -139,6 +142,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void installDefaultCannedMessageModuleConfig();
 
   private:
+#if defined(USE_U8G2_EINK_TEXT)
+    enum class ImeMode { CN, EN, NUM };
+#endif
     // === Input Observers ===
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =
         CallbackObserver<CannedMessageModule, const InputEvent *>(this, &CannedMessageModule::handleInputEvent);
@@ -183,10 +189,22 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     std::vector<NodeEntry> filteredNodes;
 
 #if defined(USE_U8G2_EINK_TEXT)
-    bool imeEnabled = true;
-    String imeBuffer;
-    std::vector<String> imeCandidates;
-    int imeCandidateIndex = 0;
+    ChineseIme ime;
+    ImeMode imeMode = ImeMode::CN;
+    int imePage = 0;
+    int imePageSize = 0;
+    static constexpr int kImeMaxCandidates = 18;
+    int imeCandidateHitCount = 0;
+    int imeCandidateStartX[kImeMaxCandidates];
+    int imeCandidateEndX[kImeMaxCandidates];
+    int imeCandidateIndexMap[kImeMaxCandidates];
+    int imeSelectedOffset = 0;
+    int imeArrowLeftX0 = 0;
+    int imeArrowLeftX1 = 0;
+    int imeArrowRightX0 = 0;
+    int imeArrowRightX1 = 0;
+    int imeBarY = 0;
+    int imeBarHeight = 0;
 #endif
 
 #if defined(USE_VIRTUAL_KEYBOARD)
@@ -206,11 +224,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void moveCursorLeftUtf8();
     void moveCursorRightUtf8();
 #if defined(USE_U8G2_EINK_TEXT)
-    void resetIme();
-    void updateImeCandidates();
-    bool commitImeCandidate(int index);
+    void cycleImeMode();
 #endif
-
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},
