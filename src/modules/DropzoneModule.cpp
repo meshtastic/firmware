@@ -60,9 +60,7 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
-        hour = hms / SEC_PER_HOUR;
-        min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-        sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN;
+        graphics::decomposeTime(rtc_sec, hour, min, sec);
     }
 
     // Check if the dropzone is open or closed by reading the analog pin
