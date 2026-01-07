@@ -252,12 +252,12 @@ void setupModules()
         (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
         new EnvironmentTelemetryModule();
     }
-
-    if (moduleConfig.has_telemetry && moduleConfig.telemetry.air_quality_enabled &&
-        nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY
+    if (moduleConfig.has_telemetry &&
+        (moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled)) {
         new AirQualityTelemetryModule();
     }
-
+#endif
 #if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
     if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
         nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {

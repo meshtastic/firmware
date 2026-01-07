@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
@@ -42,11 +42,10 @@ int32_t AirQualityTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.air_quality_enabled = 1;
-    // TODO there is no config in module_config.proto for air_quality_screen_enabled. Reusing environment one, although it should have its own
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.air_quality_screen_enabled = 1;
     // moduleConfig.telemetry.air_quality_interval = 15;
 
-    if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.environment_screen_enabled ||
+    if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
@@ -104,7 +103,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
 bool AirQualityTelemetryModule::wantUIFrame()
 {
-    return moduleConfig.telemetry.environment_screen_enabled;
+    return moduleConfig.telemetry.air_quality_screen_enabled;
 }
 
 void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
