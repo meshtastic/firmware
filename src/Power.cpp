@@ -333,7 +333,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled *= operativeAdcMultiplier;
 #else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+#if (BATTERY_PIN == -1)
+                raw += analogReadVDDHDIV5();
+#else
                 raw += analogRead(BATTERY_PIN);
+#endif
             }
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
