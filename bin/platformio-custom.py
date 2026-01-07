@@ -2,11 +2,12 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
-from os.path import join, basename, isfile
+from os.path import join
 import subprocess
 import json
 import re
 from datetime import datetime
+from typing import Dict
 
 from readprops import readProps
 
@@ -14,8 +15,13 @@ Import("env")
 platform = env.PioPlatform()
 progname = env.get("PROGNAME")
 lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
+manifest_ran = False
 
 def manifest_gather(source, target, env):
+    global manifest_ran
+    if manifest_ran:
+        return
+    manifest_ran = True
     out = []
     board_platform = env.BoardConfig().get("platform")
     needs_ota_suffix = board_platform == "nordicnrf52"
@@ -47,6 +53,50 @@ def manifest_gather(source, target, env):
     manifest_write(out, env)
 
 def manifest_write(files, env):
+    def get_project_option(name):
+        try:
+            return env.GetProjectOption(name)
+        except Exception:
+            return None
+
+    def get_project_option_any(names):
+        for name in names:
+            val = get_project_option(name)
+            if val is not None:
+                return val
+        return None
+
+    def as_bool(val):
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+    def as_int(val):
+        try:
+            return int(str(val), 10)
+        except (TypeError, ValueError):
+            return None
+
+    def as_list(val):
+        return [item.strip() for item in str(val).split(",") if item.strip()]
+
+    def infer_architecture(board_cfg):
+        mcu = board_cfg.get("build.mcu") if board_cfg else None
+        if not mcu:
+            return None
+        mcu_l = str(mcu).lower()
+        if "esp32s3" in mcu_l:
+            return "esp32-s3"
+        if "esp32c6" in mcu_l:
+            return "esp32-c6"
+        if "esp32c3" in mcu_l:
+            return "esp32-c3"
+        if "esp32" in mcu_l:
+            return "esp32"
+        if "rp2040" in mcu_l:
+            return "rp2040"
+        if "nrf52" in mcu_l or "nrf52840" in mcu_l:
+            return "nrf52840"
+        return None
+
     manifest = {
         "version": verObj["long"],
         "build_epoch": build_epoch,
@@ -54,7 +104,6 @@ def manifest_write(files, env):
         "mcu": env.get("BOARD_MCU"),
         "repo": repo_owner,
         "files": files,
-        "part": None,
         "has_mui": False,
         "has_inkhud": False,
     }
@@ -68,6 +117,48 @@ def manifest_write(files, env):
         manifest["has_mui"] = True
     if "MESHTASTIC_INCLUDE_INKHUD" in env.get("CPPDEFINES", []):
         manifest["has_inkhud"] = True
+
+    pioenv = env.get("PIOENV")
+    device_meta = {}
+    device_meta_fields = [
+        ("hwModel", ["custom_meshtastic_hw_model", "meshtastic_hw_model", "custom_device_hw_model"], as_int),
+        ("hwModelSlug", ["custom_meshtastic_hw_model_slug", "meshtastic_hw_model_slug", "custom_device_hw_model_slug"], str),
+        ("architecture", ["custom_meshtastic_architecture", "meshtastic_architecture", "custom_device_architecture"], str),
+        ("activelySupported", ["custom_meshtastic_actively_supported", "meshtastic_actively_supported", "custom_device_actively_supported"], as_bool),
+        ("displayName", ["custom_meshtastic_display_name", "meshtastic_display_name", "custom_device_display_name"], str),
+        ("supportLevel", ["custom_meshtastic_support_level", "meshtastic_support_level", "custom_device_support_level"], as_int),
+        ("images", ["custom_meshtastic_images", "meshtastic_images", "custom_device_images"], as_list),
+        ("tags", ["custom_meshtastic_tags", "meshtastic_tags", "custom_device_tags"], as_list),
+        ("requiresDfu", ["custom_meshtastic_requires_dfu", "meshtastic_requires_dfu", "custom_device_requires_dfu"], as_bool),
+        ("partitionScheme", ["custom_meshtastic_partition_scheme", "meshtastic_partition_scheme", "custom_device_partition_scheme"], str),
+        ("hasMui", ["custom_meshtastic_has_mui", "meshtastic_has_mui", "custom_device_has_mui"], as_bool),
+        ("hasInkHud", ["custom_meshtastic_has_inkhud", "meshtastic_has_inkhud", "custom_device_has_inkhud"], as_bool),
+        ("url", ["custom_meshtastic_url", "meshtastic_url", "custom_device_url"], str),
+        ("key", ["custom_meshtastic_key", "meshtastic_key", "custom_device_key"], str),
+        ("variant", ["custom_meshtastic_variant", "meshtastic_variant", "custom_device_variant"], str),
+    ]
+
+    for manifest_key, option_keys, caster in device_meta_fields:
+        raw_val = get_project_option_any(option_keys)
+        if raw_val is None:
+            continue
+        parsed = caster(raw_val) if callable(caster) else raw_val
+        if parsed is not None and parsed != "":
+            device_meta[manifest_key] = parsed
+
+    # Always use the env name as the emitted platformioTarget unless explicitly overridden later
+    device_meta["platformioTarget"] = pioenv
+
+    if "architecture" not in device_meta:
+        board_arch = infer_architecture(env.BoardConfig())
+        if board_arch:
+            device_meta["architecture"] = board_arch
+
+    device_meta.setdefault("displayName", pioenv)
+    device_meta.setdefault("activelySupported", False)
+
+    if device_meta:
+        manifest.update(device_meta)
 
     # Write the manifest to the build directory
     with open(env.subst("$BUILD_DIR/${PROGNAME}.mt.json"), "w") as f:
@@ -104,7 +195,7 @@ for pref in userPrefs:
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
-    elif userPrefs[pref].startswith("meshtastic_"):
+    elif userPrefs[pref].startswith("custom_meshtastic_") or userPrefs[pref].startswith("meshtastic_"):
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     # If the value is a string, we need to wrap it in quotes
     else:
@@ -181,5 +272,8 @@ env.AddCustomTarget(
     actions=[manifest_gather],
     title="Meshtastic Manifest",
     description="Generating Meshtastic manifest JSON + Checksums",
-    always_build=False,
+    always_build=True,
 )
+
+# Run manifest generation as part of the default build pipeline.
+env.Default("mtjson")
