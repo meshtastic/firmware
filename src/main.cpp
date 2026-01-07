@@ -341,7 +341,6 @@ void setup()
 {
 
     // initialize power HAL layer as early as possible
-    // for NRF52 this also initializes SoftDevice framework
     powerHAL_init();
 
     // prevent booting if device is in power failure mode
