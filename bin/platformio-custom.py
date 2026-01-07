@@ -18,7 +18,12 @@ lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
 manifest_ran = False
 
 def infer_architecture(board_cfg):
-    mcu = board_cfg.get("build.mcu") if board_cfg else None
+    try:
+        mcu = board_cfg.get("build.mcu") if board_cfg else None
+    except KeyError:
+        mcu = None
+    except Exception:
+        mcu = None
     if not mcu:
         return None
     mcu_l = str(mcu).lower()
