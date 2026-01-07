@@ -618,6 +618,13 @@ void RadioInterface::applyModemConfig()
     slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
 
+#ifdef USE_ADAPTIVE_CODING_RATE
+    if (adaptiveCrOverride >= 5 && adaptiveCrOverride <= 8 && cr != adaptiveCrOverride) {
+        cr = adaptiveCrOverride;
+        LOG_DEBUG("Adaptive coding rate override set to %u", cr);
+    }
+#endif
+
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", myRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
@@ -730,3 +737,70 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     sendingPacket = p;
     return p->encrypted.size + sizeof(PacketHeader);
 }
+
+#ifdef USE_ADAPTIVE_CODING_RATE
+uint8_t RadioInterface::computeAdaptiveCodingRate(uint8_t attempt) const
+{
+    if (attempt <= 1) {
+        return 5; // Attempt 1: 4/5
+    }
+    if (attempt == 2) {
+        return 7; // Attempt 2: 4/7
+    }
+    return 8; // Attempt 3+: 4/8
+}
+
+uint64_t RadioInterface::adaptiveKey(NodeNum from, PacketId id) const
+{
+    return (static_cast<uint64_t>(from) << 32) | id;
+}
+
+void RadioInterface::pruneAdaptiveAttempts(uint32_t now)
+{
+    const uint32_t expiryMsec = 5 * 60 * 1000UL; // drop state after 5 minutes
+    for (auto it = adaptiveAttempts.begin(); it != adaptiveAttempts.end();) {
+        if (now - it->second.lastUseMsec > expiryMsec) {
+            it = adaptiveAttempts.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+uint8_t RadioInterface::recordAdaptiveAttempt(const meshtastic_MeshPacket *p)
+{
+    const uint32_t now = millis();
+    pruneAdaptiveAttempts(now);
+
+    const uint64_t key = adaptiveKey(getFrom(p), p->id);
+    auto &state = adaptiveAttempts[key];
+    if (state.attempts < UINT8_MAX) {
+        state.attempts++;
+    }
+    state.lastUseMsec = now;
+    return state.attempts;
+}
+
+bool RadioInterface::applyAdaptiveCodingRate(const meshtastic_MeshPacket *p)
+{
+    const uint8_t attempt = recordAdaptiveAttempt(p);
+    const uint8_t desiredCr = computeAdaptiveCodingRate(attempt);
+    if (desiredCr < 5 || desiredCr > 8) {
+        return false;
+    }
+
+    adaptiveCrOverride = desiredCr;
+    if (cr != desiredCr) {
+        cr = desiredCr;
+        reconfigure();
+        return true;
+    }
+
+    return false;
+}
+
+void RadioInterface::clearAdaptiveCodingRateState(NodeNum from, PacketId id)
+{
+    adaptiveAttempts.erase(adaptiveKey(from, id));
+}
+#endif

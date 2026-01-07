@@ -540,6 +540,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         packetPool.release(txp);
         return false;
     } else {
+#ifdef USE_ADAPTIVE_CODING_RATE
+        applyAdaptiveCodingRate(txp);
+#endif
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);

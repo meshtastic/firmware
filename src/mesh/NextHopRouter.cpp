@@ -238,6 +238,12 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         // call to startRetransmission.
         packetPool.release(p);
 
+#ifdef USE_ADAPTIVE_CODING_RATE
+        if (iface) {
+            iface->clearAdaptiveCodingRateState(getFrom(p), p->id);
+        }
+#endif
+
         return true;
     } else
         return false;

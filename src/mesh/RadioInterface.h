@@ -6,6 +6,9 @@
 #include "PointerQueue.h"
 #include "airtime.h"
 #include "error.h"
+#ifdef USE_ADAPTIVE_CODING_RATE
+#include <unordered_map>
+#endif
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
@@ -220,6 +223,11 @@ class RadioInterface
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
 
+#ifdef USE_ADAPTIVE_CODING_RATE
+    /** Clear adaptive coding rate tracking for a completed packet id */
+    void clearAdaptiveCodingRateState(NodeNum from, PacketId id);
+#endif
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
@@ -249,6 +257,20 @@ class RadioInterface
      * Save the channel we selected for later reuse.
      */
     virtual void saveChannelNum(uint32_t savedChannelNum);
+
+#ifdef USE_ADAPTIVE_CODING_RATE
+    bool applyAdaptiveCodingRate(const meshtastic_MeshPacket *p);
+    struct AdaptiveAttemptState {
+        uint8_t attempts = 0;
+        uint32_t lastUseMsec = 0;
+    };
+    std::unordered_map<uint64_t, AdaptiveAttemptState> adaptiveAttempts;
+    uint8_t adaptiveCrOverride = 0;
+    uint8_t recordAdaptiveAttempt(const meshtastic_MeshPacket *p);
+    uint8_t computeAdaptiveCodingRate(uint8_t attempt) const;
+    void pruneAdaptiveAttempts(uint32_t now);
+    uint64_t adaptiveKey(NodeNum from, PacketId id) const;
+#endif
 
   private:
     /**
