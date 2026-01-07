@@ -17,58 +17,37 @@ progname = env.get("PROGNAME")
 lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
 manifest_ran = False
 
-def is_portduino_based(env):
-    """Return True if this env/platform is Portduino/native based.
-
-    Checks the PIO platform name, board platform, framework, and env/board names
-    for indicators of a native/portduino target. This is more reliable than
-    only inspecting the env name.
-    """
-    try:
-        p_name = getattr(platform, "name", "") or ""
-        if "portduino" in str(p_name).lower():
-            return True
-    except Exception:
-        pass
-    try:
-        board_platform = env.BoardConfig().get("platform")
-        if board_platform and str(board_platform).lower() == "native":
-            return True
-    except Exception:
-        pass
-    try:
-        fw = env.get("PIOFRAMEWORK") or ""
-        if "portduino" in str(fw).lower():
-            return True
-    except Exception:
-        pass
-    # Some platform objects expose a manifest with a name field
-    try:
-        manifest = getattr(platform, "manifest", None)
-        if manifest and isinstance(manifest, dict):
-            name = manifest.get("name", "")
-            if "portduino" in str(name).lower():
-                return True
-    except Exception:
-        pass
-    # Fallback checks for env/board naming
-    try:
-        pioenv = env.get("PIOENV") or ""
-        board_name = env.get("BOARD") or ""
-        if str(pioenv).lower().startswith("native") or str(board_name).lower() == "native":
-            return True
-    except Exception:
-        pass
-    return False
+def infer_architecture(board_cfg):
+    mcu = board_cfg.get("build.mcu") if board_cfg else None
+    if not mcu:
+        return None
+    mcu_l = str(mcu).lower()
+    if "esp32s3" in mcu_l:
+        return "esp32-s3"
+    if "esp32c6" in mcu_l:
+        return "esp32-c6"
+    if "esp32c3" in mcu_l:
+        return "esp32-c3"
+    if "esp32" in mcu_l:
+        return "esp32"
+    if "rp2040" in mcu_l:
+        return "rp2040"
+    if "rp2350" in mcu_l:
+        return "rp2350"
+    if "nrf52" in mcu_l or "nrf52840" in mcu_l:
+        return "nrf52840"
+    if "stm32" in mcu_l:
+        return "stm32"
+    return None
 
 def manifest_gather(source, target, env):
     global manifest_ran
     if manifest_ran:
         return
-    # Skip manifest generation for native builds (we don't produce mt.json for native)
-    # Use robust detection for Portduino/native-based environments
-    if is_portduino_based(env):
-        print(f"Skipping mtjson generation for Portduino/native environment: {env.get('PIOENV')}")
+    # Skip manifest generation if we cannot determine architecture (host/native builds)
+    board_arch = infer_architecture(env.BoardConfig())
+    if not board_arch:
+        print(f"Skipping mtjson generation for unknown architecture (env={env.get('PIOENV')})")
         manifest_ran = True
         return
     manifest_ran = True
@@ -103,11 +82,7 @@ def manifest_gather(source, target, env):
     manifest_write(out, env)
 
 def manifest_write(files, env):
-    # Defensive: also skip manifest writing if this is a native environment
-    # Use robust detection for Portduino/native-based environments
-    if is_portduino_based(env):
-        print(f"Skipping mtjson write for Portduino/native environment: {env.get('PIOENV')}")
-        return
+    # Defensive: also skip manifest writing if we cannot determine architecture
     def get_project_option(name):
         try:
             return env.GetProjectOption(name)
@@ -132,29 +107,6 @@ def manifest_write(files, env):
 
     def as_list(val):
         return [item.strip() for item in str(val).split(",") if item.strip()]
-
-    def infer_architecture(board_cfg):
-        mcu = board_cfg.get("build.mcu") if board_cfg else None
-        if not mcu:
-            return None
-        mcu_l = str(mcu).lower()
-        if "esp32s3" in mcu_l:
-            return "esp32-s3"
-        if "esp32c6" in mcu_l:
-            return "esp32-c6"
-        if "esp32c3" in mcu_l:
-            return "esp32-c3"
-        if "esp32" in mcu_l:
-            return "esp32"
-        if "rp2040" in mcu_l:
-            return "rp2040"
-        if "rp2350" in mcu_l:
-            return "rp2350"
-        if "nrf52" in mcu_l or "nrf52840" in mcu_l:
-            return "nrf52840"
-        if "stm32" in mcu_l:
-            return "stm32"
-        return None
 
     manifest = {
         "version": verObj["long"],
@@ -319,9 +271,10 @@ def load_boot_logo(source, target, env):
 if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
     env.AddPreAction(f"$BUILD_DIR/{lfsbin}", load_boot_logo)
 
-is_native_env = is_portduino_based(env)
+board_arch = infer_architecture(env.BoardConfig())
+is_native_env = board_arch is None
 
-# For native envs, avoid depending on 'buildprog' (some native targets don't define it)
+# For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
 mtjson_deps = [] if is_native_env else ["buildprog"]
 if not is_native_env and platform.name == "espressif32":
     # Build littlefs image as part of mtjson target
