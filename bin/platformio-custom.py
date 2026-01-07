@@ -17,9 +17,59 @@ progname = env.get("PROGNAME")
 lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
 manifest_ran = False
 
+def is_portduino_based(env):
+    """Return True if this env/platform is Portduino/native based.
+
+    Checks the PIO platform name, board platform, framework, and env/board names
+    for indicators of a native/portduino target. This is more reliable than
+    only inspecting the env name.
+    """
+    try:
+        p_name = getattr(platform, "name", "") or ""
+        if "portduino" in str(p_name).lower():
+            return True
+    except Exception:
+        pass
+    try:
+        board_platform = env.BoardConfig().get("platform")
+        if board_platform and str(board_platform).lower() == "native":
+            return True
+    except Exception:
+        pass
+    try:
+        fw = env.get("PIOFRAMEWORK") or ""
+        if "portduino" in str(fw).lower():
+            return True
+    except Exception:
+        pass
+    # Some platform objects expose a manifest with a name field
+    try:
+        manifest = getattr(platform, "manifest", None)
+        if manifest and isinstance(manifest, dict):
+            name = manifest.get("name", "")
+            if "portduino" in str(name).lower():
+                return True
+    except Exception:
+        pass
+    # Fallback checks for env/board naming
+    try:
+        pioenv = env.get("PIOENV") or ""
+        board_name = env.get("BOARD") or ""
+        if str(pioenv).lower().startswith("native") or str(board_name).lower() == "native":
+            return True
+    except Exception:
+        pass
+    return False
+
 def manifest_gather(source, target, env):
     global manifest_ran
     if manifest_ran:
+        return
+    # Skip manifest generation for native builds (we don't produce mt.json for native)
+    # Use robust detection for Portduino/native-based environments
+    if is_portduino_based(env):
+        print(f"Skipping mtjson generation for Portduino/native environment: {env.get('PIOENV')}")
+        manifest_ran = True
         return
     manifest_ran = True
     out = []
@@ -53,6 +103,11 @@ def manifest_gather(source, target, env):
     manifest_write(out, env)
 
 def manifest_write(files, env):
+    # Defensive: also skip manifest writing if this is a native environment
+    # Use robust detection for Portduino/native-based environments
+    if is_portduino_based(env):
+        print(f"Skipping mtjson write for Portduino/native environment: {env.get('PIOENV')}")
+        return
     def get_project_option(name):
         try:
             return env.GetProjectOption(name)
@@ -145,15 +200,17 @@ def manifest_write(files, env):
         if parsed is not None and parsed != "":
             device_meta[manifest_key] = parsed
 
-    # Always set requiresDfu: true for nrf52840 targets
+    # Determine architecture once; if we can't infer it, skip manifest generation
     board_arch = device_meta.get("architecture") or infer_architecture(env.BoardConfig())
+    if not board_arch:
+        print(f"Skipping mtjson write for unknown architecture (env={env.get('PIOENV')})")
+        return
+
+    device_meta["architecture"] = board_arch
+
+    # Always set requiresDfu: true for nrf52840 targets
     if board_arch == "nrf52840":
         device_meta["requiresDfu"] = True
-
-    if "architecture" not in device_meta:
-        board_arch = infer_architecture(env.BoardConfig())
-        if board_arch:
-            device_meta["architecture"] = board_arch
 
     device_meta.setdefault("displayName", pioenv)
     device_meta.setdefault("activelySupported", False)
@@ -258,8 +315,11 @@ def load_boot_logo(source, target, env):
 if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
     env.AddPreAction(f"$BUILD_DIR/{lfsbin}", load_boot_logo)
 
-mtjson_deps = ["buildprog"]
-if platform.name == "espressif32":
+is_native_env = is_portduino_based(env)
+
+# For native envs, avoid depending on 'buildprog' (some native targets don't define it)
+mtjson_deps = [] if is_native_env else ["buildprog"]
+if not is_native_env and platform.name == "espressif32":
     # Build littlefs image as part of mtjson target
     # Equivalent to `pio run -t buildfs`
     target_lfs = env.DataToBin(
@@ -267,14 +327,27 @@ if platform.name == "espressif32":
     )
     mtjson_deps.append(target_lfs)
 
-env.AddCustomTarget(
-    name="mtjson",
-    dependencies=mtjson_deps,
-    actions=[manifest_gather],
-    title="Meshtastic Manifest",
-    description="Generating Meshtastic manifest JSON + Checksums",
-    always_build=True,
-)
+if is_native_env:
+    def skip_manifest(source, target, env):
+        print(f"mtjson: skipped for native environment: {env.get('PIOENV')}")
 
-# Run manifest generation as part of the default build pipeline.
-env.Default("mtjson")
+    env.AddCustomTarget(
+        name="mtjson",
+        dependencies=mtjson_deps,
+        actions=[skip_manifest],
+        title="Meshtastic Manifest (skipped)",
+        description="mtjson generation is skipped for native environments",
+        always_build=True,
+    )
+else:
+    env.AddCustomTarget(
+        name="mtjson",
+        dependencies=mtjson_deps,
+        actions=[manifest_gather],
+        title="Meshtastic Manifest",
+        description="Generating Meshtastic manifest JSON + Checksums",
+        always_build=True,
+    )
+
+    # Run manifest generation as part of the default build pipeline for non-native builds.
+    env.Default("mtjson")
