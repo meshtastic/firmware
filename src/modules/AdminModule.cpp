@@ -383,24 +383,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
-    case meshtastic_AdminMessage_set_muted_node_tag: {
+    case meshtastic_AdminMessage_toggle_muted_node_tag: {
         LOG_INFO("Client received set_muted_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_muted_node);
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
         if (node != NULL) {
-            node->is_muted = true;
+            node->bitfield &NODEINFO_BITFIELD_IS_MUTED_MASK;
             saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
-    case meshtastic_AdminMessage_remove_muted_node_tag: {
-        LOG_INFO("Client received remove_muted_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_muted_node);
-        if (node != NULL) {
-            node->is_muted = false;
-            saveChanges(SEGMENT_NODEDATABASE, false);
-        }
-        break;
-    }
+
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
