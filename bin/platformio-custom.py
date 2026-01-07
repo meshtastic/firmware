@@ -148,8 +148,12 @@ def manifest_write(files, env):
             return "esp32"
         if "rp2040" in mcu_l:
             return "rp2040"
+        if "rp2350" in mcu_l:
+            return "rp2350"
         if "nrf52" in mcu_l or "nrf52840" in mcu_l:
             return "nrf52840"
+        if "stm32" in mcu_l:
+            return "stm32"
         return None
 
     manifest = {
