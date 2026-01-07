@@ -131,8 +131,6 @@ def manifest_write(files, env):
         ("tags", ["custom_meshtastic_tags"], as_list),
         ("requiresDfu", ["custom_meshtastic_requires_dfu"], as_bool),
         ("partitionScheme", ["custom_meshtastic_partition_scheme"], str),
-        ("hasMui", ["custom_meshtastic_has_mui"], as_bool),
-        ("hasInkHud", ["custom_meshtastic_has_inkhud"], as_bool),
         ("url", ["custom_meshtastic_url"], str),
         ("key", ["custom_meshtastic_key"], str),
         ("variant", ["custom_meshtastic_variant"], str),
