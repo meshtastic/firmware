@@ -112,6 +112,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getNextHashStmt;
     sqlite3_stmt *getChainEndStmt;
     sqlite3_stmt *getLinkStmt;
+    sqlite3_stmt *getLinkFromMessageHashStmt;
     sqlite3_stmt *getHashFromRootStmt;
     sqlite3_stmt *addRootToMappingsStmt;
     sqlite3_stmt *getRootFromChannelHashStmt;
@@ -124,6 +125,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getPeerStmt;
     sqlite3_stmt *updatePeerStmt;
     sqlite3_stmt *clearChainStmt;
+    sqlite3_stmt *canon_scratch_insert_stmt;
+    sqlite3_stmt *getCanonScratchCountStmt;
+    sqlite3_stmt *getCanonScratchStmt;
+    sqlite3_stmt *removeCanonScratch;
+    sqlite3_stmt *clearCanonScratchStmt;
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -170,7 +176,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool addToScratch(link_object &);
 
     // sends a CANON_ANNOUNCE message, specifying the given root and commit hashes
-    void canonAnnounce(link_object &, uint8_t *, uint8_t *, uint8_t *, uint32_t);
+    void canonAnnounce(link_object &);
 
     // checks if the message hash is present in the canonical chain database
     bool isInDB(uint8_t *, size_t);
@@ -205,8 +211,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // confirms the root hash and commit hash
     link_object ingestLinkMessage(meshtastic_StoreForwardPlusPlus *, bool = true);
 
-    // retrieves a link object from the canonical chain database given a message hash
+    // retrieves a link object from the canonical chain database given a commit hash
     link_object getLink(uint8_t *, size_t);
+
+    // retrieves a link object from the canonical chain database given a message hash
+    link_object getLinkFromMessageHash(uint8_t *, size_t);
 
     // puts the encrypted payload back into the queue as if it were just received
     void rebroadcastLinkObject(link_object &);
@@ -238,6 +247,19 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     void updatePeers(const meshtastic_MeshPacket &, meshtastic_StoreForwardPlusPlus_SFPP_message_type);
 
+    void maybeMoveFromCanonScratch(uint8_t *, size_t);
+
+    void addToCanonScratch(link_object &);
+
+    link_object getfromCanonScratch(uint8_t *, size_t);
+    void removeFromCanonScratch(uint8_t *, size_t);
+
+    void clearCanonScratch(uint8_t *, size_t, uint32_t);
+
+    bool isInCanonScratch(uint8_t *, size_t);
+
+    void logLinkObject(link_object &);
+
     // Track if we have a scheduled runOnce pending
     // useful to not accudentally delay a scheduled runOnce
     bool pendingRun = false;
@@ -253,5 +275,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     bool doing_split_receive = false;
     link_object split_link_in;
+
+    bool did_announce_last = false;
 };
 #endif
