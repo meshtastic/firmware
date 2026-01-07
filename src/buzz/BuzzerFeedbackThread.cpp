@@ -24,6 +24,9 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
     switch (event->inputEvent) {
     case INPUT_BROKER_USER_PRESS:
     case INPUT_BROKER_ALT_PRESS:
+        playClick(); // Low delay feedback
+        break;
+
     case INPUT_BROKER_SELECT:
     case INPUT_BROKER_SELECT_LONG:
         playBeep(); // Confirmation feedback
