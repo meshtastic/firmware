@@ -1,7 +1,9 @@
 #include "modules/ChineseIme.h"
 #include "modules/PinyinData.h"
 
+#if defined(T_DECK_PRO)
 #include <pgmspace.h>
+#endif
 
 void ChineseIme::setEnabled(bool enabled)
 {
@@ -129,6 +131,9 @@ void ChineseIme::updateCandidates()
 
 void ChineseIme::updateCandidatesFromBuiltin()
 {
+#if !defined(T_DECK_PRO)
+    return;
+#else
     const size_t kMaxCandidates = 50;
     std::vector<String> exactCandidates;
     std::vector<String> prefixCandidates;
@@ -212,4 +217,5 @@ void ChineseIme::updateCandidatesFromBuiltin()
         if (!exists)
             imeCandidates.emplace_back(candidate);
     }
+#endif
 }
