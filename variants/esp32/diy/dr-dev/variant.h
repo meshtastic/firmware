@@ -35,9 +35,9 @@
 #define LORA_DIO2 22 // BUSY for SX1262/SX1268
 // NOT_A_PIN is treated as RADIOLIB_NC due to how they are defined, best to use RADIOLIB_NC directly
 #define LORA_TXEN RADIOLIB_NC // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
-// E22_TXEN_CONNECTED_TO_DIO2 wasn't defined, so RXEN wasn't controlled. Commented it out to maintain behavior, but
-// shouldn't be. Need to comment out defining SX126X_RXEN as LORA_RXEN too #define LORA_RXEN 17 // Input - RF switch RX
-// control, connecting external MCU IO, valid in high level
+// E22_TXEN_CONNECTED_TO_DIO2 wasn't defined, so RXEN wasn't controlled. Commented it out to maintain behavior, but shouldn't be.
+// Need to comment out defining SX126X_RXEN as LORA_RXEN too
+// #define LORA_RXEN 17 // Input - RF switch RX control, connecting external MCU IO, valid in high level
 #undef LORA_CS
 #define LORA_CS 16
 #define SX126X_BUSY 22

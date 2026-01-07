@@ -13,8 +13,9 @@
 
 // #define BUTTON_NEED_PULLUP
 
-// #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery
-// voltage #define ADC_CHANNEL ADC1_GPIO27_CHANNEL #define ADC_MULTIPLIER 2
+// #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+// #define ADC_CHANNEL ADC1_GPIO27_CHANNEL
+// #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
 #define ST7701_CS (4 | IO_EXPANDER)
@@ -44,8 +45,7 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x48
 
-// in future, we may want to add a buzzer and add all sensors to the indicator via a data protocol for now only GPS is
-// supported
+// in future, we may want to add a buzzer and add all sensors to the indicator via a data protocol for now only GPS is supported
 // // Buzzer
 // #define PIN_BUZZER 19
 

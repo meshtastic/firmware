@@ -12,20 +12,21 @@
  * Currently the only usecase for this class is the ESP32 bluetooth stack, where once we've called deinit(false)
  * we are sure all those bluetooth objects no longer exist, and we'll need to recreate them when we restart bluetooth
  */
-class SimpleAllocator {
-  uint8_t bytes[POOL_SIZE] = {};
+class SimpleAllocator
+{
+    uint8_t bytes[POOL_SIZE] = {};
 
-  uint32_t nextFree = 0;
+    uint32_t nextFree = 0;
 
-public:
-  SimpleAllocator();
+  public:
+    SimpleAllocator();
 
-  void *alloc(size_t size);
+    void *alloc(size_t size);
 
-  /** If you are _sure_ no outstanding references to blocks in this buffer still exist, you can call
-   * reset() to start from scratch.
-   * */
-  void reset();
+    /** If you are _sure_ no outstanding references to blocks in this buffer still exist, you can call
+     * reset() to start from scratch.
+     * */
+    void reset();
 };
 
 void *operator new(size_t size, SimpleAllocator &p);
@@ -34,8 +35,9 @@ void *operator new(size_t size, SimpleAllocator &p);
  * Temporarily makes the specified Allocator be used for _all_ allocations.  Useful when calling library routines
  * that don't know about pools
  */
-class AllocatorScope {
-public:
-  explicit AllocatorScope(SimpleAllocator &a);
-  ~AllocatorScope();
+class AllocatorScope
+{
+  public:
+    explicit AllocatorScope(SimpleAllocator &a);
+    ~AllocatorScope();
 };

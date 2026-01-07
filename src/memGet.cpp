@@ -20,19 +20,20 @@ MemGet memGet;
  * Returns the amount of free heap memory in bytes.
  * @return uint32_t The amount of free heap memory in bytes.
  */
-uint32_t MemGet::getFreeHeap() {
+uint32_t MemGet::getFreeHeap()
+{
 #ifdef ARCH_ESP32
-  return ESP.getFreeHeap();
+    return ESP.getFreeHeap();
 #elif defined(ARCH_NRF52)
-  return dbgHeapFree();
+    return dbgHeapFree();
 #elif defined(ARCH_RP2040)
-  return rp2040.getFreeHeap();
+    return rp2040.getFreeHeap();
 #elif defined(ARCH_STM32WL)
-  struct mallinfo m = mallinfo();
-  return m.fordblks; // Total free space (bytes)
+    struct mallinfo m = mallinfo();
+    return m.fordblks; // Total free space (bytes)
 #else
-  // this platform does not have heap management function implemented
-  return UINT32_MAX;
+    // this platform does not have heap management function implemented
+    return UINT32_MAX;
 #endif
 }
 
@@ -40,19 +41,20 @@ uint32_t MemGet::getFreeHeap() {
  * Returns the size of the heap memory in bytes.
  * @return uint32_t The size of the heap memory in bytes.
  */
-uint32_t MemGet::getHeapSize() {
+uint32_t MemGet::getHeapSize()
+{
 #ifdef ARCH_ESP32
-  return ESP.getHeapSize();
+    return ESP.getHeapSize();
 #elif defined(ARCH_NRF52)
-  return dbgHeapTotal();
+    return dbgHeapTotal();
 #elif defined(ARCH_RP2040)
-  return rp2040.getTotalHeap();
+    return rp2040.getTotalHeap();
 #elif defined(ARCH_STM32WL)
-  struct mallinfo m = mallinfo();
-  return m.arena; // Non-mmapped space allocated (bytes)
+    struct mallinfo m = mallinfo();
+    return m.arena; // Non-mmapped space allocated (bytes)
 #else
-  // this platform does not have heap management function implemented
-  return UINT32_MAX;
+    // this platform does not have heap management function implemented
+    return UINT32_MAX;
 #endif
 }
 
@@ -61,13 +63,14 @@ uint32_t MemGet::getHeapSize() {
  *
  * @return The amount of free psram memory in bytes.
  */
-uint32_t MemGet::getFreePsram() {
+uint32_t MemGet::getFreePsram()
+{
 #ifdef ARCH_ESP32
-  return ESP.getFreePsram();
+    return ESP.getFreePsram();
 #elif defined(ARCH_PORTDUINO)
-  return 4194252;
+    return 4194252;
 #else
-  return 0;
+    return 0;
 #endif
 }
 
@@ -76,23 +79,25 @@ uint32_t MemGet::getFreePsram() {
  *
  * @return uint32_t The size of the PSRAM memory.
  */
-uint32_t MemGet::getPsramSize() {
+uint32_t MemGet::getPsramSize()
+{
 #ifdef ARCH_ESP32
-  return ESP.getPsramSize();
+    return ESP.getPsramSize();
 #elif defined(ARCH_PORTDUINO)
-  return 4194252;
+    return 4194252;
 #else
-  return 0;
+    return 0;
 #endif
 }
 
-void displayPercentHeapFree() {
-  uint32_t freeHeap = memGet.getFreeHeap();
-  uint32_t totalHeap = memGet.getHeapSize();
-  if (totalHeap == 0 || totalHeap == UINT32_MAX) {
-    LOG_INFO("Heap size unavailable");
-    return;
-  }
-  int percent = (int)((freeHeap * 100) / totalHeap);
-  LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
+void displayPercentHeapFree()
+{
+    uint32_t freeHeap = memGet.getFreeHeap();
+    uint32_t totalHeap = memGet.getHeapSize();
+    if (totalHeap == 0 || totalHeap == UINT32_MAX) {
+        LOG_INFO("Heap size unavailable");
+        return;
+    }
+    int percent = (int)((freeHeap * 100) / totalHeap);
+    LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
 }

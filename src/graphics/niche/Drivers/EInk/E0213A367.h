@@ -17,22 +17,24 @@ E-Ink display driver
 
 #include "./SSD1682.h"
 
-namespace NicheGraphics::Drivers {
-class E0213A367 : public SSD1682 {
-  // Display properties
-private:
-  static constexpr uint32_t width = 122;
-  static constexpr uint32_t height = 250;
-  static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
+namespace NicheGraphics::Drivers
+{
+class E0213A367 : public SSD1682
+{
+    // Display properties
+  private:
+    static constexpr uint32_t width = 122;
+    static constexpr uint32_t height = 250;
+    static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
-public:
-  E0213A367() : SSD1682(width, height, supported, 0) {}
+  public:
+    E0213A367() : SSD1682(width, height, supported, 0) {}
 
-protected:
-  void configScanning() override;
-  void configWaveform() override;
-  void configUpdateSequence() override;
-  void detachFromUpdate() override;
+  protected:
+    void configScanning() override;
+    void configWaveform() override;
+    void configUpdateSequence() override;
+    void detachFromUpdate() override;
 };
 
 } // namespace NicheGraphics::Drivers

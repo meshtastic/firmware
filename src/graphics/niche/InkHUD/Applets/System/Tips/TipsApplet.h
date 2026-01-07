@@ -14,34 +14,36 @@
 
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
-namespace NicheGraphics::InkHUD {
+namespace NicheGraphics::InkHUD
+{
 
-class TipsApplet : public SystemApplet {
-protected:
-  enum class Tip {
-    WELCOME,
-    FINISH_SETUP,
-    SAFE_SHUTDOWN,
-    CUSTOMIZATION,
-    BUTTONS,
-    ROTATION,
-  };
+class TipsApplet : public SystemApplet
+{
+  protected:
+    enum class Tip {
+        WELCOME,
+        FINISH_SETUP,
+        SAFE_SHUTDOWN,
+        CUSTOMIZATION,
+        BUTTONS,
+        ROTATION,
+    };
 
-public:
-  TipsApplet();
+  public:
+    TipsApplet();
 
-  void onRender() override;
-  void onForeground() override;
-  void onBackground() override;
-  void onButtonShortPress() override;
-  void onExitShort() override;
+    void onRender() override;
+    void onForeground() override;
+    void onBackground() override;
+    void onButtonShortPress() override;
+    void onExitShort() override;
 
-protected:
-  void renderWelcome(); // Very first screen of tutorial
+  protected:
+    void renderWelcome(); // Very first screen of tutorial
 
-  std::deque<Tip> tipQueue; // List of tips to show, one after another
+    std::deque<Tip> tipQueue; // List of tips to show, one after another
 
-  WindowManager *windowManager = nullptr; // For convenience. Set in constructor.
+    WindowManager *windowManager = nullptr; // For convenience. Set in constructor.
 };
 
 } // namespace NicheGraphics::InkHUD

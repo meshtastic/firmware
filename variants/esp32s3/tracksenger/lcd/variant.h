@@ -106,8 +106,12 @@
 
 #define INPUTBROKER_MATRIX_TYPE 1
 
-#define KEYS_COLS                                                                                                                                    \
-  { 44, 45, 46, 4, 5, 6 }
-#define KEYS_ROWS                                                                                                                                    \
-  { 26, 37, 17, 16, 15, 7 }
+#define KEYS_COLS                                                                                                                \
+    {                                                                                                                            \
+        44, 45, 46, 4, 5, 6                                                                                                      \
+    }
+#define KEYS_ROWS                                                                                                                \
+    {                                                                                                                            \
+        26, 37, 17, 16, 15, 7                                                                                                    \
+    }
 // #end keyboard

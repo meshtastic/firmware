@@ -27,12 +27,13 @@
 
 #include "STM32_LittleFS.h"
 
-class LittleFS : public STM32_LittleFS {
-public:
-  LittleFS(void);
+class LittleFS : public STM32_LittleFS
+{
+  public:
+    LittleFS(void);
 
-  // overwrite to also perform low level format (sector erase of whole flash region)
-  bool begin(void);
+    // overwrite to also perform low level format (sector erase of whole flash region)
+    bool begin(void);
 };
 
 extern LittleFS InternalFS;
