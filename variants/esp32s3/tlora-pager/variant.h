@@ -20,9 +20,13 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#define USE_TFTDISPLAY 1
+#define HAS_PHYSICAL_KEYBOARD 1
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
+
+#define HAS_DRV2605 1
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120

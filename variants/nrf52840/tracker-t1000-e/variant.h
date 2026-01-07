@@ -142,6 +142,8 @@ extern "C" {
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 
+#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
+
 // Buzzer
 #define BUZZER_EN_PIN (32 + 5) // P1.05, always high
 #define PIN_BUZZER (0 + 25)    // P0.25, pwm output

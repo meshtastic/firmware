@@ -49,6 +49,13 @@ BuildRequires: pkgconfig(x11)
 BuildRequires: pkgconfig(libinput)
 BuildRequires: pkgconfig(xkbcommon-x11)
 
+# libbsd is needed on older Fedora/RHEL to provide 'strlcpy'
+%if 0%{?fedora} >= 39 || 0%{?rhel} >= 10
+BuildRequires: glibc-devel >= 2.38
+%else
+BuildRequires: pkgconfig(libbsd-overlay)
+%endif
+
 Requires:      systemd-udev
 
 %description
@@ -69,7 +76,7 @@ platformio run -e native-tft
 %install
 # Install meshtasticd binary
 mkdir -p %{buildroot}%{_bindir}
-install -m 0755 .pio/build/native-tft/program %{buildroot}%{_bindir}/meshtasticd
+install -m 0755 .pio/build/native-tft/meshtasticd %{buildroot}%{_bindir}/meshtasticd
 
 # Install portduino VFS dir
 install -p -d -m 0770 %{buildroot}%{_localstatedir}/lib/meshtasticd

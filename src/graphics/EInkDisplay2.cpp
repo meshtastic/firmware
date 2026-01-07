@@ -148,7 +148,7 @@ bool EInkDisplay::connect()
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
@@ -243,7 +243,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK)
+#elif defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK) || defined(HELTEC_MESH_SOLAR_EINK)
     {
         spi1 = &SPI1;
         spi1->begin();
