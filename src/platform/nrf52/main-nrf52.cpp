@@ -9,12 +9,12 @@
 #define NRFX_WDT_ENABLED 1
 #define NRFX_WDT0_ENABLED 1
 #define NRFX_WDT_CONFIG_NO_IRQ 1
-#include <nrfx_wdt.c>
-#include <nrfx_wdt.h>
-
+#include "nrfx_power.h"
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
+#include <nrfx_wdt.c>
+#include <nrfx_wdt.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
 #include "NodeDB.h"
@@ -31,12 +31,17 @@
 #include "BQ25713.h"
 #endif
 
+// WARNING! THRESHOLD + HYSTERESIS should be less than regulated VDD voltage - which depends on board
+// and is 3.0 or 3.3V. Also VDD likes to read values like 2.9999 so make sure you account for that
+// otherwise board will not boot at all. Before you modify this part - please triple read NRF52840 power design
+// section in datasheet and you understand how REG0 and REG1 regulators work together.
 #ifndef SAFE_VDD_VOLTAGE_THRESHOLD
 #define SAFE_VDD_VOLTAGE_THRESHOLD 2.7
 #endif
 
-#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HIST
-#define SAFE_VDD_VOLTAGE_THRESHOLD_HOST 0.2
+// hysteresis value
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HYST
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST 0.2
 #endif
 
 // Weak empty variant initialization function.
@@ -68,28 +73,42 @@ bool powerHAL_isVBUSConnected()
 bool powerHAL_isPowerLevelSafe()
 {
 
-    uint16_t threshhold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
+    uint16_t threshold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
+    uint16_t hysteresis = SAFE_VDD_VOLTAGE_THRESHOLD_HYST * 1000;
 
-    return true;
+    if (powerLevelSafe) {
+        if (getVDDVoltage() < threshold) {
+            powerLevelSafe = false;
+        }
+    } else {
+        // power level is only safe again when it raises above threshold + hysteresis
+        if (getVDDVoltage() >= (threshold + hysteresis)) {
+            powerLevelSafe = true;
+        }
+    }
+
+    return powerLevelSafe;
 }
 
 void powerHAL_platformInit()
 {
 
     // Enable POF power failure comparator. It will prevent writing to NVMC flash when supply voltage is too low.
-    // Set to 2.4V as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node behaviour on its
-    // own.
-
-    // @phaseloop note: during my tests - setting threshold to 2.7V would still trigger POFWARN only at 2.5V fed to VDDH (??).
-    // According to datasheet, below 2.8V setting both VDD and VDDH level are covered by this register. So feeding 2.5V to VDDH
-    // would result at 2.2V at VDD (because LDO voltage drop) which is even weirder. Anyway we don't rely much on POFWARN.
+    // Set to some low value as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node
+    // behaviour on its own.
 
     // POFWARN is pretty useless for node power management because it triggers only once and clearing this event will not
     // re-trigger it again until voltage rises to safe level and drops again. So we will use SAADC routed to VDD to read safely
     // voltage.
 
+    // @phaseloop: I disable POFCON for now because it seems to be unreliable or buggy. Even when set at 2.0V it
+    // triggers below 2.8V and corrupts data when pairing bluetooth - because it prevents filesystem writes and
+    // adafruit BLE library triggers lfs_assert which reboots node and formats filesystem.
+    // I did experiments with bench power supply and no matter what is set to POFCON, it always triggers right below
+    // 2.8V. I compared raw registry values with datasheet.
+
     NRF_POWER->POFCON =
-        ((POWER_POFCON_THRESHOLD_V24 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+        ((POWER_POFCON_THRESHOLD_V22 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
 
     // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in variant definition file
 #ifdef VBAT_AR_INTERNAL
@@ -102,16 +121,21 @@ void powerHAL_platformInit()
 // get VDD voltage (in millivolts)
 uint16_t getVDDVoltage()
 {
-    // some variants use AREF_VOLTAGE as 3.0
-    // but this is fine as we usually hunt for VDD values less than 3V
-    // otherwise either set here the reference for each measure and make sure
-    // same is done for battery reading (which long term should be implemented here as HAL function)
-
     // we use the same values as regular battery read so there is no conflict on SAADC
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 
+    // VDD range on NRF52840 is 1.8-3.3V so we need to remap analog reference to 3.6V
+    // let's hope battery reading runs in same task and we don't have race condition
+    analogReference(AR_INTERNAL);
+
     uint16_t vddADCRead = analogReadVDD();
-    float voltage = ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
+    float voltage = ((1000 * 3.6) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vddADCRead;
+
+// restore default battery reading reference
+#ifdef VBAT_AR_INTERNAL
+    analogReference(VBAT_AR_INTERNAL);
+#endif
+
     return voltage;
 }
 
@@ -251,7 +275,7 @@ extern "C" void lfs_assert(const char *reason)
     // do not set GPREGRET if POFWARN is triggered because it means lfs_assert reports flash undervoltage protection
     // and not data corruption. Reboot is fine as boot procedure will wait until power level is safe again
 
-    if (powerHAL_isPowerLevelSafe()) {
+    if (!NRF_POWER->EVENTS_POFWARN) {
         if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
               sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
             NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
@@ -298,6 +322,8 @@ void nrf52Loop()
 
     checkSDEvents();
     reportLittleFSCorruptionOnce();
+
+    LOG_INFO("POFCON: %x", NRF_POWER->POFCON);
 }
 
 #ifdef USE_SEMIHOSTING
