@@ -805,26 +805,16 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
     // Update gateway relationships
     replaceGatewayNode(placeholderId, realNodeId);
 
-    // Transfer graph edges from placeholder to real node and remove placeholder
-    // This ensures topology continuity during resolution
+    // Transfer ONLY legitimate graph edges from placeholder to real node
+    // Placeholders are used for inferred connectivity and should not have edges that represent
+    // actual neighbor relationships. Only transfer reverse edges from our node to the placeholder,
+    // which represent actual radio connectivity that should be preserved.
     if (routingGraph) {
         NodeNum ourNode = nodeDB->getNodeNum();
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        // Get all edges where placeholder is the source
-        const NodeEdgesLite* placeholderEdges = routingGraph->getEdgesFrom(placeholderId);
-        if (placeholderEdges) {
-            for (uint8_t i = 0; i < placeholderEdges->edgeCount; i++) {
-                NodeNum target = placeholderEdges->edges[i].to;
-                float etx = placeholderEdges->edges[i].getEtx();
-                // Create equivalent edge from real node to target
-                routingGraph->updateEdge(realNodeId, target, etx, millis() / 1000);
-                LOG_DEBUG("[SR] Transferred edge: %08x -> %08x (ETX=%.2f)",
-                         realNodeId, target, etx);
-            }
-        }
-
-        // Also check for reverse edges (where placeholder is the target)
+        // Only transfer reverse edges (where our node had a direct link to the placeholder)
+        // These represent actual radio connectivity that should be preserved
         const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
         if (ourEdges) {
             for (uint8_t i = 0; i < ourEdges->edgeCount; i++) {
@@ -838,18 +828,8 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
             }
         }
 #else
-        // Get all edges where placeholder is the source
-        const std::vector<Edge>* placeholderEdges = routingGraph->getEdgesFrom(placeholderId);
-        if (placeholderEdges) {
-            for (const Edge& edge : *placeholderEdges) {
-                // Create equivalent edge from real node to target
-                routingGraph->updateEdge(realNodeId, edge.to, edge.etx, edge.lastUpdate, edge.variance);
-                LOG_DEBUG("[SR] Transferred edge: %08x -> %08x (ETX=%.2f)",
-                         realNodeId, edge.to, edge.etx);
-            }
-        }
-
-        // Also check for reverse edges (where placeholder is the target)
+        // Only transfer reverse edges (where our node had a direct link to the placeholder)
+        // These represent actual radio connectivity that should be preserved
         const std::vector<Edge>* ourEdges = routingGraph->getEdgesFrom(ourNode);
         if (ourEdges) {
             for (const Edge& edge : *ourEdges) {
@@ -863,7 +843,7 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
         }
 #endif
 
-        // Remove the placeholder node from the graph now that edges are transferred
+        // Remove the placeholder node from the graph
         routingGraph->removeNode(placeholderId);
 
         LOG_INFO("[SR] Resolved placeholder %08x -> real node %08x", placeholderId, realNodeId);
@@ -1562,15 +1542,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             rememberRelayIdentity(inferredRelayer, mp.relay_node);
 
             // We know that inferredRelayer relayed a packet from mp.from
-            // This suggests connectivity between mp.from and inferredRelayer
-            LOG_DEBUG("[SR] Inferred connectivity: %08x -> %08x (relayed via %02x)",
-                     mp.from, inferredRelayer, mp.relay_node);
-
-            // Add a synthetic graph edge to show inferred connectivity through relay
-            // Use ETX=2.0 for inferred connections (corresponds to poor connectivity)
-            routingGraph->updateEdge(mp.from, inferredRelayer, 2.0f, millis() / 1000);
-            LOG_DEBUG("[SR] Added synthetic edge: %08x -> %08x (ETX=2.0%s)",
-                     mp.from, inferredRelayer, isPlaceholderNode(inferredRelayer) ? ", placeholder" : "");
+            // This establishes a gateway relationship, not direct connectivity
+            LOG_DEBUG("[SR] Inferred gateway relationship: %08x relayed by %08x",
+                     mp.from, inferredRelayer);
 
             // Track that both the original sender and relayer are active
             trackNodeCapability(mp.from, CapabilityStatus::Unknown);
