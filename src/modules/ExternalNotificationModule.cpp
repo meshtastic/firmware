@@ -440,7 +440,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
         }
       }
 
+      meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
       meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+
       if (moduleConfig.external_notification.alert_bell) {
         if (containsBell) {
           LOG_INFO("externalNotificationModule - Notification Bell");
@@ -491,7 +493,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
         }
       }
 
-      if (moduleConfig.external_notification.alert_message && (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
+      if (moduleConfig.external_notification.alert_message && !sender->is_muted &&
+          (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
         LOG_INFO("externalNotificationModule - Notification Module");
         isNagging = true;
         setExternalState(0, true);
@@ -502,7 +505,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
         }
       }
 
-      if (moduleConfig.external_notification.alert_message_vibra && (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
+      if (moduleConfig.external_notification.alert_message_vibra && !sender->is_muted &&
+          (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
         LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
         isNagging = true;
         setExternalState(1, true);
@@ -513,7 +517,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
         }
       }
 
-      if (moduleConfig.external_notification.alert_message_buzzer && (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
+      if (moduleConfig.external_notification.alert_message_buzzer && !sender->is_muted &&
+          (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
         LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
         if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY || (!isBroadcast(mp.to) && isToUs(&mp))) {
           // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
