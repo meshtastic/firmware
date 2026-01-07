@@ -314,7 +314,7 @@ void waitUntilPowerLevelSafe()
 
 #ifdef LED_PIN
 
-        // 3x: blink for 500 ms, pause for 500 ms
+        // 3x: blink for 300 ms, pause for 300 ms
 
         for (int i = 0; i < 3; i++) {
             digitalWrite(LED_PIN, LED_STATE_ON);
