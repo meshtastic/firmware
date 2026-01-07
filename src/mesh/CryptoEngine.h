@@ -21,7 +21,8 @@ struct CryptoKey {
  */
 
 #define MAX_BLOCKSIZE 256
-#define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+#define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for
+                                  // testing keys
 
 class CryptoEngine
 {
@@ -46,23 +47,32 @@ class CryptoEngine
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 
-    virtual void aesSetKey(const uint8_t *key, size_t key_len);
+  // Perfect Forward Secrecy methods
+  virtual bool deriveTripleDHSessionKey(const uint8_t *remoteIdentityPub, const uint8_t *remoteEphemeralPub, const uint8_t *localEphemeralPriv,
+                                        uint8_t *sessionKeyOut);
+  virtual bool encryptWithPFS(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey,
+                              const uint8_t *remoteEphemeralKey, uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+  virtual bool decryptWithPFS(uint32_t fromNode, meshtastic_UserLite_public_key_t remoteIdentityKey, const uint8_t *remoteEphemeralKey,
+                              uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+
+  virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
     AESSmall256 *aes = NULL;
 
 #endif
 
-    /**
-     * Set the key used for encrypt, decrypt.
-     *
-     * As a special case: If all bytes are zero, we assume _no encryption_ and send all data in cleartext.
-     *
-     * @param numBytes must be 16 (AES128), 32 (AES256) or 0 (no crypt)
-     * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
-     * provided pointer)
-     */
-    virtual void setKey(const CryptoKey &k);
+  /**
+   * Set the key used for encrypt, decrypt.
+   *
+   * As a special case: If all bytes are zero, we assume _no encryption_ and
+   * send all data in cleartext.
+   *
+   * @param numBytes must be 16 (AES128), 32 (AES256) or 0 (no crypt)
+   * @param bytes a _static_ buffer that will remain valid for the life of this
+   * crypto instance (i.e. this class will cache the provided pointer)
+   */
+  virtual void setKey(const CryptoKey &k);
 
     /**
      * Encrypt a packet

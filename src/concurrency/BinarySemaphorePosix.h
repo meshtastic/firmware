@@ -2,6 +2,10 @@
 
 #include "../freertosinc.h"
 
+#ifdef ARCH_PORTDUINO
+#include <pthread.h>
+#endif
+
 namespace concurrency
 {
 
@@ -9,7 +13,11 @@ namespace concurrency
 
 class BinarySemaphorePosix
 {
-    // SemaphoreHandle_t semaphore;
+#ifdef ARCH_PORTDUINO
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    bool signaled;
+#endif
 
   public:
     BinarySemaphorePosix();
