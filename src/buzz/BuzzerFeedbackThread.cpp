@@ -22,7 +22,7 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
 
     // Handle different input events with appropriate buzzer feedback
     switch (event->inputEvent) {
-#ifdef T_LORA_PAGER
+#ifdef INPUTDRIVER_ENCODER_TYPE
     case INPUT_BROKER_SELECT:
     case INPUT_BROKER_SELECT_LONG:
         playClick();
