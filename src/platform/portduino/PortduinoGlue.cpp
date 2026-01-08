@@ -29,6 +29,7 @@
 
 portduino_config_struct portduino_config;
 std::ofstream traceFile;
+std::ofstream JSONFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
@@ -146,6 +147,20 @@ void getMacAddr(uint8_t *dmac)
     }
 }
 
+std::string cleanupNameForAutoconf(std::string name)
+{
+    // Convert spaces -> dashes, lowercase
+
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+        if (c == ' ') {
+            return '-';
+        }
+        return (char)std::tolower(c);
+    });
+
+    return name;
+}
+
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
  * before running 'arduino' code.
@@ -218,6 +233,11 @@ void portduinoSetup()
     // If LoRa `Module: auto` (default in config.yaml),
     // attempt to auto config based on Product Strings
     if (portduino_config.lora_module == use_autoconf) {
+        bool found_hat = false;
+        bool found_rak_eeprom = false;
+        bool found_ch341 = false;
+
+        char hat_vendor[96] = {0};
         char autoconf_product[96] = {0};
         // Try CH341
         try {
@@ -227,28 +247,39 @@ void portduinoSetup()
             ch341Hal->getProductString(autoconf_product, 95);
             delete ch341Hal;
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
+
+            found_ch341 = true;
         } catch (...) {
             std::cout << "autoconf: Could not locate CH341 device" << std::endl;
         }
         // Try Pi HAT+
         if (strlen(autoconf_product) < 6) {
             std::cout << "autoconf: Looking for Pi HAT+..." << std::endl;
+            if (access("/proc/device-tree/hat/vendor", R_OK) == 0) {
+                std::ifstream hatVendorFile("/proc/device-tree/hat/vendor");
+                if (hatVendorFile.is_open()) {
+                    hatVendorFile.read(hat_vendor, 95);
+                    hatVendorFile.close();
+                }
+            }
             if (access("/proc/device-tree/hat/product", R_OK) == 0) {
                 std::ifstream hatProductFile("/proc/device-tree/hat/product");
                 if (hatProductFile.is_open()) {
                     hatProductFile.read(autoconf_product, 95);
                     hatProductFile.close();
                 }
-                std::cout << "autoconf: Found Pi HAT+ " << autoconf_product << " at /proc/device-tree/hat/product" << std::endl;
+                std::cout << "autoconf: Found Pi HAT+ " << hat_vendor << " " << autoconf_product << " at /proc/device-tree/hat"
+                          << std::endl;
+                found_hat = true;
             } else {
-                std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
+                std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat" << std::endl;
             }
         }
         // attempt to load autoconf data from an EEPROM on 0x50
         //      RAK6421-13300-S1:aabbcc123456:5ba85807d92138b7519cfb60460573af:3061e8d8
         // <model string>:mac address :<16 random unique bytes in hexidecimal> : crc32
         // crc32 is calculated on the eeprom string up to but not including the final colon
-        if (strlen(autoconf_product) < 6) {
+        if (strlen(autoconf_product) < 6 && portduino_config.i2cdev != "") {
             try {
                 char *mac_start = nullptr;
                 char *devID_start = nullptr;
@@ -297,6 +328,7 @@ void portduinoSetup()
                         autoconf_product[0] = 0x0;
                     } else {
                         std::cout << "autoconf: Found eeprom data " << autoconf_raw << std::endl;
+                        found_rak_eeprom = true;
                         if (mac_start != nullptr) {
                             std::cout << "autoconf: Found mac data " << mac_start << std::endl;
                             if (strlen(mac_start) == 12)
@@ -325,12 +357,37 @@ void portduinoSetup()
         if (strlen(autoconf_product) > 0) {
             // From configProducts map in PortduinoGlue.h
             std::string product_config = "";
-            try {
+
+            if (configProducts.find(autoconf_product) != configProducts.end()) {
                 product_config = configProducts.at(autoconf_product);
-            } catch (std::out_of_range &e) {
-                std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
-                exit(EXIT_FAILURE);
+            } else {
+                if (found_hat) {
+                    product_config =
+                        cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
+                } else if (found_ch341) {
+                    product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
+                    // look for more data after the null terminator
+                    size_t len = strlen(autoconf_product);
+                    if (len < 74) {
+                        memcpy(portduino_config.device_id, autoconf_product + len + 1, 16);
+                        if (!memfll(portduino_config.device_id, '\0', 16) && !memfll(portduino_config.device_id, 0xff, 16)) {
+                            portduino_config.has_device_id = true;
+                        }
+                    }
+                }
+
+                // Don't try to automatically find config for a device with RAK eeprom.
+                if (found_rak_eeprom) {
+                    std::cerr << "autoconf: Found unknown RAK product " << autoconf_product << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (access((portduino_config.available_directory + product_config).c_str(), R_OK) != 0) {
+                    std::cerr << "autoconf: Unable to find config for " << autoconf_product << "(tried " << product_config << ")"
+                              << std::endl;
+                    exit(EXIT_FAILURE);
+                }
             }
+
             if (loadConfig((portduino_config.available_directory + product_config).c_str())) {
                 std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
             } else {
@@ -378,11 +435,13 @@ void portduinoSetup()
     }
 
     getMacAddr(dmac);
+#ifndef UNIT_TEST
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
         std::cout << "Please set a MAC Address in config.yaml using either MACAddress or MACAddressSource." << std::endl;
         exit(EXIT_FAILURE);
     }
+#endif
     printf("MAC ADDRESS: %02X:%02X:%02X:%02X:%02X:%02X\n", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
     // Rather important to set this, if not running simulated.
     randomSeed(time(NULL));
@@ -415,11 +474,27 @@ void portduinoSetup()
     if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {
         SPI.begin(portduino_config.lora_spi_dev.c_str());
     }
+
     if (portduino_config.traceFilename != "") {
         try {
             traceFile.open(portduino_config.traceFilename, std::ios::out | std::ios::app);
         } catch (std::ofstream::failure &e) {
             std::cout << "*** traceFile Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        if (!traceFile.is_open()) {
+            std::cout << "*** traceFile open failure" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (portduino_config.JSONFilename != "") {
+        try {
+            JSONFile.open(portduino_config.JSONFilename, std::ios::out | std::ios::app);
+        } catch (std::ofstream::failure &e) {
+            std::cout << "*** JSONFile Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        if (!JSONFile.is_open()) {
+            std::cout << "*** JSONFile open failure" << std::endl;
             exit(EXIT_FAILURE);
         }
     }
@@ -469,6 +544,29 @@ bool loadConfig(const char *configPath)
                 portduino_config.logoutputlevel = level_error;
             }
             portduino_config.traceFilename = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
+            portduino_config.JSONFilename = yamlConfig["Logging"]["JSONFile"].as<std::string>("");
+            portduino_config.JSONFilter = (_meshtastic_PortNum)yamlConfig["Logging"]["JSONFilter"].as<int>(0);
+            if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "textmessage")
+                portduino_config.JSONFilter = meshtastic_PortNum_TEXT_MESSAGE_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "telemetry")
+                portduino_config.JSONFilter = meshtastic_PortNum_TELEMETRY_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "nodeinfo")
+                portduino_config.JSONFilter = meshtastic_PortNum_NODEINFO_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "position")
+                portduino_config.JSONFilter = meshtastic_PortNum_POSITION_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "waypoint")
+                portduino_config.JSONFilter = meshtastic_PortNum_WAYPOINT_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "neighborinfo")
+                portduino_config.JSONFilter = meshtastic_PortNum_NEIGHBORINFO_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "traceroute")
+                portduino_config.JSONFilter = meshtastic_PortNum_TRACEROUTE_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "detection")
+                portduino_config.JSONFilter = meshtastic_PortNum_DETECTION_SENSOR_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "paxcounter")
+                portduino_config.JSONFilter = meshtastic_PortNum_PAXCOUNTER_APP;
+            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "remotehardware")
+                portduino_config.JSONFilter = meshtastic_PortNum_REMOTE_HARDWARE_APP;
+
             if (yamlConfig["Logging"]["AsciiLogs"]) {
                 // Default is !isatty(1) but can be set explicitly in config.yaml
                 portduino_config.ascii_logs = yamlConfig["Logging"]["AsciiLogs"].as<bool>();
