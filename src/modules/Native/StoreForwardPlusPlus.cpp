@@ -1569,7 +1569,7 @@ bool StoreForwardPlusPlusModule::checkCommitHash(StoreForwardPlusPlusModule::lin
     commit_hash.update(lo.message_hash, SFPP_HASH_SIZE);
     commit_hash.finalize(tmp_commit_hash, SFPP_HASH_SIZE);
 
-    if (hash_len == 0 || memcmp(commit_hash_bytes, lo.commit_hash, hash_len) == 0) {
+    if (hash_len == 0 || memcmp(commit_hash_bytes, tmp_commit_hash, hash_len) == 0) {
         lo.commit_hash_len = SFPP_HASH_SIZE;
         memcpy(lo.commit_hash, tmp_commit_hash, SFPP_HASH_SIZE);
         return true;
@@ -1643,8 +1643,13 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromC
 
         step++;
     }
-    if (last_message_commit_hash != nullptr && _rx_time != 0) {
+    if (!memfll(last_message_commit_hash, '\0', SFPP_HASH_SIZE) && _rx_time != 0) {
         lo = getLink(last_message_commit_hash, SFPP_HASH_SIZE);
+        if (lo.counter != _count) {
+            lo.validObject = false;
+        } else {
+            lo.rx_time = _rx_time;
+        }
     } else {
         LOG_WARN("StoreForwardpp Failed to get link from count");
         lo.validObject = false;
@@ -1878,6 +1883,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getfromCanon
         const char *_error_mesg = sqlite3_errmsg(ppDb);
         LOG_ERROR("StoreForwardpp getCanonScratchStmt step error %u, %s", res, _error_mesg);
         lo.validObject = false;
+        sqlite3_reset(getCanonScratchStmt);
         return lo;
     }
     lo.to = sqlite3_column_int(getCanonScratchStmt, 0);
