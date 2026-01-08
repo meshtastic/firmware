@@ -2,6 +2,8 @@
 // Track the nodenums we've gotten SFPP traffic from, to build a network graph
 // store nodes, packet counts, and hops away in a new peers table
 
+// TODO: Include the counter in the commit hash?
+
 // Eventual TODO: non-stratum0 nodes need to be pointed at their upstream source? Maybe
 #if __has_include("sqlite3.h")
 
@@ -397,7 +399,8 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
     // Allow only LoRa, Multicast UDP, and API packets
     // maybe in the future, only disallow MQTT
-    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA &&
+    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL &&
+        mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA &&
         mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP &&
         mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API) {
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
@@ -610,6 +613,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             printBytes("StoreForwardpp next chain hash: ", next_commit_hash, SFPP_HASH_SIZE);
 
             broadcastLink(next_commit_hash, SFPP_HASH_SIZE);
+        } else {
+            LOG_WARN("Could not find requested link on the chain.");
         }
 
         // if root and chain hashes are the same, grab the first message on the chain
@@ -972,6 +977,7 @@ void StoreForwardPlusPlusModule::broadcastLink(uint8_t *_commit_hash, size_t _co
 
 void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit_hash, bool is_split_second_half)
 {
+    LOG_DEBUG("Sending link #%u", lo.counter);
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
     if (lo.encrypted_len > 180) {
@@ -1134,25 +1140,36 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
 
 bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
 {
+    uint8_t tmp_commit_hash[SFPP_HASH_SIZE];
     link_object chain_end = getLinkFromCount(0, lo.root_hash, lo.root_hash_len);
 
     // we may need to calculate the full commit hash at this point
-    if (lo.commit_hash_len != SFPP_HASH_SIZE) {
-        SHA256 commit_hash;
+    SHA256 commit_hash;
 
-        commit_hash.reset();
+    commit_hash.reset();
 
-        if (chain_end.commit_hash_len == SFPP_HASH_SIZE) {
-            printBytes("StoreForwardpp last message: 0x", chain_end.commit_hash, SFPP_HASH_SIZE);
-            commit_hash.update(chain_end.commit_hash, SFPP_HASH_SIZE);
-        } else {
-            printBytes("StoreForwardpp new chain root: 0x", lo.root_hash, SFPP_HASH_SIZE);
-            commit_hash.update(lo.root_hash, SFPP_HASH_SIZE);
-        }
-
-        commit_hash.update(lo.message_hash, SFPP_HASH_SIZE);
-        commit_hash.finalize(lo.commit_hash, SFPP_HASH_SIZE);
+    if (chain_end.commit_hash_len == SFPP_HASH_SIZE) {
+        printBytes("StoreForwardpp last message: 0x", chain_end.commit_hash, SFPP_HASH_SIZE);
+        commit_hash.update(chain_end.commit_hash, SFPP_HASH_SIZE);
+    } else {
+        printBytes("StoreForwardpp new chain root: 0x", lo.root_hash, SFPP_HASH_SIZE);
+        commit_hash.update(lo.root_hash, SFPP_HASH_SIZE);
     }
+
+    commit_hash.update(lo.message_hash, SFPP_HASH_SIZE);
+    commit_hash.finalize(tmp_commit_hash, SFPP_HASH_SIZE);
+
+    if (lo.commit_hash_len >= SFPP_SHORT_HASH_SIZE && memcmp(tmp_commit_hash, lo.commit_hash, lo.commit_hash_len) != 0) {
+
+        LOG_ERROR("StoreForwardpp Commit hash mismatch");
+        logLinkObject(lo);
+        return false;
+    }
+    if (lo.commit_hash_len < SFPP_HASH_SIZE) {
+        memcpy(lo.commit_hash, tmp_commit_hash, SFPP_HASH_SIZE);
+        lo.commit_hash_len = SFPP_HASH_SIZE;
+    }
+
     // if we get an official counter, use it. Otherwise, just increment.
     if (lo.counter == 0) {
         lo.counter = chain_end.counter + 1;
