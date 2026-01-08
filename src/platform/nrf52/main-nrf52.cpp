@@ -44,6 +44,8 @@
 #define SAFE_VDD_VOLTAGE_THRESHOLD_HYST 0.2
 #endif
 
+uint16_t getVDDVoltage();
+
 // Weak empty variant initialization function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
