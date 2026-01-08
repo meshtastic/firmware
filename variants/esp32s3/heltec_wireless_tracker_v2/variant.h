@@ -73,7 +73,29 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define USE_GC1109_PA   // We have a GC1109 power amplifier+attenuator
-#define LORA_PA_POWER 7 // power en
-#define LORA_PA_EN 4
-#define LORA_PA_TX_EN 46 // enable tx
+// ---- GC1109 RF FRONT END CONFIGURATION ----
+// The Heltec Wireless Tracker V2 uses a GC1109 FEM chip with integrated PA and LNA
+// RF path: SX1262 -> GC1109 PA -> Pi attenuator -> Antenna
+// Measured net TX gain (non-linear due to PA compression):
+//   +11dB at 0-15dBm input  (e.g., 10dBm in -> 21dBm out)
+//   +10dB at 16-17dBm input
+//   +9dB  at 18-19dBm input
+//   +7dB  at 21dBm input    (e.g., 21dBm in -> 28dBm out max)
+// Control logic (from GC1109 datasheet):
+//   Shutdown:        CSD=0, CTX=X, CPS=X
+//   Receive LNA:     CSD=1, CTX=0, CPS=X  (17dB gain, 2dB NF)
+//   Transmit bypass: CSD=1, CTX=1, CPS=0  (~1dB loss, no PA)
+//   Transmit PA:     CSD=1, CTX=1, CPS=1  (full PA enabled)
+// Pin mapping:
+//   CTX (pin 6)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
+//   CSD (pin 4)  -> GPIO4: Chip enable (HIGH=on, LOW=shutdown)
+//   CPS (pin 5)  -> GPIO46: PA mode select (HIGH=full PA, LOW=bypass)
+//   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
+#define USE_GC1109_PA
+#define LORA_PA_POWER 7  // VFEM_Ctrl - GC1109 LDO power enable
+#define LORA_PA_EN 4     // CSD - GC1109 chip enable (HIGH=on)
+#define LORA_PA_TX_EN 46 // CPS - GC1109 PA mode (HIGH=full PA, LOW=bypass)
+
+// GC1109 FEM: TX/RX path switching is handled by DIO2 -> CTX pin (via SX126X_DIO2_AS_RF_SWITCH)
+// GPIO46 is CPS (PA mode), not TX control - setTransmitEnable() handles it in SX126xInterface.cpp
+// Do NOT use SX126X_TXEN/RXEN as that would cause double-control of GPIO46
