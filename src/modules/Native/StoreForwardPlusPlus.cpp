@@ -477,6 +477,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
     updatePeers(mp, t->sfpp_message_type);
 
+    // TODO: Clean up this mess of logic
+
     if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE) {
 
         if (portduino_config.sfpp_stratum0) {
@@ -779,7 +781,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 return true;
 
             if (incoming_link.commit_hash_len == 0) {
-                addToScratch(incoming_link);
+                if (!isInScratch(incoming_link.message_hash, incoming_link.message_hash_len))
+                    addToScratch(incoming_link);
             } else if (incoming_link.commit_hash_len == SFPP_HASH_SIZE && chain_end.counter == 0) {
                 addToChain(incoming_link);
             } else {
