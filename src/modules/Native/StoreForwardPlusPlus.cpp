@@ -345,7 +345,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         return portduino_config.sfpp_announce_interval * 60 * 1000;
     }
 
-    if (did_announce_last && sendFromScratch(root_hash_bytes)) {
+    if (!portduino_config.sfpp_stratum0 && did_announce_last && sendFromScratch(root_hash_bytes)) {
         LOG_DEBUG("Send from scratch queue");
         did_announce_last = false;
         return portduino_config.sfpp_announce_interval * 60 * 1000;
