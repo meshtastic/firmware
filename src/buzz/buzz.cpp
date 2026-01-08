@@ -65,7 +65,7 @@ void playTones(const ToneDuration *tone_durations, int size)
 
 void playBeep()
 {
-    ToneDuration melody[] = {{NOTE_B3, DURATION_1_8}};
+    ToneDuration melody[] = {{NOTE_B3, DURATION_1_16}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
