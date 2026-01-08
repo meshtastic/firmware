@@ -774,8 +774,16 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 }
             }
         } else {
-            // We've received a link provide, and it doesn't fit. But it may be legit. Add it to canon_scratch
-            addToCanonScratch(incoming_link);
+            LOG_INFO("StoreForwardpp Recalculated hash does not match.");
+            if (incoming_link.commit_hash_len == 0) {
+                addToScratch(incoming_link);
+            } else if (incoming_link.commit_hash_len == SFPP_HASH_SIZE && chain_end.counter == 0) {
+                addToChain(incoming_link);
+            } else {
+
+                // We've received a link provide, and it doesn't fit. But it may be legit. Add it to canon_scratch
+                addToCanonScratch(incoming_link);
+            }
         }
     }
 
@@ -1843,7 +1851,12 @@ void StoreForwardPlusPlusModule::addToCanonScratch(link_object &lo)
 {
 
     // recalculate full message hash?
-    LOG_INFO("addToCanonScratch");
+    LOG_INFO("StoreForwardpp addToCanonScratch");
+    if (lo.counter == 0) {
+        LOG_WARN("StoreForwardpp Counter 0, not adding to Canon Scratch");
+        return;
+    }
+
     logLinkObject(lo);
 
     // push a message into the local chain DB
