@@ -786,7 +786,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     addToScratch(incoming_link);
             } else if (incoming_link.commit_hash_len == SFPP_HASH_SIZE && chain_end.counter == 0) {
                 addToChain(incoming_link);
-            } else if (incoming_link.counter != 0) {
+            } else if (incoming_link.counter != 0 &&
+                       !isInCanonScratch(incoming_link.message_hash, incoming_link.message_hash_len)) {
 
                 // We've received a link provide, and it doesn't fit. But it may be legit. Add it to canon_scratch
                 addToCanonScratch(incoming_link);
