@@ -1161,9 +1161,11 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
 
     if (lo.commit_hash_len >= SFPP_SHORT_HASH_SIZE && memcmp(tmp_commit_hash, lo.commit_hash, lo.commit_hash_len) != 0) {
 
-        LOG_ERROR("StoreForwardpp Commit hash mismatch");
+        LOG_WARN("StoreForwardpp Commit hash mismatch");
         logLinkObject(lo);
-        return false;
+        if (chain_end.validObject)
+            return false;
+        LOG_INFO("Commiting anyway due to empty chain");
     }
     if (lo.commit_hash_len < SFPP_HASH_SIZE) {
         memcpy(lo.commit_hash, tmp_commit_hash, SFPP_HASH_SIZE);
