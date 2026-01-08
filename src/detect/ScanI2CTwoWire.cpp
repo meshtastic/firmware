@@ -438,7 +438,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_QMA6100P
                 SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P", (uint8_t)addr.address)
 #else
-                SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031", (uint8_t)addr.address)
+                SCAN_SIMPLE_CASE(PMSA003I_ADDR, PMSA003I, "PMSA003I", (uint8_t)addr.address)
 #endif
             case BMA423_ADDR: // this can also be LIS3DH_ADDR_ALT
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);

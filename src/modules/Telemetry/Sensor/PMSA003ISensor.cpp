@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR  && defined(VBLE_I2C_CLOCK_SPEED)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
@@ -13,47 +13,29 @@ PMSA003ISensor::PMSA003ISensor()
 {
 }
 
-void PMSA003ISensor::setup()
+bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
+    LOG_INFO("Init sensor: %s", sensorName);
 #ifdef PMSA003I_ENABLE_PIN
     pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
 #endif
-}
 
-bool PMSA003ISensor::restoreClock(uint32_t currentClock){
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        return bus->setClock(currentClock);
-    }
-    return true;
-#endif
-}
-
-int32_t PMSA003ISensor::runOnce()
-{
-    LOG_INFO("Init sensor: %s", sensorName);
-
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
-    bus = nodeTelemetrySensorsMap[sensorType].second;
-    address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
+    _bus = bus;
+    _address = dev->address.address;
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
     uint32_t currentClock;
-    currentClock = bus->getClock();
+    currentClock = _bus->getClock();
     if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
         // LOG_DEBUG("Changing I2C clock to %u", PMSA003I_I2C_CLOCK_SPEED);
-        bus->setClock(PMSA003I_I2C_CLOCK_SPEED);
+        _bus->setClock(PMSA003I_I2C_CLOCK_SPEED);
     }
 #endif
 
-    bus->beginTransmission(address);
-    if (bus->endTransmission() != 0) {
+    _bus->beginTransmission(_address);
+    if (_bus->endTransmission() != 0) {
         LOG_WARN("PMSA003I not found on I2C at 0x12");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+        return false;
     }
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
@@ -63,7 +45,18 @@ int32_t PMSA003ISensor::runOnce()
     status = 1;
     LOG_INFO("PMSA003I Enabled");
 
-    return initI2CSensor();
+    initI2CSensor();
+    return true;
+}
+
+bool PMSA003ISensor::restoreClock(uint32_t currentClock){
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        return _bus->setClock(currentClock);
+    }
+    return true;
+#endif
 }
 
 bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
@@ -75,16 +68,16 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
     uint32_t currentClock;
-    currentClock = bus->getClock();
+    currentClock = _bus->getClock();
     if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
         // LOG_DEBUG("Changing I2C clock to %u", PMSA003I_I2C_CLOCK_SPEED);
-        bus->setClock(PMSA003I_I2C_CLOCK_SPEED);
+        _bus->setClock(PMSA003I_I2C_CLOCK_SPEED);
     }
 #endif
 
-    bus->requestFrom(address, PMSA003I_FRAME_LENGTH);
-    if (bus->available() < PMSA003I_FRAME_LENGTH) {
-        LOG_WARN("PMSA003I read failed: incomplete data (%d bytes)", bus->available());
+    _bus->requestFrom(_address, PMSA003I_FRAME_LENGTH);
+    if (_bus->available() < PMSA003I_FRAME_LENGTH) {
+        LOG_WARN("PMSA003I read failed: incomplete data (%d bytes)", _bus->available());
         return false;
     }
 
@@ -93,7 +86,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 #endif
 
     for (uint8_t i = 0; i < PMSA003I_FRAME_LENGTH; i++) {
-        buffer[i] = bus->read();
+        buffer[i] = _bus->read();
     }
 
     if (buffer[0] != 0x42 || buffer[1] != 0x4D) {
@@ -170,6 +163,7 @@ void PMSA003ISensor::sleep()
 
 uint32_t PMSA003ISensor::wakeUp()
 {
+    LOG_INFO('Waking up PMSA003I')
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = State::ACTIVE;
     return PMSA003I_WARMUP_MS;

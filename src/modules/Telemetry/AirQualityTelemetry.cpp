@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
@@ -13,16 +13,61 @@
 #include "UnitConversions.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "graphics/ScreenFonts.h"
 #include "main.h"
 #include "sleep.h"
 #include <Throttle.h>
-// Sensor includes
-#include "Sensor/PMSA003ISensor.h"
 
 // Sensors
-PMSA003ISensor pmsa003iSensor;
+#ifdef VBLE_I2C_CLOCK_SPEED
+#include "Sensor/PMSA003ISensor.h"
+#endif
 
-#include "graphics/ScreenFonts.h"
+#include <forward_list>
+
+static std::forward_list<TelemetrySensor *> sensors;
+
+template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
+{
+    ScanI2C::FoundDevice dev = i2cScanner->find(type);
+    if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
+        TelemetrySensor *sensor = new T();
+#if WIRE_INTERFACES_COUNT > 1
+        TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
+        if (dev.address.port != ScanI2C::I2CPort::WIRE1 && sensor->onlyWire1()) {
+            // This sensor only works on Wire (Wire1 is not supported)
+            delete sensor;
+            return;
+        }
+#else
+        TwoWire *bus = &Wire;
+#endif
+        if (sensor->initDevice(bus, &dev)) {
+            sensors.push_front(sensor);
+            return;
+        }
+        // destroy sensor
+        delete sensor;
+    }
+}
+
+void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
+{
+    if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
+        return;
+    }
+    LOG_INFO("Air Quality Telemetry adding I2C devices...");
+
+    // order by priority of metrics/values (low top, high bottom)
+
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+// Sensors that require variable I2C clock speed
+#ifdef VBLE_I2C_CLOCK_SPEED
+    addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
+#endif
+#endif
+
+}
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
@@ -58,8 +103,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
 
-            if (pmsa003iSensor.hasSensor())
-                result = pmsa003iSensor.runOnce();
+            // check if we have at least one sensor
+            if (!sensors.empty()) {
+                result = DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+            }
+
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -72,10 +120,12 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it
+// #ifdef VBLE_I2C_CLOCK_SPEED
 #ifdef PMSA003I_ENABLE_PIN
         if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
             return pmsa003iSensor.wakeUp();
 #endif /* PMSA003I_ENABLE_PIN */
+// #endif
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -93,9 +143,12 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
+// Send to sleep sensors that consume power
+// #ifdef VBLE_I2C_CLOCK_SPEED
 #ifdef PMSA003I_ENABLE_PIN
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
+// #endif
 
     }
     return min(sendToPhoneIntervalMs, result);
@@ -228,10 +281,11 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m->variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
 
-    if (pmsa003iSensor.hasSensor()) {
-        // TODO - Should we check for sensor state here?
-        // If a sensor is sleeping, we should know and check to wake it up
-        valid = valid && pmsa003iSensor.getMetrics(m);
+    // TODO - Should we check for sensor state here?
+    // If a sensor is sleeping, we should know and check to wake it up
+    for (TelemetrySensor *sensor : sensors) {
+        LOG_INFO("Reading AQ sensors");
+        valid = valid && sensor->getMetrics(m);
         hasSensor = true;
     }
 
@@ -322,18 +376,13 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
                                                                                  meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
-    if (pmsa003iSensor.hasSensor()) {
-        // TODO - Potentially implement an admin message to choose between pm_standard
-        // and pm_environmental. This could be configurable as it doesn't make sense so
-        // have both
-        result = pmsa003iSensor.handleAdminMessage(mp, request, response);
+
+    for (TelemetrySensor *sensor : sensors) {
+        result = sensor->handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
 
-
-#endif
     return result;
 }
 
