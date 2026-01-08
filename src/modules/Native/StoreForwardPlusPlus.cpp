@@ -1174,7 +1174,8 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     commit_hash.update(lo.message_hash, SFPP_HASH_SIZE);
     commit_hash.finalize(tmp_commit_hash, SFPP_HASH_SIZE);
 
-    if (lo.commit_hash_len >= SFPP_SHORT_HASH_SIZE && memcmp(tmp_commit_hash, lo.commit_hash, lo.commit_hash_len) != 0) {
+    if (chain_end.validObject && lo.commit_hash_len >= SFPP_SHORT_HASH_SIZE &&
+        memcmp(tmp_commit_hash, lo.commit_hash, lo.commit_hash_len) != 0) {
 
         LOG_WARN("StoreForwardpp Commit hash mismatch");
         logLinkObject(lo);
