@@ -1429,9 +1429,14 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         }
         nodeDB->updateGUI = false;
         break;
-    case STATUS_TYPE_POWER:
-        forceDisplay(true);
+    case STATUS_TYPE_POWER: {
+        bool currentUSB = powerStatus->getHasUSB();
+        if (currentUSB != lastPowerUSBState) {
+            lastPowerUSBState = currentUSB;
+            forceDisplay(true);
+        }
         break;
+    }
     }
 
     return 0;
