@@ -279,7 +279,7 @@ void portduinoSetup()
         //      RAK6421-13300-S1:aabbcc123456:5ba85807d92138b7519cfb60460573af:3061e8d8
         // <model string>:mac address :<16 random unique bytes in hexidecimal> : crc32
         // crc32 is calculated on the eeprom string up to but not including the final colon
-        if (strlen(autoconf_product) < 6) {
+        if (strlen(autoconf_product) < 6 && portduino_config.i2cdev != "") {
             try {
                 char *mac_start = nullptr;
                 char *devID_start = nullptr;
@@ -435,11 +435,13 @@ void portduinoSetup()
     }
 
     getMacAddr(dmac);
+#ifndef UNIT_TEST
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
         std::cout << "Please set a MAC Address in config.yaml using either MACAddress or MACAddressSource." << std::endl;
         exit(EXIT_FAILURE);
     }
+#endif
     printf("MAC ADDRESS: %02X:%02X:%02X:%02X:%02X:%02X\n", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
     // Rather important to set this, if not running simulated.
     randomSeed(time(NULL));
