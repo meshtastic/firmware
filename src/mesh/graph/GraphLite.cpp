@@ -206,7 +206,10 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs)
         }
 
         // Check if entire node is stale (no recent updates) or has no edges left
-        if (currentTimeSecs - node->lastFullUpdate > EDGE_AGING_TIMEOUT_SECS || node->edgeCount == 0) {
+        bool isPlaceholder = (node->nodeId & 0xFF000000) == 0xFF000000;
+        uint32_t ttl = isPlaceholder ? 60 : EDGE_AGING_TIMEOUT_SECS; // 1 minute for placeholders
+
+        if (currentTimeSecs - node->lastFullUpdate > ttl || node->edgeCount == 0) {
             // Remove this node by swapping with last
             if (n < nodeCount - 1) {
                 nodes[n] = nodes[nodeCount - 1];
