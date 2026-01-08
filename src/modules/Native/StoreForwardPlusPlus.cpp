@@ -786,7 +786,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     addToScratch(incoming_link);
             } else if (incoming_link.commit_hash_len == SFPP_HASH_SIZE && chain_end.counter == 0) {
                 addToChain(incoming_link);
-            } else {
+            } else if (incoming_link.counter != 0) {
 
                 // We've received a link provide, and it doesn't fit. But it may be legit. Add it to canon_scratch
                 addToCanonScratch(incoming_link);
@@ -1220,7 +1220,7 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     }
     sqlite3_reset(chain_insert_stmt);
     setChainCount(lo.root_hash, SFPP_HASH_SIZE, lo.counter);
-    removeFromCanonScratch(lo.message_hash, lo.message_hash_len);
+    removeFromCanonScratch(lo.message_hash, SFPP_SHORT_HASH_SIZE);
     return true;
 }
 
@@ -1848,6 +1848,10 @@ void StoreForwardPlusPlusModule::maybeMoveFromCanonScratch(uint8_t *root_hash, s
     link_object chain_end = getLinkFromCount(0, root_hash, root_hash_len);
     if (!chain_end.validObject)
         return;
+    if (chain_end.counter > lo.counter) {
+        removeFromCanonScratch(lo.message_hash, lo.message_hash_len);
+        maybeMoveFromCanonScratch(root_hash, root_hash_len); // recursion!
+    }
 
     if (lo.counter == chain_end.counter + 1 &&
         recalculateHash(lo, root_hash, root_hash_len, lo.commit_hash, lo.commit_hash_len)) {
