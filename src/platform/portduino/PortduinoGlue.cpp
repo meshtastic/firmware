@@ -176,6 +176,7 @@ void portduinoSetup()
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
+        portduino_config.sfpp_enabled = false;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
             if (!yamlOnly)
