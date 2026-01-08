@@ -233,7 +233,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // query the mappings table for the chain count for the given root hash
     uint32_t getChainCount(uint8_t *, size_t);
 
-    link_object getLinkFromCount(uint32_t, uint8_t *, size_t);
+    link_object getLinkFromPositionFromTip(uint32_t, uint8_t *, size_t);
 
     void pruneScratchQueue();
 
