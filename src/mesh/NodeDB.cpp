@@ -807,9 +807,11 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
     defined(ELECROW_ThinkNode_M6)
+#ifdef PIN_LED2
     // Default to PIN_LED2 for external notification output (LED color depends on device variant)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
+#endif
 #if defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
     moduleConfig.external_notification.active = false;
 #else
@@ -1091,7 +1093,11 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
     snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
-    snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
+#ifdef GAT562
+    snprintf(owner.long_name, sizeof(owner.long_name), "GAT562 %04x", getNodeNum() & 0x0ffff);
+#else
+    snprintf(owner.long_name, sizeof(owner.long_name), "MeshCN %04x", getNodeNum() & 0x0ffff);
+#endif
 #endif
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);

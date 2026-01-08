@@ -260,7 +260,7 @@ typedef enum _meshtastic_HardwareModel {
     /* Lilygo TLora Pager */
     meshtastic_HardwareModel_T_LORA_PAGER = 103,
     /* M5Stack Reserved */
-    meshtastic_HardwareModel_M5STACK_RESERVED = 104, /* 0x68 */
+    meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER = 104, /* 0x68 */
     /* RAKwireless WisMesh Tag */
     meshtastic_HardwareModel_WISMESH_TAG = 105,
     /* RAKwireless WisBlock Core RAK3312 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/ */

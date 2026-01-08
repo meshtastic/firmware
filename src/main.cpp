@@ -243,7 +243,13 @@ const char *getDeviceName()
     if (strcmp(owner.short_name, name) != 0) {
         snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
-        snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+#if defined(GAT562)
+        snprintf(name, sizeof(name), "GAT562_%02x%02x", dmac[4], dmac[5]);
+#elif defined(TINYLORA)
+        snprintf(name, sizeof(name), "TinyLora_%02x%02x", dmac[4], dmac[5]);
+#else
+        snprintf(name, sizeof(name), "MeshCN_%02x%02x", dmac[4], dmac[5]);
+#endif
     }
     return name;
 }
