@@ -31,6 +31,7 @@ class WindowManager
     void prevTile();
     void openMenu();
     void openAlignStick();
+    void openKeyboard();
     void nextApplet();
     void prevApplet();
     void rotate();

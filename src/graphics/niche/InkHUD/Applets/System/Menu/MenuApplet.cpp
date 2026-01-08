@@ -181,7 +181,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case ALIGN_JOYSTICK:
         inkhud->openAlignStick();
         break;
-
+    
+    case KEYBOARD:
+        inkhud->openKeyboard();
+        break;
     case LAYOUT:
         // Todo: smarter incrementing of tile count
         settings->userTiles.count++;
@@ -287,6 +290,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
+        items.push_back(MenuItem("Keyboard", MenuAction::KEYBOARD));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));

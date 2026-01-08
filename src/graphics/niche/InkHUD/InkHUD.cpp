@@ -197,6 +197,10 @@ void InkHUD::InkHUD::openAlignStick()
     windowManager->openAlignStick();
 }
 
+void InkHUD::InkHUD::openKeyboard()
+{
+    windowManager->openKeyboard();
+}
 // In layouts where multiple applets are shown at once, change which tile is focused
 // The focused tile in the one which cycles applets on button short press, and displays menu on long press
 void InkHUD::InkHUD::nextTile()

@@ -70,6 +70,7 @@ class InkHUD
     void prevApplet();
     void openMenu();
     void openAlignStick();
+    void openKeyboard();
     void nextTile();
     void prevTile();
     void rotate();
