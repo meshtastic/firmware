@@ -487,7 +487,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case TSL25911_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x12), 1);
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xA0 | 0x12), 1);
                 if (registerValue == 0x50) {
                     type = TSL2591;
                     logFoundDevice("TSL25911", (uint8_t)addr.address);
