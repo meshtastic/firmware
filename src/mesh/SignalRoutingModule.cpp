@@ -148,7 +148,7 @@ int32_t SignalRoutingModule::runOnce()
 
         // Periodic topology logging (every 5 minutes)
         static uint32_t lastTopologyLog = 0;
-        if (nowMs - lastTopologyLog >= 300 * 1000) {
+        if (nowMs - lastTopologyLog >= 60 * 1000) {
             logNetworkTopology();
             lastTopologyLog = nowMs;
         }
@@ -517,7 +517,10 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     }
 
     // Only process SignalRoutingInfo packets
-    if (p->decoded.portnum != meshtastic_PortNum_SIGNAL_ROUTING_APP) return;
+    if (p->decoded.portnum != meshtastic_PortNum_SIGNAL_ROUTING_APP) {
+        LOG_DEBUG("[SR] Skipping non-SR packet in preProcessSignalRoutingPacket (portnum=%d)", p->decoded.portnum);
+        return;
+    }
     // Reject packets from invalid node IDs (0 is invalid)
     if (p->from == 0) {
         LOG_DEBUG("[SR] Ignoring SR broadcast from invalid node ID 0");
@@ -528,6 +531,8 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     meshtastic_SignalRoutingInfo info = meshtastic_SignalRoutingInfo_init_zero;
     if (!pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size,
                               &meshtastic_SignalRoutingInfo_msg, &info)) {
+        LOG_WARN("[SR] Failed to decode SignalRoutingInfo from %08x (payload size=%u)", 
+                 p->from, p->decoded.payload.size);
         return;
     }
 
@@ -576,9 +581,11 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     }
 
     // Process topology directly from the received packet - no intermediate storage
-    LOG_DEBUG("[SR] Processing topology from %08x: %d neighbors (version %u, %s)",
-              p->from, info.neighbors_count, receivedVersion, 
-              isNewVersion ? "new version" : "continuation");
+    char senderNameForTopo[48];
+    getNodeDisplayName(p->from, senderNameForTopo, sizeof(senderNameForTopo));
+    LOG_INFO("[SR] Processing topology from %s: %d neighbors (version %u, %s, relay=0x%02x)",
+              senderNameForTopo, info.neighbors_count, receivedVersion, 
+              isNewVersion ? "new version" : "continuation", p->relay_node);
 
     // Only clear existing edges when starting a NEW topology version
     // For multi-packet broadcasts (same version), we append to existing edges
@@ -672,9 +679,21 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         // when they relay topology from the actual gateway (angl)
         bool receivedDirectly = (p->relay_node == 0) || ((p->from & 0xFF) == p->relay_node);
         
+        // Detailed logging for debugging topology processing
+        char neighborName[48];
+        getNodeDisplayName(neighbor.node_id, neighborName, sizeof(neighborName));
+        
         if (!hasDirectConnection && receivedDirectly) {
             // This node is only reachable through the topology broadcaster - mark as downstream
+            LOG_INFO("[SR]   -> %s: NO direct connection, marking as downstream of %s",
+                    neighborName, senderNameForTopo);
             recordGatewayRelation(p->from, neighbor.node_id);
+        } else if (hasDirectConnection) {
+            LOG_DEBUG("[SR]   -> %s: HAS direct connection, NOT marking as downstream",
+                    neighborName);
+        } else {
+            LOG_DEBUG("[SR]   -> %s: received via relay (not direct), NOT marking as downstream",
+                    neighborName);
         }
     }
 
@@ -1282,12 +1301,14 @@ bool SignalRoutingModule::isDownstreamOfHeardRelay(NodeNum destination, NodeNum 
 
 uint32_t SignalRoutingModule::getNodeTtlSeconds(CapabilityStatus status) const
 {
-    // Mute/inactive nodes (Legacy status) get longer TTL
-    if (status == CapabilityStatus::Legacy) {
-        return MUTE_NODE_TTL_SECS;
+    // Only known SR-active/inactive nodes get shorter TTL (they send regular broadcasts)
+    // Stock nodes, legacy routers, and unknown nodes need longer TTL since they
+    // transmit less frequently and we don't want to age them out prematurely
+    if (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) {
+        return ACTIVE_NODE_TTL_SECS;  // 5 minutes for known SR nodes
     }
-    // Active nodes (Capable, Unknown) get shorter TTL
-    return ACTIVE_NODE_TTL_SECS;
+    // Legacy, Unknown, and any other status get longer TTL
+    return MUTE_NODE_TTL_SECS;  // 30 minutes for stock/unknown nodes
 }
 
 void SignalRoutingModule::logNetworkTopology()
@@ -1299,13 +1320,15 @@ void SignalRoutingModule::logNetworkTopology()
     NodeNum nodeBuf[GRAPH_LITE_MAX_NODES];
     size_t rawNodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
 
-    // Filter out downstream nodes
+    // Filter out downstream nodes - they should only appear under their gateways
+    uint32_t now = millis() / 1000;
     size_t nodeCount = 0;
     for (size_t i = 0; i < rawNodeCount; i++) {
         NodeNum nodeId = nodeBuf[i];
         bool isDownstream = false;
         for (uint8_t j = 0; j < gatewayRelationCount; j++) {
-            if (gatewayRelations[j].downstream == nodeId) {
+            if (gatewayRelations[j].downstream == nodeId &&
+                (now - gatewayRelations[j].lastSeen) <= ACTIVE_NODE_TTL_SECS) {
                 isDownstream = true;
                 break;
             }
@@ -1341,35 +1364,35 @@ void SignalRoutingModule::logNetworkTopology()
             continue;
         }
 
-        // Count gateway downstreams using fixed iteration (no heap allocation)
-        uint8_t downstreamCount = 0;
+        // Get gateway downstreams for this node (using fixed iteration, no heap allocation)
+        const GatewayDownstreamSet* downstreamSet = nullptr;
         uint32_t now = millis() / 1000;  // Use monotonic time
         for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
             const GatewayDownstreamSet &set = gatewayDownstream[i];
             if (set.gateway == nodeId && (now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
-                downstreamCount = set.count;
+                downstreamSet = &set;
                 break;
             }
         }
 
-        // Helper lambda to check if a node is downstream of ANY gateway
-        auto isNodeDownstream = [this, now](NodeNum node) -> bool {
-            for (uint8_t i = 0; i < gatewayRelationCount; i++) {
-                if (gatewayRelations[i].downstream == node && 
-                    (now - gatewayRelations[i].lastSeen) <= ACTIVE_NODE_TTL_SECS) {
-                    return true;
-                }
+        // Helper to check if a node is a downstream of this gateway
+        auto isDownstreamOfThisGateway = [downstreamSet](NodeNum node) -> bool {
+            if (!downstreamSet) return false;
+            for (uint8_t i = 0; i < downstreamSet->count; i++) {
+                if (downstreamSet->downstream[i] == node) return true;
             }
             return false;
         };
 
-        // Count actual direct neighbors (excluding ANY downstream nodes)
+        // Count direct neighbors (edges that are NOT to our own downstream nodes)
+        // Downstream nodes will be shown separately in the gateway list
         uint8_t directNeighborCount = 0;
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
-            if (!isNodeDownstream(edges->edges[i].to)) {
+            if (!isDownstreamOfThisGateway(edges->edges[i].to)) {
                 directNeighborCount++;
             }
         }
+        uint8_t downstreamCount = downstreamSet ? downstreamSet->count : 0;
 
         if (downstreamCount == 0) {
             LOG_INFO("[SR] +- %s%s: connected to %d nodes", prefix, nodeName, directNeighborCount);
@@ -1377,12 +1400,12 @@ void SignalRoutingModule::logNetworkTopology()
             LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %d nodes)", prefix, nodeName, directNeighborCount, downstreamCount);
         }
 
-        // Display neighbors, excluding ANY downstream nodes (they should only appear in gateway lists)
+        // Display direct neighbors (skip downstream nodes - they're shown in gateway list)
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
             const EdgeLite& edge = edges->edges[i];
-            
-            // Skip nodes that are downstream of ANY gateway
-            if (isNodeDownstream(edge.to)) {
+
+            // Skip downstream nodes of this gateway - they're already counted in "gateway for X nodes"
+            if (isDownstreamOfThisGateway(edge.to)) {
                 continue;
             }
 
@@ -1430,17 +1453,10 @@ void SignalRoutingModule::logNetworkTopology()
         return;
     }
 
-    // Filter out downstream nodes for topology display
+    // Filter out downstream nodes - they should only appear under their gateways
     std::vector<NodeNum> topologyNodes;
     for (NodeNum nodeId : allNodes) {
-        bool isDownstream = false;
-        for (const auto& relation : downstreamGateway) {
-            if (relation.first == nodeId) {
-                isDownstream = true;
-                break;
-            }
-        }
-        if (!isDownstream) {
+        if (downstreamGateway.find(nodeId) == downstreamGateway.end()) {
             topologyNodes.push_back(nodeId);
         }
     }
@@ -1468,16 +1484,19 @@ void SignalRoutingModule::logNetworkTopology()
         // Get this node's downstream nodes
         std::vector<NodeNum> downstreams;
         appendGatewayDownstreams(nodeId, downstreams);
+        std::sort(downstreams.begin(), downstreams.end());
+        downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
         
-        // Helper lambda to check if a node is downstream of ANY gateway
-        auto isNodeDownstream = [this](NodeNum node) -> bool {
-            return downstreamGateway.find(node) != downstreamGateway.end();
+        // Helper to check if a node is a downstream of this gateway
+        auto isDownstreamOfThisGateway = [&downstreams](NodeNum node) -> bool {
+            return std::binary_search(downstreams.begin(), downstreams.end(), node);
         };
-        
-        // Count direct neighbors (excluding ANY downstream nodes)
+
+        // Count direct neighbors (edges that are NOT to our own downstream nodes)
+        // Downstream nodes will be shown separately in the gateway list
         size_t directNeighborCount = 0;
         for (const Edge& edge : *edges) {
-            if (!isNodeDownstream(edge.to)) {
+            if (!isDownstreamOfThisGateway(edge.to)) {
                 directNeighborCount++;
             }
         }
@@ -1485,8 +1504,6 @@ void SignalRoutingModule::logNetworkTopology()
         if (downstreams.empty()) {
             LOG_INFO("[SR] +- %s%s: connected to %d nodes", prefix, nodeName, directNeighborCount);
         } else {
-            std::sort(downstreams.begin(), downstreams.end());
-            downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
             char buf[128];
             size_t pos = 0;
             size_t maxList = std::min<size_t>(downstreams.size(), 4);
@@ -1511,11 +1528,12 @@ void SignalRoutingModule::logNetworkTopology()
         std::sort(sortedEdges.begin(), sortedEdges.end(),
                  [](const Edge& a, const Edge& b) { return a.etx < b.etx; });
 
+        // Display direct neighbors (skip downstream nodes - they're shown in gateway list)
         for (size_t i = 0; i < sortedEdges.size(); i++) {
             const Edge& edge = sortedEdges[i];
             
-            // Skip nodes that are downstream of ANY gateway
-            if (isNodeDownstream(edge.to)) {
+            // Skip downstream nodes of this gateway - they're already counted in "gateway for X nodes"
+            if (isDownstreamOfThisGateway(edge.to)) {
                 continue;
             }
             
@@ -1552,6 +1570,15 @@ void SignalRoutingModule::logNetworkTopology()
 
 ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // Sanity check: reject packets with obviously corrupted payload sizes
+    // Max valid payload is ~237 bytes for LoRa; anything over 256 is definitely garbage
+    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        mp.decoded.payload.size > meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        LOG_WARN("[SR] Rejecting packet with invalid payload size: %u bytes (max %u)",
+                 mp.decoded.payload.size, meshtastic_Constants_DATA_PAYLOAD_LEN);
+        return ProcessMessage::CONTINUE;
+    }
+
     // Turn on LED to indicate SR processing active
     // We'll turn it off when this RTOS task completes
     // For now, use a neutral color - will be overridden by specific operations
@@ -1582,15 +1609,12 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     bool hasSignalData = (mp.rx_rssi != 0 || mp.rx_snr != 0);
     bool notViaMqtt = !mp.via_mqtt;
     uint8_t fromLastByte = mp.from & 0xFF;
-    bool isDirectFromSender = (mp.relay_node == fromLastByte);
+    bool isDirectFromSender = (mp.relay_node == 0) || (mp.relay_node == fromLastByte);
     
     // Debug logging to understand why packets might not be tracked
     if (hasSignalData && notViaMqtt) {
         LOG_DEBUG("[SR] Packet from 0x%08x: relay=0x%02x, fromLastByte=0x%02x, direct=%d",
                   mp.from, mp.relay_node, fromLastByte, isDirectFromSender);
-        if (!isDirectFromSender && mp.relay_node != 0) {
-            LOG_DEBUG("[SR] Relayed packet detected - relay node presence will be updated via inferred relayer");
-        }
     }
     
     // Update node activity for ANY packet reception to keep nodes in graph
@@ -1854,6 +1878,17 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
         return true;
     }
 
+    // If we received the packet FROM the calculated next hop, the next hop already transmitted.
+    // Since the next hop can reach the destination (that's why it's our next hop), the destination
+    // should have received the packet directly from the next hop - no need for us to relay.
+    if (heardFrom == myNextHop && heardFrom != 0) {
+        char nextHopName[64];
+        getNodeDisplayName(myNextHop, nextHopName, sizeof(nextHopName));
+        LOG_DEBUG("[SR] UNICAST RELAY: Received from next hop %s who can reach %s - destination should have it",
+                 nextHopName, destName);
+        return false;  // Next hop already transmitted, destination should have received it
+    }
+
     // Check if the calculated next hop node has already been tried and failed
     // This implements the iterative candidate removal like broadcasts
     if (hasNodeBeenExcludedFromRelay(myNextHop, p->id)) {
@@ -1885,228 +1920,39 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
 }
 bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacket *p)
 {
+    // This function only checks if SR is available and operational.
+    // All actual routing decisions are made in shouldRelay().
+
     if (!p || !signalBasedRoutingEnabled || !routingGraph || !nodeDB) {
-        LOG_DEBUG("[SR] SR disabled or unavailable (enabled=%d, graph=%p, nodeDB=%p)",
-                 signalBasedRoutingEnabled, routingGraph, nodeDB);
         return false;
     }
 
-    // Update SR graph timestamps for any packet we process (including duplicates)
+    // Update SR graph timestamps for any packet we process
     updateNodeActivityForPacketAndRelay(p);
 
-    // If the packet wasn't decrypted, still consider SR but note we are routing opaque payload.
-    // This can happen for duplicates that weren't decrypted by the Router
-    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        LOG_INFO("[SR] Packet not decrypted - routing header only analysis");
-    }
-
-    // Use smaller buffers to reduce stack pressure on memory-constrained devices
-    char destName[40], senderName[40];
-    getNodeDisplayName(p->to, destName, sizeof(destName));
-    getNodeDisplayName(p->from, senderName, sizeof(senderName));
-
-    if (isBroadcast(p->to)) {
-        LOG_DEBUG("[SR] Considering broadcast from %s to %s (hop_limit=%d)",
-                 senderName, destName, p->hop_limit);
-
-        if (!isActiveRoutingRole()) {
-            LOG_DEBUG("[SR] Passive role - entering SR path for relay veto");
-            return true; // enter SR path so shouldRelayBroadcast can veto the relay
-        }
-
-        bool healthy = topologyHealthyForBroadcast();
-        LOG_DEBUG("[SR] Calculating neighborCount");
-        size_t neighborCount = 0;
-        if (routingGraph && nodeDB) {
-#ifdef SIGNAL_ROUTING_LITE_MODE
-            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) neighborCount = edges->edgeCount;
-#else
-            auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) neighborCount = edges->size();
-#endif
-        }
-        LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% SR-active)",
-                 healthy ? "HEALTHY - SR active" : "UNHEALTHY - flooding only",
-                 neighborCount, getDirectNeighborsSignalActivePercentage());
-
-        if (!healthy && neighborCount > 0) {
-            LOG_INFO("[SR] SR not activated despite having neighbors - checking capability status");
-#ifndef SIGNAL_ROUTING_LITE_MODE
-            if (routingGraph) {
-                const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-                if (edges) {
-                    for (const Edge& edge : *edges) {
-                        CapabilityStatus status = getCapabilityStatus(edge.to);
-                        char neighborName[64];
-                        getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
-                        LOG_INFO("[SR] Neighbor %s: status=%s", neighborName,
-                                status == CapabilityStatus::SRactive ? "SR-active" :
-                                status == CapabilityStatus::SRinactive ? "SR-inactive" :
-                                status == CapabilityStatus::Legacy ? "legacy" : "unknown");
-                    }
-                }
-            }
-#endif
-        }
-        return healthy;
-    }
-
-    // Unicast routing
-    LOG_DEBUG("[SR] Considering unicast from %s to %s (hop_limit=%d)",
-             senderName, destName, p->hop_limit);
-
     // Don't use SR for packets addressed to us - let them be delivered normally
-    if (p->to == nodeDB->getNodeNum()) {
-        LOG_DEBUG("[SR] Packet addressed to local node - not using SR");
+    if (!isBroadcast(p->to) && p->to == nodeDB->getNodeNum()) {
         return false;
     }
 
+    // For broadcasts: check if we have enough SR neighbors
+    if (isBroadcast(p->to)) {
+        // Passive roles can still veto relays through shouldRelay
+        if (!isActiveRoutingRole()) {
+            return true;
+        }
+        return topologyHealthyForBroadcast();
+    }
+
+    // For unicasts: SR is available if we have any neighbors and are active role
+    // shouldRelay() will handle unknown destinations and routing decisions
     if (!isActiveRoutingRole()) {
-        LOG_DEBUG("[SR] Passive role - not using SR for unicast");
         return false;
     }
 
-    // Check if we have any route to the destination - if so, use SR coordination for unicast relay
-    // SR's coordinated delivery algorithm will determine the best relay candidates
-    float routeCost = 0.0f;
-    bool haveAnyRoute = false;
-
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    RouteLite route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
-                        [this](NodeNum nodeId) { return isNodeRoutable(nodeId); }) : RouteLite();
-#else
-    Route route = routingGraph ? routingGraph->calculateRoute(p->to, millis() / 1000,
-                      [this](NodeNum nodeId) { return isNodeRoutable(nodeId); }) : Route();
-#endif
-
-    if (route.nextHop != 0) {
-        routeCost = route.getCost();
-        haveAnyRoute = true;
-    }
-
-    if (haveAnyRoute) {
-        LOG_DEBUG("[SR] We have route to %s (cost: %.2f) - using SR coordination for unicast relay", destName, routeCost);
-        return true; // Use SR coordination for unicast relay to destination
-    }
-
-    bool topologyHealthy = topologyHealthyForUnicast(p->to);
-    LOG_DEBUG("[SR] Unicast topology %s for destination",
-             topologyHealthy ? "HEALTHY" : "unhealthy");
-
-    bool destCapable = isSignalBasedCapable(p->to);
-    bool destLegacy = isLegacyRouter(p->to);
-    LOG_DEBUG("[SR] Destination %s (SR-capable=%d, legacy-router=%d)",
-             destName, destCapable, destLegacy);
-
-    NodeNum sourceNode = p->from;
-    NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
-    // Iterative unicast route selection - try multiple strategies like broadcast fallback
-    NodeNum nextHop = 0;
-
-    // Check if this appears to be a retransmitted packet (simple heuristic)
-    bool isRetry = (p->hop_start > 0 && p->hop_start == p->hop_limit) ||
-                   (p->rx_rssi != 0 && p->rx_snr != 0); // Packets from our own retransmission
-    int strategyLevel = isRetry ? 1 : 0; // Start at higher strategy level for retries
-
-    // Try strategies in order of increasing permissiveness (like broadcast candidate selection)
-    for (int attempt = strategyLevel; attempt < 4 && nextHop == 0; attempt++) {
-        switch (attempt) {
-            case 0: // Strategy 1: Best calculated route, restrictive opportunistic forwarding
-                nextHop = getNextHop(p->to, sourceNode, heardFrom, !topologyHealthy);
-                if (nextHop != 0) {
-                    LOG_DEBUG("[SR] UNICAST Strategy 1: Using calculated route via %08x", nextHop);
-                }
-                break;
-
-            case 1: // Strategy 2: Best calculated route with opportunistic forwarding enabled
-                nextHop = getNextHop(p->to, sourceNode, heardFrom, true);
-                if (nextHop != 0) {
-                    LOG_DEBUG("[SR] UNICAST Strategy 2: Using opportunistic route via %08x", nextHop);
-                }
-                break;
-
-            case 2: // Strategy 3: Try gateway routing if destination has a designated gateway
-                {
-                    NodeNum designatedGateway = getGatewayFor(p->to);
-                    if (designatedGateway != 0 && designatedGateway != nodeDB->getNodeNum()) {
-                        char gwName[64];
-                        getNodeDisplayName(designatedGateway, gwName, sizeof(gwName));
-                        LOG_INFO("[SR] UNICAST Strategy 3: Using designated gateway %s for %s", gwName, destName);
-
-                        // Cancel any pending transmission that traditional routing might have queued
-                        if (router) {
-                            router->cancelSending(p->from, p->id);
-                        }
-
-                        return false; // Don't use SR - designated gateway should handle this packet
-                    }
-                }
-                break;
-
-            case 3: // Strategy 4: No SR route found, fall back to traditional routing
-                LOG_DEBUG("[SR] UNICAST Strategy 4: No SR route found after all attempts - using traditional routing");
-                return false; // Allow traditional routing/flooding
-        }
-    }
-
-    // If we get here, nextHop should be set by one of the strategies
-    if (nextHop == 0) {
-        LOG_DEBUG("[SR] UNICAST: Unexpected - all strategies exhausted but nextHop is 0");
-        return false;
-    }
-
-    // Gateway preference: if we know the destination is behind a gateway we can reach directly, prefer that
-    // But only if we don't already have a direct route to the destination
-    if (nextHop != p->to) {  // Only use gateway if we don't have a direct route
-        NodeNum gatewayForDest = getGatewayFor(p->to);
-        if (gatewayForDest && gatewayForDest != nextHop) {
-            bool directToGateway = false;
-#ifdef SIGNAL_ROUTING_LITE_MODE
-            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) {
-                for (uint8_t i = 0; i < edges->edgeCount; i++) {
-                    if (edges->edges[i].to == gatewayForDest) {
-                        directToGateway = true;
-                        break;
-                    }
-                }
-            }
-#else
-            const std::vector<Edge>* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) {
-                for (const Edge& e : *edges) {
-                    if (e.to == gatewayForDest) {
-                        directToGateway = true;
-                        break;
-                    }
-                }
-            }
-#endif
-            if (directToGateway) {
-                LOG_INFO("[SR] Gateway preference: using gateway %08x to reach %08x (was %08x)", gatewayForDest, p->to, nextHop);
-                nextHop = gatewayForDest;
-            }
-        }
-    }
-
-    char nextHopName[64];
-    getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
-
-    bool nextHopCapable = isSignalBasedCapable(nextHop);
-    bool nextHopLegacy = isLegacyRouter(nextHop);
-    LOG_DEBUG("[SR] Next hop %s (SR-capable=%d, legacy-router=%d)",
-             nextHopName, nextHopCapable, nextHopLegacy);
-
-    if (!nextHopCapable && !nextHopLegacy) {
-        LOG_DEBUG("[SR] Next hop not SR-capable and not legacy router - fallback to flood");
-        return false;
-    }
-
-
-    LOG_INFO("[SR] Using SR for unicast from %s to %s via %s",
-             senderName, destName, nextHopName);
-    return true;
+    // Use SR for unicasts if we have topology (at least one SR neighbor)
+    // This allows shouldRelay() to make informed decisions about routing
+    return topologyHealthyForBroadcast();
 }
 
 bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
@@ -2120,87 +1966,85 @@ bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
         return shouldRelayBroadcast(p);
     }
 
-    // For unicasts: first check if destination is known
-    // When SR is active, we don't relay unicasts to unknown destinations
-    // (prevents flooding - discovery occurs via broadcasts)
+    // === UNICAST RELAY DECISION ===
+    // All unicast routing logic is now consolidated here
+
+    char destName[64], senderName[64];
+    getNodeDisplayName(p->to, destName, sizeof(destName));
+    getNodeDisplayName(p->from, senderName, sizeof(senderName));
+    LOG_DEBUG("[SR] Considering unicast relay from %s to %s (hop_limit=%d)",
+             senderName, destName, p->hop_limit);
+
+    // Check if destination is known - don't relay to unknown destinations
     if (!topologyHealthyForUnicast(p->to)) {
-        char destName[64];
-        getNodeDisplayName(p->to, destName, sizeof(destName));
         LOG_DEBUG("[SR] Not relaying unicast to unknown destination %s", destName);
         return false;
     }
 
-    // Check if next hop already heard from source
-    // This is the same concept as "alreadyCovered" in broadcast relay decisions
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
-    // If we didn't hear directly from source, we can't determine if next hop heard it
-    if (heardFrom != sourceNode) {
-        return true;  // Relay - we got this relayed, next hop might not have it
-    }
-
-    // Calculate the next hop to determine who would relay
-    NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom, false);
-    if (nextHop == 0 || nextHop == nodeDB->getNodeNum()) {
-        return true;  // We are the next hop or no route - relay
-    }
-
-    // Check if source and next hop are neighbors (next hop already heard the packet)
-    bool nextHopHeardFromSource = false;
+    // If we heard directly from source, check if next hop already has the packet
+    if (heardFrom == sourceNode) {
+        NodeNum nextHop = getNextHop(p->to, sourceNode, heardFrom, false);
+        if (nextHop != 0 && nextHop != nodeDB->getNodeNum()) {
+            // Check if source and next hop are neighbors
+            bool nextHopHeardFromSource = false;
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    const NodeEdgesLite* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
-    if (sourceEdges) {
-        for (uint8_t i = 0; i < sourceEdges->edgeCount; i++) {
-            if (sourceEdges->edges[i].to == nextHop) {
-                nextHopHeardFromSource = true;
-                break;
-            }
-        }
-    }
-    if (!nextHopHeardFromSource) {
-        const NodeEdgesLite* nextHopEdges = routingGraph->getEdgesFrom(nextHop);
-        if (nextHopEdges) {
-            for (uint8_t i = 0; i < nextHopEdges->edgeCount; i++) {
-                if (nextHopEdges->edges[i].to == sourceNode) {
-                    nextHopHeardFromSource = true;
-                    break;
+            const NodeEdgesLite* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
+            if (sourceEdges) {
+                for (uint8_t i = 0; i < sourceEdges->edgeCount; i++) {
+                    if (sourceEdges->edges[i].to == nextHop) {
+                        nextHopHeardFromSource = true;
+                        break;
+                    }
                 }
             }
-        }
-    }
+            if (!nextHopHeardFromSource) {
+                const NodeEdgesLite* nextHopEdges = routingGraph->getEdgesFrom(nextHop);
+                if (nextHopEdges) {
+                    for (uint8_t i = 0; i < nextHopEdges->edgeCount; i++) {
+                        if (nextHopEdges->edges[i].to == sourceNode) {
+                            nextHopHeardFromSource = true;
+                            break;
+                        }
+                    }
+                }
+            }
 #else
-    auto sourceEdges = routingGraph->getEdgesFrom(sourceNode);
-    if (sourceEdges) {
-        for (const Edge& e : *sourceEdges) {
-            if (e.to == nextHop) {
-                nextHopHeardFromSource = true;
-                break;
-            }
-        }
-    }
-    if (!nextHopHeardFromSource) {
-        auto nextHopEdges = routingGraph->getEdgesFrom(nextHop);
-        if (nextHopEdges) {
-            for (const Edge& e : *nextHopEdges) {
-                if (e.to == sourceNode) {
-                    nextHopHeardFromSource = true;
-                    break;
+            auto sourceEdges = routingGraph->getEdgesFrom(sourceNode);
+            if (sourceEdges) {
+                for (const Edge& e : *sourceEdges) {
+                    if (e.to == nextHop) {
+                        nextHopHeardFromSource = true;
+                        break;
+                    }
                 }
             }
+            if (!nextHopHeardFromSource) {
+                auto nextHopEdges = routingGraph->getEdgesFrom(nextHop);
+                if (nextHopEdges) {
+                    for (const Edge& e : *nextHopEdges) {
+                        if (e.to == sourceNode) {
+                            nextHopHeardFromSource = true;
+                            break;
+                        }
+                    }
+                }
+            }
+#endif
+            if (nextHopHeardFromSource) {
+                char nextHopName[64];
+                getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
+                LOG_DEBUG("[SR] Unicast: next hop %s already heard from source %s - no relay needed",
+                         nextHopName, senderName);
+                return false;
+            }
         }
     }
-#endif
 
-    if (nextHopHeardFromSource) {
-        char nextHopName[64], sourceName[64];
-        getNodeDisplayName(nextHop, nextHopName, sizeof(nextHopName));
-        getNodeDisplayName(sourceNode, sourceName, sizeof(sourceName));
-        LOG_DEBUG("[SR] Unicast: next hop %s already heard from source %s - no relay needed", nextHopName, sourceName);
-        return false;
-    }
-
-    return true;  // Relay the unicast
+    // Use the contention-based unicast relay coordination
+    return shouldRelayUnicastForCoordination(p);
 }
 
 bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
@@ -2229,10 +2073,6 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
         return false;
     }
 
-    if (!topologyHealthyForBroadcast()) {
-        return true;
-    }
-
     // Compute packet received timestamp once for all SignalRouting operations
     uint32_t packetReceivedTimestamp = millis() / 1000;
 
@@ -2240,6 +2080,12 @@ bool SignalRoutingModule::shouldRelayBroadcast(const meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         p->decoded.portnum == meshtastic_PortNum_SIGNAL_ROUTING_APP) {
         preProcessSignalRoutingPacket(p, packetReceivedTimestamp);
+    }
+
+    // Now check if our topology is healthy for making relay decisions
+    // If not healthy, default to relay (conservative behavior)
+    if (!topologyHealthyForBroadcast()) {
+        return true;
     }
 
     NodeNum myNode = nodeDB->getNodeNum();
@@ -2650,6 +2496,10 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
         getNodeDisplayName(nodeId, neighborName, sizeof(neighborName));
 
         if (changeType == Graph::EDGE_NEW) {
+            // We now have a DIRECT connection to this node - clear any gateway relationships
+            // that were created based on topology broadcasts before we heard from them directly
+            clearDownstreamFromAllGateways(nodeId);
+
             // Set green for new neighbor (operation start)
             setRgbLed(0, 255, 0);
             LOG_INFO("[SR] Topology changed: new neighbor %s (total nodes: %u)", neighborName, static_cast<unsigned int>(routingGraph->getNodeCount()));
