@@ -775,6 +775,9 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             }
         } else {
             LOG_INFO("StoreForwardpp Recalculated hash does not match.");
+            if (portduino_config.sfpp_stratum0)
+                return true;
+
             if (incoming_link.commit_hash_len == 0) {
                 addToScratch(incoming_link);
             } else if (incoming_link.commit_hash_len == SFPP_HASH_SIZE && chain_end.counter == 0) {
