@@ -248,7 +248,21 @@ int32_t ButtonThread::runOnce()
                 this->notifyObservers(&evt);
                 playComboTune();
                 break;
-
+#if !HAS_SCREEN
+            case 4:
+                if (moduleConfig.external_notification.enabled && externalNotificationModule) {
+                    externalNotificationModule->setMute(!externalNotificationModule->getMute());
+                    IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow();)
+                    if (externalNotificationModule->getMute()) {
+                        LOG_INFO("Temporarily Muted");
+                        play4ClickDown(); // Disable tone
+                    } else {
+                        LOG_INFO("Unmuted");
+                        play4ClickUp(); // Enable tone
+                    }
+                }
+                break;
+#endif
             // No valid multipress action
             default:
                 break;

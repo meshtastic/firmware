@@ -7,6 +7,8 @@ void playShutdownMelody();
 void playGPSEnableBeep();
 void playGPSDisableBeep();
 void playComboTune();
+void play4ClickDown();
+void play4ClickUp();
 void playBoop();
 void playChirp();
 void playClick();

@@ -234,6 +234,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define RAK_4631 1
 
+#define HAS_SCREEN 0
+
 #ifdef __cplusplus
 }
 #endif
