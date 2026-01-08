@@ -498,6 +498,10 @@ void portduinoSetup()
     return;
 #endif
 
+    // -s turns SF++ off by default; an explicit -c config may turn it back on.
+    if (portduino_config.force_simradio)
+        portduino_config.sfpp_enabled = false;
+
     // An explicit -c is honored even under -s: it also carries non-radio settings
     // (EnableUDP, display, GPIO) that have to survive simulated mode.
     if (configPath != nullptr) {
