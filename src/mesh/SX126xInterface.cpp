@@ -389,9 +389,9 @@ template <typename T> bool SX126xInterface<T>::sleep()
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
 #if defined(USE_GC1109_PA)
-    digitalWrite(LORA_PA_POWER, HIGH);  // Ensure LDO is on
-    digitalWrite(LORA_PA_EN, HIGH);     // CSD=1: Chip enabled
-    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0);  // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
+    digitalWrite(LORA_PA_POWER, HIGH);         // Ensure LDO is on
+    digitalWrite(LORA_PA_EN, HIGH);            // CSD=1: Chip enabled
+    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0); // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
 #endif
 }
 
