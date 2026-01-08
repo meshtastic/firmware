@@ -352,7 +352,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     }
 
     // get tip of chain for this channel
-    link_object chain_end = getLinkFromCount(0, root_hash_bytes, SFPP_HASH_SIZE);
+    link_object chain_end = getLinkFromPositionFromTip(0, root_hash_bytes, SFPP_HASH_SIZE);
 
     if (chain_end.rx_time == 0) {
         if (portduino_config.sfpp_stratum0) {
@@ -479,7 +479,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
     // get tip of chain for this channel
     if (t->root_hash.size >= SFPP_SHORT_HASH_SIZE)
-        chain_end = getLinkFromCount(0, t->root_hash.bytes, t->root_hash.size);
+        chain_end = getLinkFromPositionFromTip(0, t->root_hash.bytes, t->root_hash.size);
 
     updatePeers(mp, t->sfpp_message_type);
 
@@ -596,7 +596,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
         // If chain_count is set, this is a request for x messages up the chain.
         if (t->chain_count != 0 && t->root_hash.size >= 8) {
-            link_object link_from_count = getLinkFromCount(t->chain_count, t->root_hash.bytes, t->root_hash.size);
+            link_object link_from_count = getLinkFromPositionFromTip(t->chain_count, t->root_hash.bytes, t->root_hash.size);
             LOG_DEBUG("StoreForwardpp Count requested %d", t->chain_count);
             if (link_from_count.validObject)
                 broadcastLink(link_from_count, true);
@@ -672,25 +672,25 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             }
         }
 
+        // Incoming hash. First check if we already have it
+        if (isCommitInDB(incoming_link.commit_hash, incoming_link.commit_hash_len) ||
+            isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
+            // This was sent to us as a scratch message, but we already have it in the chain.
+            // Respond by announcing this
+            if (t->commit_hash.size == 0) {
+                link_object link_to_announce = getLinkFromMessageHash(incoming_link.message_hash, incoming_link.message_hash_len);
+                canonAnnounce(link_to_announce);
+                LOG_INFO("StoreForwardpp Received link already in chain #%u, announcing next", link_to_announce.counter);
+            } else {
+                LOG_INFO("StoreForwardpp Received link already in chain");
+            }
+            return true;
+        }
+
         // We have a link. Recalculate the message hash and check if the commit hash matches
         if (recalculateHash(incoming_link, t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size)) {
             if (incoming_link.root_hash_len == 0) {
                 LOG_WARN("StoreForwardpp Hash bytes not found for incoming link");
-                return true;
-            }
-
-            if (isCommitInDB(incoming_link.commit_hash, incoming_link.commit_hash_len) ||
-                isInDB(incoming_link.message_hash, incoming_link.message_hash_len)) {
-                // This was sent to us as a scratch message, but we already have it in the chain.
-                // Respond by announcing this
-                if (t->commit_hash.size == 0) {
-                    link_object link_to_announce =
-                        getLinkFromMessageHash(incoming_link.message_hash, incoming_link.message_hash_len);
-                    canonAnnounce(link_to_announce);
-                    LOG_INFO("StoreForwardpp Received link already in chain #%u, announcing next", link_to_announce.counter);
-                } else {
-                    LOG_INFO("StoreForwardpp Received link already in chain");
-                }
                 return true;
             }
 
@@ -1156,7 +1156,7 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
 bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
 {
     uint8_t tmp_commit_hash[SFPP_HASH_SIZE];
-    link_object chain_end = getLinkFromCount(0, lo.root_hash, lo.root_hash_len);
+    link_object chain_end = getLinkFromPositionFromTip(0, lo.root_hash, lo.root_hash_len);
 
     // we may need to calculate the full commit hash at this point
     SHA256 commit_hash;
@@ -1411,7 +1411,7 @@ bool StoreForwardPlusPlusModule::speculateScratchChain(uint8_t *commit_hash_byte
         }
         addToChain(next_scratch_object);
         removeFromScratch(next_scratch_object.message_hash, next_scratch_object.message_hash_len);
-        chain_end = getLinkFromCount(0, root_hash, SFPP_HASH_SIZE);
+        chain_end = getLinkFromPositionFromTip(0, root_hash, SFPP_HASH_SIZE);
         printBytes("StoreForwardpp local final commit hash: ", chain_end.commit_hash, SFPP_HASH_SIZE);
         printBytes("StoreForwardpp target commit hash:  ", commit_hash_bytes, commit_hash_len);
     } while (memcmp(chain_end.commit_hash, commit_hash_bytes, commit_hash_len) != 0);
@@ -1591,7 +1591,7 @@ bool StoreForwardPlusPlusModule::checkCommitHash(StoreForwardPlusPlusModule::lin
     SHA256 commit_hash;
     uint8_t tmp_commit_hash[SFPP_HASH_SIZE];
 
-    link_object chain_end = getLinkFromCount(0, lo.root_hash, lo.root_hash_len);
+    link_object chain_end = getLinkFromPositionFromTip(0, lo.root_hash, lo.root_hash_len);
 
     commit_hash.reset();
 
@@ -1659,8 +1659,8 @@ uint32_t StoreForwardPlusPlusModule::getChainCount(uint8_t *root_hash, size_t ro
     return count;
 }
 
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromCount(uint32_t _count, uint8_t *_root_hash,
-                                                                                     size_t _root_hash_len)
+StoreForwardPlusPlusModule::link_object
+StoreForwardPlusPlusModule::getLinkFromPositionFromTip(uint32_t _count, uint8_t *_root_hash, size_t _root_hash_len)
 {
     link_object lo;
     int step = 0;
@@ -1686,11 +1686,8 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromC
     }
     if (!memfll(last_message_commit_hash, '\0', SFPP_HASH_SIZE) && _rx_time != 0) {
         lo = getLink(last_message_commit_hash, SFPP_HASH_SIZE);
-        if (lo.counter != _count) {
+        if (lo.rx_time == 0)
             lo.validObject = false;
-        } else {
-            lo.rx_time = _rx_time;
-        }
     } else {
         LOG_WARN("StoreForwardpp Failed to get link from count");
         lo.validObject = false;
@@ -1845,7 +1842,7 @@ void StoreForwardPlusPlusModule::maybeMoveFromCanonScratch(uint8_t *root_hash, s
     link_object lo = getfromCanonScratch(root_hash, root_hash_len);
     if (!lo.validObject)
         return;
-    link_object chain_end = getLinkFromCount(0, root_hash, root_hash_len);
+    link_object chain_end = getLinkFromPositionFromTip(0, root_hash, root_hash_len);
     if (!chain_end.validObject)
         return;
     if (chain_end.counter > lo.counter) {
