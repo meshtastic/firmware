@@ -1077,7 +1077,8 @@ void setup()
     };
 #endif
 #endif
-TouchButtonThread->initButton(touchConfig);
+    TouchButtonThread->initButton(touchConfig);
+#endif
 
 #if defined(CANCEL_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
