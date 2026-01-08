@@ -125,8 +125,12 @@ class GraphLite {
 
     /**
      * Remove edges that haven't been updated recently
+     * @param currentTimeSecs Current time in seconds
+     * @param getTtlForNode Optional callback to get TTL for a specific node (returns seconds).
+     *                      If not provided, uses EDGE_AGING_TIMEOUT_SECS for all nodes.
+     *                      This allows different TTLs for SR-active vs stock/mute nodes.
      */
-    void ageEdges(uint32_t currentTimeSecs);
+    void ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(NodeNum)> getTtlForNode = nullptr);
 
     /**
      * Calculate route to destination (simplified Dijkstra)

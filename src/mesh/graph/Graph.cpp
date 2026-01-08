@@ -131,21 +131,24 @@ void Graph::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
     nodeActivity[nodeId] = timestamp;
 }
 
-void Graph::ageEdges(uint32_t currentTime) {
+void Graph::ageEdges(uint32_t currentTime, std::function<uint32_t(NodeNum)> getTtlForNode) {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
 
-    // Age individual edges
+    // Age individual edges - use node-specific TTL if callback provided
     for (auto& pair : adjacencyList) {
         // Never remove edges for our own node
         if (pair.first == myNode) {
             continue;
         }
 
+        // Get TTL for this node (capability-based if callback provided)
+        uint32_t nodeTtl = getTtlForNode ? getTtlForNode(pair.first) : EDGE_AGING_TIMEOUT_SECS;
+
         auto& edges = pair.second;
         edges.erase(
             std::remove_if(edges.begin(), edges.end(),
-                [currentTime](const Edge& e) {
-                    return (currentTime - e.lastUpdate) > EDGE_AGING_TIMEOUT_SECS;
+                [currentTime, nodeTtl](const Edge& e) {
+                    return (currentTime - e.lastUpdate) > nodeTtl;
                 }),
             edges.end());
     }
@@ -162,11 +165,14 @@ void Graph::ageEdges(uint32_t currentTime) {
         bool isPlaceholder = (it->first & 0xFF000000) == 0xFF000000;
         uint32_t placeholderTtl = 60; // 1 minute for placeholders
 
+        // Get TTL for this node (capability-based if callback provided)
+        uint32_t nodeTtl = getTtlForNode ? getTtlForNode(it->first) : EDGE_AGING_TIMEOUT_SECS;
+
         if (it->second.empty()) {
             // Check if this node is still marked as active
             auto activityIt = nodeActivity.find(it->first);
             bool shouldRemove = activityIt == nodeActivity.end() ||
-                (currentTime - activityIt->second) > (isPlaceholder ? placeholderTtl : EDGE_AGING_TIMEOUT_SECS);
+                (currentTime - activityIt->second) > (isPlaceholder ? placeholderTtl : nodeTtl);
             if (shouldRemove) {
                 // Node is not active or activity has expired - remove it
                 it = adjacencyList.erase(it);
@@ -195,9 +201,10 @@ void Graph::ageEdges(uint32_t currentTime) {
         }
     }
 
-    // Age node activity timestamps
+    // Age node activity timestamps - use default TTL here since activity is node-agnostic
     for (auto it = nodeActivity.begin(); it != nodeActivity.end();) {
-        if ((currentTime - it->second) > EDGE_AGING_TIMEOUT_SECS) {
+        uint32_t nodeTtl = getTtlForNode ? getTtlForNode(it->first) : EDGE_AGING_TIMEOUT_SECS;
+        if ((currentTime - it->second) > nodeTtl) {
             it = nodeActivity.erase(it);
         } else {
             ++it;
@@ -420,10 +427,10 @@ std::unordered_set<NodeNum> Graph::getDirectNeighbors(NodeNum node) const {
     auto it = adjacencyList.find(node);
     if (it != adjacencyList.end()) {
         for (const Edge& edge : it->second) {
-            // Only include edges based on actual direct communication (Reported), not topology inference (Mirrored)
-            if (edge.source == Edge::Source::Reported) {
-                neighbors.insert(edge.to);
-            }
+            // Include all edges - Mirrored edges FROM us are based on us HEARING from the neighbor,
+            // which is our evidence of direct connectivity. Reported edges TO us come from the
+            // neighbor's topology broadcasts.
+            neighbors.insert(edge.to);
         }
     }
     return neighbors;
@@ -475,17 +482,17 @@ void Graph::removeNode(NodeNum nodeId) {
 }
 
 void Graph::clearEdgesForNode(NodeNum nodeId) {
-    // Remove all edges from this node to others
-    adjacencyList.erase(nodeId);
-
-    // Remove all edges to this node from other nodes
-    for (auto& pair : adjacencyList) {
-        auto& edges = pair.second;
-        edges.erase(
-            std::remove_if(edges.begin(), edges.end(),
-                [nodeId](const Edge& e) {
-                    return e.to == nodeId;
-                }),
+    // Remove only MIRRORED edges FROM this node (topology-reported edges)
+    // PRESERVE Reported edges - those represent our own direct observations of
+    // radio communication and should not be destroyed by topology updates.
+    // When we receive a topology broadcast from nodeId, we clear what they
+    // previously reported (Mirrored) and replace with their new report,
+    // but we keep edges we observed directly (Reported).
+    auto it = adjacencyList.find(nodeId);
+    if (it != adjacencyList.end()) {
+        auto& edges = it->second;
+        edges.erase(std::remove_if(edges.begin(), edges.end(),
+            [](const Edge& e) { return e.source == Edge::Source::Mirrored; }),
             edges.end());
     }
 
