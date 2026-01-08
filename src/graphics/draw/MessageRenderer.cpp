@@ -16,7 +16,12 @@
 #include "main.h"
 #include "meshUtils.h"
 #if defined(USE_U8G2_EINK_TEXT)
+#if defined(USE_EINK)
 #include "graphics/EInkDisplay2.h"
+#else
+#include <Adafruit_GFX.h>
+#include <U8g2_for_Adafruit_GFX.h>
+#endif
 #endif
 #include <string>
 #include <vector>
@@ -42,9 +47,44 @@ static bool manualScrolling = false;
 #if defined(USE_U8G2_EINK_TEXT)
 static U8G2_FOR_ADAFRUIT_GFX *getU8g2Fonts(OLEDDisplay *display)
 {
+#if defined(USE_EINK)
     auto *u8g2 = static_cast<EInkDisplay *>(display)->getU8g2();
     if (!u8g2)
         return nullptr;
+#else
+    if (!display)
+        return nullptr;
+    class BufferGFX : public Adafruit_GFX
+    {
+      public:
+        explicit BufferGFX(OLEDDisplay *display)
+            : Adafruit_GFX(display ? display->getWidth() : 0, display ? display->getHeight() : 0), display(display)
+        {
+        }
+
+        void drawPixel(int16_t x, int16_t y, uint16_t color) override
+        {
+            if (!display)
+                return;
+            if (x < 0 || y < 0 || x >= display->getWidth() || y >= display->getHeight())
+                return;
+            display->setColor(color ? WHITE : BLACK);
+            display->setPixel(x, y);
+        }
+
+      private:
+        OLEDDisplay *display;
+    };
+
+    static BufferGFX bufferTarget(display);
+    static U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
+    static bool u8g2Ready = false;
+    if (!u8g2Ready) {
+        u8g2Fonts.begin(bufferTarget);
+        u8g2Ready = true;
+    }
+    auto *u8g2 = &u8g2Fonts;
+#endif
 
     u8g2->setFont(u8g2_font_wqy12_t_gb2312);
     u8g2->setFontMode(1);
@@ -838,12 +878,14 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
     }
 
     std::string line, word;
-    for (int i = 0; messageBuf[i];) {
+    const size_t msgLen = strlen(messageBuf);
+    for (size_t i = 0; i < msgLen;) {
         uint8_t c = static_cast<uint8_t>(messageBuf[i]);
         size_t len = utf8CharLen(c);
 
         // Normalize fancy apostrophe to ASCII
-        if (c == 0xE2 && (uint8_t)messageBuf[i + 1] == 0x80 && (uint8_t)messageBuf[i + 2] == 0x99) {
+        if (c == 0xE2 && i + 2 < msgLen && (uint8_t)messageBuf[i + 1] == 0x80 &&
+            (uint8_t)messageBuf[i + 2] == 0x99) {
             c = '\'';
             len = 1;
         }

@@ -96,6 +96,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     cannedMessageModuleRunState getRunState() const { return runState; }
 #endif
 
+#if defined(USE_U8G2_EINK_TEXT)
+    bool isImeActiveWithCandidates() const;
+#endif
+
     // === Packet Interest Filter ===
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override
     {

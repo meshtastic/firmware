@@ -35,7 +35,12 @@ extern MessageStore messageStore;
 #include "graphics/EInkDynamicDisplay.h" // To select between full and fast refresh on E-Ink displays
 #endif
 #if defined(USE_U8G2_EINK_TEXT)
+#if defined(USE_EINK)
 #include "graphics/EInkDisplay2.h"
+#else
+#include <Adafruit_GFX.h>
+#include <U8g2_for_Adafruit_GFX.h>
+#endif
 #endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
@@ -224,9 +229,44 @@ void CannedMessageModule::cycleImeMode()
 
 static U8G2_FOR_ADAFRUIT_GFX *getU8g2Fonts(OLEDDisplay *display)
 {
+#if defined(USE_EINK)
     auto *u8g2 = static_cast<EInkDisplay *>(display)->getU8g2();
     if (!u8g2)
         return nullptr;
+#else
+    if (!display)
+        return nullptr;
+    class BufferGFX : public Adafruit_GFX
+    {
+      public:
+        explicit BufferGFX(OLEDDisplay *display)
+            : Adafruit_GFX(display ? display->getWidth() : 0, display ? display->getHeight() : 0), display(display)
+        {
+        }
+
+        void drawPixel(int16_t x, int16_t y, uint16_t color) override
+        {
+            if (!display)
+                return;
+            if (x < 0 || y < 0 || x >= display->getWidth() || y >= display->getHeight())
+                return;
+            display->setColor(color ? WHITE : BLACK);
+            display->setPixel(x, y);
+        }
+
+      private:
+        OLEDDisplay *display;
+    };
+
+    static BufferGFX bufferTarget(display);
+    static U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
+    static bool u8g2Ready = false;
+    if (!u8g2Ready) {
+        u8g2Fonts.begin(bufferTarget);
+        u8g2Ready = true;
+    }
+    auto *u8g2 = &u8g2Fonts;
+#endif
 
     u8g2->setFont(u8g2_font_wqy12_t_gb2312);
     u8g2->setFontMode(1);
@@ -420,6 +460,7 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
 #endif
 
     runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+    lastTouchMillis = millis();
     requestFocus();
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -658,6 +699,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         // Printable char (ASCII) opens free text compose
         if (event->kbchar >= 32 && event->kbchar <= 126) {
             runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            lastTouchMillis = millis();
             requestFocus();
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -915,6 +957,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 #if defined(USE_VIRTUAL_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
             runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            lastTouchMillis = millis();
             requestFocus();
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -1008,6 +1051,47 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Always process only if in FREETEXT mode
     if (runState != CANNED_MESSAGE_RUN_STATE_FREETEXT)
         return false;
+
+#if defined(T_DECK)
+    if (event->source && strncmp(event->source, "trackball", 9) == 0 &&
+        (event->inputEvent == INPUT_BROKER_SELECT || event->inputEvent == INPUT_BROKER_SELECT_LONG)) {
+        cycleImeMode();
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+
+    if (event->source && strncmp(event->source, "trackball", 9) == 0 && event->inputEvent == INPUT_BROKER_LEFT &&
+        imeMode == ImeMode::CN && ime.isEnabled() && ime.hasBuffer() && !ime.candidates().empty()) {
+        int total = static_cast<int>(ime.candidates().size());
+        int pageSize = (imePageSize > 0) ? imePageSize : 5;
+        int pages = (total + pageSize - 1) / pageSize;
+        if (pages > 1) {
+            imePage = (imePage <= 0) ? (pages - 1) : (imePage - 1);
+            imeSelectedOffset = 0;
+        }
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+
+    if (event->source && strncmp(event->source, "trackball", 9) == 0 && event->inputEvent == INPUT_BROKER_RIGHT &&
+        imeMode == ImeMode::CN && ime.isEnabled() && ime.hasBuffer() && !ime.candidates().empty()) {
+        int total = static_cast<int>(ime.candidates().size());
+        int pageSize = (imePageSize > 0) ? imePageSize : 5;
+        int pages = (total + pageSize - 1) / pageSize;
+        if (pages > 1) {
+            imePage = (imePage + 1) % pages;
+            imeSelectedOffset = 0;
+        }
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+#endif
 
     LOG_DEBUG("[FREETEXT] inputEvent=%u kbchar=0x%02x src=%s", event->inputEvent, (uint8_t)event->kbchar,
               event->source ? event->source : "?");
@@ -1252,6 +1336,13 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
             imeSelectedOffset = 0;
             lastTouchMillis = millis();
             requestFocus();
+            runOnce();
+            return true;
+        }
+
+        if (!ime.hasBuffer() && event->kbchar == ' ') {
+            payload = ' ';
+            lastTouchMillis = millis();
             runOnce();
             return true;
         }
@@ -1558,6 +1649,14 @@ int32_t CannedMessageModule::runOnce()
 
     // Normal module disable/idle handling
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+#if defined(USE_U8G2_EINK_TEXT)
+        imeMode = ImeMode::EN;
+        ime.setEnabled(false);
+        ime.reset();
+        imePage = 0;
+        imeSelectedOffset = 0;
+        imeCandidateHitCount = 0;
+#endif
         // Clean up virtual keyboard if needed when going inactive
         if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr) {
             LOG_INFO("Performing delayed virtual keyboard cleanup");
@@ -2056,6 +2155,14 @@ void CannedMessageModule::drawEnterIcon(OLEDDisplay *display, int x, int y, floa
 
 // Indicate to screen class that module is handling keyboard input specially (at certain times)
 // This prevents the left & right keys being used for nav. between screen frames during text entry.
+#if defined(USE_U8G2_EINK_TEXT)
+bool CannedMessageModule::isImeActiveWithCandidates() const
+{
+    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && imeMode == ImeMode::CN && ime.isEnabled() && ime.hasBuffer() &&
+           !ime.candidates().empty();
+}
+#endif
+
 bool CannedMessageModule::interceptingKeyboardInput()
 {
     switch (runState) {
@@ -2429,7 +2536,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 #if defined(USE_U8G2_EINK_TEXT)
             {
                 imeCandidateHitCount = 0;
-                imeBarY = y + display->getHeight() - FONT_HEIGHT_SMALL;
+                imeBarY = y + display->getHeight() - FONT_HEIGHT_SMALL - 3;
                 imeBarHeight = FONT_HEIGHT_SMALL;
                 int imeBufferY = imeBarY - FONT_HEIGHT_SMALL;
 

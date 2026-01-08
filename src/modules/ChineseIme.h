@@ -26,12 +26,8 @@ class ChineseIme
     void updateCandidates();
     void updateCandidatesFromBuiltin();
 
-    bool enabled =
-#if defined(T_DECK_PRO)
-        true;
-#else
-        false;
-#endif
+    // Only enabled when switching into CN mode.
+    bool enabled = false;
     String imeBuffer;
     std::vector<String> imeCandidates;
     int imeCandidateIndex = 0;

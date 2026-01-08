@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK)
 static const char kPinyinDict[] PROGMEM = R"PINYIN_DICT(
 a	阿 啊 呵 嗄 腌 锕 吖
 ai	爱 乃 奇 埃 呆 艾 哀 碍 癌 挨 矮 唉 哎 隘 嗳 呃 蔼 暧 捱 霭 嗌 噫 皑 锿 嫒 砹 瑷

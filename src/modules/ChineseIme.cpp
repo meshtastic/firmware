@@ -1,13 +1,13 @@
 #include "modules/ChineseIme.h"
 #include "modules/PinyinData.h"
 
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK)
 #include <pgmspace.h>
 #endif
 
 void ChineseIme::setEnabled(bool enabled)
 {
-#if !defined(T_DECK_PRO)
+#if !defined(T_DECK_PRO) && !defined(T_DECK)
     (void)enabled;
     if (this->enabled) {
         this->enabled = false;
@@ -131,7 +131,7 @@ void ChineseIme::updateCandidates()
 
 void ChineseIme::updateCandidatesFromBuiltin()
 {
-#if !defined(T_DECK_PRO)
+#if !defined(T_DECK_PRO) && !defined(T_DECK)
     return;
 #else
     const size_t kMaxCandidates = 50;
