@@ -91,9 +91,13 @@ public:
     void updateNodeActivity(NodeNum nodeId, uint32_t timestamp);
 
     /**
-     * Remove edges and inactive nodes that haven't been active in the last 5 minutes
+     * Remove edges and inactive nodes that haven't been active recently
+     * @param currentTime Current time in seconds
+     * @param getTtlForNode Optional callback to get TTL for a specific node (returns seconds).
+     *                      If not provided, uses EDGE_AGING_TIMEOUT_SECS for all nodes.
+     *                      This allows different TTLs for SR-active vs stock/mute nodes.
      */
-    void ageEdges(uint32_t currentTime);
+    void ageEdges(uint32_t currentTime, std::function<uint32_t(NodeNum)> getTtlForNode = nullptr);
 
     /**
      * Calculate route to destination using Dijkstra with ETX costs
