@@ -625,10 +625,10 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 return true;
             }
 
-            incoming_link = ingestLinkMessage(t, false);
+            incoming_link = ingestLinkMessage(t);
         } else if (t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_FIRSTHALF) {
             LOG_DEBUG("StoreForwardpp Link Provide First Half received!");
-            split_link_in = ingestLinkMessage(t, false);
+            split_link_in = ingestLinkMessage(t);
             doing_split_receive = true;
             split_link_in.validObject = true;
             return true;
@@ -644,7 +644,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 doing_split_receive = false;
                 return true;
             }
-            link_object second_half = ingestLinkMessage(t, false);
+            link_object second_half = ingestLinkMessage(t);
             if (split_link_in.encrypted_len + second_half.encrypted_len > 256) {
                 LOG_WARN("StoreForwardpp Combined link too large");
                 return true;
@@ -671,6 +671,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 return true;
             }
         }
+
+        recalculateMessageHash(incoming_link);
 
         // Incoming hash. First check if we already have it
         if (isCommitInDB(incoming_link.commit_hash, incoming_link.commit_hash_len) ||
@@ -1529,8 +1531,7 @@ StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, co
     return lo;
 }
 
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMessage(meshtastic_StoreForwardPlusPlus *t,
-                                                                                      bool recalc)
+StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMessage(meshtastic_StoreForwardPlusPlus *t)
 {
     link_object lo;
 
@@ -1548,19 +1549,12 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
 
     memcpy(lo.encrypted_bytes, t->message.bytes, t->message.size);
     lo.encrypted_len = t->message.size;
-    if (recalc) {
-        if (!recalculateHash(lo, t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size)) {
-            lo.validObject = false;
-            return lo;
-        }
-    } else {
-        memcpy(lo.message_hash, t->message_hash.bytes, t->message_hash.size);
-        lo.message_hash_len = t->message_hash.size;
-        memcpy(lo.root_hash, t->root_hash.bytes, t->root_hash.size);
-        lo.root_hash_len = t->root_hash.size;
-        memcpy(lo.commit_hash, t->commit_hash.bytes, t->commit_hash.size);
-        lo.commit_hash_len = t->commit_hash.size;
-    }
+    memcpy(lo.message_hash, t->message_hash.bytes, t->message_hash.size);
+    lo.message_hash_len = t->message_hash.size;
+    memcpy(lo.root_hash, t->root_hash.bytes, t->root_hash.size);
+    lo.root_hash_len = t->root_hash.size;
+    memcpy(lo.commit_hash, t->commit_hash.bytes, t->commit_hash.size);
+    lo.commit_hash_len = t->commit_hash.size;
 
     // we don't ever get the payload here, so it's always an empty string
     lo.payload = "";
@@ -1733,8 +1727,7 @@ void StoreForwardPlusPlusModule::clearChain(uint8_t *root_hash, size_t root_hash
     setChainCount(root_hash, root_hash_len, 0);
 }
 
-bool StoreForwardPlusPlusModule::recalculateHash(StoreForwardPlusPlusModule::link_object &lo, uint8_t *_root_hash_bytes,
-                                                 size_t _root_hash_len, uint8_t *_commit_hash_bytes, size_t _commit_hash_len)
+void StoreForwardPlusPlusModule::recalculateMessageHash(link_object &lo)
 {
     SHA256 message_hash;
     message_hash.reset();
@@ -1744,6 +1737,12 @@ bool StoreForwardPlusPlusModule::recalculateHash(StoreForwardPlusPlusModule::lin
     message_hash.update(&lo.id, sizeof(lo.id));
     message_hash.finalize(lo.message_hash, SFPP_HASH_SIZE);
     lo.message_hash_len = SFPP_HASH_SIZE;
+}
+
+bool StoreForwardPlusPlusModule::recalculateHash(StoreForwardPlusPlusModule::link_object &lo, uint8_t *_root_hash_bytes,
+                                                 size_t _root_hash_len, uint8_t *_commit_hash_bytes, size_t _commit_hash_len)
+{
+    recalculateMessageHash(lo);
 
     // look up full root hash and copy over the partial if it matches
     if (lookUpFullRootHash(_root_hash_bytes, _root_hash_len, lo.root_hash)) {
