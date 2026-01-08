@@ -184,7 +184,7 @@ void GraphLite::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
     }
 }
 
-void GraphLite::ageEdges(uint32_t currentTimeSecs)
+void GraphLite::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(NodeNum)> getTtlForNode)
 {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
     uint16_t currentLo = static_cast<uint16_t>(currentTimeSecs & 0xFFFF);
@@ -198,16 +198,19 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs)
             continue;
         }
 
+        // Get TTL for this node (capability-based if callback provided)
+        uint32_t nodeTtl = getTtlForNode ? getTtlForNode(node->nodeId) : EDGE_AGING_TIMEOUT_SECS;
+
         // Age individual edges within this node
         // For GraphLite, use a simpler approach: if the node's last update is old,
         // assume all its edges are stale and clear them
-        if (currentTimeSecs - node->lastFullUpdate > EDGE_AGING_TIMEOUT_SECS) {
+        if (currentTimeSecs - node->lastFullUpdate > nodeTtl) {
             node->edgeCount = 0; // Clear all edges for stale nodes
         }
 
         // Check if entire node is stale (no recent updates) or has no edges left
         bool isPlaceholder = (node->nodeId & 0xFF000000) == 0xFF000000;
-        uint32_t ttl = isPlaceholder ? 60 : EDGE_AGING_TIMEOUT_SECS; // 1 minute for placeholders
+        uint32_t ttl = isPlaceholder ? 60 : nodeTtl; // 1 minute for placeholders
 
         if (currentTimeSecs - node->lastFullUpdate > ttl || node->edgeCount == 0) {
             // Remove this node by swapping with last
@@ -959,26 +962,25 @@ void GraphLite::removeNode(NodeNum nodeId)
 
 void GraphLite::clearEdgesForNode(NodeNum nodeId)
 {
-    // Find and clear edges from this node
+    // Remove only MIRRORED edges FROM this node (topology-reported edges)
+    // PRESERVE Reported edges - those represent our own direct observations of
+    // radio communication and should not be destroyed by topology updates.
+    // When we receive a topology broadcast from nodeId, we clear what they
+    // previously reported (Mirrored) and replace with their new report,
+    // but we keep edges we observed directly (Reported).
     NodeEdgesLite *node = findNode(nodeId);
     if (node) {
-        node->edgeCount = 0;
-    }
-
-    // Remove edges from other nodes that point to this node
-    for (uint8_t i = 0; i < nodeCount; i++) {
-        NodeEdgesLite *otherNode = &nodes[i];
-        // Remove edges where destination is the target node
+        // Compact array: keep only Reported edges
         uint8_t writeIdx = 0;
-        for (uint8_t readIdx = 0; readIdx < otherNode->edgeCount; readIdx++) {
-            if (otherNode->edges[readIdx].to != nodeId) {
-                if (writeIdx != readIdx) {
-                    otherNode->edges[writeIdx] = otherNode->edges[readIdx];
+        for (uint8_t i = 0; i < node->edgeCount; i++) {
+            if (node->edges[i].source == EdgeLite::Source::Reported) {
+                if (writeIdx != i) {
+                    node->edges[writeIdx] = node->edges[i];
                 }
                 writeIdx++;
             }
         }
-        otherNode->edgeCount = writeIdx;
+        node->edgeCount = writeIdx;
     }
 
     // Clear route cache entries that involve this node

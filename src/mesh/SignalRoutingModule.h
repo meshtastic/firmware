@@ -44,6 +44,13 @@ public:
     void updateNodeActivityForPacketAndRelay(const meshtastic_MeshPacket *p);
 
     /**
+     * Unified relay decision for both broadcasts and unicasts
+     * For broadcasts: uses graph-based coverage calculation
+     * For unicasts: checks if next hop already heard from source
+     */
+    bool shouldRelay(const meshtastic_MeshPacket *p);
+
+    /**
      * Check if we should relay a broadcast packet
      * Uses graph-based coverage calculation to coordinate with other nodes
      */
