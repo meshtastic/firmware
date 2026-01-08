@@ -595,6 +595,11 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         // Process this neighbor directly - no need for protobuf handler since we already validated the main packet
         // This is just for graph updates, capability status was already handled for the main sender
         updateGraphWithNeighbor(p->from, neighbor);
+        
+        // NOTE: We intentionally do NOT create gateway relationships here.
+        // Gateway relationships should only be inferred from actual packet relaying,
+        // not from topology broadcasts. Creating them here would incorrectly mark
+        // nodes we can hear directly as "downstream" of remote nodes.
     }
 
     // Update last processed version (minimal state tracking)
@@ -873,16 +878,40 @@ void SignalRoutingModule::replaceGatewayNode(NodeNum oldNode, NodeNum newNode)
         }
     }
 
-    // Update gatewayDownstream array
-    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+    // Update gatewayDownstream array - need to handle carefully to avoid duplicates
+    // First, collect all downstream nodes for the old gateway
+    GatewayDownstreamSet oldGatewaySet = {};
+    bool foundOldGateway = false;
+    for (uint8_t i = 0; i < gatewayDownstreamCount; ) {
         if (gatewayDownstream[i].gateway == oldNode) {
-            gatewayDownstream[i].gateway = newNode;
+            if (!foundOldGateway) {
+                oldGatewaySet = gatewayDownstream[i];
+                oldGatewaySet.gateway = newNode; // Change to new gateway
+                foundOldGateway = true;
+            }
+            // Remove this entry by shifting
+            for (uint8_t j = i; j < gatewayDownstreamCount - 1; j++) {
+                gatewayDownstream[j] = gatewayDownstream[j + 1];
+            }
+            gatewayDownstreamCount--;
+            // Don't increment i since we shifted elements
+        } else {
+            i++;
         }
+    }
+
+    // Replace any downstream references to oldNode with newNode across all gateway sets
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
         for (uint8_t j = 0; j < gatewayDownstream[i].count; j++) {
             if (gatewayDownstream[i].downstream[j] == oldNode) {
                 gatewayDownstream[i].downstream[j] = newNode;
             }
         }
+    }
+
+    // If we found an old gateway entry, add it back with the new gateway ID
+    if (foundOldGateway && gatewayDownstreamCount < MAX_GATEWAY_RELATIONS) {
+        gatewayDownstream[gatewayDownstreamCount++] = oldGatewaySet;
     }
 #else
     // Full mode: update std::unordered_map structures
@@ -905,9 +934,11 @@ void SignalRoutingModule::replaceGatewayNode(NodeNum oldNode, NodeNum newNode)
     // Update any references within downstream sets
     for (auto& pair : gatewayDownstream) {
         auto& downstreamSet = pair.second;
-        // Remove oldNode if it exists
-        downstreamSet.erase(oldNode);
-        // Note: we don't add newNode here as it's now the key
+        // Replace oldNode with newNode if it exists as a downstream
+        if (downstreamSet.count(oldNode)) {
+            downstreamSet.erase(oldNode);
+            downstreamSet.insert(newNode);
+        }
     }
 #endif
 }
@@ -1496,7 +1527,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         } else {
             NodeNum inferredRelayer = resolveRelayIdentity(mp.relay_node);
 
-        // If still not resolved, try direct neighbors
+        // If still not resolved, try known nodes (both direct neighbors and topology-known nodes)
+        // We need to check ALL edges, not just Reported ones, because the relay might be
+        // a node we only know through topology broadcasts (Mirrored edges)
         if (inferredRelayer == 0 && routingGraph && nodeDB) {
 #ifdef SIGNAL_ROUTING_LITE_MODE
             const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
@@ -1507,22 +1540,25 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
                         inferredRelayer = neighbor;
                         // Remember this mapping for future use
                         rememberRelayIdentity(neighbor, mp.relay_node);
-                        LOG_DEBUG("[SR] Resolved relay 0x%02x to direct neighbor %08x",
+                        LOG_DEBUG("[SR] Resolved relay 0x%02x to known node %08x",
                                  mp.relay_node, neighbor);
                         break;
                     }
                 }
             }
 #else
-            auto neighbors = routingGraph->getDirectNeighbors(nodeDB->getNodeNum());
-            for (NodeNum neighbor : neighbors) {
-                if ((neighbor & 0xFF) == mp.relay_node) {
-                    inferredRelayer = neighbor;
-                    // Remember this mapping for future use
-                    rememberRelayIdentity(neighbor, mp.relay_node);
-                    LOG_DEBUG("[SR] Resolved relay 0x%02x to direct neighbor %08x",
-                             mp.relay_node, neighbor);
-                    break;
+            // Check all edges from our node (both Reported and Mirrored)
+            const std::vector<Edge>* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (myEdges) {
+                for (const Edge& edge : *myEdges) {
+                    if ((edge.to & 0xFF) == mp.relay_node) {
+                        inferredRelayer = edge.to;
+                        // Remember this mapping for future use
+                        rememberRelayIdentity(edge.to, mp.relay_node);
+                        LOG_DEBUG("[SR] Resolved relay 0x%02x to known node %08x",
+                                 mp.relay_node, edge.to);
+                        break;
+                    }
                 }
             }
 #endif
@@ -1531,15 +1567,17 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // If we can't resolve the relay identity, create a placeholder node
         if (inferredRelayer == 0) {
             inferredRelayer = createPlaceholderNode(mp.relay_node);
-            // Remember this placeholder for future reference
-            rememberRelayIdentity(inferredRelayer, mp.relay_node);
+            // Don't remember placeholders in relay identity cache - only remember real nodes
+            // rememberRelayIdentity(inferredRelayer, mp.relay_node);
             LOG_DEBUG("[SR] Created placeholder %08x for unknown relay 0x%02x",
                      inferredRelayer, mp.relay_node);
         }
 
         if (inferredRelayer != 0 && inferredRelayer != mp.from) {
-            // Remember this relay identity mapping for future use
-            rememberRelayIdentity(inferredRelayer, mp.relay_node);
+            // Remember this relay identity mapping for future use (only for real nodes, not placeholders)
+            if (!isPlaceholderNode(inferredRelayer)) {
+                rememberRelayIdentity(inferredRelayer, mp.relay_node);
+            }
 
             // We know that inferredRelayer relayed a packet from mp.from
             // This establishes a gateway relationship, not direct connectivity
@@ -1754,10 +1792,24 @@ bool SignalRoutingModule::shouldUseSignalBasedRouting(const meshtastic_MeshPacke
         if (routingGraph && nodeDB) {
 #ifdef SIGNAL_ROUTING_LITE_MODE
             const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) neighborCount = edges->edgeCount;
+            if (edges) {
+                for (uint8_t i = 0; i < edges->edgeCount; i++) {
+                    // Only count Reported edges as direct neighbors
+                    if (edges->edges[i].source == EdgeLite::Source::Reported) {
+                        neighborCount++;
+                    }
+                }
+            }
 #else
             auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-            if (edges) neighborCount = edges->size();
+            if (edges) {
+                for (const Edge& edge : *edges) {
+                    // Only count Reported edges as direct neighbors
+                    if (edge.source == Edge::Source::Reported) {
+                        neighborCount++;
+                    }
+                }
+            }
 #endif
         }
         LOG_INFO("[SR] Topology check: %s (%d direct neighbors, %.1f%% SR-active)",
@@ -2468,21 +2520,26 @@ float SignalRoutingModule::getDirectNeighborsSignalActivePercentage() const
 #ifdef SIGNAL_ROUTING_LITE_MODE
     const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (edges) {
-        totalNeighbors = edges->edgeCount;
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
-            NodeNum neighborId = edges->edges[i].to;
-            if (getCapabilityStatus(neighborId) == CapabilityStatus::SRactive) {
-                activeNeighbors++;
+            // Only count Reported edges as direct neighbors, not Mirrored topology knowledge
+            if (edges->edges[i].source == EdgeLite::Source::Reported) {
+                totalNeighbors++;
+                if (getCapabilityStatus(edges->edges[i].to) == CapabilityStatus::SRactive) {
+                    activeNeighbors++;
+                }
             }
         }
     }
 #else
     auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (edges) {
-        totalNeighbors = edges->size();
         for (const Edge& edge : *edges) {
-            if (getCapabilityStatus(edge.to) == CapabilityStatus::SRactive) {
-                activeNeighbors++;
+            // Only count Reported edges as direct neighbors, not Mirrored topology knowledge
+            if (edge.source == Edge::Source::Reported) {
+                totalNeighbors++;
+                if (getCapabilityStatus(edge.to) == CapabilityStatus::SRactive) {
+                    activeNeighbors++;
+                }
             }
         }
     }
@@ -3354,8 +3411,13 @@ NodeNum SignalRoutingModule::resolveRelayIdentity(uint8_t relayId) const
     }
 #endif
 
+    // Don't return placeholders - they should be resolved to real nodes
+    if (isPlaceholderNode(bestNode)) {
+        return 0;
+    }
     return bestNode;
 }
+
 
 // Record gateway/downstream relationship inferred from relayed packets
 void SignalRoutingModule::removeGatewayRelationship(NodeNum gateway, NodeNum downstream)
@@ -3655,6 +3717,8 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
         return resolved;
     }
 
+    // Check ALL known nodes (both Reported and Mirrored edges), not just direct neighbors,
+    // because the relay might be a node we only know through topology broadcasts
     if (routingGraph && nodeDB) {
 #ifdef SIGNAL_ROUTING_LITE_MODE
         const NodeEdgesLite *myEdges = static_cast<GraphLite*>(routingGraph)->getEdgesFrom(nodeDB->getNodeNum());
@@ -3668,12 +3732,14 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
             }
         }
 #else
-        auto neighbors = routingGraph->getDirectNeighbors(nodeDB->getNodeNum());
-        for (NodeNum neighbor : neighbors) {
-            if ((neighbor & 0xFF) == p->relay_node) {
-                // Remember this mapping for future use
-                const_cast<SignalRoutingModule*>(this)->rememberRelayIdentity(neighbor, p->relay_node);
-                return neighbor;
+        const std::vector<Edge>* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        if (myEdges) {
+            for (const Edge& edge : *myEdges) {
+                if ((edge.to & 0xFF) == p->relay_node) {
+                    // Remember this mapping for future use
+                    const_cast<SignalRoutingModule*>(this)->rememberRelayIdentity(edge.to, p->relay_node);
+                    return edge.to;
+                }
             }
         }
 #endif

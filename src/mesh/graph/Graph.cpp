@@ -158,11 +158,16 @@ void Graph::ageEdges(uint32_t currentTime) {
             continue;
         }
 
+        // Special handling for placeholder nodes - remove them quickly if not resolved
+        bool isPlaceholder = (it->first & 0xFF000000) == 0xFF000000;
+        uint32_t placeholderTtl = 60; // 1 minute for placeholders
+
         if (it->second.empty()) {
             // Check if this node is still marked as active
             auto activityIt = nodeActivity.find(it->first);
-        if (activityIt == nodeActivity.end() ||
-            (currentTime - activityIt->second) > EDGE_AGING_TIMEOUT_SECS) {
+            bool shouldRemove = activityIt == nodeActivity.end() ||
+                (currentTime - activityIt->second) > (isPlaceholder ? placeholderTtl : EDGE_AGING_TIMEOUT_SECS);
+            if (shouldRemove) {
                 // Node is not active or activity has expired - remove it
                 it = adjacencyList.erase(it);
             } else {
@@ -170,6 +175,22 @@ void Graph::ageEdges(uint32_t currentTime) {
                 ++it;
             }
         } else {
+            // Node has edges - check if it's an old placeholder that should be removed
+            if (isPlaceholder) {
+                // Check if any edge is recent enough to keep the placeholder
+                bool hasRecentEdge = false;
+                for (const auto& edge : it->second) {
+                    if ((currentTime - edge.lastUpdate) <= placeholderTtl) {
+                        hasRecentEdge = true;
+                        break;
+                    }
+                }
+                if (!hasRecentEdge) {
+                    // Placeholder has no recent edges - remove it
+                    it = adjacencyList.erase(it);
+                    continue;
+                }
+            }
             ++it;
         }
     }
@@ -399,7 +420,10 @@ std::unordered_set<NodeNum> Graph::getDirectNeighbors(NodeNum node) const {
     auto it = adjacencyList.find(node);
     if (it != adjacencyList.end()) {
         for (const Edge& edge : it->second) {
-            neighbors.insert(edge.to);
+            // Only include edges based on actual direct communication (Reported), not topology inference (Mirrored)
+            if (edge.source == Edge::Source::Reported) {
+                neighbors.insert(edge.to);
+            }
         }
     }
     return neighbors;
