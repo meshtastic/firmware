@@ -37,6 +37,9 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     _activeLow = config.activeLow;
     _touchQuirk = config.touchQuirk;
     _intRoutine = config.intRoutine;
+    _pressHandler = config.onPress;
+    _releaseHandler = config.onRelease;
+    _suppressLeadUp = config.suppressLeadUpSound;
     _longLongPress = config.longLongPress;
 
     userButton = OneButton(config.pinNumber, config.activeLow, config.activePullup);
@@ -133,6 +136,8 @@ int32_t ButtonThread::runOnce()
 
     // Detect start of button press
     if (buttonCurrentlyPressed && !buttonWasPressed) {
+        if (_pressHandler)
+            _pressHandler();
         buttonPressStartTime = millis();
         leadUpPlayed = false;
         leadUpSequenceActive = false;
@@ -140,7 +145,7 @@ int32_t ButtonThread::runOnce()
     }
 
     // Progressive lead-up sound system
-    if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
+    if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
 
         // Start the progressive sequence if not already active
         if (!leadUpSequenceActive) {
@@ -160,6 +165,8 @@ int32_t ButtonThread::runOnce()
 
     // Reset when button is released
     if (!buttonCurrentlyPressed && buttonWasPressed) {
+        if (_releaseHandler)
+            _releaseHandler();
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
