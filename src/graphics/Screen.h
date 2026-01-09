@@ -40,7 +40,6 @@ class Screen
         FOCUS_DEFAULT,  // No specific frame
         FOCUS_PRESERVE, // Return to the previous frame
         FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
         FOCUS_CLOCK,
         FOCUS_SYSTEM,
@@ -55,8 +54,6 @@ class Screen
     void startFirmwareUpdateScreen() {}
     void increaseBrightness() {}
     void decreaseBrightness() {}
-    void setFunctionSymbol(std::string) {}
-    void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
@@ -83,6 +80,8 @@ class Screen
 #include <ST7789Spi.h>
 #elif defined(USE_SPISSD1306)
 #include <SSD1306Spi.h>
+#elif defined(USE_ST7796)
+#include <ST7796Spi.h>
 #else
 // the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
@@ -170,6 +169,8 @@ class Point
 namespace graphics
 {
 
+enum class FrameDirection { NEXT, PREVIOUS };
+
 // Forward declarations
 class Screen;
 
@@ -209,8 +210,6 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
-    CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent); // Sent by Mesh Modules
     CallbackObserver<Screen, const InputEvent *> inputObserver =
@@ -221,6 +220,10 @@ class Screen : public concurrency::OSThread
   public:
     OLEDDisplay *getDisplayDevice() { return dispdev; }
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+
+    // Screen dimension accessors
+    inline int getHeight() const { return displayHeight; }
+    inline int getWidth() const { return displayWidth; }
     size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
@@ -229,7 +232,6 @@ class Screen : public concurrency::OSThread
         FOCUS_DEFAULT,  // No specific frame
         FOCUS_PRESERVE, // Return to the previous frame
         FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
         FOCUS_CLOCK,
         FOCUS_SYSTEM,
@@ -248,6 +250,8 @@ class Screen : public concurrency::OSThread
     OLEDDISPLAY_GEOMETRY geometry;
 
     bool isOverlayBannerShowing();
+
+    bool isScreenOn() { return screenOn; }
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
@@ -275,6 +279,7 @@ class Screen : public concurrency::OSThread
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
+    void showFrame(FrameDirection direction);
 
     // generic alert start
     void startAlert(FrameCallback _alertFrame)
@@ -341,9 +346,6 @@ class Screen : public concurrency::OSThread
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
-
-    void setFunctionSymbol(std::string sym);
-    void removeFunctionSymbol(std::string sym);
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
@@ -575,7 +577,7 @@ class Screen : public concurrency::OSThread
 
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
-    int handleTextMessage(const meshtastic_MeshPacket *arg);
+    int handleTextMessage(const meshtastic_MeshPacket *packet);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
     int handleAdminMessage(AdminModule_ObserverData *arg);
@@ -585,9 +587,6 @@ class Screen : public concurrency::OSThread
 
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
-
-    // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
-    void hideCurrentFrame();
 
     // Menu-driven Show / Hide Toggle
     void toggleFrameVisibility(const std::string &frameName);
@@ -636,8 +635,6 @@ class Screen : public concurrency::OSThread
     // Implementations of various commands, called from doTask().
     void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
-    void handleShowNextFrame();
-    void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
 
     // Info collected by setFrames method.
@@ -657,7 +654,8 @@ class Screen : public concurrency::OSThread
             uint8_t gps = 255;
             uint8_t home = 255;
             uint8_t textMessage = 255;
-            uint8_t nodelist = 255;
+            uint8_t nodelist_nodes = 255;
+            uint8_t nodelist_location = 255;
             uint8_t nodelist_lastheard = 255;
             uint8_t nodelist_hopsignal = 255;
             uint8_t nodelist_distance = 255;
@@ -680,7 +678,8 @@ class Screen : public concurrency::OSThread
         bool home = false;
         bool clock = false;
 #ifndef USE_EINK
-        bool nodelist = false;
+        bool nodelist_nodes = false;
+        bool nodelist_location = false;
 #endif
 #ifdef USE_EINK
         bool nodelist_lastheard = false;
@@ -688,7 +687,9 @@ class Screen : public concurrency::OSThread
         bool nodelist_distance = false;
 #endif
 #if HAS_GPS
+#ifdef USE_EINK
         bool nodelist_bearings = false;
+#endif
         bool gps = false;
 #endif
         bool lora = false;
@@ -714,6 +715,8 @@ class Screen : public concurrency::OSThread
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
+    /// Track USB power state to only wake screen on actual power state changes
+    bool lastPowerUSBState = false;
 
     // Implementation to Adjust Brightness
     uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
