@@ -87,6 +87,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         }
     }
 
+    void handleEncrypted(const meshtastic_MeshPacket *, const meshtastic_MeshPacket *);
+
   protected:
     /** Called to handle a particular incoming message
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
@@ -280,4 +282,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     bool did_announce_last = false;
 };
+
+extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
 #endif

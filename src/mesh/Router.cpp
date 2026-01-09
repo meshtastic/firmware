@@ -17,6 +17,7 @@
 #endif
 #include "Default.h"
 #if ARCH_PORTDUINO
+#include "modules/Native/StoreForwardPlusPlus.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
@@ -359,6 +360,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
+#if ARCH_PORTDUINO
+        if (p_decoded->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP &&
+            (p->from == 0 || p->from == nodeDB->getNodeNum()) && storeForwardPlusPlusModule && portduino_config.sfpp_enabled) {
+            storeForwardPlusPlusModule->handleEncrypted(p_decoded, p);
+        }
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {

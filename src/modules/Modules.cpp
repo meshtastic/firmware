@@ -246,7 +246,7 @@ void setupModules()
     new HostMetricsModule();
 #if SFPP_ENABLED
     if (portduino_config.sfpp_enabled) {
-        new StoreForwardPlusPlusModule();
+        storeForwardPlusPlusModule = new StoreForwardPlusPlusModule();
     }
 #endif
 #endif
