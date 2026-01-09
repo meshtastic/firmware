@@ -6,6 +6,7 @@
 #include "target_specific.h"
 
 #include "PortduinoGlue.h"
+#include "SHA256.h"
 #include "api/ServerAPI.h"
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
@@ -270,7 +271,39 @@ void portduinoSetup()
                 }
                 std::cout << "autoconf: Found Pi HAT+ " << hat_vendor << " " << autoconf_product << " at /proc/device-tree/hat"
                           << std::endl;
-                found_hat = true;
+
+                // potential TODO: Validate that this is a real UUID
+                std::ifstream hatUUID("/proc/device-tree/hat/uuid");
+                char uuid[38] = {0};
+                if (hatUUID.is_open()) {
+                    hatUUID.read(uuid, 37);
+                    hatUUID.close();
+                    std::cout << "autoconf: UUID " << uuid << std::endl;
+                    SHA256 uuid_hash;
+                    uint8_t uuid_hash_bytes[32] = {0};
+
+                    uuid_hash.reset();
+                    uuid_hash.update(uuid, 37);
+                    uuid_hash.finalize(uuid_hash_bytes, 32);
+
+                    for (int j = 0; j < 16; j++) {
+                        portduino_config.device_id[j] = uuid_hash_bytes[j];
+                    }
+                    portduino_config.has_device_id = true;
+                    uint8_t dmac[6] = {0};
+                    dmac[0] = (uuid_hash_bytes[17] << 4) | 2;
+                    dmac[1] = uuid_hash_bytes[18];
+                    dmac[2] = uuid_hash_bytes[19];
+                    dmac[3] = uuid_hash_bytes[20];
+                    dmac[4] = uuid_hash_bytes[21];
+                    dmac[5] = uuid_hash_bytes[22];
+                    char macBuf[13] = {0};
+                    snprintf(macBuf, sizeof(macBuf), "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4],
+                             dmac[5]);
+                    portduino_config.mac_address = macBuf;
+                    found_hat = true;
+                }
+
             } else {
                 std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat" << std::endl;
             }
