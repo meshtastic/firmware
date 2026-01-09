@@ -301,7 +301,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
-        previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::SEND;
         break;
 
     case OPTIONS:
