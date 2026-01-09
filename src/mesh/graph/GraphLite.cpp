@@ -129,7 +129,7 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
 
         // Update existing edge
         float oldEtx = edge->getEtx();
-        float change = std::abs(etx - oldEtx) / oldEtx;
+        float change = fabs(etx - oldEtx) / oldEtx;
 
         edge->setEtx(etx);
         if (updateTimestamp) {

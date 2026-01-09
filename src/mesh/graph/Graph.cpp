@@ -85,7 +85,7 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
 
         // Check for significant change
         float oldEtx = it->etx;
-        float change = std::abs(etx - oldEtx) / oldEtx;
+        float change = fabs(etx - oldEtx) / oldEtx;
 
         // Update existing edge
         it->etx = etx;
