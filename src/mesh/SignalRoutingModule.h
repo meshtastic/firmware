@@ -76,6 +76,15 @@ public:
      * Check if two nodes have direct connectivity in the routing graph
      */
     bool hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB);
+    
+    /**
+     * Enhanced connectivity check that considers stock firmware limitations.
+     * @param transmitter The node that transmitted
+     * @param receiver The node we're checking if it can hear the transmitter
+     * @param unknownOut If provided, set to true when connectivity cannot be verified (stock node involved)
+     * @return true if verified connectivity exists, false otherwise
+     */
+    bool hasVerifiedConnectivity(NodeNum transmitter, NodeNum receiver, bool* unknownOut = nullptr);
 
     /**
      * Update neighbor information from a directly received packet
@@ -278,7 +287,12 @@ private:
             NodeNum expectedRelay;
             PacketId packetId;
             NodeNum destination;
+            NodeNum sourceNode;      // Original packet source
+            NodeNum heardFrom;       // Where we heard the packet from
+            uint8_t hopLimit;        // Original hop limit
+            uint8_t hopStart;        // Original hop start
             uint32_t expiryMs;
+            bool needsRelay;         // Set to true when we should relay after expiry
         };
         ContentionCheck contentionChecks[4]; // Max 4 pending checks
         uint8_t contentionCheckCount = 0;
@@ -319,7 +333,12 @@ private:
             NodeNum expectedRelay;
             PacketId packetId;
             NodeNum destination;
+            NodeNum sourceNode;      // Original packet source
+            NodeNum heardFrom;       // Where we heard the packet from
+            uint8_t hopLimit;        // Original hop limit
+            uint8_t hopStart;        // Original hop start
             uint32_t expiryMs;
+            bool needsRelay;         // Set to true when we should relay after expiry
         };
         std::vector<ContentionCheck> contentionChecks;
     #endif
@@ -398,6 +417,17 @@ private:
      * Log the current network topology graph in a readable format
      */
     void logNetworkTopology();
+
+    /**
+     * Evaluate if we should relay after contention window expires
+     * @return true if we should relay the packet ourselves
+     */
+    bool evaluateContentionExpiry(const ContentionCheck& check, NodeNum myNode);
+
+    /**
+     * Queue a unicast relay after contention evaluation (if possible)
+     */
+    void queueUnicastRelay(const ContentionCheck& check);
 };
 
 extern SignalRoutingModule *signalRoutingModule;

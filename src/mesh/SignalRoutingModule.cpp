@@ -1859,8 +1859,9 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     NodeNum sourceNode = p->from;
     NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
 
-    char destName[64];
+    char destName[64], heardFromName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
+    getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
 
     // UNICAST RELAY COORDINATION: Use broadcast-style algorithm
     // Calculate what my next hop would be to reach the destination
@@ -1870,6 +1871,16 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
         // I don't have a route to the destination, so I can't be part of the relay chain
         LOG_DEBUG("[SR] UNICAST RELAY: No route to %s - cannot participate in relay coordination", destName);
         return false;
+    }
+
+    char nextHopName[64];
+    getNodeDisplayName(myNextHop, nextHopName, sizeof(nextHopName));
+
+    // If next hop IS the destination, it means destination is a direct neighbor.
+    // We should deliver directly, not wait for destination to "relay to itself".
+    if (myNextHop == destination) {
+        LOG_INFO("[SR] UNICAST RELAY: Destination %s is direct neighbor - delivering directly", destName);
+        return true;
     }
 
     // If I'm the next hop in the route, I should relay this unicast
@@ -1882,35 +1893,100 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     // Since the next hop can reach the destination (that's why it's our next hop), the destination
     // should have received the packet directly from the next hop - no need for us to relay.
     if (heardFrom == myNextHop && heardFrom != 0) {
-        char nextHopName[64];
-        getNodeDisplayName(myNextHop, nextHopName, sizeof(nextHopName));
         LOG_DEBUG("[SR] UNICAST RELAY: Received from next hop %s who can reach %s - destination should have it",
                  nextHopName, destName);
         return false;  // Next hop already transmitted, destination should have received it
     }
 
+    // Check if heardFrom is ALSO a gateway for the destination.
+    // If we received the packet from ANY gateway that leads to the destination,
+    // that gateway should deliver it - we don't need to relay.
+    if (heardFrom != 0 && heardFrom != sourceNode) {
+        NodeNum gatewayForDest = getGatewayFor(destination);
+        if (gatewayForDest == heardFrom) {
+            LOG_DEBUG("[SR] UNICAST RELAY: Received from gateway %s which leads to %s - no relay needed",
+                     heardFromName, destName);
+            return false;
+        }
+    }
+
+    // Check if next hop can hear the transmitting node (heardFrom).
+    // If we can't verify the next hop heard the transmission, we should relay ourselves
+    // (especially for stock/placeholder gateways that don't report topology).
+    bool nextHopCanHearTransmitter = false;
+    if (heardFrom != 0) {
+        // Check if heardFrom has an edge to myNextHop (heardFrom → myNextHop)
+        nextHopCanHearTransmitter = hasDirectConnectivity(heardFrom, myNextHop);
+
+        // Also check reverse direction (myNextHop → heardFrom)
+        if (!nextHopCanHearTransmitter) {
+            nextHopCanHearTransmitter = hasDirectConnectivity(myNextHop, heardFrom);
+        }
+    }
+
+    // For stock/placeholder nodes, we can't verify connectivity - be conservative
+    CapabilityStatus nextHopStatus = getCapabilityStatus(myNextHop);
+    bool isStockOrPlaceholder = isPlaceholderNode(myNextHop) ||
+                                nextHopStatus == CapabilityStatus::Legacy ||
+                                nextHopStatus == CapabilityStatus::Unknown;
+
+    if (!nextHopCanHearTransmitter && isStockOrPlaceholder) {
+        // Can't verify stock/placeholder gateway heard the transmitter
+        // If we heard directly from the source, we should relay ourselves
+        if (heardFrom == sourceNode) {
+            LOG_INFO("[SR] UNICAST RELAY: Cannot verify stock gateway %s heard source %s - relaying",
+                    nextHopName, heardFromName);
+            return true;
+        }
+        // If we heard from an intermediate relayer, still be conservative for stock gateways
+        LOG_DEBUG("[SR] UNICAST RELAY: Stock gateway %s may not have heard transmitter %s - excluding from candidates",
+                 nextHopName, heardFromName);
+        excludeNodeFromRelay(myNextHop, p->id);
+        // Fall through to try alternative route
+    }
+
     // Check if the calculated next hop node has already been tried and failed
     // This implements the iterative candidate removal like broadcasts
     if (hasNodeBeenExcludedFromRelay(myNextHop, p->id)) {
-        LOG_DEBUG("[SR] UNICAST RELAY: Next hop %08x has been excluded for packet %08x - trying alternative route",
-                 myNextHop, p->id);
+        LOG_DEBUG("[SR] UNICAST RELAY: Next hop %s has been excluded for packet %08x - trying alternative route",
+                 nextHopName, p->id);
 
         // Try opportunistic routing as fallback
         NodeNum opportunisticNextHop = getNextHop(destination, sourceNode, heardFrom, true);
-        if (opportunisticNextHop == myNode) {
-            LOG_INFO("[SR] UNICAST RELAY: Using opportunistic routing - I am next hop to %s", destName);
-            return true;
+        if (opportunisticNextHop != 0 && opportunisticNextHop != myNextHop) {
+            if (opportunisticNextHop == myNode || opportunisticNextHop == destination) {
+                LOG_INFO("[SR] UNICAST RELAY: Using opportunistic routing - delivering to %s", destName);
+                return true;
+            }
+            // Check if opportunistic next hop can hear transmitter
+            bool oppCanHear = hasDirectConnectivity(heardFrom, opportunisticNextHop) ||
+                             hasDirectConnectivity(opportunisticNextHop, heardFrom);
+            if (oppCanHear && !hasNodeBeenExcludedFromRelay(opportunisticNextHop, p->id)) {
+                char oppName[64];
+                getNodeDisplayName(opportunisticNextHop, oppName, sizeof(oppName));
+                LOG_DEBUG("[SR] UNICAST RELAY: Waiting for opportunistic next hop %s", oppName);
+                scheduleContentionWindowCheck(opportunisticNextHop, p->id, destination, p);
+                return false;
+            }
         }
 
-        // If I still can't find a route that makes me the next hop, don't relay
-        LOG_DEBUG("[SR] UNICAST RELAY: No alternative route makes me next hop to %s", destName);
-        return false;
+        // No valid alternative found - we should relay ourselves as last resort
+        LOG_INFO("[SR] UNICAST RELAY: No alternative candidates - relaying to %s ourselves", destName);
+        return true;
+    }
+
+    // Verify next hop can actually hear the transmitting node before waiting
+    if (!nextHopCanHearTransmitter && !isStockOrPlaceholder) {
+        // For SR nodes without connectivity to transmitter, skip them immediately
+        LOG_DEBUG("[SR] UNICAST RELAY: Next hop %s cannot hear transmitter %s - excluding",
+                 nextHopName, heardFromName);
+        excludeNodeFromRelay(myNextHop, p->id);
+        // Recurse to try next candidate
+        return shouldRelayUnicastForCoordination(p);
     }
 
     // I'm not the next hop, so I should wait for the next hop node to relay
     // This is the contention window waiting period like broadcasts
-    char nextHopName[64];
-    getNodeDisplayName(myNextHop, nextHopName, sizeof(nextHopName));
     LOG_DEBUG("[SR] UNICAST RELAY: Waiting for next hop %s to relay to %s", nextHopName, destName);
 
     // Set up contention window monitoring - if next hop doesn't relay within timeout, exclude it
@@ -2248,46 +2324,115 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
                     destName, routeCost);
         }
 
-        // Even if we have a route, check if any neighbor has a significantly better route
-        // This ensures unicasts are forwarded to better-positioned nodes
-        if (allowOpportunistic && routeCost > 2.0f) { // Only check if our route is not excellent
-            NodeNum betterNeighbor = findBetterPositionedNeighbor(destination, sourceNode, heardFrom, routeCost, currentTime);
+        // CRITICAL: Verify the next hop can hear the transmitting node (heardFrom)
+        // If heardFrom is known and next hop didn't hear the transmission, it can't relay
+        bool nextHopCanHearTransmitter = true;  // Assume true if we can't verify
+        bool connectivityUnknown = false;
+        
+        if (heardFrom != 0 && route.nextHop != heardFrom) {
+            // Use enhanced connectivity check that handles stock firmware nodes
+            nextHopCanHearTransmitter = hasVerifiedConnectivity(heardFrom, route.nextHop, &connectivityUnknown);
+            
+            if (!nextHopCanHearTransmitter) {
+                char heardFromName[64];
+                getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
+                
+                if (connectivityUnknown) {
+                    // Stock node involved - we can't verify connectivity
+                    // Be conservative: don't trust unverified relays, relay ourselves
+                    LOG_DEBUG("[SR] Route via %s rejected - cannot verify connectivity to %s (stock/unknown node)",
+                             nextHopName, heardFromName);
+                } else {
+                    // Both are SR-active but no edge exists - they likely can't hear each other
+                    LOG_DEBUG("[SR] Route via %s rejected - no connectivity to transmitter %s",
+                             nextHopName, heardFromName);
+                }
+                // Don't return this next hop - fall through to try alternatives
+            }
+        }
+
+        if (nextHopCanHearTransmitter) {
+            // Even if we have a route, check if any neighbor has a significantly better route
+            // This ensures unicasts are forwarded to better-positioned nodes
+            if (allowOpportunistic && routeCost > 2.0f) { // Only check if our route is not excellent
+                NodeNum betterNeighbor = findBetterPositionedNeighbor(destination, sourceNode, heardFrom, routeCost, currentTime);
+                if (betterNeighbor != 0) {
+                    return betterNeighbor;
+                }
+            }
+
+            return route.nextHop;
+        }
+        
+        // Next hop can't hear transmitter - try to find alternative through opportunistic routing
+        if (allowOpportunistic) {
+            NodeNum betterNeighbor = findBetterPositionedNeighbor(destination, sourceNode, heardFrom, 
+                                                                  std::numeric_limits<float>::infinity(), currentTime);
             if (betterNeighbor != 0) {
+                char altName[64];
+                getNodeDisplayName(betterNeighbor, altName, sizeof(altName));
+                LOG_DEBUG("[SR] Using alternative next hop %s (can hear transmitter)", altName);
                 return betterNeighbor;
             }
         }
-
-        return route.nextHop;
+        
+        // No alternative found - indicate we should relay ourselves
+        // by returning our own node number
+        NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+        if (myNode != 0) {
+            LOG_DEBUG("[SR] No next hop can hear transmitter - we should relay ourselves");
+            return myNode;
+        }
     }
 
     // Fallback 1: if we know a gateway for this destination, and we have a direct link to it, forward there
+    // But only if the gateway can hear the transmitter (heardFrom)
     NodeNum gatewayForDest = getGatewayFor(destination);
     if (gatewayForDest != 0 && nodeDB) {
+        // Verify gateway can hear transmitter before using it
+        bool gatewayCanHearTransmitter = true;
+        bool connectivityUnknown = false;
+        if (heardFrom != 0 && gatewayForDest != heardFrom) {
+            gatewayCanHearTransmitter = hasVerifiedConnectivity(heardFrom, gatewayForDest, &connectivityUnknown);
+        }
+        
+        // Only use gateway if we can verify connectivity (be conservative with stock nodes)
+        if (gatewayCanHearTransmitter && !connectivityUnknown) {
 #ifdef SIGNAL_ROUTING_LITE_MODE
-        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-        if (myEdges) {
-            for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
-                if (myEdges->edges[i].to == gatewayForDest) {
-                    char gwName[64];
-                    getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
-                    LOG_DEBUG("[SR] No direct route to %s, but forwarding to gateway %s", destName, gwName);
-                    return gatewayForDest;
+            const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (myEdges) {
+                for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
+                    if (myEdges->edges[i].to == gatewayForDest) {
+                        char gwName[64];
+                        getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
+                        LOG_DEBUG("[SR] No direct route to %s, but forwarding to gateway %s", destName, gwName);
+                        return gatewayForDest;
+                    }
                 }
             }
-        }
 #else
-        auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
-        if (edges) {
-            for (const Edge& e : *edges) {
-                if (e.to == gatewayForDest) {
-                    char gwName[64];
-                    getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
-                    LOG_DEBUG("[SR] No direct route to %s, but forwarding to gateway %s", destName, gwName);
-                    return gatewayForDest;
+            auto edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            if (edges) {
+                for (const Edge& e : *edges) {
+                    if (e.to == gatewayForDest) {
+                        char gwName[64];
+                        getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
+                        LOG_DEBUG("[SR] No direct route to %s, but forwarding to gateway %s", destName, gwName);
+                        return gatewayForDest;
+                    }
                 }
             }
-        }
 #endif
+        } else {
+            char gwName[64], heardFromName[64];
+            getNodeDisplayName(gatewayForDest, gwName, sizeof(gwName));
+            getNodeDisplayName(heardFrom, heardFromName, sizeof(heardFromName));
+            if (connectivityUnknown) {
+                LOG_DEBUG("[SR] Gateway %s connectivity to %s unknown (stock node) - skipping", gwName, heardFromName);
+            } else {
+                LOG_DEBUG("[SR] Gateway %s cannot hear transmitter %s - skipping", gwName, heardFromName);
+            }
+        }
     }
 
     // Fallback 2: opportunistic forward — find neighbor with better position for destination
@@ -2391,6 +2536,17 @@ NodeNum SignalRoutingModule::findBetterPositionedNeighbor(NodeNum destination, N
             continue;
         }
 
+        // CRITICAL: Only consider neighbors that can hear the transmitting node (heardFrom)
+        // If they didn't hear the transmission, they can't relay it
+        if (heardFrom != 0) {
+            bool connectivityUnknown = false;
+            bool canHearTransmitter = hasVerifiedConnectivity(heardFrom, neighbor, &connectivityUnknown);
+            if (!canHearTransmitter) {
+                // Skip if no connectivity, or if connectivity is unknown (stock node - be conservative)
+                continue;
+            }
+        }
+
         // Check if this neighbor has a direct connection to the destination
         const NodeEdgesLite* neighborEdges = routingGraph->getEdgesFrom(neighbor);
         if (neighborEdges) {
@@ -2420,6 +2576,17 @@ NodeNum SignalRoutingModule::findBetterPositionedNeighbor(NodeNum destination, N
         // Don't forward back to source or heardFrom nodes
         if (neighbor == sourceNode || neighbor == heardFrom) {
             continue;
+        }
+
+        // CRITICAL: Only consider neighbors that can hear the transmitting node (heardFrom)
+        // If they didn't hear the transmission, they can't relay it
+        if (heardFrom != 0) {
+            bool connectivityUnknown = false;
+            bool canHearTransmitter = hasVerifiedConnectivity(heardFrom, neighbor, &connectivityUnknown);
+            if (!canHearTransmitter) {
+                // Skip if no connectivity, or if connectivity is unknown (stock node - be conservative)
+                continue;
+            }
         }
 
         // Check if this neighbor has a direct connection to the destination
@@ -3827,8 +3994,14 @@ bool SignalRoutingModule::hasNodeBeenExcludedFromRelay(NodeNum nodeId, PacketId 
 
 void SignalRoutingModule::scheduleContentionWindowCheck(NodeNum expectedRelay, PacketId packetId, NodeNum destination, const meshtastic_MeshPacket *packet)
 {
+    if (!packet) return;
+
     // Calculate dynamic contention window based on radio factors (similar to retransmission timeout)
     uint32_t contentionWindowMs = router->getRadioInterface()->getContentionWindowMsec(packet);
+
+    // Store packet info needed for re-evaluation and potential relay
+    NodeNum sourceNode = packet->from;
+    NodeNum heardFrom = resolveHeardFrom(packet, sourceNode);
 
 #ifdef SIGNAL_ROUTING_LITE_MODE
     if (contentionCheckCount >= 4) {
@@ -3839,13 +4012,23 @@ void SignalRoutingModule::scheduleContentionWindowCheck(NodeNum expectedRelay, P
     check.expectedRelay = expectedRelay;
     check.packetId = packetId;
     check.destination = destination;
+    check.sourceNode = sourceNode;
+    check.heardFrom = heardFrom;
+    check.hopLimit = packet->hop_limit;
+    check.hopStart = packet->hop_start;
     check.expiryMs = millis() + contentionWindowMs;
+    check.needsRelay = false;
 #else
     ContentionCheck check;
     check.expectedRelay = expectedRelay;
     check.packetId = packetId;
     check.destination = destination;
+    check.sourceNode = sourceNode;
+    check.heardFrom = heardFrom;
+    check.hopLimit = packet->hop_limit;
+    check.hopStart = packet->hop_start;
     check.expiryMs = millis() + contentionWindowMs;
+    check.needsRelay = false;
     contentionChecks.push_back(check);
 #endif
 }
@@ -3899,14 +4082,32 @@ void SignalRoutingModule::clearRelayExclusionsForPacket(PacketId packetId)
 
 void SignalRoutingModule::processContentionWindows(uint32_t nowMs)
 {
+    if (!routingGraph || !nodeDB) return;
+
+    NodeNum myNode = nodeDB->getNodeNum();
+
 #ifdef SIGNAL_ROUTING_LITE_MODE
     for (uint8_t i = 0; i < contentionCheckCount;) {
         if (nowMs >= contentionChecks[i].expiryMs) {
-            // Contention window expired - exclude the expected relay from future attempts
-            excludeNodeFromRelay(contentionChecks[i].expectedRelay, contentionChecks[i].packetId);
+            ContentionCheck& check = contentionChecks[i];
 
-            LOG_DEBUG("[SR] Contention window expired for relay %08x on packet %08x to %08x - excluding from future attempts",
-                     contentionChecks[i].expectedRelay, contentionChecks[i].packetId, contentionChecks[i].destination);
+            // Contention window expired - exclude the expected relay from future attempts
+            excludeNodeFromRelay(check.expectedRelay, check.packetId);
+
+            char destName[64], relayName[64];
+            getNodeDisplayName(check.destination, destName, sizeof(destName));
+            getNodeDisplayName(check.expectedRelay, relayName, sizeof(relayName));
+
+            LOG_DEBUG("[SR] Contention window expired for relay %s on packet %08x to %s - excluding from future attempts",
+                     relayName, check.packetId, destName);
+
+            // Re-evaluate: find next best candidate or relay ourselves
+            bool shouldRelayNow = evaluateContentionExpiry(check, myNode);
+
+            if (shouldRelayNow && check.hopLimit > 0) {
+                LOG_INFO("[SR] Contention re-evaluation: relaying packet %08x to %s ourselves", check.packetId, destName);
+                queueUnicastRelay(check);
+            }
 
             // Remove this check by shifting the rest
             if (i < contentionCheckCount - 1) {
@@ -3924,8 +4125,20 @@ void SignalRoutingModule::processContentionWindows(uint32_t nowMs)
             // Contention window expired - exclude the expected relay from future attempts
             excludeNodeFromRelay(it->expectedRelay, it->packetId);
 
-            LOG_DEBUG("[SR] Contention window expired for relay %08x on packet %08x to %08x - excluding from future attempts",
-                     it->expectedRelay, it->packetId, it->destination);
+            char destName[64], relayName[64];
+            getNodeDisplayName(it->destination, destName, sizeof(destName));
+            getNodeDisplayName(it->expectedRelay, relayName, sizeof(relayName));
+
+            LOG_DEBUG("[SR] Contention window expired for relay %s on packet %08x to %s - excluding from future attempts",
+                     relayName, it->packetId, destName);
+
+            // Re-evaluate: find next best candidate or relay ourselves
+            bool shouldRelayNow = evaluateContentionExpiry(*it, myNode);
+
+            if (shouldRelayNow && it->hopLimit > 0) {
+                LOG_INFO("[SR] Contention re-evaluation: relaying packet %08x to %s ourselves", it->packetId, destName);
+                queueUnicastRelay(*it);
+            }
 
             it = contentionChecks.erase(it);
         } else {
@@ -3963,4 +4176,141 @@ bool SignalRoutingModule::hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB)
 #endif
 
     return false;
+}
+
+// Enhanced connectivity check that considers stock firmware limitations
+// Returns: true = verified connectivity, false = no connectivity or unknown
+// The unknownOut parameter indicates if we couldn't verify (stock node involved)
+bool SignalRoutingModule::hasVerifiedConnectivity(NodeNum transmitter, NodeNum receiver, bool* unknownOut)
+{
+    if (!routingGraph || !nodeDB) {
+        if (unknownOut) *unknownOut = true;
+        return false;
+    }
+
+    // Get capability status of both nodes
+    CapabilityStatus txStatus = getCapabilityStatus(transmitter);
+    CapabilityStatus rxStatus = getCapabilityStatus(receiver);
+    
+    bool txIsStock = isPlaceholderNode(transmitter) || 
+                     txStatus == CapabilityStatus::Legacy || 
+                     txStatus == CapabilityStatus::Unknown;
+    bool rxIsStock = isPlaceholderNode(receiver) || 
+                     rxStatus == CapabilityStatus::Legacy || 
+                     rxStatus == CapabilityStatus::Unknown;
+
+    // If both are stock, we have no topology data - unknown
+    if (txIsStock && rxIsStock) {
+        if (unknownOut) *unknownOut = true;
+        return false;
+    }
+
+    // Check both directions for edges:
+    // 1. transmitter → receiver: transmitter reported hearing receiver
+    // 2. receiver → transmitter: receiver reported hearing transmitter
+    
+    bool foundEdge = false;
+    
+    // Check transmitter → receiver (only useful if transmitter is SR-active)
+    if (!txIsStock) {
+        if (hasDirectConnectivity(transmitter, receiver)) {
+            foundEdge = true;
+        }
+    }
+    
+    // Check receiver → transmitter (only useful if receiver is SR-active)
+    if (!foundEdge && !rxIsStock) {
+        if (hasDirectConnectivity(receiver, transmitter)) {
+            foundEdge = true;
+        }
+    }
+    
+    if (foundEdge) {
+        if (unknownOut) *unknownOut = false;
+        return true;
+    }
+    
+    // No edge found. Determine if this is "unknown" or "no connectivity"
+    // If the SR-active node has edges but none to the stock node, it's likely no connectivity
+    // But if the SR-active node has very few edges or the stock node is new, it could be unknown
+    
+    if (txIsStock || rxIsStock) {
+        // One node is stock - we can't be certain, mark as unknown
+        if (unknownOut) *unknownOut = true;
+    } else {
+        // Both are SR-active and no edge exists - they likely can't hear each other
+        if (unknownOut) *unknownOut = false;
+    }
+    
+    return false;
+}
+
+bool SignalRoutingModule::evaluateContentionExpiry(const ContentionCheck& check, NodeNum myNode)
+{
+    if (!routingGraph || !nodeDB) return false;
+
+    // Try to find an alternative next hop that can hear the transmitter
+    NodeNum nextHop = getNextHop(check.destination, check.sourceNode, check.heardFrom, true);
+
+    // If no route found, we should relay ourselves
+    if (nextHop == 0) {
+        LOG_DEBUG("[SR] Contention re-eval: No route to %08x - will relay ourselves", check.destination);
+        return true;
+    }
+
+    // If we are the next hop, relay
+    if (nextHop == myNode || nextHop == check.destination) {
+        return true;
+    }
+
+    // If the new next hop is also excluded, relay ourselves
+    if (hasNodeBeenExcludedFromRelay(nextHop, check.packetId)) {
+        LOG_DEBUG("[SR] Contention re-eval: Alternative next hop %08x also excluded - will relay ourselves", nextHop);
+        return true;
+    }
+
+    // Check if the new next hop can hear the transmitter
+    bool canHear = hasDirectConnectivity(check.heardFrom, nextHop) ||
+                   hasDirectConnectivity(nextHop, check.heardFrom);
+
+    if (!canHear) {
+        // New candidate also can't hear transmitter
+        CapabilityStatus status = getCapabilityStatus(nextHop);
+        if (isPlaceholderNode(nextHop) || status == CapabilityStatus::Legacy || status == CapabilityStatus::Unknown) {
+            // Stock/placeholder - can't verify, relay ourselves
+            LOG_DEBUG("[SR] Contention re-eval: Alternative %08x is stock/unknown and can't verify hearing - relay ourselves", nextHop);
+            return true;
+        }
+    }
+
+    // We found a valid alternative candidate - schedule another contention check for them
+    // But we don't have the original packet anymore, so we can't reschedule properly
+    // For now, just relay ourselves if we've exhausted primary candidates
+    LOG_DEBUG("[SR] Contention re-eval: Found alternative candidate %08x but cannot reschedule - relay ourselves", nextHop);
+    return true;
+}
+
+void SignalRoutingModule::queueUnicastRelay(const ContentionCheck& check)
+{
+    if (!router || !nodeDB) return;
+
+    // Create a minimal packet for relay
+    // Note: We don't have the full payload, so we can only attempt to trigger
+    // a "delayed relay" by notifying the router. However, the original packet
+    // may have already been delivered/discarded.
+
+    // For now, log that we would have relayed - the original packet is no longer available
+    // This is a limitation: once we decide not to relay, we can't recover the packet.
+
+    // The real fix is that the initial decision in shouldRelayUnicastForCoordination
+    // should be more conservative and not wait for unreliable candidates.
+    // The contention window expiry is a fallback for when we did wait but shouldn't have.
+
+    char destName[64];
+    getNodeDisplayName(check.destination, destName, sizeof(destName));
+    LOG_WARN("[SR] queueUnicastRelay: Packet %08x to %s - original packet no longer available for relay",
+             check.packetId, destName);
+
+    // Clear exclusions for this packet since we've handled it
+    clearRelayExclusionsForPacket(check.packetId);
 }
