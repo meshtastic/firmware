@@ -53,9 +53,10 @@
 #define HAS_BMA423 1
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_BAUDRATE 38400
+#define GPS_RX_PIN 42
+#define GPS_TX_PIN 41
 
 #define USE_SX1262
 #define USE_SX1268
