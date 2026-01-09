@@ -323,7 +323,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #ifdef TFT_MESH_OVERRIDE
     } else if (rawRGB == 0) {
         LOG_INFO("Setting screen RGB color to TFT_MESH_OVERRIDE: 0x%06X", TFT_MESH_OVERRIDE);
-        // Default to TFT_MESH_OVERRIDE if default
+        // Default to TFT_MESH_OVERRIDE if available
         TFT_MESH = TFT_MESH_OVERRIDE;
 #endif
     } else {
