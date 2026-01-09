@@ -10,6 +10,7 @@ System Applet to send a message using a virtual keyboard
 
 #include "configuration.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
 #include <string>
 namespace NicheGraphics::InkHUD
 {
@@ -36,9 +37,9 @@ class FreeTextApplet : public SystemApplet
 	static const uint8_t KEYBOARD_ROWS = 4;
 	private:
 	enum KEY_ACTIONS {
-		SWITCH_LAYER,
+		NONE,
 		BACKSPACE,
-		SHIFT,
+		ESCAPE,
 		ENTER,
 	};
 	struct Key {
@@ -46,15 +47,17 @@ class FreeTextApplet : public SystemApplet
 		KEY_ACTIONS action;
 
 	};
-    
+    std::string inputText;
 	protected:
-		struct Key keyboard[KEYBOARD_COLS][KEYBOARD_ROWS];
+		struct Key keyboard[KEYBOARD_ROWS][KEYBOARD_COLS];
 		const char keyboardLayout[KEYBOARD_ROWS][KEYBOARD_COLS] = {{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\b'},
                                                                       {'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '\n'},
                                                                       {'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', ' '},
                                                                       {'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', '\x1b'}};
 
-	
+		uint8_t keyCursorX = 0;
+		uint8_t keyCursorY = 0;
+		uint16_t lineCursor = 0;
 	
 
 	//void drawKeypad(uint16_t pointX, uint16_t pointY, Color color);
