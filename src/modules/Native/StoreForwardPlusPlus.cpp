@@ -392,6 +392,42 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     return portduino_config.sfpp_announce_interval * 60 * 1000;
 }
 
+void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp, const meshtastic_MeshPacket *p_encrypted)
+{
+    // This is intended to handle text messages from the local node
+    if (mp->from != nodeDB->getNodeNum() && mp->from != 0) {
+        return;
+    }
+
+    link_object lo = ingestTextPacket(*mp, p_encrypted);
+
+    if (lo.from == 0)
+        lo.from = nodeDB->getNodeNum();
+
+    if (isInDB(lo.message_hash, lo.message_hash_len) && isInScratch(lo.message_hash, lo.message_hash_len) &&
+        isInCanonScratch(lo.message_hash, lo.message_hash_len)) {
+        return;
+    }
+
+    if (!portduino_config.sfpp_stratum0) {
+        if (lo.root_hash_len == 0) {
+            LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
+            return;
+        }
+        addToScratch(lo);
+        LOG_DEBUG("StoreForwardpp added message to scratch db");
+        // send link to upstream?
+
+        return;
+    }
+    addToChain(lo);
+
+    if (!pendingRun) {
+        setIntervalFromNow(10 * 1000); // run again in 10 seconds to announce the new tip of chain
+        pendingRun = true;
+    }
+}
+
 ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     // To avoid terrible time problems, require NTP or GPS time
@@ -399,35 +435,36 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         return ProcessMessage::CONTINUE;
     }
 
-    if (mp.from == nodeDB->getNodeNum()) {
-        return ProcessMessage::CONTINUE; // don't process our own packets
+    if (mp.from == nodeDB->getNodeNum() || mp.from == 0) {
+        return ProcessMessage::CONTINUE; // don't process our own packets here
     }
 
     // Allow only LoRa, Multicast UDP, and API packets
     // maybe in the future, only disallow MQTT
-    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL &&
-        mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA &&
+    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA &&
         mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP &&
         mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API) {
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
     }
 
+    // will eventually host DMs and other undecodable messages
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        LOG_WARN("StoreForwardpp Saw an encoded message, dropping");
+        return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+    }
+
     if (router == nullptr || router->p_encrypted == nullptr) {
-        LOG_WARN("StoreForwardpp cannot process message, due to null pointer");
+        LOG_WARN("StoreForwardpp cannot process text message, due to null pointer");
         return ProcessMessage::CONTINUE;
     }
 
-    // will eventually host DMs and other undecodable messages
-    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+    if (mp.id != router->p_encrypted->id) {
+        LOG_WARN("Wrong packet in p_encrypted, dropping text message");
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
     }
+
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && mp.to == NODENUM_BROADCAST) {
         link_object lo = ingestTextPacket(mp, router->p_encrypted);
-
-        // the big problem here is that the packet passes through here before encryption
-        // From 0 in this context means it originated from the local node
-        if (lo.from == 0)
-            lo.from = nodeDB->getNodeNum();
 
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
             LOG_DEBUG("StoreForwardpp Found text message in chain DB");
@@ -437,18 +474,20 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
                 updatePayload(lo.message_hash, lo.message_hash_len, lo.payload);
             return ProcessMessage::CONTINUE;
         }
+        if (isInDB(lo.message_hash, lo.message_hash_len) && isInScratch(lo.message_hash, lo.message_hash_len) &&
+            isInCanonScratch(lo.message_hash, lo.message_hash_len)) {
+            return ProcessMessage::CONTINUE;
+        }
 
         if (!portduino_config.sfpp_stratum0) {
-            if (!isInDB(lo.message_hash, lo.message_hash_len) && !isInScratch(lo.message_hash, lo.message_hash_len) &&
-                !isInCanonScratch(lo.message_hash, lo.message_hash_len)) {
-                if (lo.root_hash_len == 0) {
-                    LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
-                    return ProcessMessage::CONTINUE;
-                }
-                addToScratch(lo);
-                LOG_DEBUG("StoreForwardpp added message to scratch db");
-                // send link to upstream?
+            if (lo.root_hash_len == 0) {
+                LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
+                return ProcessMessage::CONTINUE;
             }
+            addToScratch(lo);
+            LOG_DEBUG("StoreForwardpp added message to scratch db");
+            // send link to upstream?
+
             return ProcessMessage::CONTINUE;
         }
         addToChain(lo);
@@ -686,14 +725,16 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             // Respond by announcing this
             if (t->commit_hash.size == 0) {
                 link_object link_to_announce = getLinkFromMessageHash(incoming_link.message_hash, incoming_link.message_hash_len);
-                canonAnnounce(link_to_announce);
                 LOG_INFO("StoreForwardpp Received link already in chain #%u, announcing that commit hash",
                          link_to_announce.counter);
+                canonAnnounce(link_to_announce);
+
             } else {
                 LOG_INFO("StoreForwardpp Received link already in chain");
             }
             return true;
         }
+        // do we want to explicitly check for blank comm hash here?
 
         // We have a link. Recalculate the message hash and check if the commit hash matches
         if (recalculateHash(incoming_link, t->root_hash.bytes, t->root_hash.size, t->commit_hash.bytes, t->commit_hash.size)) {
@@ -2003,5 +2044,7 @@ void StoreForwardPlusPlusModule::logLinkObject(link_object &lo)
         LOG_DEBUG("Valid Object");
     }
 }
+
+StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
 
 #endif // has include sqlite3
