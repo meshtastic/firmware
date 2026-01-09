@@ -113,6 +113,17 @@ typedef struct _meshtastic_AdminMessage_InputEvent {
     uint16_t touch_y;
 } meshtastic_AdminMessage_InputEvent;
 
+typedef PB_BYTES_ARRAY_T(32) meshtastic_AdminMessage_OTAEvent_ota_hash_t;
+/* User is requesting an over the air update.
+ Node will reboot into the OTA loader */
+typedef struct _meshtastic_AdminMessage_OTAEvent {
+    /* Tell the node to reboot into OTA mode for firmware update via BLE or WiFi (ESP32 only for now) */
+    meshtastic_OTAMode reboot_ota_mode;
+    /* A 32 byte hash of the OTA firmware.
+ Used to verify the integrity of the firmware before applying an update. */
+    meshtastic_AdminMessage_OTAEvent_ota_hash_t ota_hash;
+} meshtastic_AdminMessage_OTAEvent;
+
 /* Parameters for setting up Meshtastic for ameteur radio usage */
 typedef struct _meshtastic_HamParameters {
     /* Amateur radio call sign, eg. KD2ABC */
@@ -288,6 +299,8 @@ typedef struct _meshtastic_AdminMessage {
         /* Tell the node to reset the nodedb.
      When true, favorites are preserved through reset. */
         bool nodedb_reset;
+        /* Tell the node to reset into the OTA Loader */
+        meshtastic_AdminMessage_OTAEvent ota_request;
     };
     /* The node generates this key and sends it with any get_x_response packets.
  The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
@@ -329,6 +342,8 @@ extern "C" {
 #define meshtastic_AdminMessage_payload_variant_reboot_ota_mode_ENUMTYPE meshtastic_OTAMode
 
 
+#define meshtastic_AdminMessage_OTAEvent_reboot_ota_mode_ENUMTYPE meshtastic_OTAMode
+
 
 
 
@@ -338,12 +353,14 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
+#define meshtastic_AdminMessage_OTAEvent_init_default {_meshtastic_OTAMode_MIN, {0, {0}}}
 #define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_SharedContact_init_default    {0, false, meshtastic_User_init_default, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_default {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
+#define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
 #define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_SharedContact_init_zero       {0, false, meshtastic_User_init_zero, 0, 0}
@@ -354,6 +371,8 @@ extern "C" {
 #define meshtastic_AdminMessage_InputEvent_kb_char_tag 2
 #define meshtastic_AdminMessage_InputEvent_touch_x_tag 3
 #define meshtastic_AdminMessage_InputEvent_touch_y_tag 4
+#define meshtastic_AdminMessage_OTAEvent_reboot_ota_mode_tag 1
+#define meshtastic_AdminMessage_OTAEvent_ota_hash_tag 2
 #define meshtastic_HamParameters_call_sign_tag   1
 #define meshtastic_HamParameters_tx_power_tag    2
 #define meshtastic_HamParameters_frequency_tag   3
@@ -422,6 +441,7 @@ extern "C" {
 #define meshtastic_AdminMessage_shutdown_seconds_tag 98
 #define meshtastic_AdminMessage_factory_reset_config_tag 99
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
+#define meshtastic_AdminMessage_ota_request_tag  102
 #define meshtastic_AdminMessage_session_passkey_tag 101
 
 /* Struct field encoding specification for nanopb */
@@ -481,7 +501,8 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_second
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,nodedb_reset,nodedb_reset), 100) \
-X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
+X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 102)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
@@ -502,6 +523,7 @@ X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
 #define meshtastic_AdminMessage_payload_variant_store_ui_config_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_AdminMessage_payload_variant_add_contact_MSGTYPE meshtastic_SharedContact
 #define meshtastic_AdminMessage_payload_variant_key_verification_MSGTYPE meshtastic_KeyVerificationAdmin
+#define meshtastic_AdminMessage_payload_variant_ota_request_MSGTYPE meshtastic_AdminMessage_OTAEvent
 
 #define meshtastic_AdminMessage_InputEvent_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   event_code,        1) \
@@ -510,6 +532,12 @@ X(a, STATIC,   SINGULAR, UINT32,   touch_x,           3) \
 X(a, STATIC,   SINGULAR, UINT32,   touch_y,           4)
 #define meshtastic_AdminMessage_InputEvent_CALLBACK NULL
 #define meshtastic_AdminMessage_InputEvent_DEFAULT NULL
+
+#define meshtastic_AdminMessage_OTAEvent_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    reboot_ota_mode,   1) \
+X(a, STATIC,   SINGULAR, BYTES,    ota_hash,          2)
+#define meshtastic_AdminMessage_OTAEvent_CALLBACK NULL
+#define meshtastic_AdminMessage_OTAEvent_DEFAULT NULL
 
 #define meshtastic_HamParameters_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   call_sign,         1) \
@@ -544,6 +572,7 @@ X(a, STATIC,   OPTIONAL, UINT32,   security_number,   4)
 
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_InputEvent_msg;
+extern const pb_msgdesc_t meshtastic_AdminMessage_OTAEvent_msg;
 extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
 extern const pb_msgdesc_t meshtastic_SharedContact_msg;
@@ -552,6 +581,7 @@ extern const pb_msgdesc_t meshtastic_KeyVerificationAdmin_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
 #define meshtastic_AdminMessage_InputEvent_fields &meshtastic_AdminMessage_InputEvent_msg
+#define meshtastic_AdminMessage_OTAEvent_fields &meshtastic_AdminMessage_OTAEvent_msg
 #define meshtastic_HamParameters_fields &meshtastic_HamParameters_msg
 #define meshtastic_NodeRemoteHardwarePinsResponse_fields &meshtastic_NodeRemoteHardwarePinsResponse_msg
 #define meshtastic_SharedContact_fields &meshtastic_SharedContact_msg
@@ -560,6 +590,7 @@ extern const pb_msgdesc_t meshtastic_KeyVerificationAdmin_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
 #define meshtastic_AdminMessage_InputEvent_size  14
+#define meshtastic_AdminMessage_OTAEvent_size    36
 #define meshtastic_AdminMessage_size             511
 #define meshtastic_HamParameters_size            31
 #define meshtastic_KeyVerificationAdmin_size     25

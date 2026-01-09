@@ -68,7 +68,7 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
         if (r == 0x08 || r == 0x00) {
             logFoundDevice("SH1106", (uint8_t)addr.address);
             o_probe = SCREEN_SH1106; // SH1106
-        } else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07) {
+        } else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07 || r == 0x05) {
             logFoundDevice("SSD1306", (uint8_t)addr.address);
             o_probe = SCREEN_SSD1306; // SSD1306
         }
@@ -487,7 +487,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case TSL25911_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x12), 1);
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xA0 | 0x12), 1);
                 if (registerValue == 0x50) {
                     type = TSL2591;
                     logFoundDevice("TSL25911", (uint8_t)addr.address);
