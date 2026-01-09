@@ -419,9 +419,11 @@ void portduinoSetup()
         ch341Hal->getProductString(product_string, 95);
         std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && portduino_config.mac_address.length() < 12) {
-            uint8_t hash[32] = {0};
+            std::cout << "Deriving MAC address from Serial and Product String" << std::endl;
+            uint8_t hash[104] = {0};
             memcpy(hash, serial, 8);
-            crypto->hash(hash, 8);
+            memcpy(hash + 8, product_string, strlen(product_string));
+            crypto->hash(hash, 8 + strlen(product_string));
             dmac[0] = (hash[0] << 4) | 2;
             dmac[1] = hash[1];
             dmac[2] = hash[2];
