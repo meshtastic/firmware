@@ -272,8 +272,9 @@ void portduinoSetup()
                 std::cout << "autoconf: Found Pi HAT+ " << hat_vendor << " " << autoconf_product << " at /proc/device-tree/hat"
                           << std::endl;
 
+                // potential TODO: Validate that this is a real UUID
                 std::ifstream hatUUID("/proc/device-tree/hat/uuid");
-                char uuid[37] = {0};
+                char uuid[38] = {0};
                 if (hatUUID.is_open()) {
                     hatUUID.read(uuid, 37);
                     hatUUID.close();
@@ -297,7 +298,8 @@ void portduinoSetup()
                     dmac[4] = uuid_hash_bytes[21];
                     dmac[5] = uuid_hash_bytes[22];
                     char macBuf[13] = {0};
-                    sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
+                    snprintf(macBuf, sizeof(macBuf), "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4],
+                             dmac[5]);
                     portduino_config.mac_address = macBuf;
                     found_hat = true;
                 }
