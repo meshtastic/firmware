@@ -1840,7 +1840,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     static const ScreenColorOption colorOptions[] = {
         {"Back", OptionsAction::Back},
         {"Default", OptionsAction::Select, ScreenColor(0, 0, 0, true)},
-        {"Meshtastic Green", OptionsAction::Select, ScreenColor(103, 234, 148)},
+        {"Meshtastic Green", OptionsAction::Select, ScreenColor(0x67, 0xEA, 0x94)},
         {"Yellow", OptionsAction::Select, ScreenColor(255, 255, 128)},
         {"Red", OptionsAction::Select, ScreenColor(255, 64, 64)},
         {"Orange", OptionsAction::Select, ScreenColor(255, 160, 20)},
@@ -1890,7 +1890,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 #ifdef TFT_MESH_OVERRIDE
                 TFT_MESH = TFT_MESH_OVERRIDE;
 #else
-                TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+                TFT_MESH = COLOR565(255, 255, 128);
 #endif
             } else {
                 TFT_MESH = COLOR565(r, g, b);
