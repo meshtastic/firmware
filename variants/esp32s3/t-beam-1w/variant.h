@@ -15,7 +15,7 @@
 
 // Buttons
 #define BUTTON_PIN 0      // BUTTON 1
-#define BUTTON_PIN_ALT 17 // BUTTON 2
+#define ALT_BUTTON_PIN 17 // BUTTON 2
 
 // SPI (shared by LoRa and SD)
 #define SPI_MOSI 11
