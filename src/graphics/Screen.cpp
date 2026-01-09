@@ -1732,7 +1732,11 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_RIGHT) {
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_USER_PRESS){
+#ifdef GAT562_MESH_TRACKER_PRO
                 setOn(false);
+#else
+                showFrame(FrameDirection::NEXT);
+#endif
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                 // Long press up button for fast frame switching
                 showPrevFrame();
