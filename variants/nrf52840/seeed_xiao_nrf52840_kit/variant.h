@@ -188,9 +188,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SDA D6
 #define PIN_WIRE_SCL D7
 #else
-// Internal LSM6DS3TR on XIAO nRF52840 Series
-#define PIN_WIRE_SDA (17)
-#define PIN_WIRE_SCL (16)
+// Use NFC pads for I2C as done on Seeed Solar Node 
+#define PIN_WIRE_SDA D14 // P0.09
+#define PIN_WIRE_SCL D15 // P0.10
 #endif
 
 static const uint8_t SDA = PIN_WIRE_SDA;
