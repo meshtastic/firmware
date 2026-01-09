@@ -328,7 +328,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
     } else {
         // Default best readable yellow color
-        LOG_INFO("Setting screen RGB color to default: (255,255,128))");
+        LOG_INFO("Setting screen RGB color to default: (255,255,128)");
         TFT_MESH = COLOR565(255, 255, 128);
     }
 
