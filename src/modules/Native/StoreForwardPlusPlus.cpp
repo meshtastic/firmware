@@ -424,6 +424,11 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && mp.to == NODENUM_BROADCAST) {
         link_object lo = ingestTextPacket(mp, router->p_encrypted);
 
+        // the big problem here is that the packet passes through here before encryption
+        // From 0 in this context means it originated from the local node
+        if (lo.from == 0)
+            lo.from = nodeDB->getNodeNum();
+
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
             LOG_DEBUG("StoreForwardpp Found text message in chain DB");
             // We may have this message already, but we may not have the payload
@@ -682,7 +687,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             if (t->commit_hash.size == 0) {
                 link_object link_to_announce = getLinkFromMessageHash(incoming_link.message_hash, incoming_link.message_hash_len);
                 canonAnnounce(link_to_announce);
-                LOG_INFO("StoreForwardpp Received link already in chain #%u, announcing next", link_to_announce.counter);
+                LOG_INFO("StoreForwardpp Received link already in chain #%u, announcing that commit hash",
+                         link_to_announce.counter);
             } else {
                 LOG_INFO("StoreForwardpp Received link already in chain");
             }
@@ -704,7 +710,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     return true;
                 }
 
-                // calculate the commit_hash
+                LOG_DEBUG("StoreForwardpp Adding message to canon, received as a link provide");
                 addToChain(incoming_link);
                 if (!pendingRun) {
                     setIntervalFromNow(10 * 1000); // run again in 30 seconds to announce the new tip of chain
