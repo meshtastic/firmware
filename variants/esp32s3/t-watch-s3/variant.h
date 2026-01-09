@@ -59,6 +59,8 @@
 #define GPS_RX_PIN 42
 #define GPS_TX_PIN 41
 
+#define BUTTON_PIN 0 // only for Plus version
+
 #define USE_SX1262
 #define USE_SX1268
 
