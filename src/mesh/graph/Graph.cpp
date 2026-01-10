@@ -1012,8 +1012,18 @@ bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, 
     auto relayCandidates = findAllRelayCandidates(alreadyCovered, candidates, currentTime, packetId);
 
     if (relayCandidates.empty()) {
-        LOG_DEBUG("Graph: No relay candidates found - not relaying");
-        return false;  // No one can provide additional coverage
+        // No relay candidates found - but we might still need to relay if we have neighbors
+        // that aren't covered by the transmitting node. This handles cases where stock gateways
+        // or nodes that went down were expected to relay but won't.
+        auto myNeighbors = getDirectNeighbors(myNode);
+        for (NodeNum neighbor : myNeighbors) {
+            if (alreadyCovered.find(neighbor) == alreadyCovered.end()) {
+                LOG_DEBUG("Graph: Conservative fallback - neighbor %08x not covered, relaying", neighbor);
+                return true;  // We have neighbors not covered - relay to ensure propagation
+            }
+        }
+        LOG_DEBUG("Graph: No relay candidates and all neighbors covered - not relaying");
+        return false;
     }
 
     // Find candidates in tier 0 (primary relays)
