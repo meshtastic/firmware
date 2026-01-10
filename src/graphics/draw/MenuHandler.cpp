@@ -1541,7 +1541,8 @@ void menuHandler::FrameToggles_menu()
         lora,
         clock,
         show_favorites,
-        show_telemetry,
+        show_env_telemetry,
+        show_aq_telemetry,
         show_power,
         enumEnd
     };
@@ -1581,8 +1582,11 @@ void menuHandler::FrameToggles_menu()
     optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
     optionsEnumArray[options++] = show_favorites;
 
-    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Telemetry" : "Show Telemetry";
-    optionsEnumArray[options++] = show_telemetry;
+    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Env. Telemetry" : "Show Env. Telemetry";
+    optionsEnumArray[options++] = show_env_telemetry;
+
+    optionsArray[options] = moduleConfig.telemetry.air_quality_screen_enabled ? "Hide AQ Telemetry" : "Show AQ Telemetry";
+    optionsEnumArray[options++] = show_aq_telemetry;
 
     optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
     optionsEnumArray[options++] = show_power;
@@ -1641,8 +1645,12 @@ void menuHandler::FrameToggles_menu()
             screen->toggleFrameVisibility("show_favorites");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
-        } else if (selected == show_telemetry) {
+        } else if (selected == show_env_telemetry) {
             moduleConfig.telemetry.environment_screen_enabled = !moduleConfig.telemetry.environment_screen_enabled;
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_aq_telemetry) {
+            moduleConfig.telemetry.air_quality_screen_enabled = !moduleConfig.telemetry.air_quality_screen_enabled;
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_power) {
