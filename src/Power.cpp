@@ -1149,11 +1149,11 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO1);
 
-            // sdcard power channel
+            // sdcard (T-Beam S3) / gnns (T-Watch S3 Plus) power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+#ifndef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_BLDO1);
-
-#ifdef T_WATCH_S3
+#else
             // DRV2605 power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300);
             PMU->enablePowerOutput(XPOWERS_BLDO2);
