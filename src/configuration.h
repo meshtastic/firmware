@@ -29,12 +29,35 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("pcf8563.h")
-#include "pcf8563.h"
+#if __has_include("SensorRtcHelper.hpp")
+#include "SensorRtcHelper.hpp"
 #endif
 
 /* Offer chance for variant-specific defines */
 #include "variant.h"
+
+// -----------------------------------------------------------------------------
+// Display feature overrides
+// -----------------------------------------------------------------------------
+
+// Allow build environments to opt-in explicitly to the E-Ink UI stack while
+// keeping headless targets slim by default. Existing variants that already
+// define USE_EINK continue to work without additional flags.
+#ifndef MESHTASTIC_USE_EINK_UI
+#ifdef USE_EINK
+#define MESHTASTIC_USE_EINK_UI 1
+#else
+#define MESHTASTIC_USE_EINK_UI 0
+#endif
+#endif
+
+#if MESHTASTIC_USE_EINK_UI
+#ifndef USE_EINK
+#define USE_EINK
+#endif
+#else
+#undef USE_EINK
+#endif
 
 // -----------------------------------------------------------------------------
 // Version
@@ -250,8 +273,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A
+#define CST328_ADDR 0x1A // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
+#define CST226SE_ADDR_ALT 0x5A
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -370,6 +394,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
 #endif
+#ifndef USE_TFTDISPLAY
+#define USE_TFTDISPLAY 0
+#endif
 
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined
@@ -396,6 +423,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_RGB_LED
 #endif
 
+#ifndef LED_STATE_OFF
+#define LED_STATE_OFF 0
+#endif
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
+#endif
+
 // default mapping of pins
 #if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
 #define ALT_BUTTON_PIN PIN_BUTTON2
@@ -409,6 +443,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ALT_BUTTON_ACTIVE_PULLUP true
 #endif
 #endif
+
+// BME680 BSEC2 support detection
+#if !defined(MESHTASTIC_BME680_BSEC2_SUPPORTED)
+#if defined(RAK_4631) || defined(TBEAM_V10)
+
+#define MESHTASTIC_BME680_BSEC2_SUPPORTED 1
+#define MESHTASTIC_BME680_HEADER <bsec2.h>
+#else
+#define MESHTASTIC_BME680_BSEC2_SUPPORTED 0
+#define MESHTASTIC_BME680_HEADER <Adafruit_BME680.h>
+#endif // defined(RAK_4631)
+#endif // !defined(MESHTASTIC_BME680_BSEC2_SUPPORTED)
 
 // -----------------------------------------------------------------------------
 // Global switches to turn off features for a minimized build
