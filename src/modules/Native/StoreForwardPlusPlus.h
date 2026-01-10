@@ -121,6 +121,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getFullRootHashStmt;
     sqlite3_stmt *setChainCountStmt;
     sqlite3_stmt *getChainCountStmt;
+    sqlite3_stmt *getScratchCountStmt;
+    sqlite3_stmt *getRootCanonScratchCountStmt;
     sqlite3_stmt *pruneScratchQueueStmt;
     sqlite3_stmt *trimOldestLinkStmt;
     sqlite3_stmt *maybeAddPeerStmt;
@@ -232,8 +234,14 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // update the mappings table to set the chain count for the given root hash
     void setChainCount(uint8_t *, size_t, uint32_t);
 
-    // query the mappings table for the chain count for the given root hash
+    // get the chain count for the given root hash
     uint32_t getChainCount(uint8_t *, size_t);
+
+    // get the scratch count for the given root hash
+    uint32_t getScratchCount(uint8_t *, size_t);
+
+    // get the canon scratch count for the given root hash
+    uint32_t getCanonScratchCount(uint8_t *, size_t);
 
     link_object getLinkFromPositionFromTip(uint32_t, uint8_t *, size_t);
 
@@ -281,6 +289,21 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     link_object split_link_in;
 
     bool did_announce_last = false;
+
+    uint32_t texts_rebroadcast = 0;
+    uint32_t links_speculated = 0;
+    uint32_t canon_announces = 0;
+    uint32_t links_requested = 0;
+    uint32_t links_provided = 0;
+    uint32_t links_added = 0;
+    uint32_t links_from_canon_scratch = 0;
+    uint32_t links_from_scratch = 0;
+    uint32_t split_links_sent = 0;
+    uint32_t split_links_received = 0;
+    uint32_t links_pruned = 0;
+    uint32_t scratch_timed_out = 0;
+    uint32_t sent_from_scratch = 0;
+    uint32_t received_from_scratch = 0;
 };
 
 extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
