@@ -25,6 +25,7 @@ class TCA8418KeyboardBase
         BT_TOGGLE = 0xAA,
         GPS_TOGGLE = 0x9E,
         MUTE_TOGGLE = 0xAC,
+        VOICEMEMO = 0xAD,
         SEND_PING = 0xAF,
         BL_TOGGLE = 0xAB
     };

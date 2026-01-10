@@ -163,6 +163,16 @@ int32_t KbI2cBase::runOnce()
                         e.kbchar = key.key;
                     }
                     break;
+                case 'v': // sym v - voice memo
+                    if (is_sym) {
+                        e.inputEvent = INPUT_BROKER_ANYKEY;
+                        e.kbchar = INPUT_BROKER_MSG_VOICEMEMO;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = INPUT_BROKER_ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
                 case 0x13: // Code scanner says the SYM key is 0x13
                     is_sym = !is_sym;
                     e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -370,6 +380,10 @@ int32_t KbI2cBase::runOnce()
 
         if (i2cBus->available()) {
             char c = i2cBus->read();
+            // Debug: log every key press
+            if (c != 0x00) {
+                LOG_DEBUG("T-Deck KB: key=0x%02X ('%c'), is_sym=%d", (uint8_t)c, (c >= 0x20 && c < 0x7f) ? c : '?', is_sym);
+            }
             InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
@@ -443,6 +457,17 @@ int32_t KbI2cBase::runOnce()
                     e.kbchar = c;
                 }
                 break;
+            case 0x76: // letter v. voice memo trigger
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = INPUT_BROKER_ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_VOICEMEMO;
+                    LOG_DEBUG("T-Deck: Sym+V pressed, sending VOICEMEMO 0x%02X", INPUT_BROKER_MSG_VOICEMEMO);
+                } else {
+                    e.inputEvent = INPUT_BROKER_ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
             case 0x1b: // ESC
                 e.inputEvent = INPUT_BROKER_CANCEL;
                 break;
@@ -466,9 +491,11 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_RIGHT;
                 e.kbchar = 0;
                 break;
-            case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
+            case 0x3F: // Sym key on some T-Deck variants (sends '?')
+            case 0xc:  // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
                 // toggle moddifiers button.
                 is_sym = !is_sym;
+                LOG_DEBUG("T-Deck: Modifier key pressed, is_sym now=%d", is_sym);
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
                                   : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // modifier key is active

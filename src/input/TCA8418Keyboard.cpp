@@ -28,18 +28,18 @@ static unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
 };
 
 static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
-    Key::ESC,   // 1
-    Key::UP,    // 2
-    Key::NONE,  // 3
-    Key::LEFT,  // 4
-    Key::NONE,  // 5
-    Key::RIGHT, // 6
-    Key::NONE,  // 7
-    Key::DOWN,  // 8
-    Key::NONE,  // 9
-    Key::BSP,   // *
-    Key::NONE,  // 0
-    Key::NONE,  // #
+    Key::ESC,       // 1
+    Key::UP,        // 2
+    Key::NONE,      // 3
+    Key::LEFT,      // 4
+    Key::NONE,      // 5
+    Key::RIGHT,     // 6
+    Key::NONE,      // 7
+    Key::DOWN,      // 8
+    Key::NONE,      // 9
+    Key::BSP,       // *
+    Key::VOICEMEMO, // 0
+    Key::NONE,      // #
 };
 
 TCA8418Keyboard::TCA8418Keyboard()

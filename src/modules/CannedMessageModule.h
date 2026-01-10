@@ -89,9 +89,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
-#ifdef RAK14014
+    // Get current run state (used by VoiceMemoModule to avoid conflicts)
     cannedMessageModuleRunState getRunState() const { return runState; }
-#endif
 
     // === Packet Interest Filter ===
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override
