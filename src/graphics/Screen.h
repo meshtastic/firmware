@@ -560,6 +560,42 @@ class Screen : public concurrency::OSThread
 
 #endif
 
+#if defined(OLED_GR)
+
+        switch (last) {
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
+        // Map UTF-8 Greek chars to Windows-1253 (CP-1253) ASCII codes
+        case 0xCE: {
+            SKIPREST = false;
+            // Uppercase Greek: Α-Ρ (U+0391-U+03A1) -> CP-1253 193-209
+            if (ch >= 145 && ch <= 161)
+                return (uint8_t)(ch + 48);
+            // Uppercase Greek: Σ-Ω (U+03A3-U+03A9) -> CP-1253 211-217
+            else if (ch >= 163 && ch <= 169)
+                return (uint8_t)(ch + 48);
+            // Lowercase Greek: α-ρ (U+03B1-U+03C1) -> CP-1253 225-241
+            else if (ch >= 177 && ch <= 193)
+                return (uint8_t)(ch + 48);
+            break;
+        }
+        case 0xCF: {
+            SKIPREST = false;
+            // Lowercase Greek: ς-ω (U+03C2-U+03C9) -> CP-1253 242-249
+            if (ch >= 130 && ch <= 137)
+                return (uint8_t)(ch + 112);
+            break;
+        }
+        }
+
+        // We want to strip out prefix chars for two-byte Greek char formats
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0xCE || ch == 0xCF)
+            return (uint8_t)0;
+
+#endif
+
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
         // rest of it
         if (SKIPREST)
