@@ -771,11 +771,15 @@ bool GraphLite::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode
     }
 
     if (!transmittingEdges) {
-        return false; // No transmitting node edges found
+        // No topology data for transmitting node - this might be a stock node or a node that went down
+        // In this case, fall back to relaying if we have neighbors (to ensure propagation)
+        LOG_DEBUG("GraphLite: No topology for transmitting node %08x - fallback relay", heardFrom);
+        return true;
     }
 
     // Count SR neighbors we have that the transmitting node doesn't have direct connection to
     uint8_t uniqueSrNeighbors = 0;
+    uint8_t totalNeighborsNotCovered = 0;
     for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
         NodeNum neighbor = myEdges->edges[i].to;
         if (neighbor == sourceNode || neighbor == heardFrom) {
@@ -793,12 +797,26 @@ bool GraphLite::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode
 
         if (!transmittingHasIt) {
             uniqueSrNeighbors++;
+            totalNeighborsNotCovered++;
         }
     }
 
     // Conservative logic: Require at least 2 unique SR neighbors before relaying
     // This reduces redundant relaying while still ensuring branch connectivity
-    return uniqueSrNeighbors >= 2;
+    if (uniqueSrNeighbors >= 2) {
+        return true;
+    }
+
+    // Fallback: if we have ANY neighbors not covered by the transmitting node, relay
+    // This ensures packet propagation when stock gateways might not relay
+    // (e.g., they went down, are in CLIENT_MUTE mode, or have rebroadcast disabled)
+    if (totalNeighborsNotCovered > 0) {
+        LOG_DEBUG("GraphLite: Conservative fallback - have %u uncovered neighbors, relaying", totalNeighborsNotCovered);
+        return true;
+    }
+
+    // All our neighbors are covered by the transmitting node - no need to relay
+    return false;
 }
 
 uint32_t GraphLite::getContentionWindowMs()
