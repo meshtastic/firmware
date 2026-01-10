@@ -24,19 +24,30 @@ void InkHUD::FreeTextApplet::onRender()
 {
     setFont(fontSmall);
     std::string header = "Free Text";
-    printAt(0, 0, header);
+    
     // Draw the input box
-    uint16_t yStartBox = 5 + fontSmall.lineHeight();
-    uint16_t inputBoxH = Y(0.45) - 5;
+    uint16_t yStartBox = fontSmall.lineHeight();
     uint16_t inputBoxW = X(1.0);
+    uint16_t inputBoxH = fontSmall.lineHeight();
 
-    drawRect(0, yStartBox, inputBoxW, inputBoxH, BLACK);
-    if (!inkhud->freetext.empty())
-        // For very long words with narrow characters like 'l' at the right edge,
-        // The text will jump down one line before going back to normal on the
-        // next character typed.
-        // Either it must be fixed here in in printWrapped() itself.
-        printWrapped(2, yStartBox + 1, inputBoxW - 5, inkhud->freetext);
+    while (inputBoxH < Y(0.40)) {
+        inputBoxH += fontSmall.lineHeight();
+    }
+
+    
+    if (!inkhud->freetext.empty()) 
+    {
+        uint32_t textHeight = getWrappedTextHeight(0, inputBoxW - 5, inkhud->freetext);
+        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight + fontSmall.lineHeight() : inputBoxH - textHeight + fontSmall.lineHeight() + 1;
+        if (textHeight > inputBoxH) 
+            printWrapped(2, textPadding, inputBoxW - 5, inkhud->freetext);
+        else
+            printWrapped(2, yStartBox + 2, inputBoxW - 5, inkhud->freetext);
+    }
+    fillRect(0, 0, X(1.0), yStartBox, WHITE);
+    printAt(0, 0, header);
+    drawRect(0, yStartBox, inputBoxW, inputBoxH + 5, BLACK);
+    
     // Draw the keyboard
     uint16_t yStartKb = Y(0.55);
     float padding = 0.01;
