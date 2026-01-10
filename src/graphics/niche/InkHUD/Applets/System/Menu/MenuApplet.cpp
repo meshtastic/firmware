@@ -164,13 +164,26 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
+    case FREE_TEXT:
+        OSThread::enabled = true; // TODO: reenable timeout when returning from FreeText
+        inkhud->openKeyboard();
+        break;
+
     case STORE_CANNEDMESSAGE_SELECTION:
-        cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        if (!settings->joystick.enabled)
+            cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        else
+            cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
         break;
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
-        sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, cm.selectedMessageItem->rawText.c_str());
+        if (inkhud->freetext.empty()) // send selected message
+            sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex,
+                     cm.selectedMessageItem->rawText.c_str());
+        else // send freetext
+            sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, inkhud->freetext.c_str());
+        inkhud->freetext.erase();
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL); // Next refresh should be FULL. Lots of button pressing to get here
         break;
 
@@ -181,10 +194,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case ALIGN_JOYSTICK:
         inkhud->openAlignStick();
         break;
-    
-    case KEYBOARD:
-        inkhud->openKeyboard();
-        break;
+
     case LAYOUT:
         // Todo: smarter incrementing of tile count
         settings->userTiles.count++;
@@ -290,7 +300,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
-        items.push_back(MenuItem("Keyboard", MenuAction::KEYBOARD));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
@@ -636,6 +645,10 @@ void InkHUD::MenuApplet::populateSendPage()
 {
     // Position / NodeInfo packet
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
+
+    // If joystick is available, include the Free Text option
+    if (settings->joystick.enabled)
+        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::CANNEDMESSAGE_RECIPIENT));
 
     // One menu item for each canned message
     uint8_t count = cm.store->size();

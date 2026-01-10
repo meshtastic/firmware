@@ -3,10 +3,10 @@
 
 using namespace NicheGraphics;
 
-InkHUD::FreeTextApplet::FreeTextApplet() 
+InkHUD::FreeTextApplet::FreeTextApplet()
 {
-    for (int i=0; i<KEYBOARD_ROWS; i++) {
-        for (int j=0; j<KEYBOARD_COLS; j++) {
+    for (int i = 0; i < KEYBOARD_ROWS; i++) {
+        for (int j = 0; j < KEYBOARD_COLS; j++) {
             if (keyboardLayout[i][j] == '\b') {
                 keyboard[i][j] = {'<', BACKSPACE};
             } else if (keyboardLayout[i][j] == '\n') {
@@ -19,6 +19,7 @@ InkHUD::FreeTextApplet::FreeTextApplet()
         }
     }
 }
+
 void InkHUD::FreeTextApplet::onRender()
 {
     setFont(fontSmall);
@@ -30,25 +31,25 @@ void InkHUD::FreeTextApplet::onRender()
     uint16_t inputBoxW = X(1.0);
 
     drawRect(0, yStartBox, inputBoxW, inputBoxH, BLACK);
-    if (!inputText.empty()) 
+    if (!inkhud->freetext.empty())
         // For very long words with narrow characters like 'l' at the right edge,
         // The text will jump down one line before going back to normal on the
         // next character typed.
         // Either it must be fixed here in in printWrapped() itself.
-        printWrapped(2, yStartBox + 1, inputBoxW - 5, inputText);
+        printWrapped(2, yStartBox + 1, inputBoxW - 5, inkhud->freetext);
     // Draw the keyboard
     uint16_t yStartKb = Y(0.55);
     float padding = 0.01;
-    uint16_t keyW = (width() / 11 );
+    uint16_t keyW = (width() / 11);
     uint16_t r = (width() % 10) / 10;
     uint16_t c = 0;
     uint16_t keyH = X(1.0) > Y(1.0) ? fontSmall.lineHeight() + Y(padding) : fontSmall.lineHeight() + (2 * X(padding));
-    
-    for (uint8_t i=0; i<FreeTextApplet::KEYBOARD_ROWS; i++) {
-        for (uint8_t j=0; j<FreeTextApplet::KEYBOARD_COLS; j++) {
+
+    for (uint8_t i = 0; i < FreeTextApplet::KEYBOARD_ROWS; i++) {
+        for (uint8_t j = 0; j < FreeTextApplet::KEYBOARD_COLS; j++) {
             char temp[2] = "\0";
             temp[0] = keyboardLayout[i][j];
-            //drawRect(c, yStartKb, keyW + r, keyH, BLACK);
+            // drawRect(c, yStartKb, keyW + r, keyH, BLACK);
             if (keyCursorX == j && keyCursorY == i) {
                 fillRect(c, yStartKb, keyW + r, keyH, BLACK);
                 setTextColor(WHITE);
@@ -71,8 +72,6 @@ void InkHUD::FreeTextApplet::onRender()
         c = 0;
         yStartKb += X(1.0) > Y(1.0) ? keyH : keyH + Y(padding);
     }
-    
-
 }
 
 void InkHUD::FreeTextApplet::onForeground()
@@ -87,8 +86,6 @@ void InkHUD::FreeTextApplet::onForeground()
 
 void InkHUD::FreeTextApplet::onBackground()
 {
-    // Erase the text
-    inputText.erase();
     // Allow normal update behavior to resume
     SystemApplet::lockRendering = false;
     SystemApplet::lockRequests = false;
@@ -100,11 +97,11 @@ void InkHUD::FreeTextApplet::onBackground()
 
 void InkHUD::FreeTextApplet::onButtonShortPress()
 {
-    
+
     char ch = keyboard[keyCursorY][keyCursorX].c;
     enum KEY_ACTIONS a = keyboard[keyCursorY][keyCursorX].action;
-    if (a == BACKSPACE && !inputText.empty()) {
-        inputText.pop_back();
+    if (a == BACKSPACE && !inkhud->freetext.empty()) {
+        inkhud->freetext.pop_back();
         requestUpdate(EInk::UpdateTypes::FAST);
     } else if (a == ENTER) {
         // This will eventually lead to a save/send page;
@@ -112,10 +109,9 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
         sendToBackground();
         requestUpdate(EInk::UpdateTypes::FAST);
     } else if (a == NONE) {
-        inputText += ch;
+        inkhud->freetext += ch;
         requestUpdate(EInk::UpdateTypes::FAST);
     }
-    
 }
 
 void InkHUD::FreeTextApplet::onButtonLongPress()
@@ -133,14 +129,14 @@ void InkHUD::FreeTextApplet::onExitShort()
 void InkHUD::FreeTextApplet::onExitLong()
 {
     sendToBackground();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL); 
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::FreeTextApplet::onNavUp()
 {
-    if (keyCursorY == 0) 
+    if (keyCursorY == 0)
         keyCursorY = KEYBOARD_ROWS - 1;
-    else 
+    else
         keyCursorY--;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
@@ -153,9 +149,9 @@ void InkHUD::FreeTextApplet::onNavDown()
 
 void InkHUD::FreeTextApplet::onNavLeft()
 {
-    if (keyCursorX == 0) 
+    if (keyCursorX == 0)
         keyCursorX = KEYBOARD_COLS - 1;
-    else 
+    else
         keyCursorX--;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }

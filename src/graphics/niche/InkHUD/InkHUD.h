@@ -108,6 +108,9 @@ class InkHUD
     // Shared data which persists between boots
     Persistence *persistence = nullptr;
 
+    // String to share text between the freetext applet and other system applets
+    std::string freetext;
+
   private:
     InkHUD() {} // Constructor made private to force use of InkHUD::getInstance
 
