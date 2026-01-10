@@ -245,6 +245,12 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM channel_messages WHERE substr(root_hash,1,?)=?;", -1, &getChainCountStmt,
                        NULL);
 
+    sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM local_messages WHERE substr(root_hash,1,?)=?;", -1, &getScratchCountStmt,
+                       NULL);
+
+    sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM canon_scratch WHERE substr(root_hash,1,?)=?;", -1,
+                       &getRootCanonScratchCountStmt, NULL);
+
     sqlite3_prepare_v2(ppDb, "DELETE FROM local_messages WHERE rx_time < ?;", -1, &pruneScratchQueueStmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
@@ -323,7 +329,22 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     }
 
     uint32_t chain_count = getChainCount(root_hash_bytes, SFPP_HASH_SIZE);
-    LOG_DEBUG("Chain count is %u", chain_count);
+    uint32_t scratch_count = getScratchCount(root_hash_bytes, SFPP_HASH_SIZE);
+    uint32_t canon_scratch_count = getCanonScratchCount(root_hash_bytes, SFPP_HASH_SIZE);
+
+    // add links in scratch and links in canon_scratch
+
+    LOG_DEBUG("chain_count=%u, scratch_count=%u, canon_scratch_count=%u, texts_rebroadcast=%u, links_speculated=%u, "
+              "canon_announces=%u,",
+              chain_count, scratch_count, canon_scratch_count, texts_rebroadcast, links_speculated, canon_announces);
+
+    LOG_DEBUG("links_requested=%u, links_provided=%u, links_added=%u, links_from_canon_scratch=%u, links_from_scratch=%u, "
+              "split_links_sent=%u",
+              links_requested, links_provided, links_added, links_from_canon_scratch, links_from_scratch, split_links_sent);
+    LOG_DEBUG(
+        "split_links_received=%u, links_pruned = %u, scratch_timed_out = %u, sent_from_scratch = %u, received_from_scratch = %u",
+        split_links_received, links_pruned, scratch_timed_out, sent_from_scratch, received_from_scratch);
+
     while (chain_count > portduino_config.sfpp_max_chain) {
         LOG_DEBUG("Chain length %u exceeds max %u, evicting oldest", chain_count, portduino_config.sfpp_max_chain);
         trimOldestLink(root_hash_bytes, SFPP_HASH_SIZE);
@@ -604,7 +625,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 checkCommitHash(scratch_object, t->commit_hash.bytes, t->message_hash.size)) {
                 LOG_INFO("StoreForwardpp Found announced message in scratch, adding to chain");
                 scratch_object.rx_time = t->encapsulated_rxtime;
-                addToChain(scratch_object);
+                if (addToChain(scratch_object))
+                    links_from_scratch++;
                 removeFromScratch(scratch_object.message_hash, scratch_object.message_hash_len);
                 maybeMoveFromCanonScratch(scratch_object.root_hash, scratch_object.root_hash_len);
 
@@ -703,6 +725,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 memcpy(&incoming_link.encrypted_bytes[split_link_in.encrypted_len], second_half.encrypted_bytes,
                        second_half.encrypted_len);
                 incoming_link.encrypted_len = split_link_in.encrypted_len + second_half.encrypted_len;
+                split_links_received++;
 
                 // append the encrypted bytes
 
@@ -911,6 +934,7 @@ void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t
 void StoreForwardPlusPlusModule::requestNextMessage(uint8_t *_root_hash, size_t _root_hash_len, uint8_t *_commit_hash,
                                                     size_t _commit_hash_len)
 {
+    links_requested++;
 
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST;
@@ -937,6 +961,7 @@ void StoreForwardPlusPlusModule::requestNextMessage(uint8_t *_root_hash, size_t 
 
 void StoreForwardPlusPlusModule::requestMessageCount(uint8_t *_root_hash, size_t _root_hash_len, uint32_t count)
 {
+    links_requested++;
 
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST;
@@ -1042,6 +1067,7 @@ void StoreForwardPlusPlusModule::broadcastLink(uint8_t *_commit_hash, size_t _co
 
 void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit_hash, bool is_split_second_half)
 {
+    links_provided++;
     LOG_DEBUG("Sending link #%u", lo.counter);
     meshtastic_StoreForwardPlusPlus storeforward = meshtastic_StoreForwardPlusPlus_init_zero;
     storeforward.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE;
@@ -1064,6 +1090,7 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit
         storeforward.message_hash.size = SFPP_SHORT_HASH_SIZE;
         memcpy(storeforward.message_hash.bytes, lo.message_hash, storeforward.message_hash.size);
         doing_split_send = false;
+        split_links_sent++;
     }
 
     storeforward.encapsulated_to = lo.to;
@@ -1194,6 +1221,7 @@ bool StoreForwardPlusPlusModule::sendFromScratch(uint8_t *root_hash)
         printBytes("StoreForwardpp Send link to mesh ", lo.message_hash, 8);
         LOG_WARN("StoreForwardpp Size: %d", lo.encrypted_len);
         printBytes("StoreForwardpp encrypted ", lo.encrypted_bytes, lo.encrypted_len);
+        sent_from_scratch++;
         broadcastLink(lo, false);
 
         return true;
@@ -1271,6 +1299,7 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     }
     sqlite3_reset(chain_insert_stmt);
     setChainCount(lo.root_hash, SFPP_HASH_SIZE, lo.counter);
+    links_added++;
     removeFromCanonScratch(lo.message_hash, SFPP_SHORT_HASH_SIZE);
     return true;
 }
@@ -1346,6 +1375,7 @@ void StoreForwardPlusPlusModule::canonAnnounce(link_object &lo)
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
     LOG_INFO("StoreForwardpp Send packet to mesh payload size %u", p->decoded.payload.size);
+    canon_announces++;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -1460,7 +1490,8 @@ bool StoreForwardPlusPlusModule::speculateScratchChain(uint8_t *commit_hash_byte
             LOG_ERROR("StoreForwardpp Speculation commit possibly failed, no next scratch object");
             break;
         }
-        addToChain(next_scratch_object);
+        if (addToChain(next_scratch_object))
+            links_speculated++;
         removeFromScratch(next_scratch_object.message_hash, next_scratch_object.message_hash_len);
         chain_end = getLinkFromPositionFromTip(0, root_hash, SFPP_HASH_SIZE);
         printBytes("StoreForwardpp local final commit hash: ", chain_end.commit_hash, SFPP_HASH_SIZE);
@@ -1613,6 +1644,7 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
 void StoreForwardPlusPlusModule::rebroadcastLinkObject(link_object &lo)
 {
     LOG_INFO("StoreForwardpp Attempting to Rebroadcast a message received over SF++");
+    texts_rebroadcast++;
     meshtastic_MeshPacket *p = router->allocForSending();
     p->to = lo.to;
     p->from = lo.from;
@@ -1702,6 +1734,34 @@ uint32_t StoreForwardPlusPlusModule::getChainCount(uint8_t *root_hash, size_t ro
     return count;
 }
 
+uint32_t StoreForwardPlusPlusModule::getScratchCount(uint8_t *root_hash, size_t root_hash_len)
+{
+    sqlite3_bind_int(getScratchCountStmt, 1, root_hash_len);
+    sqlite3_bind_blob(getScratchCountStmt, 2, root_hash, root_hash_len, NULL);
+
+    int res = sqlite3_step(getScratchCountStmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE && res != SQLITE_ROW) {
+        LOG_ERROR("StoreForwardpp getScratchCountStmt sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    }
+    uint32_t count = sqlite3_column_int(getScratchCountStmt, 0);
+    sqlite3_reset(getScratchCountStmt);
+    return count;
+}
+
+uint32_t StoreForwardPlusPlusModule::getCanonScratchCount(uint8_t *root_hash, size_t root_hash_len)
+{
+    sqlite3_bind_int(getRootCanonScratchCountStmt, 1, root_hash_len);
+    sqlite3_bind_blob(getRootCanonScratchCountStmt, 2, root_hash, root_hash_len, NULL);
+
+    int res = sqlite3_step(getRootCanonScratchCountStmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE && res != SQLITE_ROW) {
+        LOG_ERROR("StoreForwardpp getRootCanonScratchCountStmt sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    }
+    uint32_t count = sqlite3_column_int(getRootCanonScratchCountStmt, 0);
+    sqlite3_reset(getRootCanonScratchCountStmt);
+    return count;
+}
+
 StoreForwardPlusPlusModule::link_object
 StoreForwardPlusPlusModule::getLinkFromPositionFromTip(uint32_t _count, uint8_t *_root_hash, size_t _root_hash_len)
 {
@@ -1749,10 +1809,12 @@ void StoreForwardPlusPlusModule::pruneScratchQueue()
         LOG_ERROR("StoreForwardpp Prune Scratch sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
     }
     sqlite3_reset(pruneScratchQueueStmt);
+    scratch_timed_out += sqlite3_changes(ppDb);
 }
 
 void StoreForwardPlusPlusModule::trimOldestLink(uint8_t *root_hash, size_t root_hash_len)
 {
+    links_pruned++;
     sqlite3_bind_int(trimOldestLinkStmt, 1, root_hash_len);
     sqlite3_bind_blob(trimOldestLinkStmt, 2, root_hash, root_hash_len, NULL);
     int res = sqlite3_step(trimOldestLinkStmt);
@@ -1901,7 +1963,8 @@ void StoreForwardPlusPlusModule::maybeMoveFromCanonScratch(uint8_t *root_hash, s
     if (lo.counter == chain_end.counter + 1 &&
         recalculateHash(lo, root_hash, root_hash_len, lo.commit_hash, lo.commit_hash_len)) {
 
-        addToChain(lo);
+        if (addToChain(lo))
+            links_from_canon_scratch++;
         maybeMoveFromCanonScratch(root_hash, root_hash_len); // recursion!
         return;
     }
