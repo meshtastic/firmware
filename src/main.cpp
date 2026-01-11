@@ -398,6 +398,12 @@ void setup()
     io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
     io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+#elif defined(T5_S3_EPAPER_PRO)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(BOARD_BL_EN, OUTPUT);
 #elif defined(HACKADAY_COMMUNICATOR)
     pinMode(KB_INT, INPUT);
 #endif
