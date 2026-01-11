@@ -237,8 +237,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_ETH_ELITE = 91,
     /* Heltec HRI-3621 industrial probe */
     meshtastic_HardwareModel_HELTEC_SENSOR_HUB = 92,
-    /* Reserved Fried Chicken ID for future use */
-    meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN = 93,
+    /* Muzi Works Muzi-Base device */
+    meshtastic_HardwareModel_MUZI_BASE = 93,
     /* Heltec Magnetic Power Bank with Meshtastic compatible */
     meshtastic_HardwareModel_HELTEC_MESH_POCKET = 94,
     /* Seeed Solar Node */
@@ -1399,10 +1399,6 @@ extern "C" {
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
 #define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY
 #define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY+1))
-
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF+1))
 
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
