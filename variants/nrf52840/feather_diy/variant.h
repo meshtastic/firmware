@@ -84,8 +84,7 @@ extern "C" {
 #define LORA_MOSI MO
 #define LORA_CS SS
 
-// enables 3.3V periphery like GPS or IO Module
-#define PIN_3V3_EN 34 // P1.14 34 - Neopixel power on RevE, not connected on RevD
+#define PIN_NEOPIXEL_POWER 34 // P1.14 34 - Neopixel power on RevE, not connected on RevD
 
 #undef USE_EINK
 
