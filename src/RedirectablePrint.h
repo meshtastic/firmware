@@ -56,4 +56,9 @@ class RedirectablePrint : public Print
   private:
     void log_to_syslog(const char *logLevel, const char *format, va_list arg);
     void log_to_ble(const char *logLevel, const char *format, va_list arg);
+    // void log_to_uart(const char *logLevel, const char *format, va_list arg);
+
+  public:
+    // Static pointer for UART log forwarding (set by SerialModule when in LOG mode)
+    static Print *uartLogDestination;
 };

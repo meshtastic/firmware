@@ -12,6 +12,10 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
+    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#include "modules/SerialModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -358,6 +362,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             p->channel = 0; // Reset the channel to 0, so we don't use the failing hash again
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
+        }
+        // Clean packet logging for LOG and LOG_TEXT_ONLY modes (outgoing packets)
+        if (moduleConfig.serial.enabled &&
+            (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
+             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY)) {
+            SerialModule::logPacketClean(p_decoded);
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
@@ -709,6 +719,14 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             printPacket("handleReceived(USER)", p);
         else
             printPacket("handleReceived(REMOTE)", p);
+
+        // Clean packet logging for LOG and LOG_TEXT_ONLY modes (incoming packets)
+        // Note: logPacketClean is static, so we don't need serialModule instance
+        if (moduleConfig.serial.enabled &&
+            (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
+             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY)) {
+            SerialModule::logPacketClean(p);
+        }
 
         // Neighbor info module is disabled, ignore expensive neighbor info packets
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
