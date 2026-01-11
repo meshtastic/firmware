@@ -188,6 +188,7 @@ extern struct portduino_config_struct {
     // Routing
     bool whitelist_enabled = false;
     std::vector<int> whitelist_ports = {};
+    std::vector<int> nohop_ports = {};
 
     // General
     std::string mac_address = "";
@@ -524,9 +525,10 @@ extern struct portduino_config_struct {
         }
 
         // Routing
-        if (whitelist_enabled) {
+        if (whitelist_enabled || nohop_ports.size() > 0) {
             out << YAML::Key << "Routing" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "WhitelistPorts" << YAML::Value << whitelist_ports;
+            out << YAML::Key << "NoHopPorts" << YAML::Value << nohop_ports;
             out << YAML::EndMap; // Routing
         }
 
