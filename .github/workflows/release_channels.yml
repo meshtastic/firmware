@@ -48,6 +48,37 @@ jobs:
         ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
     secrets: inherit
 
+  publish-release-notes:
+    if: github.event.action == 'published'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release version
+        id: version
+        run: |
+          # Extract version from tag (e.g., v2.7.15.567b8ea -> 2.7.15.567b8ea)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get release notes
+        run: |
+          mkdir -p ./publish
+          gh release view ${{ github.event.release.tag_name }} --json body --jq '.body' > ./publish/release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release notes to meshtastic.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.DIST_PAGES_DEPLOY_KEY }}
+          external_repository: meshtastic/meshtastic.github.io
+          publish_branch: master
+          publish_dir: ./publish
+          destination_dir: firmware-${{ steps.version.outputs.version }}
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: Release notes for ${{ steps.version.outputs.version }}
+          enable_jekyll: true
+
   # Create a PR to bump version when a release is Published
   bump-version:
     if: github.event.action == 'published'
