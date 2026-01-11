@@ -1270,9 +1270,12 @@ void NodeDB::loadFromDisk()
         if (us && us->has_user) {
             LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
                      us->num);
-            strncpy(owner.long_name, us->user.long_name, sizeof(owner.long_name));
-            strncpy(owner.short_name, us->user.short_name, sizeof(owner.short_name));
+            memcpy(owner.long_name, us->user.long_name, sizeof(owner.long_name));
+            owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+            memcpy(owner.short_name, us->user.short_name, sizeof(owner.short_name));
+            owner.short_name[sizeof(owner.short_name) - 1] = '\0';
             owner.is_licensed = us->user.is_licensed;
+            owner.has_is_unmessagable = us->user.has_is_unmessagable;
             owner.is_unmessagable = us->user.is_unmessagable;
 
             // Save the recovered owner to device state on disk
