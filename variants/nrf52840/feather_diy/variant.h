@@ -49,8 +49,8 @@ extern "C" {
 #define PIN_LED1 3 // P1.15 3
 #define PIN_LED2 4 // P1.10 4
 
-#define LED_GREEN PIN_LED2 // Actually red
-#define LED_BLUE PIN_LED1
+#define LED_RED PIN_LED1
+#define LED_BLUE PIN_LED2
 
 #define LED_STATE_ON 1 // State when LED is lit
 
