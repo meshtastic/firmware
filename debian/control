@@ -25,7 +25,8 @@ Build-Depends: debhelper-compat (= 13),
                liborcania-dev,
                libx11-dev,
                libinput-dev,
-               libxkbcommon-x11-dev
+               libxkbcommon-x11-dev,
+               libsqlite3-dev
 Standards-Version: 4.6.2
 Homepage: https://github.com/meshtastic/firmware
 Rules-Requires-Root: no
