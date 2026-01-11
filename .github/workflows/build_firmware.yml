@@ -59,6 +59,44 @@ jobs:
         run: |
           curl -L -o bleota-c3.bin $OTA_URL
 
+      - name: Update manifest with OTA file
+        if: inputs.platform == 'esp32' || inputs.platform == 'esp32s3' || inputs.platform == 'esp32c3' || inputs.platform == 'esp32c6'
+        working-directory: release
+        env:
+          PIO_PLATFORM: ${{ inputs.platform }}
+        run: |
+          # Determine OTA filename based on platform
+          if [[ "$PIO_PLATFORM" == "esp32" || "$PIO_PLATFORM" == "esp32s3" ]]; then
+            OTA_FILE="mt-${PIO_PLATFORM}-ota.bin"
+          else
+            OTA_FILE="bleota-c3.bin"
+          fi
+
+          # Check if OTA file exists
+          if [[ ! -f "$OTA_FILE" ]]; then
+            echo "OTA file $OTA_FILE not found, skipping manifest update"
+            exit 0
+          fi
+
+          # Calculate MD5 and size
+          if command -v md5sum &> /dev/null; then
+            OTA_MD5=$(md5sum "$OTA_FILE" | cut -d' ' -f1)
+          else
+            OTA_MD5=$(md5 -q "$OTA_FILE")
+          fi
+          OTA_SIZE=$(stat -f%z "$OTA_FILE" 2>/dev/null || stat -c%s "$OTA_FILE")
+
+          # Find and update manifest file
+          for manifest in firmware-*.mt.json; do
+            if [[ -f "$manifest" ]]; then
+              echo "Updating $manifest with $OTA_FILE (md5: $OTA_MD5, size: $OTA_SIZE)"
+              # Add OTA entry to files array if not already present
+              jq --arg name "$OTA_FILE" --arg md5 "$OTA_MD5" --argjson bytes "$OTA_SIZE" \
+                'if .files | map(select(.name == $name)) | length == 0 then .files += [{"name": $name, "md5": $md5, "bytes": $bytes}] else . end' \
+                "$manifest" > "${manifest}.tmp" && mv "${manifest}.tmp" "$manifest"
+            fi
+          done
+
       - name: Job summary
         env:
           PIO_ENV: ${{ inputs.pio_env }}
