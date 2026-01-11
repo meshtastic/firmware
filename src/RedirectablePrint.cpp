@@ -18,7 +18,7 @@
 #endif
 
 #if HAS_NETWORKING
-extern Syslog syslog;
+extern meshtastic::Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
 {
