@@ -488,7 +488,7 @@ void portduinoSetup()
     }
 
     for (auto i : portduino_config.extra_pins) {
-        if (i.enabled && i.gpiochip > max_GPIO)
+        if (i.enabled && i.pin > max_GPIO)
             max_GPIO = i.pin;
     }
 
