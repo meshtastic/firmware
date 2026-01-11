@@ -5,12 +5,12 @@
 #include "MeshTypes.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
-#include "RedirectablePrint.h"
 #include "RTC.h"
+#include "RedirectablePrint.h"
 #include "Router.h"
 #include "configuration.h"
-#include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -100,8 +100,8 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT)) {
-        const char *warning =
-            "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, MS_CONFIG, LOG, and LOGTEXT output-only modes.";
+        const char *warning = "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, "
+                              "MS_CONFIG, LOG, and LOGTEXT output-only modes.";
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -760,8 +760,7 @@ void SerialModule::processWXSerial()
  */
 int SerialModuleRadio::onNotify(const meshtastic_MeshPacket *packet)
 {
-    if (moduleConfig.serial.enabled &&
-        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
+    if (moduleConfig.serial.enabled && moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
         SerialModule::logPacketClean(packet);
     }
 
@@ -784,7 +783,7 @@ static bool wasLoggedRecently(const meshtastic_MeshPacket *p)
     PacketId id = p->id;
     uint32_t now = millis();
     uint32_t timeoutMs = 5000; // 5 second window for duplicates
-    
+
     // Check if we've seen this (from, id) pair recently
     for (int i = 0; i < MAX_RECENT_LOGGED_PACKETS; i++) {
         if (recentLoggedPackets[i].from == from && recentLoggedPackets[i].id == id) {
@@ -797,13 +796,13 @@ static bool wasLoggedRecently(const meshtastic_MeshPacket *p)
             return false;
         }
     }
-    
+
     // Not found, add it to the list
     recentLoggedPackets[recentLoggedIndex].from = from;
     recentLoggedPackets[recentLoggedIndex].id = id;
     recentLoggedPackets[recentLoggedIndex].timestamp = now;
     recentLoggedIndex = (recentLoggedIndex + 1) % MAX_RECENT_LOGGED_PACKETS;
-    
+
     return false;
 }
 
@@ -813,26 +812,26 @@ void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
     if (!moduleConfig.serial.enabled) {
         return;
     }
-    
+
     bool isLogMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG);
     bool isLogTextOnlyMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT);
-    
+
     if (!isLogMode && !isLogTextOnlyMode) {
         return;
     }
-    
+
     // For LOGTEXT mode, only process text messages
     if (isLogTextOnlyMode && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (!MeshService::isTextPayload(p)) {
             return;
         }
     }
-    
+
     // Suppress immediate duplicates
     if (wasLoggedRecently(p)) {
         return;
     }
-    
+
     Print *uart = nullptr;
     if (isLogMode) {
         uart = RedirectablePrint::uartLogDestination;
@@ -840,7 +839,7 @@ void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
         // For LOGTEXT, use serialPrint directly
         uart = serialPrint;
     }
-    
+
     if (uart == nullptr) {
         return;
     }
@@ -890,7 +889,8 @@ void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
         else if (decoded.portnum == meshtastic_PortNum_TELEMETRY_APP) {
             meshtastic_Telemetry telemetry;
             memset(&telemetry, 0, sizeof(telemetry));
-            bool decodeOk = pb_decode_from_bytes(decoded.payload.bytes, decoded.payload.size, &meshtastic_Telemetry_msg, &telemetry);
+            bool decodeOk =
+                pb_decode_from_bytes(decoded.payload.bytes, decoded.payload.size, &meshtastic_Telemetry_msg, &telemetry);
             if (decodeOk) {
                 if (telemetry.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
                     const auto &m = telemetry.variant.environment_metrics;
