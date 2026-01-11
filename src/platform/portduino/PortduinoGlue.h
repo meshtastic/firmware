@@ -2,6 +2,7 @@
 #include <fstream>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 #include "LR11x0Interface.h"
 #include "Module.h"
@@ -183,6 +184,10 @@ extern struct portduino_config_struct {
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
     // Allow DMs
+
+    // Routing
+    bool whitelist_enabled = false;
+    std::vector<int> whitelist_ports = {};
 
     // General
     std::string mac_address = "";
@@ -516,6 +521,13 @@ extern struct portduino_config_struct {
             out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
             out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
             out << YAML::EndMap; // StoreAndForward
+        }
+
+        // Routing
+        if (whitelist_enabled) {
+            out << YAML::Key << "Routing" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "WhitelistPorts" << YAML::Value << whitelist_ports;
+            out << YAML::EndMap; // Routing
         }
 
         // General

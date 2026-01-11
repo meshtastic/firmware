@@ -742,6 +742,22 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+#if ARCH_PORTDUINO
+        if (portduino_config.whitelist_enabled) {
+            bool allowed = false;
+            for (const auto &port : portduino_config.whitelist_ports) {
+                if (port == p->decoded.portnum) {
+                    allowed = true;
+                    break;
+                }
+            }
+            if (!allowed) {
+                LOG_DEBUG("Dropping packet not on Portduino Whitelist");
+                cancelSending(p->from, p->id);
+                skipHandle = true;
+            }
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }

@@ -843,7 +843,14 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_backlog_limit = (yamlConfig["StoreAndForward"]["BacklogLimit"]).as<uint32_t>(100);
             portduino_config.sfpp_steal_port = (yamlConfig["StoreAndForward"]["StealPort"]).as<bool>(false);
         }
-
+        if (yamlConfig["Routing"]) {
+            if (yamlConfig["Routing"]["WhitelistPorts"]) {
+                portduino_config.whitelist_ports = (yamlConfig["Routing"]["WhitelistPorts"]).as<std::vector<int>>();
+                if (portduino_config.whitelist_ports.size() > 0) {
+                    portduino_config.whitelist_enabled = true;
+                }
+            }
+        }
         if (yamlConfig["General"]) {
             portduino_config.MaxNodes = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             portduino_config.maxtophone = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
