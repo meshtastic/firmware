@@ -2,10 +2,10 @@
 
 #include "./MenuApplet.h"
 
-#include "RTC.h"
-
 #include "DisplayFormatters.h"
+#include "GPS.h"
 #include "MeshService.h"
+#include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
 #include "main.h"
@@ -17,10 +17,6 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
-#endif
-
-#if !MESHTASTIC_EXCLUDE_GPS
-#include "GPS.h"
 #endif
 
 using namespace NicheGraphics;
@@ -443,8 +439,18 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_GPS:
-        gps->toggleGpsMode();
+#if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+        } else {
+            // NOT_PRESENT do nothing
+            break;
+        }
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->reloadConfig(SEGMENT_CONFIG);
+#endif
         break;
 
     case ENABLE_BLUETOOTH:
@@ -942,13 +948,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Device Config Section
         items.push_back(MenuItem::Header("Device Config"));
         items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
-
-#if !MESHTASTIC_EXCLUDE_GPS
         items.push_back(MenuItem("Position", MenuPage::NODE_CONFIG_POSITION));
-#endif
-
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
-
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Network", MenuPage::NODE_CONFIG_NETWORK));
 #endif
@@ -981,15 +982,15 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case NODE_CONFIG_POSITION: {
         items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
-
-#if !MESHTASTIC_EXCLUDE_GPS
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
-            items.push_back(MenuItem("Enable GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION));
+#if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
+        const auto mode = config.position.gps_mode;
+        if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            items.push_back(MenuItem("GPS None", MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION));
         } else {
-            items.push_back(MenuItem("Disable GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION));
+            gpsEnabled = (mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED);
+            items.push_back(MenuItem("GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION, &gpsEnabled));
         }
 #endif
-
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
@@ -1443,21 +1444,6 @@ void InkHUD::MenuApplet::onRender()
 
             // Indented normal item text
             printAt(itemL + X(padding * 2), center, item.label, LEFT, MIDDLE);
-        }
-
-        // Checkbox, if relevant
-        if (item.checkState) {
-            const uint16_t cbWH = fontSmall.lineHeight();
-            const int16_t cbL = itemR - X(padding) - cbWH;
-            const int16_t cbT = center - (cbWH / 2);
-
-            if (*(item.checkState)) {
-                drawRect(cbL, cbT, cbWH, cbWH, BLACK);
-                drawLine(cbL + 3, center, cbL + (cbWH / 2), center + (cbWH / 2) - 2, BLACK);
-                drawLine(cbL + (cbWH / 2), center + (cbWH / 2) - 2, cbL + cbWH + 2, center - (cbWH / 2) - 2, BLACK);
-            } else {
-                drawRect(cbL, cbT, cbWH, cbWH, BLACK);
-            }
         }
 
         // Checkbox, if relevant

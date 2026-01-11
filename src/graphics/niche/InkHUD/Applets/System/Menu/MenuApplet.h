@@ -69,6 +69,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages
     uint8_t selectedChannelIndex = 0;          // Currently selected LoRa channel (Node Config → Radio → Channel)
     bool channelPositionEnabled = false;
+    bool gpsEnabled = false;
 
     // Recents menu checkbox state (derived from settings.recentlyActiveSeconds)
     static constexpr uint8_t RECENTS_COUNT = 6;
