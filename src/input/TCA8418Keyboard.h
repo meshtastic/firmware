@@ -20,4 +20,7 @@ class TCA8418Keyboard : public TCA8418KeyboardBase
     uint8_t char_idx;
     int32_t tap_interval;
     bool should_backspace;
+#if defined(T_DECK)
+    bool symEnabled;
+#endif
 };

@@ -8,8 +8,18 @@ TrackballInterruptImpl1::TrackballInterruptImpl1() : TrackballInterruptBase("tra
 
 void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress)
 {
-    input_broker_event eventDown = INPUT_BROKER_DOWN;
-    input_broker_event eventUp = INPUT_BROKER_UP;
+    input_broker_event eventDown =
+#if defined(T_DECK)
+        INPUT_BROKER_RIGHT;
+#else
+        INPUT_BROKER_DOWN;
+#endif
+    input_broker_event eventUp =
+#if defined(T_DECK)
+        INPUT_BROKER_LEFT;
+#else
+        INPUT_BROKER_UP;
+#endif
     input_broker_event eventLeft = INPUT_BROKER_LEFT;
     input_broker_event eventRight = INPUT_BROKER_RIGHT;
     input_broker_event eventPressed = INPUT_BROKER_SELECT;

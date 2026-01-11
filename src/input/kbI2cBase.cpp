@@ -3,7 +3,7 @@
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
 
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK)
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
@@ -18,7 +18,7 @@ extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK)
       TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(*(new TLoraPagerKeyboard()))
@@ -256,7 +256,7 @@ int32_t KbI2cBase::runOnce()
         TCAKeyboard.trigger();
         InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
-            char nextEvent = TCAKeyboard.dequeueEvent();
+            uint8_t nextEvent = static_cast<uint8_t>(TCAKeyboard.dequeueEvent());
             e.inputEvent = INPUT_BROKER_ANYKEY;
             e.kbchar = 0x00;
             e.source = this->_originName;
@@ -320,6 +320,22 @@ int32_t KbI2cBase::runOnce()
             case TCA8418KeyboardBase::TAB:
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
+                break;
+            case INPUT_BROKER_MSG_FN_SYMBOL_ON:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_FN_SYMBOL_ON;
+                break;
+            case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_FN_SYMBOL_OFF;
+                break;
+            case INPUT_BROKER_MSG_IME_PAGE_PREV:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_IME_PAGE_PREV;
+                break;
+            case INPUT_BROKER_MSG_IME_PAGE_NEXT:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_IME_PAGE_NEXT;
                 break;
             default:
                 if (nextEvent > 127) {
@@ -469,9 +485,14 @@ int32_t KbI2cBase::runOnce()
             case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
                 // toggle moddifiers button.
                 is_sym = !is_sym;
+#if defined(T_DECK)
+                e.inputEvent = INPUT_BROKER_NONE;
+                e.kbchar = 0x00;
+#else
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
                                   : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // modifier key is active
+#endif
                 break;
             case 0x9e: // fn+g      INPUT_BROKER_GPS_TOGGLE
                 e.inputEvent = INPUT_BROKER_GPS_TOGGLE;

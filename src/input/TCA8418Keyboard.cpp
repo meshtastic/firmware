@@ -1,4 +1,5 @@
 #include "TCA8418Keyboard.h"
+#include "input/InputBroker.h"
 
 #define _TCA8418_COLS 3
 #define _TCA8418_ROWS 4
@@ -45,6 +46,10 @@ static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 TCA8418Keyboard::TCA8418Keyboard()
     : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), last_key(-1), next_key(-1), last_tap(0L), char_idx(0), tap_interval(0),
       should_backspace(false)
+#if defined(T_DECK)
+      ,
+      symEnabled(false)
+#endif
 {
 }
 
@@ -114,6 +119,14 @@ void TCA8418Keyboard::released()
     uint32_t now = millis();
     int32_t held_interval = now - last_tap;
     last_tap = now;
+#if defined(T_DECK)
+    if (last_key == (_TCA8418_NUM_KEYS - 1)) {
+        symEnabled = !symEnabled;
+        queueEvent(symEnabled ? INPUT_BROKER_MSG_FN_SYMBOL_ON : INPUT_BROKER_MSG_FN_SYMBOL_OFF);
+        return;
+    }
+#endif
+
     if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD && should_backspace) {
         queueEvent(BSP);
     }

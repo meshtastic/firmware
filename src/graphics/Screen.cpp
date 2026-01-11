@@ -1588,6 +1588,9 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
+    if (event) {
+        LOG_DEBUG("[Screen] UIFrameEvent action=%d", static_cast<int>(event->action));
+    }
     // Block UI frame events when virtual keyboard is active
     if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
         return 0;
