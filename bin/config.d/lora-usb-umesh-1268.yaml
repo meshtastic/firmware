@@ -2,9 +2,9 @@ Lora:
   Module: sx1268
   CS: 0
   IRQ: 6
-  Reset: 2
+  Reset: 1
   Busy: 4
-  RXen: 1
+  RXen: 2
   DIO2_AS_RF_SWITCH: true
   spidev: ch341
   USB_PID: 0x5512
