@@ -460,7 +460,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             }
 
             meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
-            bool mutedNode = sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK;
+            bool mutedNode = false;
+            if (sender) {
+                mutedNode = (sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK);
+            }
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
 
             if (moduleConfig.external_notification.alert_bell) {
