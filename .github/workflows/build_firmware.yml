@@ -29,23 +29,6 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - name: Set OTA firmware source and target
-        if: startsWith(inputs.platform, 'esp32')
-        id: ota_dir
-        env:
-          PIO_PLATFORM: ${{ inputs.platform }}
-        run: |
-          if [ "$PIO_PLATFORM" = "esp32s3" ]; then
-            echo "src=firmware-s3.bin" >> $GITHUB_OUTPUT
-            echo "tgt=release/bleota-s3.bin" >> $GITHUB_OUTPUT
-          elif [ "$PIO_PLATFORM" = "esp32c3" ] || [ "$PIO_PLATFORM" = "esp32c6" ]; then
-            echo "src=firmware-c3.bin" >> $GITHUB_OUTPUT
-            echo "tgt=release/bleota-c3.bin" >> $GITHUB_OUTPUT
-          elif [ "$PIO_PLATFORM" = "esp32" ]; then
-            echo "src=firmware.bin" >> $GITHUB_OUTPUT
-            echo "tgt=release/bleota.bin" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build ${{ inputs.platform }}
         id: build
         uses: meshtastic/gh-action-firmware@main
@@ -53,8 +36,28 @@ jobs:
           pio_platform: ${{ inputs.platform }}
           pio_env: ${{ inputs.pio_env }}
           pio_target: build
-          ota_firmware_source: ${{ steps.ota_dir.outputs.src || '' }}
-          ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
+
+      - name: ESP32 - Download Unified OTA firmware
+        # Currently only esp32 and esp32s3 use the unified ota
+        if: inputs.platform == 'esp32' || inputs.platform == 'esp32s3'
+        id: dl-ota-unified
+        env:
+          PIO_PLATFORM: ${{ inputs.platform }}
+          PIO_ENV: ${{ inputs.pio_env }}
+          OTA_URL: https://github.com/meshtastic/esp32-unified-ota/releases/latest/download/mt-${{ inputs.platform }}-ota.bin
+        working-directory: release
+        run: |
+          curl -L -o "mt-$PIO_PLATFORM-ota.bin" $OTA_URL
+
+      - name: ESP32-C* - Download BLE-Only OTA firmware
+        if: inputs.platform == 'esp32c3' || inputs.platform == 'esp32c6'
+        id: dl-ota-ble
+        env:
+          PIO_ENV: ${{ inputs.pio_env }}
+          OTA_URL: https://github.com/meshtastic/firmware-ota/releases/latest/download/firmware-c3.bin
+        working-directory: release
+        run: |
+          curl -L -o bleota-c3.bin $OTA_URL
 
       - name: Job summary
         env:

@@ -58,6 +58,7 @@ def manifest_gather(source, target, env):
     manifest_ran = True
     out = []
     board_platform = env.BoardConfig().get("platform")
+    board_mcu = env.BoardConfig().get("build.mcu").lower()
     needs_ota_suffix = board_platform == "nordicnrf52"
     check_paths = [
         progname,
@@ -69,7 +70,9 @@ def manifest_gather(source, target, env):
         f"{progname}.uf2",
         f"{progname}.factory.uf2",
         f"{progname}.zip",
-        lfsbin
+        lfsbin,
+        f"mt-{board_mcu}-ota.bin",
+        "bleota-c3.bin"
     ]
     for p in check_paths:
         f = env.File(env.subst(f"$BUILD_DIR/{p}"))
