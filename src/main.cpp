@@ -1052,6 +1052,10 @@ void setup()
         BaseType_t higherWake = 0;
         mainDelay.interruptFromISR(&higherWake);
     };
+#if defined(TTGO_T_ECHO) && defined(PIN_EINK_EN)
+    touchConfig.singlePress = INPUT_BROKER_BACKLIGHT;
+    touchConfig.longPress = INPUT_BROKER_BACKLIGHT_TOGGLE;
+#else
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
 #if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
@@ -1071,6 +1075,7 @@ void setup()
         }
         touchBacklightActive = false;
     };
+#endif
 #endif
     TouchButtonThread->initButton(touchConfig);
 #endif
