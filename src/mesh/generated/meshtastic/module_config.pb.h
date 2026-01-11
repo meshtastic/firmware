@@ -84,8 +84,11 @@ typedef enum _meshtastic_ModuleConfig_SerialConfig_Serial_Mode {
  https://beta.ivc.no/wiki/index.php/Victron_VE_Direct_DIY_Cable */
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT = 7,
     /* Used to configure and view some parameters of MeshSolar.
-https://heltec.org/project/meshsolar/ */
-    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG = 8
+ https://heltec.org/project/meshsolar/ */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG = 8,
+    /* Logs mesh traffic to the serial pins, ideal for logging via openLog or similar. */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG = 9, /* includes other packets */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT = 10 /* only text (channel & DM) */
 } meshtastic_ModuleConfig_SerialConfig_Serial_Mode;
 
 /* TODO: REPLACE */
@@ -483,8 +486,8 @@ extern "C" {
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Baud)(meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
 
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT
-#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG
-#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG+1))
+#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT
+#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT+1))
 
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MAX meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK
