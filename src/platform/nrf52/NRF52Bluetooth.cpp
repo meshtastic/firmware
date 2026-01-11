@@ -119,7 +119,7 @@ void startAdv(void)
     Bluefruit.Advertising.addService(meshBleService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
-     * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
+     * - Interval:  fast mode = 20 ms, slow mode = 417,5 ms
      * - Timeout for fast mode is 30 seconds
      * - Start(timeout) with timeout = 0 will advertise forever (until connected)
      *
@@ -127,7 +127,7 @@ void startAdv(void)
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
@@ -272,6 +272,30 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+
+  
+    // Do not change Slave Latency to value other than 0 !!!
+    // There is probably a bug in SoftDevice + certain Apple iOS versions being
+    // brain damaged causing connectivity problems.
+
+    // On one side it seems SoftDevice is using SlaveLatency value even
+    // if connection parameter negotation failed and phone sees it as connectivity errors.
+
+    // On the other hand Apple can randomly refuse any parameter negotiation and shutdown connection
+    // even if you meet Apple Developer Guidelines for BLE devices. Because f* you, that's why.
+
+    // While this API call sets preferred connection parameters (PPCP) - many phones ignore it (yeah) and it seems SoftDevice
+    // will try to renegotiate connection parameters based on those values after phone connection.
+    // So those are relatively safe values so Apple braindead firmware won't get angry and at least we may try
+    // to negotiate some longer connection interval to save battery.
+
+    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not worth
+    // dying on a hill here.
+
+    Bluefruit.Periph.setConnSlaveLatency(0);
+    // 1.25 ms units - so min, max is 15, 100 ms range.
+    Bluefruit.Periph.setConnInterval(12, 80);
+
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
@@ -300,7 +324,7 @@ void NRF52Bluetooth::setup()
 void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }
