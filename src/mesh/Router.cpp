@@ -1635,6 +1635,13 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
                 skipHandle = true;
             }
         }
+        for (const auto &port : portduino_config.nohop_ports) {
+            if (port == p->decoded.portnum) {
+                p->hop_start -= p->hop_limit;
+                p->hop_limit = 0;
+                break;
+            }
+        }
 #endif
 
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL

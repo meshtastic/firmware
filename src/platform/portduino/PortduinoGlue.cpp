@@ -1608,6 +1608,9 @@ bool loadConfig(const char *configPath)
                     portduino_config.whitelist_enabled = true;
                 }
             }
+            if (yamlConfig["Routing"]["NoHopPorts"]) {
+                portduino_config.nohop_ports = (yamlConfig["Routing"]["NoHopPorts"]).as<std::vector<int>>();
+            }
         }
         if (yamlConfig["General"]) {
             portduino_config.MaxNodes = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
