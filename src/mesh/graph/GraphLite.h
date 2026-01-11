@@ -254,6 +254,13 @@ class GraphLite {
     void clearEdgesForNode(NodeNum nodeId);
 
     /**
+     * Clear inferred (Mirrored) edges pointing TO a specific node
+     * Used when a node becomes SR-capable and reports its own topology
+     * @param nodeId Node that edges point to
+     */
+    void clearInferredEdgesToNode(NodeNum nodeId);
+
+    /**
      * Get memory usage estimate in bytes
      */
     static constexpr size_t getMemoryUsage() {

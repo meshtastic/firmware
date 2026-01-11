@@ -162,6 +162,13 @@ public:
     void clearEdgesForNode(NodeNum nodeId);
 
     /**
+     * Clear inferred (Mirrored) edges pointing TO a specific node
+     * Used when a node becomes SR-capable and reports its own topology
+     * @param nodeId Node that edges point to
+     */
+    void clearInferredEdgesToNode(NodeNum nodeId);
+
+    /**
      * Calculate which nodes would be covered if a specific relay rebroadcasts
      * @param relay The node that would relay
      * @param alreadyCovered Nodes that have already received the packet

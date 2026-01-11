@@ -762,8 +762,14 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     // This ensures our view of the sender's connectivity matches exactly what it reported
 #ifdef SIGNAL_ROUTING_LITE_MODE
     routingGraph->clearEdgesForNode(mp.from);
+    // Also clear any inferred connectivity edges pointing TO this node that were created
+    // before we knew it was SR-capable
+    routingGraph->clearInferredEdgesToNode(mp.from);
 #else
     routingGraph->clearEdgesForNode(mp.from);
+    // Also clear any inferred connectivity edges pointing TO this node that were created
+    // before we knew it was SR-capable
+    routingGraph->clearInferredEdgesToNode(mp.from);
 #endif
 
     // Add edges from each neighbor TO the sender
@@ -1725,7 +1731,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             }
 
             // We know that inferredRelayer relayed a packet from mp.from
-            // This establishes a gateway relationship, not direct connectivity
+            // This establishes both a gateway relationship and direct connectivity inference
             LOG_DEBUG("[SR] Inferred gateway relationship: %08x relayed by %08x",
                      mp.from, inferredRelayer);
 
@@ -1761,6 +1767,36 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
 #endif
             if (!hasDirectConnection) {
                 recordGatewayRelation(inferredRelayer, mp.from);
+            }
+
+            // Infer direct connectivity between relayer and sender only for stock firmware nodes
+            // SR-aware nodes broadcast their topology, so we don't need to infer connectivity for them
+            if (getCapabilityStatus(inferredRelayer) == CapabilityStatus::Legacy) {
+                // Since the relayer successfully relayed a packet from the sender,
+                // we can assume they have direct connectivity
+                LOG_DEBUG("[SR] Inferred direct connectivity: legacy node %08x can hear %08x directly",
+                         inferredRelayer, mp.from);
+
+                // Add edge between inferredRelayer and mp.from with default signal quality
+                // Use Mirrored source since this is inferred, not directly measured
+                uint32_t monotonicTimestamp = millis() / 1000;
+                int32_t defaultRssi = -70; // default RSSI for inferred connectivity
+                float defaultSnr = 5.0f;  // default SNR for inferred connectivity
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+                routingGraph->updateEdge(mp.from, inferredRelayer, GraphLite::calculateETX(defaultRssi, defaultSnr),
+                                         monotonicTimestamp, 0, EdgeLite::Source::Mirrored);
+                routingGraph->updateEdge(inferredRelayer, mp.from, GraphLite::calculateETX(defaultRssi, defaultSnr),
+                                         monotonicTimestamp, 0, EdgeLite::Source::Mirrored);
+#else
+                routingGraph->updateEdge(mp.from, inferredRelayer, Graph::calculateETX(defaultRssi, defaultSnr),
+                                         monotonicTimestamp, 0, Edge::Source::Mirrored);
+                routingGraph->updateEdge(inferredRelayer, mp.from, Graph::calculateETX(defaultRssi, defaultSnr),
+                                         monotonicTimestamp, 0, Edge::Source::Mirrored);
+#endif
+            } else {
+                LOG_DEBUG("[SR] Skipping direct connectivity inference for SR-aware node %08x (capability: %d)",
+                         inferredRelayer, (int)getCapabilityStatus(inferredRelayer));
             }
 
             // Update relay node's edge in the graph since it's actively relaying

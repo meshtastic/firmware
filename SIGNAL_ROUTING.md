@@ -119,7 +119,7 @@ SignalRouting discovers network topology through multiple channels:
 
 3. **Mute Node Topology Sharing**: CLIENT_MUTE nodes broadcast their direct neighbor information to help active SignalRouting nodes discover network topology, even though mute nodes don't participate in packet relaying. Active nodes learn about mute node neighbors for discovery purposes but don't consider routing paths through mute nodes since they don't relay. CLIENT_MUTE nodes maintain their direct neighbor graph (add/remove expired connections) but use simplified topology tracking. Other inactive roles (TRACKER, SENSOR, TAK, etc.) do not participate in topology sharing.
 
-4. **Relayed Packet Inference**: When receiving relayed packets, connectivity between the original sender and relay node is inferred, even without direct signal measurements
+4. **Relayed Packet Inference**: When receiving relayed packets from Legacy (stock firmware) nodes, both gateway relationships and direct connectivity between the original sender and relay node are inferred, even without direct signal measurements. SR-aware nodes broadcast their topology directly, so inference is not needed for them.
 
 5. **Placeholder System**: Unknown relay nodes are tracked as placeholders until their real identities are discovered through direct contact or topology broadcasts
 
@@ -232,7 +232,7 @@ This conservative approach prevents network flooding by only coordinating delive
 
 - **Broadcast topology announcements**: Nodes periodically broadcast their neighbor information
 - **Direct packet reception**: When receiving packets directly from unknown nodes with signal data
-- **Relayed packet inference**: Inferring connectivity between senders and relays from relayed packets
+- **Relayed packet inference**: Inferring gateway relationships and direct connectivity between senders and Legacy relay nodes from relayed packets
 - **Placeholder resolution**: Unknown relays are tracked as placeholders until real node identities are discovered
 
 Unicast coordination can occur once a destination is known through any of these discovery methods. Additionally, unicast relay coordination includes optimizations to prevent unnecessary transmissions:
