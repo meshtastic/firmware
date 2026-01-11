@@ -511,6 +511,22 @@ void Graph::clearEdgesForNode(NodeNum nodeId) {
     }
 }
 
+void Graph::clearInferredEdgesToNode(NodeNum nodeId) {
+    // Remove Mirrored edges FROM any node TO the specified nodeId
+    // These would be inferred connectivity edges created before we knew nodeId was SR-capable
+    for (auto& pair : adjacencyList) {
+        auto& edges = pair.second;
+        edges.erase(std::remove_if(edges.begin(), edges.end(),
+            [nodeId](const Edge& e) {
+                return e.to == nodeId && e.source == Edge::Source::Mirrored;
+            }),
+            edges.end());
+    }
+
+    // Clear route cache as topology has changed
+    routeCache.clear();
+}
+
 std::unordered_set<NodeNum> Graph::getCoverageIfRelays(NodeNum relay, const std::unordered_set<NodeNum>& alreadyCovered) const {
     std::unordered_set<NodeNum> newCoverage;
 

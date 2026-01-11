@@ -1015,3 +1015,27 @@ void GraphLite::clearEdgesForNode(NodeNum nodeId)
     }
 }
 
+void GraphLite::clearInferredEdgesToNode(NodeNum nodeId)
+{
+    // Remove Mirrored edges FROM any node TO the specified nodeId
+    // These would be inferred connectivity edges created before we knew nodeId was SR-capable
+    for (uint8_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+        NodeEdgesLite *node = &nodes[nodeIdx];
+        if (node->nodeId == 0) continue; // Skip empty slots
+
+        // Compact array: keep only non-Mirrored-to-target edges
+        uint8_t writeIdx = 0;
+        for (uint8_t i = 0; i < node->edgeCount; i++) {
+            if (!(node->edges[i].to == nodeId && node->edges[i].source == EdgeLite::Source::Mirrored)) {
+                if (writeIdx != i) {
+                    node->edges[writeIdx] = node->edges[i];
+                }
+                writeIdx++;
+            }
+        }
+        node->edgeCount = writeIdx;
+    }
+
+    // Clear route cache as topology has changed
+    routeCacheCount = 0;
+}
