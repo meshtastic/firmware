@@ -335,6 +335,23 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    // Enforce position broadcast minimums if we would send positions over a default channel
+    // Check channels the same way PositionModule::sendOurPosition() does - first channel with position_precision set
+    bool positionUsesDefaultChannel = false;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        if (channels.getByIndex(i).settings.has_module_settings &&
+            channels.getByIndex(i).settings.module_settings.position_precision != 0) {
+            positionUsesDefaultChannel = channels.isDefaultChannel(i);
+            break;
+        }
+    }
+    if (positionUsesDefaultChannel) {
+        LOG_DEBUG("Coerce position broadcasts to min of 1 hour and smart broadcast min of 5 minutes on defaults");
+        config.position.position_broadcast_secs =
+            Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
+        config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
+            config.position.broadcast_smart_minimum_interval_secs, min_default_broadcast_smart_minimum_interval_secs);
+    }
     // FIXME: UINT32_MAX intervals overflows Apple clients until they are fully patched
     if (config.device.node_info_broadcast_secs > MAX_INTERVAL)
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
@@ -644,7 +661,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.position.position_broadcast_smart_enabled = true;
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
-    config.position.broadcast_smart_minimum_interval_secs = 30;
+    config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
