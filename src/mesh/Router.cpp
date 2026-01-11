@@ -363,10 +363,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
-        // Clean packet logging for LOG and LOG_TEXT_ONLY modes (outgoing packets)
+        // Clean packet logging for LOG and LOGTEXT modes (outgoing packets)
         if (moduleConfig.serial.enabled &&
             (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
-             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY)) {
+             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT)) {
             SerialModule::logPacketClean(p_decoded);
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -720,11 +720,11 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
 
-        // Clean packet logging for LOG and LOG_TEXT_ONLY modes (incoming packets)
+        // Clean packet logging for LOG and LOGTEXT modes (incoming packets)
         // Note: logPacketClean is static, so we don't need serialModule instance
         if (moduleConfig.serial.enabled &&
             (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
-             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY)) {
+             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT)) {
             SerialModule::logPacketClean(p);
         }
 

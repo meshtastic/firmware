@@ -36,7 +36,7 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     void processWXSerial();
 
   public:
-    // Clean packet logger for LOG and LOG_TEXT_ONLY modes
+    // Clean packet logger for LOG and LOGTEXT modes
     static void logPacketClean(const meshtastic_MeshPacket *p);
 };
 
@@ -73,7 +73,7 @@ class SerialModuleRadio : public MeshModule, public Observer<const meshtastic_Me
 
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
 
-    // Observer interface for text messages (LOG_TEXT_ONLY mode)
+    // Observer interface for text messages (LOGTEXT mode)
     virtual int onNotify(const meshtastic_MeshPacket *packet) override;
 
     meshtastic_MeshPacket *allocDataPacket()

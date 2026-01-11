@@ -99,9 +99,9 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY)) {
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT)) {
         const char *warning =
-            "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, MS_CONFIG, LOG, and LOG_TEXT_ONLY output-only modes.";
+            "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, MS_CONFIG, LOG, and LOGTEXT output-only modes.";
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -122,7 +122,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
         ourPortNum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         break;
-    case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY:
+    case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT:
         // For text-only log mode, observe text messages
         if (textMessageModule) {
             observe(textMessageModule);
@@ -252,11 +252,11 @@ int32_t SerialModule::runOnce()
                 serialPrint->printf("\n=== Meshtastic Packet Log Mode (LOG) ===\n");
                 serialPrint->printf("Packet logs will be logged to UART\n");
                 serialPrint->printf("Time: %u seconds since boot\n\n", millis() / 1000);
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
                 RedirectablePrint::uartLogDestination = nullptr;
                 // Write header line on boot for text-only log mode
-                LOG_INFO("SerialModule: Text-Only Log Mode (LOG_TEXT_ONLY) enabled");
-                serialPrint->printf("\n=== Meshtastic Text-Only Log Mode (LOG_TEXT_ONLY) ===\n");
+                LOG_INFO("SerialModule: Text-Only Log Mode (LOGTEXT) enabled");
+                serialPrint->printf("\n=== Meshtastic Text-Only Log Mode (LOGTEXT) ===\n");
                 serialPrint->printf("Only text messages with metadata will be logged to UART\n");
                 serialPrint->printf("Format: [HH:MM:SS] FROM:0xXXXX (name) TO:BROADCAST/DM CH:channelname (index) MSG:message\n");
                 serialPrint->printf("Time: %u seconds since boot\n\n", millis() / 1000);
@@ -294,10 +294,10 @@ int32_t SerialModule::runOnce()
                     }
                 }
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
-                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
                 // These are output-only modes, no input processing needed
                 // LOG mode forwards logs via RedirectablePrint::uartLogDestination
-                // LOG_TEXT_ONLY mode handles messages via observer pattern
+                // LOGTEXT mode handles messages via observer pattern
             }
 
 #if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) && \
@@ -441,7 +441,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG) {
                 serialPrint->write(p.payload.bytes, p.payload.size);
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
@@ -765,7 +765,7 @@ void SerialModule::processWXSerial()
 int SerialModuleRadio::onNotify(const meshtastic_MeshPacket *packet)
 {
     if (moduleConfig.serial.enabled &&
-        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
         // Use the same logger function for consistency
         SerialModule::logPacketClean(packet);
     }
@@ -813,7 +813,7 @@ static bool wasLoggedRecently(const meshtastic_MeshPacket *p)
     return false;
 }
 
-// Clean packet logger for LOG and LOG_TEXT_ONLY modes - shows time, to, from, packet ID, and contents
+// Clean packet logger for LOG and LOGTEXT modes - shows time, to, from, packet ID, and contents
 void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
 {
     if (!moduleConfig.serial.enabled) {
@@ -821,13 +821,13 @@ void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
     }
     
     bool isLogMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG);
-    bool isLogTextOnlyMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY);
+    bool isLogTextOnlyMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT);
     
     if (!isLogMode && !isLogTextOnlyMode) {
         return;
     }
     
-    // For LOG_TEXT_ONLY mode, only process text messages
+    // For LOGTEXT mode, only process text messages
     if (isLogTextOnlyMode && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (!MeshService::isTextPayload(p)) {
             return;
@@ -843,7 +843,7 @@ void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
     if (isLogMode) {
         uart = RedirectablePrint::uartLogDestination;
     } else if (isLogTextOnlyMode) {
-        // For LOG_TEXT_ONLY, use serialPrint directly
+        // For LOGTEXT, use serialPrint directly
         uart = serialPrint;
     }
     
