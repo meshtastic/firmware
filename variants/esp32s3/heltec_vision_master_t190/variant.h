@@ -45,7 +45,7 @@
 #define ADC_CTRL 46
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 6
-#define ADC_CHANNEL ADC1_GPIO6_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_5
 #define ADC_MULTIPLIER 4.9 * 1.03        // Voltage divider is roughly 1:1
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // Voltage divider output is quite high
 
