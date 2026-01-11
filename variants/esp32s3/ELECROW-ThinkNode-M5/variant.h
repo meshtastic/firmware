@@ -14,6 +14,8 @@
 #define BATTERY_PIN 8
 #define ADC_CHANNEL ADC1_GPIO8_CHANNEL
 
+#define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
+
 #define PIN_BUZZER 9
 
 // Buttons
@@ -41,9 +43,6 @@
 
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
-
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
 
 #define SX126X_CS 17
 #define LORA_SCK 16

@@ -101,8 +101,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_WATCH_S3
 #elif defined(GENIEBLOCKS)
 #define HW_VENDOR meshtastic_HardwareModel_GENIEBLOCKS
-#elif defined(PRIVATE_HW)
-#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(NANO_G1)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
 #elif defined(M5STACK)
@@ -191,6 +189,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
 #elif defined(RAK3312)
 #define HW_VENDOR meshtastic_HardwareModel_RAK3312
+#elif defined(RAK_WISMESH_TAP_V2)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP_V2
 #elif defined(LINK_32)
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
@@ -205,6 +205,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
 #elif defined(T_WATCH_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_T_WATCH_ULTRA
+#else
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
 
 // -----------------------------------------------------------------------------

@@ -171,7 +171,8 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, false),
 
     /*
         Nepal
@@ -245,7 +246,9 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
 {
-    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
+    size_t numbytes = p->which_payload_variant == meshtastic_MeshPacket_decoded_tag
+                          ? pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded)
+                          : p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
     uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
     // Make sure enough time has elapsed for this packet to be sent and an ACK is received.
     // LOG_DEBUG("Waiting for flooding message with airtime %d and slotTime is %d", packetAirtime, slotTimeMsec);
@@ -272,10 +275,10 @@ uint32_t RadioInterface::getTxDelayMsec()
 uint8_t RadioInterface::getCWsize(float snr)
 {
     // The minimum value for a LoRa SNR
-    const uint32_t SNR_MIN = -20;
+    const int32_t SNR_MIN = -20;
 
     // The maximum value for a LoRa SNR
-    const uint32_t SNR_MAX = 10;
+    const int32_t SNR_MAX = 10;
 
     return map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
 }
@@ -294,11 +297,6 @@ bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
     // If we are a ROUTER, we always rebroadcast early
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         return true;
-    }
-
-    // If we are a CLIENT_BASE and the packet is from or to a favorited node, we should rebroadcast early
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
-        return nodeDB->isFromOrToFavoritedNode(*p);
     }
 
     return false;
@@ -503,6 +501,11 @@ void RadioInterface::applyModemConfig()
                 cr = 5;
                 sf = 10;
                 break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+                bw = (myRegion->wideLora) ? 1625.0 : 500;
+                cr = 8;
+                sf = 11;
+                break;
             default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
                 bw = (myRegion->wideLora) ? 812.5 : 250;
                 cr = 5;
@@ -518,6 +521,10 @@ void RadioInterface::applyModemConfig()
                 cr = 8;
                 sf = 12;
                 break;
+            }
+            if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cr) {
+                cr = loraConfig.coding_rate;
+                LOG_INFO("Using custom Coding Rate %u", cr);
             }
         } else {
             sf = loraConfig.spread_factor;
@@ -539,13 +546,26 @@ void RadioInterface::applyModemConfig()
         }
 
         if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-            static const char *err_string = "Regional frequency range is smaller than bandwidth. Fall back to default preset";
-            LOG_ERROR(err_string);
+            const float regionSpanKHz = (myRegion->freqEnd - myRegion->freqStart) * 1000.0f;
+            const float requestedBwKHz = bw;
+            const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
+            const char *presetName =
+                DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+
+            char err_string[160];
+            if (isWideRequest) {
+                snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to LongFast.",
+                         myRegion->name, presetName);
+            } else {
+                snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to LongFast.",
+                         myRegion->name, regionSpanKHz, requestedBwKHz);
+            }
+            LOG_ERROR("%s", err_string);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_ERROR;
-            sprintf(cn->message, err_string);
+            snprintf(cn->message, sizeof(cn->message), "%s", err_string);
             service->sendClientNotification(cn);
 
             // Set to default modem preset
