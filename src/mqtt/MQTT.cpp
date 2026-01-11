@@ -845,14 +845,11 @@ void MQTT::perhapsReportToMap()
         map_position_precision = default_map_position_precision;
     }
 
-    if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs))
+    if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs) && last_report_to_map != 0)
         return;
 
-    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        last_report_to_map = millis();
-        LOG_WARN("MQTT Map report enabled, but no position available");
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
         return;
-    }
 
     // Allocate MeshPacket and fill it
     meshtastic_MeshPacket *mp = packetPool.allocZeroed();
