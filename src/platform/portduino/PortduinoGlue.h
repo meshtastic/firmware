@@ -355,6 +355,10 @@ extern struct portduino_config_struct {
     // Are we allowing unknown channel hashes? Does this even make sense?
     // Allow DMs
 
+    // Routing
+    bool whitelist_enabled = false;
+    std::vector<int> whitelist_ports = {};
+
     // General
     std::string mac_address = "";
     bool mac_address_explicit = false;
@@ -831,6 +835,13 @@ extern struct portduino_config_struct {
             out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
             out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
             out << YAML::EndMap; // StoreAndForward
+        }
+
+        // Routing
+        if (whitelist_enabled) {
+            out << YAML::Key << "Routing" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "WhitelistPorts" << YAML::Value << whitelist_ports;
+            out << YAML::EndMap; // Routing
         }
 
         // General

@@ -1620,6 +1620,22 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+#if ARCH_PORTDUINO
+        if (portduino_config.whitelist_enabled) {
+            bool allowed = false;
+            for (const auto &port : portduino_config.whitelist_ports) {
+                if (port == p->decoded.portnum) {
+                    allowed = true;
+                    break;
+                }
+            }
+            if (!allowed) {
+                LOG_DEBUG("Dropping packet not on Portduino Whitelist");
+                cancelSending(p->from, p->id);
+                skipHandle = true;
+            }
+        }
+#endif
 
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
         // Discard coordinate-bearing packets that arrive on the event ("everyone")
