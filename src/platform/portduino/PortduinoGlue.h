@@ -2,6 +2,7 @@
 #include <fstream>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 #include "LR11x0Interface.h"
 #include "Module.h"
@@ -97,6 +98,7 @@ extern struct portduino_config_struct {
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
+    std::vector<pinMapping> extra_pins = {};
 
     // GPS
     bool has_gps = false;
