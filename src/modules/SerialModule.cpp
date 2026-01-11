@@ -1,11 +1,16 @@
 #include "SerialModule.h"
+#include "Channels.h"
 #include "GeoCoord.h"
 #include "MeshService.h"
+#include "MeshTypes.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
+#include "RedirectablePrint.h"
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -92,9 +97,11 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
 {
     if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY)) {
         const char *warning =
-            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+            "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, MS_CONFIG, LOG, and LOG_TEXT_ONLY output-only modes.";
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -114,6 +121,13 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
     switch (moduleConfig.serial.mode) {
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
         ourPortNum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        break;
+    case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY:
+        // For text-only log mode, observe text messages
+        if (textMessageModule) {
+            observe(textMessageModule);
+        }
+        ourPortNum = meshtastic_PortNum_SERIAL_APP;
         break;
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA:
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO:
@@ -231,6 +245,25 @@ int32_t SerialModule::runOnce()
 #endif
             serialModuleRadio = new SerialModuleRadio();
 
+            if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG) {
+                RedirectablePrint::uartLogDestination = serialPrint;
+                // Write header line on boot
+                LOG_INFO("SerialModule: Packet Log Mode (LOG) enabled");
+                serialPrint->printf("\n=== Meshtastic Packet Log Mode (LOG) ===\n");
+                serialPrint->printf("Packet logs will be logged to UART\n");
+                serialPrint->printf("Time: %u seconds since boot\n\n", millis() / 1000);
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+                RedirectablePrint::uartLogDestination = nullptr;
+                // Write header line on boot for text-only log mode
+                LOG_INFO("SerialModule: Text-Only Log Mode (LOG_TEXT_ONLY) enabled");
+                serialPrint->printf("\n=== Meshtastic Text-Only Log Mode (LOG_TEXT_ONLY) ===\n");
+                serialPrint->printf("Only text messages with metadata will be logged to UART\n");
+                serialPrint->printf("Format: [HH:MM:SS] FROM:0xXXXX (name) TO:BROADCAST/DM CH:channelname (index) MSG:message\n");
+                serialPrint->printf("Time: %u seconds since boot\n\n", millis() / 1000);
+            } else {
+                RedirectablePrint::uartLogDestination = nullptr;
+            }
+
             firstTime = 0;
 
             // in API mode send rebooted sequence
@@ -260,6 +293,11 @@ int32_t SerialModule::runOnce()
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
+                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+                // These are output-only modes, no input processing needed
+                // LOG mode forwards logs via RedirectablePrint::uartLogDestination
+                // LOG_TEXT_ONLY mode handles messages via observer pattern
             }
 
 #if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) && \
@@ -401,9 +439,9 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         } else {
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
-                moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
+                moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG) {
                 serialPrint->write(p.payload.bytes, p.payload.size);
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
@@ -718,5 +756,217 @@ void SerialModule::processWXSerial()
     }
 #endif
     return;
+}
+
+/**
+ * Observer callback for text messages
+ * Uses the same logger function as LOG mode for consistency
+ */
+int SerialModuleRadio::onNotify(const meshtastic_MeshPacket *packet)
+{
+    if (moduleConfig.serial.enabled &&
+        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY) {
+        // Use the same logger function for consistency
+        SerialModule::logPacketClean(packet);
+    }
+
+    return 0; // Continue processing
+}
+
+// Simple duplicate suppression - track recently logged packet IDs
+#define MAX_RECENT_LOGGED_PACKETS 4
+struct RecentLoggedPacket {
+    NodeNum from;
+    PacketId id;
+    uint32_t timestamp;
+};
+static RecentLoggedPacket recentLoggedPackets[MAX_RECENT_LOGGED_PACKETS];
+static uint8_t recentLoggedIndex = 0;
+
+static bool wasLoggedRecently(const meshtastic_MeshPacket *p)
+{
+    NodeNum from = getFrom(p);
+    PacketId id = p->id;
+    uint32_t now = millis();
+    uint32_t timeoutMs = 5000; // 5 second window for duplicates
+    
+    // Check if we've seen this (from, id) pair recently
+    for (int i = 0; i < MAX_RECENT_LOGGED_PACKETS; i++) {
+        if (recentLoggedPackets[i].from == from && recentLoggedPackets[i].id == id) {
+            // Check if it's still within the timeout window
+            uint32_t age = now - recentLoggedPackets[i].timestamp;
+            if (age < timeoutMs) {
+                return true; // Duplicate found
+            }
+            // Expired, update with new timestamp
+            recentLoggedPackets[i].timestamp = now;
+            return false;
+        }
+    }
+    
+    // Not found, add it to the list
+    recentLoggedPackets[recentLoggedIndex].from = from;
+    recentLoggedPackets[recentLoggedIndex].id = id;
+    recentLoggedPackets[recentLoggedIndex].timestamp = now;
+    recentLoggedIndex = (recentLoggedIndex + 1) % MAX_RECENT_LOGGED_PACKETS;
+    
+    return false;
+}
+
+// Clean packet logger for LOG and LOG_TEXT_ONLY modes - shows time, to, from, packet ID, and contents
+void SerialModule::logPacketClean(const meshtastic_MeshPacket *p)
+{
+    if (!moduleConfig.serial.enabled) {
+        return;
+    }
+    
+    bool isLogMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG);
+    bool isLogTextOnlyMode = (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG_TEXT_ONLY);
+    
+    if (!isLogMode && !isLogTextOnlyMode) {
+        return;
+    }
+    
+    // For LOG_TEXT_ONLY mode, only process text messages
+    if (isLogTextOnlyMode && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        if (!MeshService::isTextPayload(p)) {
+            return;
+        }
+    }
+    
+    // Suppress immediate duplicates
+    if (wasLoggedRecently(p)) {
+        return;
+    }
+    
+    Print *uart = nullptr;
+    if (isLogMode) {
+        uart = RedirectablePrint::uartLogDestination;
+    } else if (isLogTextOnlyMode) {
+        // For LOG_TEXT_ONLY, use serialPrint directly
+        uart = serialPrint;
+    }
+    
+    if (uart == nullptr) {
+        return;
+    }
+
+    // Get time
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+    char timeStr[32] = "??:??:??";
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+        int hour = hms / SEC_PER_HOUR;
+        int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN;
+        snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", hour, min, sec);
+    }
+
+    // Get sender info
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(p));
+    const char *fromName = (node && node->has_user) ? node->user.short_name : "???";
+    NodeNum fromNode = getFrom(p);
+
+    // Get destination info - show actual node number instead of "DM"
+    char toInfo[32];
+    if (isBroadcast(p->to)) {
+        snprintf(toInfo, sizeof(toInfo), "BROADCAST");
+    } else {
+        snprintf(toInfo, sizeof(toInfo), "0x%x", p->to);
+    }
+
+    // Format: [HH:MM:SS] ID:0xXXXX FROM:0xXXXX (name) TO:0xXXXX or BROADCAST
+    uart->printf("[%s] ID:0x%x FROM:0x%x (%s) TO:%s", timeStr, p->id, fromNode, fromName, toInfo);
+
+    // Only show contents for decoded packets
+    LOG_DEBUG("serialModule: Packet payload_variant=%d", p->which_payload_variant);
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        auto &decoded = p->decoded;
+
+        // Text messages
+        if (MeshService::isTextPayload(p)) {
+            char messageText[meshtastic_Constants_DATA_PAYLOAD_LEN + 1];
+            size_t msgLen = decoded.payload.size < sizeof(messageText) ? decoded.payload.size : sizeof(messageText) - 1;
+            memcpy(messageText, decoded.payload.bytes, msgLen);
+            messageText[msgLen] = '\0';
+            uart->printf(" MSG:%s\n", messageText);
+        }
+        // Telemetry
+        else if (decoded.portnum == meshtastic_PortNum_TELEMETRY_APP) {
+            meshtastic_Telemetry telemetry;
+            memset(&telemetry, 0, sizeof(telemetry));
+            bool decodeOk = pb_decode_from_bytes(decoded.payload.bytes, decoded.payload.size, &meshtastic_Telemetry_msg, &telemetry);
+            if (decodeOk) {
+                if (telemetry.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
+                    const auto &m = telemetry.variant.environment_metrics;
+                    uart->printf(" TELEMETRY:env");
+                    if (m.has_temperature)
+                        uart->printf(" temp=%.1fC", m.temperature);
+                    if (m.has_relative_humidity)
+                        uart->printf(" humidity=%.1f%%", m.relative_humidity);
+                    if (m.barometric_pressure != 0)
+                        uart->printf(" pressure=%.1f", m.barometric_pressure);
+                    if (m.has_voltage)
+                        uart->printf(" voltage=%.2fV", m.voltage);
+                    if (m.has_wind_speed)
+                        uart->printf(" wind=%.1fm/s@%.0fdeg", m.wind_speed, m.wind_direction);
+                    if (m.has_iaq)
+                        uart->printf(" IAQ=%d", m.iaq);
+                    uart->printf("\n");
+                } else if (telemetry.which_variant == meshtastic_Telemetry_device_metrics_tag) {
+                    const auto &m = telemetry.variant.device_metrics;
+                    uart->printf(" TELEMETRY:device");
+                    if (m.has_battery_level)
+                        uart->printf(" battery=%d%%", m.battery_level);
+                    uart->printf(" voltage=%.2fV", m.voltage);
+                    uart->printf(" ch_util=%.1f%%", m.channel_utilization);
+                    uart->printf(" air_util_tx=%.1f%%", m.air_util_tx);
+                    uart->printf(" uptime=%us\n", m.uptime_seconds);
+                } else {
+                    uart->printf(" TELEMETRY:other\n");
+                }
+            } else {
+                uart->printf(" TELEMETRY:decode_failed\n");
+            }
+        }
+        // Position packets
+        else if (decoded.portnum == meshtastic_PortNum_POSITION_APP) {
+            meshtastic_Position position;
+            memset(&position, 0, sizeof(position));
+            if (pb_decode_from_bytes(decoded.payload.bytes, decoded.payload.size, &meshtastic_Position_msg, &position)) {
+                uart->printf(" POSITION lat=%d lon=%d alt=%d sats=%d\n", position.latitude_i, position.longitude_i,
+                             position.altitude, position.sats_in_view);
+            } else {
+                uart->printf(" POSITION decode_failed\n");
+            }
+        }
+        // NodeInfo packets
+        else if (decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
+            meshtastic_User user;
+            memset(&user, 0, sizeof(user));
+            if (pb_decode_from_bytes(decoded.payload.bytes, decoded.payload.size, &meshtastic_User_msg, &user)) {
+                uart->printf(" NODEINFO short_name=%s long_name=%s\n", user.short_name, user.long_name);
+            } else {
+                uart->printf(" NODEINFO decode_failed\n");
+            }
+        }
+        // Routing packets
+        else if (decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
+            meshtastic_Routing routing;
+            memset(&routing, 0, sizeof(routing));
+            if (pb_decode_from_bytes(decoded.payload.bytes, decoded.payload.size, &meshtastic_Routing_msg, &routing)) {
+                uart->printf(" ROUTING variant=%d\n", routing.which_variant);
+            } else {
+                uart->printf(" ROUTING decode_failed\n");
+            }
+        }
+        // Other packet types - just show portnum
+        else {
+            uart->printf(" PORT:%d\n", decoded.portnum);
+        }
+    } else {
+        uart->printf(" ENCRYPTED\n");
+    }
 }
 #endif
