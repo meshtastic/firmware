@@ -721,7 +721,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             printPacket("handleReceived(REMOTE)", p);
 
         // Clean packet logging for LOG and LOGTEXT modes (incoming packets)
-        // Note: logPacketClean is static, so we don't need serialModule instance
         if (moduleConfig.serial.enabled &&
             (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
              moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT)) {

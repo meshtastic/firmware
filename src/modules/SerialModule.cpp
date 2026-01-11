@@ -247,14 +247,12 @@ int32_t SerialModule::runOnce()
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG) {
                 RedirectablePrint::uartLogDestination = serialPrint;
-                // Write header line on boot
                 LOG_INFO("SerialModule: Packet Log Mode (LOG) enabled");
                 serialPrint->printf("\n=== Meshtastic Packet Log Mode (LOG) ===\n");
                 serialPrint->printf("Packet logs will be logged to UART\n");
                 serialPrint->printf("Time: %u seconds since boot\n\n", millis() / 1000);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
                 RedirectablePrint::uartLogDestination = nullptr;
-                // Write header line on boot for text-only log mode
                 LOG_INFO("SerialModule: Text-Only Log Mode (LOGTEXT) enabled");
                 serialPrint->printf("\n=== Meshtastic Text-Only Log Mode (LOGTEXT) ===\n");
                 serialPrint->printf("Only text messages with metadata will be logged to UART\n");
@@ -296,8 +294,6 @@ int32_t SerialModule::runOnce()
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG ||
                        moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
                 // These are output-only modes, no input processing needed
-                // LOG mode forwards logs via RedirectablePrint::uartLogDestination
-                // LOGTEXT mode handles messages via observer pattern
             }
 
 #if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) && \
@@ -439,9 +435,9 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         } else {
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
-                moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOG) {
+                moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 serialPrint->write(p.payload.bytes, p.payload.size);
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
@@ -766,14 +762,13 @@ int SerialModuleRadio::onNotify(const meshtastic_MeshPacket *packet)
 {
     if (moduleConfig.serial.enabled &&
         moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT) {
-        // Use the same logger function for consistency
         SerialModule::logPacketClean(packet);
     }
 
     return 0; // Continue processing
 }
 
-// Simple duplicate suppression - track recently logged packet IDs
+// duplicate suppression - track recently logged packet IDs
 #define MAX_RECENT_LOGGED_PACKETS 4
 struct RecentLoggedPacket {
     NodeNum from;
@@ -793,7 +788,6 @@ static bool wasLoggedRecently(const meshtastic_MeshPacket *p)
     // Check if we've seen this (from, id) pair recently
     for (int i = 0; i < MAX_RECENT_LOGGED_PACKETS; i++) {
         if (recentLoggedPackets[i].from == from && recentLoggedPackets[i].id == id) {
-            // Check if it's still within the timeout window
             uint32_t age = now - recentLoggedPackets[i].timestamp;
             if (age < timeoutMs) {
                 return true; // Duplicate found

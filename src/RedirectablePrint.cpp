@@ -264,9 +264,7 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
 #endif
 }
 
-// Static variable initialization
 Print *RedirectablePrint::uartLogDestination = nullptr;
-
 
 meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 {
@@ -347,7 +345,6 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         log_to_serial(logLevel, newFormat, arg);
         log_to_syslog(logLevel, newFormat, arg);
         log_to_ble(logLevel, newFormat, arg);
-        // log_to_uart(logLevel, newFormat, arg);
 
         va_end(arg);
 #ifdef HAS_FREE_RTOS
