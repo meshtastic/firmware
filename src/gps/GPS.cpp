@@ -834,8 +834,13 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     case GPS_IDLE:
         if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
-        if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
+        if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) { // If hardware just waking now, clear buffer
+            if (gnssModel == GNSS_MODEL_UC6580) {
+                didSerialInit = false;
+                setup(); // Re-setup UC6580 after wake - it loses config in sleep
+            }
             clearBuffer();
+        }
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
         setPowerPMU(true);                                        // Power (PMU): on
