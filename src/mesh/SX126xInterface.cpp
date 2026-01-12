@@ -256,7 +256,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR SX126xInterface<T>::disableInterrupt()
+template <typename T> void SX126xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();
 }

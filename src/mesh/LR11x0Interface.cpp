@@ -186,7 +186,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR LR11x0Interface<T>::disableInterrupt()
+template <typename T> void LR11x0Interface<T>::disableInterrupt()
 {
     lora.clearIrqAction();
 }
