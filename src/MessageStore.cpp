@@ -15,7 +15,7 @@
 
 // Default autosave interval 12 hours, override per device later with -DMESSAGE_AUTOSAVE_INTERVAL_SEC=300 (etc)
 #ifndef MESSAGE_AUTOSAVE_INTERVAL_SEC
-#define MESSAGE_AUTOSAVE_INTERVAL_SEC (12 * 60 * 60)
+#define MESSAGE_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
 #endif
 
 // Global message text pool and state
@@ -152,8 +152,10 @@ static inline void autosaveTick(MessageStore *store)
 
     // Autosave interval reached, Only save if there are unsaved messages.
     if (g_messageStoreHasUnsavedChanges) {
+        LOG_INFO("Autosaving MessageStore to flash");
         store->saveToFlash();
     } else {
+        LOG_INFO("Autosave skipped, no changes to save");
         g_lastAutoSaveMs = now;
     }
 }

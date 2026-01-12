@@ -449,7 +449,7 @@ void menuHandler::clockMenu()
 }
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, ViewMode, DeleteAll, DeleteOldest, ReplyMenu, MuteChannel, Aloud, enumEnd };
+    enum optionsNumbers { Back = 0, ViewMode, DeleteMenu, ReplyMenu, MuteChannel, Aloud, enumEnd };
 
     static const char *optionsArray[enumEnd];
     static int optionsEnumArray[enumEnd];
@@ -479,7 +479,7 @@ void menuHandler::messageResponseMenu()
 
     // Delete submenu
     optionsArray[options] = "Delete";
-    optionsEnumArray[options++] = 900;
+    optionsEnumArray[options++] = DeleteMenu;
 
 #ifdef HAS_I2S
     optionsArray[options] = "Read Aloud";
@@ -520,33 +520,9 @@ void menuHandler::messageResponseMenu()
                 nodeDB->saveToDisk();
             }
 
-            // Delete submenu
-        } else if (selected == 900) {
+        } else if (selected == DeleteMenu) {
             menuHandler::menuQueue = menuHandler::delete_messages_menu;
             screen->runNow();
-
-            // Delete oldest FIRST (only change)
-        } else if (selected == DeleteOldest) {
-            auto mode = graphics::MessageRenderer::getThreadMode();
-            int ch = graphics::MessageRenderer::getThreadChannel();
-            uint32_t peer = graphics::MessageRenderer::getThreadPeer();
-
-            if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
-                // Global oldest
-                messageStore.deleteOldestMessage();
-            } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
-                // Oldest in current channel
-                messageStore.deleteOldestMessageInChannel(ch);
-            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
-                // Oldest in current DM
-                messageStore.deleteOldestMessageWithPeer(peer);
-            }
-
-            // Delete all messages
-        } else if (selected == DeleteAll) {
-            messageStore.clearAllMessages();
-            graphics::MessageRenderer::clearThreadRegistries();
-            graphics::MessageRenderer::clearMessageCache();
 
 #ifdef HAS_I2S
         } else if (selected == Aloud) {
@@ -703,6 +679,7 @@ void menuHandler::deleteMessagesMenu()
             messageStore.clearAllMessages();
             graphics::MessageRenderer::clearThreadRegistries();
             graphics::MessageRenderer::clearMessageCache();
+            messageStore.saveToFlash();
             return;
         }
 
@@ -716,7 +693,7 @@ void menuHandler::deleteMessagesMenu()
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteOldestMessageWithPeer(peer);
             }
-
+            messageStore.saveToFlash();
             return;
         }
 
@@ -729,7 +706,7 @@ void menuHandler::deleteMessagesMenu()
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteAllMessagesWithPeer(peer);
             }
-
+            messageStore.saveToFlash();
             return;
         }
     };
