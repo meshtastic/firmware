@@ -679,7 +679,6 @@ void menuHandler::deleteMessagesMenu()
             messageStore.clearAllMessages();
             graphics::MessageRenderer::clearThreadRegistries();
             graphics::MessageRenderer::clearMessageCache();
-            messageStore.saveToFlash();
             return;
         }
 
@@ -693,7 +692,6 @@ void menuHandler::deleteMessagesMenu()
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteOldestMessageWithPeer(peer);
             }
-            messageStore.saveToFlash();
             return;
         }
 
@@ -706,7 +704,6 @@ void menuHandler::deleteMessagesMenu()
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteAllMessagesWithPeer(peer);
             }
-            messageStore.saveToFlash();
             return;
         }
     };
