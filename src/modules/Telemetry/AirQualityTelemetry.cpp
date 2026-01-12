@@ -132,6 +132,7 @@ bool AirQualityTelemetryModule::wantUIFrame()
     return moduleConfig.telemetry.air_quality_screen_enabled;
 }
 
+#if HAS_SCREEN
 void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // === Setup display ===
@@ -141,7 +142,7 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (graphics::isHighResolution) ? "Environment" : "Env.";
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Air Quality" : "AQ.";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -190,11 +191,11 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     std::vector<String> entries;
 
     if (m.has_pm10_standard)
-        entries.push_back("PM1.0: " + String(m.pm10_standard) + "ug/m3");
+        entries.push_back("PM1: " + String(m.pm10_standard) + "ug/m3");
     if (m.has_pm25_standard)
         entries.push_back("PM2.5: " + String(m.pm25_standard) + "ug/m3");
     if (m.has_pm100_standard)
-        entries.push_back("PM10.0: " + String(m.pm100_standard) + "ug/m3");
+        entries.push_back("PM10: " + String(m.pm100_standard) + "ug/m3");
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
@@ -220,7 +221,9 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
 
         currentY += rowHeight;
     }
+    graphics::drawCommonFooter(display, x, y);
 }
+#endif
 
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
