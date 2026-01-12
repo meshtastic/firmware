@@ -587,11 +587,11 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
               senderNameForTopo, info.neighbors_count, receivedVersion, 
               isNewVersion ? "new version" : "continuation", p->relay_node);
 
-    // Only clear existing edges when starting a NEW topology version
-    // For multi-packet broadcasts (same version), we append to existing edges
+    // For new topology versions, clear only topology-learned (Mirrored) edges
+    // Preserve direct radio (Reported) edges which represent actual connectivity
     if (isNewVersion && routingGraph) {
         routingGraph->clearEdgesForNode(p->from);
-        LOG_DEBUG("[SR] Cleared existing edges for node %08x (new version)", p->from);
+        LOG_DEBUG("[SR] Cleared topology-learned edges for node %08x (new version)", p->from);
     }
 
     // Process each neighbor directly from the received info - memory efficient
@@ -634,12 +634,13 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
                     }
                 }
             }
-            // Also check edges FROM us TO neighbor (any source - Mirrored means we heard from them)
+            // Also check edges FROM us TO neighbor with Reported source (actual direct radio connection)
             if (!hasDirectConnection) {
                 const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
                 if (ourEdges) {
                     for (uint8_t j = 0; j < ourEdges->edgeCount; j++) {
-                        if (ourEdges->edges[j].to == neighbor.node_id) {
+                        if (ourEdges->edges[j].to == neighbor.node_id &&
+                            ourEdges->edges[j].source == EdgeLite::Source::Reported) {
                             hasDirectConnection = true;
                             break;
                         }
@@ -657,12 +658,12 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
                     }
                 }
             }
-            // Also check edges FROM us TO neighbor (any source - Mirrored means we heard from them)
+            // Also check edges FROM us TO neighbor with Reported source (actual direct radio connection)
             if (!hasDirectConnection) {
                 const std::vector<Edge>* ourEdges = routingGraph->getEdgesFrom(ourNode);
                 if (ourEdges) {
                     for (const Edge& edge : *ourEdges) {
-                        if (edge.to == neighbor.node_id) {
+                        if (edge.to == neighbor.node_id && edge.source == Edge::Source::Reported) {
                             hasDirectConnection = true;
                             break;
                         }
@@ -672,28 +673,37 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 #endif
         }
         
-        // Only create gateway relationships if:
-        // 1. We don't have direct connection to the neighbor
-        // 2. The topology broadcast was received DIRECTLY from the sender (not relayed)
-        // This prevents intermediate nodes (like piko/Nara) from incorrectly becoming gateways
-        // when they relay topology from the actual gateway (angl)
-        bool receivedDirectly = (p->relay_node == 0) ||
-                                ((p->from & 0xFF) == p->relay_node);
-        
+        // Topology broadcasts share graph connectivity (ETX/routing information) and establish hierarchy
+        // Create topology-based gateway relationships for all neighbors in broadcasts. This creates
+        // an information-source hierarchy where nodes appear under the SR node that provided
+        // their topology information, regardless of relaying history.
+
         // Detailed logging for debugging topology processing
         char neighborName[48];
         getNodeDisplayName(neighbor.node_id, neighborName, sizeof(neighborName));
-        
-        if (!hasDirectConnection && receivedDirectly) {
-            // This node is only reachable through the topology broadcaster - mark as downstream
-            LOG_INFO("[SR]   -> %s: NO direct connection, marking as downstream of %s",
+        bool senderIsKnownGateway = false;
+#ifdef SIGNAL_ROUTING_LITE_MODE
+        for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+            if (gatewayDownstream[i].gateway == p->from) {
+                senderIsKnownGateway = true;
+                break;
+            }
+        }
+#else
+        auto dgIt = downstreamGateway.find(p->from);
+        if (dgIt != downstreamGateway.end()) {
+            senderIsKnownGateway = true;
+        }
+#endif
+
+        if (!hasDirectConnection) {
+            // Establish topology-based hierarchy: nodes learned through topology broadcasts
+            // appear as downstream of the broadcasting node, creating a information-source hierarchy
+            LOG_INFO("[SR]   -> %s: NO direct connection, marking as downstream of topology source %s",
                     neighborName, senderNameForTopo);
             recordGatewayRelation(p->from, neighbor.node_id);
-        } else if (hasDirectConnection) {
-            LOG_DEBUG("[SR]   -> %s: HAS direct connection, NOT marking as downstream",
-                    neighborName);
         } else {
-            LOG_DEBUG("[SR]   -> %s: received via relay (not direct), NOT marking as downstream",
+            LOG_DEBUG("[SR]   -> %s: HAS direct connection, sender confirms reachability",
                     neighborName);
         }
     }
@@ -1327,40 +1337,8 @@ void SignalRoutingModule::logNetworkTopology()
     NodeNum nodeBuf[GRAPH_LITE_MAX_NODES];
     size_t rawNodeCount = routingGraph->getAllNodeIds(nodeBuf, GRAPH_LITE_MAX_NODES);
 
-    // Filter out downstream nodes - they should only appear under their gateways
-    uint32_t now = millis() / 1000;
-
-    // Collect all active downstream nodes first (O(m*p) where m=gatewayDownstreamCount, p=max downstream per gateway)
-    NodeNum downstreamNodes[GRAPH_LITE_MAX_NODES];
-    uint8_t downstreamCount = 0;
-
-    for (uint8_t j = 0; j < gatewayDownstreamCount && downstreamCount < GRAPH_LITE_MAX_NODES; j++) {
-        const GatewayDownstreamSet &set = gatewayDownstream[j];
-        if ((now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
-            for (uint8_t k = 0; k < set.count && downstreamCount < GRAPH_LITE_MAX_NODES; k++) {
-                downstreamNodes[downstreamCount++] = set.downstream[k];
-            }
-        }
-    }
-
-    // Filter nodes by checking against downstream list (O(n*d) where d=downstreamCount)
-    size_t nodeCount = 0;
-    for (size_t i = 0; i < rawNodeCount; i++) {
-        NodeNum nodeId = nodeBuf[i];
-        bool isDownstream = false;
-
-        // Linear search through downstream nodes
-        for (uint8_t j = 0; j < downstreamCount; j++) {
-            if (downstreamNodes[j] == nodeId) {
-                isDownstream = true;
-                break;
-            }
-        }
-
-        if (!isDownstream) {
-            nodeBuf[nodeCount++] = nodeId;
-        }
-    }
+    // Include all nodes for hierarchical display
+    size_t nodeCount = rawNodeCount;
 
     if (nodeCount == 0) {
         LOG_INFO("[SR] Network Topology: No nodes in graph yet");
@@ -1368,12 +1346,23 @@ void SignalRoutingModule::logNetworkTopology()
     }
     LOG_INFO("[SR] Network Topology: %d nodes total", nodeCount);
 
+    // Debug: show all gateway relationships
+    LOG_DEBUG("[SR] Gateway relationships:");
+    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
+        const GatewayDownstreamSet &set = gatewayDownstream[i];
+        if (set.count > 0) {
+            char gwName[48];
+            getNodeDisplayName(set.gateway, gwName, sizeof(gwName));
+            LOG_DEBUG("[SR]   %s -> %d downstreams", gwName, set.count);
+        }
+    }
+
     // Sort in place using fixed array (avoid std::vector heap allocation)
     std::sort(nodeBuf, nodeBuf + nodeCount);
 
-    for (size_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
-        NodeNum nodeId = nodeBuf[nodeIdx];
-        char nodeName[48]; // Reduced buffer size for stack safety
+    // Helper function to log a node hierarchically
+    std::function<void(NodeNum, const char*, bool)> logNodeHierarchical = [&](NodeNum nodeId, const char* indent, bool isDownstream) -> void {
+        char nodeName[48];
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
         CapabilityStatus status = getCapabilityStatus(nodeId);
@@ -1384,13 +1373,13 @@ void SignalRoutingModule::logNetworkTopology()
             const char* statusStr = (status == CapabilityStatus::SRactive) ? "SR-active" :
                                    (status == CapabilityStatus::SRinactive) ? "SR-inactive" :
                                    (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
-            LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
-            continue;
+            LOG_INFO("[SR] %s+- %s%s: no neighbors (%s)", indent, prefix, nodeName, statusStr);
+            return;
         }
 
-        // Get gateway downstreams for this node (using fixed iteration, no heap allocation)
+        // Get gateway downstreams for this node
         const GatewayDownstreamSet* downstreamSet = nullptr;
-        uint32_t now = millis() / 1000;  // Use monotonic time
+        uint32_t now = millis() / 1000;
         for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
             const GatewayDownstreamSet &set = gatewayDownstream[i];
             if (set.gateway == nodeId && (now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
@@ -1399,38 +1388,164 @@ void SignalRoutingModule::logNetworkTopology()
             }
         }
 
-        // Helper to check if a node is a downstream of this gateway
-        auto isDownstreamOfThisGateway = [downstreamSet](NodeNum node) -> bool {
-            if (!downstreamSet) return false;
-            for (uint8_t i = 0; i < downstreamSet->count; i++) {
-                if (downstreamSet->downstream[i] == node) return true;
-            }
-            return false;
-        };
-
-        // Count direct neighbors (edges that are NOT to our own downstream nodes)
-        // Downstream nodes will be shown separately in the gateway list
-        uint8_t directNeighborCount = 0;
-        for (uint8_t i = 0; i < edges->edgeCount; i++) {
-            if (!isDownstreamOfThisGateway(edges->edges[i].to)) {
-                directNeighborCount++;
-            }
-        }
+        // Count direct radio connections and downstream nodes
+        uint8_t directConnectionCount = 0;
         uint8_t downstreamCount = downstreamSet ? downstreamSet->count : 0;
 
-        if (downstreamCount == 0) {
-            LOG_INFO("[SR] +- %s%s: connected to %d nodes", prefix, nodeName, directNeighborCount);
-        } else {
-            LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %d nodes)", prefix, nodeName, directNeighborCount, downstreamCount);
+        for (uint8_t i = 0; i < edges->edgeCount; i++) {
+            const EdgeLite& edge = edges->edges[i];
+            if (edge.source == EdgeLite::Source::Reported) {
+                directConnectionCount++;
+            }
         }
 
-        // Display direct neighbors (skip downstream nodes - they're shown in gateway list)
+        // Build downstream list for display
+        char downstreamBuf[128] = "";
+        if (downstreamCount > 0) {
+            size_t pos = 0;
+            size_t maxList = std::min<size_t>(downstreamCount, 4);
+            for (size_t i = 0; i < maxList; i++) {
+                char dn[32];
+                getNodeDisplayName(downstreamSet->downstream[i], dn, sizeof(dn));
+                int written = snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos,
+                                     (i == 0) ? "%s" : ", %s", dn);
+                if (written < 0 || (size_t)written >= (sizeof(downstreamBuf) - pos)) {
+                    downstreamBuf[sizeof(downstreamBuf) - 1] = '\0';
+                    break;
+                }
+                pos += static_cast<size_t>(written);
+            }
+            if (downstreamCount > maxList) {
+                snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos, ", +%u",
+                        static_cast<unsigned int>(downstreamCount - maxList));
+            }
+        }
+
+        if (downstreamCount == 0) {
+            LOG_INFO("[SR] %s+- %s%s",
+                     indent, prefix, nodeName);
+        } else {
+            LOG_INFO("[SR] %s+- %s%s (gateway for %d nodes: %s)",
+                     indent, prefix, nodeName, downstreamCount, downstreamBuf);
+        }
+
+        // Recursively display downstream nodes that are also gateways
+        if (downstreamSet) {
+            char childIndent[16];
+            snprintf(childIndent, sizeof(childIndent), "%s|  ", indent);
+
+            for (uint8_t i = 0; i < downstreamSet->count; i++) {
+                NodeNum downstreamId = downstreamSet->downstream[i];
+                // Check if this downstream is also a gateway
+                bool isAlsoGateway = false;
+                for (uint8_t j = 0; j < gatewayDownstreamCount; j++) {
+                    const GatewayDownstreamSet &set = gatewayDownstream[j];
+                    if (set.gateway == downstreamId && (now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+                        isAlsoGateway = true;
+                        break;
+                    }
+                }
+                if (isAlsoGateway) {
+                    // This downstream is also a gateway, show it hierarchically with link quality
+                    char gatewayLinkBuf[64] = "";
+
+                    // Find the edge from this gateway to the downstream gateway
+                    for (uint8_t k = 0; k < edges->edgeCount; k++) {
+                        const EdgeLite& edge = edges->edges[k];
+                        if (edge.to == downstreamId && edge.source == EdgeLite::Source::Reported) {
+                            // Found the direct connection, format the link quality
+                            const char* quality;
+                            if (edge.getEtx() < 2.0f) quality = "excellent";
+                            else if (edge.getEtx() < 4.0f) quality = "good";
+                            else if (edge.getEtx() < 8.0f) quality = "fair";
+                            else quality = "poor";
+
+                            int32_t age = computeAgeSecs(edge.lastUpdate, millis() / 1000);
+                            char ageBuf[16];
+                            if (age < 0) {
+                                snprintf(ageBuf, sizeof(ageBuf), "-");
+                            } else {
+                                snprintf(ageBuf, sizeof(ageBuf), "%d", age);
+                            }
+
+                            snprintf(gatewayLinkBuf, sizeof(gatewayLinkBuf), ": %s link (ETX=%.1f, %s sec ago)",
+                                    quality, edge.getEtx(), ageBuf);
+                            break;
+                        }
+                    }
+
+                    // Show the downstream gateway with link quality
+                    char nodeName[48];
+                    getNodeDisplayName(downstreamId, nodeName, sizeof(nodeName));
+
+                    CapabilityStatus status = getCapabilityStatus(downstreamId);
+                    const char* prefix = (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) ? "[SR] " : "";
+
+                    // Get this downstream gateway's downstreams
+                    const GatewayDownstreamSet* subDownstreamSet = nullptr;
+                    for (uint8_t j = 0; j < gatewayDownstreamCount; j++) {
+                        const GatewayDownstreamSet &set = gatewayDownstream[j];
+                        if (set.gateway == downstreamId && (now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+                            subDownstreamSet = &set;
+                            break;
+                        }
+                    }
+
+                    // Build downstream list for display
+                    char subDownstreamBuf[128] = "";
+                    if (subDownstreamSet && subDownstreamSet->count > 0) {
+                        size_t pos = 0;
+                        size_t maxList = std::min<size_t>(subDownstreamSet->count, 4);
+                        for (uint8_t j = 0; j < maxList; j++) {
+                            char dn[32];
+                            getNodeDisplayName(subDownstreamSet->downstream[j], dn, sizeof(dn));
+                            int written = snprintf(subDownstreamBuf + pos, sizeof(subDownstreamBuf) - pos,
+                                         (j == 0) ? "%s" : ", %s", dn);
+                            if (written < 0 || (size_t)written >= (sizeof(subDownstreamBuf) - pos)) {
+                                subDownstreamBuf[sizeof(subDownstreamBuf) - 1] = '\0';
+                                break;
+                            }
+                            pos += static_cast<size_t>(written);
+                        }
+                        if (subDownstreamSet->count > maxList) {
+                            snprintf(subDownstreamBuf + pos, sizeof(subDownstreamBuf) - pos, ", +%u",
+                                    static_cast<unsigned int>(subDownstreamSet->count - maxList));
+                        }
+                    }
+
+                    if (!subDownstreamSet || subDownstreamSet->count == 0) {
+                        LOG_INFO("[SR] %s+- %s%s%s",
+                                 childIndent, prefix, nodeName, gatewayLinkBuf);
+                    } else {
+                        LOG_INFO("[SR] %s+- %s%s (gateway for %d nodes: %s)%s",
+                                 childIndent, prefix, nodeName, subDownstreamSet->count,
+                                 subDownstreamBuf, gatewayLinkBuf);
+                    }
+                }
+            }
+        }
+
+        // Display direct connections (only Reported source edges, excluding downstreams)
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
             const EdgeLite& edge = edges->edges[i];
 
-            // Skip downstream nodes of this gateway - they're already counted in "gateway for X nodes"
-            if (isDownstreamOfThisGateway(edge.to)) {
+            // Only show actual direct radio connections (Reported source)
+            if (edge.source != EdgeLite::Source::Reported) {
                 continue;
+            }
+
+            // Skip downstream nodes of this gateway - they're shown hierarchically above
+            if (downstreamSet) {
+                bool isDownstreamOfThis = false;
+                for (uint8_t j = 0; j < downstreamSet->count; j++) {
+                    if (downstreamSet->downstream[j] == edge.to) {
+                        isDownstreamOfThis = true;
+                        break;
+                    }
+                }
+                if (isDownstreamOfThis) {
+                    continue;
+                }
             }
 
             char neighborName[48]; // Reduced buffer size for stack safety
@@ -1454,8 +1569,79 @@ void SignalRoutingModule::logNetworkTopology()
                 snprintf(ageBuf, sizeof(ageBuf), "%d", age);
             }
 
-            LOG_INFO("[SR] |  +- %s%s: %s link (ETX=%.1f, %s sec ago)",
-                    prefix, neighborName, quality, etx, ageBuf);
+            // Check if this direct connection is a gateway
+            const GatewayDownstreamSet* neighborDownstreamSet = nullptr;
+            uint32_t now = millis() / 1000;
+            for (uint8_t j = 0; j < gatewayDownstreamCount; j++) {
+                const GatewayDownstreamSet &set = gatewayDownstream[j];
+                if (set.gateway == edge.to && (now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+                    neighborDownstreamSet = &set;
+                    break;
+                }
+            }
+
+            if (neighborDownstreamSet && neighborDownstreamSet->count > 0) {
+                // This direct connection is a gateway - show it with downstreams
+                char downstreamBuf[128] = "";
+                size_t pos = 0;
+                size_t maxList = std::min<size_t>(neighborDownstreamSet->count, 4);
+                for (size_t k = 0; k < maxList; k++) {
+                    char dn[32];
+                    getNodeDisplayName(neighborDownstreamSet->downstream[k], dn, sizeof(dn));
+                    int written = snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos,
+                                         (k == 0) ? "%s" : ", %s", dn);
+                    if (written < 0 || (size_t)written >= (sizeof(downstreamBuf) - pos)) {
+                        downstreamBuf[sizeof(downstreamBuf) - 1] = '\0';
+                        break;
+                    }
+                    pos += static_cast<size_t>(written);
+                }
+                if (neighborDownstreamSet->count > maxList) {
+                    snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos, ", +%u",
+                            static_cast<unsigned int>(neighborDownstreamSet->count - maxList));
+                }
+
+                LOG_INFO("[SR] %s|    +- %s%s: %s link (ETX=%.1f, %s sec ago) (gateway for %d nodes: %s)",
+                        indent, prefix, neighborName, quality, etx, ageBuf, neighborDownstreamSet->count, downstreamBuf);
+            } else {
+                // Regular direct connection
+                LOG_INFO("[SR] %s|    +- %s%s: %s link (ETX=%.1f, %s sec ago)",
+                        indent, prefix, neighborName, quality, etx, ageBuf);
+            }
+        }
+    };
+
+    // Display topology hierarchically
+    for (size_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+        NodeNum nodeId = nodeBuf[nodeIdx];
+
+        // Check if this node is a downstream of another gateway
+        bool isDownstream = false;
+        NodeNum downstreamOf = 0;
+        uint32_t now = millis() / 1000;
+        for (uint8_t j = 0; j < gatewayDownstreamCount; j++) {
+            const GatewayDownstreamSet &set = gatewayDownstream[j];
+            if ((now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+                for (uint8_t k = 0; k < set.count; k++) {
+                    if (set.downstream[k] == nodeId) {
+                        isDownstream = true;
+                        downstreamOf = set.gateway;
+                        break;
+                    }
+                }
+                if (isDownstream) break;
+            }
+        }
+
+        // Only show top-level nodes (not downstreams)
+        if (!isDownstream) {
+            logNodeHierarchical(nodeId, "", false);
+        } else {
+            // Debug: log why this node is not shown at top level
+            char gatewayName[48];
+            getNodeDisplayName(downstreamOf, gatewayName, sizeof(gatewayName));
+            LOG_DEBUG("[SR] Node %s not shown at top level - is downstream of %s",
+                     nodeBuf[nodeIdx], gatewayName);
         }
     }
 
@@ -1477,26 +1663,19 @@ void SignalRoutingModule::logNetworkTopology()
         return;
     }
 
-    // Filter out downstream nodes - they should only appear under their gateways
-    uint32_t now = millis() / 1000;  // Use monotonic time
-    std::vector<NodeNum> topologyNodes;
-    for (NodeNum nodeId : allNodes) {
-        auto dgIt = downstreamGateway.find(nodeId);
-        if (dgIt == downstreamGateway.end()) {
-            // Node is not downstream of any gateway
-            topologyNodes.push_back(nodeId);
-        } else if ((now - dgIt->second.lastSeen) > ACTIVE_NODE_TTL_SECS) {
-            // Downstream relationship has expired
-            topologyNodes.push_back(nodeId);
-        }
-        // If relationship is active, exclude from topology (node appears under its gateway)
+    LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
+
+    // Debug: show all gateway relationships
+    LOG_DEBUG("[SR] Gateway relationships:");
+    for (const auto& pair : downstreamGateway) {
+        char gwName[48], dsName[48];
+        getNodeDisplayName(pair.second.gateway, gwName, sizeof(gwName));
+        getNodeDisplayName(pair.first, dsName, sizeof(dsName));
+        LOG_DEBUG("[SR]   %s -> %s", gwName, dsName);
     }
 
-    LOG_INFO("[SR] Network Topology: %d nodes total", topologyNodes.size());
-    // Sort nodes for consistent output
-    std::sort(topologyNodes.begin(), topologyNodes.end());
-
-    for (NodeNum nodeId : topologyNodes) {
+    // Helper function to log a node hierarchically
+    std::function<void(NodeNum, const char*, bool)> logNodeHierarchical = [&](NodeNum nodeId, const char* indent, bool isDownstream) -> void {
         char nodeName[64];
         getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
 
@@ -1508,8 +1687,8 @@ void SignalRoutingModule::logNetworkTopology()
             const char* statusStr = (status == CapabilityStatus::SRactive) ? "SR-active" :
                                    (status == CapabilityStatus::SRinactive) ? "SR-inactive" :
                                    (status == CapabilityStatus::Legacy) ? "legacy" : "unknown";
-            LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
-            continue;
+            LOG_INFO("[SR] %s+- %s%s: no neighbors (%s)", indent, prefix, nodeName, statusStr);
+            return;
         }
 
         // Get this node's downstream nodes
@@ -1517,62 +1696,153 @@ void SignalRoutingModule::logNetworkTopology()
         appendGatewayDownstreams(nodeId, downstreams);
         std::sort(downstreams.begin(), downstreams.end());
         downstreams.erase(std::unique(downstreams.begin(), downstreams.end()), downstreams.end());
-        
-        // Helper to check if a node is a downstream of this gateway
-        auto isDownstreamOfThisGateway = [&downstreams](NodeNum node) -> bool {
-            return std::binary_search(downstreams.begin(), downstreams.end(), node);
-        };
 
-        // Count direct neighbors (edges that are NOT to our own downstream nodes)
-        // Downstream nodes will be shown separately in the gateway list
-        size_t directNeighborCount = 0;
+        // Count direct radio connections
+        size_t directConnectionCount = 0;
         for (const Edge& edge : *edges) {
-            if (!isDownstreamOfThisGateway(edge.to)) {
-                directNeighborCount++;
+            if (edge.source == Edge::Source::Reported) {
+                directConnectionCount++;
             }
         }
 
-        if (downstreams.empty()) {
-            LOG_INFO("[SR] +- %s%s: connected to %d nodes", prefix, nodeName, directNeighborCount);
-        } else {
-            char buf[128];
+        // Build downstream list for display
+        char downstreamBuf[128] = "";
+        if (!downstreams.empty()) {
             size_t pos = 0;
             size_t maxList = std::min<size_t>(downstreams.size(), 4);
             for (size_t i = 0; i < maxList; i++) {
                 char dn[32];
                 getNodeDisplayName(downstreams[i], dn, sizeof(dn));
-                int written = snprintf(buf + pos, sizeof(buf) - pos, (i == 0) ? "%s" : ", %s", dn);
-                if (written < 0 || (size_t)written >= (sizeof(buf) - pos)) {
-                    buf[sizeof(buf) - 1] = '\0';
+                int written = snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos,
+                                     (i == 0) ? "%s" : ", %s", dn);
+                if (written < 0 || (size_t)written >= (sizeof(downstreamBuf) - pos)) {
+                    downstreamBuf[sizeof(downstreamBuf) - 1] = '\0';
                     break;
                 }
                 pos += static_cast<size_t>(written);
             }
-            if (downstreams.size() > maxList && pos < sizeof(buf) - 6) {
-                snprintf(buf + pos, sizeof(buf) - pos, ", +%u", static_cast<unsigned int>(downstreams.size() - maxList));
+            if (downstreams.size() > maxList) {
+                snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos, ", +%u",
+                        static_cast<unsigned int>(downstreams.size() - maxList));
             }
-            LOG_INFO("[SR] +- %s%s: connected to %d nodes (gateway for %u nodes: %s)", prefix, nodeName, directNeighborCount, static_cast<unsigned int>(downstreams.size()), buf);
         }
 
-        // Sort edges by ETX for consistent output
+        if (downstreams.empty()) {
+            LOG_INFO("[SR] %s+- %s%s",
+                     indent, prefix, nodeName);
+        } else {
+            LOG_INFO("[SR] %s+- %s%s (gateway for %u nodes: %s)",
+                     indent, prefix, nodeName, static_cast<unsigned int>(downstreams.size()), downstreamBuf);
+        }
+
+        // Recursively display downstream nodes that are also gateways
+        if (!downstreams.empty()) {
+            char childIndent[16];
+            snprintf(childIndent, sizeof(childIndent), "%s|  ", indent);
+
+            uint32_t now = millis() / 1000;
+            for (NodeNum downstreamId : downstreams) {
+                // Check if this downstream is also a gateway
+                auto it = downstreamGateway.find(downstreamId);
+                if (it != downstreamGateway.end() && (now - it->second.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+                    // This downstream is also a gateway, show it hierarchically with link quality
+                    char gatewayLinkBuf[64] = "";
+
+                    // Find the edge from this gateway to the downstream gateway
+                    for (size_t i = 0; i < edges->size(); i++) {
+                        const Edge& edge = (*edges)[i];
+                        if (edge.to == downstreamId && edge.source == Edge::Source::Reported) {
+                            // Found the direct connection, format the link quality
+                            const char* quality;
+                            if (edge.etx < 2.0f) quality = "excellent";
+                            else if (edge.etx < 4.0f) quality = "good";
+                            else if (edge.etx < 8.0f) quality = "fair";
+                            else quality = "poor";
+
+                            int32_t age = computeAgeSecs(edge.lastUpdate, millis() / 1000);
+                            char ageBuf[16];
+                            if (age < 0) {
+                                snprintf(ageBuf, sizeof(ageBuf), "-");
+                            } else {
+                                snprintf(ageBuf, sizeof(ageBuf), "%d", age);
+                            }
+
+                            snprintf(gatewayLinkBuf, sizeof(gatewayLinkBuf), ": %s link (ETX=%.1f, %s sec ago)",
+                                    quality, edge.etx, ageBuf);
+                            break;
+                        }
+                    }
+
+                    // Show the downstream gateway with link quality
+                    char nodeName[64];
+                    getNodeDisplayName(downstreamId, nodeName, sizeof(nodeName));
+
+                    CapabilityStatus status = getCapabilityStatus(downstreamId);
+                    const char* prefix = (status == CapabilityStatus::SRactive || status == CapabilityStatus::SRinactive) ? "[SR] " : "";
+
+                    // Get this downstream gateway's downstreams
+                    std::vector<NodeNum> subDownstreams;
+                    appendGatewayDownstreams(downstreamId, subDownstreams);
+                    std::sort(subDownstreams.begin(), subDownstreams.end());
+                    subDownstreams.erase(std::unique(subDownstreams.begin(), subDownstreams.end()), subDownstreams.end());
+
+                    // Build downstream list for display
+                    char subDownstreamBuf[128] = "";
+                    if (!subDownstreams.empty()) {
+                        size_t pos = 0;
+                        size_t maxList = std::min<size_t>(subDownstreams.size(), 4);
+                        for (size_t i = 0; i < maxList; i++) {
+                            char dn[32];
+                            getNodeDisplayName(subDownstreams[i], dn, sizeof(dn));
+                            int written = snprintf(subDownstreamBuf + pos, sizeof(subDownstreamBuf) - pos,
+                                         (i == 0) ? "%s" : ", %s", dn);
+                            if (written < 0 || (size_t)written >= (sizeof(subDownstreamBuf) - pos)) {
+                                subDownstreamBuf[sizeof(subDownstreamBuf) - 1] = '\0';
+                                break;
+                            }
+                            pos += static_cast<size_t>(written);
+                        }
+                        if (subDownstreams.size() > maxList) {
+                            snprintf(subDownstreamBuf + pos, sizeof(subDownstreamBuf) - pos, ", +%u",
+                                    static_cast<unsigned int>(subDownstreams.size() - maxList));
+                        }
+                    }
+
+                    if (subDownstreams.empty()) {
+                        LOG_INFO("[SR] %s+- %s%s%s",
+                                 childIndent, prefix, nodeName, gatewayLinkBuf);
+                    } else {
+                        LOG_INFO("[SR] %s+- %s%s (gateway for %u nodes: %s)%s",
+                                 childIndent, prefix, nodeName, static_cast<unsigned int>(subDownstreams.size()),
+                                 subDownstreamBuf, gatewayLinkBuf);
+                    }
+                }
+            }
+        }
+
+        // Display direct connections (only Reported source edges, excluding downstreams)
         std::vector<Edge> sortedEdges = *edges;
         std::sort(sortedEdges.begin(), sortedEdges.end(),
                  [](const Edge& a, const Edge& b) { return a.etx < b.etx; });
 
-        // Display direct neighbors (skip downstream nodes - they're shown in gateway list)
         for (size_t i = 0; i < sortedEdges.size(); i++) {
             const Edge& edge = sortedEdges[i];
-            
-            // Skip downstream nodes of this gateway - they're already counted in "gateway for X nodes"
-            if (isDownstreamOfThisGateway(edge.to)) {
+
+            // Only show actual direct radio connections (Reported source)
+            if (edge.source != Edge::Source::Reported) {
                 continue;
             }
-            
+
+            // Skip downstream nodes of this gateway - they're shown hierarchically above
+            if (std::binary_search(downstreams.begin(), downstreams.end(), edge.to)) {
+                continue;
+            }
+
             char neighborName[64];
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
 
             CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
-            const char* prefix = (neighborStatus == CapabilityStatus::SRactive || neighborStatus == CapabilityStatus::SRinactive) ? "[SR] " : "";
+            const char* nprefix = (neighborStatus == CapabilityStatus::SRactive || neighborStatus == CapabilityStatus::SRinactive) ? "[SR] " : "";
 
             const char* quality;
             if (edge.etx < 2.0f) quality = "excellent";
@@ -1588,14 +1858,67 @@ void SignalRoutingModule::logNetworkTopology()
                 snprintf(ageBuf, sizeof(ageBuf), "%d", age);
             }
 
-            LOG_INFO("[SR] |  +- %s%s: %s link (ETX=%.1f, %s sec ago)",
-                    prefix, neighborName, quality, edge.etx, ageBuf);
+            // Check if this direct connection is a gateway
+            std::vector<NodeNum> neighborDownstreams;
+            appendGatewayDownstreams(edge.to, neighborDownstreams);
+            std::sort(neighborDownstreams.begin(), neighborDownstreams.end());
+            neighborDownstreams.erase(std::unique(neighborDownstreams.begin(), neighborDownstreams.end()), neighborDownstreams.end());
+
+            if (!neighborDownstreams.empty()) {
+                // This direct connection is a gateway - show it with downstreams
+                char downstreamBuf[128] = "";
+                size_t pos = 0;
+                size_t maxList = std::min<size_t>(neighborDownstreams.size(), 4);
+                for (size_t k = 0; k < maxList; k++) {
+                    char dn[32];
+                    getNodeDisplayName(neighborDownstreams[k], dn, sizeof(dn));
+                    int written = snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos,
+                                         (k == 0) ? "%s" : ", %s", dn);
+                    if (written < 0 || (size_t)written >= (sizeof(downstreamBuf) - pos)) {
+                        downstreamBuf[sizeof(downstreamBuf) - 1] = '\0';
+                        break;
+                    }
+                    pos += static_cast<size_t>(written);
+                }
+                if (neighborDownstreams.size() > maxList) {
+                    snprintf(downstreamBuf + pos, sizeof(downstreamBuf) - pos, ", +%u",
+                            static_cast<unsigned int>(neighborDownstreams.size() - maxList));
+                }
+
+                LOG_INFO("[SR] %s|    +- %s%s: %s link (ETX=%.1f, %s sec ago) (gateway for %u nodes: %s)",
+                        indent, nprefix, neighborName, quality, edge.etx, ageBuf, static_cast<unsigned int>(neighborDownstreams.size()), downstreamBuf);
+            } else {
+                // Regular direct connection
+                LOG_INFO("[SR] %s|    +- %s%s: %s link (ETX=%.1f, %s sec ago)",
+                        indent, nprefix, neighborName, quality, edge.etx, ageBuf);
+            }
+        }
+    };
+
+    // Display topology hierarchically
+    for (NodeNum nodeId : allNodes) {
+        // Check if this node is a downstream of another gateway
+        bool isDownstream = false;
+        NodeNum downstreamOf = 0;
+        uint32_t now = millis() / 1000;
+        auto dgIt = downstreamGateway.find(nodeId);
+        if (dgIt != downstreamGateway.end() && (now - dgIt->second.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+            isDownstream = true;
+            downstreamOf = dgIt->second.gateway;
+        }
+
+        // Only show top-level nodes (not downstreams)
+        if (!isDownstream) {
+            logNodeHierarchical(nodeId, "", false);
+        } else {
+            // Debug: log why this node is not shown at top level
+            char nodeName[48], gatewayName[48];
+            getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
+            getNodeDisplayName(downstreamOf, gatewayName, sizeof(gatewayName));
+            LOG_DEBUG("[SR] Node %s not shown at top level - is downstream of %s",
+                     nodeName, gatewayName);
         }
     }
-
-    // Add legend explaining ETX to signal quality mapping
-    LOG_INFO("[SR] ETX to signal mapping: ETX=1.0~RSSI=-60dB/SNR=10dB, ETX=2.0~RSSI=-90dB/SNR=0dB, ETX=4.0~RSSI=-110dB/SNR=-5dB");
-    LOG_DEBUG("[SR] Topology logging complete");
 #endif
 }
 
@@ -1683,8 +2006,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             Graph::calculateETX(mp.rx_rssi, mp.rx_snr);
 #endif
 
-        // Remove this node from ALL gateway relationships since we can hear it directly
-        clearDownstreamFromAllGateways(mp.from);
+        // NOTE: We used to clear downstream relationships when a node becomes directly reachable,
+        // but this is wrong. A node can be both a direct neighbor AND a gateway for other nodes.
+        // Only clear downstream relationships through aging or when relationships become invalid.
 
         LOG_INFO("[SR] Direct neighbor %s: RSSI=%d, SNR=%.1f, ETX=%.2f",
                  senderName, mp.rx_rssi, mp.rx_snr, etx);
@@ -2709,13 +3033,14 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
         routingGraph->updateEdge(nodeId, myNode, etx, monotonicTimestamp, variance, Edge::Source::Reported);
 #endif
 
-    // Also store reverse edge: us → nodeId (assuming approximately symmetric link) if we don't yet have a better
-    // (reported) estimate of how nodeId hears us. This serves as a fallback until we receive their SR info.
+    // Also store reverse edge: us → nodeId (assuming approximately symmetric link)
+    // Since we directly measured the link quality (even if in the opposite direction),
+    // mark this as Reported source, not Mirrored
     routingGraph->updateEdge(myNode, nodeId, etx, monotonicTimestamp, variance
 #ifndef SIGNAL_ROUTING_LITE_MODE
-                             , Edge::Source::Mirrored
+                             , Edge::Source::Reported
 #else
-                             , EdgeLite::Source::Mirrored
+                             , EdgeLite::Source::Reported
 #endif
                              );
 
@@ -3263,8 +3588,37 @@ void SignalRoutingModule::pruneGatewayRelations(uint32_t nowSecs)
         }
     }
 #else
-    // Full mode: remove gateway relations when gateways or downstream nodes are removed from graph
+    // Full mode: remove gateway relations when they expire or when gateways/downstream nodes are removed from graph
     // When removing a gateway, only remove downstream relations if no alternative gateway exists
+
+    // First pass: age out time-expired relations
+    for (auto it = downstreamGateway.begin(); it != downstreamGateway.end();) {
+        if ((nowSecs - it->second.lastSeen) > ACTIVE_NODE_TTL_SECS) {
+            NodeNum gatewayId = it->second.gateway;
+            NodeNum downstreamId = it->first;
+
+            // Remove from gateway's downstream set
+            auto gwIt = gatewayDownstream.find(gatewayId);
+            if (gwIt != gatewayDownstream.end()) {
+                gwIt->second.erase(downstreamId);
+                if (gwIt->second.empty()) {
+                    gatewayDownstream.erase(gwIt);
+                }
+            }
+
+            char gatewayName[64], downstreamName[64];
+            getNodeDisplayName(gatewayId, gatewayName, sizeof(gatewayName));
+            getNodeDisplayName(downstreamId, downstreamName, sizeof(downstreamName));
+            LOG_DEBUG("[SR] Pruned stale gateway relation (%s is gateway for %s)",
+                     gatewayName, downstreamName);
+
+            it = downstreamGateway.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Second pass: remove relations when nodes are removed from graph
     for (auto it = downstreamGateway.begin(); it != downstreamGateway.end();) {
         NodeNum gatewayId = it->second.gateway;
         NodeNum downstreamId = it->first;
