@@ -326,8 +326,6 @@ void nrf52Loop()
 
     checkSDEvents();
     reportLittleFSCorruptionOnce();
-
-    LOG_INFO("POFCON: %x", NRF_POWER->POFCON);
 }
 
 #ifdef USE_SEMIHOSTING

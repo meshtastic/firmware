@@ -307,9 +307,6 @@ void lateInitVariant() {}
 void waitUntilPowerLevelSafe()
 {
 
-    // TODO: do not use delay but RTC/IRQ whatever so we don't burn
-    // energy which is already scarce
-
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
 #endif
