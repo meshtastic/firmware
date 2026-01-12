@@ -45,16 +45,12 @@ struct EdgeLite {
     uint16_t etxFixed;     // ETX * 100 (fixed-point, range 1.00-655.35)
     uint32_t lastUpdate;   // Full timestamp (seconds since boot)
     uint8_t variance;      // Position variance (0-255, scaled)
-    uint8_t stability;     // Stability * 100 (1.0 = 100, lower = less stable)
     Source source;
 
-    EdgeLite() : to(0), etxFixed(100), lastUpdate(0), variance(0), stability(100), source(Source::Mirrored) {}
+    EdgeLite() : to(0), etxFixed(100), lastUpdate(0), variance(0), source(Source::Mirrored) {}
 
     float getEtx() const { return etxFixed / 100.0f; }
     void setEtx(float etx) { etxFixed = static_cast<uint16_t>(etx * 100.0f); }
-
-    float getStability() const { return stability / 100.0f; }
-    void setStability(float s) { stability = static_cast<uint8_t>(s * 100.0f); }
 };
 
 struct NodeEdgesLite {
@@ -242,10 +238,6 @@ class GraphLite {
      */
     void removeNode(NodeNum nodeId);
 
-    /**
-     * Update stability weighting for an edge
-     */
-    void updateStability(NodeNum from, NodeNum to, float newStability);
 
     /**
      * Clear all edges to/from a specific node (used for graph merging)

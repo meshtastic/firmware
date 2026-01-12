@@ -379,16 +379,6 @@ void GraphLite::clearCache()
     routeCacheCount = 0;
 }
 
-void GraphLite::updateStability(NodeNum from, NodeNum to, float newStability)
-{
-    NodeEdgesLite *nodeEdges = findNode(from);
-    if (!nodeEdges) return;
-
-    EdgeLite *edge = findEdge(nodeEdges, to);
-    if (edge) {
-        edge->setStability(newStability);
-    }
-}
 
 size_t GraphLite::getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, size_t maxNodes, const NodeNum *alreadyCovered, size_t alreadyCoveredCount) const
 {
