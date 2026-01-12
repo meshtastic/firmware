@@ -1239,20 +1239,13 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    optionsArray[options] = "Add Favorite";
-    optionsEnumArray[options++] = Favorite;
-    optionsArray[options] = "Trace Route";
-    optionsEnumArray[options++] = TraceRoute;
-
-    if (currentResolution != ScreenResolution::UltraLow) {
-        optionsArray[options] = "Key Verification";
-        optionsEnumArray[options++] = Verify;
-    }
+    optionsArray[options] = "Node Actions / Settings";
+    optionsEnumArray[options++] = NodePicker;
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Show Long/Short Name";
@@ -1267,23 +1260,107 @@ void menuHandler::nodeListMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Favorite) {
-            menuQueue = add_favorite;
-            screen->runNow();
-        } else if (selected == Verify) {
-            menuQueue = key_verification_init;
+        if (selected == NodePicker) {
+            menuQueue = NodePicker_menu;
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
-            screen->runNow();
-        } else if (selected == TraceRoute) {
-            menuQueue = trace_route_menu;
             screen->runNow();
         } else if (selected == NodeNameLength) {
             menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
         }
     };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::NodePicker()
+{
+    const char *NODE_PICKER_TITLE;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        NODE_PICKER_TITLE = "Pick Node";
+    } else {
+        NODE_PICKER_TITLE = "Node To Manage";
+    }
+    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
+        LOG_INFO("Nodenum: %u", nodenum);
+        menuQueue = Manage_Node_menu;
+        screen->runNow();
+    });
+}
+
+// Old Node Favorite Menus
+void menuHandler::addFavoriteMenu()
+{
+    const char *NODE_PICKER_TITLE;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        NODE_PICKER_TITLE = "Node Favorite";
+    } else {
+        NODE_PICKER_TITLE = "Node To Favorite";
+    }
+    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
+        LOG_WARN("Nodenum: %u", nodenum);
+        nodeDB->set_favorite(true, nodenum);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    });
+}
+
+void menuHandler::ManageNodeMenu()
+{
+    enum class ManageNodeAction { Favorite, Mute, TraceRoute, KeyVerification, IgnoreNode };
+
+    static const ManageNodeOption baseOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"Favorite", OptionsAction::Select, static_cast<int>(ManageNodeAction::Favorite)},
+        {"Mute Notifications", OptionsAction::Select, static_cast<int>(ManageNodeAction::Mute)},
+        {"Trace Route", OptionsAction::Select, static_cast<int>(ManageNodeAction::TraceRoute)},
+        {"Key Verification", OptionsAction::Select, static_cast<int>(ManageNodeAction::KeyVerification)},
+        {"Ignore Node", OptionsAction::Select, static_cast<int>(ManageNodeAction::IgnoreNode)},
+    };
+
+    constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
+    static std::array<const char *, baseCount> baseLabels{};
+
+    auto onSelection = [](const PositionMenuOption &option, int) -> void {
+        if (option.action == OptionsAction::Back) {
+            return;
+        }
+
+        if (!option.hasValue) {
+            return;
+        }
+
+        auto action = static_cast<ManageNodeAction>(option.value);
+        switch (action) {
+        case ManageNodeAction::Favorite:
+            LOG_INFO("User selected Favorite");
+            // menuQueue = add_favorite;
+            // screen->runNow();
+            break;
+        case ManageNodeAction::Mute:
+            LOG_INFO("User selected Mute");
+            // menuQueue = ADD_SOMETHING_HERE;
+            // screen->runNow();
+            break;
+        case ManageNodeAction::TraceRoute:
+            LOG_INFO("User selected TraceRoute");
+            // menuQueue = ADD_SOMETHING_HERE;
+            // screen->runNow();
+            break;
+        case ManageNodeAction::KeyVerification:
+            LOG_INFO("User selected KeyVerification");
+            // menuQueue = ADD_SOMETHING_HERE;
+            // screen->runNow();
+            break;
+        case ManageNodeAction::IgnoreNode:
+            LOG_INFO("User selected IgnoreNode");
+            // menuQueue = ADD_SOMETHING_HERE;
+            // screen->runNow();
+            break;
+        }
+    };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions = createStaticBannerOptions("Manage Node", baseOptions, baseLabels, onSelection);
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -1984,21 +2061,6 @@ void menuHandler::shutdownMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::addFavoriteMenu()
-{
-    const char *NODE_PICKER_TITLE;
-    if (currentResolution == ScreenResolution::UltraLow) {
-        NODE_PICKER_TITLE = "Node Favorite";
-    } else {
-        NODE_PICKER_TITLE = "Node To Favorite";
-    }
-    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
-        LOG_WARN("Nodenum: %u", nodenum);
-        nodeDB->set_favorite(true, nodenum);
-        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-    });
-}
-
 void menuHandler::removeFavoriteMenu()
 {
 
@@ -2509,6 +2571,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case shutdown_menu:
         shutdownMenu();
+        break;
+    case NodePicker_menu:
+        NodePicker();
+        break;
+    case Manage_Node_menu:
+        ManageNodeMenu();
         break;
     case add_favorite:
         addFavoriteMenu();

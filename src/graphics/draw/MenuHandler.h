@@ -33,6 +33,8 @@ class menuHandler
         brightness_picker,
         reboot_menu,
         shutdown_menu,
+        NodePicker_menu,
+        Manage_Node_menu,
         add_favorite,
         remove_favorite,
         test_menu,
@@ -90,6 +92,8 @@ class menuHandler
     static void BrightnessPickerMenu();
     static void rebootMenu();
     static void shutdownMenu();
+    static void NodePicker();
+    static void ManageNodeMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void traceRouteMenu();
@@ -149,6 +153,7 @@ using GPSToggleOption = MenuOption<meshtastic_Config_PositionConfig_GpsMode>;
 using GPSFormatOption = MenuOption<meshtastic_DeviceUIConfig_GpsCoordinateFormat>;
 using NodeNameOption = MenuOption<bool>;
 using PositionMenuOption = MenuOption<int>;
+using ManageNodeOption = MenuOption<int>;
 using ClockFaceOption = MenuOption<bool>;
 
 } // namespace graphics
