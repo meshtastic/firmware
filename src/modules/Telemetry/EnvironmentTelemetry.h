@@ -67,7 +67,6 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
-    uint32_t sensor_read_error_count = 0;
 };
 
 #endif
