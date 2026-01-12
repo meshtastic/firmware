@@ -22,6 +22,17 @@ def get_last_release_tag():
     return result.stdout.strip()
 
 
+def get_tag_date(tag):
+    """Get the commit date (ISO 8601) of the tag."""
+    result = subprocess.run(
+        ["git", "show", "-s", "--format=%cI", tag],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
 def get_merged_prs_since_tag(tag, branch):
     """Get all merged PRs since the given tag on the specified branch."""
     # Get commits since tag on the branch - look for PR numbers in parentheses
@@ -94,12 +105,33 @@ def should_exclude_pr(pr_details):
     if "bump release version" in title or "bump version" in title:
         return True
 
-    # Exclude automated dependency digest updates (chore(deps): update X digest to Y)
-    if re.match(r"^chore\(deps\):\s*update .+ digest to [a-f0-9]+$", title, re.IGNORECASE):
+    return False
+
+
+def is_dependency_update(pr_details):
+    """Check if PR is a dependency/chore update."""
+    if not pr_details:
+        return False
+
+    title = pr_details.get("title", "").lower()
+    author = pr_details.get("author", {}).get("login", "").lower()
+    labels = [label.get("name", "").lower() for label in pr_details.get("labels", [])]
+
+    # Check for renovate or dependabot authors
+    if "renovate" in author or "dependabot" in author:
         return True
 
-    # Exclude generic "Update X digest to Y" patterns
-    if re.match(r"^update .+ digest to [a-f0-9]+$", title, re.IGNORECASE):
+    # Check for chore(deps) pattern
+    if re.match(r"^chore\(deps\):", title):
+        return True
+
+    # Check for digest update patterns
+    if re.match(r".*digest to [a-f0-9]+", title, re.IGNORECASE):
+        return True
+
+    # Check for dependency-related labels
+    dependency_labels = ["dependencies", "deps", "renovate"]
+    if any(dep in label for label in labels for dep in dependency_labels):
         return True
 
     return False
@@ -166,13 +198,24 @@ def format_pr_line(pr_details):
     return f"- {title} by @{author} in {url}"
 
 
-def get_new_contributors(pr_details_list, tag):
-    """Find contributors who made their first contribution in this release."""
-    # Exclude bots from new contributors
+def get_new_contributors(pr_details_list, tag, repo="meshtastic/firmware"):
+    """Find contributors who made their first merged PR before this release.
+
+    GitHub usernames do not necessarily match git commit authors, so we use the
+    GitHub search API via `gh` to see if the user has any merged PRs before the
+    tag date. This mirrors how GitHub's "Generate release notes" feature works.
+    """
+
     bot_authors = {"github-actions", "renovate", "dependabot", "app/renovate", "app/github-actions", "app/dependabot"}
 
     new_contributors = []
     seen_authors = set()
+
+    try:
+        tag_date = get_tag_date(tag)
+    except subprocess.CalledProcessError:
+        print(f"Warning: Could not determine tag date for {tag}; skipping new contributor detection", file=sys.stderr)
+        return []
 
     for pr in pr_details_list:
         author = pr.get("author", {}).get("login", "")
@@ -185,14 +228,41 @@ def get_new_contributors(pr_details_list, tag):
 
         seen_authors.add(author)
 
-        # Check if this author appears in git history before tag
-        author_check = subprocess.run(
-            ["git", "log", f"{tag}", f"--author={author}", "--oneline", "-1"],
-            capture_output=True,
-            text=True,
-        )
-        if not author_check.stdout.strip():
-            new_contributors.append((author, pr.get("url", "")))
+        try:
+            # Search for merged PRs by this author created before the tag date
+            search_query = f"is:pr author:{author} repo:{repo} closed:<=\"{tag_date}\""
+            search = subprocess.run(
+                [
+                    "gh",
+                    "search",
+                    "issues",
+                    "--json",
+                    "number,mergedAt,createdAt",
+                    "--state",
+                    "closed",
+                    "--limit",
+                    "200",
+                    search_query,
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            if search.returncode != 0:
+                # If gh fails, be conservative and skip adding to new contributors
+                print(f"Warning: gh search failed for author {author}: {search.stderr.strip()}", file=sys.stderr)
+                continue
+
+            results = json.loads(search.stdout or "[]")
+            # If any merged PR exists before or on tag date, not a new contributor
+            had_prior_pr = any(item.get("mergedAt") for item in results)
+
+            if not had_prior_pr:
+                new_contributors.append((author, pr.get("url", "")))
+
+        except Exception as e:
+            print(f"Warning: Could not check contributor history for {author}: {e}", file=sys.stderr)
+            continue
 
     return new_contributors
 
@@ -224,13 +294,16 @@ def main():
     # Get details for all PRs
     enhancements = []
     bug_fixes = []
+    dependencies = []
     all_pr_details = []
 
     for pr_number in sorted(all_pr_numbers, key=int):
         details = get_pr_details(pr_number)
         if details and not should_exclude_pr(details):
             all_pr_details.append(details)
-            if is_enhancement(details):
+            if is_dependency_update(details):
+                dependencies.append(details)
+            elif is_enhancement(details):
                 enhancements.append(details)
             else:
                 bug_fixes.append(details)
@@ -250,7 +323,13 @@ def main():
             output.append(format_pr_line(pr))
         output.append("")
 
-    # Find new contributors
+    if dependencies:
+        output.append("## ⚙️ Dependencies\n")
+        for pr in dependencies:
+            output.append(format_pr_line(pr))
+        output.append("")
+
+    # Find new contributors (GitHub-accurate check using merged PRs before tag date)
     new_contributors = get_new_contributors(all_pr_details, last_tag)
     if new_contributors:
         output.append("## New Contributors\n")
