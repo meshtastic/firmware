@@ -449,13 +449,14 @@ void menuHandler::clockMenu()
 }
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, ViewMode, DeleteAll, DeleteOldest, ReplyMenu, Aloud, enumEnd };
+    enum optionsNumbers { Back = 0, ViewMode, DeleteAll, DeleteOldest, ReplyMenu, MuteChannel, Aloud, enumEnd };
 
     static const char *optionsArray[enumEnd];
     static int optionsEnumArray[enumEnd];
     int options = 0;
 
     auto mode = graphics::MessageRenderer::getThreadMode();
+    int threadChannel = graphics::MessageRenderer::getThreadChannel();
 
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
@@ -466,6 +467,15 @@ void menuHandler::messageResponseMenu()
 
     optionsArray[options] = "View Chats";
     optionsEnumArray[options++] = ViewMode;
+
+    // If viewing ALL chats, hide “Mute Chat”
+    if (mode != graphics::MessageRenderer::ThreadMode::ALL && mode != graphics::MessageRenderer::ThreadMode::DIRECT) {
+        const uint8_t chIndex = (threadChannel != 0) ? (uint8_t)threadChannel : channels.getPrimaryIndex();
+        auto &chan = channels.getByIndex(chIndex);
+
+        optionsArray[options] = chan.settings.module_settings.is_muted ? "Unmute Channel" : "Mute Channel";
+        optionsEnumArray[options++] = MuteChannel;
+    }
 
     // Delete submenu
     optionsArray[options] = "Delete";
@@ -501,6 +511,14 @@ void menuHandler::messageResponseMenu()
         } else if (selected == ReplyMenu) {
             menuHandler::menuQueue = menuHandler::reply_menu;
             screen->runNow();
+
+        } else if (selected == MuteChannel) {
+            const uint8_t chIndex = (ch != 0) ? (uint8_t)ch : channels.getPrimaryIndex();
+            auto &chan = channels.getByIndex(chIndex);
+            if (chan.settings.has_module_settings) {
+                chan.settings.module_settings.is_muted = !chan.settings.module_settings.is_muted;
+                nodeDB->saveToDisk();
+            }
 
             // Delete submenu
         } else if (selected == 900) {
@@ -1822,7 +1840,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     static const ScreenColorOption colorOptions[] = {
         {"Back", OptionsAction::Back},
         {"Default", OptionsAction::Select, ScreenColor(0, 0, 0, true)},
-        {"Meshtastic Green", OptionsAction::Select, ScreenColor(103, 234, 148)},
+        {"Meshtastic Green", OptionsAction::Select, ScreenColor(0x67, 0xEA, 0x94)},
         {"Yellow", OptionsAction::Select, ScreenColor(255, 255, 128)},
         {"Red", OptionsAction::Select, ScreenColor(255, 64, 64)},
         {"Orange", OptionsAction::Select, ScreenColor(255, 160, 20)},
@@ -1872,7 +1890,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 #ifdef TFT_MESH_OVERRIDE
                 TFT_MESH = TFT_MESH_OVERRIDE;
 #else
-                TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+                TFT_MESH = COLOR565(255, 255, 128);
 #endif
             } else {
                 TFT_MESH = COLOR565(r, g, b);
