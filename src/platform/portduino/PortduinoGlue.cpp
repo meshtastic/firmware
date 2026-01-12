@@ -487,6 +487,11 @@ void portduinoSetup()
             max_GPIO = i->pin;
     }
 
+    for (auto i : portduino_config.extra_pins) {
+        if (i.enabled && i.pin > max_GPIO)
+            max_GPIO = i.pin;
+    }
+
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
@@ -500,6 +505,19 @@ void portduinoSetup()
         if (i->enabled) {
             if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
                 printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    for (auto i : portduino_config.extra_pins) {
+        // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
+        // Those GPIO are handled in our usermode driver instead.
+        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+            continue;
+        }
+        if (i.enabled) {
+            if (initGPIOPin(i.pin, gpioChipName + std::to_string(i.gpiochip), i.line) != ERRNO_OK) {
+                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.line);
                 exit(EXIT_FAILURE);
             }
         }
@@ -717,6 +735,16 @@ bool loadConfig(const char *configPath)
                 portduino_config.has_gps = 1;
             }
         }
+        if (yamlConfig["GPIO"]["ExtraPins"]) {
+            for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
+                portduino_config.extra_pins.push_back(pinMapping());
+                portduino_config.extra_pins.back().config_section = "GPIO";
+                portduino_config.extra_pins.back().config_name = "ExtraPins";
+                portduino_config.extra_pins.back().enabled = true;
+                readGPIOFromYaml(extra_pin, portduino_config.extra_pins.back());
+            }
+        }
+
         if (yamlConfig["I2C"]) {
             portduino_config.i2cdev = yamlConfig["I2C"]["I2CDevice"].as<std::string>("");
         }
