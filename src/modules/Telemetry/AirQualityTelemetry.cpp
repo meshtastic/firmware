@@ -31,15 +31,24 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     }
     LOG_INFO("Air Quality Telemetry adding I2C devices...");
 
-    // order by priority of metrics/values (low top, high bottom)
+    /*
+        Uncomment the preferences below if you want to use the module
+        without having to configure it from the PythonAPI or WebUI.
+        Note: this was previously on runOnce, which didnt take effect
+        as other modules already had already been initialized (screen)
+    */
 
+    // moduleConfig.telemetry.air_quality_enabled = 1;
+    // moduleConfig.telemetry.air_quality_screen_enabled = 1;
+    // moduleConfig.telemetry.air_quality_interval = 15;
+
+    // order by priority of metrics/values (low top, high bottom)
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 // Sensors that require variable I2C clock speed
 #ifdef VBLE_I2C_CLOCK_SPEED
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
 #endif
 #endif
-
 }
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -53,15 +62,6 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
-
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
-    // moduleConfig.telemetry.air_quality_enabled = 1;
-    // moduleConfig.telemetry.air_quality_screen_enabled = 1;
-    // moduleConfig.telemetry.air_quality_interval = 15;
 
     if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
