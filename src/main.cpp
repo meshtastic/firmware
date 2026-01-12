@@ -432,10 +432,17 @@ void setup()
 #endif
 
 #if ARCH_PORTDUINO
+    RTCQuality ourQuality = RTCQualityDevice;
+
+    std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
+    if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    }
+
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityDevice, &tv);
+    perhapsSetRTC(ourQuality, &tv);
 #endif
 
     powerMonInit();
@@ -1203,11 +1210,6 @@ void setup()
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
 #endif
-#endif
-
-#ifdef PIN_PWR_DELAY_MS
-    // This may be required to give the peripherals time to power up.
-    delay(PIN_PWR_DELAY_MS);
 #endif
 
 #ifdef ARCH_PORTDUINO

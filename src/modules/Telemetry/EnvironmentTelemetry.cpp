@@ -53,7 +53,7 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/LTR390UVSensor.h"
 #endif
 
-#if __has_include(<bsec2.h>)
+#if __has_include(MESHTASTIC_BME680_HEADER)
 #include "Sensor/BME680Sensor.h"
 #endif
 
@@ -187,7 +187,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_LTR390.h>)
     addSensor<LTR390UVSensor>(i2cScanner, ScanI2C::DeviceType::LTR390UV);
 #endif
-#if __has_include(<bsec2.h>)
+#if __has_include(MESHTASTIC_BME680_HEADER)
     addSensor<BME680Sensor>(i2cScanner, ScanI2C::DeviceType::BME_680);
 #endif
 #if __has_include(<Adafruit_BMP280.h>)
@@ -351,7 +351,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (graphics::isHighResolution) ? "Environment" : "Env.";
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Environment" : "Env.";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
