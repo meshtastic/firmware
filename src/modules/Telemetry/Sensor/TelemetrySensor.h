@@ -30,6 +30,8 @@ class TelemetrySensor
     meshtastic_TelemetrySensorType sensorType = meshtastic_TelemetrySensorType_SENSOR_UNSET;
     unsigned status;
     bool initialized = false;
+    TwoWire * _bus;
+    uint8_t _address;
 
     int32_t initI2CSensor()
     {
@@ -69,6 +71,9 @@ class TelemetrySensor
 
     virtual bool getMetrics(meshtastic_Telemetry *measurement) = 0;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) { return false; };
+#ifdef CAN_RECLOCK_I2C
+    virtual uint32_t setClock(uint32_t desiredClock);
+#endif
 };
 
 #endif

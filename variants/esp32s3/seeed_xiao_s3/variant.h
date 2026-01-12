@@ -88,5 +88,3 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
-
-#define VBLE_I2C_CLOCK_SPEED

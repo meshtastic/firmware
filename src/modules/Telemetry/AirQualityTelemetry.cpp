@@ -20,9 +20,8 @@
 #include "Sensor/AddI2CSensorTemplate.h"
 
 // Sensors
-#ifdef VBLE_I2C_CLOCK_SPEED
 #include "Sensor/PMSA003ISensor.h"
-#endif
+
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -45,9 +44,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // order by priority of metrics/values (low top, high bottom)
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 // Sensors that require variable I2C clock speed
-#ifdef VBLE_I2C_CLOCK_SPEED
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
-#endif
 #endif
 }
 
@@ -93,12 +90,10 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it
-// #ifdef VBLE_I2C_CLOCK_SPEED
 #ifdef PMSA003I_ENABLE_PIN
         if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
             return pmsa003iSensor.wakeUp();
 #endif /* PMSA003I_ENABLE_PIN */
-// #endif
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -117,11 +112,9 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
 // Send to sleep sensors that consume power
-// #ifdef VBLE_I2C_CLOCK_SPEED
 #ifdef PMSA003I_ENABLE_PIN
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
-// #endif
 
     }
     return min(sendToPhoneIntervalMs, result);

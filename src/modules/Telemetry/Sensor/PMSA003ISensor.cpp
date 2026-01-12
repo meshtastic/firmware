@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR  && defined(VBLE_I2C_CLOCK_SPEED)
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
@@ -23,12 +23,11 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _bus = bus;
     _address = dev->address.address;
 
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    uint32_t currentClock;
-    currentClock = _bus->getClock();
-    if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", PMSA003I_I2C_CLOCK_SPEED);
-        _bus->setClock(PMSA003I_I2C_CLOCK_SPEED);
+#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    uint32_t currentClock = setClock(PMSA003I_I2C_CLOCK_SPEED);
+    if (!currentClock){
+        LOG_WARN("PMSA003I can't be used at this clock speed");
+        return false;
     }
 #endif
 
@@ -38,8 +37,8 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         return false;
     }
 
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    restoreClock(currentClock);
+#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    setClock(currentClock);
 #endif
 
     status = 1;
@@ -49,16 +48,6 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     return true;
 }
 
-bool PMSA003ISensor::restoreClock(uint32_t currentClock){
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        return _bus->setClock(currentClock);
-    }
-    return true;
-#endif
-}
-
 bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     if(!isActive()){
@@ -66,13 +55,8 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    uint32_t currentClock;
-    currentClock = _bus->getClock();
-    if (currentClock != PMSA003I_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", PMSA003I_I2C_CLOCK_SPEED);
-        _bus->setClock(PMSA003I_I2C_CLOCK_SPEED);
-    }
+#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    uint32_t currentClock = setClock(PMSA003I_I2C_CLOCK_SPEED);
 #endif
 
     _bus->requestFrom(_address, PMSA003I_FRAME_LENGTH);
@@ -81,8 +65,8 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    restoreClock(currentClock);
+#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    setClock(currentClock);
 #endif
 
     for (uint8_t i = 0; i < PMSA003I_FRAME_LENGTH; i++) {
@@ -119,6 +103,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.has_pm100_standard = true;
     measurement->variant.air_quality_metrics.pm100_standard = read16(buffer, 8);
 
+    // TODO - Add admin command to remove environmental metrics to save protobuf space
     measurement->variant.air_quality_metrics.has_pm10_environmental = true;
     measurement->variant.air_quality_metrics.pm10_environmental = read16(buffer, 10);
 
@@ -128,6 +113,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.has_pm100_environmental = true;
     measurement->variant.air_quality_metrics.pm100_environmental = read16(buffer, 14);
 
+    // TODO - Add admin command to remove PN to save protobuf space
     measurement->variant.air_quality_metrics.has_particles_03um = true;
     measurement->variant.air_quality_metrics.particles_03um = read16(buffer, 16);
 
@@ -169,5 +155,4 @@ uint32_t PMSA003ISensor::wakeUp()
     return PMSA003I_WARMUP_MS;
 }
 #endif
-
 #endif

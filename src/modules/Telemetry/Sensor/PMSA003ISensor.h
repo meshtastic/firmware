@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && defined(VBLE_I2C_CLOCK_SPEED)
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -13,7 +13,6 @@ class PMSA003ISensor : public TelemetrySensor
 {
 public:
     PMSA003ISensor();
-    virtual bool restoreClock(uint32_t currentClock);
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool isActive();
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
@@ -26,8 +25,6 @@ public:
 private:
     enum class State { IDLE, ACTIVE };
     State state = State::ACTIVE;
-    TwoWire * _bus;
-    uint8_t _address;
 
     uint16_t computedChecksum = 0;
     uint16_t receivedChecksum = 0;
