@@ -146,7 +146,7 @@ int32_t SignalRoutingModule::runOnce()
             sendSignalRoutingInfo();
         }
 
-        // Periodic topology logging (every 5 minutes)
+        // Periodic topology logging
         static uint32_t lastTopologyLog = 0;
         if (nowMs - lastTopologyLog >= 60 * 1000) {
             logNetworkTopology();
@@ -1329,23 +1329,34 @@ void SignalRoutingModule::logNetworkTopology()
 
     // Filter out downstream nodes - they should only appear under their gateways
     uint32_t now = millis() / 1000;
+
+    // Collect all active downstream nodes first (O(m*p) where m=gatewayDownstreamCount, p=max downstream per gateway)
+    NodeNum downstreamNodes[GRAPH_LITE_MAX_NODES];
+    uint8_t downstreamCount = 0;
+
+    for (uint8_t j = 0; j < gatewayDownstreamCount && downstreamCount < GRAPH_LITE_MAX_NODES; j++) {
+        const GatewayDownstreamSet &set = gatewayDownstream[j];
+        if ((now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+            for (uint8_t k = 0; k < set.count && downstreamCount < GRAPH_LITE_MAX_NODES; k++) {
+                downstreamNodes[downstreamCount++] = set.downstream[k];
+            }
+        }
+    }
+
+    // Filter nodes by checking against downstream list (O(n*d) where d=downstreamCount)
     size_t nodeCount = 0;
     for (size_t i = 0; i < rawNodeCount; i++) {
         NodeNum nodeId = nodeBuf[i];
         bool isDownstream = false;
-        // Check if this node is downstream of any gateway
-        for (uint8_t j = 0; j < gatewayDownstreamCount; j++) {
-            const GatewayDownstreamSet &set = gatewayDownstream[j];
-            if ((now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
-                for (uint8_t k = 0; k < set.count; k++) {
-                    if (set.downstream[k] == nodeId) {
-                        isDownstream = true;
-                        goto foundDownstream;
-                    }
-                }
+
+        // Linear search through downstream nodes
+        for (uint8_t j = 0; j < downstreamCount; j++) {
+            if (downstreamNodes[j] == nodeId) {
+                isDownstream = true;
+                break;
             }
         }
-        foundDownstream:
+
         if (!isDownstream) {
             nodeBuf[nodeCount++] = nodeId;
         }
@@ -1637,7 +1648,8 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
                   mp.from, mp.relay_node, fromLastByte, isDirectFromSender);
     }
     
-    // Update node activity for ANY packet reception to keep nodes in graph
+    // Update SignalRouting graph for ALL nodes we've heard from (not just SR-capable)
+    // This provides complete network topology for routing decisions, even to non-SR nodes
     if (routingGraph && notViaMqtt) {
         if (hasSignalData && isDirectFromSender) {
             // Real signal data available - use it
