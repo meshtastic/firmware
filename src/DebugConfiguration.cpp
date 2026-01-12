@@ -41,7 +41,8 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...)
 }
 
 #if HAS_NETWORKING
-
+namespace meshtastic
+{
 Syslog::Syslog(UDP &client)
 {
     this->_client = &client;
@@ -194,5 +195,7 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
 
     return true;
 }
+
+}; // namespace meshtastic
 
 #endif
