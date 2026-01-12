@@ -341,9 +341,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
         LOG_INFO("Client received set_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
-        if (node != NULL) {
-            node->is_favorite = true;
+        if (nodeDB->getMeshNode(r->set_favorite_node) != NULL) {
+            nodeDB->set_favorite(true, r->set_favorite_node);
             saveChanges(SEGMENT_NODEDATABASE, false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
@@ -352,9 +351,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_remove_favorite_node_tag: {
         LOG_INFO("Client received remove_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
-        if (node != NULL) {
-            node->is_favorite = false;
+        if (nodeDB->getMeshNode(r->remove_favorite_node) != NULL) {
+            nodeDB->set_favorite(false, r->remove_favorite_node);
             saveChanges(SEGMENT_NODEDATABASE, false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens

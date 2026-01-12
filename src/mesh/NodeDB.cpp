@@ -24,6 +24,7 @@
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <limits>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
@@ -37,6 +38,12 @@
 #include <Preferences.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#if __has_include(<esp_ptr.h>)
+#include <esp_ptr.h>
+#define NODEDB_HAS_ESP_PTR 1
+#else
+#define NODEDB_HAS_ESP_PTR 0
+#endif
 #include <nvs_flash.h>
 #include <soc/efuse_reg.h>
 #include <soc/soc.h>
@@ -66,6 +73,174 @@ meshtastic_LocalConfig config;
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
+
+//------------------------------------------------------------------------------
+// Runtime instrumentation helpers
+//------------------------------------------------------------------------------
+
+namespace
+{
+
+// Log the pool headroom every 100 inserts (and when we hit MAX) so field logs
+// capture how close we are to exhausting heap/PSRAM on real hardware.
+
+void logNodeInsertStats(size_t count, const char *poolLabel)
+{
+    if (count == 0)
+        return;
+    if ((count % 100) != 0 && count != MAX_NUM_NODES)
+        return;
+
+    LOG_INFO("NodeDB %s pool usage %u/%u nodes, heap free %u, psram free %u", poolLabel, static_cast<unsigned>(count),
+             static_cast<unsigned>(MAX_NUM_NODES), memGet.getFreeHeap(), memGet.getFreePsram());
+}
+
+#if HAS_PSRAM_NODEDB
+bool logPsramAllocationOnce(void *ptr, size_t capacity)
+{
+    static bool logged = false;
+    if (logged || !ptr)
+        return logged;
+
+#if NODEDB_HAS_ESP_PTR
+    bool inPsram = esp_ptr_external_ram(ptr);
+#else
+    bool inPsram = false;
+#endif
+    LOG_INFO("NodeDB PSRAM backing at %p (%s) capacity %u entries (~%u bytes)", ptr, inPsram ? "PSRAM" : "DRAM",
+             static_cast<unsigned>(capacity), static_cast<unsigned>(capacity * sizeof(meshtastic_NodeInfoLite)));
+    logged = true;
+    return logged;
+}
+#endif
+
+} // namespace
+
+#if HAS_PSRAM_NODEDB
+
+void NodeDB::initHotCache()
+{
+    // Pre-reserve the full cold store in PSRAM during boot so the high watermark
+    // shows up immediately in PSRAM usage logs and we avoid fragmented
+    // allocations later in the mission.
+    psramMeshNodes.resize(MAX_NUM_NODES);
+    hotNodes.resize(MAX_NUM_NODES);
+    hotDirty.assign(MAX_NUM_NODES, true);
+    meshNodes = &psramMeshNodes;
+    logPsramAllocationOnce(psramMeshNodes.data(), psramMeshNodes.capacity());
+}
+
+void NodeDB::refreshHotCache()
+{
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        if (hotDirty[i])
+            syncHotFromCold(i);
+    }
+}
+
+void NodeDB::syncHotFromCold(size_t index)
+{
+    if (index >= psramMeshNodes.size())
+        return;
+
+    const meshtastic_NodeInfoLite &node = psramMeshNodes[index];
+    NodeHotEntry &hot = hotNodes[index];
+
+    hot.num = node.num;
+    hot.last_heard = node.last_heard;
+    hot.snr = node.snr;
+    hot.channel = node.channel;
+    hot.next_hop = node.next_hop;
+    hot.role = static_cast<uint8_t>(node.user.role);
+    hot.hops_away = node.hops_away;
+
+    uint8_t flags = 0;
+    if (node.via_mqtt)
+        flags |= HOT_FLAG_VIA_MQTT;
+    if (node.is_favorite)
+        flags |= HOT_FLAG_IS_FAVORITE;
+    if (node.is_ignored)
+        flags |= HOT_FLAG_IS_IGNORED;
+    if (node.has_hops_away)
+        flags |= HOT_FLAG_HAS_HOPS;
+    if (node.bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK)
+        flags |= HOT_FLAG_IS_KEY_VERIFIED;
+    hot.flags = flags;
+
+    hotDirty[index] = false;
+}
+
+void NodeDB::markHotDirty(size_t index)
+{
+    if (index < hotDirty.size())
+        hotDirty[index] = true;
+}
+
+void NodeDB::markHotDirty(const meshtastic_NodeInfoLite *ptr)
+{
+    size_t idx = indexOf(ptr);
+    if (idx != std::numeric_limits<size_t>::max())
+        markHotDirty(idx);
+}
+
+void NodeDB::clearSlot(size_t index)
+{
+    if (index >= psramMeshNodes.size())
+        return;
+
+    psramMeshNodes[index] = {};
+    hotNodes[index] = NodeHotEntry{};
+    hotDirty[index] = false;
+}
+
+void NodeDB::swapSlots(size_t a, size_t b)
+{
+    if (a == b)
+        return;
+
+    std::swap(psramMeshNodes[a], psramMeshNodes[b]);
+    std::swap(hotNodes[a], hotNodes[b]);
+    std::swap(hotDirty[a], hotDirty[b]);
+}
+
+void NodeDB::copySlot(size_t src, size_t dst)
+{
+    if (src == dst)
+        return;
+
+    psramMeshNodes[dst] = psramMeshNodes[src];
+    hotNodes[dst] = hotNodes[src];
+    hotDirty[dst] = hotDirty[src];
+}
+
+void NodeDB::moveSlot(size_t src, size_t dst)
+{
+    if (src == dst)
+        return;
+
+    copySlot(src, dst);
+    clearSlot(src);
+}
+
+bool NodeDB::isNodeEmpty(const meshtastic_NodeInfoLite &node) const
+{
+    return node.num == 0 && !node.has_user && !node.has_position && !node.has_device_metrics && !node.is_favorite &&
+           !node.is_ignored && node.last_heard == 0 && node.channel == 0 && node.next_hop == 0 && node.bitfield == 0;
+}
+
+size_t NodeDB::indexOf(const meshtastic_NodeInfoLite *ptr) const
+{
+    if (!ptr || psramMeshNodes.empty())
+        return std::numeric_limits<size_t>::max();
+
+    const meshtastic_NodeInfoLite *base = psramMeshNodes.data();
+    size_t idx = static_cast<size_t>(ptr - base);
+    if (idx >= psramMeshNodes.size())
+        return std::numeric_limits<size_t>::max();
+    return idx;
+}
+
+#endif
 
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
@@ -537,9 +712,16 @@ void NodeDB::installDefaultNodeDatabase()
 {
     LOG_DEBUG("Install default NodeDatabase");
     nodeDatabase.version = DEVICESTATE_CUR_VER;
+#if HAS_PSRAM_NODEDB
+    initHotCache();
+    for (size_t i = 0; i < psramMeshNodes.size(); ++i)
+        clearSlot(i);
+    nodeDatabase.nodes.clear();
+#else
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
-    numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+#endif
+    numMeshNodes = 0;
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -1014,6 +1196,31 @@ void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
+#if HAS_PSRAM_NODEDB
+    if (psramMeshNodes.empty())
+        initHotCache();
+    numMeshNodes = std::min<pb_size_t>(numMeshNodes, MAX_NUM_NODES);
+    if (numMeshNodes == 0)
+        numMeshNodes = 1;
+    if (keepFavorites) {
+        LOG_INFO("Clearing node database - preserving favorites");
+        size_t writeIdx = 1;
+        for (size_t i = 1; i < static_cast<size_t>(numMeshNodes); i++) {
+            if (psramMeshNodes[i].is_favorite) {
+                if (writeIdx != i)
+                    moveSlot(i, writeIdx);
+                writeIdx++;
+            }
+        }
+        for (size_t i = writeIdx; i < psramMeshNodes.size(); ++i)
+            clearSlot(i);
+        numMeshNodes = static_cast<pb_size_t>(writeIdx);
+    } else {
+        LOG_INFO("Clearing node database - removing favorites");
+        for (size_t i = 1; i < psramMeshNodes.size(); ++i)
+            clearSlot(i);
+    }
+#else
     numMeshNodes = 1;
     if (keepFavorites) {
         LOG_INFO("Clearing node database - preserving favorites");
@@ -1029,6 +1236,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         LOG_INFO("Clearing node database - removing favorites");
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
+#endif
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1039,7 +1247,25 @@ void NodeDB::resetNodes(bool keepFavorites)
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
-    int newPos = 0, removed = 0;
+#if HAS_PSRAM_NODEDB
+    refreshHotCache();
+    int newPos = 0;
+    int removed = 0;
+    for (int i = 0; i < numMeshNodes; i++) {
+        if (hotNodes[i].num != nodeNum) {
+            if (newPos != i)
+                moveSlot(i, newPos);
+            newPos++;
+        } else {
+            removed++;
+        }
+    }
+    for (int i = newPos; i < numMeshNodes; i++)
+        clearSlot(i);
+    numMeshNodes -= removed;
+#else
+    int newPos = 0;
+    int removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).num != nodeNum)
             meshNodes->at(newPos++) = meshNodes->at(i);
@@ -1049,6 +1275,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     numMeshNodes -= removed;
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
               meshtastic_NodeInfoLite());
+#endif
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1066,6 +1293,29 @@ void NodeDB::clearLocalPosition()
 
 void NodeDB::cleanupMeshDB()
 {
+#if HAS_PSRAM_NODEDB
+    refreshHotCache();
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < numMeshNodes; i++) {
+        auto &node = psramMeshNodes[i];
+        if (node.has_user) {
+            if (node.user.public_key.size > 0) {
+                if (memfll(node.user.public_key.bytes, 0, node.user.public_key.size)) {
+                    node.user.public_key.size = 0;
+                    markHotDirty(i);
+                }
+            }
+            if (newPos != i)
+                moveSlot(i, newPos);
+            newPos++;
+        } else {
+            removed++;
+        }
+    }
+    for (int i = newPos; i < numMeshNodes; i++)
+        clearSlot(i);
+    numMeshNodes -= removed;
+#else
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
@@ -1085,6 +1335,7 @@ void NodeDB::cleanupMeshDB()
     numMeshNodes -= removed;
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
+#endif
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
@@ -1238,16 +1489,41 @@ void NodeDB::loadFromDisk()
         LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
         installDefaultNodeDatabase();
     } else {
+#if HAS_PSRAM_NODEDB
+        initHotCache();
+        size_t inserted = 0;
+        for (const auto &n : nodeDatabase.nodes) {
+            if (inserted >= MAX_NUM_NODES)
+                break;
+            if (isNodeEmpty(n))
+                continue;
+            psramMeshNodes[inserted] = n;
+            hotDirty[inserted] = true;
+            syncHotFromCold(inserted);
+            ++inserted;
+        }
+        for (size_t i = inserted; i < psramMeshNodes.size(); ++i)
+            clearSlot(i);
+        numMeshNodes = inserted;
+        nodeDatabase.nodes.clear();
+        LOG_INFO("Loaded saved nodedatabase version %d, with active nodes: %u", nodeDatabase.version, inserted);
+#else
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
+#endif
     }
 
+#if HAS_PSRAM_NODEDB
+    if (numMeshNodes > MAX_NUM_NODES)
+        numMeshNodes = MAX_NUM_NODES;
+#else
     if (numMeshNodes > MAX_NUM_NODES) {
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
+#endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1454,9 +1730,20 @@ bool NodeDB::saveNodeDatabaseToDisk()
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 #endif
+#if HAS_PSRAM_NODEDB
+    nodeDatabase.nodes.clear();
+    nodeDatabase.nodes.reserve(numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        nodeDatabase.nodes.push_back(psramMeshNodes[i]);
+    }
+#endif
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    bool success = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+#if HAS_PSRAM_NODEDB
+    nodeDatabase.nodes.clear();
+#endif
+    return success;
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
@@ -1537,10 +1824,18 @@ bool NodeDB::saveToDisk(int saveWhat)
 
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
+#if HAS_PSRAM_NODEDB
+    if (readIndex < numMeshNodes) {
+        markHotDirty(readIndex);
+        return &psramMeshNodes[readIndex++];
+    }
+    return NULL;
+#else
     if (readIndex < numMeshNodes)
         return &meshNodes->at(readIndex++);
     else
         return NULL;
+#endif
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -1590,12 +1885,27 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
+#if HAS_PSRAM_NODEDB
+    refreshHotCache();
+    uint32_t now = getTime();
+    for (int i = 0; i < numMeshNodes; i++) {
+        const NodeHotEntry &hot = hotNodes[i];
+        if (localOnly && (hot.flags & HOT_FLAG_VIA_MQTT))
+            continue;
+        int delta = static_cast<int>(now - hot.last_heard);
+        if (delta < 0)
+            delta = 0;
+        if (delta < NUM_ONLINE_SECS)
+            numseen++;
+    }
+#else
     for (int i = 0; i < numMeshNodes; i++) {
         if (localOnly && meshNodes->at(i).via_mqtt)
             continue;
         if (sinceLastSeen(&meshNodes->at(i)) < NUM_ONLINE_SECS)
             numseen++;
     }
+#endif
 
     return numseen;
 }
@@ -1730,6 +2040,13 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
+#if HAS_PSRAM_NODEDB
+    {
+        size_t idx = indexOf(info);
+        if (idx != std::numeric_limits<size_t>::max())
+            syncHotFromCold(idx);
+    }
+#endif
     saveNodeDatabaseToDisk();
 }
 
@@ -1792,6 +2109,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
               info->channel);
     info->has_user = true;
 
+#if HAS_PSRAM_NODEDB
+    {
+        size_t idx = indexOf(info);
+        if (idx != std::numeric_limits<size_t>::max())
+            syncHotFromCold(idx);
+    }
+#endif
+
     if (changed) {
         updateGUIforNode = info;
         notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -1840,6 +2165,13 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = hopsAway;
         }
+#if HAS_PSRAM_NODEDB
+        {
+            size_t idx = indexOf(info);
+            if (idx != std::numeric_limits<size_t>::max())
+                syncHotFromCold(idx);
+        }
+#endif
         sortMeshDB();
     }
 }
@@ -1849,6 +2181,11 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
+#if HAS_PSRAM_NODEDB
+        size_t idx = indexOf(lite);
+        if (idx != std::numeric_limits<size_t>::max())
+            syncHotFromCold(idx);
+#endif
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
@@ -1862,12 +2199,21 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
+#if HAS_PSRAM_NODEDB
+    refreshHotCache();
+    for (int i = 0; i < numMeshNodes; ++i) {
+        if (hotNodes[i].num == nodeId)
+            return (hotNodes[i].flags & HOT_FLAG_IS_FAVORITE) != 0;
+    }
+    return false;
+#else
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
 
     if (lite) {
         return lite->is_favorite;
     }
     return false;
+#endif
 }
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
@@ -1881,11 +2227,33 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
     if (p.to == NODENUM_BROADCAST)
         return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
 
-    meshtastic_NodeInfoLite *lite = NULL;
-
     bool seenFrom = false;
     bool seenTo = false;
 
+#if HAS_PSRAM_NODEDB
+    refreshHotCache();
+    for (int i = 0; i < numMeshNodes; i++) {
+        const NodeHotEntry &hot = hotNodes[i];
+
+        if (hot.num == p.from) {
+            if (hot.flags & HOT_FLAG_IS_FAVORITE)
+                return true;
+
+            seenFrom = true;
+        }
+
+        if (hot.num == p.to) {
+            if (hot.flags & HOT_FLAG_IS_FAVORITE)
+                return true;
+
+            seenTo = true;
+        }
+
+        if (seenFrom && seenTo)
+            return false; // we've seen both, and neither is a favorite, so we can stop searching early
+    }
+#else
+    meshtastic_NodeInfoLite *lite = NULL;
     for (int i = 0; i < numMeshNodes; i++) {
         lite = &meshNodes->at(i);
 
@@ -1909,6 +2277,7 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
         // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
         // all favorited nodes first.
     }
+#endif
 
     return false;
 }
@@ -1925,6 +2294,27 @@ void NodeDB::sortMeshDB()
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
+#if HAS_PSRAM_NODEDB
+            refreshHotCache();
+            for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
+                NodeHotEntry &prev = hotNodes[i - 1];
+                NodeHotEntry &curr = hotNodes[i];
+                if (prev.num == getNodeNum()) {
+                    continue;
+                } else if (curr.num == getNodeNum()) {
+                    swapSlots(i, i - 1);
+                    changed = true;
+                } else if ((curr.flags & HOT_FLAG_IS_FAVORITE) && !(prev.flags & HOT_FLAG_IS_FAVORITE)) {
+                    swapSlots(i, i - 1);
+                    changed = true;
+                } else if (!(curr.flags & HOT_FLAG_IS_FAVORITE) && (prev.flags & HOT_FLAG_IS_FAVORITE)) {
+                    continue;
+                } else if (curr.last_heard > prev.last_heard) {
+                    swapSlots(i, i - 1);
+                    changed = true;
+                }
+            }
+#else
             for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
                 if (meshNodes->at(i - 1).num == getNodeNum()) {
                     // noop
@@ -1943,6 +2333,7 @@ void NodeDB::sortMeshDB()
                     changed = true;
                 }
             }
+#endif
         }
         LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
     }
@@ -1950,11 +2341,20 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
+#if HAS_PSRAM_NODEDB
+    refreshHotCache();
+    for (int i = 0; i < numMeshNodes; ++i) {
+        if (hotNodes[i].num == n)
+            return hotNodes[i].channel;
+    }
+    return 0;
+#else
     const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
     return info->channel;
+#endif
 }
 
 std::string NodeDB::getNodeId() const
@@ -1968,11 +2368,21 @@ std::string NodeDB::getNodeId() const
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
+#if HAS_PSRAM_NODEDB
+    for (int i = 0; i < numMeshNodes; i++) {
+        if (hotNodes[i].num == n) {
+            markHotDirty(i);
+            return &psramMeshNodes[i];
+        }
+    }
+    return NULL;
+#else
     for (int i = 0; i < numMeshNodes; i++)
         if (meshNodes->at(i).num == n)
             return &meshNodes->at(i);
 
     return NULL;
+#endif
 }
 
 // returns true if the maximum number of nodes is reached or we are running low on memory
@@ -1984,6 +2394,60 @@ bool NodeDB::isFull()
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
+#if HAS_PSRAM_NODEDB
+    meshtastic_NodeInfoLite *lite = getMeshNode(n);
+
+    if (!lite) {
+        if (isFull()) {
+            LOG_INFO("Node database full with %i nodes and %u bytes free. Erasing oldest entry", numMeshNodes,
+                     memGet.getFreeHeap());
+            refreshHotCache();
+            uint32_t oldest = UINT32_MAX;
+            uint32_t oldestBoring = UINT32_MAX;
+            int oldestIndex = -1;
+            int oldestBoringIndex = -1;
+            for (int i = 1; i < numMeshNodes; i++) {
+                const NodeHotEntry &hot = hotNodes[i];
+                if (!(hot.flags & HOT_FLAG_IS_FAVORITE) && !(hot.flags & HOT_FLAG_IS_IGNORED) &&
+                    !(hot.flags & HOT_FLAG_IS_KEY_VERIFIED) && hot.last_heard < oldest) {
+                    oldest = hot.last_heard;
+                    oldestIndex = i;
+                }
+                const auto &coldNode = psramMeshNodes[i];
+                if (!(hot.flags & HOT_FLAG_IS_FAVORITE) && !(hot.flags & HOT_FLAG_IS_IGNORED) &&
+                    coldNode.user.public_key.size == 0 && hot.last_heard < oldestBoring) {
+                    oldestBoring = hot.last_heard;
+                    oldestBoringIndex = i;
+                }
+            }
+            if (oldestBoringIndex != -1)
+                oldestIndex = oldestBoringIndex;
+
+            if (oldestIndex != -1) {
+                for (int i = oldestIndex; i < numMeshNodes - 1; i++)
+                    copySlot(i + 1, i);
+                clearSlot(numMeshNodes - 1);
+                (numMeshNodes)--;
+            }
+        }
+
+        if (numMeshNodes >= MAX_NUM_NODES) {
+            LOG_WARN("Unable to allocate new node %u, MAX_NUM_NODES reached", static_cast<unsigned>(n));
+            return NULL;
+        }
+
+        size_t index = numMeshNodes++;
+        clearSlot(index);
+        psramMeshNodes[index].num = n;
+        syncHotFromCold(index);
+        lite = &psramMeshNodes[index];
+        LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        logNodeInsertStats(numMeshNodes, "PSRAM");
+    }
+
+    markHotDirty(lite);
+    return lite;
+#else
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {
@@ -2030,9 +2494,11 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        logNodeInsertStats(numMeshNodes, "Heap");
     }
 
     return lite;
+#endif
 }
 
 /// Sometimes we will have Position objects that only have a time, so check for

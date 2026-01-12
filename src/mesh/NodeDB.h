@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <new>
 #include <pb_encode.h>
 #include <string>
 #include <vector>
@@ -13,6 +14,55 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
+
+#if HAS_PSRAM_NODEDB
+#include <esp_heap_caps.h>
+
+/**
+ * Custom allocator that redirects NodeInfoLite storage into PSRAM so that the
+ * heavy payload stays out of internal RAM on ESP32-S3 devices.
+ */
+template <class T> struct PsramAllocator {
+    using value_type = T;
+
+    PsramAllocator() noexcept = default;
+
+    template <class U> PsramAllocator(const PsramAllocator<U> &) noexcept {}
+
+    [[nodiscard]] T *allocate(std::size_t n)
+    {
+        void *ptr = heap_caps_malloc(n * sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!ptr)
+            throw std::bad_alloc();
+        return static_cast<T *>(ptr);
+    }
+
+    void deallocate(T *p, std::size_t) noexcept
+    {
+        if (p)
+            heap_caps_free(p);
+    }
+
+    template <class U> bool operator==(const PsramAllocator<U> &) const noexcept { return true; }
+    template <class U> bool operator!=(const PsramAllocator<U> &) const noexcept { return false; }
+};
+
+/** Lightweight DRAM copy of the latency-sensitive node fields. */
+struct NodeHotEntry {
+    uint32_t num = 0;
+    uint32_t last_heard = 0;
+    float snr = 0.0f;
+    uint8_t role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    uint8_t channel = 0;
+    uint8_t next_hop = 0;
+    uint8_t hops_away = 0;
+    uint8_t flags = 0; // bitmask, see NodeDB::HotFlags
+};
+
+using NodeInfoLiteVector = std::vector<meshtastic_NodeInfoLite, PsramAllocator<meshtastic_NodeInfoLite>>;
+#else
+using NodeInfoLiteVector = std::vector<meshtastic_NodeInfoLite>;
+#endif
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -139,7 +189,7 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes;
+    NodeInfoLiteVector *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
@@ -250,7 +300,12 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
         assert(x < numMeshNodes);
+#if HAS_PSRAM_NODEDB
+        markHotDirty(x);
+        return &psramMeshNodes[x];
+#else
         return &meshNodes->at(x);
+#endif
     }
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
@@ -342,6 +397,31 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+#if HAS_PSRAM_NODEDB
+    enum HotFlags : uint8_t {
+        HOT_FLAG_VIA_MQTT = 1 << 0,
+        HOT_FLAG_IS_FAVORITE = 1 << 1,
+        HOT_FLAG_IS_IGNORED = 1 << 2,
+        HOT_FLAG_HAS_HOPS = 1 << 3,
+        HOT_FLAG_IS_KEY_VERIFIED = 1 << 4
+    };
+
+    void initHotCache();
+    void refreshHotCache();
+    void syncHotFromCold(size_t index);
+    void markHotDirty(size_t index);
+    void markHotDirty(const meshtastic_NodeInfoLite *ptr);
+    void clearSlot(size_t index);
+    void swapSlots(size_t a, size_t b);
+    void copySlot(size_t src, size_t dst);
+    void moveSlot(size_t src, size_t dst);
+    bool isNodeEmpty(const meshtastic_NodeInfoLite &node) const;
+    size_t indexOf(const meshtastic_NodeInfoLite *ptr) const;
+
+    NodeInfoLiteVector psramMeshNodes;
+    std::vector<NodeHotEntry> hotNodes;
+    std::vector<bool> hotDirty;
+#endif
 };
 
 extern NodeDB *nodeDB;
