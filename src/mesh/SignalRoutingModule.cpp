@@ -677,7 +677,8 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         // 2. The topology broadcast was received DIRECTLY from the sender (not relayed)
         // This prevents intermediate nodes (like piko/Nara) from incorrectly becoming gateways
         // when they relay topology from the actual gateway (angl)
-        bool receivedDirectly = (p->relay_node == 0) || ((p->from & 0xFF) == p->relay_node);
+        bool receivedDirectly = (p->relay_node == 0) ||
+                                ((p->from & 0xFF) == p->relay_node);
         
         // Detailed logging for debugging topology processing
         char neighborName[48];
