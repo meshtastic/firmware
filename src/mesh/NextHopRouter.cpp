@@ -5,6 +5,7 @@
 #include "modules/TraceRouteModule.h"
 #endif
 #include "NodeDB.h"
+#include "SignalRoutingModule.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -25,6 +26,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
     p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
     LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
@@ -65,6 +67,10 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             }
         } else {
             bool isRepeated = getHopsAway(*p) == 0;
+            // Don't treat signal-routed packets as "repeated" - they preserve hop_limit by design
+            if (isRepeated && signalRoutingModule && signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+                isRepeated = false;
+            }
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
@@ -130,6 +136,15 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
+
+                    // Signal-based routing: check if we should relay (broadcasts and unicasts)
+                    if (signalRoutingModule && signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+                        if (!signalRoutingModule->shouldRelay(p)) {
+                            LOG_INFO("[SR] Not relaying 0x%08x", p->id);
+                            return false;
+                        }
+                    }
+
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                     LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
 

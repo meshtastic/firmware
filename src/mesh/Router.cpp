@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "SignalRoutingModule.h"
 
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
@@ -80,6 +81,15 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 {
+    // Signal-based routing: do NOT decrement hop_limit
+    // Old nodes still see the original hop_limit for correct TTL behaviour
+    // New nodes use explicit next-hop + speculative retransmit → hop_limit is irrelevant
+    // Packet ID + sender deduplication already prevents loops
+    if (signalRoutingModule && signalRoutingModule->shouldUseSignalBasedRouting(p)) {
+        LOG_DEBUG("Signal-based routing: preserving hop_limit for packet 0x%08x", p->id);
+        return false;
+    }
+
     // First hop MUST always decrement to prevent retry issues
     if (getHopsAway(*p) == 0) {
         return true; // Always decrement on first hop
