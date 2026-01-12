@@ -343,13 +343,13 @@ void MessageStore::loadFromFlash()
     // Loading messages does not trigger an autosave
     g_messageStoreHasUnsavedChanges = false;
     g_lastAutoSaveMs = millis();
+}
 
 #else
 // If persistence is disabled, these functions become no-ops
 void MessageStore::saveToFlash() {}
 void MessageStore::loadFromFlash() {}
 #endif
-}
 
 // Clear all messages (RAM + persisted queue)
 void MessageStore::clearAllMessages()
