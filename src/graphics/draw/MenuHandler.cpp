@@ -2600,9 +2600,6 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case Manage_Node_menu:
         ManageNodeMenu();
         break;
-    case add_favorite:
-        addFavoriteMenu();
-        break;
     case remove_favorite:
         removeFavoriteMenu();
         break;
