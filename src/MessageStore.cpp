@@ -134,7 +134,7 @@ static inline void markMessageStoreUnsaved()
     }
 }
 
-// // Called periodically from the main loop in main.cpp
+// Called periodically from the main loop in main.cpp
 static inline void autosaveTick(MessageStore *store)
 {
     if (!store)
@@ -150,7 +150,7 @@ static inline void autosaveTick(MessageStore *store)
     if (!reachedMs(now, g_lastAutoSaveMs + autosaveIntervalMs()))
         return;
 
-    // Autosave interval reached, Only save if there are unsaved messages.
+    // Autosave interval reached, only save if there are unsaved messages.
     if (g_messageStoreHasUnsavedChanges) {
         LOG_INFO("Autosaving MessageStore to flash");
         store->saveToFlash();
