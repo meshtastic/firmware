@@ -35,7 +35,6 @@ class menuHandler
         shutdown_menu,
         NodePicker_menu,
         Manage_Node_menu,
-        add_favorite,
         remove_favorite,
         test_menu,
         number_test,

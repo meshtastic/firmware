@@ -1296,102 +1296,70 @@ void menuHandler::NodePicker()
 
 void menuHandler::ManageNodeMenu()
 {
-    // If we don't have a node selected yet, prompt for one and then return — the callback will re-enter this menu
+    // If we don't have a node selected yet, go fast exit
     auto node = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
     if (!node) {
         return;
     }
+    enum optionsNumbers { Back, Favorite, Mute, TraceRoute, KeyVerification, Ignore, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
 
-    // Build dynamic options so labels reflect the node's current state
-    enum ManageNodeMenuAction {
-        MN_Back = 0,
-        MN_Favorite = 1,
-        MN_Mute = 2,
-        MN_TraceRoute = 3,
-        MN_KeyVerification = 4,
-        MN_Ignore = 5
-    };
-
-    static std::vector<std::string> labelStrs;
-    static std::vector<const char *> labels;
-    static std::vector<int> ids;
-    labelStrs.clear();
-    labels.clear();
-    ids.clear();
-
-    // Back
-    labelStrs.emplace_back("Back");
-    ids.push_back(MN_Back);
-
-    // Favorite / Unfavorite
     if (node->is_favorite) {
-        labelStrs.emplace_back("Unfavorite");
+        optionsArray[options] = "Unfavorite";
     } else {
-        labelStrs.emplace_back("Favorite");
+        optionsArray[options] = "Favorite";
     }
-    ids.push_back(MN_Favorite);
+    optionsEnumArray[options++] = Favorite;
 
-    // Mute / Unmute Notifications
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     if (isMuted) {
-        labelStrs.emplace_back("Unmute Notifications");
+        optionsArray[options] = "Unmute Notifications";
     } else {
-        labelStrs.emplace_back("Mute Notifications");
+        optionsArray[options] = "Mute Notifications";
     }
-    ids.push_back(MN_Mute);
+    optionsEnumArray[options++] = Mute;
 
-    // Trace route
-    labelStrs.emplace_back("Trace Route");
-    ids.push_back(MN_TraceRoute);
+    optionsArray[options] = "Trace Route";
+    optionsEnumArray[options++] = TraceRoute;
 
-    // Key verification
-    labelStrs.emplace_back("Key Verification");
-    ids.push_back(MN_KeyVerification);
+    optionsArray[options] = "Key Verification";
+    optionsEnumArray[options++] = KeyVerification;
 
-    // Ignore / Unignore
     if (node->is_ignored) {
-        labelStrs.emplace_back("Unignore Node");
+        optionsArray[options] = "Unignore Node";
     } else {
-        labelStrs.emplace_back("Ignore Node");
+        optionsArray[options] = "Ignore Node";
     }
-    ids.push_back(MN_Ignore);
+    optionsEnumArray[options++] = Ignore;
 
-    // Move c_str pointers into labels (must keep labelStrs alive while we show the banner)
-    labels.reserve(labelStrs.size());
-    for (auto &s : labelStrs) {
-        labels.push_back(s.c_str());
-    }
+    BannerOverlayOptions bannerOptions;
 
-    // Title with node name or node number
     std::string title = "";
     if (node->has_user && node->user.long_name && node->user.long_name[0]) {
-
         title += sanitizeString(node->user.long_name).substr(0, 15);
     } else {
         char buf[20];
         snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
         title += buf;
     }
-
-    BannerOverlayOptions bannerOptions;
     bannerOptions.message = title.c_str();
-    bannerOptions.optionsArrayPtr = labels.data();
-    bannerOptions.optionsEnumPtr = ids.data();
-    bannerOptions.optionsCount = (int)labels.size();
-
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == MN_Back) {
+        if (selected == Back) {
             menuQueue = node_base_menu;
             screen->runNow();
             return;
         }
 
-        if (selected == MN_Favorite) {
+        if (selected == Favorite) {
             auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
             if (!n) {
                 return;
             }
-
             if (n->is_favorite) {
                 LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
@@ -1403,7 +1371,7 @@ void menuHandler::ManageNodeMenu()
             return;
         }
 
-        if (selected == MN_Mute) {
+        if (selected == Mute) {
             auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
             if (!n) {
                 return;
@@ -1421,7 +1389,7 @@ void menuHandler::ManageNodeMenu()
             return;
         }
 
-        if (selected == MN_TraceRoute) {
+        if (selected == TraceRoute) {
             LOG_INFO("Starting traceroute to %08X", menuHandler::pickedNodeNum);
             if (traceRouteModule) {
                 traceRouteModule->startTraceRoute(menuHandler::pickedNodeNum);
@@ -1429,7 +1397,7 @@ void menuHandler::ManageNodeMenu()
             return;
         }
 
-        if (selected == MN_KeyVerification) {
+        if (selected == KeyVerification) {
             LOG_INFO("Initiating key verification with %08X", menuHandler::pickedNodeNum);
             if (keyVerificationModule) {
                 keyVerificationModule->sendInitialRequest(menuHandler::pickedNodeNum);
@@ -1437,7 +1405,7 @@ void menuHandler::ManageNodeMenu()
             return;
         }
 
-        if (selected == MN_Ignore) {
+        if (selected == Ignore) {
             auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
             if (!n) {
                 return;
@@ -1455,7 +1423,6 @@ void menuHandler::ManageNodeMenu()
             return;
         }
     };
-
     screen->showOverlayBanner(bannerOptions);
 }
 
