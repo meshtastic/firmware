@@ -1,3 +1,6 @@
+// Disable PSRAM-backed NodeDB to reserve PSRAM for TFT display buffers.
+// Uncomment the line below if running low on PSRAM:
+// #define HAS_PSRAM_NODEDB 0
 
 #define TFT_CS 12
 

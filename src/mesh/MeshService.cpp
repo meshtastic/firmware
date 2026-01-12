@@ -314,15 +314,21 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 #endif
 
-    if (toPhoneQueue.numFree() == 0) {
+    // MAX_RX_TOPHONE is sized for PSRAM-backed builds. Fall back to a smaller
+    // runtime limit if the helper detects <2MB of PSRAM at boot.
+    const int queueLimit = get_rx_tophone_limit();
+    const bool runtimeLimitReached = queueLimit > 0 && toPhoneQueue.numUsed() >= queueLimit;
+
+    if (toPhoneQueue.numFree() == 0 || runtimeLimitReached) {
+        const bool runtimeControlled = runtimeLimitReached && queueLimit < MAX_RX_TOPHONE;
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-            LOG_WARN("ToPhone queue is full, discard oldest");
+            LOG_WARN("ToPhone queue %s, discard oldest", runtimeControlled ? "reached runtime limit" : "is full");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
                 releaseToPool(d);
         } else {
-            LOG_WARN("ToPhone queue is full, drop packet");
+            LOG_WARN("ToPhone queue %s, drop packet", runtimeControlled ? "reached runtime limit" : "is full");
             releaseToPool(p);
             fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;
