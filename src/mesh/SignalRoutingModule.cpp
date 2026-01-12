@@ -1332,13 +1332,19 @@ void SignalRoutingModule::logNetworkTopology()
     for (size_t i = 0; i < rawNodeCount; i++) {
         NodeNum nodeId = nodeBuf[i];
         bool isDownstream = false;
-        for (uint8_t j = 0; j < gatewayRelationCount; j++) {
-            if (gatewayRelations[j].downstream == nodeId &&
-                (now - gatewayRelations[j].lastSeen) <= ACTIVE_NODE_TTL_SECS) {
-                isDownstream = true;
-                break;
+        // Check if this node is downstream of any gateway
+        for (uint8_t j = 0; j < gatewayDownstreamCount; j++) {
+            const GatewayDownstreamSet &set = gatewayDownstream[j];
+            if ((now - set.lastSeen) <= ACTIVE_NODE_TTL_SECS) {
+                for (uint8_t k = 0; k < set.count; k++) {
+                    if (set.downstream[k] == nodeId) {
+                        isDownstream = true;
+                        goto foundDownstream;
+                    }
+                }
             }
         }
+        foundDownstream:
         if (!isDownstream) {
             nodeBuf[nodeCount++] = nodeId;
         }
@@ -1460,11 +1466,18 @@ void SignalRoutingModule::logNetworkTopology()
     }
 
     // Filter out downstream nodes - they should only appear under their gateways
+    uint32_t now = millis() / 1000;  // Use monotonic time
     std::vector<NodeNum> topologyNodes;
     for (NodeNum nodeId : allNodes) {
-        if (downstreamGateway.find(nodeId) == downstreamGateway.end()) {
+        auto dgIt = downstreamGateway.find(nodeId);
+        if (dgIt == downstreamGateway.end()) {
+            // Node is not downstream of any gateway
+            topologyNodes.push_back(nodeId);
+        } else if ((now - dgIt->second.lastSeen) > ACTIVE_NODE_TTL_SECS) {
+            // Downstream relationship has expired
             topologyNodes.push_back(nodeId);
         }
+        // If relationship is active, exclude from topology (node appears under its gateway)
     }
 
     LOG_INFO("[SR] Network Topology: %d nodes total", topologyNodes.size());
