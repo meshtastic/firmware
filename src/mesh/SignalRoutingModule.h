@@ -27,6 +27,10 @@ class SignalRoutingModule : public ProtobufModule<meshtastic_SignalRoutingInfo>,
 public:
     SignalRoutingModule();
 
+    // Delete copy constructor and assignment operator since this class manages dynamic memory and threading
+    SignalRoutingModule(const SignalRoutingModule&) = delete;
+    SignalRoutingModule& operator=(const SignalRoutingModule&) = delete;
+
     /**
      * Check if signal-based routing should be used for a packet
      * Works for both unicast (route to destination) and broadcast (coordinated flooding)
