@@ -17,6 +17,23 @@
 // accommodate Heltec WiFi LoRa 32 V4 boards (and others)
 static constexpr size_t PSRAM_LARGE_THRESHOLD_BYTES = 2 * 1024 * 1024;
 
+// HAS_PSRAM_NODEDB: Enables storing the NodeDB in PSRAM for ESP32-S3 devices.
+// This allows storing many more nodes (up to 3000) but uses PSRAM which may
+// conflict with TFT displays or other PSRAM-heavy features.
+//
+// Variants can override this by defining HAS_PSRAM_NODEDB to 0 or 1 in variant.h:
+//   #define HAS_PSRAM_NODEDB 0  // Disable PSRAM NodeDB (e.g., for TFT variants)
+//   #define HAS_PSRAM_NODEDB 1  // Force enable PSRAM NodeDB
+//
+// Default: Enabled for ESP32-S3 with PSRAM, disabled otherwise
+#ifndef HAS_PSRAM_NODEDB
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)
+#define HAS_PSRAM_NODEDB 1
+#else
+#define HAS_PSRAM_NODEDB 0
+#endif
+#endif
+
 // Default RX queue size for phone delivery when PSRAM is available
 // This is an arbitrary default bump from default, boards can override
 // this in board.h
@@ -95,16 +112,18 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #define MAX_NUM_NODES 10
 #elif defined(ARCH_NRF52)
 #define MAX_NUM_NODES 80
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#if defined(BOARD_MAX_NUM_NODES)
+#elif defined(BOARD_MAX_NUM_NODES)
+// Explicit board override takes priority
 #define MAX_NUM_NODES BOARD_MAX_NUM_NODES
-#elif defined(BOARD_HAS_PSRAM)
+#elif HAS_PSRAM_NODEDB
+// PSRAM-backed NodeDB can hold many more nodes
 #define MAX_NUM_NODES 3000
-#else
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+// ESP32-S3 without PSRAM NodeDB - use flash-size heuristic
 #include "Esp.h"
 static inline int get_max_num_nodes()
 {
-    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Fallback based on flash size
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024);
     if (flash_size >= 15) {
         return 250;
     } else if (flash_size >= 7) {
@@ -113,7 +132,6 @@ static inline int get_max_num_nodes()
     return 100;
 }
 #define MAX_NUM_NODES get_max_num_nodes()
-#endif
 #else
 #define MAX_NUM_NODES 100
 #endif

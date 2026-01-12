@@ -95,7 +95,7 @@ void logNodeInsertStats(size_t count, const char *poolLabel)
              static_cast<unsigned>(MAX_NUM_NODES), memGet.getFreeHeap(), memGet.getFreePsram());
 }
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
 bool logPsramAllocationOnce(void *ptr, size_t capacity)
 {
     static bool logged = false;
@@ -116,7 +116,7 @@ bool logPsramAllocationOnce(void *ptr, size_t capacity)
 
 } // namespace
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
 
 void NodeDB::initHotCache()
 {
@@ -712,7 +712,7 @@ void NodeDB::installDefaultNodeDatabase()
 {
     LOG_DEBUG("Install default NodeDatabase");
     nodeDatabase.version = DEVICESTATE_CUR_VER;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     initHotCache();
     for (size_t i = 0; i < psramMeshNodes.size(); ++i)
         clearSlot(i);
@@ -1196,7 +1196,7 @@ void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     if (psramMeshNodes.empty())
         initHotCache();
     numMeshNodes = std::min<pb_size_t>(numMeshNodes, MAX_NUM_NODES);
@@ -1247,7 +1247,7 @@ void NodeDB::resetNodes(bool keepFavorites)
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     refreshHotCache();
     int newPos = 0;
     int removed = 0;
@@ -1293,7 +1293,7 @@ void NodeDB::clearLocalPosition()
 
 void NodeDB::cleanupMeshDB()
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     refreshHotCache();
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
@@ -1489,7 +1489,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
         installDefaultNodeDatabase();
     } else {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
         initHotCache();
         size_t inserted = 0;
         for (const auto &n : nodeDatabase.nodes) {
@@ -1514,7 +1514,7 @@ void NodeDB::loadFromDisk()
 #endif
     }
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     if (numMeshNodes > MAX_NUM_NODES)
         numMeshNodes = MAX_NUM_NODES;
 #else
@@ -1730,7 +1730,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 #endif
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     nodeDatabase.nodes.clear();
     nodeDatabase.nodes.reserve(numMeshNodes);
     for (size_t i = 0; i < numMeshNodes; ++i) {
@@ -1740,7 +1740,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool success = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     nodeDatabase.nodes.clear();
 #endif
     return success;
@@ -1824,7 +1824,7 @@ bool NodeDB::saveToDisk(int saveWhat)
 
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     if (readIndex < numMeshNodes) {
         markHotDirty(readIndex);
         return &psramMeshNodes[readIndex++];
@@ -1885,7 +1885,7 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     refreshHotCache();
     uint32_t now = getTime();
     for (int i = 0; i < numMeshNodes; i++) {
@@ -2040,7 +2040,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     {
         size_t idx = indexOf(info);
         if (idx != std::numeric_limits<size_t>::max())
@@ -2109,7 +2109,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
               info->channel);
     info->has_user = true;
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     {
         size_t idx = indexOf(info);
         if (idx != std::numeric_limits<size_t>::max())
@@ -2165,7 +2165,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = hopsAway;
         }
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
         {
             size_t idx = indexOf(info);
             if (idx != std::numeric_limits<size_t>::max())
@@ -2181,7 +2181,7 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
         size_t idx = indexOf(lite);
         if (idx != std::numeric_limits<size_t>::max())
             syncHotFromCold(idx);
@@ -2199,7 +2199,7 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     refreshHotCache();
     for (int i = 0; i < numMeshNodes; ++i) {
         if (hotNodes[i].num == nodeId)
@@ -2230,7 +2230,7 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
     bool seenFrom = false;
     bool seenTo = false;
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     refreshHotCache();
     for (int i = 0; i < numMeshNodes; i++) {
         const NodeHotEntry &hot = hotNodes[i];
@@ -2294,7 +2294,7 @@ void NodeDB::sortMeshDB()
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
             refreshHotCache();
             for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
                 NodeHotEntry &prev = hotNodes[i - 1];
@@ -2341,7 +2341,7 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     refreshHotCache();
     for (int i = 0; i < numMeshNodes; ++i) {
         if (hotNodes[i].num == n)
@@ -2368,7 +2368,7 @@ std::string NodeDB::getNodeId() const
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     for (int i = 0; i < numMeshNodes; i++) {
         if (hotNodes[i].num == n) {
             markHotDirty(i);
@@ -2394,7 +2394,7 @@ bool NodeDB::isFull()
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {

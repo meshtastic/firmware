@@ -52,7 +52,7 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)
+#if HAS_PSRAM_NODEDB
 // Try to put the heavy MeshPacket pool into PSRAM. If that fails we fall back to
 // heap allocation so the radio stays functional (at the cost of fewer packets).
 static PsramMemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> psramPool;
@@ -60,9 +60,6 @@ static MemoryDynamic<meshtastic_MeshPacket> fallbackPool;
 Allocator<meshtastic_MeshPacket> &packetPool = psramPool.isValid()
                                                    ? static_cast<Allocator<meshtastic_MeshPacket> &>(psramPool)
                                                    : static_cast<Allocator<meshtastic_MeshPacket> &>(fallbackPool);
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
-Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 #else
 static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;

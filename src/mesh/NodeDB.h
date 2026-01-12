@@ -8,9 +8,6 @@
 #include <pb_encode.h>
 #include <string>
 #include <vector>
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-#include <esp_heap_caps.h>
-#endif
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
@@ -18,7 +15,9 @@
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
+#include <esp_heap_caps.h>
+
 /**
  * Custom allocator that redirects NodeInfoLite storage into PSRAM so that the
  * heavy payload stays out of internal RAM on ESP32-S3 devices.
@@ -301,7 +300,7 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
         assert(x < numMeshNodes);
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
         markHotDirty(x);
         return &psramMeshNodes[x];
 #else
@@ -398,7 +397,7 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAS_PSRAM_NODEDB
     enum HotFlags : uint8_t {
         HOT_FLAG_VIA_MQTT = 1 << 0,
         HOT_FLAG_IS_FAVORITE = 1 << 1,
