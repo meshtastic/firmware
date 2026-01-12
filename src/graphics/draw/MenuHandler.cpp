@@ -1302,87 +1302,160 @@ void menuHandler::ManageNodeMenu()
         return;
     }
 
-    enum class ManageNodeAction { Favorite, Mute, TraceRoute, KeyVerification, IgnoreNode };
-
-    static const ManageNodeOption baseOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"Favorite", OptionsAction::Select, static_cast<int>(ManageNodeAction::Favorite)},
-        {"Mute Notifications", OptionsAction::Select, static_cast<int>(ManageNodeAction::Mute)},
-        {"Trace Route", OptionsAction::Select, static_cast<int>(ManageNodeAction::TraceRoute)},
-        {"Key Verification", OptionsAction::Select, static_cast<int>(ManageNodeAction::KeyVerification)},
-        {"Ignore Node", OptionsAction::Select, static_cast<int>(ManageNodeAction::IgnoreNode)},
+    // Build dynamic options so labels reflect the node's current state
+    enum ManageNodeMenuAction {
+        MN_Back = 0,
+        MN_Favorite = 1,
+        MN_Mute = 2,
+        MN_TraceRoute = 3,
+        MN_KeyVerification = 4,
+        MN_Ignore = 5
     };
 
-    constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
-    static std::array<const char *, baseCount> baseLabels{};
+    static std::vector<std::string> labelStrs;
+    static std::vector<const char *> labels;
+    static std::vector<int> ids;
+    labelStrs.clear();
+    labels.clear();
+    ids.clear();
 
-    // Build a friendly title including node name (if present)
-    std::string title = "Manage Node";
+    // Back
+    labelStrs.emplace_back("Back");
+    ids.push_back(MN_Back);
 
-    auto onSelection = [node](const ManageNodeOption &option, int) -> void {
-        if (option.action == OptionsAction::Back) {
+    // Favorite / Unfavorite
+    if (node->is_favorite) {
+        labelStrs.emplace_back("Unfavorite");
+    } else {
+        labelStrs.emplace_back("Favorite");
+    }
+    ids.push_back(MN_Favorite);
+
+    // Mute / Unmute Notifications
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    if (isMuted) {
+        labelStrs.emplace_back("Unmute Notifications");
+    } else {
+        labelStrs.emplace_back("Mute Notifications");
+    }
+    ids.push_back(MN_Mute);
+
+    // Trace route
+    labelStrs.emplace_back("Trace Route");
+    ids.push_back(MN_TraceRoute);
+
+    // Key verification
+    labelStrs.emplace_back("Key Verification");
+    ids.push_back(MN_KeyVerification);
+
+    // Ignore / Unignore
+    if (node->is_ignored) {
+        labelStrs.emplace_back("Unignore Node");
+    } else {
+        labelStrs.emplace_back("Ignore Node");
+    }
+    ids.push_back(MN_Ignore);
+
+    // Move c_str pointers into labels (must keep labelStrs alive while we show the banner)
+    labels.reserve(labelStrs.size());
+    for (auto &s : labelStrs) {
+        labels.push_back(s.c_str());
+    }
+
+    // Title with node name or node number
+    std::string title = "";
+    if (node->has_user && node->user.long_name && node->user.long_name[0]) {
+
+        title += sanitizeString(node->user.long_name).substr(0, 15);
+    } else {
+        char buf[20];
+        snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
+        title += buf;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = title.c_str();
+    bannerOptions.optionsArrayPtr = labels.data();
+    bannerOptions.optionsEnumPtr = ids.data();
+    bannerOptions.optionsCount = (int)labels.size();
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == MN_Back) {
             menuQueue = node_base_menu;
             screen->runNow();
             return;
         }
 
-        if (!option.hasValue) {
+        if (selected == MN_Favorite) {
+            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            if (!n) {
+                return;
+            }
+
+            if (n->is_favorite) {
+                LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
+                nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
+            } else {
+                LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
+                nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
+            }
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
 
-        auto action = static_cast<ManageNodeAction>(option.value);
-        switch (action) {
-        case ManageNodeAction::Favorite: {
-            // VERIFIED
-            LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
-            nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-            break;
-        }
-        case ManageNodeAction::Mute: {
-            // NEEDS TESTING
+        if (selected == MN_Mute) {
             auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
-            if (n) {
-                n->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
-                LOG_INFO("Toggled mute for node %08X (bitfield=0x%08x)", menuHandler::pickedNodeNum, n->bitfield);
-                nodeDB->notifyObservers(true);
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            if (!n) {
+                return;
             }
-            break;
+
+            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
+                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
+                LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
+            } else {
+                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
+                LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
+            }
+            nodeDB->notifyObservers(true);
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            return;
         }
-        case ManageNodeAction::TraceRoute: {
-            // VERIFIED
+
+        if (selected == MN_TraceRoute) {
             LOG_INFO("Starting traceroute to %08X", menuHandler::pickedNodeNum);
             if (traceRouteModule) {
                 traceRouteModule->startTraceRoute(menuHandler::pickedNodeNum);
             }
-            break;
+            return;
         }
-        case ManageNodeAction::KeyVerification: {
-            // VERIFIED
+
+        if (selected == MN_KeyVerification) {
             LOG_INFO("Initiating key verification with %08X", menuHandler::pickedNodeNum);
             if (keyVerificationModule) {
                 keyVerificationModule->sendInitialRequest(menuHandler::pickedNodeNum);
             }
-            break;
+            return;
         }
-        case ManageNodeAction::IgnoreNode: {
-            // NEEDS TESTING
+
+        if (selected == MN_Ignore) {
             auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
-            if (n) {
+            if (!n) {
+                return;
+            }
+
+            if (n->is_ignored) {
+                n->is_ignored = false;
+                LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
+            } else {
                 n->is_ignored = true;
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
-                nodeDB->notifyObservers(true);
             }
+            nodeDB->notifyObservers(true);
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-            break;
-        }
+            return;
         }
     };
 
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = title.c_str();
-    bannerOptions = createStaticBannerOptions(title.c_str(), baseOptions, baseLabels, onSelection);
     screen->showOverlayBanner(bannerOptions);
 }
 
