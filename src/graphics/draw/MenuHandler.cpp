@@ -1294,22 +1294,6 @@ void menuHandler::NodePicker()
     });
 }
 
-// Old Node Favorite Menus
-void menuHandler::addFavoriteMenu()
-{
-    const char *NODE_PICKER_TITLE;
-    if (currentResolution == ScreenResolution::UltraLow) {
-        NODE_PICKER_TITLE = "Node Favorite";
-    } else {
-        NODE_PICKER_TITLE = "Node To Favorite";
-    }
-    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
-        LOG_WARN("Nodenum: %u", nodenum);
-        nodeDB->set_favorite(true, nodenum);
-        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-    });
-}
-
 void menuHandler::ManageNodeMenu()
 {
     // If we don't have a node selected yet, prompt for one and then return — the callback will re-enter this menu
