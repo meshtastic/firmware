@@ -22,13 +22,6 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
      */
     virtual bool handleToRadio(const uint8_t *buf, size_t len) override;
 
-    virtual size_t write(uint8_t c) override
-    {
-        if (c == '\n') // prefix any newlines with carriage return
-            RedirectablePrint::write('\r');
-        return RedirectablePrint::write(c);
-    }
-
     virtual int32_t runOnce() override;
 
     void flush();

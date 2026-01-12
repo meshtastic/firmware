@@ -259,6 +259,20 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
            PROCESSING_TIME_MSEC;
 }
 
+uint32_t RadioInterface::getContentionWindowMsec(const meshtastic_MeshPacket *p)
+{
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
+    uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
+
+    // For contention windows, we use a timeout that provides buffer for busy networks
+    // Enough time for the best candidate to start transmitting, with safety margin
+    float channelUtil = airTime->channelUtilizationPercent();
+    uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
+
+    // Use 2x airtime for buffer in busy networks + CW calculation
+    return 2 * packetAirtime + (pow_of_2(CWsize) + pow_of_2(int((CWmax + CWmin) / 2))) * slotTimeMsec;
+}
+
 /** The delay to use when we want to send something */
 uint32_t RadioInterface::getTxDelayMsec()
 {
