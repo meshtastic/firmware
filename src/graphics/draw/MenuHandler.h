@@ -57,6 +57,7 @@ class menuHandler
         DisplayUnits
     };
     static screenMenus menuQueue;
+    static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
 
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);

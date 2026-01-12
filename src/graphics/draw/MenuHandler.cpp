@@ -59,6 +59,7 @@ BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOp
 } // namespace
 
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
+uint32_t menuHandler::pickedNodeNum = 0;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
@@ -1284,6 +1285,10 @@ void menuHandler::NodePicker()
     }
     screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
         LOG_INFO("Nodenum: %u", nodenum);
+        // Store the selection so the Manage Node menu knows which node to operate on
+        menuHandler::pickedNodeNum = nodenum;
+        // Keep UI favorite context in sync (used elsewhere for some node-based actions)
+        graphics::UIRenderer::currentFavoriteNodeNum = nodenum;
         menuQueue = Manage_Node_menu;
         screen->runNow();
     });
@@ -1307,6 +1312,12 @@ void menuHandler::addFavoriteMenu()
 
 void menuHandler::ManageNodeMenu()
 {
+    // If we don't have a node selected yet, prompt for one and then return — the callback will re-enter this menu
+    auto node = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+    if (!node) {
+        return;
+    }
+
     enum class ManageNodeAction { Favorite, Mute, TraceRoute, KeyVerification, IgnoreNode };
 
     static const ManageNodeOption baseOptions[] = {
@@ -1321,8 +1332,13 @@ void menuHandler::ManageNodeMenu()
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
     static std::array<const char *, baseCount> baseLabels{};
 
-    auto onSelection = [](const PositionMenuOption &option, int) -> void {
+    // Build a friendly title including node name (if present)
+    std::string title = "Manage Node";
+
+    auto onSelection = [node](const ManageNodeOption &option, int) -> void {
         if (option.action == OptionsAction::Back) {
+            menuQueue = node_base_menu;
+            screen->runNow();
             return;
         }
 
@@ -1332,35 +1348,57 @@ void menuHandler::ManageNodeMenu()
 
         auto action = static_cast<ManageNodeAction>(option.value);
         switch (action) {
-        case ManageNodeAction::Favorite:
-            LOG_INFO("User selected Favorite");
-            // menuQueue = add_favorite;
-            // screen->runNow();
-            break;
-        case ManageNodeAction::Mute:
-            LOG_INFO("User selected Mute");
-            // menuQueue = ADD_SOMETHING_HERE;
-            // screen->runNow();
-            break;
-        case ManageNodeAction::TraceRoute:
-            LOG_INFO("User selected TraceRoute");
-            // menuQueue = ADD_SOMETHING_HERE;
-            // screen->runNow();
-            break;
-        case ManageNodeAction::KeyVerification:
-            LOG_INFO("User selected KeyVerification");
-            // menuQueue = ADD_SOMETHING_HERE;
-            // screen->runNow();
-            break;
-        case ManageNodeAction::IgnoreNode:
-            LOG_INFO("User selected IgnoreNode");
-            // menuQueue = ADD_SOMETHING_HERE;
-            // screen->runNow();
+        case ManageNodeAction::Favorite: {
+            // VERIFIED
+            LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
+            nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             break;
         }
+        case ManageNodeAction::Mute: {
+            // NEEDS TESTING
+            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            if (n) {
+                n->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
+                LOG_INFO("Toggled mute for node %08X (bitfield=0x%08x)", menuHandler::pickedNodeNum, n->bitfield);
+                nodeDB->notifyObservers(true);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            }
+            break;
+        }
+        case ManageNodeAction::TraceRoute: {
+            // VERIFIED
+            LOG_INFO("Starting traceroute to %08X", menuHandler::pickedNodeNum);
+            if (traceRouteModule) {
+                traceRouteModule->startTraceRoute(menuHandler::pickedNodeNum);
+            }
+            break;
+        }
+        case ManageNodeAction::KeyVerification: {
+            // VERIFIED
+            LOG_INFO("Initiating key verification with %08X", menuHandler::pickedNodeNum);
+            if (keyVerificationModule) {
+                keyVerificationModule->sendInitialRequest(menuHandler::pickedNodeNum);
+            }
+            break;
+        }
+        case ManageNodeAction::IgnoreNode: {
+            // NEEDS TESTING
+            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            if (n) {
+                n->is_ignored = true;
+                LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
+                nodeDB->notifyObservers(true);
+            }
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            break;
+        }
+        }
     };
+
     BannerOverlayOptions bannerOptions;
-    bannerOptions = createStaticBannerOptions("Manage Node", baseOptions, baseLabels, onSelection);
+    bannerOptions.message = title.c_str();
+    bannerOptions = createStaticBannerOptions(title.c_str(), baseOptions, baseLabels, onSelection);
     screen->showOverlayBanner(bannerOptions);
 }
 
