@@ -1385,6 +1385,7 @@ void menuHandler::ManageNodeMenu()
                 LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
+            nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
@@ -1419,6 +1420,7 @@ void menuHandler::ManageNodeMenu()
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
+            nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }

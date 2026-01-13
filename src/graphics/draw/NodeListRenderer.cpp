@@ -205,9 +205,11 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int nameMaxWidth = columnWidth - 25;
     int timeOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
@@ -234,6 +236,13 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+        } else {
+            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
+        }
+    }
 
     int rightEdge = x + columnWidth - timeOffset;
     if (timeStr[strlen(timeStr) - 1] == 'm') // Fix the fact that our fonts don't line up well all the time
@@ -253,6 +262,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int barsXOffset = columnWidth - barsOffset;
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -263,6 +273,13 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+        } else {
+            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
         }
     }
 
@@ -298,6 +315,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     char distStr[10] = "";
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -358,6 +376,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+        } else {
+            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
+        }
+    }
 
     if (strlen(distStr) > 0) {
         int offset = (currentResolution == ScreenResolution::High)
@@ -392,6 +417,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -401,6 +427,13 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+        } else {
+            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
         }
     }
 }
