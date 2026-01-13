@@ -13,7 +13,7 @@
 #define MESSAGE_TEXT_POOL_SIZE (MAX_MESSAGES_SAVED * MAX_MESSAGE_SIZE)
 #endif
 
-// Default autosave interval 12 hours, override per device later with -DMESSAGE_AUTOSAVE_INTERVAL_SEC=300 (etc)
+// Default autosave interval 2 hours, override per device later with -DMESSAGE_AUTOSAVE_INTERVAL_SEC=300 (etc)
 #ifndef MESSAGE_AUTOSAVE_INTERVAL_SEC
 #define MESSAGE_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
 #endif
