@@ -13,6 +13,11 @@
 #define MESSAGE_TEXT_POOL_SIZE (MAX_MESSAGES_SAVED * MAX_MESSAGE_SIZE)
 #endif
 
+// Default autosave interval 2 hours, override per device later with -DMESSAGE_AUTOSAVE_INTERVAL_SEC=300 (etc)
+#ifndef MESSAGE_AUTOSAVE_INTERVAL_SEC
+#define MESSAGE_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
+#endif
+
 // Global message text pool and state
 static char *g_messagePool = nullptr;
 static size_t g_poolWritePos = 0;
@@ -102,6 +107,60 @@ void MessageStore::addLiveMessage(const StoredMessage &msg)
     pushWithLimit(liveMessages, msg);
 }
 
+#if ENABLE_MESSAGE_PERSISTENCE
+static bool g_messageStoreHasUnsavedChanges = false;
+static uint32_t g_lastAutoSaveMs = 0; // last time we actually saved
+
+static inline uint32_t autosaveIntervalMs()
+{
+    uint32_t sec = (uint32_t)MESSAGE_AUTOSAVE_INTERVAL_SEC;
+    if (sec < 60)
+        sec = 60;
+    return sec * 1000UL;
+}
+
+static inline bool reachedMs(uint32_t now, uint32_t target)
+{
+    return (int32_t)(now - target) >= 0;
+}
+
+// Mark new messages in RAM that need to be saved later
+static inline void markMessageStoreUnsaved()
+{
+    g_messageStoreHasUnsavedChanges = true;
+
+    if (g_lastAutoSaveMs == 0) {
+        g_lastAutoSaveMs = millis();
+    }
+}
+
+// Called periodically from the main loop in main.cpp
+static inline void autosaveTick(MessageStore *store)
+{
+    if (!store)
+        return;
+
+    uint32_t now = millis();
+
+    if (g_lastAutoSaveMs == 0) {
+        g_lastAutoSaveMs = now;
+        return;
+    }
+
+    if (!reachedMs(now, g_lastAutoSaveMs + autosaveIntervalMs()))
+        return;
+
+    // Autosave interval reached, only save if there are unsaved messages.
+    if (g_messageStoreHasUnsavedChanges) {
+        LOG_INFO("Autosaving MessageStore to flash");
+        store->saveToFlash();
+    } else {
+        LOG_INFO("Autosave skipped, no changes to save");
+        g_lastAutoSaveMs = now;
+    }
+}
+#endif
+
 // Add from incoming/outgoing packet
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
@@ -131,6 +190,11 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     }
 
     addLiveMessage(sm);
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    markMessageStoreUnsaved();
+#endif
+
     return liveMessages.back();
 }
 
@@ -155,6 +219,10 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     sm.ackStatus = AckStatus::NONE;
 
     addLiveMessage(sm);
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    markMessageStoreUnsaved();
+#endif
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -239,6 +307,10 @@ void MessageStore::saveToFlash()
 
     f.close();
 #endif
+
+    // Reset autosave state after any save
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 }
 
 void MessageStore::loadFromFlash()
@@ -270,6 +342,9 @@ void MessageStore::loadFromFlash()
 
     f.close();
 #endif
+    // Loading messages does not trigger an autosave
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 }
 
 #else
@@ -289,6 +364,11 @@ void MessageStore::clearAllMessages()
     uint8_t count = 0;
     f.write(&count, 1); // write "0 messages"
     f.close();
+#endif
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 #endif
 }
 
@@ -420,6 +500,14 @@ uint16_t MessageStore::storeText(const char *src, size_t len)
     // Wrapper around the internal helper
     return storeTextInPool(src, len);
 }
+
+#if ENABLE_MESSAGE_PERSISTENCE
+void messageStoreAutosaveTick()
+{
+    // Called from the main loop to check autosave timing
+    autosaveTick(&messageStore);
+}
+#endif
 
 // Global definition
 MessageStore messageStore("default");
