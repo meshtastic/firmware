@@ -238,9 +238,9 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     }
     if (node->is_ignored || isMuted) {
         if (currentResolution == ScreenResolution::High) {
-            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
-            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
         }
     }
 
@@ -277,9 +277,9 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     }
     if (node->is_ignored || isMuted) {
         if (currentResolution == ScreenResolution::High) {
-            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
-            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
         }
     }
 
@@ -378,9 +378,9 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
     if (node->is_ignored || isMuted) {
         if (currentResolution == ScreenResolution::High) {
-            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
-            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
         }
     }
 
@@ -431,9 +431,9 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
     if (node->is_ignored || isMuted) {
         if (currentResolution == ScreenResolution::High) {
-            display->drawLine(x + 4, y + 7, nameMaxWidth - 4, y + 7);
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
-            display->drawLine(x + 4, y + 6, nameMaxWidth - 4, y + 6);
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
         }
     }
 }
