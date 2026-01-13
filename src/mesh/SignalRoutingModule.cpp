@@ -939,8 +939,6 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
                     float etx = ourEdges->edges[i].getEtx();
                     // Create equivalent edge from our node to real node
                     routingGraph->updateEdge(ourNode, realNodeId, etx, millis() / 1000);
-                    LOG_DEBUG("[SR] Transferred reverse edge: %08x -> %08x (ETX=%.2f)",
-                             ourNode, realNodeId, etx);
                 }
             }
         }
@@ -953,8 +951,6 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
                 if (edge.to == placeholderId) {
                     // Create equivalent edge from our node to real node
                     routingGraph->updateEdge(ourNode, realNodeId, edge.etx, edge.lastUpdate, edge.variance);
-                    LOG_DEBUG("[SR] Transferred reverse edge: %08x -> %08x (ETX=%.2f)",
-                             ourNode, realNodeId, edge.etx);
                 }
             }
         }
@@ -1346,17 +1342,6 @@ void SignalRoutingModule::logNetworkTopology()
     }
     LOG_INFO("[SR] Network Topology: %d nodes total", nodeCount);
 
-    // Debug: show all gateway relationships
-    LOG_DEBUG("[SR] Gateway relationships:");
-    for (uint8_t i = 0; i < gatewayDownstreamCount; i++) {
-        const GatewayDownstreamSet &set = gatewayDownstream[i];
-        if (set.count > 0) {
-            char gwName[48];
-            getNodeDisplayName(set.gateway, gwName, sizeof(gwName));
-            LOG_DEBUG("[SR]   %s -> %d downstreams", gwName, set.count);
-        }
-    }
-
     // Sort in place using fixed array (avoid std::vector heap allocation)
     std::sort(nodeBuf, nodeBuf + nodeCount);
 
@@ -1636,12 +1621,6 @@ void SignalRoutingModule::logNetworkTopology()
         // Only show top-level nodes (not downstreams)
         if (!isDownstream) {
             logNodeHierarchical(nodeId, "", false);
-        } else {
-            // Debug: log why this node is not shown at top level
-            char gatewayName[48];
-            getNodeDisplayName(downstreamOf, gatewayName, sizeof(gatewayName));
-            LOG_DEBUG("[SR] Node %s not shown at top level - is downstream of %s",
-                     nodeBuf[nodeIdx], gatewayName);
         }
     }
 
@@ -1664,15 +1643,6 @@ void SignalRoutingModule::logNetworkTopology()
     }
 
     LOG_INFO("[SR] Network Topology: %d nodes total", allNodes.size());
-
-    // Debug: show all gateway relationships
-    LOG_DEBUG("[SR] Gateway relationships:");
-    for (const auto& pair : downstreamGateway) {
-        char gwName[48], dsName[48];
-        getNodeDisplayName(pair.second.gateway, gwName, sizeof(gwName));
-        getNodeDisplayName(pair.first, dsName, sizeof(dsName));
-        LOG_DEBUG("[SR]   %s -> %s", gwName, dsName);
-    }
 
     // Helper function to log a node hierarchically
     std::function<void(NodeNum, const char*, bool)> logNodeHierarchical = [&](NodeNum nodeId, const char* indent, bool isDownstream) -> void {
@@ -1910,13 +1880,6 @@ void SignalRoutingModule::logNetworkTopology()
         // Only show top-level nodes (not downstreams)
         if (!isDownstream) {
             logNodeHierarchical(nodeId, "", false);
-        } else {
-            // Debug: log why this node is not shown at top level
-            char nodeName[48], gatewayName[48];
-            getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
-            getNodeDisplayName(downstreamOf, gatewayName, sizeof(gatewayName));
-            LOG_DEBUG("[SR] Node %s not shown at top level - is downstream of %s",
-                     nodeName, gatewayName);
         }
     }
 #endif
