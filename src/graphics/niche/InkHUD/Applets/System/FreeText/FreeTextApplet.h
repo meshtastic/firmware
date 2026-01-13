@@ -58,7 +58,7 @@ class FreeTextApplet : public SystemApplet
 		uint8_t keyCursorX = 0;
 		uint8_t keyCursorY = 0;
 		uint16_t lineCursor = 0;
-	
+
 
 	//void drawKeypad(uint16_t pointX, uint16_t pointY, Color color);
 	//void drawInput(uint16_t pointX, uint16_t pointY);)

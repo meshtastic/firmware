@@ -24,37 +24,51 @@ void InkHUD::FreeTextApplet::onRender()
 {
     setFont(fontSmall);
     std::string header = "Free Text";
-
-    // Draw the input box
-    uint16_t yStartBox = fontSmall.lineHeight();
-    uint16_t inputBoxW = X(1.0);
-    uint16_t inputBoxH = fontSmall.lineHeight();
-
-    while (inputBoxH < Y(0.40)) {
-        inputBoxH += fontSmall.lineHeight();
-    }
-
-    if (!inkhud->freetext.empty()) {
-        uint32_t textHeight = getWrappedTextHeight(0, inputBoxW - 5, inkhud->freetext);
-        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight + fontSmall.lineHeight()
-                                               : inputBoxH - textHeight + fontSmall.lineHeight() + 1;
-        if (textHeight > inputBoxH)
-            printWrapped(2, textPadding, inputBoxW - 5, inkhud->freetext);
-        else
-            printWrapped(2, yStartBox + 2, inputBoxW - 5, inkhud->freetext);
-    }
-    fillRect(0, 0, X(1.0), yStartBox, WHITE);
-    printAt(0, 0, header);
-    drawRect(0, yStartBox, inputBoxW, inputBoxH + 5, BLACK);
-
-    // Draw the keyboard
     uint16_t yStartKb = Y(0.55);
     float padding = 0.01;
     uint16_t keyW = (width() / 11);
     uint16_t r = (width() % 10) / 10;
     uint16_t c = 0;
     uint16_t keyH = X(1.0) > Y(1.0) ? fontSmall.lineHeight() + Y(padding) : fontSmall.lineHeight() + (2 * X(padding));
+    uint16_t yStartBox = fontSmall.lineHeight();
+    uint16_t inputBoxW = X(1.0);
+    uint16_t inputBoxH = fontSmall.lineHeight();
 
+    // Draw the text, input box, and cursor
+    // Adjusting the box for screen height
+    while (inputBoxH < Y(0.40)) {
+        inputBoxH += fontSmall.lineHeight();
+    }
+
+    // If the text is so long that it goes outside of the input box, the text is actually rendered off screen.
+    uint32_t textHeight = getWrappedTextHeight(0, inputBoxW - 5, inkhud->freetext);
+    if (!inkhud->freetext.empty()) 
+    {
+        
+        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight + fontSmall.lineHeight() : inputBoxH - textHeight + fontSmall.lineHeight() + 1;
+        if (textHeight > inputBoxH) 
+            printWrapped(2, textPadding, inputBoxW - 5, inkhud->freetext);
+        else
+            printWrapped(2, yStartBox + 2, inputBoxW - 5, inkhud->freetext);
+    }
+    
+    uint16_t textCursorX = inkhud->freetext.empty() ? 1 : getCursorX();
+    uint16_t textCursorY = inkhud->freetext.empty() ? fontSmall.lineHeight() + 2: getCursorY() - fontSmall.lineHeight() + 3;
+
+    if (textCursorX + 1 > inputBoxW - 5) {
+        textCursorX = getCursorX() - inputBoxW + 5;
+        textCursorY += fontSmall.lineHeight();
+    }
+    
+    fillRect(textCursorX + 1, textCursorY, 1, keyH - 2, BLACK);
+    
+    // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
+    fillRect(0, 0, X(1.0), yStartBox, WHITE);
+    printAt(0, 0, header);
+    drawRect(0, yStartBox, inputBoxW, inputBoxH + 5, BLACK);
+    
+    
+    // Draw the keyboard
     for (uint8_t i = 0; i < FreeTextApplet::KEYBOARD_ROWS; i++) {
         for (uint8_t j = 0; j < FreeTextApplet::KEYBOARD_COLS; j++) {
             char temp[2] = "\0";
