@@ -60,6 +60,14 @@ def manifest_gather(source, target, env):
     board_platform = env.BoardConfig().get("platform")
     board_mcu = env.BoardConfig().get("build.mcu").lower()
     needs_ota_suffix = board_platform == "nordicnrf52"
+    
+    # Mapping of bin files to their target partition names
+    # Maps the filename pattern to the partition name where it should be flashed
+    partition_map = {
+        f"{progname}.bin": "app",              # primary application slot (app0 / OTA_0)
+        lfsbin: "spiffs",                        # filesystem image flashed to spiffs
+    }
+    
     check_paths = [
         progname,
         f"{progname}.elf",
@@ -85,6 +93,9 @@ def manifest_gather(source, target, env):
                 "md5": f.get_content_hash(), # Returns MD5 hash
                 "bytes": f.get_size() # Returns file size in bytes
             }
+            # Add part_name if this file represents a partition that should be flashed
+            if p in partition_map:
+                d["part_name"] = partition_map[p]
             out.append(d)
             print(d)
     manifest_write(out, env)
