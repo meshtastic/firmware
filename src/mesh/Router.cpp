@@ -757,13 +757,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                 skipHandle = true;
             }
         }
-        for (const auto &port : portduino_config.nohop_ports) {
-            if (port == p->decoded.portnum) {
-                p->hop_start -= p->hop_limit;
-                p->hop_limit = 0;
-                break;
-            }
-        }
 #endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);

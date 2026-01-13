@@ -145,6 +145,18 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         tosend->hop_start -= (tosend->hop_limit - 2);
                         tosend->hop_limit = 2;
                     }
+#elif ARCH_PORTDUINO
+                    if (tosend->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                        portduino_config.nohop_ports.size()) {
+                        for (const auto &port : portduino_config.nohop_ports) {
+                            if (port == tosend->decoded.portnum) {
+                                LOG_DEBUG("0-hopping portnum %u", tosend->decoded.portnum);
+                                tosend->hop_start -= tosend->hop_limit;
+                                tosend->hop_limit = 0;
+                                break;
+                            }
+                        }
+                    }
 #endif
 
                     if (p->next_hop == NO_NEXT_HOP_PREFERENCE) {
