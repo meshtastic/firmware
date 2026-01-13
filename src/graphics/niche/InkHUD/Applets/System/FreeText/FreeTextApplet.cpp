@@ -100,6 +100,10 @@ void InkHUD::FreeTextApplet::onBackground()
     SystemApplet::lockRendering = false;
     SystemApplet::lockRequests = false;
     SystemApplet::handleInput = false;
+
+    // Special free text event for returning to the originating applet
+    inkhud->freeTextClosed();
+
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
@@ -114,7 +118,6 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
         inkhud->freetext.pop_back();
         requestUpdate(EInk::UpdateTypes::FAST);
     } else if (a == ENTER) {
-        inkhud->newFreeText();
         sendToBackground();
     } else if (a == ESCAPE) {
         inkhud->freetext.erase();

@@ -602,13 +602,15 @@ void InkHUD::MenuApplet::onFreeText()
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
 
-    // Save the message to the free text message item and select it
-    cm.freeTextItem.rawText = inkhud->freetext;
-    cm.selectedMessageItem = &cm.freeTextItem;
+    if (!inkhud->freetext.empty()) {
+        // Save the message to the free text message item and select it
+        cm.freeTextItem.rawText = inkhud->freetext;
+        cm.selectedMessageItem = &cm.freeTextItem;
 
-    // Open the recipients page
-    showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // Open the recipients page
+        showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 // Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu

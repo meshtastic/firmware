@@ -63,7 +63,7 @@ class InkHUD
     void navRight();
 
     // Handle Freetext
-    void newFreeText();
+    void freeTextClosed();
     std::string freetext;
 
     // Trigger UI changes

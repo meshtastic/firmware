@@ -169,8 +169,8 @@ void InkHUD::InkHUD::navRight()
 }
 
 // This should only be called by FreeTextApplet
-// Signals that a new free text value is available
-void InkHUD::InkHUD::newFreeText()
+// Signals that the FreeText Applet has closed
+void InkHUD::InkHUD::freeTextClosed()
 {
     events->onFreeText();
 }

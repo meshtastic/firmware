@@ -36,7 +36,7 @@ class Events
     void onNavLeft();     // Navigate left
     void onNavRight();    // Navigate right
 
-    void onFreeText(); // New free text available
+    void onFreeText(); // free text applet closed
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
