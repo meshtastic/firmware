@@ -91,8 +91,8 @@ jobs:
             if [[ -f "$manifest" ]]; then
               echo "Updating $manifest with $OTA_FILE (md5: $OTA_MD5, size: $OTA_SIZE)"
               # Add OTA entry to files array if not already present
-              jq --arg name "$OTA_FILE" --arg md5 "$OTA_MD5" --argjson bytes "$OTA_SIZE" \
-                'if .files | map(select(.name == $name)) | length == 0 then .files += [{"name": $name, "md5": $md5, "bytes": $bytes}] else . end' \
+              jq --arg name "$OTA_FILE" --arg md5 "$OTA_MD5" --argjson bytes "$OTA_SIZE" --arg part "app1" \
+                'if .files | map(select(.name == $name)) | length == 0 then .files += [{"name": $name, "md5": $md5, "bytes": $bytes, "part_name": $part}] else . end' \
                 "$manifest" > "${manifest}.tmp" && mv "${manifest}.tmp" "$manifest"
             fi
           done
