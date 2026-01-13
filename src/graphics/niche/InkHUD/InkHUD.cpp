@@ -168,6 +168,13 @@ void InkHUD::InkHUD::navRight()
     }
 }
 
+// This should only be called by FreeTextApplet
+// Signals that a new free text value is available
+void InkHUD::InkHUD::newFreeText()
+{
+    events->onFreeText();
+}
+
 // Cycle the next user applet to the foreground
 // Only activated applets are cycled
 // If user has a multi-applet layout, the applets will cycle on the "focused tile"

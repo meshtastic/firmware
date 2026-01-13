@@ -36,6 +36,8 @@ class Events
     void onNavLeft();     // Navigate left
     void onNavRight();    // Navigate right
 
+    void onFreeText(); // New free text available
+
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message

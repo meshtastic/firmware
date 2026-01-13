@@ -62,6 +62,10 @@ class InkHUD
     void navLeft();
     void navRight();
 
+    // Handle Freetext
+    void newFreeText();
+    std::string freetext;
+
     // Trigger UI changes
     // - called by various InkHUD components
     // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
@@ -107,9 +111,6 @@ class InkHUD
 
     // Shared data which persists between boots
     Persistence *persistence = nullptr;
-
-    // String to share text between the freetext applet and other system applets
-    std::string freetext;
 
   private:
     InkHUD() {} // Constructor made private to force use of InkHUD::getInstance

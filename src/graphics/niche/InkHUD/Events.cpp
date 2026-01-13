@@ -238,6 +238,19 @@ void InkHUD::Events::onNavRight()
     }
 }
 
+void InkHUD::Events::onFreeText()
+{
+    // Check which system applet wants to handle the text
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeText();
+            break;
+        }
+    }
+
+    inkhud->freetext.erase();
+}
+
 // Callback for deepSleepObserver
 // Returns 0 to signal that we agree to sleep now
 int InkHUD::Events::beforeDeepSleep(void *unused)

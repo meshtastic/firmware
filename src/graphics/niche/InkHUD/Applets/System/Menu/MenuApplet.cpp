@@ -62,6 +62,9 @@ void InkHUD::MenuApplet::onForeground()
     SystemApplet::lockRequests = true;
     SystemApplet::handleInput = true;
 
+    // This applet can handle free text
+    handleFreeText = true;
+
     // Begin the auto-close timeout
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
@@ -91,6 +94,8 @@ void InkHUD::MenuApplet::onBackground()
     // Resume normal rendering and button behavior of user applets
     SystemApplet::lockRequests = false;
     SystemApplet::handleInput = false;
+
+    handleFreeText = false;
 
     // Restore the user applet whose tile we borrowed
     if (borrowedTileOwner)
@@ -165,7 +170,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case FREE_TEXT:
-        OSThread::enabled = true; // TODO: reenable timeout when returning from FreeText
+        OSThread::enabled = false;
         inkhud->openKeyboard();
         break;
 
@@ -178,12 +183,8 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
-        if (inkhud->freetext.empty()) // send selected message
-            sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex,
-                     cm.selectedMessageItem->rawText.c_str());
-        else // send freetext
-            sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, inkhud->freetext.c_str());
-        inkhud->freetext.erase();
+        // send selected message
+        sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, cm.selectedMessageItem->rawText.c_str());
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL); // Next refresh should be FULL. Lots of button pressing to get here
         break;
 
@@ -595,6 +596,21 @@ void InkHUD::MenuApplet::onNavRight()
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
+void InkHUD::MenuApplet::onFreeText()
+{
+    // Restart the auto-close timeout
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    OSThread::enabled = true;
+
+    // Save the message to the free text message item and select it
+    cm.freeTextItem.rawText = inkhud->freetext;
+    cm.selectedMessageItem = &cm.freeTextItem;
+
+    // Open the recipients page
+    showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
 // Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu
 void InkHUD::MenuApplet::populateAppletPage()
 {
@@ -648,7 +664,7 @@ void InkHUD::MenuApplet::populateSendPage()
 
     // If joystick is available, include the Free Text option
     if (settings->joystick.enabled)
-        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::CANNEDMESSAGE_RECIPIENT));
+        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message
     uint8_t count = cm.store->size();

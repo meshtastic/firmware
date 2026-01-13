@@ -32,6 +32,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onNavDown() override;
     void onNavLeft() override;
     void onNavRight() override;
+    void onFreeText() override;
     void onRender() override;
 
     void show(Tile *t); // Open the menu, onto a user tile
@@ -94,6 +95,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
         // Cleared onBackground (when MenuApplet closes)
         std::vector<MessageItem> messageItems;
         std::vector<RecipientItem> recipientItems;
+
+        MessageItem freeTextItem;
     } cm;
 
     Applet *borrowedTileOwner = nullptr; // Which applet we have temporarily replaced while displaying menu

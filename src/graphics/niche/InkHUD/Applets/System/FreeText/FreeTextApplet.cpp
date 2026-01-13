@@ -24,7 +24,7 @@ void InkHUD::FreeTextApplet::onRender()
 {
     setFont(fontSmall);
     std::string header = "Free Text";
-    
+
     // Draw the input box
     uint16_t yStartBox = fontSmall.lineHeight();
     uint16_t inputBoxW = X(1.0);
@@ -34,12 +34,11 @@ void InkHUD::FreeTextApplet::onRender()
         inputBoxH += fontSmall.lineHeight();
     }
 
-    
-    if (!inkhud->freetext.empty()) 
-    {
+    if (!inkhud->freetext.empty()) {
         uint32_t textHeight = getWrappedTextHeight(0, inputBoxW - 5, inkhud->freetext);
-        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight + fontSmall.lineHeight() : inputBoxH - textHeight + fontSmall.lineHeight() + 1;
-        if (textHeight > inputBoxH) 
+        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight + fontSmall.lineHeight()
+                                               : inputBoxH - textHeight + fontSmall.lineHeight() + 1;
+        if (textHeight > inputBoxH)
             printWrapped(2, textPadding, inputBoxW - 5, inkhud->freetext);
         else
             printWrapped(2, yStartBox + 2, inputBoxW - 5, inkhud->freetext);
@@ -47,7 +46,7 @@ void InkHUD::FreeTextApplet::onRender()
     fillRect(0, 0, X(1.0), yStartBox, WHITE);
     printAt(0, 0, header);
     drawRect(0, yStartBox, inputBoxW, inputBoxH + 5, BLACK);
-    
+
     // Draw the keyboard
     uint16_t yStartKb = Y(0.55);
     float padding = 0.01;
@@ -115,10 +114,11 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
         inkhud->freetext.pop_back();
         requestUpdate(EInk::UpdateTypes::FAST);
     } else if (a == ENTER) {
-        // This will eventually lead to a save/send page;
-    } else if (a == ESCAPE) {
+        inkhud->newFreeText();
         sendToBackground();
-        requestUpdate(EInk::UpdateTypes::FAST);
+    } else if (a == ESCAPE) {
+        inkhud->freetext.erase();
+        sendToBackground();
     } else if (a == NONE) {
         inkhud->freetext += ch;
         requestUpdate(EInk::UpdateTypes::FAST);
@@ -127,20 +127,20 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
 
 void InkHUD::FreeTextApplet::onButtonLongPress()
 {
+    inkhud->freetext.erase();
     sendToBackground();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::FreeTextApplet::onExitShort()
 {
+    inkhud->freetext.erase();
     sendToBackground();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::FreeTextApplet::onExitLong()
 {
+    inkhud->freetext.erase();
     sendToBackground();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::FreeTextApplet::onNavUp()
