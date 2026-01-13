@@ -20,6 +20,8 @@
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define USE_TFTDISPLAY 1
 
+#define HAS_DRV2605 1
+
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
 #define SCREEN_TOUCH_USE_I2C1
@@ -51,9 +53,10 @@
 #define HAS_BMA423 1
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_BAUDRATE 38400
+#define GPS_RX_PIN 42
+#define GPS_TX_PIN 41
 
 #define USE_SX1262
 #define USE_SX1268
