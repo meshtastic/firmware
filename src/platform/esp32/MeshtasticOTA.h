@@ -10,7 +10,7 @@ void initialize();
 bool isUpdated();
 
 void recoverConfig(meshtastic_Config_NetworkConfig *network);
-void saveConfig(meshtastic_Config_NetworkConfig *network, meshtastic_OTAMode method, uint8_t* ota_hash);
+void saveConfig(meshtastic_Config_NetworkConfig *network, meshtastic_OTAMode method, uint8_t *ota_hash);
 bool trySwitchToOTA();
 const char *getVersion();
 } // namespace MeshtasticOTA

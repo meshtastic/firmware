@@ -3,25 +3,24 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "Default.h"
 #include "AirQualityTelemetry.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "Sensor/AddI2CSensorTemplate.h"
 #include "UnitConversions.h"
+#include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
-#include "graphics/ScreenFonts.h"
 #include "main.h"
 #include "sleep.h"
 #include <Throttle.h>
-#include "Sensor/AddI2CSensorTemplate.h"
 
 // Sensors
 #include "Sensor/PMSA003ISensor.h"
-
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -57,7 +56,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
     uint32_t result = UINT32_MAX;
 
-    if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.air_quality_screen_enabled ||
+    if (!(moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
@@ -74,7 +73,6 @@ int32_t AirQualityTelemetryModule::runOnce()
             if (!sensors.empty()) {
                 result = DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
             }
-
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -95,27 +93,26 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         if (((lastSentToMesh == 0) ||
-            !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                            moduleConfig.telemetry.air_quality_interval,
-                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.air_quality_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = millis();
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
-                (service->isToPhoneQueueEmpty())) {
+                   (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }
 
-    // Send to sleep sensors that consume power
-    LOG_INFO("Sending sensors to sleep");
-    for (TelemetrySensor *sensor : sensors) {
-        sensor->sleep();
-    }
-
+        // Send to sleep sensors that consume power
+        LOG_INFO("Sending sensors to sleep");
+        for (TelemetrySensor *sensor : sensors) {
+            sensor->sleep();
+        }
     }
     return min(sendToPhoneIntervalMs, result);
 }
@@ -161,8 +158,8 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     const auto &m = telemetry.variant.air_quality_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard  || m.has_pm10_environmental || m.has_pm25_environmental ||
-                  m.has_pm100_environmental;
+    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard || m.has_pm10_environmental ||
+                  m.has_pm25_environmental || m.has_pm100_environmental;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -296,10 +293,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     if (getAirQualityTelemetry(&m)) {
         LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, \
-                    pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u", \
-                    m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard, \
-                    m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental, \
-                    m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
+                    pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
+                 m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,
+                 m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
+                 m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
@@ -341,8 +338,8 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 }
 
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
-                                                                                 meshtastic_AdminMessage *request,
-                                                                                 meshtastic_AdminMessage *response)
+                                                                                meshtastic_AdminMessage *request,
+                                                                                meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
 
