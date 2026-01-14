@@ -29,9 +29,9 @@ private:
     uint16_t computedChecksum = 0;
     uint16_t receivedChecksum = 0;
 
-    uint8_t buffer[PMSA003I_FRAME_LENGTH];
-    TwoWire * _bus;
-    uint8_t _address;
+    uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
+    TwoWire * _bus{};
+    uint8_t _address{};
 };
 
 #endif
