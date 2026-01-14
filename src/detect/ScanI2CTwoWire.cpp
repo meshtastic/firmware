@@ -63,6 +63,10 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
         if (i2cBus->available()) {
             r = i2cBus->read();
         }
+        if(r == 0x80){
+            LOG_INFO("QMC6310N found at address 0x%02X", addr.address);
+            return ScanI2C::DeviceType::QMC6310N;
+        }
         r &= 0x0f;
 
         if (r == 0x08 || r == 0x00) {
@@ -175,7 +179,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         type = NONE;
         if (err == 0) {
             switch (addr.address) {
-            case SSD1306_ADDRESS:
+            case SSD1306_ADDRESS_H:
+            case SSD1306_ADDRESS_L:
                 type = probeOLED(addr);
                 break;
 
@@ -412,7 +417,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case LPS22HB_ADDR_ALT:
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
+                SCAN_SIMPLE_CASE(QMC6310U_ADDR, QMC6310U, "QMC6310U", (uint8_t)addr.address)
 
             case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
