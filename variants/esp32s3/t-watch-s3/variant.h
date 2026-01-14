@@ -56,8 +56,8 @@
 #define HAS_GPS 1
 #define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_BAUDRATE 38400
-#define GPS_RX_PIN 42
-#define GPS_TX_PIN 41
+#define GPS_RX_PIN 41
+#define GPS_TX_PIN 42
 
 #define BUTTON_PIN 0 // only for Plus version
 
