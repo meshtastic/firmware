@@ -1541,8 +1541,9 @@ void setup()
 }
 
 #endif
-uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
-uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
+uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to reboot shortly after the update completes)
+uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
+bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will suppress the current delay and instead try to run ASAP.
