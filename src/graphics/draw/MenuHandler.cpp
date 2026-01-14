@@ -1255,7 +1255,7 @@ void menuHandler::NodePicker()
     if (currentResolution == ScreenResolution::UltraLow) {
         NODE_PICKER_TITLE = "Pick Node";
     } else {
-        NODE_PICKER_TITLE = "Node To Manage";
+        NODE_PICKER_TITLE = "Pick A Node";
     }
     screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
         LOG_INFO("Nodenum: %u", nodenum);
