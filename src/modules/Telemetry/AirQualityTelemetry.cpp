@@ -42,10 +42,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // moduleConfig.telemetry.air_quality_interval = 15;
 
     // order by priority of metrics/values (low top, high bottom)
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
-// Sensors that require variable I2C clock speed
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
-#endif
 }
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -90,10 +87,12 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it
-#ifdef PMSA003I_ENABLE_PIN
-        if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
-            return pmsa003iSensor.wakeUp();
-#endif /* PMSA003I_ENABLE_PIN */
+        LOG_INFO("Waking up sensors");
+        for (TelemetrySensor *sensor : sensors) {
+            if (!sensor->isActive()) {
+                return sensor->wakeUp();
+            }
+        }
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -111,10 +110,11 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
-// Send to sleep sensors that consume power
-#ifdef PMSA003I_ENABLE_PIN
-        pmsa003iSensor.sleep();
-#endif /* PMSA003I_ENABLE_PIN */
+    // Send to sleep sensors that consume power
+    LOG_INFO("Sending sensors to sleep");
+    for (TelemetrySensor *sensor : sensors) {
+        sensor->sleep();
+    }
 
     }
     return min(sendToPhoneIntervalMs, result);

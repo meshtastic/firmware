@@ -14,13 +14,11 @@ class PMSA003ISensor : public TelemetrySensor
 public:
     PMSA003ISensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-    virtual bool isActive();
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 
-#ifdef PMSA003I_ENABLE_PIN
-    void sleep();
-    uint32_t wakeUp();
-#endif
+    virtual bool isActive() override;
+    virtual void sleep() override;
+    virtual uint32_t wakeUp() override;
 
 private:
     enum class State { IDLE, ACTIVE };

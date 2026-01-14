@@ -141,19 +141,24 @@ bool PMSA003ISensor::isActive()
     return state == State::ACTIVE;
 }
 
-#ifdef PMSA003I_ENABLE_PIN
+
 void PMSA003ISensor::sleep()
 {
+#ifdef PMSA003I_ENABLE_PIN
     digitalWrite(PMSA003I_ENABLE_PIN, LOW);
     state = State::IDLE;
+#endif
 }
 
 uint32_t PMSA003ISensor::wakeUp()
 {
+#ifdef PMSA003I_ENABLE_PIN
     LOG_INFO("Waking up PMSA003I");
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = State::ACTIVE;
     return PMSA003I_WARMUP_MS;
-}
 #endif
+    // No need to wait for warmup if already active
+    return 0;
+}
 #endif
