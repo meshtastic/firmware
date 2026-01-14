@@ -1,4 +1,11 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+
 #include <forward_list>
+#include "TelemetrySensor.h"
+#include "detect/ScanI2C.h"
+#include "detect/ScanI2CTwoWire.h"
+#include <Wire.h>
+
 static std::forward_list<TelemetrySensor *> sensors;
 
 template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
@@ -24,3 +31,4 @@ template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType ty
         delete sensor;
     }
 }
+#endif
