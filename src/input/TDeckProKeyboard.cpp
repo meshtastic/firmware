@@ -1,6 +1,8 @@
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK)
 
 #include "TDeckProKeyboard.h"
+#include "input/InputBroker.h"
+#include "modules/CannedMessageModule.h"
 
 #define _TCA8418_COLS 10
 #define _TCA8418_ROWS 4
@@ -175,14 +177,28 @@ void TDeckProKeyboard::toggleBacklight(void)
     digitalWrite(KB_BL_PIN, !digitalRead(KB_BL_PIN));
 }
 
+static bool shouldQueueImePageEvent()
+{
+#if defined(USE_U8G2_EINK_TEXT)
+    return cannedMessageModule && cannedMessageModule->isImeActiveWithCandidates();
+#else
+    return false;
+#endif
+}
+
 void TDeckProKeyboard::updateModifierFlag(uint8_t key)
 {
     if (key == modifierRightShiftKey) {
         modifierFlag ^= modifierRightShift;
+        if (shouldQueueImePageEvent())
+            queueEvent(INPUT_BROKER_MSG_IME_PAGE_NEXT);
     } else if (key == modifierLeftShiftKey) {
         modifierFlag ^= modifierLeftShift;
+        if (shouldQueueImePageEvent())
+            queueEvent(INPUT_BROKER_MSG_IME_PAGE_PREV);
     } else if (key == modifierSymKey) {
         modifierFlag ^= modifierSym;
+        queueEvent((modifierFlag & modifierSym) ? INPUT_BROKER_MSG_FN_SYMBOL_ON : INPUT_BROKER_MSG_FN_SYMBOL_OFF);
     } else if (key == modifierAltKey) {
         modifierFlag ^= modifierAlt;
     }
@@ -193,4 +209,4 @@ bool TDeckProKeyboard::isModifierKey(uint8_t key)
     return (key == modifierRightShiftKey || key == modifierLeftShiftKey || key == modifierAltKey || key == modifierSymKey);
 }
 
-#endif // T_DECK_PRO
+#endif // T_DECK_PRO || T_DECK

@@ -132,6 +132,21 @@ void EInkDisplay::setDetected(uint8_t detected)
     (void)detected;
 }
 
+#ifdef USE_U8G2_EINK_TEXT
+U8G2_FOR_ADAFRUIT_GFX *EInkDisplay::getU8g2()
+{
+    if (!u8g2Ready) {
+        if (!u8g2Target) {
+            u8g2Target = new EInkBufferGFX(this);
+        }
+        u8g2Fonts.begin(*u8g2Target);
+        u8g2Ready = true;
+    }
+
+    return &u8g2Fonts;
+}
+#endif
+
 // Connect to the display - variant specific
 bool EInkDisplay::connect()
 {
