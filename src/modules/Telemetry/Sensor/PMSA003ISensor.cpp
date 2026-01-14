@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
 #include "TelemetrySensor.h"
+#include "../detect/reClockI2C.h"
 
 #include <Wire.h>
 
@@ -24,7 +25,7 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _address = dev->address.address;
 
 #if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    uint32_t currentClock = setClock(PMSA003I_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus);
     if (!currentClock){
         LOG_WARN("PMSA003I can't be used at this clock speed");
         return false;
@@ -38,7 +39,7 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     }
 
 #if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    setClock(currentClock);
+    reClockI2C(currentClock, _bus);
 #endif
 
     status = 1;
@@ -56,7 +57,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
 #if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    uint32_t currentClock = setClock(PMSA003I_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus);
 #endif
 
     _bus->requestFrom(_address, PMSA003I_FRAME_LENGTH);
@@ -66,7 +67,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
 #if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    setClock(currentClock);
+    reClockI2C(currentClock, _bus);
 #endif
 
     for (uint8_t i = 0; i < PMSA003I_FRAME_LENGTH; i++) {

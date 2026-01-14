@@ -30,6 +30,8 @@ private:
     uint16_t receivedChecksum = 0;
 
     uint8_t buffer[PMSA003I_FRAME_LENGTH];
+    TwoWire * _bus;
+    uint8_t _address;
 };
 
 #endif
