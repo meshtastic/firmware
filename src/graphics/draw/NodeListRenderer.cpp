@@ -599,13 +599,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Draw column separator
     if (currentResolution != ScreenResolution::UltraLow && shownCount > 0) {
         const int firstNodeY = y + 3;
-        if (currentResolution == ScreenResolution::High) {
-            columnWidth -= 2;
-        } else if (currentResolution == ScreenResolution::Low) {
-            columnWidth -= 1;
-        }
+        const int tempColumnWidth = (currentResolution == ScreenResolution::High)  ? columnWidth - 2
+                                    : (currentResolution == ScreenResolution::Low) ? columnWidth - 1
+                                                                                   : columnWidth;
         for (int horizontal_offset = 1; horizontal_offset < totalColumns; horizontal_offset++) {
-            drawColumnSeparator(display, columnWidth * horizontal_offset, firstNodeY, lastNodeY);
+            drawColumnSeparator(display, tempColumnWidth * horizontal_offset, firstNodeY, lastNodeY);
         }
     }
 
