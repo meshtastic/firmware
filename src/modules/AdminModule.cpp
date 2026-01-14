@@ -241,6 +241,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32)
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (!BleOta::getOtaAppVersion().isEmpty()) {
+            suppressRebootBanner = true;
             if (screen)
                 screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
@@ -249,6 +250,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
 #if !MESHTASTIC_EXCLUDE_WIFI
         if (WiFiOTA::trySwitchToOTA()) {
+            suppressRebootBanner = true;
             if (screen)
                 screen->startFirmwareUpdateScreen();
             WiFiOTA::saveConfig(&config.network);
