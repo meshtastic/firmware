@@ -335,6 +335,23 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    // Enforce position broadcast minimums if we would send positions over a default channel
+    // Check channels the same way PositionModule::sendOurPosition() does - first channel with position_precision set
+    bool positionUsesDefaultChannel = false;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        if (channels.getByIndex(i).settings.has_module_settings &&
+            channels.getByIndex(i).settings.module_settings.position_precision != 0) {
+            positionUsesDefaultChannel = channels.isDefaultChannel(i);
+            break;
+        }
+    }
+    if (positionUsesDefaultChannel) {
+        LOG_DEBUG("Coerce position broadcasts to min of 1 hour and smart broadcast min of 5 minutes on defaults");
+        config.position.position_broadcast_secs =
+            Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
+        config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
+            config.position.broadcast_smart_minimum_interval_secs, min_default_broadcast_smart_minimum_interval_secs);
+    }
     // FIXME: UINT32_MAX intervals overflows Apple clients until they are fully patched
     if (config.device.node_info_broadcast_secs > MAX_INTERVAL)
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
@@ -644,7 +661,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.position.position_broadcast_smart_enabled = true;
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
-    config.position.broadcast_smart_minimum_interval_secs = 30;
+    config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
@@ -805,7 +822,8 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
+#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
+    defined(ELECROW_ThinkNode_M6)
     // Default to PIN_LED2 for external notification output (LED color depends on device variant)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
@@ -1548,6 +1566,23 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
     return delta;
 }
 
+int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
+{
+    // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
+    // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
+    // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
+    // the bitfield is encrypted under the channel encryption key. For encrypted packets, this returns
+    // defaultIfUnknown when hop_start is 0.
+    if (p.hop_start == 0 && !(p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield))
+        return defaultIfUnknown; // Cannot reliably determine the number of hops.
+
+    // Guard against invalid values.
+    if (p.hop_start < p.hop_limit)
+        return defaultIfUnknown;
+
+    return p.hop_start - p.hop_limit;
+}
+
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
@@ -1800,9 +1835,10 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
-        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
+        const int8_t hopsAway = getHopsAway(mp);
+        if (hopsAway >= 0) {
             info->has_hops_away = true;
-            info->hops_away = mp.hop_start - mp.hop_limit;
+            info->hops_away = hopsAway;
         }
         sortMeshDB();
     }

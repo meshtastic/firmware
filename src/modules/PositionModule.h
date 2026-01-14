@@ -69,10 +69,11 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // In event mode we want to prevent excessive position broadcasts
     // we set the minimum interval to 5m
     const uint32_t minimumTimeThreshold =
-        max(300000, Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30));
+        max(uint32_t(300000), Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs,
+                                                                default_broadcast_smart_minimum_interval_secs));
 #else
-    const uint32_t minimumTimeThreshold =
-        Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
+    const uint32_t minimumTimeThreshold = Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs,
+                                                                            default_broadcast_smart_minimum_interval_secs);
 #endif
 };
 

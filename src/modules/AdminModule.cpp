@@ -236,6 +236,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_ota_request_tag: {
 #if defined(ARCH_ESP32)
         if (r->ota_request.ota_hash.size != 32) {
+            suppressRebootBanner = true;
             LOG_INFO("OTA Failed: Invalid `ota_hash` provided");
             break;
         }
@@ -243,6 +244,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_OTAMode mode = r->ota_request.reboot_ota_mode;
         if (MeshtasticOTA::trySwitchToOTA()) {
             LOG_INFO("OTA Requested");
+            suppressRebootBanner = true;
             if (screen)
                 screen->startFirmwareUpdateScreen();
             MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
@@ -379,6 +381,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_toggle_muted_node_tag: {
+        LOG_INFO("Client received toggle_muted_node command");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
+        if (node != NULL) {
+            node->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
+            saveChanges(SEGMENT_NODEDATABASE, false);
+        }
+        break;
+    }
+
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
