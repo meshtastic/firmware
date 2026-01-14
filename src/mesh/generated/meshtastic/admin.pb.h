@@ -270,6 +270,8 @@ typedef struct _meshtastic_AdminMessage {
         uint32_t set_ignored_node;
         /* Set specified node-num to be un-ignored on the NodeDB on the device */
         uint32_t remove_ignored_node;
+        /* Set specified node-num to be muted */
+        uint32_t toggle_muted_node;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -279,8 +281,6 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_SharedContact add_contact;
         /* Initiate or respond to a key verification request */
         meshtastic_KeyVerificationAdmin key_verification;
-        /* Tell the node to reboot into OTA mode for firmware update via BLE or WiFi (ESP32 only for now) */
-        meshtastic_OTAMode reboot_ota_mode;
         /* Tell the node to factory reset config everything; all device state and configuration will be returned to factory defaults and BLE bonds will be cleared. */
         int32_t factory_reset_device;
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
@@ -339,7 +339,6 @@ extern "C" {
 #define meshtastic_AdminMessage_payload_variant_backup_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
 #define meshtastic_AdminMessage_payload_variant_restore_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
 #define meshtastic_AdminMessage_payload_variant_remove_backup_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
-#define meshtastic_AdminMessage_payload_variant_reboot_ota_mode_ENUMTYPE meshtastic_OTAMode
 
 
 #define meshtastic_AdminMessage_OTAEvent_reboot_ota_mode_ENUMTYPE meshtastic_OTAMode
@@ -429,11 +428,11 @@ extern "C" {
 #define meshtastic_AdminMessage_store_ui_config_tag 46
 #define meshtastic_AdminMessage_set_ignored_node_tag 47
 #define meshtastic_AdminMessage_remove_ignored_node_tag 48
+#define meshtastic_AdminMessage_toggle_muted_node_tag 49
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_add_contact_tag  66
 #define meshtastic_AdminMessage_key_verification_tag 67
-#define meshtastic_AdminMessage_reboot_ota_mode_tag 68
 #define meshtastic_AdminMessage_factory_reset_device_tag 94
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
 #define meshtastic_AdminMessage_exit_simulator_tag 96
@@ -489,11 +488,11 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_ui_config_response,get_u
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_ui_config,store_ui_config),  46) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_ignored_node,set_ignored_node),  47) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_ignored_node,remove_ignored_node),  48) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,toggle_muted_node,toggle_muted_node),  49) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,add_contact,add_contact),  66) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification,key_verification),  67) \
-X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,reboot_ota_mode,reboot_ota_mode),  68) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \

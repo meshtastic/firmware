@@ -26,6 +26,7 @@ class AppletFont
         WINDOWS_1250,
         WINDOWS_1251,
         WINDOWS_1252,
+        WINDOWS_1253,
     };
 
     AppletFont();
@@ -83,5 +84,13 @@ class AppletFont
 #define FREESANS_12PT_WIN1252 InkHUD::AppletFont(FreeSans12pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -3, 1)
 #define FREESANS_9PT_WIN1252 InkHUD::AppletFont(FreeSans9pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -2, -1)
 #define FREESANS_6PT_WIN1252 InkHUD::AppletFont(FreeSans6pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -1, -2)
+
+// Greek
+#include "graphics/niche/Fonts/FreeSans12pt_Win1253.h"
+#include "graphics/niche/Fonts/FreeSans6pt_Win1253.h"
+#include "graphics/niche/Fonts/FreeSans9pt_Win1253.h"
+#define FREESANS_12PT_WIN1253 InkHUD::AppletFont(FreeSans12pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -3, 1)
+#define FREESANS_9PT_WIN1253 InkHUD::AppletFont(FreeSans9pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -2, -1)
+#define FREESANS_6PT_WIN1253 InkHUD::AppletFont(FreeSans6pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -1, -2)
 
 #endif
