@@ -91,6 +91,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
 
+    // pointer to the encrypted packet
+    meshtastic_MeshPacket *p_encrypted = nullptr;
+
   protected:
     friend class RoutingModule;
 

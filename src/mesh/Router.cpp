@@ -113,7 +113,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 
         // Check 3: role check (moderate cost - multiple comparisons)
         if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
             continue;
         }
 
@@ -691,7 +691,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // Store a copy of encrypted packet for MQTT
     DEBUG_HEAP_BEFORE;
-    meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
+    p_encrypted = packetPool.allocCopy(*p);
     DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
@@ -729,7 +729,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                        meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP,
                        meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP,
                        meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_WAYPOINT_APP,
-                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP)) {
+                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP,
+                       meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP)) {
             LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;
@@ -761,6 +762,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
+    p_encrypted = nullptr;
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)

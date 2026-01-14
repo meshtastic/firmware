@@ -38,6 +38,9 @@
 #include "target_specific.h"
 #include <memory>
 #include <utility>
+#if HAS_SCREEN
+#include "MessageStore.h"
+#endif
 
 #ifdef ELECROW_ThinkNode_M5
 PCA9557 io(0x18, &Wire);
@@ -432,10 +435,17 @@ void setup()
 #endif
 
 #if ARCH_PORTDUINO
+    RTCQuality ourQuality = RTCQualityDevice;
+
+    std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
+    if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    }
+
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityDevice, &tv);
+    perhapsSetRTC(ourQuality, &tv);
 #endif
 
     powerMonInit();
@@ -1205,11 +1215,6 @@ void setup()
 #endif
 #endif
 
-#ifdef PIN_PWR_DELAY_MS
-    // This may be required to give the peripherals time to power up.
-    delay(PIN_PWR_DELAY_MS);
-#endif
-
 #ifdef ARCH_PORTDUINO
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -1650,6 +1655,9 @@ void loop()
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();
     }
+#endif
+#if HAS_SCREEN && ENABLE_MESSAGE_PERSISTENCE
+    messageStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();
 

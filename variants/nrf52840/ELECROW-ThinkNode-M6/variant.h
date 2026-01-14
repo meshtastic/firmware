@@ -121,7 +121,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL2_TX (24)
 
 // PCF8563 RTC Module
-#define PCF8563_RTC 0x51
+// REVISIT https://github.com/meshtastic/firmware/pull/9084
+// #define PCF8563_RTC 0x51
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
