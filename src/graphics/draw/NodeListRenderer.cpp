@@ -176,6 +176,7 @@ int calculateMaxScroll(int totalEntries, int visibleRows)
 
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
 {
+    x = (currentResolution == ScreenResolution::High) ? x - 2 : (currentResolution == ScreenResolution::Low) ? x - 1 : x;
     for (int y = yStart; y <= yEnd; y += 2) {
         display->setPixel(x, y);
     }
@@ -599,11 +600,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Draw column separator
     if (currentResolution != ScreenResolution::UltraLow && shownCount > 0) {
         const int firstNodeY = y + 3;
-        const int tempColumnWidth = (currentResolution == ScreenResolution::High)  ? columnWidth - 2
-                                    : (currentResolution == ScreenResolution::Low) ? columnWidth - 1
-                                                                                   : columnWidth;
         for (int horizontal_offset = 1; horizontal_offset < totalColumns; horizontal_offset++) {
-            drawColumnSeparator(display, tempColumnWidth * horizontal_offset, firstNodeY, lastNodeY);
+            drawColumnSeparator(display, columnWidth * horizontal_offset, firstNodeY, lastNodeY);
         }
     }
 
