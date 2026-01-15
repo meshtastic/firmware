@@ -115,7 +115,7 @@ int32_t StatusLEDModule::runOnce()
     bool chargeIndicatorLED2 = LED_STATE_OFF;
     bool chargeIndicatorLED3 = LED_STATE_OFF;
     bool chargeIndicatorLED4 = LED_STATE_OFF;
-    if (lastUserbuttonTime + 10 * 1000 > millis()) {
+    if (lastUserbuttonTime + 10 * 1000 > millis() || CHARGE_LED_state == LED_STATE_ON) {
         // should this be off at very low percentages?
         chargeIndicatorLED1 = LED_STATE_ON;
         if (powerStatus && powerStatus->getBatteryChargePercent() >= 25)
