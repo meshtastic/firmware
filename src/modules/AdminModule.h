@@ -1,5 +1,5 @@
 #pragma once
-#ifdef ARCH_ESP32
+#ifdef ESP_PLATFORM
 #include <esp_ota_ops.h>
 #endif
 #include "ProtobufModule.h"
