@@ -9,11 +9,8 @@
 #include "meshUtils.h"
 #include <FSCommon.h>
 #include <ctype.h> // for better whitespace handling
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "BleOta.h"
-#endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-#include "WiFiOTA.h"
+#include "MeshtasticOTA.h"
 #endif
 #include "Router.h"
 #include "configuration.h"
@@ -236,26 +233,27 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         reboot(r->reboot_seconds);
         break;
     }
-    case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
-        int32_t s = r->reboot_ota_seconds;
+    case meshtastic_AdminMessage_ota_request_tag: {
 #if defined(ARCH_ESP32)
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
-        if (!BleOta::getOtaAppVersion().isEmpty()) {
-            if (screen)
-                screen->startFirmwareUpdateScreen();
-            BleOta::switchToOtaApp();
-            LOG_INFO("Rebooting to BLE OTA");
+        if (r->ota_request.ota_hash.size != 32) {
+            suppressRebootBanner = true;
+            LOG_INFO("OTA Failed: Invalid `ota_hash` provided");
+            break;
         }
-#endif
-#if !MESHTASTIC_EXCLUDE_WIFI
-        if (WiFiOTA::trySwitchToOTA()) {
+
+        meshtastic_OTAMode mode = r->ota_request.reboot_ota_mode;
+        if (MeshtasticOTA::trySwitchToOTA()) {
+            LOG_INFO("OTA Requested");
+            suppressRebootBanner = true;
             if (screen)
                 screen->startFirmwareUpdateScreen();
-            WiFiOTA::saveConfig(&config.network);
+            MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
             LOG_INFO("Rebooting to WiFi OTA");
+        } else {
+            LOG_INFO("WIFI OTA Failed");
         }
 #endif
-#endif
+        int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -383,6 +381,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_toggle_muted_node_tag: {
+        LOG_INFO("Client received toggle_muted_node command");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
+        if (node != NULL) {
+            node->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
+            saveChanges(SEGMENT_NODEDATABASE, false);
+        }
+        break;
+    }
+
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
