@@ -3,7 +3,9 @@
 
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
+#ifdef ARCH_ESP32
 #include <esp_ota_ops.h>
+#endif
 
 #define METHOD_OTA_BLE 1
 #define METHOD_OTA_WIFI 2

@@ -1,8 +1,9 @@
-#include <esp_ota_ops.h>
-#include <sys/types.h>
-
 #pragma once
+#ifdef ARCH_ESP32
+#include <esp_ota_ops.h>
+#endif
 #include "ProtobufModule.h"
+#include <sys/types.h>
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
