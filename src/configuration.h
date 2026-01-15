@@ -176,8 +176,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SSD1306_ADDRESS 0x3D
 #define USE_SH1106
 #else
-#define SSD1306_ADDRESS_L 0x3C   //Addr = 0
-#define SSD1306_ADDRESS_H  0x3D  //Addr = 1
+#define SSD1306_ADDRESS_L 0x3C // Addr = 0
+#define SSD1306_ADDRESS_H 0x3D // Addr = 1
 #endif
 #define ST7567_ADDRESS 0x3F
 
