@@ -1,3 +1,4 @@
+#include <esp_ota_ops.h>
 #include <sys/types.h>
 
 #pragma once
@@ -71,7 +72,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     bool messageIsResponse(const meshtastic_AdminMessage *r);
     bool messageIsRequest(const meshtastic_AdminMessage *r);
-    void sendWarning(const char *message);
+    void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
+    void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
 };
 
 static constexpr const char *licensedModeMessage =
