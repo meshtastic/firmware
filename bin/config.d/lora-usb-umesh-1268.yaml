@@ -11,5 +11,8 @@ Lora:
   USB_VID: 0x1A86
   DIO3_TCXO_VOLTAGE: true
 #  USB_Serialnum: 12345678
-  SX126X_MAX_POWER: 30
+  SX126X_MAX_POWER: 22
 # Reduce output power to improve EMI
+# Note: This module integrates an additional PA to achieve higher output power.
+# The 'power' parameter here does not represent the actual RF output.
+# Please refer to https://github.com/linser233/uMesh/blob/main/RF_Power.md for detailed information.
