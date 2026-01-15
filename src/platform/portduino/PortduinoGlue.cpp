@@ -678,7 +678,7 @@ bool loadConfig(const char *configPath)
                     // Pretty sure this is always true
                     if (x >= 0 && x < 10 && y >= 0 && y < 10) {
                         // I believe this bit of weirdness is specifically for the new GUI
-                        portduino_config.lora_spi_dev_int = x + y << 4;
+                        portduino_config.lora_spi_dev_int = x + (y << 4);
                         portduino_config.display_spi_dev_int = portduino_config.lora_spi_dev_int;
                         portduino_config.touchscreen_spi_dev_int = portduino_config.lora_spi_dev_int;
                     }
@@ -777,7 +777,7 @@ bool loadConfig(const char *configPath)
                     int x = portduino_config.display_spi_dev.at(11) - '0';
                     int y = portduino_config.display_spi_dev.at(13) - '0';
                     if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.display_spi_dev_int = x + y << 4;
+                        portduino_config.display_spi_dev_int = x + (y << 4);
                         portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
                     }
                 }
@@ -805,7 +805,7 @@ bool loadConfig(const char *configPath)
                     int x = portduino_config.touchscreen_spi_dev.at(11) - '0';
                     int y = portduino_config.touchscreen_spi_dev.at(13) - '0';
                     if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.touchscreen_spi_dev_int = x + y << 4;
+                        portduino_config.touchscreen_spi_dev_int = x + (y << 4);
                     }
                 }
             }
