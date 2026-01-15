@@ -1609,11 +1609,11 @@ class SerialBatteryLevel : public HasBatteryLevel
     {
         // definitely need to gobble up more bytes at once
         if (BatterySerial.available() > 5) {
-            LOG_WARN("SerialBatteryLevel: %u bytes available", BatterySerial.available());
+            // LOG_WARN("SerialBatteryLevel: %u bytes available", BatterySerial.available());
             while (BatterySerial.available() > 11) {
                 BatterySerial.read(); // flush old data
             }
-            LOG_WARN("SerialBatteryLevel: %u bytes now available", BatterySerial.available());
+            // LOG_WARN("SerialBatteryLevel: %u bytes now available", BatterySerial.available());
             int tries = 0;
             while (BatterySerial.read() != 0xFE) {
                 tries++; // wait for start byte
@@ -1635,7 +1635,7 @@ class SerialBatteryLevel : public HasBatteryLevel
             v_percent = Data[1];
             voltage = Data[2] + (((float)Data[3]) / 100) + (((float)Data[4]) / 10000);
             voltage *= 2;
-            LOG_WARN("SerialBatteryLevel: received data %u, %f, %02x", v_percent, voltage, Data[5]);
+            // LOG_WARN("SerialBatteryLevel: received data %u, %f, %02x", v_percent, voltage, Data[5]);
             return true;
         }
         // This function runs first, so use it to grab the latest data from the secondary MCU
