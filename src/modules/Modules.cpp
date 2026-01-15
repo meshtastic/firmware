@@ -252,9 +252,9 @@ void setupModules()
         (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
         new EnvironmentTelemetryModule();
     }
-#if __has_include("Adafruit_PM25AQI.h")
-    if (moduleConfig.has_telemetry && moduleConfig.telemetry.air_quality_enabled &&
-        nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+    if (moduleConfig.has_telemetry &&
+        (moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled)) {
         new AirQualityTelemetryModule();
     }
 #endif
