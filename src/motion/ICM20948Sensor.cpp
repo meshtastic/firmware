@@ -47,7 +47,6 @@ int32_t ICM20948Sensor::runOnce()
 int32_t ICM20948Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-#if defined(MUZI_BASE) // temporarily gated to single device due to feature freeze
     if (screen && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
         if (!isAsleep) {
             LOG_DEBUG("sleeping IMU");
@@ -60,7 +59,6 @@ int32_t ICM20948Sensor::runOnce()
         sensor->sleep(false);
         isAsleep = false;
     }
-#endif
 
     float magX = 0, magY = 0, magZ = 0;
     if (sensor->dataReady()) {

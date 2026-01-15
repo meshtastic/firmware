@@ -823,7 +823,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
 #if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
-    defined(ELECROW_ThinkNode_M6)
+    defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M6)
     // Default to PIN_LED2 for external notification output (LED color depends on device variant)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
@@ -1264,6 +1264,23 @@ void NodeDB::loadFromDisk()
     if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
         LOG_WARN("Devicestate %d is old or invalid, discard", devicestate.version);
         installDefaultDeviceState();
+
+        // Attempt recovery of owner fields from our own NodeDB entry if available.
+        meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
+        if (us && us->has_user) {
+            LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
+                     us->num);
+            memcpy(owner.long_name, us->user.long_name, sizeof(owner.long_name));
+            owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+            memcpy(owner.short_name, us->user.short_name, sizeof(owner.short_name));
+            owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+            owner.is_licensed = us->user.is_licensed;
+            owner.has_is_unmessagable = us->user.has_is_unmessagable;
+            owner.is_unmessagable = us->user.is_unmessagable;
+
+            // Save the recovered owner to device state on disk
+            saveToDisk(SEGMENT_DEVICESTATE);
+        }
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
