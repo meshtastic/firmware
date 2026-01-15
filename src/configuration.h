@@ -174,6 +174,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS 0x3D
+#define SSD1306_ADDRESS_H SSD1306_ADDRESS
+#define SSD1306_ADDRESS_L 0x3C // Alternate low address for scanners
 #define USE_SH1106
 #else
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
