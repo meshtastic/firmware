@@ -2,17 +2,14 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
+#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
 #include "TelemetrySensor.h"
-#include "../detect/reClockI2C.h"
 
 #include <Wire.h>
 
-PMSA003ISensor::PMSA003ISensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_PMSA003I, "PMSA003I")
-{
-}
+PMSA003ISensor::PMSA003ISensor() : TelemetrySensor(meshtastic_TelemetrySensorType_PMSA003I, "PMSA003I") {}
 
 bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
@@ -26,7 +23,7 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 #if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
     uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus);
-    if (!currentClock){
+    if (!currentClock) {
         LOG_WARN("PMSA003I can't be used at this clock speed");
         return false;
     }
@@ -51,7 +48,7 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    if(!isActive()){
+    if (!isActive()) {
         LOG_WARN("PMSA003I is not active");
         return false;
     }
@@ -79,9 +76,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    auto read16 = [](uint8_t *data, uint8_t idx) -> uint16_t {
-        return (data[idx] << 8) | data[idx + 1];
-    };
+    auto read16 = [](uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
 
     computedChecksum = 0;
 
@@ -140,7 +135,6 @@ bool PMSA003ISensor::isActive()
 {
     return state == State::ACTIVE;
 }
-
 
 void PMSA003ISensor::sleep()
 {

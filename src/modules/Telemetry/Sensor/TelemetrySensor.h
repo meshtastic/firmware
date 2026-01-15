@@ -59,7 +59,7 @@ class TelemetrySensor
     // TODO: delete after migration
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
     // Functions to sleep / wakeup sensors that support it
-    virtual void sleep() {};
+    virtual void sleep(){};
     virtual uint32_t wakeUp() { return 0; }
     // Return active by default, override per sensor
     virtual bool isActive() { return true; }

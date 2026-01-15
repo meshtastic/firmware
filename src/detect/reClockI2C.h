@@ -1,7 +1,8 @@
 #ifdef CAN_RECLOCK_I2C
 #include "ScanI2CTwoWire.h"
 
-uint32_t reClockI2C(uint32_t desiredClock, TwoWire *i2cBus) {
+uint32_t reClockI2C(uint32_t desiredClock, TwoWire *i2cBus)
+{
 
     uint32_t currentClock;
 
@@ -31,7 +32,7 @@ uint32_t reClockI2C(uint32_t desiredClock, TwoWire *i2cBus) {
     return 0;
 #endif
 
-    if (currentClock != desiredClock){
+    if (currentClock != desiredClock) {
         LOG_DEBUG("Changing I2C clock to %u", desiredClock);
         i2cBus->setClock(desiredClock);
     }

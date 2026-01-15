@@ -16,8 +16,8 @@
 #include <OLEDDisplayUi.h>
 
 class AirQualityTelemetryModule : private concurrency::OSThread,
-    public ScanI2CConsumer,
-    public ProtobufModule<meshtastic_Telemetry>
+                                  public ScanI2CConsumer,
+                                  public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *>(this,
