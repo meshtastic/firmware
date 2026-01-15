@@ -1,6 +1,6 @@
 #include "MeshtasticOTA.h"
 #include "configuration.h"
-#ifdef ARCH_ESP32
+#ifdef ESP_PLATFORM
 #include <Preferences.h>
 #include <esp_ota_ops.h>
 #endif
