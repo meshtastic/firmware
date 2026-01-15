@@ -58,7 +58,7 @@ bool needReconnect = true;   // If we create our reconnector, run it once at the
 bool isReconnecting = false; // If we are currently reconnecting
 
 WiFiUDP syslogClient;
-Syslog syslog(syslogClient);
+meshtastic::Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
 

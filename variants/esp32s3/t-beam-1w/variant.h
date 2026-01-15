@@ -1,4 +1,4 @@
-// LilyGo T-Beam-1W variant.h  
+// LilyGo T-Beam-1W variant.h
 // Configuration based on LilyGO utilities.h and RF documentation
 
 // I2C for OLED display (SH1106 at 0x3C)
@@ -9,13 +9,13 @@
 #define GPS_RX_PIN 5
 #define GPS_TX_PIN 6
 #define GPS_1PPS_PIN 7
-#define GPS_WAKEUP_PIN 16  // GPS_EN_PIN in LilyGO code
+#define GPS_WAKEUP_PIN 16 // GPS_EN_PIN in LilyGO code
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 
 // Buttons
-#define BUTTON_PIN 0         // BUTTON 1
-#define BUTTON_PIN_ALT 17    // BUTTON 2
+#define BUTTON_PIN 0      // BUTTON 1
+#define ALT_BUTTON_PIN 17 // BUTTON 2
 
 // SPI (shared by LoRa and SD)
 #define SPI_MOSI 11
@@ -32,7 +32,7 @@
 #define USE_SX1262
 
 #define LORA_SCK SPI_SCK
-#define LORA_MISO SPI_MISO  
+#define LORA_MISO SPI_MISO
 #define LORA_MOSI SPI_MOSI
 #define LORA_CS 15
 #define LORA_RESET 3
@@ -58,7 +58,7 @@
 // Truth table: DIO2=1,CTRL=0 → TX (PA on, LNA off)
 //              DIO2=0,CTRL=1 → RX (PA off, LNA on)
 #define SX126X_DIO2_AS_RF_SWITCH
-#define SX126X_RXEN 21  // LNA enable - HIGH during RX
+#define SX126X_RXEN 21 // LNA enable - HIGH during RX
 
 // TCXO voltage - required for radio init
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
@@ -68,7 +68,7 @@
 
 // LED
 #define LED_PIN 18
-#define LED_STATE_ON 1  // HIGH = ON
+#define LED_STATE_ON 1 // HIGH = ON
 
 // Battery ADC
 #define BATTERY_PIN 4
@@ -89,7 +89,7 @@
 #define SX126X_PA_RAMP_US 0x05
 
 // Display - SH1106 OLED (128x64)
-#define USE_SH1106 
+#define USE_SH1106
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 64
 

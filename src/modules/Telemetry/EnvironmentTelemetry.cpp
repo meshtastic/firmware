@@ -141,36 +141,9 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
+#include "Sensor/AddI2CSensorTemplate.h"
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
-
-#include <forward_list>
-
-static std::forward_list<TelemetrySensor *> sensors;
-
-template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
-{
-    ScanI2C::FoundDevice dev = i2cScanner->find(type);
-    if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
-        TelemetrySensor *sensor = new T();
-#if WIRE_INTERFACES_COUNT > 1
-        TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
-        if (dev.address.port != ScanI2C::I2CPort::WIRE1 && sensor->onlyWire1()) {
-            // This sensor only works on Wire (Wire1 is not supported)
-            delete sensor;
-            return;
-        }
-#else
-        TwoWire *bus = &Wire;
-#endif
-        if (sensor->initDevice(bus, &dev)) {
-            sensors.push_front(sensor);
-            return;
-        }
-        // destroy sensor
-        delete sensor;
-    }
-}
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -641,8 +614,6 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
                  m.variant.environment_metrics.soil_moisture);
-
-        sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

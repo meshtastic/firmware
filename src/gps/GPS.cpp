@@ -896,14 +896,11 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-
-// Determine the new value for the pin
-// Normally: active HIGH for awake
-#ifdef PIN_GPS_STANDBY_INVERTED
-    bool val = standby;
-#else
-    bool val = !standby;
-#endif
+    bool val;
+    if (standby)
+        val = GPS_STANDBY_ACTIVE;
+    else
+        val = !GPS_STANDBY_ACTIVE;
 
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
@@ -934,8 +931,11 @@ void GPS::setPowerPMU(bool on)
             // t-beam v1.2 GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
-            // t-beam-s3-core GNSS  power channel
+            // t-beam-s3-core GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+            // t-watch-s3-plus GNSS power channel
+            on ? PMU->enablePowerOutput(XPOWERS_BLDO1) : PMU->disablePowerOutput(XPOWERS_BLDO1);
         }
     } else if (model == XPOWERS_AXP192) {
         // t-beam v1.1 GNSS  power channel

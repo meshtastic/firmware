@@ -1,13 +1,13 @@
-#include "WiFiOTA.h"
+#include "MeshtasticOTA.h"
 #include "configuration.h"
 #include <Preferences.h>
 #include <esp_ota_ops.h>
 
-namespace WiFiOTA
+namespace MeshtasticOTA
 {
 
-static const char *nvsNamespace = "ota-wifi";
-static const char *appProjectName = "OTA-WiFi";
+static const char *nvsNamespace = "MeshtasticOTA";
+static const char *appProjectName = "MeshtasticOTA";
 
 static bool updated = false;
 
@@ -43,12 +43,14 @@ void recoverConfig(meshtastic_Config_NetworkConfig *network)
     strncpy(network->wifi_psk, psk.c_str(), sizeof(network->wifi_psk));
 }
 
-void saveConfig(meshtastic_Config_NetworkConfig *network)
+void saveConfig(meshtastic_Config_NetworkConfig *network, meshtastic_OTAMode method, uint8_t *ota_hash)
 {
     LOG_INFO("Saving WiFi settings for upcoming OTA update");
 
     Preferences prefs;
     prefs.begin(nvsNamespace);
+    prefs.putUChar("method", method);
+    prefs.putBytes("ota_hash", ota_hash, 32);
     prefs.putString("ssid", network->wifi_ssid);
     prefs.putString("psk", network->wifi_psk);
     prefs.putBool("updated", false);
@@ -62,10 +64,14 @@ const esp_partition_t *getAppPartition()
 
 bool getAppDesc(const esp_partition_t *part, esp_app_desc_t *app_desc)
 {
-    if (esp_ota_get_partition_description(part, app_desc) != ESP_OK)
+    if (esp_ota_get_partition_description(part, app_desc) != ESP_OK) {
+        LOG_INFO("esp_ota_get_partition_description failed");
         return false;
-    if (strcmp(app_desc->project_name, appProjectName) != 0)
+    }
+    if (strcmp(app_desc->project_name, appProjectName) != 0) {
+        LOG_INFO("app_desc->project_name == 0");
         return false;
+    }
     return true;
 }
 
@@ -89,4 +95,4 @@ const char *getVersion()
     return app_desc.version;
 }
 
-} // namespace WiFiOTA
+} // namespace MeshtasticOTA

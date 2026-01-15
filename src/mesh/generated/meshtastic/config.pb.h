@@ -66,7 +66,7 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     but should not be given priority over other routers in order to avoid unnecessaraily
     consuming hops. */
     meshtastic_Config_DeviceConfig_Role_ROUTER_LATE = 11,
-    /* Description: Treats packets from or to favorited nodes as ROUTER, and all other packets as CLIENT.
+    /* Description: Treats packets from or to favorited nodes as ROUTER_LATE, and all other packets as CLIENT.
  Technical Details: Used for stronger attic/roof nodes to distribute messages more widely
     from weaker, indoor, or less-well-positioned nodes. Recommended for users with multiple nodes
     where one CLIENT_BASE acts as a more powerful base station, such as an attic/roof node. */

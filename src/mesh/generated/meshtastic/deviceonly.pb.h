@@ -97,7 +97,8 @@ typedef struct _meshtastic_NodeInfoLite {
     /* Last byte of the node number of the node that should be used as the next hop to reach this node. */
     uint8_t next_hop;
     /* Bitfield for storing booleans.
- LSB 0 is_key_manually_verified */
+ LSB 0 is_key_manually_verified
+ LSB 1 is_muted */
     uint32_t bitfield;
 } meshtastic_NodeInfoLite;
 
@@ -360,7 +361,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
-#define meshtastic_BackupPreferences_size        2277
+#define meshtastic_BackupPreferences_size        2279
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_DeviceState_size              1737
 #define meshtastic_NodeInfoLite_size             196
