@@ -11,6 +11,7 @@
  * For more information, see: https://meshtastic.org/
  */
 #include "power.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
@@ -788,7 +789,9 @@ void Power::shutdown()
     playShutdownMelody();
 #endif
     nodeDB->saveToDisk();
-
+#if HAS_SCREEN
+    messageStore.saveToFlash();
+#endif
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
@@ -1148,11 +1151,11 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO1);
 
-            // sdcard power channel
+            // sdcard (T-Beam S3) / gnns (T-Watch S3 Plus) power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+#ifndef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_BLDO1);
-
-#ifdef T_WATCH_S3
+#else
             // DRV2605 power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300);
             PMU->enablePowerOutput(XPOWERS_BLDO2);
@@ -1455,7 +1458,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return PPM->getVbusVoltage() > 0; }
+    virtual bool isVbusIn() override { return PPM->isVbusIn(); }
 
     /**
      * return true if the battery is currently charging

@@ -168,7 +168,7 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
-#ifdef T_WATCH_S3
+#ifdef HAS_DRV2605
             drv.go();
 #endif
         }
@@ -283,7 +283,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #ifdef UNPHONE
     unphone.rgb(red, green, blue);
 #endif
-#ifdef T_WATCH_S3
+#ifdef HAS_DRV2605
     if (on) {
         drv.go();
     } else {
@@ -310,8 +310,7 @@ void ExternalNotificationModule::stopNow()
     rtttl::stop();
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
-    if (audioThread->isPlaying())
-        audioThread->stop();
+    audioThread->stop();
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
@@ -320,7 +319,7 @@ void ExternalNotificationModule::stopNow()
         externalTurnedOn[i] = 0;
     }
     setIntervalFromNow(0);
-#ifdef T_WATCH_S3
+#ifdef HAS_DRV2605
     drv.stop();
 #endif
 
@@ -460,7 +459,13 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+            bool mutedNode = false;
+            if (sender) {
+                mutedNode = (sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK);
+            }
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
@@ -511,7 +516,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message &&
+            if (moduleConfig.external_notification.alert_message && !mutedNode &&
                 (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
@@ -523,7 +528,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra &&
+            if (moduleConfig.external_notification.alert_message_vibra && !mutedNode &&
                 (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
@@ -535,13 +540,26 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer &&
+            if (moduleConfig.external_notification.alert_message_buzzer && !mutedNode &&
                 (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (!isBroadcast(mp.to) && isToUs(&mp))) {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     isNagging = true;
+#ifdef T_LORA_PAGER
+                    if (canBuzz()) {
+                        drv.setWaveform(0, 16); // Long buzzer 100%
+                        drv.setWaveform(1, 0);  // Pause
+                        drv.setWaveform(2, 16);
+                        drv.setWaveform(3, 0);
+                        drv.setWaveform(4, 16);
+                        drv.setWaveform(5, 0);
+                        drv.setWaveform(6, 16);
+                        drv.setWaveform(7, 0);
+                        drv.go();
+                    }
+#endif
                     if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
                         setExternalState(2, true);
                     } else {

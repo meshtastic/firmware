@@ -41,3 +41,30 @@ void initVariant()
     pinMode(VDD_FLASH_EN, OUTPUT);
     digitalWrite(VDD_FLASH_EN, HIGH);
 }
+
+// called from main-nrf52.cpp during the cpuDeepSleep() function
+void variant_shutdown()
+{
+    // This sets the pin to OUTPUT and LOW for the pins *not* in the if block.
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == PIN_GPS_EN || pin == ADC_CTRL || pin == PIN_BUTTON1 || pin == PIN_SPI_MISO || pin == PIN_SPI_MOSI ||
+            pin == PIN_SPI_SCK) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+        if (pin >= 32) {
+            NRF_P1->DIRCLR = (1 << (pin - 32));
+        } else {
+            NRF_GPIO->DIRCLR = (1 << pin);
+        }
+    }
+
+    digitalWrite(PIN_GPS_EN, LOW);
+    digitalWrite(ADC_CTRL, LOW);
+    // digitalWrite(RTC_POWER, LOW);
+
+    nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+    nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
+    nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense1);
+}

@@ -49,10 +49,14 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
 
     // Long press detection for press button
     uint32_t pressStartTime = 0;
+    uint32_t directionStartTime = 0;
+    uint8_t directionInterval = 0;
     bool pressDetected = false;
+    bool directionDetected = false;
     uint32_t lastLongPressEventTime = 0;
+    uint32_t lastDirectionPressEventTime = 0;
     static const uint32_t LONG_PRESS_DURATION = 500;        // ms
-    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = 500; // ms - interval between repeated long press events
+    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = 300; // ms - interval between repeated long press events
 
   private:
     input_broker_event _eventDown = INPUT_BROKER_NONE;

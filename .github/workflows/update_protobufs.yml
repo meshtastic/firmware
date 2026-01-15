@@ -16,7 +16,7 @@ jobs:
           submodules: true
 
       - name: Update submodule
-        if: ${{ github.ref == 'refs/heads/master' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop' }}
         run: |
           git submodule update --remote protobufs
 
@@ -31,7 +31,7 @@ jobs:
           ./bin/regen-protos.sh
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: create-pull-request/update-protobufs
           labels: submodules

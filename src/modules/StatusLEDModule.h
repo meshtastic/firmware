@@ -37,8 +37,10 @@ class StatusLEDModule : private concurrency::OSThread
 
     uint32_t PAIRING_LED_starttime = 0;
     uint32_t lastUserbuttonTime = 0;
+    uint32_t POWER_LED_starttime = 0;
+    bool doing_fast_blink = false;
 
-    enum PowerState { discharging, charging, charged };
+    enum PowerState { discharging, charging, charged, critical };
 
     PowerState power_state = discharging;
 

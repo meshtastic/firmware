@@ -29,7 +29,7 @@ Flash image file to device, leave existing system intact."
     -h               Display this help and exit
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
-    -f FILENAME      The *update.bin file to flash.  Custom to your device type.
+    -f FILENAME      The *.bin file to flash.  Custom to your device type.
     --change-mode    Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
@@ -78,7 +78,7 @@ fi
     shift
 }
 
-if [ -f "${FILENAME}" ] && [ -z "${FILENAME##*"update"*}" ]; then
+if [[ -f "$FILENAME" && "$FILENAME" != *.factory.bin ]]; then
     echo "Trying to flash update ${FILENAME}"
     $ESPTOOL_CMD --baud $FLASH_BAUD write-flash $UPDATE_OFFSET "${FILENAME}"
 else

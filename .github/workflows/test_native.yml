@@ -40,7 +40,7 @@ jobs:
 
       - name: Integration test
         run: |
-          .pio/build/coverage/program -s &
+          .pio/build/coverage/meshtasticd -s &
           PID=$!
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
@@ -59,10 +59,10 @@ jobs:
         id: version
 
       - name: Save coverage information
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always() # run this step even if previous step failed
         with:
-          name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.long }}.zip
+          name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.long }}
           overwrite: true
           path: ./coverage_*.info
 
@@ -94,9 +94,9 @@ jobs:
 
       - name: Save test results
         if: always() # run this step even if previous step failed
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}.zip
+          name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
           path: ./testreport.xml
 
@@ -108,10 +108,10 @@ jobs:
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
       - name: Save coverage information
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always() # run this step even if previous step failed
         with:
-          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.long }}.zip
+          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.long }}
           overwrite: true
           path: ./coverage_*.info
 
@@ -137,22 +137,22 @@ jobs:
         id: version
 
       - name: Download test artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}.zip
+          name: platformio-test-report-${{ steps.version.outputs.long }}
           merge-multiple: true
 
       - name: Test Report
-        uses: dorny/test-reporter@v2.2.0
+        uses: dorny/test-reporter@v2.5.0
         with:
           name: PlatformIO Tests
           path: testreport.xml
           reporter: java-junit
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
-          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}.zip
+          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}
           path: code-coverage-report
           merge-multiple: true
 
@@ -163,7 +163,7 @@ jobs:
           genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
-          name: code-coverage-report-${{ steps.version.outputs.long }}.zip
+          name: code-coverage-report-${{ steps.version.outputs.long }}
           path: code-coverage-report

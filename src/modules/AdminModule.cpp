@@ -383,6 +383,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_toggle_muted_node_tag: {
+        LOG_INFO("Client received toggle_muted_node command");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
+        if (node != NULL) {
+            node->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
+            saveChanges(SEGMENT_NODEDATABASE, false);
+        }
+        break;
+    }
+
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -417,6 +427,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
         LOG_INFO("Client requesting to enter DFU mode");
+#if HAS_SCREEN
+        IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
+#endif
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
