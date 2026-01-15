@@ -15,7 +15,7 @@ bool HDC1080Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     LOG_INFO("Init sensor: %s", sensorName);
     hdc1080.begin(dev->address.address);
     
-    status = (hdc1080.readDeviceId() == 0x1050);
+    status = 1;
 
     initI2CSensor();
     return status;
