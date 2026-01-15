@@ -178,6 +178,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->rotate();
         break;
 
+    case ALIGN_JOYSTICK:
+        inkhud->openAlignStick();
+        break;
+
     case LAYOUT:
         // Todo: smarter incrementing of tile count
         settings->userTiles.count++;
@@ -287,14 +291,17 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        previousPage = MenuPage::EXIT;
         break;
 
     case SEND:
         populateSendPage();
+        previousPage = MenuPage::ROOT;
         break;
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case OPTIONS:
@@ -321,6 +328,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->userTiles.maxCount > 1)
             items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
+        if (settings->joystick.enabled)
+            items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
@@ -332,20 +341,24 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(
             MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        previousPage = MenuPage::ROOT;
         break;
 
     case APPLETS:
         populateAppletPage();
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case AUTOSHOW:
         populateAutoshowPage();
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case RECENTS:
         populateRecentsPage();
+        previousPage = MenuPage::OPTIONS;
         break;
 
     case EXIT:
@@ -479,12 +492,21 @@ void InkHUD::MenuApplet::onButtonShortPress()
     // Push the auto-close timer back
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    // Move menu cursor to next entry, then update
-    if (cursorShown)
-        cursor = (cursor + 1) % items.size();
-    else
-        cursorShown = true;
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    if (!settings->joystick.enabled) {
+        // Move menu cursor to next entry, then update
+        if (cursorShown)
+            cursor = (cursor + 1) % items.size();
+        else
+            cursorShown = true;
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    } else {
+        if (cursorShown)
+            execute(items.at(cursor));
+        else
+            showPage(MenuPage::EXIT);
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onButtonLongPress()
@@ -500,6 +522,62 @@ void InkHUD::MenuApplet::onButtonLongPress()
     // If we didn't already request a specialized update, when handling a menu action,
     // then perform the usual fast update.
     // FAST keeps things responsive: important because we're dealing with user input
+    if (!wantsToRender())
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onExitShort()
+{
+    // Exit the menu
+    showPage(MenuPage::EXIT);
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onNavUp()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // Move menu cursor to previous entry, then update
+    if (cursor == 0)
+        cursor = items.size() - 1;
+    else
+        cursor--;
+
+    if (!cursorShown)
+        cursorShown = true;
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onNavDown()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // Move menu cursor to next entry, then update
+    if (cursorShown)
+        cursor = (cursor + 1) % items.size();
+    else
+        cursorShown = true;
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onNavLeft()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // Go to the previous menu page
+    showPage(previousPage);
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onNavRight()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    if (cursorShown)
+        execute(items.at(cursor));
     if (!wantsToRender())
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }

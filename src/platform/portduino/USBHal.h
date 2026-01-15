@@ -64,7 +64,7 @@ class Ch341Hal : public RadioLibHal
     void getProductString(char *_product_string, size_t len)
     {
         len = len > 95 ? 95 : len;
-        strncpy(_product_string, pinedio.product_string, len);
+        memcpy(_product_string, pinedio.product_string, len);
     }
 
     void init() override {}

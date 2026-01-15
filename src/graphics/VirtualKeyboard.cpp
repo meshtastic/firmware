@@ -354,8 +354,6 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         if (screenHeight <= 64) {
             textY = boxY + (boxHeight - inputLineH) / 2;
         } else {
-            const int innerLeft = boxX + 1;
-            const int innerRight = boxX + boxWidth - 2;
             const int innerTop = boxY + 1;
             const int innerBottom = boxY + boxHeight - 2;
 
@@ -506,6 +504,9 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
             centeredTextY -= 1;
         }
     }
+#ifdef MUZI_BASE // Correct issue with character vertical position on MUZI_BASE
+    centeredTextY -= 2;
+#endif
     display->drawString(textX, centeredTextY, keyText.c_str());
 }
 

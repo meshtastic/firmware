@@ -63,9 +63,20 @@ void initVariant()
 // called from main-nrf52.cpp during the cpuDeepSleep() function
 void variant_shutdown()
 {
+    digitalWrite(red_LED_PIN, HIGH);
+    digitalWrite(green_LED_PIN, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+
+    digitalWrite(PIN_EN1, LOW);
+    digitalWrite(PIN_EN2, LOW);
     digitalWrite(EEPROM_POWER, LOW);
     digitalWrite(KEY_POWER, LOW);
+    digitalWrite(DHT_POWER, LOW);
+    digitalWrite(ACC_POWER, LOW);
+    digitalWrite(Battery_POWER, LOW);
+    digitalWrite(GPS_POWER, LOW);
 
+    // This sets the pin to OUTPUT and LOW for the pins *not* in the if block.
     for (int pin = 0; pin < 48; pin++) {
         if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == DHT_POWER ||
             pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||

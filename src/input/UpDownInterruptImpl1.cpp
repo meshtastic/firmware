@@ -29,7 +29,9 @@ bool UpDownInterruptImpl1::init()
                               eventDownLong, UpDownInterruptImpl1::handleIntDown, UpDownInterruptImpl1::handleIntUp,
                               UpDownInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
+#endif
     return true;
 }
 

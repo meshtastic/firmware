@@ -23,8 +23,11 @@ namespace NodeListRenderer
 typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
 typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int, float, double, double);
 
-// Node list mode enumeration
-enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
+// Node list mode enumeration for Last Heard and Hop Signal views
+enum ListMode_Node { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_COUNT_NODE = 2 };
+
+// Node list mode enumeration for Distance and Bearings views
+enum ListMode_Location { MODE_DISTANCE = 0, MODE_BEARING = 1, MODE_COUNT_LOCATION = 2 };
 
 // Main node list screen function
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
@@ -35,7 +38,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
 void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
 void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
-void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
+void drawEntryDynamic_Nodes(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
 
 // Extras renderers
@@ -46,13 +49,19 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawDynamicListScreen_Nodes(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 // Utility functions
-const char *getCurrentModeTitle(int screenWidth);
-const char *getSafeNodeName(meshtastic_NodeInfoLite *node);
+const char *getCurrentModeTitle_Nodes(int screenWidth);
+const char *getCurrentModeTitle_Location(int screenWidth);
+const char *getSafeNodeName(meshtastic_NodeInfoLite *node, int columnWidth);
 void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
+
+// Scrolling controls
+void scrollUp();
+void scrollDown();
 
 // Bitmap drawing function
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display);

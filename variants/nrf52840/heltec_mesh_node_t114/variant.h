@@ -175,9 +175,6 @@ No longer populated on PCB
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
 
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
-
 /*
  * SPI Interfaces
  */
@@ -211,7 +208,8 @@ No longer populated on PCB
 #define ADC_MULTIPLIER (4.916F)
 
 // rf52840 AIN2 = Pin 4
-#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_2
+// commented out due to power leakage of 2.9mA in shutdown state see reported issue #8801
+// #define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_2 //UNSAFE
 
 // We have AIN2 with a VBAT divider so AIN2 = VBAT * (100/490)
 // We have the device going deep sleep under 3.1V, which is AIN2 = 0.63V

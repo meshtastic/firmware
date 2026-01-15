@@ -86,6 +86,11 @@ typedef enum _meshtastic_PortNum {
     /* Paxcounter lib included in the firmware
  ENCODING: protobuf */
     meshtastic_PortNum_PAXCOUNTER_APP = 34,
+    /* Store and Forward++ module included in the firmware
+ ENCODING: protobuf
+ This module is specifically for Native Linux nodes, and provides a Git-style
+ chain of messages. */
+    meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP = 35,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.

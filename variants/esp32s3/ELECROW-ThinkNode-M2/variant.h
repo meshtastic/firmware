@@ -56,10 +56,6 @@
 #define HAS_SCREEN 1
 #define USE_SH1106 1
 
-// PCF8563 RTC Module
-// #define PCF8563_RTC 0x51
-// #define PIN_RTC_INT 48 // Interrupt from the PCF8563 RTC
-#define HAS_RTC 0
 #define HAS_GPS 0
 
 #define BUTTON_PIN PIN_BUTTON1

@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
@@ -33,6 +34,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     // Handle hop_limit upgrade scenario for rebroadcasters
     if (wasUpgraded && perhapsHandleUpgradedPacket(p)) {
         return true; // we handled it, so stop processing
+    }
+
+    if (!seenRecently && !wasUpgraded && textMessageModule) {
+        seenRecently = textMessageModule->recentlySeen(p->id);
     }
 
     if (seenRecently) {
@@ -122,6 +127,10 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
             txRelayCanceled++;
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+        iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+    }
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB &&
+        nodeDB->isFromOrToFavoritedNode(*p)) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
 }

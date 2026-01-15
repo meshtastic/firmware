@@ -14,6 +14,7 @@ class ScanI2C
         SCREEN_ST7567,
         RTC_RV3028,
         RTC_PCF8563,
+        RTC_PCF85063,
         RTC_RX8130CE,
         CARDKB,
         TDECKKB,
@@ -85,7 +86,8 @@ class ScanI2C
         DRV2605,
         BH1750,
         DA217,
-        CHSC6X
+        CHSC6X,
+        CST226SE
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

@@ -33,7 +33,6 @@ BuildRequires: python3dist(grpcio[protobuf])
 BuildRequires: python3dist(grpcio-tools)
 BuildRequires: git-core
 BuildRequires: gcc-c++
-BuildRequires: (glibc-devel >= 2.38) or pkgconfig(libbsd-overlay)
 BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(libgpiod)
 BuildRequires: pkgconfig(bluez)
@@ -77,7 +76,7 @@ platformio run -e native-tft
 %install
 # Install meshtasticd binary
 mkdir -p %{buildroot}%{_bindir}
-install -m 0755 .pio/build/native-tft/program %{buildroot}%{_bindir}/meshtasticd
+install -m 0755 .pio/build/native-tft/meshtasticd %{buildroot}%{_bindir}/meshtasticd
 
 # Install portduino VFS dir
 install -p -d -m 0770 %{buildroot}%{_localstatedir}/lib/meshtasticd

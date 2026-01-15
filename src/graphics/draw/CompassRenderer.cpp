@@ -48,7 +48,7 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     // This could draw a "N" indicator or north arrow
     // For now, we'll draw a simple north indicator
     // const float radius = 17.0f;
-    if (isHighResolution) {
+    if (currentResolution == ScreenResolution::High) {
         radius += 4;
     }
     Point north(0, -radius);
@@ -59,7 +59,7 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setColor(BLACK);
-    if (isHighResolution) {
+    if (currentResolution == ScreenResolution::High) {
         display->fillRect(north.x - 8, north.y - 1, display->getStringWidth("N") + 3, FONT_HEIGHT_SMALL - 6);
     } else {
         display->fillRect(north.x - 4, north.y - 1, display->getStringWidth("N") + 2, FONT_HEIGHT_SMALL - 6);

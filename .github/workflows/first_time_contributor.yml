@@ -1,0 +1,47 @@
+name: Welcome First-Time Contributor
+
+on:
+  issues:
+    types: opened
+  pull_request_target:
+    types: opened
+
+permissions: {}
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write # Required to post comments and labels on issues
+      pull-requests: write # Required to post comments and labels on PRs
+    steps:
+      - uses: plbstl/first-contribution@v4
+        with:
+          labels: first-contribution
+          issue-opened-msg: |
+            ### @{fc-author}, Welcome to Meshtastic! :wave:
+
+            Thanks for opening your first issue. If it's helpful, an easy way
+            to get logs is the "Open Serial Monitor" button on the [Web Flasher](https://flasher.meshtastic.org).
+
+            If you have ideas for features, note that we often debate big ideas
+            in the [discussions tab](https://github.com/meshtastic/firmware/discussions/categories/ideas)
+            first. This tracker tends to be for ideas that have community
+            consensus and a clear implementation.
+
+            We're very active [on discord](https://discord.com/invite/meshtastic),
+            especially the \#firmware and \#alphanauts-testing channels. If you'll
+            be around for a while, we'd love to see you there!
+
+            Welcome to the community! :heart:
+
+          pr-opened-msg: |
+            ### @{fc-author}, Welcome to Meshtastic!
+
+            Thanks for opening your first pull request. We really appreciate it.
+
+            We discuss work as a team in discord, please join us in the [#firmware channel](https://discord.com/invite/meshtastic).
+            There's a big backlog of patches at the moment. If you have time,
+            please help us with some code review and testing of [other PRs](https://github.com/meshtastic/firmware/pulls)!
+
+            Welcome to the team :smile:
