@@ -105,6 +105,8 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include <string>
 #endif
 
+#ifdef ARCH_ESP32
+#ifdef DEBUG_PARTITION_TABLE
 #include "esp_partition.h"
 
 void printPartitionTable()
@@ -137,6 +139,8 @@ void printPartitionTable()
     }
     printf("-----------------------\n");
 }
+#endif // DEBUG_PARTITION_TABLE
+#endif // ARCH_ESP32
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "input/ButtonThread.h"
@@ -681,7 +685,11 @@ void setup()
         sensor_detected = true;
 #endif
     }
+#ifdef ARCH_ESP32
+#ifdef DEBUG_PARTITION_TABLE
     printPartitionTable();
+#endif
+#endif // ARCH_ESP32
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
