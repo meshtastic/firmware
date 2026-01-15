@@ -172,12 +172,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
-#define SSD1306_ADDRESS 0x3D
-#define USE_SH1106
-#else
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
 #define SSD1306_ADDRESS_H 0x3D // Addr = 1
+
+#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#define SSD1306_ADDRESS SSD1306_ADDRESS_H
+#define USE_SH1106
 #endif
 #define ST7567_ADDRESS 0x3F
 
