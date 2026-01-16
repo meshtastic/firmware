@@ -53,7 +53,7 @@
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-#include <WiFiOTA.h>
+#include <MeshtasticOTA.h>
 #endif
 
 NodeDB *nodeDB = nullptr;
@@ -756,8 +756,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.compass_orientation = COMPASS_ORIENTATION;
 #endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-    if (WiFiOTA::isUpdated()) {
-        WiFiOTA::recoverConfig(&config.network);
+    if (MeshtasticOTA::isUpdated()) {
+        MeshtasticOTA::recoverConfig(&config.network);
     }
 #endif
 
@@ -823,7 +823,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
 #if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
-    defined(ELECROW_ThinkNode_M6)
+    defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M6)
     // Default to PIN_LED2 for external notification output (LED color depends on device variant)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
