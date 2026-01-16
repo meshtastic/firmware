@@ -20,7 +20,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 RUN apt-get update && apt-get install --no-install-recommends -y \
         cmake git zip libgpiod-dev libbluetooth-dev libi2c-dev \
         libunistring-dev libmicrohttpd-dev libgnutls28-dev libgcrypt20-dev \
-        libusb-1.0-0-dev libssl-dev pkg-config && \
+        libusb-1.0-0-dev libssl-dev pkg-config libsqlite3-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir -U \
         platformio==6.1.16 \
