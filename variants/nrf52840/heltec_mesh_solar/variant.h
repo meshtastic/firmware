@@ -116,13 +116,13 @@ No longer populated on PCB
 #define PIN_GPS_PPS (32 + 4)
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 5) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 7) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (32 + 7) // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 5) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
 /*
  * SPI Interfaces
@@ -142,7 +142,6 @@ No longer populated on PCB
 #define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
 #define BQ4050_EMERGENCY_SHUTDOWN_PIN (32 + 3) // Emergency shutdown pin
 
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif
