@@ -298,6 +298,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MESHSTICK_1262 = 121,
     /* LilyGo T-Beam 1W */
     meshtastic_HardwareModel_TBEAM_1_WATT = 122,
+    /* LilyGo T5 S3 ePaper Pro (V1 and V2) */
+    meshtastic_HardwareModel_T5_S3_EPAPER_PRO = 123,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
