@@ -23,20 +23,20 @@ InkHUD::FreeTextApplet::FreeTextApplet()
 void InkHUD::FreeTextApplet::onRender()
 {
     setFont(fontSmall);
-    std::string header = "Free Text";
-    uint16_t yStartKb = Y(0.55);
+    //std::string header = "Free Text";
     float padding = 0.01;
     uint16_t keyW = (width() / 11);
     uint16_t r = (width() % 10) / 10;
     uint16_t c = 0;
     uint16_t keyH = X(1.0) > Y(1.0) ? fontSmall.lineHeight() + Y(padding) : fontSmall.lineHeight() + (2 * X(padding));
-    uint16_t yStartBox = fontSmall.lineHeight();
+    uint16_t yStartKb = Y(1.0) - (5 * keyH);
+    uint16_t yStartBox = 0;
     uint16_t inputBoxW = X(1.0);
-    uint16_t inputBoxH = fontSmall.lineHeight();
+    uint16_t inputBoxH = 0;
 
     // Draw the text, input box, and cursor
     // Adjusting the box for screen height
-    while (inputBoxH < Y(0.40)) {
+    while (inputBoxH < yStartKb - fontSmall.lineHeight()) {
         inputBoxH += fontSmall.lineHeight();
     }
 
@@ -45,7 +45,7 @@ void InkHUD::FreeTextApplet::onRender()
     if (!inkhud->freetext.empty()) 
     {
         
-        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight + fontSmall.lineHeight() : inputBoxH - textHeight + fontSmall.lineHeight() + 1;
+        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight : inputBoxH - textHeight + 1;
         if (textHeight > inputBoxH) 
             printWrapped(2, textPadding, inputBoxW - 5, inkhud->freetext);
         else
@@ -53,7 +53,7 @@ void InkHUD::FreeTextApplet::onRender()
     }
     
     uint16_t textCursorX = inkhud->freetext.empty() ? 1 : getCursorX();
-    uint16_t textCursorY = inkhud->freetext.empty() ? fontSmall.lineHeight() + 2: getCursorY() - fontSmall.lineHeight() + 3;
+    uint16_t textCursorY = inkhud->freetext.empty() ? 0: getCursorY() - fontSmall.lineHeight() + 3;
 
     if (textCursorX + 1 > inputBoxW - 5) {
         textCursorX = getCursorX() - inputBoxW + 5;
@@ -64,7 +64,7 @@ void InkHUD::FreeTextApplet::onRender()
     
     // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
     fillRect(0, 0, X(1.0), yStartBox, WHITE);
-    printAt(0, 0, header);
+    //printAt(0, 0, header);
     drawRect(0, yStartBox, inputBoxW, inputBoxH + 5, BLACK);
     
     
@@ -81,15 +81,17 @@ void InkHUD::FreeTextApplet::onRender()
                 setTextColor(BLACK);
             }
             if (keyboardLayout[i][j] == '\b') {
-                printAt(c + 2, yStartKb + 1, "<");
+                printAt(c + 1, yStartKb + 1, "<");
             } else if (keyboardLayout[i][j] == '\n') {
-                printAt(c + 2, yStartKb + 1, ">");
+                printAt(c + 1, yStartKb + 1, ">");
             } else if (keyboardLayout[i][j] == ' ') {
-                printAt(c + 2, yStartKb + 1, "_");
+                printAt(c + 1, yStartKb + 1, "_");
             } else if (keyboardLayout[i][j] == '\x1b') {
-                printAt(c + 2, yStartKb + 1, "~");
+                printAt(c + 1, yStartKb + 1, "~");
             } else {
-                printAt(c + 2, yStartKb + 1, temp);
+                if (temp[0] >= 0x61)
+                    temp[0] -= 32;
+                printAt(c + 1, yStartKb + 1, temp);
             }
             c += (keyW + r);
         }
@@ -144,8 +146,22 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
 
 void InkHUD::FreeTextApplet::onButtonLongPress()
 {
-    inkhud->freetext.erase();
-    sendToBackground();
+    char ch = keyboard[keyCursorY][keyCursorX].c;
+    enum KEY_ACTIONS a = keyboard[keyCursorY][keyCursorX].action;
+    if (a == BACKSPACE && !inkhud->freetext.empty()) {
+        inkhud->freetext.pop_back();
+        requestUpdate(EInk::UpdateTypes::FAST);
+    } else if (a == ENTER) {
+        sendToBackground();
+    } else if (a == ESCAPE) {
+        inkhud->freetext.erase();
+        sendToBackground();
+    } else if (a == NONE) {
+        if (ch >= 0x61)
+            ch -= 32;
+        inkhud->freetext += ch;
+        requestUpdate(EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::FreeTextApplet::onExitShort()
