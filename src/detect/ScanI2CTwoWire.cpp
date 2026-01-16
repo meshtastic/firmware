@@ -313,7 +313,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2); // Check for HDC1080 first
-                if (registerValue == 0x1050) { // Device ID for HDC1080
+                if (registerValue == 0x1050) {                                                     // Device ID for HDC1080
                     logFoundDevice("HDC1080", (uint8_t)addr.address);
                     type = HDC1080;
                     break;
