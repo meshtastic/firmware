@@ -125,6 +125,11 @@ class MessageStore
     std::string filename;                   // Flash filename for persistence
 };
 
+#if ENABLE_MESSAGE_PERSISTENCE
+// Called periodically from main loop to trigger time based autosave
+void messageStoreAutosaveTick();
+#endif
+
 // Global instance (defined in MessageStore.cpp)
 extern MessageStore messageStore;
 
