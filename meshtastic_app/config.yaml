@@ -1,34 +1,58 @@
-# Meshtastic Python App Configuration
-# =====================================
+# =============================================================================
+# Meshtastic Master Controller Configuration
+# =============================================================================
+#
+# This configuration file controls the master node that connects to your
+# computer via USB. The master communicates with slave nodes over the
+# private channel.
+#
 
-# Device connection settings
+# -----------------------------------------------------------------------------
+# Device Connection
+# -----------------------------------------------------------------------------
 device:
   # Serial port path (leave empty for auto-detect)
-  # Examples: /dev/ttyUSB0, /dev/ttyACM0, COM4
+  # Linux:   /dev/ttyUSB0, /dev/ttyACM0
+  # macOS:   /dev/cu.usbmodem53230050571
+  # Windows: COM4
   port: ""
 
   # Connection timeout in seconds
   timeout: 30
 
-# Security settings
+# -----------------------------------------------------------------------------
+# Security - Private Key Configuration
+# -----------------------------------------------------------------------------
+# The master controller AUTOMATICALLY verifies and updates the device's
+# private key on startup. If the device key doesn't match the configured
+# key, it will be updated via the meshtastic CLI.
+#
+# To get your current device key:
+#   meshtastic --export-config | grep private_key
+#
 security:
   # Your device's private key (base64 encoded)
-  # This key will be verified and set if different from device
-  # Generate with: meshtastic --export-config | grep private_key
+  # This key is verified on every startup and updated if different
   private_key: ""
 
-  # Whether to automatically update the device key if it doesn't match
-  auto_update_key: true
-
-# Channel settings
+# -----------------------------------------------------------------------------
+# Private Channel Configuration
+# -----------------------------------------------------------------------------
+# All master-slave communication uses the private channel.
+# Channel 0 = Primary (public), Channels 1-7 = Secondary (private)
+#
 channel:
-  # Channel index for private communications (0 = primary, 1-7 = secondary)
+  # Channel index for private communications
   private_channel_index: 1
 
-  # Channel name (for reference only)
+  # Channel name (for documentation only)
   private_channel_name: "Private"
 
-# Position transmission settings
+# -----------------------------------------------------------------------------
+# Position Transmission
+# -----------------------------------------------------------------------------
+# The master periodically broadcasts its position on the private channel.
+#
 position:
   # Enable automatic position transmission
   enabled: true
@@ -36,13 +60,18 @@ position:
   # Transmission interval in seconds
   interval_seconds: 300
 
-  # Fixed position (if GPS not available)
-  # Leave as null to use device GPS
+  # Fixed position coordinates (if device has no GPS)
+  # Set to null to disable fixed position
   fixed_latitude: null
   fixed_longitude: null
   fixed_altitude: null
 
-# Logging settings
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
 logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
-  file: "meshtastic_app.log"
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log file path
+  file: "master.log"
