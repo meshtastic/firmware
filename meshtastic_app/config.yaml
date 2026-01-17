@@ -66,24 +66,54 @@ slaves:
   offline_timeout: 600
 
 # -----------------------------------------------------------------------------
-# Position Broadcasting (Standard Meshtastic)
+# Position Configuration
 # -----------------------------------------------------------------------------
-# Master broadcasts its position to slaves using STANDARD Meshtastic position.
-# Position is sent ONLY on the private channel, NOT the public channel.
-# This allows slaves to know the master's location without exposing it publicly.
+# Position precision and broadcasting settings.
+#
+# IMPORTANT: To prevent public position leaks, we disable automatic position
+# on the public channel (set precision to 0). The master can still send
+# position manually via the Python API when needed.
+#
+# Position precision values (bits):
+#   0  = Disabled (no position sent)
+#   13 = ~3 km accuracy
+#   16 = ~364 m accuracy
+#   19 = ~45 m accuracy
+#   32 = Full precision
 #
 position:
-  # Enable periodic position broadcasting
-  enabled: true
+  # Position precision for public channel (channel 0)
+  # Set to 0 to disable automatic public position broadcasts
+  public_channel_precision: 0
 
-  # Broadcast interval in seconds
-  interval_seconds: 300
+  # Position precision for private channel
+  # Set to 0 since slaves don't need to see master position
+  # Master can still send position manually via send_position() if needed
+  private_channel_precision: 0
 
-  # Fixed position coordinates (required if device has no GPS)
-  # Master is typically stationary, so set these values
+  # Enable periodic position broadcasting via Python app
+  # (only works if private_channel_precision > 0)
+  broadcast_enabled: false
+
+  # Broadcast interval in seconds (if enabled)
+  broadcast_interval_seconds: 300
+
+  # Fixed position (for stationary master without GPS)
+  # These are used when calling send_position() without arguments
   fixed_latitude: null    # e.g., 37.7749
   fixed_longitude: null   # e.g., -122.4194
   fixed_altitude: null    # e.g., 10 (meters)
+
+  # Device position settings (applied via CLI during configure_device)
+  # Set to true if master has no GPS and uses fixed position
+  use_fixed_position: false
+
+  # Disable smart position broadcasting (device-level)
+  disable_smart_position: true
+
+  # GPS update interval in seconds (0 = default 2 minutes)
+  # Only relevant if device has GPS
+  gps_update_interval: 0
 
 # -----------------------------------------------------------------------------
 # Logging

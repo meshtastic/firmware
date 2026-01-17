@@ -163,12 +163,17 @@ class MasterConfig:
     private_port_num: int = PRIVATE_PORT_NUM
     send_ack: bool = True  # Auto-send ACK for received data
 
-    # Position settings (master can broadcast its position)
-    position_enabled: bool = False
-    position_interval: int = 300
+    # Position settings
+    public_channel_precision: int = 0  # Disable position on public channel
+    private_channel_precision: int = 0  # Disable automatic position on private
+    position_broadcast_enabled: bool = False  # Python app position broadcasting
+    position_broadcast_interval: int = 300
     fixed_latitude: Optional[float] = None
     fixed_longitude: Optional[float] = None
     fixed_altitude: Optional[int] = None
+    use_fixed_position: bool = False
+    disable_smart_position: bool = True
+    gps_update_interval: int = 0
 
     # Slave management
     slave_timeout: float = SLAVE_OFFLINE_TIMEOUT
@@ -183,6 +188,7 @@ class MasterConfig:
         with open(path, "r") as f:
             data = yaml.safe_load(f)
 
+        pos = data.get("position", {})
         return cls(
             device_port=data.get("device", {}).get("port", ""),
             device_timeout=data.get("device", {}).get("timeout", 30),
@@ -190,11 +196,16 @@ class MasterConfig:
             private_channel_index=data.get("channel", {}).get("private_channel_index", 1),
             private_port_num=data.get("protocol", {}).get("port_num", PRIVATE_PORT_NUM),
             send_ack=data.get("protocol", {}).get("send_ack", True),
-            position_enabled=data.get("position", {}).get("enabled", False),
-            position_interval=data.get("position", {}).get("interval_seconds", 300),
-            fixed_latitude=data.get("position", {}).get("fixed_latitude"),
-            fixed_longitude=data.get("position", {}).get("fixed_longitude"),
-            fixed_altitude=data.get("position", {}).get("fixed_altitude"),
+            public_channel_precision=pos.get("public_channel_precision", 0),
+            private_channel_precision=pos.get("private_channel_precision", 0),
+            position_broadcast_enabled=pos.get("broadcast_enabled", False),
+            position_broadcast_interval=pos.get("broadcast_interval_seconds", 300),
+            fixed_latitude=pos.get("fixed_latitude"),
+            fixed_longitude=pos.get("fixed_longitude"),
+            fixed_altitude=pos.get("fixed_altitude"),
+            use_fixed_position=pos.get("use_fixed_position", False),
+            disable_smart_position=pos.get("disable_smart_position", True),
+            gps_update_interval=pos.get("gps_update_interval", 0),
             slave_timeout=data.get("slaves", {}).get("offline_timeout", SLAVE_OFFLINE_TIMEOUT),
             log_level=data.get("logging", {}).get("level", "INFO"),
             log_file=data.get("logging", {}).get("file", "master.log"),
@@ -654,6 +665,130 @@ class MasterController:
             return False
 
         return True
+
+    # -------------------------------------------------------------------------
+    # Device Configuration (via CLI)
+    # -------------------------------------------------------------------------
+
+    def configure_device(self) -> bool:
+        """
+        Configure the Meshtastic device settings via CLI.
+
+        This sets up:
+        - Position precision on public and private channels
+        - Position broadcasting settings
+        - Fixed position (if configured)
+
+        Commands are chained together to minimize device reboots.
+
+        Returns:
+            True if configuration successful, False otherwise.
+        """
+        self.logger.info("Configuring device settings via CLI...")
+
+        # Close connection for CLI operation
+        if self.interface:
+            self.interface.close()
+            self.interface = None
+            time.sleep(2)
+
+        try:
+            # Build the command with all settings chained together
+            cmd = ["meshtastic"]
+
+            if self.config.device_port:
+                cmd.extend(["--port", self.config.device_port])
+
+            # Set position precision on public channel (channel 0)
+            cmd.extend([
+                "--ch-set", "module_settings.position_precision",
+                str(self.config.public_channel_precision),
+                "--ch-index", "0"
+            ])
+
+            self.logger.debug(f"Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+            if result.returncode != 0:
+                self.logger.error(f"Failed to set public channel precision: {result.stderr}")
+                return False
+
+            self.logger.info(
+                f"Set public channel (0) position precision: {self.config.public_channel_precision}"
+            )
+            time.sleep(10)  # Wait for device reboot
+
+            # Set position precision on private channel
+            cmd = ["meshtastic"]
+            if self.config.device_port:
+                cmd.extend(["--port", self.config.device_port])
+
+            cmd.extend([
+                "--ch-set", "module_settings.position_precision",
+                str(self.config.private_channel_precision),
+                "--ch-index", str(self.config.private_channel_index)
+            ])
+
+            self.logger.debug(f"Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+            if result.returncode != 0:
+                self.logger.error(f"Failed to set private channel precision: {result.stderr}")
+                return False
+
+            self.logger.info(
+                f"Set private channel ({self.config.private_channel_index}) "
+                f"position precision: {self.config.private_channel_precision}"
+            )
+            time.sleep(10)  # Wait for device reboot
+
+            # Set position settings (chained command)
+            cmd = ["meshtastic"]
+            if self.config.device_port:
+                cmd.extend(["--port", self.config.device_port])
+
+            # Disable smart position broadcasting
+            if self.config.disable_smart_position:
+                cmd.extend(["--set", "position.position_broadcast_smart_enabled", "false"])
+
+            # Set GPS update interval
+            cmd.extend([
+                "--set", "position.gps_update_interval",
+                str(self.config.gps_update_interval)
+            ])
+
+            # Set fixed position if configured
+            if self.config.use_fixed_position:
+                cmd.extend(["--set", "position.fixed_position", "true"])
+
+                if self.config.fixed_latitude is not None:
+                    cmd.extend(["--setlat", str(self.config.fixed_latitude)])
+
+                if self.config.fixed_longitude is not None:
+                    cmd.extend(["--setlon", str(self.config.fixed_longitude)])
+
+            self.logger.debug(f"Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+            if result.returncode != 0:
+                self.logger.error(f"Failed to set position settings: {result.stderr}")
+                return False
+
+            self.logger.info("Position settings configured")
+            time.sleep(10)  # Wait for device reboot
+
+            self.logger.info("Device configuration complete")
+            return True
+
+        except subprocess.TimeoutExpired:
+            self.logger.error("CLI command timed out")
+            return False
+        except FileNotFoundError:
+            self.logger.error("meshtastic CLI not found")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error configuring device: {e}")
+            return False
 
     # -------------------------------------------------------------------------
     # Connection Management
@@ -1197,13 +1332,13 @@ class MasterController:
         RECONNECT_DELAY = 5
 
         # Log position broadcast settings
-        if self.config.position_enabled:
+        if self.config.position_broadcast_enabled:
             self.logger.info(
-                f"Position broadcasting enabled: every {self.config.position_interval}s "
+                f"Position broadcasting enabled: every {self.config.position_broadcast_interval}s "
                 f"on private CH{self.config.private_channel_index}"
             )
         else:
-            self.logger.info("Position broadcasting disabled")
+            self.logger.info("Position broadcasting disabled (can still send manually)")
 
         try:
             while self.running:
@@ -1233,8 +1368,8 @@ class MasterController:
                     now = time.time()
 
                     # Periodically broadcast position on private channel
-                    if self.config.position_enabled:
-                        if (now - last_position_broadcast) >= self.config.position_interval:
+                    if self.config.position_broadcast_enabled:
+                        if (now - last_position_broadcast) >= self.config.position_broadcast_interval:
                             self.send_position()
                             last_position_broadcast = now
 
@@ -1278,9 +1413,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m meshtastic_app.master                # Run with default config
-  python -m meshtastic_app.master -c config.yaml # Run with custom config
-  python -m meshtastic_app.master --info         # Show device info and exit
+  python -m meshtastic_app.master                  # Run with default config
+  python -m meshtastic_app.master -c config.yaml   # Run with custom config
+  python -m meshtastic_app.master --info           # Show device info and exit
+  python -m meshtastic_app.master --configure      # Configure device settings via CLI
         """
     )
     parser.add_argument(
@@ -1292,6 +1428,11 @@ Examples:
         "--info",
         action="store_true",
         help="Show device info and exit",
+    )
+    parser.add_argument(
+        "--configure",
+        action="store_true",
+        help="Configure device settings (position precision, etc.) via CLI and exit",
     )
 
     args = parser.parse_args()
@@ -1306,6 +1447,25 @@ Examples:
         sys.exit(1)
 
     master = MasterController(config)
+
+    if args.configure:
+        print("\n" + "=" * 50)
+        print("CONFIGURING DEVICE")
+        print("=" * 50)
+        print(f"Public CH position precision:  {config.public_channel_precision}")
+        print(f"Private CH position precision: {config.private_channel_precision}")
+        print(f"Fixed position:                {config.use_fixed_position}")
+        if config.use_fixed_position and config.fixed_latitude and config.fixed_longitude:
+            print(f"  Latitude:  {config.fixed_latitude}")
+            print(f"  Longitude: {config.fixed_longitude}")
+        print("=" * 50)
+
+        if master.configure_device():
+            print("\nDevice configured successfully!")
+            sys.exit(0)
+        else:
+            print("\nDevice configuration failed!")
+            sys.exit(1)
 
     if args.info:
         if master.initialize():
