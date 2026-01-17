@@ -54,3 +54,4 @@ CMakeLists.txt
 # Test build artifacts
 *.o
 src/stechat/compressor/test_compressor
+src/stechat/compressor/test/test_compressor
