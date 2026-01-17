@@ -158,9 +158,10 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  joystick
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
+// Disabled to allow joystick UP/DOWN to scroll BaseUI instead of triggering canned messages
+// #define CANNED_MESSAGE_MODULE_ENABLE 1
 
-#define CANNED_MESSAGE_ADD_CONFIRMATION 1
+// #define CANNED_MESSAGE_ADD_CONFIRMATION 1
 
 // trackball
 #define HAS_TRACKBALL 1
