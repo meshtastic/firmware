@@ -24,7 +24,7 @@
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
-#include "modules/MorseInputModule.h"
+#include "modules/SingleButtonInputManager.h"
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"
@@ -209,25 +209,28 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
         return;
     }
 
-#if defined(BUTTON_PIN)
-    if (!kb_found) {
+#if defined(BUTTON_PIN) || HAS_TOUCHSCREEN || ARCH_PORTDUINO
+    // Use screen->showTextInput for single button input, touchscreen, or when there's no keyboard
+    // When BUTTON_PIN is defined, Screen::showTextInput will route to SingleButtonInputManager
+    if (screen) {
         const char *nodeName = getNodeName(dest);
         char header[64];
         snprintf(header, sizeof(header), "To: %s", nodeName ? nodeName : "Unknown");
 
-        graphics::MorseInputModule::instance().start(header, "", 0, [this](const std::string &text) {
+        // Use screen->showTextInput which will start SingleButtonInputManager via OnScreenKeyboardModule
+        // and properly set up all the overlays
+        screen->showTextInput(header, "", 0, [this](const std::string &text) {
              if (!text.empty()) {
                  this->sendText(this->dest, this->channel, text.c_str(), true);
              }
              // Return to inactive state
              this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-             // Force redraw to clear morse screen
+             // Force redraw to clear input screen
              UIFrameEvent e;
              e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
              notifyObservers(&e);
         });
-        // Set notification type to text_input so NotificationRenderer calls MorseInputModule::draw
-        graphics::NotificationRenderer::current_notification_type = graphics::notificationTypeEnum::text_input;
+        
         // Request focus to ensure screen updates
         requestFocus();
         return;
@@ -643,7 +646,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
                 char header[64];
                 snprintf(header, sizeof(header), "To: %s", nodeName ? nodeName : "Unknown");
 
-                graphics::MorseInputModule::instance().start(header, "", 0, [this](const std::string &text) {
+                graphics::SingleButtonInputManager::instance().start(header, "", 0, [this](const std::string &text) {
                     if (!text.empty()) {
                         this->sendText(this->dest, this->channel, text.c_str(), true);
                     }

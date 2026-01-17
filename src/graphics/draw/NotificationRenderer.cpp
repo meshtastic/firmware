@@ -13,7 +13,9 @@
 #include "input/ButtonThread.h"
 #endif
 #include "main.h"
-#include "modules/MorseInputModule.h"
+#if defined(BUTTON_PIN)
+#include "modules/SingleButtonInputManager.h"
+#endif
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -111,7 +113,7 @@ void NotificationRenderer::resetBanner()
     if (previousType == notificationTypeEnum::text_input && screen) {
         OnScreenKeyboardModule::instance().stop(false);
 #if defined(BUTTON_PIN)
-        graphics::MorseInputModule::instance().stop(false);
+        graphics::SingleButtonInputManager::instance().stop(false);
 #endif
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     }
@@ -698,14 +700,15 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
 void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
 #if defined(BUTTON_PIN)
-    if (graphics::MorseInputModule::instance().isActive()) {
+    graphics::SingleButtonInputBase *activeModule = graphics::SingleButtonInputManager::instance().getActiveModule();
+    if (activeModule && activeModule->isActive()) {
         // Consume any input events to prevent them from propagating or accumulating
         inEvent.inputEvent = INPUT_BROKER_NONE;
         
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
         display->setColor(WHITE);
-        graphics::MorseInputModule::instance().draw(display, state, 0, 0);
+        activeModule->draw(display, state, 0, 0);
         return;
     }
 #endif

@@ -553,10 +553,6 @@ void menuHandler::replyMenu()
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
 
-    // Preset reply
-    optionsArray[options] = "With Preset";
-    optionsEnumArray[options++] = ReplyPreset;
-
     // Freetext reply (only when keyboard exists or BUTTON_PIN is defined)
 #if defined(BUTTON_PIN)
     bool hasInput = true;
@@ -568,6 +564,10 @@ void menuHandler::replyMenu()
         optionsArray[options] = "With Freetext";
         optionsEnumArray[options++] = ReplyFreetext;
     }
+
+    // Preset reply
+    optionsArray[options] = "With Preset";
+    optionsEnumArray[options++] = ReplyPreset;
 
     BannerOverlayOptions bannerOptions;
 
@@ -961,8 +961,6 @@ void menuHandler::textMessageBaseMenu()
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
-    optionsArray[options] = "New Preset Msg";
-    optionsEnumArray[options++] = Preset;
 #if defined(BUTTON_PIN)
     bool hasInput = true;
 #else
@@ -972,6 +970,8 @@ void menuHandler::textMessageBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "New Preset Msg";
+    optionsEnumArray[options++] = Preset;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Message Action";
@@ -1084,17 +1084,18 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "Go To Chat";
         optionsEnumArray[options++] = GoToChat;
     }
+
+    if (kb_found) {
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
+    }
+
     if (currentResolution == ScreenResolution::UltraLow) {
         optionsArray[options] = "New Preset";
     } else {
         optionsArray[options] = "New Preset Msg";
     }
     optionsEnumArray[options++] = Preset;
-
-    if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
-        optionsEnumArray[options++] = Freetext;
-    }
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Trace Route";
