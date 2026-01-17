@@ -465,7 +465,7 @@ void MessageBuffer::reset() {
 }
 
 size_t MessageBuffer::getRAMUsage() const {
-    return sizeof(MessageBuffer) + Unishox2::getRAMUsage();
+    return sizeof(MessageBuffer) + Compressor::getRAMUsage();
 }
 
 } // namespace stechat

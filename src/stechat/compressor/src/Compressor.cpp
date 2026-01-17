@@ -1,5 +1,5 @@
 /**
- * @file Unishox2.cpp
+ * @file Compressor.cpp
  * @brief C++ wrapper implementation for official Unishox2 library
  *
  * Uses the official Unishox2 library from https://github.com/siara-cc/Unishox2
@@ -16,7 +16,7 @@
  * buffer overflows in the underlying library.
  */
 
-#include "Unishox2.h"
+#include "Compressor.h"
 #include <string.h>
 #include <assert.h>
 
@@ -32,7 +32,7 @@ namespace stechat {
 static const unsigned char USX_HCODES_DFLT_[] = {0x00, 0x40, 0x80, 0xC0, 0xE0};
 static const unsigned char USX_HCODE_LENS_DFLT_[] = {2, 2, 2, 3, 3};
 
-size_t Unishox2::compress(const char* input, uint8_t* output, size_t outputMaxLen) {
+size_t Compressor::compress(const char* input, uint8_t* output, size_t outputMaxLen) {
     // NASA Rule 5: Assertions for preconditions
     assert(input != nullptr && "Input pointer must not be null");
     assert(output != nullptr && "Output pointer must not be null");
@@ -55,7 +55,7 @@ size_t Unishox2::compress(const char* input, uint8_t* output, size_t outputMaxLe
     return compress(input, inputLen, output, outputMaxLen);
 }
 
-size_t Unishox2::compress(const char* input, size_t inputLen,
+size_t Compressor::compress(const char* input, size_t inputLen,
                           uint8_t* output, size_t outputMaxLen) {
     // NASA Rule 5: Assertions for preconditions
     assert(input != nullptr && "Input pointer must not be null");
@@ -108,7 +108,7 @@ size_t Unishox2::compress(const char* input, size_t inputLen,
     return static_cast<size_t>(result);
 }
 
-size_t Unishox2::decompress(const uint8_t* input, size_t inputLen,
+size_t Compressor::decompress(const uint8_t* input, size_t inputLen,
                             char* output, size_t outputMaxLen) {
     // NASA Rule 5: Assertions for preconditions
     assert(input != nullptr && "Input pointer must not be null");

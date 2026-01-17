@@ -1,0 +1,44 @@
+{
+  "name": "stechat-compressor",
+  "version": "1.0.0",
+  "description": "Character-by-character input buffer with Unishox2 compression for Meshtastic mesh networks",
+  "keywords": [
+    "compression",
+    "unishox2",
+    "meshtastic",
+    "mesh",
+    "keyboard",
+    "input"
+  ],
+  "license": "Apache-2.0",
+  "authors": [
+    {
+      "name": "StEChat Team"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/treyvonwhite170-droid/firmware"
+  },
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include",
+    "libLnk": true,
+    "extraScript": "",
+    "flags": [
+      "-DUNISHOX_API_WITH_OUTPUT_LEN=1"
+    ],
+    "srcFilter": [
+      "+<*.cpp>",
+      "+<../lib/*.c>"
+    ]
+  },
+  "export": {
+    "include": [
+      "include/*",
+      "lib/*"
+    ]
+  }
+}

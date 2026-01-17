@@ -1,5 +1,5 @@
 /**
- * @file Unishox2.h
+ * @file Compressor.h
  * @brief C++ wrapper for official Unishox2 compression library
  *
  * This wrapper uses the official Unishox2 library from:
@@ -18,8 +18,8 @@
  * - Rule 10: Compiled with all warnings enabled
  */
 
-#ifndef STECHAT_UNISHOX2_H
-#define STECHAT_UNISHOX2_H
+#ifndef STECHAT_COMPRESSOR_H
+#define STECHAT_COMPRESSOR_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -55,7 +55,7 @@ namespace stechat {
  *
  * Thread Safety: This class is stateless and thread-safe for concurrent use.
  */
-class Unishox2 {
+class Compressor {
 public:
     /// Maximum input string length (NASA Rule 2: fixed bounds)
     static constexpr size_t MAX_INPUT_LEN = 256;
@@ -118,9 +118,12 @@ public:
      * @brief Get estimated RAM usage for this compressor
      * @return RAM usage in bytes (stateless, so minimal)
      */
-    static constexpr size_t getRAMUsage() { return sizeof(Unishox2); }
+    static constexpr size_t getRAMUsage() { return sizeof(Compressor); }
 };
+
+// Backward compatibility alias
+using Unishox2 = Compressor;
 
 } // namespace stechat
 
-#endif // STECHAT_UNISHOX2_H
+#endif // STECHAT_COMPRESSOR_H

@@ -12,15 +12,17 @@
  * 7. Backspace handling
  *
  * Compile with:
- * gcc -c -DUNISHOX_API_WITH_OUTPUT_LEN=1 -o unishox2.o unishox2.c
- * g++ -std=c++14 -DUNISHOX_API_WITH_OUTPUT_LEN=1 -DNDEBUG -o test_compressor \
- *     test_compressor.cpp Unishox2.cpp MessageBuffer.cpp unishox2.o
+ * cd src/stechat/compressor
+ * gcc -c -DUNISHOX_API_WITH_OUTPUT_LEN=1 -Ilib -o lib/unishox2.o lib/unishox2.c
+ * g++ -std=c++14 -DUNISHOX_API_WITH_OUTPUT_LEN=1 -DNDEBUG -Iinclude -Ilib \
+ *     -o test/test_compressor test/test_compressor.cpp src/Compressor.cpp \
+ *     src/MessageBuffer.cpp lib/unishox2.o
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "Unishox2.h"
+#include "Compressor.h"
 #include "MessageBuffer.h"
 
 // Test framework macros

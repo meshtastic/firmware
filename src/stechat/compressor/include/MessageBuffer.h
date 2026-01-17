@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
-#include "Unishox2.h"
+#include "Compressor.h"
 
 namespace stechat {
 
@@ -251,7 +251,7 @@ private:
     bool inFlush_;
 
     // Compressor instance
-    Unishox2 compressor_;
+    Compressor compressor_;
 
     /**
      * @brief Create a new line with delta timestamp
