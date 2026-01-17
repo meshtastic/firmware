@@ -137,10 +137,12 @@ No longer populated on PCB
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
+
+// Hardware watchdog
 #define HAS_HARDWARE_WATCHDOG
 #define HARDWARE_WATCHDOG_DONE (0 + 9)
 #define HARDWARE_WATCHDOG_WAKE (0 + 10)
-#define HARDWARE_WATCHDOG_TIMEOUT_MS (4*60*1000) // 8 minute watchdog
+#define HARDWARE_WATCHDOG_TIMEOUT_MS (6*60*1000) // 6 minute watchdog
 
 #define BQ4050_SDA_PIN (32 + 1)                // I2C data line pin
 #define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
