@@ -259,6 +259,18 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(3);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
+#elif defined(MINI_EPAPER_S3)
+    spi1 = new SPIClass(HSPI);
+    spi1->begin(PIN_SPI1_SCK, PIN_SPI1_MISO, PIN_SPI1_MOSI, PIN_EINK_CS);
+
+    // Create GxEPD2 objects
+    auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+    adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+
+    // Init GxEPD2
+    adafruitDisplay->init();
+    adafruitDisplay->setRotation(0);
+    adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
 #elif defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213)
 
     // Detect display model, before starting SPI
