@@ -11,9 +11,6 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
-#include "detect/ScanI2CConsumer.h"
-#include <OLEDDisplay.h>
-#include <OLEDDisplayUi.h>
 
 class AirQualityTelemetryModule : private concurrency::OSThread,
     public ScanI2CConsumer,

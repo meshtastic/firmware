@@ -64,6 +64,10 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
         if (i2cBus->available()) {
             r = i2cBus->read();
         }
+        if (r == 0x80) {
+            LOG_INFO("QMC6310N found at address 0x%02X", addr.address);
+            return ScanI2C::DeviceType::QMC6310N;
+        }
         r &= 0x0f;
 
         if (r == 0x08 || r == 0x00) {
@@ -107,7 +111,7 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         if (i2cBus->available())
             i2cBus->read();
     }
-    LOG_DEBUG("Register value: 0x%x", value);
+    LOG_DEBUG("Register value from 0x%x: 0x%x", registerLocation.i2cAddress.address, value);
     return value;
 }
 
@@ -212,7 +216,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         type = NONE;
         if (err == 0) {
             switch (addr.address) {
-            case SSD1306_ADDRESS:
+            case SSD1306_ADDRESS_H:
+            case SSD1306_ADDRESS_L:
                 type = probeOLED(addr);
                 break;
 
@@ -419,11 +424,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2);
-                if (registerValue == 0x5449) {
+                if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2) != 0) { // unique SHT4x serial number
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 6) !=
+                           0) { // unique SHT4x serial number (6 bytes inc. CRC)
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else {
@@ -449,7 +454,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case LPS22HB_ADDR_ALT:
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
+                SCAN_SIMPLE_CASE(QMC6310U_ADDR, QMC6310U, "QMC6310U", (uint8_t)addr.address)
 
             case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
