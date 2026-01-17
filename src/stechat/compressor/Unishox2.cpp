@@ -11,18 +11,26 @@
  * - No dynamic memory allocation
  * - No recursion or goto statements
  * - All return values are checked
+ *
+ * SECURITY: Uses bounded API (UNISHOX_API_WITH_OUTPUT_LEN=1) to prevent
+ * buffer overflows in the underlying library.
  */
 
 #include "Unishox2.h"
 #include <string.h>
 #include <assert.h>
 
-// Include the official Unishox2 C library
+// Include the official Unishox2 C library with bounded API enabled
 extern "C" {
 #include "unishox2.h"
 }
 
 namespace stechat {
+
+// Default Unishox2 presets for general text (from unishox2.h)
+// These are declared as static const to avoid repeated allocation
+static const unsigned char USX_HCODES_DFLT_[] = {0x00, 0x40, 0x80, 0xC0, 0xE0};
+static const unsigned char USX_HCODE_LENS_DFLT_[] = {2, 2, 2, 3, 3};
 
 size_t Unishox2::compress(const char* input, uint8_t* output, size_t outputMaxLen) {
     // NASA Rule 5: Assertions for preconditions
@@ -72,32 +80,32 @@ size_t Unishox2::compress(const char* input, size_t inputLen,
         inputLen = MAX_INPUT_LEN;
     }
 
-    // Clamp output length to prevent integer overflow
-    if (outputMaxLen > MAX_OUTPUT_LEN) {
-        outputMaxLen = MAX_OUTPUT_LEN;
+    // Clamp output length to safe maximum
+    size_t safeOutputLen = outputMaxLen;
+    if (safeOutputLen > MAX_OUTPUT_LEN) {
+        safeOutputLen = MAX_OUTPUT_LEN;
     }
 
-    // Call the official Unishox2 library
-    // The library returns the number of bytes written, or negative on error
-    int result = unishox2_compress_simple(
+    // Call the official Unishox2 library with BOUNDED API
+    // This version takes output length and won't write beyond it
+    int result = unishox2_compress(
         input,
         static_cast<int>(inputLen),
-        reinterpret_cast<char*>(output)
+        reinterpret_cast<char*>(output),
+        static_cast<int>(safeOutputLen),
+        USX_HCODES_DFLT_,
+        USX_HCODE_LENS_DFLT_,
+        USX_FREQ_SEQ_DFLT,
+        USX_TEMPLATES
     );
 
     // NASA Rule 7: Check return value
-    if (result < 0) {
+    // Returns compressed length on success, or value > olen on failure
+    if (result < 0 || static_cast<size_t>(result) > safeOutputLen) {
         return 0;
     }
 
-    // Verify result is within bounds
-    size_t compressedLen = static_cast<size_t>(result);
-    if (compressedLen > outputMaxLen) {
-        // Should not happen with proper buffer, but check anyway
-        return 0;
-    }
-
-    return compressedLen;
+    return static_cast<size_t>(result);
 }
 
 size_t Unishox2::decompress(const uint8_t* input, size_t inputLen,
@@ -114,33 +122,38 @@ size_t Unishox2::decompress(const uint8_t* input, size_t inputLen,
     }
 
     if (inputLen == 0 || outputMaxLen < 2) {
+        output[0] = '\0';
         return 0;
     }
 
     // Clamp output length to maximum (NASA Rule 2: fixed bounds)
-    if (outputMaxLen > MAX_OUTPUT_LEN) {
-        outputMaxLen = MAX_OUTPUT_LEN;
+    // Reserve 1 byte for null terminator
+    size_t safeOutputLen = outputMaxLen - 1;
+    if (safeOutputLen > MAX_OUTPUT_LEN - 1) {
+        safeOutputLen = MAX_OUTPUT_LEN - 1;
     }
 
-    // Call the official Unishox2 library
-    int result = unishox2_decompress_simple(
+    // Call the official Unishox2 library with BOUNDED API
+    int result = unishox2_decompress(
         reinterpret_cast<const char*>(input),
         static_cast<int>(inputLen),
-        output
+        output,
+        static_cast<int>(safeOutputLen),
+        USX_HCODES_DFLT_,
+        USX_HCODE_LENS_DFLT_,
+        USX_FREQ_SEQ_DFLT,
+        USX_TEMPLATES
     );
 
     // NASA Rule 7: Check return value
-    if (result < 0) {
+    if (result < 0 || static_cast<size_t>(result) > safeOutputLen) {
         output[0] = '\0';
         return 0;
     }
 
     size_t decompressedLen = static_cast<size_t>(result);
 
-    // Ensure we don't exceed buffer and null-terminate
-    if (decompressedLen >= outputMaxLen) {
-        decompressedLen = outputMaxLen - 1;
-    }
+    // Ensure null termination (defensive)
     output[decompressedLen] = '\0';
 
     return decompressedLen;

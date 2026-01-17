@@ -46,6 +46,7 @@ typedef void (*PacketReadyCallback)(const uint8_t* data, size_t len,
  * @brief Configuration for MessageBuffer
  *
  * All fields have NASA-compliant fixed default values.
+ * Config is validated in setConfig() to ensure safe operation.
  */
 struct MessageBufferConfig {
     /// Maximum packet payload size (Meshtastic limit)
@@ -54,11 +55,9 @@ struct MessageBufferConfig {
     /// Packet header size (batch ID, timestamp, flags, count)
     uint8_t packetHeaderSize = 8;
 
-    /// Maximum time between inputs before auto-flush (ms)
-    uint32_t autoFlushTimeoutMs = 300000;  // 5 minutes
-
-    /// Maximum records per batch before auto-flush
-    uint16_t maxRecordsPerBatch = 1000;
+    /// Maximum records per batch before auto-flush (must be <= MAX_RECORDS)
+    /// Note: Clamped to MAX_RECORDS (64) during validation
+    uint16_t maxRecordsPerBatch = 64;
 
     /// Callback when packet is ready (may be nullptr)
     PacketReadyCallback onPacketReady = nullptr;
@@ -214,6 +213,13 @@ private:
     size_t packetLen_;
     uint8_t packetRecordCount_;
     uint8_t packetNum_;
+
+    // Packet flags tracking (fix for compression flag mismatch)
+    bool packetHasCompressedData_;   ///< True if any record in packet was compressed
+    bool packetHasRawData_;          ///< True if any record in packet was NOT compressed
+
+    // Re-entry guard (fix for double-flush issue)
+    bool inFlush_;                   ///< True while flush() is executing
 
     // Compressor instance
     Unishox2 compressor_;

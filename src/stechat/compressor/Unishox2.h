@@ -25,10 +25,24 @@
 #include <stddef.h>
 #include <assert.h>
 
+// Enable bounded API for buffer safety (NASA Rule 2: fixed bounds)
+#ifndef UNISHOX_API_WITH_OUTPUT_LEN
+#define UNISHOX_API_WITH_OUTPUT_LEN 1
+#endif
+
 // Forward declaration - the official library is pure C
+// Using bounded API versions for safety
 extern "C" {
-    int unishox2_compress_simple(const char *in, int len, char *out);
-    int unishox2_decompress_simple(const char *in, int len, char *out);
+    int unishox2_compress(const char *in, int len, char *out, int olen,
+                          const unsigned char usx_hcodes[],
+                          const unsigned char usx_hcode_lens[],
+                          const char *usx_freq_seq[],
+                          const char *usx_templates[]);
+    int unishox2_decompress(const char *in, int len, char *out, int olen,
+                            const unsigned char usx_hcodes[],
+                            const unsigned char usx_hcode_lens[],
+                            const char *usx_freq_seq[],
+                            const char *usx_templates[]);
 }
 
 namespace stechat {

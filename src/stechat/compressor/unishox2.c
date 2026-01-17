@@ -51,8 +51,12 @@ const char * USX_FREQ_SEQ_XML[]  = {"</", "=\"", "\">", "<?xml version=\"1.0\"",
 
 const char * USX_TEMPLATES[] = {"tfff-of-tfTtf:rf:rf.fffZ", "tfff-of-tf", "(fff) fff-ffff", "tf:rf:rf", 0};
 
-/// Commonly occuring templates (ISO Date/Time, ISO Date, US Phone number, ISO Time, Unused)
-#define USX_TEMPLATES (const char *[]) {"tfff-of-tfTtf:rf:rf.fffZ", "tfff-of-tf", "(fff) fff-ffff", "tf:rf:rf", 0}
+/// Commonly occuring templates - use the array directly instead of compound literal for C++ compatibility
+#ifdef __cplusplus
+#define USX_TEMPLATES_MACRO USX_TEMPLATES
+#else
+#define USX_TEMPLATES_MACRO (const char *[]) {"tfff-of-tfTtf:rf:rf.fffZ", "tfff-of-tf", "(fff) fff-ffff", "tf:rf:rf", 0}
+#endif
 
 /// possible horizontal sets and states
 enum {USX_ALPHA = 0, USX_SYM, USX_NUM, USX_DICT, USX_DELTA, USX_NUM_TEMP};
@@ -856,8 +860,11 @@ int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out
 }
 
 // Main API function. See unishox2.h for documentation
+// Note: Using USX_TEMPLATES array directly for C++ compatibility (not the macro)
 int unishox2_compress_simple(const char *in, int len, char *out) {
-  return unishox2_compress_lines(in, len, UNISHOX_API_OUT_AND_LEN(out, INT_MAX - 1), USX_HCODES_DFLT, USX_HCODE_LENS_DFLT, USX_FREQ_SEQ_DFLT, USX_TEMPLATES, NULL);
+  static const unsigned char hcodes[] = {0x00, 0x40, 0x80, 0xC0, 0xE0};
+  static const unsigned char hcode_lens[] = {2, 2, 2, 3, 3};
+  return unishox2_compress_lines(in, len, UNISHOX_API_OUT_AND_LEN(out, INT_MAX - 1), hcodes, hcode_lens, USX_FREQ_SEQ_DFLT, USX_TEMPLATES, NULL);
 }
 
 // Reads one bit from in
@@ -1380,6 +1387,9 @@ int unishox2_decompress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *o
 }
 
 // Main API function. See unishox2.h for documentation
+// Note: Using static arrays directly for C++ compatibility
 int unishox2_decompress_simple(const char *in, int len, char *out) {
-  return unishox2_decompress(in, len, UNISHOX_API_OUT_AND_LEN(out, INT_MAX - 1), USX_PSET_DFLT);
+  static const unsigned char hcodes[] = {0x00, 0x40, 0x80, 0xC0, 0xE0};
+  static const unsigned char hcode_lens[] = {2, 2, 2, 3, 3};
+  return unishox2_decompress(in, len, UNISHOX_API_OUT_AND_LEN(out, INT_MAX - 1), hcodes, hcode_lens, USX_FREQ_SEQ_DFLT, USX_TEMPLATES);
 }

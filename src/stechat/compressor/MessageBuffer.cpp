@@ -26,6 +26,9 @@ MessageBuffer::MessageBuffer()
     , packetLen_(0)
     , packetRecordCount_(0)
     , packetNum_(0)
+    , packetHasCompressedData_(false)
+    , packetHasRawData_(false)
+    , inFlush_(false)
 {
     // NASA Rule 5: Assertions to verify initialization
     assert(MAX_RECORDS > 0 && "MAX_RECORDS must be positive");
@@ -43,6 +46,19 @@ void MessageBuffer::setConfig(const MessageBufferConfig& config) {
     assert(config.packetHeaderSize >= 8 && "Header must be at least 8 bytes");
 
     config_ = config;
+
+    // Validate and clamp maxRecordsPerBatch (NASA Rule 2: fixed bounds)
+    if (config_.maxRecordsPerBatch > MAX_RECORDS) {
+        config_.maxRecordsPerBatch = static_cast<uint16_t>(MAX_RECORDS);
+    }
+    if (config_.maxRecordsPerBatch == 0) {
+        config_.maxRecordsPerBatch = static_cast<uint16_t>(MAX_RECORDS);
+    }
+
+    // Validate payload size
+    if (config_.maxPacketPayload > MAX_PACKET_DATA) {
+        config_.maxPacketPayload = MAX_PACKET_DATA;
+    }
 }
 
 bool MessageBuffer::addMessage(const char* text, uint32_t timestampMs) {
@@ -73,6 +89,11 @@ bool MessageBuffer::addMessage(const char* text, size_t textLen, uint32_t timest
         return false;
     }
 
+    // Prevent re-entry during flush (double-flush fix)
+    if (inFlush_) {
+        return false;
+    }
+
     // Clamp text length (NASA Rule 2: fixed bounds)
     if (textLen > MessageRecord::MAX_TEXT_LEN) {
         textLen = MessageRecord::MAX_TEXT_LEN;
@@ -90,11 +111,13 @@ bool MessageBuffer::addMessage(const char* text, size_t textLen, uint32_t timest
         packetLen_ = 0;
         packetRecordCount_ = 0;
         packetNum_ = 0;
+        packetHasCompressedData_ = false;
+        packetHasRawData_ = false;
     }
 
-    // Check if buffer is full - flush if needed
-    if (recordCount_ >= MAX_RECORDS) {
-        (void)flush();  // NASA Rule 7: explicitly ignore return for void operation
+    // Check if buffer is full - flush if needed (only if not already flushing)
+    if (recordCount_ >= MAX_RECORDS && !inFlush_) {
+        (void)flush();
     }
 
     // Add record to circular buffer
@@ -131,8 +154,8 @@ bool MessageBuffer::addMessage(const char* text, size_t textLen, uint32_t timest
     const bool added = compressAndAddToPacket(record);
     (void)added;  // NASA Rule 7: acknowledge return value
 
-    // Check if we should auto-flush
-    if (recordCount_ >= config_.maxRecordsPerBatch) {
+    // Check if we should auto-flush (only if not already flushing)
+    if (recordCount_ >= config_.maxRecordsPerBatch && !inFlush_) {
         (void)flush();
     }
 
@@ -151,6 +174,8 @@ bool MessageBuffer::compressAndAddToPacket(const MessageRecord& record) {
 
     // Compress the text (NASA Rule 3: fixed-size buffer on stack)
     uint8_t compressedText[MAX_COMPRESSED_LEN];
+    bool wasCompressed = false;
+
     size_t compressedLen = compressor_.compress(
         record.text,
         record.textLen,
@@ -159,8 +184,12 @@ bool MessageBuffer::compressAndAddToPacket(const MessageRecord& record) {
     );
 
     // NASA Rule 7: Check return value
-    if (compressedLen == 0) {
-        // Compression failed, use raw text with bounds check
+    if (compressedLen > 0 && compressedLen < record.textLen) {
+        // Compression succeeded and reduced size
+        wasCompressed = true;
+    } else {
+        // Compression failed or didn't help, use raw text with bounds check
+        wasCompressed = false;
         compressedLen = record.textLen;
         if (compressedLen > sizeof(compressedText)) {
             compressedLen = sizeof(compressedText);
@@ -174,8 +203,9 @@ bool MessageBuffer::compressAndAddToPacket(const MessageRecord& record) {
     uint8_t deltaBytes[MAX_VARINT_LEN];
     const size_t deltaLen = encodeVarint(record.timestamp, deltaBytes);
 
-    // Record format: [delta_varint][compressed_len][compressed_data]
-    const size_t recordSize = deltaLen + 1 + compressedLen;
+    // Record format: [delta_varint][flags_byte][data_len][data]
+    // flags_byte: bit 0 = compressed (1) or raw (0)
+    const size_t recordSize = deltaLen + 1 + 1 + compressedLen;
 
     // Check if record fits in current packet
     if (packetLen_ + recordSize > maxDataSize) {
@@ -184,9 +214,11 @@ bool MessageBuffer::compressAndAddToPacket(const MessageRecord& record) {
             finalizePacket(false);  // More packets to come
         }
 
-        // Reset packet buffer
+        // Reset packet buffer and compression tracking
         packetLen_ = 0;
         packetRecordCount_ = 0;
+        packetHasCompressedData_ = false;
+        packetHasRawData_ = false;
         ++packetNum_;
     }
 
@@ -200,15 +232,26 @@ bool MessageBuffer::compressAndAddToPacket(const MessageRecord& record) {
         }
         packetLen_ += deltaLen;
 
-        // Compressed length byte
+        // Record flags byte: bit 0 = compressed
+        packetBuffer_[baseOffset + packetLen_] = wasCompressed ? 0x01 : 0x00;
+        ++packetLen_;
+
+        // Data length byte
         packetBuffer_[baseOffset + packetLen_] = static_cast<uint8_t>(compressedLen);
         ++packetLen_;
 
-        // Copy compressed data (NASA Rule 2: bounded loop)
+        // Copy data (NASA Rule 2: bounded loop)
         for (size_t i = 0; i < compressedLen && i < MAX_COMPRESSED_LEN; ++i) {
             packetBuffer_[baseOffset + packetLen_ + i] = compressedText[i];
         }
         packetLen_ += compressedLen;
+
+        // Track compression state for packet flags (fix for flag mismatch)
+        if (wasCompressed) {
+            packetHasCompressedData_ = true;
+        } else {
+            packetHasRawData_ = true;
+        }
 
         ++packetRecordCount_;
         return true;
@@ -226,8 +269,15 @@ void MessageBuffer::finalizePacket(bool isFinal) {
         return;
     }
 
-    // Build flags
-    uint8_t flags = FLAG_COMPRESSED | FLAG_DELTA_TIME;
+    // Build flags based on actual packet content (fix for compression flag mismatch)
+    uint8_t flags = FLAG_DELTA_TIME;
+
+    // Only set FLAG_COMPRESSED if ALL records were compressed
+    // If mixed, don't set flag - receiver will check per-record flags
+    if (packetHasCompressedData_ && !packetHasRawData_) {
+        flags |= FLAG_COMPRESSED;
+    }
+
     if (!isFinal) {
         flags |= FLAG_HAS_MORE;
     }
@@ -271,12 +321,19 @@ uint8_t MessageBuffer::flush() {
     assert(packetRecordCount_ <= MAX_RECORDS && "Invalid record count state");
     assert(recordCount_ <= MAX_RECORDS && "Invalid buffer state");
 
+    // Prevent re-entry (double-flush fix)
+    if (inFlush_) {
+        return 0;
+    }
+    inFlush_ = true;
+
     uint8_t packetsSent = 0;
 
     // Finalize current packet if there's data
     if (packetRecordCount_ > 0) {
         finalizePacket(true);
-        packetsSent = packetNum_ + 1;
+        // Use saturating add to prevent overflow (NASA Rule 2: bounded)
+        packetsSent = (packetNum_ < 255) ? (packetNum_ + 1) : 255;
     }
 
     // Clear buffer state
@@ -287,7 +344,10 @@ uint8_t MessageBuffer::flush() {
     packetRecordCount_ = 0;
     packetNum_ = 0;
     batchStartTime_ = 0;
+    packetHasCompressedData_ = false;
+    packetHasRawData_ = false;
 
+    inFlush_ = false;
     return packetsSent;
 }
 
@@ -305,8 +365,11 @@ bool MessageBuffer::needsFlush() const {
         return true;
     }
 
-    // Note: Timeout check would require current time parameter
-    // For now, only check record count
+    // Check if buffer is nearly full
+    if (recordCount_ >= MAX_RECORDS - 1) {
+        return true;
+    }
+
     return false;
 }
 
@@ -324,6 +387,9 @@ void MessageBuffer::reset() {
     packetLen_ = 0;
     packetRecordCount_ = 0;
     packetNum_ = 0;
+    packetHasCompressedData_ = false;
+    packetHasRawData_ = false;
+    inFlush_ = false;
 
     // Clear packet buffer
     memset(packetBuffer_, 0, sizeof(packetBuffer_));
