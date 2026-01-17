@@ -687,6 +687,124 @@ def create_api(master_controller) -> FastAPI:
 
         return result
 
+    # -------------------------------------------------------------------------
+    # Data Deletion Endpoints
+    # -------------------------------------------------------------------------
+
+    class DeleteResponse(BaseModel):
+        """Response for delete operations."""
+        success: bool = Field(..., description="Whether deletion was successful")
+        deleted_count: int = Field(..., ge=0, description="Number of records deleted")
+        message: str = Field(..., description="Status message")
+
+    @app.delete("/api/data/{slave_id}/record/{record_id}", response_model=DeleteResponse, tags=["Data"])
+    async def delete_record(slave_id: str, record_id: int):
+        """
+        Delete a specific record by ID.
+
+        This permanently removes the record from the database.
+        """
+        master = get_master()
+        deleted = master.storage.delete_record(record_id)
+
+        if deleted:
+            return DeleteResponse(
+                success=True,
+                deleted_count=1,
+                message=f"Record {record_id} deleted",
+            )
+        else:
+            raise HTTPException(status_code=404, detail=f"Record {record_id} not found")
+
+    @app.delete("/api/data/{slave_id}/batch/{batch_id}", response_model=DeleteResponse, tags=["Data"])
+    async def delete_batch(slave_id: str, batch_id: int):
+        """
+        Delete all records from a specific batch.
+
+        This permanently removes all records associated with the batch.
+        """
+        master = get_master()
+        count = master.storage.delete_records_by_batch(slave_id, batch_id)
+
+        return DeleteResponse(
+            success=count > 0,
+            deleted_count=count,
+            message=f"Deleted {count} records from batch {batch_id}" if count > 0 else "No records found",
+        )
+
+    @app.delete("/api/data/{slave_id}/day/{year}/{month}/{day}", response_model=DeleteResponse, tags=["Data"])
+    async def delete_records_by_day(
+        slave_id: str,
+        year: int,
+        month: int,
+        day: int,
+    ):
+        """
+        Delete all records for a slave on a specific day.
+
+        This permanently removes all records for the specified date.
+        """
+        master = get_master()
+        count = master.storage.delete_records_by_day(slave_id, year, month, day)
+
+        return DeleteResponse(
+            success=count > 0,
+            deleted_count=count,
+            message=f"Deleted {count} records for {year:04d}-{month:02d}-{day:02d}",
+        )
+
+    @app.delete("/api/data/{slave_id}/range", response_model=DeleteResponse, tags=["Data"])
+    async def delete_records_by_range(
+        slave_id: str,
+        start: int = Query(..., description="Start Unix timestamp (inclusive)"),
+        end: int = Query(..., description="End Unix timestamp (exclusive)"),
+    ):
+        """
+        Delete records for a slave within a time range.
+
+        This permanently removes all records in the specified time range.
+        """
+        master = get_master()
+        count = master.storage.delete_records_by_range(slave_id, start, end)
+
+        return DeleteResponse(
+            success=count > 0,
+            deleted_count=count,
+            message=f"Deleted {count} records between {start} and {end}",
+        )
+
+    @app.delete("/api/data/{slave_id}", response_model=DeleteResponse, tags=["Data"])
+    async def delete_all_slave_data(slave_id: str):
+        """
+        Delete ALL records for a slave.
+
+        WARNING: This permanently removes all stored data for the slave.
+        Use with caution.
+        """
+        master = get_master()
+        count = master.storage.delete_all_slave_records(slave_id)
+
+        return DeleteResponse(
+            success=count > 0,
+            deleted_count=count,
+            message=f"Deleted all {count} records for {slave_id}",
+        )
+
+    @app.post("/api/data/vacuum", response_model=CommandResponse, tags=["Data"])
+    async def vacuum_database():
+        """
+        Reclaim disk space after deletions.
+
+        Run this after deleting large amounts of data to reduce database file size.
+        """
+        master = get_master()
+        master.storage.vacuum()
+
+        return CommandResponse(
+            success=True,
+            message="Database vacuum completed",
+        )
+
     return app
 
 

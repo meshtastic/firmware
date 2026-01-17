@@ -320,3 +320,113 @@ class DataStorage:
         """Reclaim disk space after deletions."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("VACUUM")
+
+    def delete_record(self, record_id: int) -> bool:
+        """
+        Delete a specific record by ID.
+
+        Args:
+            record_id: Database record ID.
+
+        Returns:
+            True if record was deleted, False if not found.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "DELETE FROM records WHERE id = ?",
+                (record_id,)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_records_by_batch(self, slave_id: str, batch_id: int) -> int:
+        """
+        Delete all records from a specific batch.
+
+        Args:
+            slave_id: Slave node ID.
+            batch_id: Batch ID to delete.
+
+        Returns:
+            Number of records deleted.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "DELETE FROM records WHERE slave_id = ? AND batch_id = ?",
+                (slave_id, batch_id)
+            )
+            conn.commit()
+            return cursor.rowcount
+
+    def delete_records_by_day(
+        self,
+        slave_id: str,
+        year: int,
+        month: int,
+        day: int,
+    ) -> int:
+        """
+        Delete all records for a slave on a specific day.
+
+        Args:
+            slave_id: Slave node ID.
+            year: Year (e.g., 2025).
+            month: Month (1-12).
+            day: Day (1-31).
+
+        Returns:
+            Number of records deleted.
+        """
+        from datetime import datetime
+
+        start = datetime(year, month, day, 0, 0, 0)
+        start_ts = int(start.timestamp())
+        end_ts = start_ts + 86400
+
+        return self.delete_records_by_range(slave_id, start_ts, end_ts)
+
+    def delete_records_by_range(
+        self,
+        slave_id: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> int:
+        """
+        Delete records for a slave within a time range.
+
+        Args:
+            slave_id: Slave node ID.
+            start_timestamp: Start Unix timestamp (inclusive).
+            end_timestamp: End Unix timestamp (exclusive).
+
+        Returns:
+            Number of records deleted.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM records
+                WHERE slave_id = ? AND timestamp >= ? AND timestamp < ?
+                """,
+                (slave_id, start_timestamp, end_timestamp)
+            )
+            conn.commit()
+            return cursor.rowcount
+
+    def delete_all_slave_records(self, slave_id: str) -> int:
+        """
+        Delete all records for a slave.
+
+        Args:
+            slave_id: Slave node ID.
+
+        Returns:
+            Number of records deleted.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "DELETE FROM records WHERE slave_id = ?",
+                (slave_id,)
+            )
+            conn.commit()
+            return cursor.rowcount
