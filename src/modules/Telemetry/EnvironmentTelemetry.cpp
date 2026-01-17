@@ -144,7 +144,6 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/AddI2CSensorTemplate.h"
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
-#include "Sensor/AddI2CSensorTemplate.h"
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {

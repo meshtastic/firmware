@@ -11,10 +11,13 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include "detect/ScanI2CConsumer.h"
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 class AirQualityTelemetryModule : private concurrency::OSThread,
-    public ScanI2CConsumer,
-    public ProtobufModule<meshtastic_Telemetry>
+                                  public ScanI2CConsumer,
+                                  public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *>(this,
