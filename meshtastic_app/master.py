@@ -4,23 +4,39 @@ Meshtastic Master Controller Module
 
 This module acts as the master controller for a Meshtastic mesh network.
 It connects to a local device via USB/Serial and communicates with slave
-nodes over the private channel.
+firmware nodes over a private channel using a custom binary protocol.
+
+Architecture:
+    Master (this Python app)
+        │
+        ├── USB/Serial connection
+        ▼
+    Meshtastic Device (connected to PC)
+        │
+        ├── Private Channel (RF)
+        ▼
+    Slave Nodes (custom firmware)
+        - Send telemetry data
+        - Send data batches
+        - Receive commands
 
 Features:
 - Automatic private key verification and update on startup
-- Position transmission on private channel
-- Framework for commanding slave nodes
+- Custom binary protocol over private port app
+- Slave node tracking with telemetry history
+- Binary data batch collection
 """
 
 import base64
 import logging
+import struct
 import subprocess
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Deque, Dict, List, Optional
 
 import yaml
 
@@ -33,6 +49,41 @@ except ImportError:
     print("Install with: pip3 install --upgrade 'meshtastic[cli]'")
     sys.exit(1)
 
+from .protocol import (
+    PRIVATE_PORT_NUM,
+    CommandType,
+    DataBatch,
+    MasterCommand,
+    MessageFlags,
+    MessageType,
+    ProtocolMessage,
+    SlaveStatus,
+    SlaveStatusReport,
+    TelemetryData,
+    create_ack_message,
+    create_command_message,
+    create_heartbeat_message,
+    parse_message,
+)
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Maximum telemetry history per slave
+MAX_TELEMETRY_HISTORY = 100
+
+# Maximum data batches to store per slave
+MAX_DATA_BATCHES = 50
+
+# Slave offline timeout (seconds)
+SLAVE_OFFLINE_TIMEOUT = 600
+
+
+# =============================================================================
+# Enums
+# =============================================================================
 
 class MasterState(Enum):
     """Master controller states."""
@@ -44,15 +95,53 @@ class MasterState(Enum):
     ERROR = "error"
 
 
+# =============================================================================
+# Data Classes
+# =============================================================================
+
 @dataclass
 class SlaveNode:
-    """Represents a slave node in the mesh network."""
+    """
+    Represents a slave node in the mesh network.
+
+    Tracks telemetry history, data batches, and status.
+    """
     node_id: str
     long_name: str = ""
     short_name: str = ""
+
+    # Timing
+    first_seen: float = 0.0
     last_seen: float = 0.0
-    last_position: Optional[Dict] = None
+
+    # Status
     is_online: bool = False
+    last_status: Optional[SlaveStatusReport] = None
+
+    # Telemetry history (newest first)
+    telemetry_history: Deque[TelemetryData] = field(
+        default_factory=lambda: deque(maxlen=MAX_TELEMETRY_HISTORY)
+    )
+
+    # Data batches received (newest first)
+    data_batches: Deque[DataBatch] = field(
+        default_factory=lambda: deque(maxlen=MAX_DATA_BATCHES)
+    )
+
+    # Statistics
+    telemetry_count: int = 0
+    batch_count: int = 0
+    error_count: int = 0
+
+    @property
+    def latest_telemetry(self) -> Optional[TelemetryData]:
+        """Get the most recent telemetry data."""
+        return self.telemetry_history[0] if self.telemetry_history else None
+
+    @property
+    def latest_batch(self) -> Optional[DataBatch]:
+        """Get the most recent data batch."""
+        return self.data_batches[0] if self.data_batches else None
 
 
 @dataclass
@@ -68,12 +157,19 @@ class MasterConfig:
     # Channel settings
     private_channel_index: int = 1
 
-    # Position settings
-    position_enabled: bool = True
+    # Protocol settings
+    private_port_num: int = PRIVATE_PORT_NUM
+    send_ack: bool = True  # Auto-send ACK for received data
+
+    # Position settings (master can broadcast its position)
+    position_enabled: bool = False
     position_interval: int = 300
     fixed_latitude: Optional[float] = None
     fixed_longitude: Optional[float] = None
     fixed_altitude: Optional[int] = None
+
+    # Slave management
+    slave_timeout: float = SLAVE_OFFLINE_TIMEOUT
 
     # Logging
     log_level: str = "INFO"
@@ -90,15 +186,22 @@ class MasterConfig:
             device_timeout=data.get("device", {}).get("timeout", 30),
             private_key=data.get("security", {}).get("private_key", ""),
             private_channel_index=data.get("channel", {}).get("private_channel_index", 1),
-            position_enabled=data.get("position", {}).get("enabled", True),
+            private_port_num=data.get("protocol", {}).get("port_num", PRIVATE_PORT_NUM),
+            send_ack=data.get("protocol", {}).get("send_ack", True),
+            position_enabled=data.get("position", {}).get("enabled", False),
             position_interval=data.get("position", {}).get("interval_seconds", 300),
             fixed_latitude=data.get("position", {}).get("fixed_latitude"),
             fixed_longitude=data.get("position", {}).get("fixed_longitude"),
             fixed_altitude=data.get("position", {}).get("fixed_altitude"),
+            slave_timeout=data.get("slaves", {}).get("offline_timeout", SLAVE_OFFLINE_TIMEOUT),
             log_level=data.get("logging", {}).get("level", "INFO"),
             log_file=data.get("logging", {}).get("file", "master.log"),
         )
 
+
+# =============================================================================
+# Master Controller
+# =============================================================================
 
 class MasterController:
     """
@@ -106,7 +209,8 @@ class MasterController:
 
     This class manages the connection to the local Meshtastic device,
     handles automatic private key verification/update, and provides
-    methods for communicating with slave nodes on the private channel.
+    methods for communicating with slave nodes using a binary protocol
+    over a private channel and port.
     """
 
     def __init__(self, config: MasterConfig):
@@ -127,11 +231,12 @@ class MasterController:
         # Node tracking
         self.my_node_id: str = ""
         self.my_node_info: Dict = {}
-        self.slave_nodes: Dict[str, SlaveNode] = {}
+        self.slaves: Dict[str, SlaveNode] = {}
 
         # Callbacks
-        self._message_handlers: List[Callable] = []
-        self._position_handlers: List[Callable] = []
+        self._telemetry_handlers: List[Callable] = []
+        self._data_batch_handlers: List[Callable] = []
+        self._status_handlers: List[Callable] = []
         self._state_handlers: List[Callable] = []
 
     def _setup_logging(self):
@@ -188,7 +293,6 @@ class MasterController:
         try:
             decoded = packet.get("decoded", {})
             from_id = packet.get("fromId", "unknown")
-            to_id = packet.get("toId", "")
             channel = packet.get("channel", 0)
             portnum = decoded.get("portnum", "")
 
@@ -196,63 +300,191 @@ class MasterController:
             if channel != self.config.private_channel_index:
                 return
 
-            # Update slave node tracking
-            self._update_slave_node(from_id, packet)
+            # Check if this is our private port app
+            # portnum can be string name or int value
+            port_value = self._get_port_value(portnum)
 
-            # Handle text messages
-            if "text" in decoded:
-                text = decoded["text"]
-                self.logger.info(f"[CH{channel}] {from_id}: {text}")
-                self._dispatch_message(from_id, text, packet)
-
-            # Handle position updates
-            elif portnum == "POSITION_APP":
-                pos = decoded.get("position", {})
-                self.logger.debug(
-                    f"[POS] {from_id}: {pos.get('latitude')}, {pos.get('longitude')}"
-                )
-                self._dispatch_position(from_id, pos, packet)
-
-            # Handle telemetry
-            elif portnum == "TELEMETRY_APP":
-                self.logger.debug(f"[TELEMETRY] {from_id}: {decoded}")
+            if port_value == self.config.private_port_num:
+                # This is our protocol - handle binary data
+                payload = decoded.get("payload", b"")
+                if isinstance(payload, str):
+                    payload = payload.encode("latin-1")
+                self._handle_protocol_message(from_id, payload)
+            else:
+                # Other traffic on private channel (position, text, etc.)
+                self._handle_other_traffic(from_id, decoded, packet)
 
         except Exception as e:
             self.logger.error(f"Error processing packet: {e}")
 
-    def _update_slave_node(self, node_id: str, packet: Dict):
-        """Update slave node tracking info."""
-        if node_id == self.my_node_id:
+    def _get_port_value(self, portnum) -> int:
+        """Convert portnum to integer value."""
+        if isinstance(portnum, int):
+            return portnum
+        if isinstance(portnum, str):
+            # Try to parse as "PRIVATE_APP" or similar
+            if portnum.startswith("PRIVATE_APP"):
+                return 256
+            try:
+                return int(portnum)
+            except ValueError:
+                pass
+        return 0
+
+    def _handle_protocol_message(self, from_id: str, data: bytes):
+        """Handle incoming protocol message from a slave."""
+        if not data:
             return
 
-        if node_id not in self.slave_nodes:
-            self.slave_nodes[node_id] = SlaveNode(node_id=node_id)
-            self.logger.info(f"New slave node discovered: {node_id}")
+        msg, payload = parse_message(data)
+        if not msg:
+            self.logger.warning(f"Invalid protocol message from {from_id}")
+            self._get_or_create_slave(from_id).error_count += 1
+            return
 
-        node = self.slave_nodes[node_id]
-        node.last_seen = time.time()
-        node.is_online = True
+        self.logger.debug(
+            f"Protocol message from {from_id}: type={msg.msg_type.name}, "
+            f"flags={msg.flags:#x}, payload_len={len(msg.payload)}"
+        )
 
-        # Update position if available
-        decoded = packet.get("decoded", {})
-        if decoded.get("portnum") == "POSITION_APP":
-            node.last_position = decoded.get("position")
+        # Update slave tracking
+        slave = self._get_or_create_slave(from_id)
+        slave.last_seen = time.time()
+        slave.is_online = True
 
-    def _dispatch_message(self, from_id: str, text: str, packet: Dict):
-        """Dispatch text message to handlers."""
-        for handler in self._message_handlers:
+        # Handle by message type
+        if msg.msg_type == MessageType.TELEMETRY:
+            self._handle_telemetry(slave, payload, msg)
+
+        elif msg.msg_type == MessageType.DATA_BATCH:
+            self._handle_data_batch(slave, payload, msg)
+
+        elif msg.msg_type == MessageType.STATUS:
+            self._handle_status(slave, payload, msg)
+
+        elif msg.msg_type == MessageType.HEARTBEAT:
+            self.logger.debug(f"Heartbeat from {from_id}")
+
+        elif msg.msg_type == MessageType.SLAVE_ACK:
+            self.logger.debug(f"ACK from {from_id}")
+
+        # Send ACK if requested
+        if (msg.flags & MessageFlags.ACK_REQUESTED) and self.config.send_ack:
+            self._send_ack(from_id, msg.msg_type)
+
+    def _handle_telemetry(self, slave: SlaveNode, telemetry: TelemetryData, msg: ProtocolMessage):
+        """Handle incoming telemetry data."""
+        if not telemetry:
+            self.logger.warning(f"Invalid telemetry from {slave.node_id}")
+            slave.error_count += 1
+            return
+
+        slave.telemetry_history.appendleft(telemetry)
+        slave.telemetry_count += 1
+
+        self.logger.info(
+            f"[TELEMETRY] {slave.node_id}: "
+            f"pos=({telemetry.latitude:.6f}, {telemetry.longitude:.6f}), "
+            f"bat={telemetry.battery_percent}%, "
+            f"temp={telemetry.temperature:.1f}C, "
+            f"status={telemetry.status.name}"
+        )
+
+        # Dispatch to handlers
+        for handler in self._telemetry_handlers:
             try:
-                handler(from_id, text, packet)
+                handler(slave, telemetry)
             except Exception as e:
-                self.logger.error(f"Message handler error: {e}")
+                self.logger.error(f"Telemetry handler error: {e}")
 
-    def _dispatch_position(self, from_id: str, position: Dict, packet: Dict):
-        """Dispatch position update to handlers."""
-        for handler in self._position_handlers:
+    def _handle_data_batch(self, slave: SlaveNode, batch: DataBatch, msg: ProtocolMessage):
+        """Handle incoming data batch."""
+        if not batch:
+            self.logger.warning(f"Invalid data batch from {slave.node_id}")
+            slave.error_count += 1
+            return
+
+        slave.data_batches.appendleft(batch)
+        slave.batch_count += 1
+
+        self.logger.info(
+            f"[DATA_BATCH] {slave.node_id}: "
+            f"batch_id={batch.batch_id}, "
+            f"records={len(batch.records)}, "
+            f"record_size={batch.record_size}"
+        )
+
+        # Dispatch to handlers
+        for handler in self._data_batch_handlers:
             try:
-                handler(from_id, position, packet)
+                handler(slave, batch)
             except Exception as e:
-                self.logger.error(f"Position handler error: {e}")
+                self.logger.error(f"Data batch handler error: {e}")
+
+    def _handle_status(self, slave: SlaveNode, status: SlaveStatusReport, msg: ProtocolMessage):
+        """Handle incoming status report."""
+        if not status:
+            self.logger.warning(f"Invalid status from {slave.node_id}")
+            slave.error_count += 1
+            return
+
+        slave.last_status = status
+
+        self.logger.info(
+            f"[STATUS] {slave.node_id}: "
+            f"uptime={status.uptime}s, "
+            f"bat={status.battery_percent}%, "
+            f"mem={status.free_memory_kb}KB, "
+            f"pending={status.pending_data_bytes}B, "
+            f"errors={status.error_count}, "
+            f"status={status.status.name}"
+        )
+
+        # Dispatch to handlers
+        for handler in self._status_handlers:
+            try:
+                handler(slave, status)
+            except Exception as e:
+                self.logger.error(f"Status handler error: {e}")
+
+    def _handle_other_traffic(self, from_id: str, decoded: Dict, packet: Dict):
+        """Handle non-protocol traffic on private channel."""
+        portnum = decoded.get("portnum", "")
+
+        if "text" in decoded:
+            self.logger.debug(f"[TEXT] {from_id}: {decoded['text']}")
+        elif portnum == "POSITION_APP":
+            pos = decoded.get("position", {})
+            self.logger.debug(
+                f"[POS] {from_id}: {pos.get('latitude')}, {pos.get('longitude')}"
+            )
+
+    def _get_or_create_slave(self, node_id: str) -> SlaveNode:
+        """Get existing slave or create new one."""
+        if node_id not in self.slaves:
+            now = time.time()
+            self.slaves[node_id] = SlaveNode(
+                node_id=node_id,
+                first_seen=now,
+                last_seen=now,
+            )
+            self.logger.info(f"New slave discovered: {node_id}")
+
+        return self.slaves[node_id]
+
+    def _send_ack(self, destination: str, for_msg_type: MessageType):
+        """Send acknowledgment to a slave."""
+        try:
+            ack_data = create_ack_message(for_msg_type)
+            self.interface.sendData(
+                data=ack_data,
+                destinationId=destination,
+                portNum=self.config.private_port_num,
+                channelIndex=self.config.private_channel_index,
+            )
+            self.logger.debug(f"ACK sent to {destination} for {for_msg_type.name}")
+        except Exception as e:
+            self.logger.error(f"Failed to send ACK: {e}")
 
     # -------------------------------------------------------------------------
     # Private Key Management
@@ -437,6 +669,8 @@ class MasterController:
         """
         self.logger.info("=" * 60)
         self.logger.info("MASTER CONTROLLER INITIALIZING")
+        self.logger.info(f"Private Channel: {self.config.private_channel_index}")
+        self.logger.info(f"Private Port: {self.config.private_port_num}")
         self.logger.info("=" * 60)
 
         # Step 1: Connect
@@ -449,57 +683,26 @@ class MasterController:
 
         # Ready
         self._set_state(MasterState.READY)
-        self.logger.info("Master controller ready")
+        self.logger.info("Master controller ready - listening for slaves")
         return True
 
     # -------------------------------------------------------------------------
-    # Public API - Communication
+    # Public API - Commands to Slaves
     # -------------------------------------------------------------------------
 
-    def send_text(self, text: str, destination: str = None) -> bool:
-        """
-        Send text message on private channel.
-
-        Args:
-            text: Message text.
-            destination: Target node ID (None for broadcast).
-
-        Returns:
-            True if sent successfully.
-        """
-        if self.state != MasterState.READY:
-            self.logger.error(f"Cannot send: state is {self.state.value}")
-            return False
-
-        try:
-            kwargs = {
-                "text": text,
-                "channelIndex": self.config.private_channel_index,
-            }
-            if destination:
-                kwargs["destinationId"] = destination
-
-            self.interface.sendText(**kwargs)
-            self.logger.info(f"Sent on CH{self.config.private_channel_index}: {text}")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Send failed: {e}")
-            return False
-
-    def send_position(
+    def send_command(
         self,
-        latitude: float = None,
-        longitude: float = None,
-        altitude: int = None,
+        destination: str,
+        command: CommandType,
+        params: List[bytes] = None,
     ) -> bool:
         """
-        Send position on private channel.
+        Send a command to a slave node.
 
         Args:
-            latitude: GPS latitude (uses config if None).
-            longitude: GPS longitude (uses config if None).
-            altitude: Altitude in meters (uses config if None).
+            destination: Target slave node ID.
+            command: Command type to send.
+            params: Optional command parameters.
 
         Returns:
             True if sent successfully.
@@ -508,83 +711,103 @@ class MasterController:
             self.logger.error(f"Cannot send: state is {self.state.value}")
             return False
 
-        lat = latitude if latitude is not None else self.config.fixed_latitude
-        lon = longitude if longitude is not None else self.config.fixed_longitude
-        alt = altitude if altitude is not None else (self.config.fixed_altitude or 0)
-
-        if lat is None or lon is None:
-            self.logger.warning("No position available")
-            return False
-
         try:
-            self.interface.sendPosition(
-                latitude=lat,
-                longitude=lon,
-                altitude=alt,
+            cmd = MasterCommand(command=command, params=params or [])
+            data = create_command_message(cmd)
+
+            self.interface.sendData(
+                data=data,
+                destinationId=destination,
+                portNum=self.config.private_port_num,
                 channelIndex=self.config.private_channel_index,
             )
-            self.logger.info(
-                f"Position sent on CH{self.config.private_channel_index}: "
-                f"({lat}, {lon}, alt={alt})"
-            )
+
+            self.logger.info(f"Command {command.name} sent to {destination}")
             return True
 
         except Exception as e:
-            self.logger.error(f"Send position failed: {e}")
+            self.logger.error(f"Send command failed: {e}")
             return False
 
-    def send_data(self, data: bytes, destination: str = None, port_num: int = 256) -> bool:
-        """
-        Send binary data on private channel.
+    def request_status(self, destination: str) -> bool:
+        """Request status from a slave."""
+        return self.send_command(destination, CommandType.SEND_DATA)
 
-        Args:
-            data: Binary payload.
-            destination: Target node ID (None for broadcast).
-            port_num: Application port number (default: PRIVATE_APP = 256).
+    def request_data(self, destination: str) -> bool:
+        """Request slave to send its pending data."""
+        return self.send_command(destination, CommandType.SEND_DATA)
 
-        Returns:
-            True if sent successfully.
-        """
+    def send_heartbeat(self, destination: str = None) -> bool:
+        """Send heartbeat to slave(s)."""
         if self.state != MasterState.READY:
-            self.logger.error(f"Cannot send: state is {self.state.value}")
             return False
 
         try:
+            data = create_heartbeat_message()
             kwargs = {
                 "data": data,
-                "portNum": port_num,
+                "portNum": self.config.private_port_num,
                 "channelIndex": self.config.private_channel_index,
             }
             if destination:
                 kwargs["destinationId"] = destination
 
             self.interface.sendData(**kwargs)
-            self.logger.debug(f"Data sent: {len(data)} bytes")
             return True
 
         except Exception as e:
-            self.logger.error(f"Send data failed: {e}")
+            self.logger.error(f"Send heartbeat failed: {e}")
+            return False
+
+    def broadcast_command(self, command: CommandType, params: List[bytes] = None) -> bool:
+        """Broadcast a command to all slaves."""
+        if self.state != MasterState.READY:
+            return False
+
+        try:
+            cmd = MasterCommand(command=command, params=params or [])
+            data = create_command_message(cmd)
+
+            self.interface.sendData(
+                data=data,
+                portNum=self.config.private_port_num,
+                channelIndex=self.config.private_channel_index,
+            )
+
+            self.logger.info(f"Broadcast command: {command.name}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Broadcast failed: {e}")
             return False
 
     # -------------------------------------------------------------------------
     # Public API - Handlers
     # -------------------------------------------------------------------------
 
-    def on_message(self, handler: Callable[[str, str, Dict], None]):
+    def on_telemetry(self, handler: Callable[[SlaveNode, TelemetryData], None]):
         """
-        Register a message handler.
+        Register a telemetry handler.
 
-        Handler signature: handler(from_id: str, text: str, packet: dict)
+        Handler signature: handler(slave: SlaveNode, telemetry: TelemetryData)
         """
-        self._message_handlers.append(handler)
+        self._telemetry_handlers.append(handler)
 
-    def on_position(self, handler: Callable[[str, Dict, Dict], None]):
+    def on_data_batch(self, handler: Callable[[SlaveNode, DataBatch], None]):
         """
-        Register a position handler.
+        Register a data batch handler.
 
-        Handler signature: handler(from_id: str, position: dict, packet: dict)
+        Handler signature: handler(slave: SlaveNode, batch: DataBatch)
         """
-        self._position_handlers.append(handler)
+        self._data_batch_handlers.append(handler)
+
+    def on_status(self, handler: Callable[[SlaveNode, SlaveStatusReport], None]):
+        """
+        Register a status handler.
+
+        Handler signature: handler(slave: SlaveNode, status: SlaveStatusReport)
+        """
+        self._status_handlers.append(handler)
 
     def on_state_change(self, handler: Callable[[MasterState, MasterState], None]):
         """
@@ -598,17 +821,45 @@ class MasterController:
     # Public API - Slave Management
     # -------------------------------------------------------------------------
 
-    def get_slave_nodes(self) -> List[SlaveNode]:
-        """Get list of known slave nodes."""
-        return list(self.slave_nodes.values())
+    def get_slaves(self) -> List[SlaveNode]:
+        """Get list of all known slave nodes."""
+        return list(self.slaves.values())
 
-    def get_online_slaves(self, timeout: float = 300.0) -> List[SlaveNode]:
-        """Get list of recently seen slave nodes."""
+    def get_slave(self, node_id: str) -> Optional[SlaveNode]:
+        """Get a specific slave by node ID."""
+        return self.slaves.get(node_id)
+
+    def get_online_slaves(self) -> List[SlaveNode]:
+        """Get list of online slave nodes."""
         now = time.time()
         return [
-            node for node in self.slave_nodes.values()
-            if (now - node.last_seen) < timeout
+            slave for slave in self.slaves.values()
+            if (now - slave.last_seen) < self.config.slave_timeout
         ]
+
+    def get_slave_telemetry(self, node_id: str, limit: int = 10) -> List[TelemetryData]:
+        """Get telemetry history for a slave."""
+        slave = self.slaves.get(node_id)
+        if not slave:
+            return []
+        return list(slave.telemetry_history)[:limit]
+
+    def get_slave_batches(self, node_id: str, limit: int = 10) -> List[DataBatch]:
+        """Get data batches for a slave."""
+        slave = self.slaves.get(node_id)
+        if not slave:
+            return []
+        return list(slave.data_batches)[:limit]
+
+    def update_slave_status(self):
+        """Update online/offline status of all slaves."""
+        now = time.time()
+        for slave in self.slaves.values():
+            was_online = slave.is_online
+            slave.is_online = (now - slave.last_seen) < self.config.slave_timeout
+
+            if was_online and not slave.is_online:
+                self.logger.warning(f"Slave {slave.node_id} went offline")
 
     # -------------------------------------------------------------------------
     # Public API - Run Loop
@@ -620,25 +871,25 @@ class MasterController:
 
         This will:
         1. Initialize (connect + verify key)
-        2. Periodically send position on private channel
-        3. Process incoming messages
+        2. Listen for slave telemetry and data
+        3. Periodically update slave status
         """
         if not self.initialize():
             self.logger.error("Initialization failed")
             return False
 
         self.running = True
-        last_position_time = 0
+        last_status_check = 0
+        STATUS_CHECK_INTERVAL = 60
 
         try:
             while self.running and self.state == MasterState.READY:
                 now = time.time()
 
-                # Send position at configured interval
-                if self.config.position_enabled:
-                    if (now - last_position_time) >= self.config.position_interval:
-                        self.send_position()
-                        last_position_time = now
+                # Periodically check slave status
+                if (now - last_status_check) >= STATUS_CHECK_INTERVAL:
+                    self.update_slave_status()
+                    last_status_check = now
 
                 time.sleep(1)
 
@@ -675,9 +926,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python master.py                    # Run with default config
-  python master.py -c myconfig.yaml   # Run with custom config
-  python master.py --info             # Show device info and exit
+  python -m meshtastic_app.master                # Run with default config
+  python -m meshtastic_app.master -c config.yaml # Run with custom config
+  python -m meshtastic_app.master --info         # Show device info and exit
         """
     )
     parser.add_argument(
@@ -706,15 +957,17 @@ Examples:
 
     if args.info:
         if master.initialize():
-            print("\n" + "=" * 40)
-            print("DEVICE INFO")
-            print("=" * 40)
-            print(f"Node ID:    {master.my_node_id}")
+            print("\n" + "=" * 50)
+            print("MASTER DEVICE INFO")
+            print("=" * 50)
+            print(f"Node ID:         {master.my_node_id}")
             user = master.my_node_info.get("user", {})
-            print(f"Long Name:  {user.get('longName', 'Unknown')}")
-            print(f"Short Name: {user.get('shortName', 'Unknown')}")
-            print(f"Hardware:   {user.get('hwModel', 'Unknown')}")
-            print(f"State:      {master.state.value}")
+            print(f"Long Name:       {user.get('longName', 'Unknown')}")
+            print(f"Short Name:      {user.get('shortName', 'Unknown')}")
+            print(f"Hardware:        {user.get('hwModel', 'Unknown')}")
+            print(f"State:           {master.state.value}")
+            print(f"Private Channel: {master.config.private_channel_index}")
+            print(f"Private Port:    {master.config.private_port_num}")
             master.shutdown()
         sys.exit(0)
 

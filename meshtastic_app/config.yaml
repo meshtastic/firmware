@@ -3,8 +3,8 @@
 # =============================================================================
 #
 # This configuration file controls the master node that connects to your
-# computer via USB. The master communicates with slave nodes over the
-# private channel.
+# computer via USB. The master communicates with slave firmware nodes over
+# the private channel using a custom binary protocol.
 #
 
 # -----------------------------------------------------------------------------
@@ -45,23 +45,35 @@ channel:
   # Channel index for private communications
   private_channel_index: 1
 
-  # Channel name (for documentation only)
-  private_channel_name: "Private"
+# -----------------------------------------------------------------------------
+# Protocol Configuration
+# -----------------------------------------------------------------------------
+# Custom binary protocol settings for master-slave communication.
+#
+protocol:
+  # Private port number (256-511 are private app range)
+  # Both master and slaves must use the same port
+  port_num: 257
+
+  # Automatically send ACK when receiving data from slaves
+  send_ack: true
 
 # -----------------------------------------------------------------------------
-# Position Transmission
+# Slave Management
 # -----------------------------------------------------------------------------
-# The master periodically broadcasts its position on the private channel.
+slaves:
+  # Time in seconds before a slave is considered offline
+  offline_timeout: 600
+
+# -----------------------------------------------------------------------------
+# Position Broadcasting (Optional)
+# -----------------------------------------------------------------------------
+# Master can optionally broadcast its position to slaves.
+# Disabled by default since master is typically stationary.
 #
 position:
-  # Enable automatic position transmission
-  enabled: true
-
-  # Transmission interval in seconds
+  enabled: false
   interval_seconds: 300
-
-  # Fixed position coordinates (if device has no GPS)
-  # Set to null to disable fixed position
   fixed_latitude: null
   fixed_longitude: null
   fixed_altitude: null
