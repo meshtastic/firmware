@@ -136,9 +136,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_433},
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
-        {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
-        {"HAM_US433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_HAM_US433},
-    };
+        {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902}};
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
     static std::array<const char *, regionCount> regionLabels{};

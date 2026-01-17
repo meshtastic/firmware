@@ -40,5 +40,5 @@ extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
 extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
 extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[];
 extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[];
-extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
+// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
 extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];

@@ -18,21 +18,22 @@ meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO};
+
 meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
     meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,  meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE // no TURBO modes in EU868
-};
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE}; // no TURBO modes in EU868
+
 meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST,
                                                            meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW};
 
 meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
                                                              meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW};
 
-// Same as Narrow presets, but separate so that extra ham settings can be added later.
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
-                                                          meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW};
+// // Same as Narrow presets, but separate so that extra ham settings can be added later.
+// meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = {meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST,
+//                                                           meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW};
 
 meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST};
 
@@ -229,11 +230,6 @@ const RegionInfo regions[] = {
     RDEF(NARROW_868, 869.4f, 869.65f, 10, 0.015, 27, false, false, false, false, 1, NARROW_FAST, PRESETS_NARROW),
 
     /*
-        HAM 433MHz band
-    */
-    RDEF(HAM_US433, 430.00f, 450.0f, 100, 0, 99, true, false, false, true, 0, NARROW_SLOW, PRESETS_HAM),
-
-    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true, false, 0, LONG_FAST, PRESETS_STD),
@@ -318,8 +314,9 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
 {
-    size_t numbytes =p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? 
-      pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded) : p->encrypted.size+MESHTASTIC_HEADER_LENGTH;
+    size_t numbytes = p->which_payload_variant == meshtastic_MeshPacket_decoded_tag
+                          ? pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded)
+                          : p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
     uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
     // Make sure enough time has elapsed for this packet to be sent and an ACK is received.
     // LOG_DEBUG("Waiting for flooding message with airtime %d and slotTime is %d", packetAirtime, slotTimeMsec);
