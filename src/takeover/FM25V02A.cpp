@@ -9,11 +9,36 @@
 #include "FM25V02A.h"
 
 /**
+ * @brief Compile-time assertions for constants
+ * Ensures configuration is valid at compile time.
+ */
+static_assert(FM25V02A_MAX_TRANSFER_SIZE == 256U,
+              "FM25V02A_MAX_TRANSFER_SIZE must be 256 bytes");
+static_assert(FM25V02A_MEMORY_SIZE == 32768U,
+              "FM25V02A_MEMORY_SIZE must be 32KB (256Kbit)");
+static_assert(FM25V02A_MAX_ADDRESS == 32767U,
+              "FM25V02A_MAX_ADDRESS must be 0x7FFF");
+static_assert(FM25V02A_ADDRESS_BYTES == 2U,
+              "FM25V02A requires 2-byte addresses");
+
+/**
  * @brief Assertion macro - halts on failure (NASA Rule 5)
  *
  * In production, this triggers an infinite loop to halt execution.
- * In debug mode, additional diagnostics may be added.
+ * In debug mode, outputs file and line number before halting.
  */
+#if FM25V02A_DEBUG
+#define FM25V02A_ASSERT(cond) \
+    do { \
+        if (!(cond)) { \
+            Serial.printf("ASSERT FAILED: %s:%d - %s\n", __FILE__, __LINE__, #cond); \
+            Serial.flush(); \
+            while (true) { \
+                /* Halt execution - NASA Rule 5 */ \
+            } \
+        } \
+    } while (false)
+#else
 #define FM25V02A_ASSERT(cond) \
     do { \
         if (!(cond)) { \
@@ -22,6 +47,20 @@
             } \
         } \
     } while (false)
+#endif
+
+/**
+ * @brief Thread safety macros
+ */
+#if FM25V02A_THREAD_SAFE
+#define FM25V02A_LOCK() \
+    do { xSemaphoreTake(m_mutex, portMAX_DELAY); } while (false)
+#define FM25V02A_UNLOCK() \
+    do { xSemaphoreGive(m_mutex); } while (false)
+#else
+#define FM25V02A_LOCK() do { } while (false)
+#define FM25V02A_UNLOCK() do { } while (false)
+#endif
 
 /**
  * @brief Static error strings for getErrorString()
@@ -51,24 +90,36 @@ FM25V02A::FM25V02A(SPIClass *spi, uint8_t csPin, uint32_t spiSpeed)
     , m_state{false, false, 0U}
     , m_errorCallback(nullptr)
     , m_errorContext(nullptr)
+#if FM25V02A_THREAD_SAFE
+    , m_mutex(nullptr)
+#endif
 {
     /* NASA Rule 5: Assertions for constructor parameters */
     FM25V02A_ASSERT(spi != nullptr);
-    FM25V02A_ASSERT(spiSpeed <= 40000000U);
+    FM25V02A_ASSERT(spiSpeed <= FM25V02A_MAX_SPI_SPEED);
 
     /* Configure CS pin as output, deasserted (high) */
     pinMode(m_csPin, OUTPUT);
     digitalWrite(m_csPin, HIGH);
+
+#if FM25V02A_THREAD_SAFE
+    m_mutex = xSemaphoreCreateMutex();
+    FM25V02A_ASSERT(m_mutex != nullptr);
+#endif
 }
 
 FM25V02A_Error FM25V02A::init(void)
 {
     /* NASA Rule 5: Assertion for preconditions */
     FM25V02A_ASSERT(m_spi != nullptr);
+    FM25V02A_ASSERT(!m_state.initialized);
+
+    FM25V02A_LOCK();
 
     /* NASA Rule 7: Validate SPI bus */
     if (m_spi == nullptr) {
         reportError(FM25V02A_ERR_SPI_NULL, 0U);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_SPI_NULL;
     }
 
@@ -85,20 +136,43 @@ FM25V02A_Error FM25V02A::init(void)
     /* NASA Rule 7: Check return value */
     if (err != FM25V02A_OK) {
         reportError(err, 0U);
+        FM25V02A_UNLOCK();
         return err;
+    }
+
+    /* Validate manufacturer ID (Cypress/Infineon) */
+    const uint8_t mfrByte1 = static_cast<uint8_t>((manufacturerId >> 8U) & 0xFFU);
+    const uint8_t mfrByte2 = static_cast<uint8_t>(manufacturerId & 0xFFU);
+
+    if ((mfrByte1 != FM25V02A_MANUFACTURER_ID_BYTE1) ||
+        (mfrByte2 != FM25V02A_MANUFACTURER_ID_BYTE2)) {
+        reportError(FM25V02A_ERR_DEVICE_ID, 0U);
+        FM25V02A_UNLOCK();
+        return FM25V02A_ERR_DEVICE_ID;
     }
 
     /* Verify product ID (upper byte indicates FM25V02A) */
     const uint8_t densityCode = static_cast<uint8_t>((productId >> 8U) & 0x1FU);
-    /* NASA Rule 5: Second assertion */
+    /* NASA Rule 5: Third assertion - validate expected density */
     FM25V02A_ASSERT(densityCode == 0x02U); /* 256Kbit density */
 
     if (densityCode != 0x02U) {
         reportError(FM25V02A_ERR_DEVICE_ID, 0U);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_DEVICE_ID;
     }
 
+    /* Read initial status for protection cache */
+    uint8_t status = 0U;
+    err = readStatus(&status);
+    if (err != FM25V02A_OK) {
+        reportError(err, 0U);
+        FM25V02A_UNLOCK();
+        return err;
+    }
+
     m_state.initialized = true;
+    FM25V02A_UNLOCK();
     return FM25V02A_OK;
 }
 
@@ -114,19 +188,24 @@ FM25V02A_Error FM25V02A::read(uint16_t address, uint8_t *buffer, uint16_t size)
         return FM25V02A_ERR_NULL_POINTER;
     }
 
+    FM25V02A_LOCK();
+
     if (!m_state.initialized) {
         reportError(FM25V02A_ERR_NOT_INITIALIZED, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_NOT_INITIALIZED;
     }
 
     if (m_state.asleep) {
         reportError(FM25V02A_ERR_ASLEEP, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_ASLEEP;
     }
 
     FM25V02A_Error err = validateAddressAndSize(address, size);
     if (err != FM25V02A_OK) {
         reportError(err, address);
+        FM25V02A_UNLOCK();
         return err;
     }
 
@@ -142,6 +221,7 @@ FM25V02A_Error FM25V02A::read(uint16_t address, uint8_t *buffer, uint16_t size)
     }
 
     endTransaction();
+    FM25V02A_UNLOCK();
     return FM25V02A_OK;
 }
 
@@ -157,31 +237,45 @@ FM25V02A_Error FM25V02A::write(uint16_t address, const uint8_t *data, uint16_t s
         return FM25V02A_ERR_NULL_POINTER;
     }
 
+    FM25V02A_LOCK();
+
     if (!m_state.initialized) {
         reportError(FM25V02A_ERR_NOT_INITIALIZED, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_NOT_INITIALIZED;
     }
 
     if (m_state.asleep) {
         reportError(FM25V02A_ERR_ASLEEP, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_ASLEEP;
     }
 
     FM25V02A_Error err = validateAddressAndSize(address, size);
     if (err != FM25V02A_OK) {
         reportError(err, address);
+        FM25V02A_UNLOCK();
         return err;
     }
 
-    /* Check write protection */
+    /* Refresh protection status from hardware before checking (fix stale cache) */
+    err = refreshProtectionStatus();
+    if (err != FM25V02A_OK) {
+        FM25V02A_UNLOCK();
+        return err;
+    }
+
+    /* Check write protection with fresh status */
     if (isWriteProtected(address, size)) {
         reportError(FM25V02A_ERR_WRITE_PROTECTED, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_WRITE_PROTECTED;
     }
 
     /* Enable writes */
     err = writeEnable();
     if (err != FM25V02A_OK) {
+        FM25V02A_UNLOCK();
         return err;
     }
 
@@ -199,6 +293,7 @@ FM25V02A_Error FM25V02A::write(uint16_t address, const uint8_t *data, uint16_t s
     endTransaction();
 
     /* Write disable happens automatically on CS high */
+    FM25V02A_UNLOCK();
     return FM25V02A_OK;
 }
 
@@ -210,12 +305,14 @@ FM25V02A_Error FM25V02A::readWithCRC(uint16_t address, uint8_t *buffer, uint16_t
 
     /* NASA Rule 7: Validate parameters */
     if (buffer == nullptr) {
+        reportError(FM25V02A_ERR_NULL_POINTER, address);
         return FM25V02A_ERR_NULL_POINTER;
     }
 
     /* Check that data + CRC fits in memory */
     const uint16_t totalSize = size + 2U;
     if ((static_cast<uint32_t>(address) + totalSize) > FM25V02A_MEMORY_SIZE) {
+        reportError(FM25V02A_ERR_ADDRESS_OVERFLOW, address);
         return FM25V02A_ERR_ADDRESS_OVERFLOW;
     }
 
@@ -254,12 +351,14 @@ FM25V02A_Error FM25V02A::writeWithCRC(uint16_t address, const uint8_t *data, uin
 
     /* NASA Rule 7: Validate parameters */
     if (data == nullptr) {
+        reportError(FM25V02A_ERR_NULL_POINTER, address);
         return FM25V02A_ERR_NULL_POINTER;
     }
 
     /* Check that data + CRC fits in memory */
     const uint16_t totalSize = size + 2U;
     if ((static_cast<uint32_t>(address) + totalSize) > FM25V02A_MEMORY_SIZE) {
+        reportError(FM25V02A_ERR_ADDRESS_OVERFLOW, address);
         return FM25V02A_ERR_ADDRESS_OVERFLOW;
     }
 
@@ -292,6 +391,7 @@ FM25V02A_Error FM25V02A::writeByte(uint16_t address, uint8_t value)
 {
     /* NASA Rule 5: Assertions */
     FM25V02A_ASSERT(address <= FM25V02A_MAX_ADDRESS);
+    FM25V02A_ASSERT(m_state.initialized);
 
     return write(address, &value, 1U);
 }
@@ -317,6 +417,7 @@ FM25V02A_Error FM25V02A::writeUint16(uint16_t address, uint16_t value)
 {
     /* NASA Rule 5: Assertions */
     FM25V02A_ASSERT(address <= (FM25V02A_MAX_ADDRESS - 1U));
+    FM25V02A_ASSERT(m_state.initialized);
 
     uint8_t buffer[2U];
     buffer[0U] = static_cast<uint8_t>((value >> 8U) & 0xFFU);
@@ -348,6 +449,7 @@ FM25V02A_Error FM25V02A::writeUint32(uint16_t address, uint32_t value)
 {
     /* NASA Rule 5: Assertions */
     FM25V02A_ASSERT(address <= (FM25V02A_MAX_ADDRESS - 3U));
+    FM25V02A_ASSERT(m_state.initialized);
 
     uint8_t buffer[4U];
     buffer[0U] = static_cast<uint8_t>((value >> 24U) & 0xFFU);
@@ -394,10 +496,17 @@ FM25V02A_Error FM25V02A::wake(void)
         return FM25V02A_OK; /* Already awake */
     }
 
-    /* Wake by asserting CS for at least tREC (400us max) */
-    beginTransaction();
-    delayMicroseconds(450U); /* Slightly more than tREC */
-    endTransaction();
+    /*
+     * Wake sequence per FM25V02A datasheet section 6.8:
+     * 1. Assert CS (low) - this initiates wake
+     * 2. Wait tREC (400us max recovery time)
+     * 3. Deassert CS (high)
+     * The device will wake on the CS falling edge and be ready
+     * after tREC has elapsed.
+     */
+    digitalWrite(m_csPin, LOW);
+    delayMicroseconds(FM25V02A_WAKE_DELAY_US);
+    digitalWrite(m_csPin, HIGH);
 
     m_state.asleep = false;
     return FM25V02A_OK;
@@ -548,10 +657,18 @@ uint16_t FM25V02A::calculateCRC16(const uint8_t *data, uint16_t size)
         return 0U;
     }
 
+    /*
+     * NASA Rule 2: Bound loop even for external callers
+     * Clamp size to max transfer size to prevent unbounded loops
+     * when called externally with large size values.
+     */
+    const uint16_t clampedSize = (size > FM25V02A_MAX_TRANSFER_SIZE) ?
+                                  FM25V02A_MAX_TRANSFER_SIZE : size;
+
     uint16_t crc = FM25V02A_CRC16_INIT;
 
-    /* NASA Rule 2: Bounded loop */
-    for (uint16_t i = 0U; i < size; i++) {
+    /* NASA Rule 2: Bounded loop (max 256 iterations) */
+    for (uint16_t i = 0U; i < clampedSize; i++) {
         crc ^= static_cast<uint16_t>(data[i]) << 8U;
 
         /* Process each bit - bounded to 8 iterations */
@@ -645,6 +762,7 @@ FM25V02A_Error FM25V02A::validateAddressAndSize(uint16_t address, uint16_t size)
 {
     /* NASA Rule 5: Assertions */
     FM25V02A_ASSERT(size <= FM25V02A_MAX_TRANSFER_SIZE);
+    FM25V02A_ASSERT(address <= FM25V02A_MAX_ADDRESS);
 
     if (size == 0U) {
         return FM25V02A_ERR_INVALID_SIZE;
@@ -704,4 +822,29 @@ void FM25V02A::reportError(FM25V02A_Error error, uint16_t address)
     if (m_errorCallback != nullptr) {
         m_errorCallback(error, address, m_errorContext);
     }
+}
+
+FM25V02A_Error FM25V02A::refreshProtectionStatus(void)
+{
+    /* NASA Rule 5: Assertions */
+    FM25V02A_ASSERT(m_spi != nullptr);
+    FM25V02A_ASSERT(m_state.initialized);
+
+    if (!m_state.initialized) {
+        return FM25V02A_ERR_NOT_INITIALIZED;
+    }
+
+    if (m_state.asleep) {
+        return FM25V02A_ERR_ASLEEP;
+    }
+
+    /* Read fresh status from hardware */
+    uint8_t status = 0U;
+    beginTransaction();
+    m_spi->transfer(OPCODE_RDSR);
+    status = m_spi->transfer(0x00U);
+    endTransaction();
+
+    m_state.status = status;
+    return FM25V02A_OK;
 }
