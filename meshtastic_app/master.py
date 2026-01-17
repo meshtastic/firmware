@@ -28,15 +28,18 @@ Features:
 """
 
 import base64
+import json
 import logging
 import struct
 import subprocess
 import sys
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
 from enum import Enum
-from typing import Callable, Deque, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Deque, Dict, List, Optional
 
 import yaml
 
@@ -238,6 +241,10 @@ class MasterController:
         self._data_batch_handlers: List[Callable] = []
         self._status_handlers: List[Callable] = []
         self._state_handlers: List[Callable] = []
+        self._position_handlers: List[Callable] = []  # For standard meshtastic position
+
+        # Internal state
+        self._subscribed = False  # Track pub/sub subscription state
 
     def _setup_logging(self):
         """Configure logging."""
@@ -448,16 +455,38 @@ class MasterController:
                 self.logger.error(f"Status handler error: {e}")
 
     def _handle_other_traffic(self, from_id: str, decoded: Dict, packet: Dict):
-        """Handle non-protocol traffic on private channel."""
+        """Handle non-protocol traffic on private channel (standard Meshtastic)."""
         portnum = decoded.get("portnum", "")
+
+        # Ignore our own messages
+        if from_id == self.my_node_id:
+            return
 
         if "text" in decoded:
             self.logger.debug(f"[TEXT] {from_id}: {decoded['text']}")
+
         elif portnum == "POSITION_APP":
             pos = decoded.get("position", {})
-            self.logger.debug(
-                f"[POS] {from_id}: {pos.get('latitude')}, {pos.get('longitude')}"
-            )
+            lat = pos.get("latitude")
+            lon = pos.get("longitude")
+            alt = pos.get("altitude", 0)
+
+            if lat is not None and lon is not None:
+                # Update slave tracking with standard Meshtastic position
+                slave = self._get_or_create_slave(from_id)
+                slave.last_seen = time.time()
+                slave.is_online = True
+
+                self.logger.info(
+                    f"[POSITION] {from_id}: ({lat:.6f}, {lon:.6f}, alt={alt}m)"
+                )
+
+                # Dispatch to position handlers
+                for handler in self._position_handlers:
+                    try:
+                        handler(slave, pos)
+                    except Exception as e:
+                        self.logger.error(f"Position handler error: {e}")
 
     def _get_or_create_slave(self, node_id: str) -> SlaveNode:
         """Get existing slave or create new one."""
@@ -619,10 +648,12 @@ class MasterController:
             self.interface = None
             time.sleep(1)
 
-        # Subscribe to events
-        pub.subscribe(self._on_receive, "meshtastic.receive")
-        pub.subscribe(self._on_connection, "meshtastic.connection.established")
-        pub.subscribe(self._on_disconnect, "meshtastic.connection.lost")
+        # Subscribe to events (only once to avoid duplicates)
+        if not self._subscribed:
+            pub.subscribe(self._on_receive, "meshtastic.receive")
+            pub.subscribe(self._on_connection, "meshtastic.connection.established")
+            pub.subscribe(self._on_disconnect, "meshtastic.connection.lost")
+            self._subscribed = True
 
         try:
             if self.config.device_port:
@@ -730,12 +761,58 @@ class MasterController:
             return False
 
     def request_status(self, destination: str) -> bool:
-        """Request status from a slave."""
-        return self.send_command(destination, CommandType.SEND_DATA)
+        """
+        Request status report from a slave.
+
+        Sends a REQUEST_STATUS message to the slave.
+        Slave should respond with a STATUS message.
+        """
+        if self.state != MasterState.READY:
+            return False
+
+        try:
+            msg = ProtocolMessage(
+                msg_type=MessageType.REQUEST_STATUS,
+                flags=MessageFlags.ACK_REQUESTED,
+            )
+            self.interface.sendData(
+                data=msg.encode(),
+                destinationId=destination,
+                portNum=self.config.private_port_num,
+                channelIndex=self.config.private_channel_index,
+            )
+            self.logger.info(f"Status request sent to {destination}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Request status failed: {e}")
+            return False
 
     def request_data(self, destination: str) -> bool:
-        """Request slave to send its pending data."""
-        return self.send_command(destination, CommandType.SEND_DATA)
+        """
+        Request slave to send its pending data batches.
+
+        Sends a REQUEST_DATA message to the slave.
+        Slave should respond with DATA_BATCH message(s).
+        """
+        if self.state != MasterState.READY:
+            return False
+
+        try:
+            msg = ProtocolMessage(
+                msg_type=MessageType.REQUEST_DATA,
+                flags=MessageFlags.ACK_REQUESTED,
+            )
+            self.interface.sendData(
+                data=msg.encode(),
+                destinationId=destination,
+                portNum=self.config.private_port_num,
+                channelIndex=self.config.private_channel_index,
+            )
+            self.logger.info(f"Data request sent to {destination}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Request data failed: {e}")
+            return False
 
     def send_heartbeat(self, destination: str = None) -> bool:
         """Send heartbeat to slave(s)."""
@@ -872,6 +949,15 @@ class MasterController:
         """
         self._state_handlers.append(handler)
 
+    def on_position(self, handler: Callable[[SlaveNode, Dict], None]):
+        """
+        Register a position handler for standard Meshtastic position updates.
+
+        Handler signature: handler(slave: SlaveNode, position: dict)
+        Position dict contains: latitude, longitude, altitude, etc.
+        """
+        self._position_handlers.append(handler)
+
     # -------------------------------------------------------------------------
     # Public API - Slave Management
     # -------------------------------------------------------------------------
@@ -917,10 +1003,139 @@ class MasterController:
                 self.logger.warning(f"Slave {slave.node_id} went offline")
 
     # -------------------------------------------------------------------------
+    # Public API - Data Export
+    # -------------------------------------------------------------------------
+
+    def export_data(self, filepath: str = None) -> str:
+        """
+        Export all slave data to a JSON file.
+
+        Args:
+            filepath: Output file path. Auto-generated if None.
+
+        Returns:
+            Path to the exported file.
+        """
+        if filepath is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = f"master_export_{timestamp}.json"
+
+        export_data = {
+            "export_time": datetime.now().isoformat(),
+            "master_node_id": self.my_node_id,
+            "slaves": {}
+        }
+
+        for node_id, slave in self.slaves.items():
+            slave_data = {
+                "node_id": slave.node_id,
+                "long_name": slave.long_name,
+                "short_name": slave.short_name,
+                "first_seen": slave.first_seen,
+                "last_seen": slave.last_seen,
+                "is_online": slave.is_online,
+                "telemetry_count": slave.telemetry_count,
+                "batch_count": slave.batch_count,
+                "error_count": slave.error_count,
+                "telemetry_history": [
+                    {
+                        "timestamp": t.timestamp,
+                        "latitude": t.latitude,
+                        "longitude": t.longitude,
+                        "altitude": t.altitude,
+                        "battery_percent": t.battery_percent,
+                        "status": t.status.name,
+                        "temperature": t.temperature,
+                    }
+                    for t in slave.telemetry_history
+                ],
+                "data_batches": [
+                    {
+                        "batch_id": b.batch_id,
+                        "record_count": len(b.records),
+                        "record_size": b.record_size,
+                        "records_hex": [r.hex() for r in b.records],
+                    }
+                    for b in slave.data_batches
+                ],
+                "last_status": None,
+            }
+
+            if slave.last_status:
+                slave_data["last_status"] = {
+                    "uptime": slave.last_status.uptime,
+                    "status": slave.last_status.status.name,
+                    "battery_percent": slave.last_status.battery_percent,
+                    "free_memory_kb": slave.last_status.free_memory_kb,
+                    "pending_data_bytes": slave.last_status.pending_data_bytes,
+                    "error_count": slave.last_status.error_count,
+                }
+
+            export_data["slaves"][node_id] = slave_data
+
+        with open(filepath, "w") as f:
+            json.dump(export_data, f, indent=2)
+
+        self.logger.info(f"Data exported to {filepath}")
+        return filepath
+
+    def export_telemetry_csv(self, filepath: str = None) -> str:
+        """
+        Export all telemetry data to a CSV file.
+
+        Args:
+            filepath: Output file path. Auto-generated if None.
+
+        Returns:
+            Path to the exported file.
+        """
+        if filepath is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = f"telemetry_{timestamp}.csv"
+
+        with open(filepath, "w") as f:
+            # Header
+            f.write("node_id,timestamp,latitude,longitude,altitude,battery_percent,status,temperature\n")
+
+            # Data
+            for node_id, slave in self.slaves.items():
+                for t in slave.telemetry_history:
+                    f.write(
+                        f"{node_id},{t.timestamp},{t.latitude},{t.longitude},"
+                        f"{t.altitude},{t.battery_percent},{t.status.name},{t.temperature}\n"
+                    )
+
+        self.logger.info(f"Telemetry exported to {filepath}")
+        return filepath
+
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the master and all slaves.
+
+        Returns:
+            Dictionary with statistics.
+        """
+        total_telemetry = sum(s.telemetry_count for s in self.slaves.values())
+        total_batches = sum(s.batch_count for s in self.slaves.values())
+        total_errors = sum(s.error_count for s in self.slaves.values())
+        online_count = len(self.get_online_slaves())
+
+        return {
+            "master_node_id": self.my_node_id,
+            "state": self.state.value,
+            "total_slaves": len(self.slaves),
+            "online_slaves": online_count,
+            "offline_slaves": len(self.slaves) - online_count,
+            "total_telemetry_received": total_telemetry,
+            "total_batches_received": total_batches,
+            "total_errors": total_errors,
+        }
+
+    # -------------------------------------------------------------------------
     # Public API - Run Loop
     # -------------------------------------------------------------------------
 
-    def run(self):
+    def run(self, auto_reconnect: bool = True, max_reconnect_attempts: int = 5):
         """
         Run the master controller main loop.
 
@@ -929,6 +1144,11 @@ class MasterController:
         2. Periodically broadcast position on private channel (if enabled)
         3. Listen for slave telemetry and data
         4. Periodically update slave status
+        5. Auto-reconnect on connection loss (if enabled)
+
+        Args:
+            auto_reconnect: Enable automatic reconnection on disconnect.
+            max_reconnect_attempts: Maximum consecutive reconnect attempts.
         """
         if not self.initialize():
             self.logger.error("Initialization failed")
@@ -937,7 +1157,9 @@ class MasterController:
         self.running = True
         last_status_check = 0
         last_position_broadcast = 0
+        reconnect_attempts = 0
         STATUS_CHECK_INTERVAL = 60
+        RECONNECT_DELAY = 5
 
         # Log position broadcast settings
         if self.config.position_enabled:
@@ -949,19 +1171,42 @@ class MasterController:
             self.logger.info("Position broadcasting disabled")
 
         try:
-            while self.running and self.state == MasterState.READY:
-                now = time.time()
+            while self.running:
+                # Check for disconnection and attempt reconnect
+                if self.state == MasterState.DISCONNECTED:
+                    if auto_reconnect and reconnect_attempts < max_reconnect_attempts:
+                        reconnect_attempts += 1
+                        self.logger.info(
+                            f"Attempting reconnect ({reconnect_attempts}/{max_reconnect_attempts})..."
+                        )
+                        time.sleep(RECONNECT_DELAY)
 
-                # Periodically broadcast position on private channel
-                if self.config.position_enabled:
-                    if (now - last_position_broadcast) >= self.config.position_interval:
-                        self.send_position()
-                        last_position_broadcast = now
+                        if self._connect():
+                            self._set_state(MasterState.READY)
+                            reconnect_attempts = 0
+                            self.logger.info("Reconnected successfully")
+                        else:
+                            self.logger.warning("Reconnect failed")
+                    else:
+                        if reconnect_attempts >= max_reconnect_attempts:
+                            self.logger.error("Max reconnect attempts reached")
+                        break
 
-                # Periodically check slave status
-                if (now - last_status_check) >= STATUS_CHECK_INTERVAL:
-                    self.update_slave_status()
-                    last_status_check = now
+                # Normal operation when READY
+                if self.state == MasterState.READY:
+                    reconnect_attempts = 0  # Reset on successful operation
+                    now = time.time()
+
+                    # Periodically broadcast position on private channel
+                    if self.config.position_enabled:
+                        if (now - last_position_broadcast) >= self.config.position_interval:
+                            self.send_position()
+                            last_position_broadcast = now
+
+                    # Periodically check slave status
+                    if (now - last_status_check) >= STATUS_CHECK_INTERVAL:
+                        self.update_slave_status()
+                        last_status_check = now
 
                 time.sleep(1)
 

@@ -180,7 +180,8 @@ class TelemetryData:
     status: SlaveStatus = SlaveStatus.OK
     temperature: float = 0.0
 
-    STRUCT_FORMAT = "<IiiHBBhH"
+    # Format: uint32, int32, int32, int16, uint8, uint8, int16, uint16
+    STRUCT_FORMAT = "<IiihBBhH"
     STRUCT_SIZE = 20
 
     def encode(self) -> bytes:
