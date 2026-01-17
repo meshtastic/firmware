@@ -452,6 +452,315 @@ For each record:
 
 ---
 
+## Data Compression Alternatives
+
+Beyond timestamp encoding, we need to compress the actual keystroke data. Here are the options researched:
+
+### 1. SMAZ2 (Current Approach)
+
+**Source:** [GitHub - antirez/smaz2](https://github.com/antirez/smaz2)
+
+SMAZ2 is designed specifically for short messages on LoRa and embedded devices.
+
+| Metric | Value |
+|--------|-------|
+| RAM Usage | < 2KB |
+| Best For | English text, short messages |
+| Compression | 40-50% typical |
+| Worst Case | Rarely enlarges input |
+
+**How it works:**
+- Pre-computed bigrams and words tables (256 words)
+- Encodes common patterns efficiently
+- Falls back gracefully for unknown patterns
+
+**Example compression:**
+```
+"This is a small string" -> 50% smaller
+"the end"                -> 58% smaller
+"foobar"                 -> 34% smaller
+"not-a-g00d-Exampl333"   -> 15% LARGER (numbers hurt)
+```
+
+**Pros:**
+- Designed for LoRa specifically
+- Very low memory footprint
+- Good for English text
+
+**Cons:**
+- Poor with numbers/symbols
+- Fixed dictionary (can't adapt)
+- English-biased
+
+---
+
+### 2. Heatshrink (LZSS-based)
+
+**Source:** [GitHub - atomicobject/heatshrink](https://github.com/atomicobject/heatshrink)
+
+Ultra-lightweight compression for real-time embedded systems.
+
+| Metric | Value |
+|--------|-------|
+| RAM Usage | 50-300 bytes |
+| ROM Usage | ~800 bytes (AVR) |
+| Best For | General data, streaming |
+| Compression | Variable (data-dependent) |
+
+**Configuration options:**
+```c
+// Typical embedded config
+#define HEATSHRINK_WINDOW_BITS 8   // 256-byte window
+#define HEATSHRINK_LOOKAHEAD_BITS 4 // 16-byte lookahead
+
+// Severely constrained
+#define HEATSHRINK_WINDOW_BITS 5   // 32-byte window
+#define HEATSHRINK_LOOKAHEAD_BITS 3 // 8-byte lookahead
+```
+
+**Pros:**
+- Extremely low memory (50 bytes possible!)
+- Streaming compression (no buffering needed)
+- Works with any data type
+- Well-tested on Arduino/ESP32
+
+**Cons:**
+- Lower compression ratio than SMAZ for text
+- Needs tuning for optimal results
+- More CPU cycles
+
+---
+
+### 3. Huffman Encoding (Static Dictionary)
+
+**Source:** [Wikipedia - Huffman coding](https://en.wikipedia.org/wiki/Huffman_coding)
+
+Assign variable-length codes based on character frequency.
+
+| Metric | Value |
+|--------|-------|
+| RAM Usage | ~256 bytes (for table) |
+| Best For | Known character distribution |
+| Compression | ~48% typical for text |
+
+**Custom keystroke dictionary approach:**
+
+```c
+// Pre-computed for English keystrokes
+// Most common: e, t, a, o, i, n, s, r, h, l
+static const HuffmanCode keystroke_table[] = {
+    {'e', 0b110,     3},   // 3 bits
+    {'t', 0b111,     3},
+    {'a', 0b1000,    4},
+    {' ', 0b1001,    4},   // Space is common!
+    {'o', 0b1010,    4},
+    // ... less common = more bits
+    {'q', 0b11111110, 8},
+    {'z', 0b11111111, 8},
+};
+```
+
+**Pros:**
+- Optimal for known distributions
+- Zero overhead if table is pre-shared
+- Simple decode (bit-by-bit tree walk)
+
+**Cons:**
+- Overhead negates gains for short strings
+- Fixed to expected distribution
+- Bit manipulation complexity
+
+---
+
+### 4. Adaptive Dictionary (Learn-as-you-go)
+
+Build a dictionary from observed patterns specific to this user's typing.
+
+**Concept:**
+```
+Initial: Empty dictionary
+After "Hello": Add "Hello" = token 0
+After "Hello World": Add "World" = token 1, " " = token 2
+Next "Hello": Emit token 0 instead of 5 bytes
+```
+
+**Implementation sketch:**
+```c
+#define MAX_DICT_ENTRIES 64
+#define MAX_WORD_LEN 16
+
+typedef struct {
+    char word[MAX_WORD_LEN];
+    uint8_t len;
+    uint16_t frequency;
+} DictEntry;
+
+// Sync dictionary periodically with master
+// Master can request dictionary dump
+// Or include mini-dictionary in batch header
+```
+
+**Pros:**
+- Adapts to user's vocabulary
+- Better compression over time
+- Handles domain-specific terms
+
+**Cons:**
+- Cold start (no compression initially)
+- Dictionary sync complexity
+- Memory for dictionary storage
+
+---
+
+### 5. Hybrid: SMAZ2 + Circular Buffer
+
+**Your current approach - analyzed:**
+
+```
+┌─────────────────────────────────────────┐
+│           Circular Buffer               │
+│  ┌─────┬─────┬─────┬─────┬─────┐       │
+│  │ Raw │ Raw │ Raw │ ... │ Raw │        │
+│  │ Key │ Key │ Key │     │ Key │        │
+│  └─────┴─────┴─────┴─────┴─────┘       │
+│            │                            │
+│            ▼                            │
+│  ┌─────────────────────────────┐       │
+│  │    SMAZ2 Compression        │       │
+│  │    (on-the-fly)             │       │
+│  └─────────────────────────────┘       │
+│            │                            │
+│            ▼                            │
+│  ┌─────────────────────────────┐       │
+│  │  Compressed Output Buffer   │       │
+│  │  (stop when full/no gain)   │       │
+│  └─────────────────────────────┘       │
+└─────────────────────────────────────────┘
+```
+
+**When to stop compressing:**
+1. Output buffer reaches limit (190 bytes)
+2. Compression ratio drops below threshold (e.g., 0.9)
+3. Delta timestamp would overflow
+
+**Pros:**
+- Already implemented
+- Good balance of complexity vs. compression
+- Handles variable input gracefully
+
+**Cons:**
+- SMAZ2 struggles with numbers
+- Fixed English dictionary
+
+---
+
+### 6. Two-Stage Compression
+
+Combine timestamp optimization with data compression.
+
+```
+Stage 1: Delta-RLE for timestamps (save 40% on timing)
+Stage 2: SMAZ2/Heatshrink for data (save 40-50% on content)
+
+Total savings: Up to 70% in ideal cases
+```
+
+**Format:**
+```
+[Header: 8 bytes]
+[Compressed Timestamps: RLE-encoded deltas]
+[Compressed Data: SMAZ2/Heatshrink encoded]
+```
+
+**Decode order:**
+1. Decompress timestamps -> get record boundaries
+2. Decompress data -> get keystroke content
+3. Merge by index
+
+---
+
+### 7. Miniz (zlib-compatible)
+
+**Source:** [GitHub - lbernstone/miniz-esp32](https://github.com/lbernstone/miniz-esp32)
+
+Full zlib/Deflate implementation, available in ESP32 ROM.
+
+| Metric | Value |
+|--------|-------|
+| RAM Usage | ~44KB (default), tunable |
+| Best For | Larger data blocks |
+| Compression | Excellent (industry standard) |
+
+**ESP32 ROM functions available:**
+```c
+#include "rom/miniz.h"
+// tdefl_* for compression
+// tinfl_* for decompression
+```
+
+**Pros:**
+- Best compression ratios
+- Industry standard (decompress anywhere)
+- Already in ESP32 ROM (no code size penalty)
+
+**Cons:**
+- High RAM usage (32KB dictionary default)
+- Overkill for small messages
+- Better for batching multiple records
+
+---
+
+## Compression Comparison Matrix
+
+| Algorithm | RAM | Compression | Speed | Best For |
+|-----------|-----|-------------|-------|----------|
+| **SMAZ2** | 2KB | 40-50% | Fast | Short English text |
+| **Heatshrink** | 50-300B | 20-40% | Medium | Streaming, any data |
+| **Huffman** | 256B | ~48% | Fast | Known distribution |
+| **Adaptive Dict** | 1-4KB | 50-70%* | Medium | Repetitive input |
+| **Miniz** | 44KB | 60-80% | Slow | Large batches |
+
+*After warm-up period
+
+---
+
+## Recommended Compression Strategy
+
+### For Keystroke Data:
+
+**Primary: SMAZ2** (your current approach)
+- Keep using for text compression
+- Good fit for English keystrokes
+
+**Enhancement: Add number handling**
+```c
+// Before SMAZ2, encode numbers specially
+// "test123" -> "test" + [NUM_MARKER, 1, 2, 3]
+// Decode: expand NUM_MARKER sequences
+```
+
+**Fallback: Heatshrink**
+- When SMAZ2 expands input (numbers, symbols)
+- Flag in header: `compression_type` field
+
+### Batch Format with Compression Flag:
+
+```
+Byte 0: Flags
+  Bit 0-1: Compression type
+    00 = None (raw)
+    01 = SMAZ2
+    10 = Heatshrink
+    11 = Reserved
+  Bit 2: Has continuation
+  Bit 3-7: Reserved
+
+Byte 1: Uncompressed size (for validation)
+Byte 2-N: Compressed data
+```
+
+---
+
 ## References
 
 ### Compression Algorithms
@@ -459,6 +768,13 @@ For each record:
 - [Sprintz: Time Series Compression for IoT](https://arxiv.org/pdf/1808.02515)
 - [Time-series Compression Algorithms](https://www.tigerdata.com/blog/time-series-compression-algorithms-explained)
 - [Dynamic Bit Packing for Sensors](https://www.mdpi.com/1424-8220/23/20/8575)
+
+### Text/Data Compression Libraries
+- [SMAZ2 - Short message compression for LoRa](https://github.com/antirez/smaz2)
+- [SMAZ - Original short string compression](https://github.com/antirez/smaz)
+- [Heatshrink - Embedded compression library](https://github.com/atomicobject/heatshrink)
+- [Miniz-ESP32 - zlib for ESP32](https://github.com/lbernstone/miniz-esp32)
+- [Huffman Coding - Wikipedia](https://en.wikipedia.org/wiki/Huffman_coding)
 
 ### Variable-Length Encoding
 - [Protocol Buffers Encoding](https://protobuf.dev/programming-guides/encoding/)
