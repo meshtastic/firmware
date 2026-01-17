@@ -50,10 +50,17 @@ channel:
 # -----------------------------------------------------------------------------
 # Custom binary protocol settings for master-slave communication.
 #
+# Slave Discovery Flow:
+#   1. Slave broadcasts DATA_BATCH when it doesn't know master's node number
+#   2. Master receives broadcast and sends ACK back
+#   3. Slave extracts master's node number from ACK packet's fromId
+#   4. Slave now sends directly to master instead of broadcasting
+#   5. Slave also monitors position broadcasts to get/update master node number
+#
 protocol:
   # Private port number (256-511 are private app range)
   # Both master and slaves must use the same port
-  port_num: 257
+  port_num: 485
 
   # Automatically send ACK when receiving data from slaves
   send_ack: true

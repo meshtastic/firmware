@@ -6,10 +6,20 @@ This module defines the binary protocol for communication between the
 master controller and slave firmware nodes.
 
 Protocol Overview:
-- All communication uses a private channel with a custom port number
+- All communication uses a private channel with a custom port number (485)
 - Messages are binary encoded for efficiency
-- Slaves send telemetry data batches to master
+- Slaves send sensor data batches to master
 - Master can send commands to slaves
+- Standard Meshtastic telemetry is used for device metrics (battery, voltage)
+
+Slave Discovery Flow:
+    1. Slave starts without knowing master's node number
+    2. Slave broadcasts DATA_BATCH on private channel (all nodes receive)
+    3. Master receives broadcast, sends ACK back to slave
+    4. Slave extracts master's node number from ACK packet's fromId field
+    5. Slave now sends directly to master (more efficient, less channel usage)
+    6. Slave also monitors master's position broadcasts to get/update node number
+    7. If master node number changes, slave updates and continues direct sending
 
 Message Format:
     [HEADER (4 bytes)] [PAYLOAD (variable)]
@@ -20,12 +30,15 @@ Header Format:
     Byte 2-3: Payload Length (2 bytes, little-endian)
 
 Message Types:
-    0x01: TELEMETRY - Slave telemetry data
-    0x02: DATA_BATCH - Slave data batch
+    0x01: TELEMETRY - Slave telemetry data (DEPRECATED - use standard Meshtastic)
+    0x02: DATA_BATCH - Slave sensor data batch
     0x03: STATUS - Slave status report
     0x10: COMMAND - Master command to slave
-    0x11: ACK - Acknowledgment
+    0x11: ACK - Acknowledgment (slave uses fromId to learn master node number)
     0x12: NACK - Negative acknowledgment
+    0x20: REQUEST_STATUS - Master requests slave status
+    0x21: REQUEST_DATA - Master requests slave data
+    0x22: SLAVE_ACK - Slave acknowledgment
     0xFF: HEARTBEAT - Keep-alive
 
 Flags:
@@ -46,7 +59,7 @@ from typing import List, Optional, Tuple
 # =============================================================================
 
 # Private application port number (256-511 are private app range)
-PRIVATE_PORT_NUM = 257
+PRIVATE_PORT_NUM = 485
 
 # Protocol version
 PROTOCOL_VERSION = 1
