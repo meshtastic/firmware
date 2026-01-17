@@ -1,0 +1,168 @@
+# =============================================================================
+# Meshtastic Master Controller Configuration
+# =============================================================================
+#
+# This configuration file controls the master node that connects to your
+# computer via USB. The master communicates with slave firmware nodes over
+# the private channel using a custom binary protocol.
+#
+
+# -----------------------------------------------------------------------------
+# Device Connection
+# -----------------------------------------------------------------------------
+device:
+  # Serial port path (leave empty for auto-detect)
+  # Linux:   /dev/ttyUSB0, /dev/ttyACM0
+  # macOS:   /dev/cu.usbmodem53230050571
+  # Windows: COM4
+  port: ""
+
+  # Connection timeout in seconds
+  timeout: 30
+
+# -----------------------------------------------------------------------------
+# Security - Key Configuration
+# -----------------------------------------------------------------------------
+# The master controller AUTOMATICALLY verifies and updates the device's
+# private key on startup. If the device key doesn't match the configured
+# key, it will be updated via the meshtastic CLI.
+#
+# To get your current device keys:
+#   meshtastic --get security.private_key
+#   meshtastic --get security.public_key
+#
+# Remote Administration Setup:
+#   Slaves must have master's public_key in their security.admin_key
+#   to allow remote configuration. Set on each slave:
+#     meshtastic --set security.admin_key "base64:MASTER_PUBLIC_KEY"
+#
+security:
+  # Your device's private key (base64 encoded)
+  # This key is verified on every startup and updated if different
+  private_key: ""
+
+  # Your device's public key (base64 encoded)
+  # Share this with slaves for admin_key setup
+  # Slaves with this key in admin_key can be remotely configured
+  public_key: ""
+
+# -----------------------------------------------------------------------------
+# Private Channel Configuration
+# -----------------------------------------------------------------------------
+# All master-slave communication uses the private channel.
+# Channel 0 = Primary (public), Channels 1-7 = Secondary (private)
+#
+channel:
+  # Channel index for private communications
+  private_channel_index: 1
+
+# -----------------------------------------------------------------------------
+# Protocol Configuration
+# -----------------------------------------------------------------------------
+# Custom binary protocol settings for master-slave communication.
+#
+# Slave Discovery Flow:
+#   1. Slave broadcasts DATA_BATCH when it doesn't know master's node number
+#   2. Master receives broadcast and sends ACK back
+#   3. Slave extracts master's node number from ACK packet's fromId
+#   4. Slave now sends directly to master instead of broadcasting
+#   5. Slave also monitors position broadcasts to get/update master node number
+#
+protocol:
+  # Private port number (256-511 are private app range)
+  # Both master and slaves must use the same port
+  port_num: 485
+
+  # Automatically send ACK when receiving data from slaves
+  send_ack: true
+
+# -----------------------------------------------------------------------------
+# Slave Management
+# -----------------------------------------------------------------------------
+slaves:
+  # Time in seconds before a slave is considered offline
+  offline_timeout: 600
+
+# -----------------------------------------------------------------------------
+# Position Configuration
+# -----------------------------------------------------------------------------
+# Position precision and broadcasting settings.
+#
+# IMPORTANT: To prevent public position leaks, we disable automatic position
+# on the public channel (set precision to 0). The master can still send
+# position manually via the Python API when needed.
+#
+# Position precision values (bits):
+#   0  = Disabled (no position sent)
+#   13 = ~3 km accuracy
+#   16 = ~364 m accuracy
+#   19 = ~45 m accuracy
+#   32 = Full precision
+#
+position:
+  # Position precision for public channel (channel 0)
+  # Set to 0 to disable automatic public position broadcasts
+  public_channel_precision: 0
+
+  # Position precision for private channel
+  # 10 bits = ~23 km (least precise), keeps slaves aware of general area
+  private_channel_precision: 10
+
+  # Enable periodic position broadcasting via Python app
+  broadcast_enabled: true
+
+  # Broadcast interval in seconds (15 minutes)
+  broadcast_interval_seconds: 900
+
+  # Fixed position (for stationary master without GPS)
+  # These are used when calling send_position() without arguments
+  fixed_latitude: null    # e.g., 37.7749
+  fixed_longitude: null   # e.g., -122.4194
+  fixed_altitude: null    # e.g., 10 (meters)
+
+  # Device position settings (applied via CLI during configure_device)
+  # Set to true if master has no GPS and uses fixed position
+  use_fixed_position: false
+
+  # Disable smart position broadcasting (device-level)
+  disable_smart_position: true
+
+  # GPS update interval in seconds (0 = default 2 minutes)
+  # Only relevant if device has GPS
+  gps_update_interval: 0
+
+# -----------------------------------------------------------------------------
+# REST API Configuration
+# -----------------------------------------------------------------------------
+# The master can run with a REST API server for web access.
+# Run with: python -m meshtastic_app --api
+#
+# API Endpoints:
+#   GET  /api/status                     - Master controller status
+#   GET  /api/slaves                     - List all slaves
+#   GET  /api/slaves/{node_id}           - Get slave details
+#   GET  /api/slaves/{node_id}/telemetry - Get slave telemetry
+#   GET  /api/slaves/{node_id}/status    - Get extended status
+#   GET  /api/slaves/{node_id}/batches   - Get data batches
+#   POST /api/slaves/{node_id}/command   - Send command
+#   GET  /api/docs                       - Swagger documentation
+#
+api:
+  # Enable API server (can also use --api CLI flag)
+  enabled: false
+
+  # Host to bind to (0.0.0.0 = all interfaces)
+  host: "0.0.0.0"
+
+  # Port for API server
+  port: 8080
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log file path
+  file: "master.log"

@@ -1,0 +1,760 @@
+#!/usr/bin/env python3
+"""
+Master-Slave Communication Protocol
+
+This module defines the binary protocol for communication between the
+master controller and slave firmware nodes.
+
+Protocol Overview:
+- All communication uses a private channel with a custom port number (485)
+- Messages are binary encoded for efficiency
+- Slaves send sensor data batches to master
+- Master can send commands to slaves
+- Standard Meshtastic telemetry is used for device metrics (battery, voltage)
+
+Slave Discovery Flow:
+    1. Slave starts without knowing master's node number
+    2. Slave broadcasts DATA_BATCH on private channel (all nodes receive)
+    3. Master receives broadcast, sends ACK back to slave
+    4. Slave extracts master's node number from ACK packet's fromId field
+    5. Slave now sends directly to master (more efficient, less channel usage)
+    6. Slave also monitors master's position broadcasts to get/update node number
+    7. If master node number changes, slave updates and continues direct sending
+
+Message Format:
+    [HEADER (4 bytes)] [PAYLOAD (variable)]
+
+Header Format:
+    Byte 0: Message Type (1 byte)
+    Byte 1: Flags (1 byte)
+    Byte 2-3: Payload Length (2 bytes, little-endian)
+
+Message Types:
+    0x01: TELEMETRY - Slave telemetry data (DEPRECATED - use standard Meshtastic)
+    0x02: DATA_BATCH - Slave sensor data batch
+    0x03: STATUS - Slave status report
+    0x10: COMMAND - Master command to slave
+    0x11: ACK - Acknowledgment (slave uses fromId to learn master node number)
+    0x12: NACK - Negative acknowledgment
+    0x20: REQUEST_STATUS - Master requests slave status
+    0x21: REQUEST_DATA - Master requests slave data
+    0x22: SLAVE_ACK - Slave acknowledgment
+    0xFF: HEARTBEAT - Keep-alive
+
+Flags:
+    Bit 0: ACK_REQUESTED - Slave requests acknowledgment
+    Bit 1: FRAGMENTED - Part of a larger message
+    Bit 2: LAST_FRAGMENT - Last fragment of a fragmented message
+    Bit 3-7: Reserved
+"""
+
+import struct
+from dataclasses import dataclass, field
+from enum import IntEnum
+from typing import List, Optional, Tuple
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Private application port number (256-511 are private app range)
+PRIVATE_PORT_NUM = 485
+
+# Protocol version
+PROTOCOL_VERSION = 1
+
+# Maximum payload size (Meshtastic limit ~230 bytes)
+MAX_PAYLOAD_SIZE = 200
+
+# Header size
+HEADER_SIZE = 4
+
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+class MessageType(IntEnum):
+    """Protocol message types."""
+    # Slave -> Master
+    TELEMETRY = 0x01           # Telemetry data from slave
+    DATA_BATCH = 0x02          # Batch of sensor/collected data (fixed-size records)
+    STATUS = 0x03              # Slave status report
+    SLAVE_ACK = 0x04           # Slave acknowledgment
+    TIMESTAMPED_BATCH = 0x05   # Batch with timestamps (variable-size records)
+
+    # Master -> Slave
+    COMMAND = 0x10        # Command to slave
+    CONFIG = 0x11         # Configuration update
+    MASTER_ACK = 0x12     # Master acknowledgment
+    REQUEST_STATUS = 0x13 # Request slave status
+    REQUEST_DATA = 0x14   # Request data from slave
+
+    # Bidirectional
+    HEARTBEAT = 0xFF      # Keep-alive ping
+
+
+class MessageFlags(IntEnum):
+    """Protocol message flags."""
+    NONE = 0x00
+    ACK_REQUESTED = 0x01
+    FRAGMENTED = 0x02
+    LAST_FRAGMENT = 0x04
+
+
+class CommandType(IntEnum):
+    """Master command types (sent in COMMAND payload)."""
+    REBOOT = 0x01
+    SLEEP = 0x02
+    WAKE = 0x03
+    SET_INTERVAL = 0x04
+    CLEAR_DATA = 0x05
+    SEND_DATA = 0x06
+    SET_MODE = 0x07
+
+
+class SlaveStatus(IntEnum):
+    """Slave status codes."""
+    OK = 0x00
+    LOW_BATTERY = 0x01
+    SENSOR_ERROR = 0x02
+    MEMORY_FULL = 0x03
+    ERROR = 0xFF
+
+
+# =============================================================================
+# Data Classes
+# =============================================================================
+
+@dataclass
+class ProtocolMessage:
+    """Represents a protocol message."""
+    msg_type: MessageType
+    flags: int = MessageFlags.NONE
+    payload: bytes = b""
+    sequence: int = 0  # For fragmented messages
+
+    def encode(self) -> bytes:
+        """Encode message to binary format."""
+        payload_len = len(self.payload)
+        if payload_len > MAX_PAYLOAD_SIZE:
+            raise ValueError(f"Payload too large: {payload_len} > {MAX_PAYLOAD_SIZE}")
+
+        header = struct.pack(
+            "<BBH",  # Little-endian: byte, byte, unsigned short
+            self.msg_type,
+            self.flags,
+            payload_len,
+        )
+        return header + self.payload
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["ProtocolMessage"]:
+        """Decode binary data to message."""
+        if len(data) < HEADER_SIZE:
+            return None
+
+        try:
+            msg_type, flags, payload_len = struct.unpack("<BBH", data[:HEADER_SIZE])
+            payload = data[HEADER_SIZE : HEADER_SIZE + payload_len]
+
+            if len(payload) < payload_len:
+                return None  # Incomplete message
+
+            return cls(
+                msg_type=MessageType(msg_type),
+                flags=flags,
+                payload=payload,
+            )
+        except (struct.error, ValueError):
+            return None
+
+
+@dataclass
+class TelemetryData:
+    """
+    DEPRECATED: Use standard Meshtastic telemetry (TELEMETRY_APP) instead.
+
+    This class is kept for backwards compatibility but is no longer used
+    by the master controller. Standard Meshtastic provides device telemetry
+    (battery, voltage) and environment metrics (temperature, humidity, pressure)
+    automatically via the TELEMETRY_APP.
+
+    Legacy Binary Format (12 bytes):
+        Bytes 0-3:   Timestamp (uint32, seconds since epoch or uptime)
+        Bytes 4:     Battery (uint8, percentage 0-100)
+        Bytes 5:     Status (uint8, SlaveStatus)
+        Bytes 6-7:   Temperature (int16, Celsius * 100, e.g., 2550 = 25.50C)
+        Bytes 8-9:   Voltage (uint16, millivolts, e.g., 3700 = 3.7V)
+        Bytes 10-11: Reserved (for future use)
+    """
+    timestamp: int = 0
+    battery_percent: int = 0
+    status: SlaveStatus = SlaveStatus.OK
+    temperature: float = 0.0  # Celsius
+    voltage_mv: int = 0  # Millivolts
+
+    STRUCT_FORMAT = "<IBBhHH"  # uint32, uint8, uint8, int16, uint16, uint16
+    STRUCT_SIZE = 12
+
+    def encode(self) -> bytes:
+        """Encode telemetry to binary."""
+        temp_encoded = int(self.temperature * 100)
+
+        return struct.pack(
+            self.STRUCT_FORMAT,
+            self.timestamp,
+            self.battery_percent,
+            self.status,
+            temp_encoded,
+            self.voltage_mv,
+            0,  # Reserved
+        )
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["TelemetryData"]:
+        """Decode binary to telemetry."""
+        if len(data) < cls.STRUCT_SIZE:
+            return None
+
+        try:
+            (
+                timestamp,
+                battery,
+                status,
+                temp_encoded,
+                voltage_mv,
+                _reserved,
+            ) = struct.unpack(cls.STRUCT_FORMAT, data[: cls.STRUCT_SIZE])
+
+            return cls(
+                timestamp=timestamp,
+                battery_percent=battery,
+                status=SlaveStatus(status),
+                temperature=temp_encoded / 100.0,
+                voltage_mv=voltage_mv,
+            )
+        except (struct.error, ValueError):
+            return None
+
+
+@dataclass
+class DataBatch:
+    """
+    A batch of data records from a slave.
+
+    Binary Format:
+        Bytes 0-3:   Batch ID (uint32)
+        Bytes 4:     Record Count (uint8)
+        Bytes 5:     Record Size (uint8)
+        Bytes 6-7:   Reserved
+        Bytes 8+:    Records (variable)
+    """
+    batch_id: int = 0
+    records: List[bytes] = field(default_factory=list)
+    record_size: int = 0
+
+    HEADER_FORMAT = "<IBBH"
+    HEADER_SIZE = 8
+
+    def encode(self) -> bytes:
+        """Encode data batch to binary."""
+        if not self.records:
+            return struct.pack(self.HEADER_FORMAT, self.batch_id, 0, 0, 0)
+
+        record_size = len(self.records[0])
+        header = struct.pack(
+            self.HEADER_FORMAT,
+            self.batch_id,
+            len(self.records),
+            record_size,
+            0,  # Reserved
+        )
+        return header + b"".join(self.records)
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["DataBatch"]:
+        """Decode binary to data batch."""
+        if len(data) < cls.HEADER_SIZE:
+            return None
+
+        try:
+            batch_id, record_count, record_size, _ = struct.unpack(
+                cls.HEADER_FORMAT, data[: cls.HEADER_SIZE]
+            )
+
+            records = []
+            offset = cls.HEADER_SIZE
+
+            for _ in range(record_count):
+                if offset + record_size > len(data):
+                    break
+                records.append(data[offset : offset + record_size])
+                offset += record_size
+
+            return cls(
+                batch_id=batch_id,
+                records=records,
+                record_size=record_size,
+            )
+        except struct.error:
+            return None
+
+
+@dataclass
+class TimestampedRecord:
+    """A single record with delta timestamp."""
+    delta_seconds: int  # Offset from batch timestamp
+    data: bytes
+
+
+@dataclass
+class TimestampedBatch:
+    """
+    A batch of timestamped records from a slave.
+
+    Used for logging data with timestamps (e.g., keystrokes, sensor readings).
+    Each record has a delta (seconds from batch creation) and variable-length data.
+
+    Binary Format:
+        Bytes 0-3:   Batch ID (uint32)
+        Bytes 4-7:   Batch Timestamp (uint32, Unix epoch when batch was created)
+        Bytes 8:     Record Count (uint8, max 255 records)
+        Bytes 9:     Reserved
+        Bytes 10+:   Records (variable length)
+
+    Record Format (variable length):
+        Bytes 0-1:   Delta seconds (uint16, offset from batch timestamp)
+        Byte 2:      Data length (uint8, max 255 bytes)
+        Bytes 3+:    Data (variable)
+
+    Example:
+        Batch created at 1737100800 with 3 records:
+        - delta=0,   "Hello"         (at batch creation)
+        - delta=300, "Still here"    (5 minutes later)
+        - delta=312, "Enter pressed" (12 seconds after that)
+    """
+    batch_id: int = 0
+    batch_timestamp: int = 0  # Unix epoch when batch was created on slave
+    records: List[TimestampedRecord] = field(default_factory=list)
+
+    HEADER_FORMAT = "<IIBB"  # batch_id, timestamp, count, reserved
+    HEADER_SIZE = 10
+    RECORD_HEADER_FORMAT = "<HB"  # delta (uint16), length (uint8)
+    RECORD_HEADER_SIZE = 3
+    MAX_RECORDS = 255
+    MAX_DATA_LENGTH = 255
+
+    def encode(self) -> bytes:
+        """Encode timestamped batch to binary."""
+        record_count = min(len(self.records), self.MAX_RECORDS)
+        header = struct.pack(
+            self.HEADER_FORMAT,
+            self.batch_id,
+            self.batch_timestamp,
+            record_count,
+            0,  # Reserved
+        )
+
+        record_data = b""
+        for i, rec in enumerate(self.records[:record_count]):
+            data_len = min(len(rec.data), self.MAX_DATA_LENGTH)
+            record_data += struct.pack(
+                self.RECORD_HEADER_FORMAT,
+                rec.delta_seconds & 0xFFFF,  # Clamp to uint16
+                data_len,
+            )
+            record_data += rec.data[:data_len]
+
+        return header + record_data
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["TimestampedBatch"]:
+        """Decode binary to timestamped batch."""
+        if len(data) < cls.HEADER_SIZE:
+            return None
+
+        try:
+            batch_id, batch_timestamp, record_count, _ = struct.unpack(
+                cls.HEADER_FORMAT, data[:cls.HEADER_SIZE]
+            )
+
+            records = []
+            offset = cls.HEADER_SIZE
+
+            for _ in range(record_count):
+                if offset + cls.RECORD_HEADER_SIZE > len(data):
+                    break
+
+                delta, data_len = struct.unpack(
+                    cls.RECORD_HEADER_FORMAT,
+                    data[offset:offset + cls.RECORD_HEADER_SIZE]
+                )
+                offset += cls.RECORD_HEADER_SIZE
+
+                if offset + data_len > len(data):
+                    break
+
+                record_data = data[offset:offset + data_len]
+                offset += data_len
+
+                records.append(TimestampedRecord(
+                    delta_seconds=delta,
+                    data=record_data,
+                ))
+
+            return cls(
+                batch_id=batch_id,
+                batch_timestamp=batch_timestamp,
+                records=records,
+            )
+        except struct.error:
+            return None
+
+    def to_storage_format(self) -> List[Tuple[int, bytes]]:
+        """
+        Convert to format suitable for DataStorage.store_batch().
+
+        Returns:
+            List of (delta_seconds, data) tuples.
+        """
+        return [(r.delta_seconds, r.data) for r in self.records]
+
+
+@dataclass
+class SlaveStatusReport:
+    """
+    Extended status report from a slave.
+
+    Includes device metrics (battery, voltage), memory stats (heap, FRAM, flash),
+    and operational status. Sent via custom protocol on private channel.
+
+    Binary Format (24 bytes):
+        Bytes 0-3:   Uptime (uint32, seconds since boot)
+        Bytes 4:     Status code (uint8, SlaveStatus enum)
+        Bytes 5:     Battery (uint8, percentage 0-100)
+        Bytes 6-7:   Voltage (uint16, millivolts, e.g., 3700 = 3.7V)
+        Bytes 8-9:   Free heap memory (uint16, KB)
+        Bytes 10-11: Free FRAM/external memory (uint16, KB, 0 if not available)
+        Bytes 12-13: Free flash storage (uint16, KB)
+        Bytes 14-17: Pending data size (uint32, bytes waiting to send)
+        Bytes 18-19: Error count (uint16, cumulative errors)
+        Bytes 20-21: Total FRAM capacity (uint16, KB, 0 if not available)
+        Bytes 22-23: Total flash capacity (uint16, KB)
+
+    This extended format allows master to monitor:
+    - Power: battery level, voltage
+    - Memory: heap usage, FRAM usage, flash usage
+    - Data: pending bytes to transmit
+    - Health: error count, operational status
+    """
+    # Core status
+    uptime: int = 0
+    status: SlaveStatus = SlaveStatus.OK
+    battery_percent: int = 0
+
+    # Power metrics
+    voltage_mv: int = 0  # Millivolts
+
+    # Memory metrics (all in KB)
+    free_heap_kb: int = 0
+    free_fram_kb: int = 0  # 0 if no FRAM
+    free_flash_kb: int = 0
+    total_fram_kb: int = 0  # 0 if no FRAM
+    total_flash_kb: int = 0
+
+    # Operational metrics
+    pending_data_bytes: int = 0
+    error_count: int = 0
+
+    STRUCT_FORMAT = "<IBBHHHHIHH"
+    STRUCT_SIZE = 24
+
+    def encode(self) -> bytes:
+        """Encode status report to binary."""
+        return struct.pack(
+            self.STRUCT_FORMAT,
+            self.uptime,
+            self.status,
+            self.battery_percent,
+            self.voltage_mv,
+            self.free_heap_kb,
+            self.free_fram_kb,
+            self.free_flash_kb,
+            self.pending_data_bytes,
+            self.error_count,
+            self.total_fram_kb,
+            self.total_flash_kb,
+        )
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["SlaveStatusReport"]:
+        """Decode binary to status report."""
+        if len(data) < cls.STRUCT_SIZE:
+            # Try legacy 16-byte format for backwards compatibility
+            if len(data) >= 16:
+                return cls._decode_legacy(data)
+            return None
+
+        try:
+            (
+                uptime,
+                status,
+                battery,
+                voltage_mv,
+                free_heap_kb,
+                free_fram_kb,
+                free_flash_kb,
+                pending_data,
+                error_count,
+                total_fram_kb,
+                total_flash_kb,
+            ) = struct.unpack(cls.STRUCT_FORMAT, data[: cls.STRUCT_SIZE])
+
+            return cls(
+                uptime=uptime,
+                status=SlaveStatus(status),
+                battery_percent=battery,
+                voltage_mv=voltage_mv,
+                free_heap_kb=free_heap_kb,
+                free_fram_kb=free_fram_kb,
+                free_flash_kb=free_flash_kb,
+                total_fram_kb=total_fram_kb,
+                total_flash_kb=total_flash_kb,
+                pending_data_bytes=pending_data,
+                error_count=error_count,
+            )
+        except (struct.error, ValueError):
+            return None
+
+    @classmethod
+    def _decode_legacy(cls, data: bytes) -> Optional["SlaveStatusReport"]:
+        """Decode legacy 16-byte format for backwards compatibility."""
+        try:
+            (
+                uptime,
+                status,
+                battery,
+                free_memory_kb,
+                pending_data,
+                error_count,
+                _reserved,
+            ) = struct.unpack("<IBBHIHH", data[:16])
+
+            return cls(
+                uptime=uptime,
+                status=SlaveStatus(status),
+                battery_percent=battery,
+                voltage_mv=0,  # Not available in legacy format
+                free_heap_kb=free_memory_kb,
+                free_fram_kb=0,
+                free_flash_kb=0,
+                total_fram_kb=0,
+                total_flash_kb=0,
+                pending_data_bytes=pending_data,
+                error_count=error_count,
+            )
+        except (struct.error, ValueError):
+            return None
+
+
+@dataclass
+class MasterCommand:
+    """
+    Command from master to slave.
+
+    Binary Format:
+        Byte 0:    Command type (uint8)
+        Byte 1:    Parameter count (uint8)
+        Bytes 2+:  Parameters (variable, each prefixed with 1-byte length)
+    """
+    command: CommandType
+    params: List[bytes] = field(default_factory=list)
+
+    def encode(self) -> bytes:
+        """Encode command to binary."""
+        data = struct.pack("<BB", self.command, len(self.params))
+        for param in self.params:
+            data += struct.pack("<B", len(param)) + param
+        return data
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["MasterCommand"]:
+        """Decode binary to command."""
+        if len(data) < 2:
+            return None
+
+        try:
+            cmd_type, param_count = struct.unpack("<BB", data[:2])
+            params = []
+            offset = 2
+
+            for _ in range(param_count):
+                if offset >= len(data):
+                    break
+                param_len = data[offset]
+                offset += 1
+                if offset + param_len > len(data):
+                    break
+                params.append(data[offset : offset + param_len])
+                offset += param_len
+
+            return cls(
+                command=CommandType(cmd_type),
+                params=params,
+            )
+        except (struct.error, ValueError):
+            return None
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+def create_telemetry_message(telemetry: TelemetryData, ack_requested: bool = False) -> bytes:
+    """
+    DEPRECATED: Use standard Meshtastic telemetry instead.
+
+    Standard Meshtastic provides device and environment telemetry automatically.
+    This function is kept for backwards compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "create_telemetry_message is deprecated. Use standard Meshtastic telemetry.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    flags = MessageFlags.ACK_REQUESTED if ack_requested else MessageFlags.NONE
+    msg = ProtocolMessage(
+        msg_type=MessageType.TELEMETRY,
+        flags=flags,
+        payload=telemetry.encode(),
+    )
+    return msg.encode()
+
+
+def create_data_batch_message(batch: DataBatch, ack_requested: bool = True) -> bytes:
+    """Create a data batch protocol message."""
+    flags = MessageFlags.ACK_REQUESTED if ack_requested else MessageFlags.NONE
+    msg = ProtocolMessage(
+        msg_type=MessageType.DATA_BATCH,
+        flags=flags,
+        payload=batch.encode(),
+    )
+    return msg.encode()
+
+
+def create_status_message(status: SlaveStatusReport) -> bytes:
+    """Create a status report protocol message."""
+    msg = ProtocolMessage(
+        msg_type=MessageType.STATUS,
+        payload=status.encode(),
+    )
+    return msg.encode()
+
+
+def create_command_message(command: MasterCommand) -> bytes:
+    """Create a master command protocol message."""
+    msg = ProtocolMessage(
+        msg_type=MessageType.COMMAND,
+        flags=MessageFlags.ACK_REQUESTED,
+        payload=command.encode(),
+    )
+    return msg.encode()
+
+
+def create_ack_message(for_msg_type: MessageType, batch_id: int = None) -> bytes:
+    """
+    Create an acknowledgment message.
+
+    For DATA_BATCH acknowledgments, includes the batch_id so the slave knows
+    which specific batch was successfully processed and can be deleted from memory.
+
+    ACK Payload Format:
+        Byte 0:     Message type being acknowledged (uint8)
+        Bytes 1-4:  Batch ID (uint32, only for DATA_BATCH ACKs)
+
+    Args:
+        for_msg_type: The message type being acknowledged.
+        batch_id: For DATA_BATCH ACKs, the batch ID that was processed.
+
+    Returns:
+        Encoded ACK message bytes.
+    """
+    if for_msg_type == MessageType.DATA_BATCH and batch_id is not None:
+        # Include batch_id so slave knows which batch to delete from memory
+        payload = struct.pack("<BI", for_msg_type, batch_id)
+    else:
+        payload = struct.pack("<B", for_msg_type)
+
+    msg = ProtocolMessage(
+        msg_type=MessageType.MASTER_ACK,
+        payload=payload,
+    )
+    return msg.encode()
+
+
+def parse_ack_message(payload: bytes) -> Tuple[Optional[MessageType], Optional[int]]:
+    """
+    Parse an ACK message payload.
+
+    This is used by slaves to extract the acknowledged message type and batch_id.
+    For DATA_BATCH ACKs, the batch_id tells the slave which batch was successfully
+    processed and can be deleted from memory.
+
+    Args:
+        payload: The ACK message payload bytes.
+
+    Returns:
+        Tuple of (acked_msg_type, batch_id) or (None, None) on error.
+        batch_id is None for non-DATA_BATCH ACKs.
+    """
+    if not payload or len(payload) < 1:
+        return None, None
+
+    try:
+        acked_type = MessageType(payload[0])
+
+        # DATA_BATCH ACKs include the batch_id (5 bytes total)
+        if acked_type == MessageType.DATA_BATCH and len(payload) >= 5:
+            batch_id = struct.unpack("<I", payload[1:5])[0]
+            return acked_type, batch_id
+
+        return acked_type, None
+    except (ValueError, struct.error):
+        return None, None
+
+
+def create_heartbeat_message() -> bytes:
+    """Create a heartbeat message."""
+    msg = ProtocolMessage(
+        msg_type=MessageType.HEARTBEAT,
+    )
+    return msg.encode()
+
+
+def parse_message(data: bytes) -> Tuple[Optional[ProtocolMessage], Optional[object]]:
+    """
+    Parse binary data and return the message and decoded payload.
+
+    Returns:
+        Tuple of (ProtocolMessage, decoded_payload) or (None, None) on error.
+    """
+    msg = ProtocolMessage.decode(data)
+    if not msg:
+        return None, None
+
+    payload = None
+
+    # Note: TELEMETRY is deprecated - use standard Meshtastic TELEMETRY_APP
+    if msg.msg_type == MessageType.DATA_BATCH:
+        payload = DataBatch.decode(msg.payload)
+    elif msg.msg_type == MessageType.TIMESTAMPED_BATCH:
+        payload = TimestampedBatch.decode(msg.payload)
+    elif msg.msg_type == MessageType.STATUS:
+        payload = SlaveStatusReport.decode(msg.payload)
+    elif msg.msg_type == MessageType.COMMAND:
+        payload = MasterCommand.decode(msg.payload)
+
+    return msg, payload
