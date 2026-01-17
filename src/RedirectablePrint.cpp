@@ -18,7 +18,7 @@
 #endif
 
 #if HAS_NETWORKING
-extern Syslog syslog;
+extern meshtastic::Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
 {
@@ -131,6 +131,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         int hour = hms / SEC_PER_HOUR;
         int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
 #ifdef ARCH_PORTDUINO
         ::printf("%s ", logLevel);
         if (color) {

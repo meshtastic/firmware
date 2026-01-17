@@ -87,10 +87,13 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
         // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
         // receives it when we get our own packet back. Then we'll stop our retransmissions.
-        if (isFromUs(e.packet))
-            routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
-        else
+        if (isFromUs(e.packet)) {
+            auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+            pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+            router->sendLocal(pAck);
+        } else {
             LOG_INFO("Ignore downlink message we originally sent");
+        }
         return;
     }
     if (isFromUs(e.packet)) {
@@ -491,7 +494,8 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
-        strlcpy(msg->topic, topic, sizeof(msg->topic));
+        strncpy(msg->topic, topic, sizeof(msg->topic));
+        msg->topic[sizeof(msg->topic) - 1] = '\0'; // Ensure null termination
         if (length > sizeof(msg->payload_variant.data.bytes))
             length = sizeof(msg->payload_variant.data.bytes);
         msg->payload_variant.data.size = length;

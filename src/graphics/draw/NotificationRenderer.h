@@ -4,6 +4,7 @@
 #include "OLEDDisplayUi.h"
 #include "graphics/Screen.h"
 #include "graphics/VirtualKeyboard.h"
+#include "modules/OnScreenKeyboardModule.h"
 #include <functional>
 #include <string>
 #define MAX_LINES 5
@@ -31,6 +32,7 @@ class NotificationRenderer
     static bool pauseBanner;
 
     static void resetBanner();
+    static void showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs);
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
