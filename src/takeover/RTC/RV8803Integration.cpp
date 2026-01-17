@@ -9,9 +9,11 @@
 #include "detect/ScanI2CTwoWire.h"
 
 // =============================================================================
-// Global Instance
+// Global Instance (NASA Rule #3: Static allocation, no heap after init)
 // =============================================================================
 
+// Static instance to avoid heap allocation (NASA Power of 10 Rule #3)
+static RV8803 rv8803Instance(RV8803Integration::DEFAULT_UPDATE_THRESHOLD_SECS);
 RV8803 *rv8803 = nullptr;
 bool rv8803Available = false;
 
@@ -43,13 +45,8 @@ bool initRV8803(ScanI2C *i2cScanner)
         // In production, add RTC_RV8803 to ScanI2C::DeviceType
     }
 
-    // Create instance with default threshold (5 minutes)
-    rv8803 = new RV8803(RV8803Integration::DEFAULT_UPDATE_THRESHOLD_SECS);
-
-    if (rv8803 == nullptr) {
-        LOG_ERROR("RV8803: Failed to allocate instance");
-        return false;
-    }
+    // Use static instance (NASA Rule #3: no dynamic heap allocation)
+    rv8803 = &rv8803Instance;
 
 // Determine which I2C bus to use
 #if WIRE_INTERFACES_COUNT > 1
@@ -63,8 +60,7 @@ bool initRV8803(ScanI2C *i2cScanner)
 
     if (err != RV8803Error::OK) {
         LOG_WARN("RV8803: Initialization failed - %s", RV8803::errorToString(err));
-        delete rv8803;
-        rv8803 = nullptr;
+        rv8803 = nullptr;  // Static instance, no delete needed (NASA Rule #3)
         rv8803Available = false;
         return false;
     }
