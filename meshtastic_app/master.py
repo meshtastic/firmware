@@ -62,7 +62,6 @@ from .protocol import (
     ProtocolMessage,
     SlaveStatus,
     SlaveStatusReport,
-    TelemetryData,
     create_ack_message,
     create_command_message,
     create_heartbeat_message,
@@ -107,7 +106,7 @@ class SlaveNode:
     """
     Represents a slave node in the mesh network.
 
-    Tracks telemetry history, data batches, and status.
+    Tracks device telemetry (from standard Meshtastic), data batches, and status.
     """
     node_id: str
     long_name: str = ""
@@ -121,25 +120,25 @@ class SlaveNode:
     is_online: bool = False
     last_status: Optional[SlaveStatusReport] = None
 
-    # Telemetry history (newest first)
-    telemetry_history: Deque[TelemetryData] = field(
-        default_factory=lambda: deque(maxlen=MAX_TELEMETRY_HISTORY)
-    )
+    # Device telemetry (from standard Meshtastic TELEMETRY_APP)
+    battery_level: int = 0  # Percentage 0-100
+    voltage: float = 0.0  # Volts
+    channel_utilization: float = 0.0  # Percentage
+    air_util_tx: float = 0.0  # Percentage
+    temperature: Optional[float] = None  # Celsius (from environment metrics)
+    humidity: Optional[float] = None  # Percentage
+    pressure: Optional[float] = None  # hPa
+    last_telemetry_time: float = 0.0
 
-    # Data batches received (newest first)
+    # Data batches received (newest first) - from our custom protocol
     data_batches: Deque[DataBatch] = field(
         default_factory=lambda: deque(maxlen=MAX_DATA_BATCHES)
     )
 
     # Statistics
-    telemetry_count: int = 0
-    batch_count: int = 0
+    telemetry_count: int = 0  # Standard Meshtastic telemetry received
+    batch_count: int = 0  # Custom protocol batches received
     error_count: int = 0
-
-    @property
-    def latest_telemetry(self) -> Optional[TelemetryData]:
-        """Get the most recent telemetry data."""
-        return self.telemetry_history[0] if self.telemetry_history else None
 
     @property
     def latest_batch(self) -> Optional[DataBatch]:
@@ -358,11 +357,9 @@ class MasterController:
         slave.last_seen = time.time()
         slave.is_online = True
 
-        # Handle by message type
-        if msg.msg_type == MessageType.TELEMETRY:
-            self._handle_telemetry(slave, payload, msg)
-
-        elif msg.msg_type == MessageType.DATA_BATCH:
+        # Handle by message type (custom protocol)
+        # Note: Standard Meshtastic telemetry is handled in _handle_other_traffic()
+        if msg.msg_type == MessageType.DATA_BATCH:
             self._handle_data_batch(slave, payload, msg)
 
         elif msg.msg_type == MessageType.STATUS:
@@ -377,31 +374,6 @@ class MasterController:
         # Send ACK if requested
         if (msg.flags & MessageFlags.ACK_REQUESTED) and self.config.send_ack:
             self._send_ack(from_id, msg.msg_type)
-
-    def _handle_telemetry(self, slave: SlaveNode, telemetry: TelemetryData, msg: ProtocolMessage):
-        """Handle incoming telemetry data from slave (no GPS)."""
-        if not telemetry:
-            self.logger.warning(f"Invalid telemetry from {slave.node_id}")
-            slave.error_count += 1
-            return
-
-        slave.telemetry_history.appendleft(telemetry)
-        slave.telemetry_count += 1
-
-        self.logger.info(
-            f"[TELEMETRY] {slave.node_id}: "
-            f"bat={telemetry.battery_percent}%, "
-            f"voltage={telemetry.voltage_mv}mV, "
-            f"temp={telemetry.temperature:.1f}C, "
-            f"status={telemetry.status.name}"
-        )
-
-        # Dispatch to handlers
-        for handler in self._telemetry_handlers:
-            try:
-                handler(slave, telemetry)
-            except Exception as e:
-                self.logger.error(f"Telemetry handler error: {e}")
 
     def _handle_data_batch(self, slave: SlaveNode, batch: DataBatch, msg: ProtocolMessage):
         """Handle incoming data batch."""
@@ -457,8 +429,9 @@ class MasterController:
         """
         Handle non-protocol traffic on private channel (standard Meshtastic).
 
-        Note: Slaves do NOT have GPS, so we don't expect position data from them.
-        This handler is mainly for text messages or other standard traffic.
+        This handles:
+        - TELEMETRY_APP: Device metrics (battery, voltage) and environment metrics
+        - TEXT_MESSAGE_APP: Text messages
         """
         portnum = decoded.get("portnum", "")
 
@@ -473,6 +446,67 @@ class MasterController:
 
         if "text" in decoded:
             self.logger.info(f"[TEXT] {from_id}: {decoded['text']}")
+
+        elif portnum == "TELEMETRY_APP":
+            self._handle_standard_telemetry(slave, decoded)
+
+    def _handle_standard_telemetry(self, slave: SlaveNode, decoded: Dict):
+        """
+        Handle standard Meshtastic telemetry (device and environment metrics).
+
+        This is the built-in Meshtastic telemetry, not our custom protocol.
+        """
+        telemetry = decoded.get("telemetry", {})
+
+        # Device metrics (battery, voltage, channel utilization)
+        device_metrics = telemetry.get("deviceMetrics", {})
+        if device_metrics:
+            if "batteryLevel" in device_metrics:
+                slave.battery_level = device_metrics["batteryLevel"]
+            if "voltage" in device_metrics:
+                slave.voltage = device_metrics["voltage"]
+            if "channelUtilization" in device_metrics:
+                slave.channel_utilization = device_metrics["channelUtilization"]
+            if "airUtilTx" in device_metrics:
+                slave.air_util_tx = device_metrics["airUtilTx"]
+
+            self.logger.info(
+                f"[TELEMETRY] {slave.node_id}: "
+                f"bat={slave.battery_level}%, "
+                f"voltage={slave.voltage:.2f}V, "
+                f"ch_util={slave.channel_utilization:.1f}%"
+            )
+
+        # Environment metrics (temperature, humidity, pressure from sensors)
+        env_metrics = telemetry.get("environmentMetrics", {})
+        if env_metrics:
+            if "temperature" in env_metrics:
+                slave.temperature = env_metrics["temperature"]
+            if "relativeHumidity" in env_metrics:
+                slave.humidity = env_metrics["relativeHumidity"]
+            if "barometricPressure" in env_metrics:
+                slave.pressure = env_metrics["barometricPressure"]
+
+            env_str = []
+            if slave.temperature is not None:
+                env_str.append(f"temp={slave.temperature:.1f}C")
+            if slave.humidity is not None:
+                env_str.append(f"humidity={slave.humidity:.1f}%")
+            if slave.pressure is not None:
+                env_str.append(f"pressure={slave.pressure:.1f}hPa")
+
+            if env_str:
+                self.logger.info(f"[ENVIRONMENT] {slave.node_id}: {', '.join(env_str)}")
+
+        slave.last_telemetry_time = time.time()
+        slave.telemetry_count += 1
+
+        # Dispatch to telemetry handlers
+        for handler in self._telemetry_handlers:
+            try:
+                handler(slave, telemetry)
+            except Exception as e:
+                self.logger.error(f"Telemetry handler error: {e}")
 
     def _get_or_create_slave(self, node_id: str) -> SlaveNode:
         """Get existing slave or create new one."""
@@ -903,11 +937,15 @@ class MasterController:
     # Public API - Handlers
     # -------------------------------------------------------------------------
 
-    def on_telemetry(self, handler: Callable[[SlaveNode, TelemetryData], None]):
+    def on_telemetry(self, handler: Callable[[SlaveNode, Dict], None]):
         """
-        Register a telemetry handler.
+        Register a handler for standard Meshtastic telemetry.
 
-        Handler signature: handler(slave: SlaveNode, telemetry: TelemetryData)
+        Handler signature: handler(slave: SlaveNode, telemetry: dict)
+
+        The telemetry dict contains the raw Meshtastic telemetry with:
+        - deviceMetrics: batteryLevel, voltage, channelUtilization, airUtilTx
+        - environmentMetrics: temperature, relativeHumidity, barometricPressure
         """
         self._telemetry_handlers.append(handler)
 
@@ -955,12 +993,28 @@ class MasterController:
             if (now - slave.last_seen) < self.config.slave_timeout
         ]
 
-    def get_slave_telemetry(self, node_id: str, limit: int = 10) -> List[TelemetryData]:
-        """Get telemetry history for a slave."""
+    def get_slave_telemetry(self, node_id: str) -> Optional[Dict]:
+        """
+        Get current telemetry for a slave.
+
+        Returns:
+            Dictionary with current telemetry values, or None if slave not found.
+            Keys: battery_level, voltage, channel_utilization, air_util_tx,
+                  temperature, humidity, pressure, last_telemetry_time
+        """
         slave = self.slaves.get(node_id)
         if not slave:
-            return []
-        return list(slave.telemetry_history)[:limit]
+            return None
+        return {
+            "battery_level": slave.battery_level,
+            "voltage": slave.voltage,
+            "channel_utilization": slave.channel_utilization,
+            "air_util_tx": slave.air_util_tx,
+            "temperature": slave.temperature,
+            "humidity": slave.humidity,
+            "pressure": slave.pressure,
+            "last_telemetry_time": slave.last_telemetry_time,
+        }
 
     def get_slave_batches(self, node_id: str, limit: int = 10) -> List[DataBatch]:
         """Get data batches for a slave."""
@@ -1014,16 +1068,16 @@ class MasterController:
                 "telemetry_count": slave.telemetry_count,
                 "batch_count": slave.batch_count,
                 "error_count": slave.error_count,
-                "telemetry_history": [
-                    {
-                        "timestamp": t.timestamp,
-                        "battery_percent": t.battery_percent,
-                        "voltage_mv": t.voltage_mv,
-                        "temperature": t.temperature,
-                        "status": t.status.name,
-                    }
-                    for t in slave.telemetry_history
-                ],
+                "device_telemetry": {
+                    "battery_level": slave.battery_level,
+                    "voltage": slave.voltage,
+                    "channel_utilization": slave.channel_utilization,
+                    "air_util_tx": slave.air_util_tx,
+                    "temperature": slave.temperature,
+                    "humidity": slave.humidity,
+                    "pressure": slave.pressure,
+                    "last_telemetry_time": slave.last_telemetry_time,
+                },
                 "data_batches": [
                     {
                         "batch_id": b.batch_id,
@@ -1056,7 +1110,11 @@ class MasterController:
 
     def export_telemetry_csv(self, filepath: str = None) -> str:
         """
-        Export all telemetry data to a CSV file.
+        Export current telemetry state for all slaves to a CSV file.
+
+        Note: This exports the latest telemetry values, not historical data.
+        Standard Meshtastic telemetry doesn't provide history - use export_data()
+        for data batches which are stored.
 
         Args:
             filepath: Output file path. Auto-generated if None.
@@ -1069,16 +1127,18 @@ class MasterController:
             filepath = f"telemetry_{timestamp}.csv"
 
         with open(filepath, "w") as f:
-            # Header (no position - slaves don't have GPS)
-            f.write("node_id,timestamp,battery_percent,voltage_mv,temperature,status\n")
+            # Header
+            f.write("node_id,battery_level,voltage,channel_util,air_util_tx,"
+                    "temperature,humidity,pressure,last_seen\n")
 
-            # Data
+            # Data (current state of each slave)
             for node_id, slave in self.slaves.items():
-                for t in slave.telemetry_history:
-                    f.write(
-                        f"{node_id},{t.timestamp},{t.battery_percent},"
-                        f"{t.voltage_mv},{t.temperature},{t.status.name}\n"
-                    )
+                f.write(
+                    f"{node_id},{slave.battery_level},{slave.voltage:.2f},"
+                    f"{slave.channel_utilization:.1f},{slave.air_util_tx:.1f},"
+                    f"{slave.temperature or ''},{slave.humidity or ''},"
+                    f"{slave.pressure or ''},{slave.last_telemetry_time}\n"
+                )
 
         self.logger.info(f"Telemetry exported to {filepath}")
         return filepath

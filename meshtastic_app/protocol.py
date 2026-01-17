@@ -160,17 +160,20 @@ class ProtocolMessage:
 @dataclass
 class TelemetryData:
     """
-    Telemetry data from a slave node (NO GPS - slaves don't have GPS).
+    DEPRECATED: Use standard Meshtastic telemetry (TELEMETRY_APP) instead.
 
-    Binary Format (12 bytes):
+    This class is kept for backwards compatibility but is no longer used
+    by the master controller. Standard Meshtastic provides device telemetry
+    (battery, voltage) and environment metrics (temperature, humidity, pressure)
+    automatically via the TELEMETRY_APP.
+
+    Legacy Binary Format (12 bytes):
         Bytes 0-3:   Timestamp (uint32, seconds since epoch or uptime)
         Bytes 4:     Battery (uint8, percentage 0-100)
         Bytes 5:     Status (uint8, SlaveStatus)
         Bytes 6-7:   Temperature (int16, Celsius * 100, e.g., 2550 = 25.50C)
         Bytes 8-9:   Voltage (uint16, millivolts, e.g., 3700 = 3.7V)
         Bytes 10-11: Reserved (for future use)
-
-    Note: Slaves do NOT have GPS. Master broadcasts its position to slaves.
     """
     timestamp: int = 0
     battery_percent: int = 0
@@ -405,7 +408,18 @@ class MasterCommand:
 # =============================================================================
 
 def create_telemetry_message(telemetry: TelemetryData, ack_requested: bool = False) -> bytes:
-    """Create a telemetry protocol message."""
+    """
+    DEPRECATED: Use standard Meshtastic telemetry instead.
+
+    Standard Meshtastic provides device and environment telemetry automatically.
+    This function is kept for backwards compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "create_telemetry_message is deprecated. Use standard Meshtastic telemetry.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     flags = MessageFlags.ACK_REQUESTED if ack_requested else MessageFlags.NONE
     msg = ProtocolMessage(
         msg_type=MessageType.TELEMETRY,
@@ -475,9 +489,8 @@ def parse_message(data: bytes) -> Tuple[Optional[ProtocolMessage], Optional[obje
 
     payload = None
 
-    if msg.msg_type == MessageType.TELEMETRY:
-        payload = TelemetryData.decode(msg.payload)
-    elif msg.msg_type == MessageType.DATA_BATCH:
+    # Note: TELEMETRY is deprecated - use standard Meshtastic TELEMETRY_APP
+    if msg.msg_type == MessageType.DATA_BATCH:
         payload = DataBatch.decode(msg.payload)
     elif msg.msg_type == MessageType.STATUS:
         payload = SlaveStatusReport.decode(msg.payload)
