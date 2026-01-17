@@ -24,6 +24,11 @@
 #include <SPI.h>
 #include <stdint.h>
 
+#if FM25V02A_THREAD_SAFE
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#endif
+
 /**
  * @brief Maximum single transfer size in bytes (NASA Rule 2: bounded loops)
  */
@@ -46,8 +51,16 @@
 
 /**
  * @brief Manufacturer ID (Cypress/Infineon in JEDEC bank 7)
+ * @note Uses ULL suffix for 64-bit portability
  */
-#define FM25V02A_MANUFACTURER_ID 0x7F7F7F7F7F7FC2U
+#define FM25V02A_MANUFACTURER_ID 0x7F7F7F7F7F7FC2ULL
+
+/**
+ * @brief Expected manufacturer ID bytes (last 2 bytes of JEDEC response)
+ * Cypress continuation code (0x7F) followed by manufacturer ID (0xC2)
+ */
+#define FM25V02A_MANUFACTURER_ID_BYTE1 0x7FU
+#define FM25V02A_MANUFACTURER_ID_BYTE2 0xC2U
 
 /**
  * @brief Expected product ID
@@ -63,6 +76,32 @@
  * @brief CRC16 initial value
  */
 #define FM25V02A_CRC16_INIT 0xFFFFU
+
+/**
+ * @brief Wake recovery time in microseconds (datasheet tREC = 400us max)
+ */
+#define FM25V02A_WAKE_DELAY_US 450U
+
+/**
+ * @brief Maximum SPI clock speed in Hz (40 MHz per datasheet)
+ */
+#define FM25V02A_MAX_SPI_SPEED 40000000U
+
+/**
+ * @brief Enable thread safety with mutex (define before including header)
+ * When enabled, all public methods acquire a mutex for thread safety.
+ * Requires FreeRTOS or similar RTOS with semaphore support.
+ */
+#ifndef FM25V02A_THREAD_SAFE
+#define FM25V02A_THREAD_SAFE 0
+#endif
+
+/**
+ * @brief Enable debug output for assertions (define before including header)
+ */
+#ifndef FM25V02A_DEBUG
+#define FM25V02A_DEBUG 0
+#endif
 
 /**
  * @brief Error codes returned by FM25V02A operations
@@ -114,11 +153,12 @@ typedef void (*FM25V02A_ErrorCallback)(FM25V02A_Error error, uint16_t address, v
 
 /**
  * @brief Device state tracking
+ * @note Marked volatile for potential ISR access
  */
 typedef struct {
-    bool initialized;   /**< True if device successfully initialized */
-    bool asleep;        /**< True if device is in sleep mode */
-    uint8_t status;     /**< Last read status register value */
+    volatile bool initialized;   /**< True if device successfully initialized */
+    volatile bool asleep;        /**< True if device is in sleep mode */
+    volatile uint8_t status;     /**< Last read status register value */
 } FM25V02A_State;
 
 /**
@@ -461,12 +501,26 @@ private:
      */
     FM25V02A_Error assertCondition(bool condition, FM25V02A_Error error);
 
+    /**
+     * @brief Refresh protection status from hardware
+     *
+     * Reads the status register to update cached protection state.
+     * Called internally before write operations.
+     *
+     * @return FM25V02A_OK on success, error code otherwise
+     */
+    FM25V02A_Error refreshProtectionStatus(void);
+
     SPIClass *m_spi;                        /**< SPI bus instance */
     SPISettings m_spiSettings;              /**< SPI configuration */
     uint8_t m_csPin;                        /**< Chip select pin */
     FM25V02A_State m_state;                 /**< Device state */
     FM25V02A_ErrorCallback m_errorCallback; /**< Error notification callback */
     void *m_errorContext;                   /**< User context for callback */
+
+#if FM25V02A_THREAD_SAFE
+    SemaphoreHandle_t m_mutex;              /**< Mutex for thread safety */
+#endif
 };
 
 #endif /* FM25V02A_H */

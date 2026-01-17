@@ -24,9 +24,15 @@
 #include "FM25V02A.h"
 
 /**
- * @brief Circular buffer header size in bytes
+ * @brief Single header size in bytes (18 bytes with sequence number)
  */
-#define FM25V02A_CB_HEADER_SIZE 16U
+#define FM25V02A_CB_SINGLE_HEADER_SIZE 18U
+
+/**
+ * @brief Total header size in bytes (2 headers for double-buffering)
+ * Double-buffered headers provide power-fail protection.
+ */
+#define FM25V02A_CB_HEADER_SIZE (FM25V02A_CB_SINGLE_HEADER_SIZE * 2U)
 
 /**
  * @brief Magic number for buffer validation ("FRMB")
@@ -37,6 +43,12 @@
  * @brief Maximum entry size (including CRC)
  */
 #define FM25V02A_CB_MAX_ENTRY_SIZE 254U
+
+/**
+ * @brief Header slot indices for double-buffering
+ */
+#define FM25V02A_CB_HEADER_SLOT_A 0U
+#define FM25V02A_CB_HEADER_SLOT_B 1U
 
 /**
  * @brief Circular buffer error codes
@@ -55,6 +67,22 @@ typedef enum {
 
 /**
  * @brief Circular buffer header structure (stored in FRAM)
+ *
+ * Power-fail protection using double-buffered headers:
+ * - Two copies of the header are maintained (slot A and slot B)
+ * - Each write increments the sequence number
+ * - On recovery, the header with the higher valid sequence is used
+ * - This ensures atomicity even if power fails during header write
+ *
+ * Memory layout (18 bytes per header, 36 bytes total):
+ *   Bytes 0-3:   Magic number (0x46524D42 = "FRMB")
+ *   Bytes 4-5:   Entry size
+ *   Bytes 6-7:   Max entries (capacity)
+ *   Bytes 8-9:   Head index (next write position)
+ *   Bytes 10-11: Tail index (oldest entry position)
+ *   Bytes 12-13: Entry count
+ *   Bytes 14-15: Sequence number (for power-fail recovery)
+ *   Bytes 16-17: Header CRC16 (over bytes 0-15)
  */
 typedef struct {
     uint32_t magic;       /**< Magic number for validation */
@@ -63,7 +91,8 @@ typedef struct {
     uint16_t head;        /**< Next write position */
     uint16_t tail;        /**< Oldest entry position */
     uint16_t count;       /**< Current number of entries */
-    uint16_t headerCrc;   /**< CRC16 of header (bytes 0-13) */
+    uint16_t sequence;    /**< Sequence number for power-fail recovery */
+    uint16_t headerCrc;   /**< CRC16 of header (bytes 0-15) */
 } FM25V02A_CB_Header;
 
 /**
@@ -221,25 +250,54 @@ public:
 
 private:
     /**
-     * @brief Load header from FRAM
+     * @brief Load header from FRAM with power-fail recovery
+     *
+     * Loads both header slots and selects the one with the higher
+     * valid sequence number for power-fail recovery.
      *
      * @return FM25V02A_CB_OK if valid header loaded
      */
     FM25V02A_CB_Error loadHeader(void);
 
     /**
-     * @brief Save header to FRAM
+     * @brief Save header to FRAM with power-fail protection
+     *
+     * Uses double-buffered writes: increments sequence number and
+     * alternates between header slots A and B. This ensures that
+     * at least one valid header always exists even if power fails
+     * during a write.
      *
      * @return FM25V02A_CB_OK on success
      */
     FM25V02A_CB_Error saveHeader(void);
 
     /**
+     * @brief Load header from specific slot
+     *
+     * @param slot Header slot (FM25V02A_CB_HEADER_SLOT_A or _B)
+     * @param header Output header structure
+     *
+     * @return FM25V02A_CB_OK if valid header loaded
+     */
+    FM25V02A_CB_Error loadHeaderFromSlot(uint8_t slot, FM25V02A_CB_Header *header);
+
+    /**
+     * @brief Save header to specific slot
+     *
+     * @param slot Header slot (FM25V02A_CB_HEADER_SLOT_A or _B)
+     *
+     * @return FM25V02A_CB_OK on success
+     */
+    FM25V02A_CB_Error saveHeaderToSlot(uint8_t slot);
+
+    /**
      * @brief Validate header CRC and magic number
+     *
+     * @param header Header to validate
      *
      * @return true if header is valid
      */
-    bool validateHeader(void) const;
+    bool validateHeader(const FM25V02A_CB_Header *header) const;
 
     /**
      * @brief Calculate address for entry at given index
@@ -253,9 +311,20 @@ private:
     /**
      * @brief Calculate CRC for header (excluding headerCrc field)
      *
+     * @param header Header to calculate CRC for
+     *
      * @return Calculated CRC16
      */
-    uint16_t calculateHeaderCrc(void) const;
+    uint16_t calculateHeaderCrc(const FM25V02A_CB_Header *header) const;
+
+    /**
+     * @brief Get address of header slot
+     *
+     * @param slot Header slot (0 or 1)
+     *
+     * @return FRAM address of header slot
+     */
+    uint16_t getHeaderSlotAddress(uint8_t slot) const;
 
     FM25V02A *m_fram;           /**< FRAM driver instance */
     uint16_t m_baseAddress;     /**< Base address in FRAM */
@@ -263,6 +332,7 @@ private:
     uint16_t m_maxEntries;      /**< Maximum entries */
     bool m_overwriteOnFull;     /**< Overwrite oldest when full */
     bool m_initialized;         /**< Initialization state */
+    uint8_t m_activeSlot;       /**< Currently active header slot */
     FM25V02A_CB_Header m_header; /**< Cached header */
 };
 
