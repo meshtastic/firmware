@@ -87,16 +87,14 @@ position:
   public_channel_precision: 0
 
   # Position precision for private channel
-  # Set to 0 since slaves don't need to see master position
-  # Master can still send position manually via send_position() if needed
-  private_channel_precision: 0
+  # 10 bits = ~23 km (least precise), keeps slaves aware of general area
+  private_channel_precision: 10
 
   # Enable periodic position broadcasting via Python app
-  # (only works if private_channel_precision > 0)
-  broadcast_enabled: false
+  broadcast_enabled: true
 
-  # Broadcast interval in seconds (if enabled)
-  broadcast_interval_seconds: 300
+  # Broadcast interval in seconds (15 minutes)
+  broadcast_interval_seconds: 900
 
   # Fixed position (for stationary master without GPS)
   # These are used when calling send_position() without arguments
