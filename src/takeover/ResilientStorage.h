@@ -21,9 +21,20 @@
 #define RESILIENT_ERROR_THRESHOLD 3U
 
 /**
- * @brief Recovery check interval (number of operations)
+ * @brief Initial recovery check interval (number of operations)
  */
-#define RESILIENT_RECOVERY_INTERVAL 100U
+#define RESILIENT_RECOVERY_INTERVAL_INITIAL 100U
+
+/**
+ * @brief Maximum recovery check interval (number of operations)
+ * After multiple failed recoveries, interval grows exponentially up to this max.
+ */
+#define RESILIENT_RECOVERY_INTERVAL_MAX 6400U
+
+/**
+ * @brief Recovery backoff multiplier (interval doubles after each failure)
+ */
+#define RESILIENT_RECOVERY_BACKOFF_MULTIPLIER 2U
 
 /**
  * @brief Resilient storage state
@@ -221,6 +232,9 @@ private:
     ResilientState m_state;             /**< Current state */
     uint8_t m_consecutiveErrors;        /**< Consecutive error count */
     uint32_t m_operationCount;          /**< Operations since last recovery check */
+    uint32_t m_lastRecoveryOp;          /**< Operation count at last recovery attempt */
+    uint32_t m_recoveryInterval;        /**< Current recovery interval (exponential backoff) */
+    uint8_t m_failedRecoveries;         /**< Count of failed recovery attempts */
     ResilientStats m_stats;             /**< Statistics */
     ResilientFailoverCallback m_callback; /**< Failover callback */
     void *m_callbackContext;            /**< Callback context */

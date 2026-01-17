@@ -85,6 +85,11 @@ public:
 
     /**
      * @brief Write data to flash
+     *
+     * @warning Flash memory can only change bits from 1 to 0. The target
+     * region must be erased (all 0xFF) before writing new data. Call
+     * erase() first if overwriting existing data.
+     *
      * @param address Starting address
      * @param data Data to write
      * @param size Number of bytes to write

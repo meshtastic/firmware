@@ -9,6 +9,19 @@
 #include "FM25V02A.h"
 
 /**
+ * @brief Compile-time assertions for constants
+ * Ensures configuration is valid at compile time.
+ */
+static_assert(FM25V02A_MAX_TRANSFER_SIZE == 256U,
+              "FM25V02A_MAX_TRANSFER_SIZE must be 256 bytes");
+static_assert(FM25V02A_MEMORY_SIZE == 32768U,
+              "FM25V02A_MEMORY_SIZE must be 32KB (256Kbit)");
+static_assert(FM25V02A_MAX_ADDRESS == 32767U,
+              "FM25V02A_MAX_ADDRESS must be 0x7FFF");
+static_assert(FM25V02A_ADDRESS_BYTES == 2U,
+              "FM25V02A requires 2-byte addresses");
+
+/**
  * @brief Assertion macro - halts on failure (NASA Rule 5)
  *
  * In production, this triggers an infinite loop to halt execution.
@@ -175,19 +188,24 @@ FM25V02A_Error FM25V02A::read(uint16_t address, uint8_t *buffer, uint16_t size)
         return FM25V02A_ERR_NULL_POINTER;
     }
 
+    FM25V02A_LOCK();
+
     if (!m_state.initialized) {
         reportError(FM25V02A_ERR_NOT_INITIALIZED, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_NOT_INITIALIZED;
     }
 
     if (m_state.asleep) {
         reportError(FM25V02A_ERR_ASLEEP, address);
+        FM25V02A_UNLOCK();
         return FM25V02A_ERR_ASLEEP;
     }
 
     FM25V02A_Error err = validateAddressAndSize(address, size);
     if (err != FM25V02A_OK) {
         reportError(err, address);
+        FM25V02A_UNLOCK();
         return err;
     }
 
@@ -203,6 +221,7 @@ FM25V02A_Error FM25V02A::read(uint16_t address, uint8_t *buffer, uint16_t size)
     }
 
     endTransaction();
+    FM25V02A_UNLOCK();
     return FM25V02A_OK;
 }
 

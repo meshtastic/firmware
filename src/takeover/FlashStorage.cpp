@@ -6,6 +6,20 @@
  */
 
 #include "FlashStorage.h"
+#include "FM25V02A.h"  /* For shared calculateCRC16 */
+
+/**
+ * @brief Compile-time assertions for structure sizes
+ * Ensures binary layout matches documented format.
+ */
+static_assert(sizeof(FlashWearInfo) == 10U,
+              "FlashWearInfo must be exactly 10 bytes");
+static_assert(FLASH_WEAR_INFO_SIZE == 10U,
+              "FLASH_WEAR_INFO_SIZE must match FlashWearInfo struct size");
+static_assert(FLASH_SECTOR_SIZE == 4096U,
+              "FLASH_SECTOR_SIZE must be 4KB");
+static_assert(FLASH_PAGE_SIZE == 256U,
+              "FLASH_PAGE_SIZE must be 256 bytes");
 
 /**
  * @brief Assertion macro - halts on failure (NASA Rule 5)
@@ -27,12 +41,6 @@
         } \
     } while (false)
 #endif
-
-/**
- * @brief CRC16 polynomial (CRC-16-CCITT)
- */
-#define FLASH_CRC16_POLY 0x1021U
-#define FLASH_CRC16_INIT 0xFFFFU
 
 /**
  * @brief Typical flash endurance (100,000 cycles)
@@ -321,6 +329,10 @@ void FlashStorage::endTransaction(void)
 
 StorageError FlashStorage::writeEnable(void)
 {
+    /* NASA Rule 5: Assertions */
+    FLASH_ASSERT(m_spi != nullptr);
+    FLASH_ASSERT(m_initialized);
+
     beginTransaction();
     m_spi->transfer(OPCODE_WRITE_ENABLE);
     endTransaction();
@@ -336,6 +348,10 @@ StorageError FlashStorage::writeEnable(void)
 
 StorageError FlashStorage::waitReady(uint32_t timeoutUs)
 {
+    /* NASA Rule 5: Assertions */
+    FLASH_ASSERT(m_spi != nullptr);
+    FLASH_ASSERT(timeoutUs > 0U);
+
     const uint32_t startTime = micros();
 
     /* NASA Rule 2: Bounded loop with timeout */
@@ -395,6 +411,10 @@ StorageError FlashStorage::writePage(uint32_t address, const uint8_t *data, uint
 
 StorageError FlashStorage::eraseSector(uint32_t sectorAddress)
 {
+    /* NASA Rule 5: Assertions */
+    FLASH_ASSERT(m_spi != nullptr);
+    FLASH_ASSERT((sectorAddress % FLASH_SECTOR_SIZE) == 0U); /* Must be sector-aligned */
+
     /* Enable writes */
     StorageError err = writeEnable();
     if (err != STORAGE_OK) {
@@ -517,27 +537,9 @@ StorageError FlashStorage::readWearInfo(uint32_t sectorAddress, FlashWearInfo *i
 
 uint16_t FlashStorage::calculateCRC16(const uint8_t *data, uint16_t size)
 {
-    /* NASA Rule 5: Assertions */
-    FLASH_ASSERT(data != nullptr);
-
-    if ((data == nullptr) || (size == 0U)) {
-        return 0U;
-    }
-
-    uint16_t crc = FLASH_CRC16_INIT;
-
-    /* NASA Rule 2: Bounded loop */
-    for (uint16_t i = 0U; i < size; i++) {
-        crc ^= static_cast<uint16_t>(data[i]) << 8U;
-
-        for (uint8_t bit = 0U; bit < 8U; bit++) {
-            if ((crc & 0x8000U) != 0U) {
-                crc = (crc << 1U) ^ FLASH_CRC16_POLY;
-            } else {
-                crc = crc << 1U;
-            }
-        }
-    }
-
-    return crc;
+    /*
+     * Delegate to FM25V02A's CRC16 implementation to avoid code duplication.
+     * Both use CRC-16-CCITT polynomial (0x1021) with 0xFFFF initial value.
+     */
+    return FM25V02A::calculateCRC16(data, size);
 }

@@ -34,6 +34,9 @@ ResilientStorage::ResilientStorage(FM25V02A *primary, FlashStorage *fallback)
     , m_state(RESILIENT_STATE_PRIMARY)
     , m_consecutiveErrors(0U)
     , m_operationCount(0U)
+    , m_lastRecoveryOp(0U)
+    , m_recoveryInterval(RESILIENT_RECOVERY_INTERVAL_INITIAL)
+    , m_failedRecoveries(0U)
     , m_stats{0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U}
     , m_callback(nullptr)
     , m_callbackContext(nullptr)
@@ -306,6 +309,9 @@ StorageError ResilientStorage::attemptRecovery(void)
         return STORAGE_OK; /* Already on primary or failed */
     }
 
+    /* Record this recovery attempt */
+    m_lastRecoveryOp = m_operationCount;
+
     transitionState(RESILIENT_STATE_RECOVERING);
 
     /* Try to re-initialize primary */
@@ -317,15 +323,27 @@ StorageError ResilientStorage::attemptRecovery(void)
         framErr = m_primary->readByte(0U, &testByte);
 
         if (framErr == FM25V02A_OK) {
+            /* Recovery successful - reset backoff */
             m_primaryInitialized = true;
             transitionState(RESILIENT_STATE_PRIMARY);
             m_consecutiveErrors = 0U;
+            m_failedRecoveries = 0U;
+            m_recoveryInterval = RESILIENT_RECOVERY_INTERVAL_INITIAL;
             m_stats.recoveryCount++;
             return STORAGE_OK;
         }
     }
 
-    /* Recovery failed - stay on fallback */
+    /* Recovery failed - apply exponential backoff */
+    m_failedRecoveries++;
+    if (m_recoveryInterval < RESILIENT_RECOVERY_INTERVAL_MAX) {
+        m_recoveryInterval *= RESILIENT_RECOVERY_BACKOFF_MULTIPLIER;
+        if (m_recoveryInterval > RESILIENT_RECOVERY_INTERVAL_MAX) {
+            m_recoveryInterval = RESILIENT_RECOVERY_INTERVAL_MAX;
+        }
+    }
+
+    /* Stay on fallback */
     transitionState(RESILIENT_STATE_FALLBACK);
     return STORAGE_ERR_READ_FAILED;
 }
@@ -390,6 +408,10 @@ void ResilientStorage::handlePrimaryError(StorageError error)
             transitionState(RESILIENT_STATE_FALLBACK);
             m_stats.failoverCount++;
             m_consecutiveErrors = 0U;
+            /* Reset recovery tracking for fresh start */
+            m_lastRecoveryOp = m_operationCount;
+            m_recoveryInterval = RESILIENT_RECOVERY_INTERVAL_INITIAL;
+            m_failedRecoveries = 0U;
         } else {
             transitionState(RESILIENT_STATE_FAILED);
         }
@@ -426,11 +448,16 @@ bool ResilientStorage::shouldAttemptRecovery(void) const
     /* Only attempt recovery if:
      * 1. Currently on fallback
      * 2. Primary was previously initialized (might just be temporarily unavailable)
-     * 3. Enough operations have passed since last check
+     * 3. Enough operations have passed since last recovery attempt
+     *    (uses exponential backoff after failed recoveries)
      */
-    return (m_state == RESILIENT_STATE_FALLBACK) &&
-           m_primaryInitialized &&
-           ((m_operationCount % RESILIENT_RECOVERY_INTERVAL) == 0U);
+    if ((m_state != RESILIENT_STATE_FALLBACK) || !m_primaryInitialized) {
+        return false;
+    }
+
+    /* Check if enough operations have passed since last attempt */
+    const uint32_t opsSinceLastAttempt = m_operationCount - m_lastRecoveryOp;
+    return (opsSinceLastAttempt >= m_recoveryInterval);
 }
 
 StorageError ResilientStorage::convertFramError(FM25V02A_Error framError)

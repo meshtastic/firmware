@@ -14,6 +14,17 @@
 #include "FM25V02A_CircularBuffer.h"
 
 /**
+ * @brief Compile-time assertions for structure sizes
+ * Ensures binary layout matches documented format.
+ */
+static_assert(sizeof(FM25V02A_CB_Header) == 18U,
+              "FM25V02A_CB_Header must be exactly 18 bytes");
+static_assert(FM25V02A_CB_SINGLE_HEADER_SIZE == 18U,
+              "FM25V02A_CB_SINGLE_HEADER_SIZE must match header struct size");
+static_assert(FM25V02A_CB_HEADER_SIZE == 36U,
+              "FM25V02A_CB_HEADER_SIZE must be 2x single header size (36 bytes)");
+
+/**
  * @brief Assertion macro - halts on failure (NASA Rule 5)
  */
 #if FM25V02A_DEBUG
@@ -596,8 +607,12 @@ uint16_t FM25V02A_CircularBuffer::getEntryAddress(uint16_t index) const
     FM25V02A_CB_ASSERT(index < m_maxEntries);
     FM25V02A_CB_ASSERT(m_entrySize > 0U);
 
-    return m_baseAddress + FM25V02A_CB_HEADER_SIZE +
-           (index * m_entrySize);
+    /*
+     * Use 32-bit arithmetic to prevent overflow when index * entrySize
+     * exceeds 16-bit range (e.g., index=200, entrySize=254 = 50,800)
+     */
+    const uint32_t offset = static_cast<uint32_t>(index) * m_entrySize;
+    return static_cast<uint16_t>(m_baseAddress + FM25V02A_CB_HEADER_SIZE + offset);
 }
 
 uint16_t FM25V02A_CircularBuffer::calculateHeaderCrc(const FM25V02A_CB_Header *header) const

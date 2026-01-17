@@ -5,17 +5,22 @@
  * Provides a persistent circular buffer for data logging stored in FRAM.
  * Follows NASA's 10 Rules of Safe Code.
  *
- * Memory Layout:
- *   [Header: 16 bytes][Entry 0][Entry 1]...[Entry N-1]
+ * Power-fail protection is implemented using double-buffered headers.
+ * Two copies of the header are maintained, and on recovery the one with
+ * the higher valid sequence number is used.
  *
- * Header Structure:
+ * Memory Layout (36 bytes header + entries):
+ *   [Header A: 18 bytes][Header B: 18 bytes][Entry 0][Entry 1]...[Entry N-1]
+ *
+ * Each Header Structure (18 bytes):
  *   Bytes 0-3:   Magic number (0x46524D42 = "FRMB")
  *   Bytes 4-5:   Entry size
  *   Bytes 6-7:   Max entries (capacity)
  *   Bytes 8-9:   Head index (next write position)
  *   Bytes 10-11: Tail index (oldest entry position)
  *   Bytes 12-13: Entry count
- *   Bytes 14-15: Header CRC16
+ *   Bytes 14-15: Sequence number (for power-fail recovery)
+ *   Bytes 16-17: Header CRC16 (over bytes 0-15)
  */
 
 #ifndef FM25V02A_CIRCULAR_BUFFER_H
