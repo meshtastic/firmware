@@ -5,14 +5,16 @@
  * Tests cover:
  * 1. Unishox2 bounded API safety
  * 2. Compression/decompression roundtrip
- * 3. MessageBuffer config validation
- * 4. Compression flag correctness
- * 5. Double-flush prevention
- * 6. Buffer boundary conditions
+ * 3. MessageBuffer key-by-key input
+ * 4. Line management with Enter key
+ * 5. 200-byte threshold compression
+ * 6. Timeout handling
+ * 7. Backspace handling
  *
  * Compile with:
- * g++ -std=c++14 -DUNISHOX_API_WITH_OUTPUT_LEN=1 -o test_compressor \
- *     test_compressor.cpp Unishox2.cpp MessageBuffer.cpp unishox2.c
+ * gcc -c -DUNISHOX_API_WITH_OUTPUT_LEN=1 -o unishox2.o unishox2.c
+ * g++ -std=c++14 -DUNISHOX_API_WITH_OUTPUT_LEN=1 -DNDEBUG -o test_compressor \
+ *     test_compressor.cpp Unishox2.cpp MessageBuffer.cpp unishox2.o
  */
 
 #include <stdio.h>
@@ -175,157 +177,259 @@ void test_unishox2_roundtrip() {
 }
 
 // ============================================================================
-// Test: MessageBuffer Config Validation
+// Test: MessageBuffer Begin/Active State
 // ============================================================================
-void test_messagebuffer_config_validation() {
-    TEST_SECTION("MessageBuffer Config Validation");
+void test_messagebuffer_begin() {
+    TEST_SECTION("MessageBuffer Begin/Active State");
 
     stechat::MessageBuffer buffer;
 
-    // Test 1: maxRecordsPerBatch clamping
+    TEST_ASSERT(!buffer.isActive(), "Buffer starts inactive");
+
+    buffer.begin(1704067200);  // 2024-01-01 00:00:00 UTC
+
+    TEST_ASSERT(buffer.isActive(), "Buffer active after begin()");
+    TEST_ASSERT(buffer.getLineCount() == 1, "Buffer has one line after begin()");
+    TEST_ASSERT(buffer.getRawSize() == 0, "Buffer raw size is 0 after begin()");
+
+    buffer.reset();
+    TEST_ASSERT(!buffer.isActive(), "Buffer inactive after reset()");
+}
+
+// ============================================================================
+// Test: MessageBuffer Single Key Input
+// ============================================================================
+void test_messagebuffer_single_key() {
+    TEST_SECTION("MessageBuffer Single Key Input");
+
+    stechat::MessageBuffer buffer;
     stechat::MessageBufferConfig config;
-    config.maxRecordsPerBatch = 1000;  // Exceeds MAX_RECORDS (64)
     config.onPacketReady = testPacketCallback;
     buffer.setConfig(config);
 
-    // Add enough records to trigger flush if config wasn't clamped
+    buffer.begin(1704067200);
+
+    // Add single character
+    bool result = buffer.addKey('H', 1000);
+    TEST_ASSERT(result, "First key added successfully");
+    TEST_ASSERT(buffer.getRawSize() == 1, "Raw size is 1 after one key");
+
+    // Add more characters
+    result = buffer.addKey('i', 1100);
+    TEST_ASSERT(result, "Second key added successfully");
+    TEST_ASSERT(buffer.getRawSize() == 2, "Raw size is 2 after two keys");
+}
+
+// ============================================================================
+// Test: MessageBuffer AddKeys Convenience Method
+// ============================================================================
+void test_messagebuffer_addkeys() {
+    TEST_SECTION("MessageBuffer AddKeys Method");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    buffer.begin(1704067200);
+
+    size_t added = buffer.addKeys("Hello World", 1000);
+    TEST_ASSERT(added == 11, "addKeys returns correct count");
+    TEST_ASSERT(buffer.getRawSize() == 11, "Raw size matches added characters");
+}
+
+// ============================================================================
+// Test: MessageBuffer Enter Key Creates New Line
+// ============================================================================
+void test_messagebuffer_enter_key() {
+    TEST_SECTION("MessageBuffer Enter Key Creates New Line");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    buffer.begin(1704067200);
+
+    // Add first line
+    buffer.addKeys("Line 1", 1000);
+    TEST_ASSERT(buffer.getLineCount() == 1, "One line before Enter");
+
+    // Press Enter
+    buffer.addKey('\n', 2000);
+    TEST_ASSERT(buffer.getLineCount() == 2, "Two lines after Enter");
+
+    // Add second line
+    buffer.addKeys("Line 2", 2100);
+    TEST_ASSERT(buffer.getRawSize() == 12, "Total raw size is correct");
+}
+
+// ============================================================================
+// Test: MessageBuffer Backspace Handling
+// ============================================================================
+void test_messagebuffer_backspace() {
+    TEST_SECTION("MessageBuffer Backspace Handling");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    buffer.begin(1704067200);
+
+    buffer.addKeys("Hello", 1000);
+    TEST_ASSERT(buffer.getRawSize() == 5, "Raw size is 5");
+
+    buffer.addKey('\b', 1100);  // Backspace
+    TEST_ASSERT(buffer.getRawSize() == 4, "Raw size is 4 after backspace");
+
+    buffer.addKey('\b', 1200);  // Another backspace
+    TEST_ASSERT(buffer.getRawSize() == 3, "Raw size is 3 after second backspace");
+}
+
+// ============================================================================
+// Test: MessageBuffer Flush and Packet Generation
+// ============================================================================
+void test_messagebuffer_flush() {
+    TEST_SECTION("MessageBuffer Flush and Packet Generation");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
     resetTestState();
-    for (int i = 0; i < 65; i++) {
-        buffer.addMessage("x", 1, i * 1000);
+
+    buffer.begin(1704067200);
+    buffer.addKeys("Hello World", 1000);
+
+    uint8_t packetsSent = buffer.flush();
+
+    TEST_ASSERT(packetsSent == 1, "One packet sent");
+    TEST_ASSERT(packetCallbackCount == 1, "Callback called once");
+    TEST_ASSERT(lastIsFinal, "Packet marked as final");
+    TEST_ASSERT(lastPacketLen > 0, "Packet has data");
+    TEST_ASSERT(!buffer.isActive(), "Buffer inactive after flush");
+}
+
+// ============================================================================
+// Test: MessageBuffer Empty Flush
+// ============================================================================
+void test_messagebuffer_empty_flush() {
+    TEST_SECTION("MessageBuffer Empty Flush");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    resetTestState();
+
+    buffer.begin(1704067200);
+    // Don't add any keys
+
+    uint8_t packetsSent = buffer.flush();
+
+    TEST_ASSERT(packetsSent == 0, "No packets sent for empty buffer");
+    TEST_ASSERT(packetCallbackCount == 0, "Callback not called for empty buffer");
+}
+
+// ============================================================================
+// Test: MessageBuffer Timeout Check
+// ============================================================================
+void test_messagebuffer_timeout() {
+    TEST_SECTION("MessageBuffer Timeout Check");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.flushTimeoutMs = 5000;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    buffer.begin(1704067200);
+    buffer.addKeys("Hello", 1000);
+
+    // Check timeout before it should trigger
+    TEST_ASSERT(!buffer.checkTimeout(4000), "No timeout at 3 seconds");
+
+    // Check timeout after it should trigger
+    TEST_ASSERT(buffer.checkTimeout(7000), "Timeout triggers at 6 seconds");
+}
+
+// ============================================================================
+// Test: MessageBuffer 200-byte Threshold
+// ============================================================================
+void test_messagebuffer_threshold() {
+    TEST_SECTION("MessageBuffer 200-byte Threshold");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    resetTestState();
+
+    buffer.begin(1704067200);
+
+    // Add characters up to near threshold
+    for (int i = 0; i < 195; i++) {
+        buffer.addKey('a', 1000 + i);
     }
 
-    // Should have triggered at least one packet due to clamping
-    TEST_ASSERT(packetCallbackCount >= 1, "Config clamping triggered flush at MAX_RECORDS");
+    TEST_ASSERT(buffer.getRawSize() == 195, "195 chars added before threshold");
+    TEST_ASSERT(packetCallbackCount == 0, "No packet sent yet");
 
-    // Test 2: Zero maxRecordsPerBatch should use default
-    buffer.reset();
-    stechat::MessageBufferConfig config2;
-    config2.maxRecordsPerBatch = 0;
-    config2.onPacketReady = testPacketCallback;
-    buffer.setConfig(config2);
-
-    resetTestState();
-    buffer.addMessage("test", 1000);
-    buffer.flush();
-
-    TEST_ASSERT(packetCallbackCount == 1, "Zero config uses default (no crash)");
-}
-
-// ============================================================================
-// Test: Compression Flag Correctness
-// ============================================================================
-void test_compression_flag_correctness() {
-    TEST_SECTION("Compression Flag Correctness");
-
-    stechat::MessageBuffer buffer;
-    stechat::MessageBufferConfig config;
-    config.onPacketReady = testPacketCallback;
-    buffer.setConfig(config);
-
-    // Test 1: Compressible text should have FLAG_COMPRESSED
-    resetTestState();
-    buffer.addMessage("The quick brown fox jumps over the lazy dog", 1000);
-    buffer.flush();
-
-    TEST_ASSERT(packetCallbackCount == 1, "Packet was sent");
-    TEST_ASSERT((lastPacketFlags & stechat::FLAG_COMPRESSED) != 0 ||
-                (lastPacketFlags & stechat::FLAG_DELTA_TIME) != 0,
-                "Compressible text has appropriate flags set");
-
-    // Test 2: Very short/random text may not compress
-    buffer.reset();
-    resetTestState();
-    buffer.addMessage("x", 1000);  // Single char won't compress well
-    buffer.flush();
-
-    TEST_ASSERT(packetCallbackCount == 1, "Packet was sent for short text");
-    // Flags should be set appropriately based on actual compression result
-    TEST_ASSERT(lastPacketLen > 0, "Packet has data regardless of compression");
-}
-
-// ============================================================================
-// Test: Double-Flush Prevention
-// ============================================================================
-void test_double_flush_prevention() {
-    TEST_SECTION("Double-Flush Prevention");
-
-    stechat::MessageBuffer buffer;
-    stechat::MessageBufferConfig config;
-    config.maxRecordsPerBatch = 64;
-    config.onPacketReady = testPacketCallback;
-    buffer.setConfig(config);
-
-    resetTestState();
-
-    // Add messages that would fill the buffer
-    for (int i = 0; i < 60; i++) {
-        buffer.addMessage("test message", i * 100);
+    // Add more to trigger threshold
+    for (int i = 0; i < 10; i++) {
+        buffer.addKey('b', 2000 + i);
     }
 
-    int countAfterAdds = packetCallbackCount;
-
-    // Multiple flush calls
-    buffer.flush();
-    buffer.flush();
-    buffer.flush();
-
-    // Should only have incremented by 1 (or 0 if nothing to flush)
-    TEST_ASSERT(packetCallbackCount <= countAfterAdds + 1,
-                "Multiple flush calls don't send duplicate packets");
+    // Should have auto-flushed
+    TEST_ASSERT(packetCallbackCount >= 1, "Packet sent when threshold reached");
 }
 
 // ============================================================================
-// Test: Buffer Boundary Conditions
+// Test: MessageBuffer Multiple Lines with Delta
 // ============================================================================
-void test_buffer_boundaries() {
-    TEST_SECTION("Buffer Boundary Conditions");
+void test_messagebuffer_multiline_delta() {
+    TEST_SECTION("MessageBuffer Multiple Lines with Delta");
 
     stechat::MessageBuffer buffer;
     stechat::MessageBufferConfig config;
     config.onPacketReady = testPacketCallback;
     buffer.setConfig(config);
 
-    // Test 1: Empty flush
-    resetTestState();
-    uint8_t result = buffer.flush();
-    TEST_ASSERT(result == 0, "Flush on empty buffer returns 0");
-    TEST_ASSERT(packetCallbackCount == 0, "No packet sent on empty flush");
+    buffer.begin(1704067200);
 
-    // Test 2: Max text length
-    char longText[stechat::MessageRecord::MAX_TEXT_LEN + 1];
-    memset(longText, 'a', stechat::MessageRecord::MAX_TEXT_LEN);
-    longText[stechat::MessageRecord::MAX_TEXT_LEN] = '\0';
+    // First line at t=1000ms
+    buffer.addKeys("First", 1000);
+
+    // Enter at t=2000ms
+    buffer.addKey('\n', 2000);
+
+    // Second line at t=2100ms
+    buffer.addKeys("Second", 2100);
+
+    // Enter at t=3000ms
+    buffer.addKey('\n', 3000);
+
+    // Third line at t=3100ms
+    buffer.addKeys("Third", 3100);
+
+    TEST_ASSERT(buffer.getLineCount() == 3, "Three lines in buffer");
 
     resetTestState();
-    bool added = buffer.addMessage(longText, 1000);
-    TEST_ASSERT(added, "Max length text accepted");
     buffer.flush();
-    TEST_ASSERT(packetCallbackCount == 1, "Max length text packet sent");
 
-    // Test 3: Over-max text length (should be clamped)
-    char tooLongText[stechat::MessageRecord::MAX_TEXT_LEN + 100];
-    memset(tooLongText, 'b', sizeof(tooLongText) - 1);
-    tooLongText[sizeof(tooLongText) - 1] = '\0';
-
-    buffer.reset();
-    resetTestState();
-    added = buffer.addMessage(tooLongText, 2000);
-    TEST_ASSERT(added, "Over-max text clamped and accepted");
-
-    // Test 4: NULL text
-    added = buffer.addMessage(nullptr, 3000);
-    TEST_ASSERT(!added, "NULL text rejected");
-
-    // Test 5: Empty text
-    added = buffer.addMessage("", 4000);
-    TEST_ASSERT(!added, "Empty text rejected");
+    TEST_ASSERT(packetCallbackCount == 1, "One packet sent");
+    TEST_ASSERT(lastPacketLen > 0, "Packet has data");
 }
 
 // ============================================================================
-// Test: Batch ID Incrementing
+// Test: MessageBuffer Batch ID Incrementing
 // ============================================================================
-void test_batch_id_incrementing() {
-    TEST_SECTION("Batch ID Incrementing");
+void test_messagebuffer_batch_id() {
+    TEST_SECTION("MessageBuffer Batch ID Incrementing");
 
     stechat::MessageBuffer buffer;
     stechat::MessageBufferConfig config;
@@ -335,17 +439,20 @@ void test_batch_id_incrementing() {
     resetTestState();
 
     // First batch
-    buffer.addMessage("batch 1", 1000);
+    buffer.begin(1704067200);
+    buffer.addKeys("Batch 1", 1000);
     buffer.flush();
     uint16_t batch1 = lastBatchId;
 
     // Second batch
-    buffer.addMessage("batch 2", 2000);
+    buffer.begin(1704067201);
+    buffer.addKeys("Batch 2", 1000);
     buffer.flush();
     uint16_t batch2 = lastBatchId;
 
     // Third batch
-    buffer.addMessage("batch 3", 3000);
+    buffer.begin(1704067202);
+    buffer.addKeys("Batch 3", 1000);
     buffer.flush();
     uint16_t batch3 = lastBatchId;
 
@@ -354,71 +461,84 @@ void test_batch_id_incrementing() {
 }
 
 // ============================================================================
-// Test: Pending Count Tracking
+// Test: MessageBuffer RAM Usage
 // ============================================================================
-void test_pending_count() {
-    TEST_SECTION("Pending Count Tracking");
-
-    stechat::MessageBuffer buffer;
-    stechat::MessageBufferConfig config;
-    config.onPacketReady = testPacketCallback;
-    buffer.setConfig(config);
-
-    TEST_ASSERT(buffer.getPendingCount() == 0, "Initial pending count is 0");
-
-    buffer.addMessage("msg1", 1000);
-    TEST_ASSERT(buffer.getPendingCount() == 1, "Count after 1 message");
-
-    buffer.addMessage("msg2", 2000);
-    TEST_ASSERT(buffer.getPendingCount() == 2, "Count after 2 messages");
-
-    buffer.flush();
-    TEST_ASSERT(buffer.getPendingCount() == 0, "Count after flush is 0");
-}
-
-// ============================================================================
-// Test: RAM Usage Reporting
-// ============================================================================
-void test_ram_usage() {
-    TEST_SECTION("RAM Usage Reporting");
+void test_messagebuffer_ram_usage() {
+    TEST_SECTION("MessageBuffer RAM Usage");
 
     stechat::MessageBuffer buffer;
     size_t ramUsage = buffer.getRAMUsage();
 
     TEST_ASSERT(ramUsage > 0, "RAM usage is non-zero");
-    TEST_ASSERT(ramUsage < 50000, "RAM usage is reasonable (< 50KB)");
+    TEST_ASSERT(ramUsage < 100000, "RAM usage is reasonable (< 100KB)");
 
     printf("  [INFO] Reported RAM usage: %zu bytes\n", ramUsage);
 }
 
 // ============================================================================
-// Test: needsFlush Behavior
+// Test: MessageBuffer Double-Flush Prevention
 // ============================================================================
-void test_needs_flush() {
-    TEST_SECTION("needsFlush Behavior");
+void test_messagebuffer_double_flush() {
+    TEST_SECTION("MessageBuffer Double-Flush Prevention");
 
     stechat::MessageBuffer buffer;
     stechat::MessageBufferConfig config;
-    config.maxRecordsPerBatch = 10;
     config.onPacketReady = testPacketCallback;
     buffer.setConfig(config);
 
-    TEST_ASSERT(!buffer.needsFlush(), "Empty buffer doesn't need flush");
+    resetTestState();
 
-    // Add messages below threshold
-    for (int i = 0; i < 5; i++) {
-        buffer.addMessage("x", i * 100);
-    }
-    TEST_ASSERT(!buffer.needsFlush(), "Buffer below threshold doesn't need flush");
+    buffer.begin(1704067200);
+    buffer.addKeys("Test data", 1000);
 
-    // Add messages to reach threshold
-    for (int i = 5; i < 10; i++) {
-        buffer.addMessage("x", i * 100);
-    }
-    // Note: auto-flush may have already happened
-    // But after reset, needsFlush should return correct value
-    buffer.reset();
-    TEST_ASSERT(!buffer.needsFlush(), "Reset buffer doesn't need flush");
+    buffer.flush();
+    int countAfterFirst = packetCallbackCount;
+
+    buffer.flush();
+    buffer.flush();
+
+    TEST_ASSERT(packetCallbackCount == countAfterFirst,
+                "Multiple flush calls don't send extra packets");
+}
+
+// ============================================================================
+// Test: MessageBuffer Carriage Return Same as Newline
+// ============================================================================
+void test_messagebuffer_carriage_return() {
+    TEST_SECTION("MessageBuffer Carriage Return Handling");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    buffer.begin(1704067200);
+
+    buffer.addKeys("Line 1", 1000);
+    buffer.addKey('\r', 2000);  // Carriage return
+    buffer.addKeys("Line 2", 2100);
+
+    TEST_ASSERT(buffer.getLineCount() == 2, "CR creates new line like LF");
+}
+
+// ============================================================================
+// Test: MessageBuffer Inactive State Rejection
+// ============================================================================
+void test_messagebuffer_inactive_rejection() {
+    TEST_SECTION("MessageBuffer Inactive State Rejection");
+
+    stechat::MessageBuffer buffer;
+    stechat::MessageBufferConfig config;
+    config.onPacketReady = testPacketCallback;
+    buffer.setConfig(config);
+
+    // Don't call begin()
+
+    bool result = buffer.addKey('x', 1000);
+    TEST_ASSERT(!result, "addKey rejected when inactive");
+
+    size_t added = buffer.addKeys("test", 1000);
+    TEST_ASSERT(added == 0, "addKeys returns 0 when inactive");
 }
 
 // ============================================================================
@@ -430,18 +550,27 @@ int main() {
     printf("  StEChat Compressor Unit Tests\n");
     printf("========================================\n");
 
-    // Run all tests
+    // Unishox2 tests
     test_unishox2_basic_compression();
     test_unishox2_bounded_api();
     test_unishox2_roundtrip();
-    test_messagebuffer_config_validation();
-    test_compression_flag_correctness();
-    test_double_flush_prevention();
-    test_buffer_boundaries();
-    test_batch_id_incrementing();
-    test_pending_count();
-    test_ram_usage();
-    test_needs_flush();
+
+    // MessageBuffer tests
+    test_messagebuffer_begin();
+    test_messagebuffer_single_key();
+    test_messagebuffer_addkeys();
+    test_messagebuffer_enter_key();
+    test_messagebuffer_backspace();
+    test_messagebuffer_flush();
+    test_messagebuffer_empty_flush();
+    test_messagebuffer_timeout();
+    test_messagebuffer_threshold();
+    test_messagebuffer_multiline_delta();
+    test_messagebuffer_batch_id();
+    test_messagebuffer_ram_usage();
+    test_messagebuffer_double_flush();
+    test_messagebuffer_carriage_return();
+    test_messagebuffer_inactive_rejection();
 
     // Print summary
     printf("\n========================================\n");

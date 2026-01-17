@@ -1,6 +1,6 @@
 /**
  * @file MessageBuffer.cpp
- * @brief Circular buffer implementation for message compression
+ * @brief Character-by-character input buffer implementation
  *
  * NASA JPL Power of 10 Rules Compliance:
  * - All functions contain assertions for precondition checking
@@ -17,25 +17,22 @@
 namespace stechat {
 
 MessageBuffer::MessageBuffer()
-    : recordHead_(0)
-    , recordTail_(0)
-    , recordCount_(0)
+    : isActive_(false)
+    , startTimestamp_(0)
+    , lastKeyTime_(0)
+    , lineCount_(0)
+    , currentLineLen_(0)
     , batchId_(0)
-    , batchStartTime_(0)
-    , lastMessageTime_(0)
     , packetLen_(0)
-    , packetRecordCount_(0)
     , packetNum_(0)
-    , packetHasCompressedData_(false)
-    , packetHasRawData_(false)
     , inFlush_(false)
 {
     // NASA Rule 5: Assertions to verify initialization
-    assert(MAX_RECORDS > 0 && "MAX_RECORDS must be positive");
+    assert(MAX_LINES > 0 && "MAX_LINES must be positive");
     assert(MAX_PACKET_DATA > 0 && "MAX_PACKET_DATA must be positive");
 
     // Zero-initialize all buffers (NASA Rule 3: no malloc needed)
-    memset(records_, 0, sizeof(records_));
+    memset(lines_, 0, sizeof(lines_));
     memset(packetBuffer_, 0, sizeof(packetBuffer_));
 }
 
@@ -47,243 +44,324 @@ void MessageBuffer::setConfig(const MessageBufferConfig& config) {
 
     config_ = config;
 
-    // Validate and clamp maxRecordsPerBatch (NASA Rule 2: fixed bounds)
-    if (config_.maxRecordsPerBatch > MAX_RECORDS) {
-        config_.maxRecordsPerBatch = static_cast<uint16_t>(MAX_RECORDS);
-    }
-    if (config_.maxRecordsPerBatch == 0) {
-        config_.maxRecordsPerBatch = static_cast<uint16_t>(MAX_RECORDS);
-    }
-
-    // Validate payload size
+    // Validate payload size (NASA Rule 2: fixed bounds)
     if (config_.maxPacketPayload > MAX_PACKET_DATA) {
         config_.maxPacketPayload = MAX_PACKET_DATA;
     }
 }
 
-bool MessageBuffer::addMessage(const char* text, uint32_t timestampMs) {
+void MessageBuffer::begin(uint32_t unixTimestamp) {
     // NASA Rule 5: Assertions
-    assert(text != nullptr && "Text pointer must not be null");
+    assert(unixTimestamp > 0 && "Timestamp should be non-zero");
+    assert(MAX_LINES > 0 && "Invalid constant");
 
-    // NASA Rule 7: Validate input
-    if (text == nullptr) {
-        return false;
-    }
+    // Reset state
+    isActive_ = true;
+    startTimestamp_ = unixTimestamp;
+    lastKeyTime_ = 0;
+    lineCount_ = 1;  // Start with one line
+    currentLineLen_ = 0;
+    ++batchId_;
+    packetLen_ = 0;
+    packetNum_ = 0;
+    inFlush_ = false;
 
-    // Calculate length with bounded loop (NASA Rule 2)
-    size_t textLen = 0;
-    for (size_t i = 0; i < MessageRecord::MAX_TEXT_LEN && text[i] != '\0'; ++i) {
-        textLen = i + 1;
-    }
-
-    return addMessage(text, textLen, timestampMs);
+    // Initialize first line with absolute timestamp
+    lines_[0].timestamp = unixTimestamp;
+    lines_[0].textLen = 0;
+    lines_[0].text[0] = '\0';
+    lines_[0].isAbsolute = true;
 }
 
-bool MessageBuffer::addMessage(const char* text, size_t textLen, uint32_t timestampMs) {
+bool MessageBuffer::addKey(char c, uint32_t timestampMs) {
     // NASA Rule 5: Assertions
-    assert(text != nullptr && "Text pointer must not be null");
-    assert(textLen <= MessageRecord::MAX_TEXT_LEN && "Text length exceeds maximum");
+    assert(MAX_LINES > 0 && "Invalid constant");
+    assert(LineRecord::MAX_LINE_LEN > 0 && "Invalid constant");
 
-    // NASA Rule 7: Validate inputs
-    if (text == nullptr || textLen == 0) {
+    // NASA Rule 7: Validate state
+    if (!isActive_) {
         return false;
     }
 
-    // Prevent re-entry during flush (double-flush fix)
+    // Prevent re-entry during flush
     if (inFlush_) {
         return false;
     }
 
-    // Clamp text length (NASA Rule 2: fixed bounds)
-    if (textLen > MessageRecord::MAX_TEXT_LEN) {
-        textLen = MessageRecord::MAX_TEXT_LEN;
+    lastKeyTime_ = timestampMs;
+
+    // Handle special characters
+    if (c == '\n' || c == '\r') {
+        // Enter key - create new line with delta
+        return newLine(timestampMs);
     }
 
-    // Use provided timestamp or current time
-    const uint32_t now = timestampMs;
-
-    // Check if this is the first record in batch
-    const bool isFirst = (recordCount_ == 0);
-
-    if (isFirst) {
-        batchStartTime_ = now;
-        ++batchId_;
-        packetLen_ = 0;
-        packetRecordCount_ = 0;
-        packetNum_ = 0;
-        packetHasCompressedData_ = false;
-        packetHasRawData_ = false;
-    }
-
-    // Check if buffer is full - flush if needed (only if not already flushing)
-    if (recordCount_ >= MAX_RECORDS && !inFlush_) {
-        (void)flush();
-    }
-
-    // Add record to circular buffer
-    MessageRecord& record = records_[recordHead_];
-    record.isAbsolute = isFirst;
-
-    if (isFirst) {
-        // Store absolute timestamp (Unix seconds)
-        record.timestamp = now / 1000;
-    } else {
-        // Store delta from last message (ms)
-        record.timestamp = now - lastMessageTime_;
-    }
-
-    // Copy text with bounds checking (NASA Rule 2)
-    for (size_t i = 0; i < textLen && i < MessageRecord::MAX_TEXT_LEN; ++i) {
-        record.text[i] = text[i];
-    }
-    record.text[textLen] = '\0';
-    record.textLen = static_cast<uint8_t>(textLen);
-
-    // Update circular buffer pointers with modulo (NASA Rule 2: bounded)
-    recordHead_ = (recordHead_ + 1) % MAX_RECORDS;
-    if (recordCount_ < MAX_RECORDS) {
-        ++recordCount_;
-    } else {
-        // Overwrite oldest - move tail
-        recordTail_ = (recordTail_ + 1) % MAX_RECORDS;
-    }
-
-    lastMessageTime_ = now;
-
-    // Try to compress and add to packet
-    const bool added = compressAndAddToPacket(record);
-    (void)added;  // NASA Rule 7: acknowledge return value
-
-    // Check if we should auto-flush (only if not already flushing)
-    if (recordCount_ >= config_.maxRecordsPerBatch && !inFlush_) {
-        (void)flush();
-    }
-
-    return true;
-}
-
-bool MessageBuffer::compressAndAddToPacket(const MessageRecord& record) {
-    // NASA Rule 5: Assertions
-    assert(config_.maxPacketPayload > config_.packetHeaderSize &&
-           "Invalid packet configuration");
-    assert(record.textLen <= MessageRecord::MAX_TEXT_LEN &&
-           "Record text length invalid");
-
-    // Calculate available space in packet
-    const size_t maxDataSize = config_.maxPacketPayload - config_.packetHeaderSize;
-
-    // Compress the text (NASA Rule 3: fixed-size buffer on stack)
-    uint8_t compressedText[MAX_COMPRESSED_LEN];
-    bool wasCompressed = false;
-
-    size_t compressedLen = compressor_.compress(
-        record.text,
-        record.textLen,
-        compressedText,
-        sizeof(compressedText)
-    );
-
-    // NASA Rule 7: Check return value
-    if (compressedLen > 0 && compressedLen < record.textLen) {
-        // Compression succeeded and reduced size
-        wasCompressed = true;
-    } else {
-        // Compression failed or didn't help, use raw text with bounds check
-        wasCompressed = false;
-        compressedLen = record.textLen;
-        if (compressedLen > sizeof(compressedText)) {
-            compressedLen = sizeof(compressedText);
+    if (c == '\b') {
+        // Backspace - remove last character if any
+        if (lineCount_ > 0 && currentLineLen_ > 0) {
+            LineRecord& currentLine = lines_[lineCount_ - 1];
+            if (currentLine.textLen > 0) {
+                --currentLine.textLen;
+                currentLine.text[currentLine.textLen] = '\0';
+                --currentLineLen_;
+            }
         }
-        for (size_t i = 0; i < compressedLen; ++i) {
-            compressedText[i] = static_cast<uint8_t>(record.text[i]);
-        }
-    }
-
-    // Encode delta timestamp as varint (NASA Rule 3: fixed-size buffer)
-    uint8_t deltaBytes[MAX_VARINT_LEN];
-    const size_t deltaLen = encodeVarint(record.timestamp, deltaBytes);
-
-    // Record format: [delta_varint][flags_byte][data_len][data]
-    // flags_byte: bit 0 = compressed (1) or raw (0)
-    const size_t recordSize = deltaLen + 1 + 1 + compressedLen;
-
-    // Check if record fits in current packet
-    if (packetLen_ + recordSize > maxDataSize) {
-        // Finalize current packet and start new one
-        if (packetRecordCount_ > 0) {
-            finalizePacket(false);  // More packets to come
-        }
-
-        // Reset packet buffer and compression tracking
-        packetLen_ = 0;
-        packetRecordCount_ = 0;
-        packetHasCompressedData_ = false;
-        packetHasRawData_ = false;
-        ++packetNum_;
-    }
-
-    // Add record to packet with bounds checking
-    if (packetLen_ + recordSize <= maxDataSize) {
-        const size_t baseOffset = config_.packetHeaderSize;
-
-        // Copy delta timestamp (NASA Rule 2: bounded loop)
-        for (size_t i = 0; i < deltaLen && i < MAX_VARINT_LEN; ++i) {
-            packetBuffer_[baseOffset + packetLen_ + i] = deltaBytes[i];
-        }
-        packetLen_ += deltaLen;
-
-        // Record flags byte: bit 0 = compressed
-        packetBuffer_[baseOffset + packetLen_] = wasCompressed ? 0x01 : 0x00;
-        ++packetLen_;
-
-        // Data length byte
-        packetBuffer_[baseOffset + packetLen_] = static_cast<uint8_t>(compressedLen);
-        ++packetLen_;
-
-        // Copy data (NASA Rule 2: bounded loop)
-        for (size_t i = 0; i < compressedLen && i < MAX_COMPRESSED_LEN; ++i) {
-            packetBuffer_[baseOffset + packetLen_ + i] = compressedText[i];
-        }
-        packetLen_ += compressedLen;
-
-        // Track compression state for packet flags (fix for flag mismatch)
-        if (wasCompressed) {
-            packetHasCompressedData_ = true;
-        } else {
-            packetHasRawData_ = true;
-        }
-
-        ++packetRecordCount_;
         return true;
+    }
+
+    // Check if we need to auto-flush (raw threshold reached)
+    size_t rawSize = calculateRawSize();
+    if (rawSize >= RAW_THRESHOLD) {
+        (void)flush();
+        // After flush, start new session
+        begin(startTimestamp_ + (timestampMs / 1000));
+    }
+
+    // Check if current line is full
+    if (lineCount_ > 0) {
+        LineRecord& currentLine = lines_[lineCount_ - 1];
+        if (currentLine.textLen >= LineRecord::MAX_LINE_LEN) {
+            // Line full - create new line
+            if (!newLine(timestampMs)) {
+                return false;  // No room for new line
+            }
+        }
+    }
+
+    // Add character to current line
+    if (lineCount_ > 0 && lineCount_ <= MAX_LINES) {
+        LineRecord& currentLine = lines_[lineCount_ - 1];
+        if (currentLine.textLen < LineRecord::MAX_LINE_LEN) {
+            currentLine.text[currentLine.textLen] = c;
+            ++currentLine.textLen;
+            currentLine.text[currentLine.textLen] = '\0';
+            ++currentLineLen_;
+            return true;
+        }
     }
 
     return false;
 }
 
+size_t MessageBuffer::addKeys(const char* text, uint32_t timestampMs) {
+    // NASA Rule 5: Assertions
+    assert(text != nullptr && "Text pointer must not be null");
+    assert(MAX_LINES > 0 && "Invalid constant");
+
+    // NASA Rule 7: Validate input
+    if (text == nullptr) {
+        return 0;
+    }
+
+    size_t added = 0;
+    // NASA Rule 2: Fixed loop bound
+    for (size_t i = 0; i < LineRecord::MAX_LINE_LEN * MAX_LINES && text[i] != '\0'; ++i) {
+        if (addKey(text[i], timestampMs)) {
+            ++added;
+        } else {
+            break;  // Buffer full or error
+        }
+    }
+
+    return added;
+}
+
+bool MessageBuffer::newLine(uint32_t timestampMs) {
+    // NASA Rule 5: Assertions
+    assert(lineCount_ <= MAX_LINES && "Invalid line count");
+    assert(MAX_LINES > 0 && "Invalid constant");
+
+    // Check if we can add more lines
+    if (lineCount_ >= MAX_LINES) {
+        // Buffer full - need to flush first
+        (void)flush();
+        begin(startTimestamp_ + (timestampMs / 1000));
+    }
+
+    if (lineCount_ >= MAX_LINES) {
+        return false;  // Still no room after flush
+    }
+
+    // Calculate delta from start (in milliseconds)
+    uint32_t delta = timestampMs - (startTimestamp_ * 1000);
+
+    // Create new line
+    LineRecord& newLineRecord = lines_[lineCount_];
+    newLineRecord.timestamp = delta;
+    newLineRecord.textLen = 0;
+    newLineRecord.text[0] = '\0';
+    newLineRecord.isAbsolute = false;
+
+    ++lineCount_;
+    currentLineLen_ = 0;
+
+    return true;
+}
+
+bool MessageBuffer::checkTimeout(uint32_t currentTimeMs) {
+    // NASA Rule 5: Assertions
+    assert(MAX_LINES > 0 && "Invalid constant");
+    assert(config_.flushTimeoutMs < 3600000 && "Timeout too large");
+
+    if (!isActive_ || config_.flushTimeoutMs == 0) {
+        return false;
+    }
+
+    // Check if timeout elapsed since last key
+    if (lastKeyTime_ > 0 && currentTimeMs > lastKeyTime_) {
+        uint32_t elapsed = currentTimeMs - lastKeyTime_;
+        if (elapsed >= config_.flushTimeoutMs) {
+            return calculateRawSize() > 0;
+        }
+    }
+
+    return false;
+}
+
+uint8_t MessageBuffer::flush() {
+    // NASA Rule 5: Assertions
+    assert(lineCount_ <= MAX_LINES && "Invalid line count");
+    assert(MAX_PACKET_DATA > 0 && "Invalid constant");
+
+    // Prevent re-entry
+    if (inFlush_) {
+        return 0;
+    }
+    inFlush_ = true;
+
+    uint8_t packetsSent = 0;
+
+    // Check if there's anything to flush
+    size_t rawSize = calculateRawSize();
+    if (rawSize == 0 || lineCount_ == 0) {
+        inFlush_ = false;
+        return 0;
+    }
+
+    // Compress all lines
+    size_t compressedSize = compressLines();
+
+    // Check if compressed data fits in one packet
+    size_t maxDataSize = config_.maxPacketPayload - config_.packetHeaderSize;
+
+    if (compressedSize > 0 && compressedSize <= maxDataSize) {
+        // Fits in one packet
+        finalizePacket(true);
+        packetsSent = 1;
+    } else if (compressedSize > maxDataSize) {
+        // Need multiple packets - send what fits
+        // For now, truncate to max packet size
+        packetLen_ = maxDataSize;
+        finalizePacket(true);
+        packetsSent = 1;
+    }
+
+    // Reset buffer state
+    lineCount_ = 0;
+    currentLineLen_ = 0;
+    packetLen_ = 0;
+    packetNum_ = 0;
+    isActive_ = false;
+
+    inFlush_ = false;
+    return packetsSent;
+}
+
+size_t MessageBuffer::compressLines() {
+    // NASA Rule 5: Assertions
+    assert(lineCount_ <= MAX_LINES && "Invalid line count");
+    assert(MAX_COMPRESSED_LEN > 0 && "Invalid constant");
+
+    if (lineCount_ == 0) {
+        return 0;
+    }
+
+    // Build raw text buffer with line format: [delta_varint][text_len][text]
+    uint8_t rawBuffer[RAW_THRESHOLD * 2];
+    size_t rawLen = 0;
+    const size_t maxRawLen = sizeof(rawBuffer);
+
+    // NASA Rule 2: Fixed loop bound
+    for (size_t i = 0; i < lineCount_ && i < MAX_LINES; ++i) {
+        const LineRecord& line = lines_[i];
+
+        // Encode timestamp as varint
+        uint8_t timestampBytes[MAX_VARINT_LEN];
+        size_t timestampLen = encodeVarint(line.timestamp, timestampBytes);
+
+        // Check if this line fits
+        if (rawLen + timestampLen + 1 + line.textLen > maxRawLen) {
+            break;
+        }
+
+        // Copy timestamp varint
+        for (size_t j = 0; j < timestampLen && j < MAX_VARINT_LEN; ++j) {
+            rawBuffer[rawLen++] = timestampBytes[j];
+        }
+
+        // Text length byte
+        rawBuffer[rawLen++] = static_cast<uint8_t>(line.textLen);
+
+        // Copy text (NASA Rule 2: bounded)
+        for (size_t j = 0; j < line.textLen && j < LineRecord::MAX_LINE_LEN; ++j) {
+            rawBuffer[rawLen++] = static_cast<uint8_t>(line.text[j]);
+        }
+    }
+
+    if (rawLen == 0) {
+        return 0;
+    }
+
+    // Compress the raw buffer
+    uint8_t compressedData[MAX_COMPRESSED_LEN];
+    size_t compressedLen = compressor_.compress(
+        reinterpret_cast<const char*>(rawBuffer),
+        rawLen,
+        compressedData,
+        sizeof(compressedData)
+    );
+
+    // NASA Rule 7: Check return value
+    bool useCompressed = (compressedLen > 0 && compressedLen < rawLen);
+
+    // Copy to packet buffer (after header space)
+    const size_t headerSize = config_.packetHeaderSize;
+
+    if (useCompressed) {
+        // Use compressed data
+        for (size_t i = 0; i < compressedLen && headerSize + i < MAX_PACKET_DATA; ++i) {
+            packetBuffer_[headerSize + i] = compressedData[i];
+        }
+        packetLen_ = compressedLen;
+    } else {
+        // Use raw data (compression didn't help)
+        for (size_t i = 0; i < rawLen && headerSize + i < MAX_PACKET_DATA; ++i) {
+            packetBuffer_[headerSize + i] = rawBuffer[i];
+        }
+        packetLen_ = rawLen;
+    }
+
+    return packetLen_;
+}
+
 void MessageBuffer::finalizePacket(bool isFinal) {
     // NASA Rule 5: Assertions
-    assert(packetRecordCount_ <= MAX_RECORDS && "Invalid record count");
+    assert(lineCount_ <= MAX_LINES && "Invalid line count");
     assert(packetLen_ <= MAX_PACKET_DATA && "Packet length overflow");
 
-    if (packetRecordCount_ == 0) {
+    if (packetLen_ == 0) {
         return;
     }
 
-    // Build flags based on actual packet content (fix for compression flag mismatch)
-    uint8_t flags = FLAG_DELTA_TIME;
-
-    // Only set FLAG_COMPRESSED if ALL records were compressed
-    // If mixed, don't set flag - receiver will check per-record flags
-    if (packetHasCompressedData_ && !packetHasRawData_) {
-        flags |= FLAG_COMPRESSED;
-    }
+    // Build flags
+    uint8_t flags = FLAG_DELTA_TIME | FLAG_COMPRESSED;
 
     if (!isFinal) {
         flags |= FLAG_HAS_MORE;
     }
 
     // Write header
-    writePacketHeader(batchStartTime_ / 1000, flags, packetRecordCount_);
+    writePacketHeader(startTimestamp_, flags, static_cast<uint8_t>(lineCount_));
 
     // Calculate total packet size
     const size_t totalLen = config_.packetHeaderSize + packetLen_;
@@ -292,12 +370,14 @@ void MessageBuffer::finalizePacket(bool isFinal) {
     if (config_.onPacketReady != nullptr) {
         config_.onPacketReady(packetBuffer_, totalLen, batchId_, packetNum_, isFinal);
     }
+
+    ++packetNum_;
 }
 
 void MessageBuffer::writePacketHeader(uint32_t baseTimestamp, uint8_t flags, uint8_t count) {
     // NASA Rule 5: Assertions
     assert(sizeof(packetBuffer_) >= 8 && "Buffer too small for header");
-    assert(count <= MAX_RECORDS && "Record count exceeds maximum");
+    assert(count <= MAX_LINES && "Line count exceeds maximum");
 
     // Batch ID (2 bytes, little-endian)
     packetBuffer_[0] = static_cast<uint8_t>(batchId_ & 0xFF);
@@ -312,99 +392,8 @@ void MessageBuffer::writePacketHeader(uint32_t baseTimestamp, uint8_t flags, uin
     // Flags
     packetBuffer_[6] = flags;
 
-    // Record count
+    // Line count
     packetBuffer_[7] = count;
-}
-
-uint8_t MessageBuffer::flush() {
-    // NASA Rule 5: Assertions
-    assert(packetRecordCount_ <= MAX_RECORDS && "Invalid record count state");
-    assert(recordCount_ <= MAX_RECORDS && "Invalid buffer state");
-
-    // Prevent re-entry (double-flush fix)
-    if (inFlush_) {
-        return 0;
-    }
-    inFlush_ = true;
-
-    uint8_t packetsSent = 0;
-
-    // Finalize current packet if there's data
-    if (packetRecordCount_ > 0) {
-        finalizePacket(true);
-        // Use saturating add to prevent overflow (NASA Rule 2: bounded)
-        packetsSent = (packetNum_ < 255) ? (packetNum_ + 1) : 255;
-    }
-
-    // Clear buffer state
-    recordHead_ = 0;
-    recordTail_ = 0;
-    recordCount_ = 0;
-    packetLen_ = 0;
-    packetRecordCount_ = 0;
-    packetNum_ = 0;
-    batchStartTime_ = 0;
-    packetHasCompressedData_ = false;
-    packetHasRawData_ = false;
-
-    inFlush_ = false;
-    return packetsSent;
-}
-
-bool MessageBuffer::needsFlush() const {
-    // NASA Rule 5: Assertions
-    assert(recordCount_ <= MAX_RECORDS && "Invalid buffer state");
-    assert(config_.maxRecordsPerBatch > 0 && "Invalid config");
-
-    if (recordCount_ == 0) {
-        return false;
-    }
-
-    // Check max records threshold
-    if (recordCount_ >= config_.maxRecordsPerBatch) {
-        return true;
-    }
-
-    // Check if buffer is nearly full
-    if (recordCount_ >= MAX_RECORDS - 1) {
-        return true;
-    }
-
-    return false;
-}
-
-void MessageBuffer::reset() {
-    // NASA Rule 5: Assertions
-    assert(MAX_RECORDS > 0 && "Invalid constant");
-    assert(MAX_PACKET_DATA > 0 && "Invalid constant");
-
-    recordHead_ = 0;
-    recordTail_ = 0;
-    recordCount_ = 0;
-    batchId_ = 0;
-    batchStartTime_ = 0;
-    lastMessageTime_ = 0;
-    packetLen_ = 0;
-    packetRecordCount_ = 0;
-    packetNum_ = 0;
-    packetHasCompressedData_ = false;
-    packetHasRawData_ = false;
-    inFlush_ = false;
-
-    // Clear packet buffer
-    memset(packetBuffer_, 0, sizeof(packetBuffer_));
-}
-
-size_t MessageBuffer::getRAMUsage() const {
-    return sizeof(MessageBuffer) + Unishox2::getRAMUsage();
-}
-
-size_t MessageBuffer::getPendingCount() const {
-    return recordCount_;
-}
-
-uint16_t MessageBuffer::getCurrentBatchId() const {
-    return batchId_;
 }
 
 size_t MessageBuffer::encodeVarint(uint32_t value, uint8_t* buf) {
@@ -428,34 +417,55 @@ size_t MessageBuffer::encodeVarint(uint32_t value, uint8_t* buf) {
     return len;
 }
 
-uint32_t MessageBuffer::decodeVarint(const uint8_t* buf, size_t maxLen, size_t* bytesRead) {
+size_t MessageBuffer::calculateRawSize() const {
     // NASA Rule 5: Assertions
-    assert(buf != nullptr && "Buffer pointer must not be null");
-    assert(bytesRead != nullptr && "bytesRead pointer must not be null");
+    assert(lineCount_ <= MAX_LINES && "Invalid line count");
+    assert(MAX_LINES > 0 && "Invalid constant");
 
-    uint32_t value = 0;
-    size_t shift = 0;
-    size_t len = 0;
+    size_t total = 0;
 
     // NASA Rule 2: Fixed loop bound
-    for (size_t i = 0; i < MAX_VARINT_LEN && i < maxLen; ++i) {
-        const uint8_t byte = buf[len++];
-        value |= static_cast<uint32_t>(byte & 0x7F) << shift;
-
-        if ((byte & 0x80) == 0) {
-            break;
-        }
-
-        shift += 7;
-
-        // Overflow protection (NASA Rule 2: bounded operation)
-        if (shift >= 35) {
-            break;
-        }
+    for (size_t i = 0; i < lineCount_ && i < MAX_LINES; ++i) {
+        total += lines_[i].textLen;
     }
 
-    *bytesRead = len;
-    return value;
+    return total;
+}
+
+size_t MessageBuffer::getRawSize() const {
+    return calculateRawSize();
+}
+
+size_t MessageBuffer::getLineCount() const {
+    return lineCount_;
+}
+
+uint16_t MessageBuffer::getCurrentBatchId() const {
+    return batchId_;
+}
+
+void MessageBuffer::reset() {
+    // NASA Rule 5: Assertions
+    assert(MAX_LINES > 0 && "Invalid constant");
+    assert(MAX_PACKET_DATA > 0 && "Invalid constant");
+
+    isActive_ = false;
+    startTimestamp_ = 0;
+    lastKeyTime_ = 0;
+    lineCount_ = 0;
+    currentLineLen_ = 0;
+    batchId_ = 0;
+    packetLen_ = 0;
+    packetNum_ = 0;
+    inFlush_ = false;
+
+    // Clear buffers
+    memset(lines_, 0, sizeof(lines_));
+    memset(packetBuffer_, 0, sizeof(packetBuffer_));
+}
+
+size_t MessageBuffer::getRAMUsage() const {
+    return sizeof(MessageBuffer) + Unishox2::getRAMUsage();
 }
 
 } // namespace stechat
