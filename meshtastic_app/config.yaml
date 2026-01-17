@@ -1,0 +1,48 @@
+# Meshtastic Python App Configuration
+# =====================================
+
+# Device connection settings
+device:
+  # Serial port path (leave empty for auto-detect)
+  # Examples: /dev/ttyUSB0, /dev/ttyACM0, COM4
+  port: ""
+
+  # Connection timeout in seconds
+  timeout: 30
+
+# Security settings
+security:
+  # Your device's private key (base64 encoded)
+  # This key will be verified and set if different from device
+  # Generate with: meshtastic --export-config | grep private_key
+  private_key: ""
+
+  # Whether to automatically update the device key if it doesn't match
+  auto_update_key: true
+
+# Channel settings
+channel:
+  # Channel index for private communications (0 = primary, 1-7 = secondary)
+  private_channel_index: 1
+
+  # Channel name (for reference only)
+  private_channel_name: "Private"
+
+# Position transmission settings
+position:
+  # Enable automatic position transmission
+  enabled: true
+
+  # Transmission interval in seconds
+  interval_seconds: 300
+
+  # Fixed position (if GPS not available)
+  # Leave as null to use device GPS
+  fixed_latitude: null
+  fixed_longitude: null
+  fixed_altitude: null
+
+# Logging settings
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "meshtastic_app.log"

@@ -1,0 +1,12 @@
+# Meshtastic Python App Dependencies
+
+# Meshtastic library with CLI support
+meshtastic[cli]>=2.3.0
+
+# Configuration file parsing
+PyYAML>=6.0
+
+# Note: The following are installed as dependencies of meshtastic:
+# - pypubsub (pub/sub event system)
+# - pyserial (serial communication)
+# - protobuf (protocol buffers)

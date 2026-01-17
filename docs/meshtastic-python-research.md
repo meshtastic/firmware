@@ -405,6 +405,96 @@ if __name__ == "__main__":
 
 ---
 
+## Security & PKI (Public Key Infrastructure)
+
+Meshtastic v2.5+ uses X25519 elliptic curve cryptography for device-to-device encryption and authentication.
+
+### Key Types
+
+1. **Device PKI Keys** - X25519 public/private key pairs for secure direct messaging
+2. **Channel PSK** - Pre-shared keys for channel encryption (AES128 or AES256)
+3. **Admin Keys** - Keys for remote device administration
+
+### Accessing Security Configuration
+
+```python
+# Get local node
+local_node = interface.getNode('^local')
+
+# Access security config
+security = local_node.localConfig.security
+
+# Read keys (as bytes)
+private_key = bytes(security.private_key)
+public_key = bytes(security.public_key)
+
+# Or use interface method for public key
+public_key = interface.getPublicKey()
+```
+
+### Setting Private Key via CLI
+
+```bash
+# Set private key (base64 encoded)
+meshtastic --set security.private_key base64:YOUR_BASE64_KEY_HERE
+
+# Set public key
+meshtastic --set security.public_key base64:YOUR_BASE64_KEY_HERE
+
+# Export full configuration (includes keys)
+meshtastic --export-config > config_backup.yaml
+
+# Restore configuration
+meshtastic --configure config_backup.yaml
+```
+
+### Channel PSK Configuration
+
+```bash
+# Set encryption key on channel 0 (primary)
+meshtastic --ch-set psk base64:puavdd7vtYJh8NUVWgxbsoG2u9Sdqc54YvMLs+KNcMA= --ch-index 0
+
+# Set key in hex format
+meshtastic --ch-set psk 0x1a1a1a1a2b2b2b2b1a1a1a1a2b2b2b2b1a1a1a1a2b2b2b2b1a1a1a1a2b2b2b2b --ch-index 0
+
+# Generate random key
+meshtastic --ch-set psk random --ch-index 1
+
+# Disable encryption
+meshtastic --ch-set psk none --ch-index 0
+```
+
+### Sending on Specific Channels
+
+```python
+# Send position on channel 1 (private channel)
+interface.sendPosition(
+    latitude=37.7749,
+    longitude=-122.4194,
+    altitude=10,
+    channelIndex=1  # Use private channel
+)
+
+# Send text on channel 1
+interface.sendText("Private message", channelIndex=1)
+
+# Send data on channel 1
+interface.sendData(
+    data=my_bytes,
+    channelIndex=1,
+    portNum=portnums_pb2.PortNum.PRIVATE_APP
+)
+```
+
+### Key Backup Warning
+
+Public and private keys are regenerated on firmware erase/reinstall. Always backup:
+```bash
+meshtastic --export-config > my_device_backup.yaml
+```
+
+---
+
 ## Example Scripts Reference
 
 The [Meshtastic-Python-Examples](https://github.com/pdxlocations/Meshtastic-Python-Examples) repository contains 39 example scripts:
@@ -453,6 +543,11 @@ The [Meshtastic-Python-Examples](https://github.com/pdxlocations/Meshtastic-Pyth
 - [MeshInterface API](https://python.meshtastic.org/mesh_interface.html)
 - [TCPInterface API](https://python.meshtastic.org/tcp_interface.html)
 - [BLEInterface API](https://python.meshtastic.org/ble_interface.html)
+- [Node API](https://python.meshtastic.org/node.html)
+- [Security Configuration](https://meshtastic.org/docs/configuration/radio/security/)
+- [Channel Configuration](https://meshtastic.org/docs/configuration/radio/channels/)
+- [Meshtastic Encryption](https://meshtastic.org/docs/overview/encryption/)
+- [PKI Implementation](https://meshtastic.org/blog/introducing-new-public-key-cryptography-in-v2_5/)
 - [GitHub Repository](https://github.com/meshtastic/python)
 - [PyPI Package](https://pypi.org/project/meshtastic/)
 - [Meshtastic Python Examples](https://github.com/pdxlocations/Meshtastic-Python-Examples)
