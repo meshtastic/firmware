@@ -15,6 +15,7 @@
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #endif
+
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
@@ -28,6 +29,7 @@ void LockingArduinoHal::spiEndTransaction()
 
     spiLock->unlock();
 }
+
 #if ARCH_PORTDUINO
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
@@ -40,6 +42,12 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
+
+    // Initialize noise floor samples array
+    for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
+        noiseFloorSamples[i] = 0;
+    }
+
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
@@ -246,6 +254,96 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
     return txQueue.find(from, id);
 }
 
+// ============================================================================
+// NOISE FLOOR IMPLEMENTATION
+// ============================================================================
+
+void RadioLibInterface::updateNoiseFloor()
+{
+    // Only update if we're in receive mode and not actively receiving
+    if (!isReceiving) {
+        LOG_DEBUG("Skipping noise floor update - not in receive mode or actively receiving");
+        return;
+    }
+
+    // Don't try to read RSSI if we're not in a stable receive state
+    if (sendingPacket != NULL) {
+        return;
+    }
+
+    // Rate limit updates
+    uint32_t now = millis();
+    if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
+        return;
+    }
+    lastNoiseFloorUpdate = now;
+
+    // Get current RSSI from the radio
+    int16_t rssi = getCurrentRSSI();
+
+    if (rssi == 0 || rssi < NOISE_FLOOR_MIN) {
+        LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
+        return;
+    }
+
+    // Check if we need to restart collection (hit max samples)
+    if (noiseFloorSampleCount >= NOISE_FLOOR_SAMPLES) {
+        LOG_INFO("Noise floor sample collection complete (%d samples, avg: %.1f dBm). Restarting.", NOISE_FLOOR_SAMPLES,
+                 currentNoiseFloor);
+        noiseFloorSampleCount = 0;
+        // Clear the array
+        for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
+            noiseFloorSamples[i] = 0;
+        }
+    }
+
+    // Store the sample
+    noiseFloorSamples[noiseFloorSampleCount] = (float)rssi;
+    noiseFloorSampleCount++;
+
+    // Calculate the new average
+    currentNoiseFloor = getAverageNoiseFloor();
+
+    LOG_INFO("Noise floor: %.1f dBm (sample %d/%d: %d dBm)", currentNoiseFloor, noiseFloorSampleCount, NOISE_FLOOR_SAMPLES, rssi);
+}
+
+float RadioLibInterface::getAverageNoiseFloor()
+{
+    if (noiseFloorSampleCount == 0) {
+        return NOISE_FLOOR_MIN; // Return minimum if no samples
+    }
+
+    float sum = 0.0f;
+
+    for (uint8_t i = 0; i < noiseFloorSampleCount; i++) {
+        sum += noiseFloorSamples[i];
+    }
+
+    float average = sum / noiseFloorSampleCount;
+
+    // Clamp to minimum of -120 dBm
+    if (average < NOISE_FLOOR_MIN) {
+        average = NOISE_FLOOR_MIN;
+    }
+
+    return average;
+}
+
+void RadioLibInterface::resetNoiseFloor()
+{
+    noiseFloorSampleCount = 0;
+    currentNoiseFloor = NOISE_FLOOR_MIN;
+    for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
+        noiseFloorSamples[i] = 0;
+    }
+    lastNoiseFloorUpdate = 0;
+    LOG_INFO("Noise floor reset - collection will restart");
+}
+
+// ============================================================================
+// END NOISE FLOOR IMPLEMENTATION
+// ============================================================================
+
 /** radio helper thread callback.
 We never immediately transmit after any operation (either Rx or Tx). Instead we should wait a random multiple of
 'slotTimes' (see definition in RadioInterface.h) taken from a contention window (CW) to lower the chance of collision.
@@ -255,6 +353,9 @@ currently active.
 */
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+
+    updateNoiseFloor();
+
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
@@ -386,11 +487,6 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     return false;
 }
 
-/**
- * Remove a packet that is eligible for replacement from the TX queue
- */
-// void RadioLibInterface::removePending
-
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
@@ -419,6 +515,9 @@ void RadioLibInterface::completeSending()
 
         // We are done sending that packet, release it
         packetPool.release(p);
+
+        // Update noise floor after transmitting (radio is now in a good state to sample)
+        updateNoiseFloor();
     }
 }
 
@@ -516,6 +615,9 @@ void RadioLibInterface::startReceive()
 {
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
+
+    // Opportunistically update noise floor when entering receive mode
+    updateNoiseFloor();
 }
 
 void RadioLibInterface::configHardwareForSend()

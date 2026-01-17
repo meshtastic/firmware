@@ -97,10 +97,37 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
+  protected:
+    // Noise floor tracking - collects up to 20 samples then restarts
+    static const uint8_t NOISE_FLOOR_SAMPLES = 20;
+    static const int16_t NOISE_FLOOR_MIN = -120; // Minimum noise floor clamp in dBm
+    float noiseFloorSamples[NOISE_FLOOR_SAMPLES];
+    uint8_t noiseFloorSampleCount = 0;
+    uint32_t lastNoiseFloorUpdate = 0;
+    static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
+    float currentNoiseFloor = NOISE_FLOOR_MIN;
+
+    /**
+     * Update the noise floor measurement by sampling RSSI when not receiving
+     * Collects up to 20 samples then automatically restarts
+     */
+    void updateNoiseFloor();
+
+    /**
+     * Override from NotifiedWorkerThread - called periodically by the thread
+     */
+    virtual int16_t getCurrentRSSI() = 0;
+
   public:
     /** Our ISR code currently needs this to find our active instance
      */
     static RadioLibInterface *instance;
+
+    /**
+     * Calculate the average noise floor from collected samples
+     * Clamps result to minimum of -120 dBm
+     */
+    float getAverageNoiseFloor();
 
     /**
      * Glue functions called from ISR land
@@ -157,6 +184,28 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
+    /**
+     * Get the current calculated noise floor in dBm
+     * Returns -120 dBm if not yet calibrated
+     */
+    float getNoiseFloor() { return currentNoiseFloor; }
+
+    /**
+     * Check if we have collected any noise floor samples
+     */
+    bool hasNoiseFloorSamples() { return noiseFloorSampleCount > 0; }
+
+    /**
+     * Get the number of samples collected in current cycle (0-20)
+     */
+    uint8_t getNoiseFloorSampleCount() { return noiseFloorSampleCount; }
+
+    /**
+     * Reset the noise floor calibration
+     * Will automatically restart collection
+     */
+    void resetNoiseFloor();
 
   private:
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
