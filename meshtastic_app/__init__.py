@@ -1,64 +1,50 @@
+#!/usr/bin/env python3
 """
-Meshtastic Master Controller Module
+Meshtastic Master Controller Package
 
-Control and monitor Meshtastic slave firmware nodes via USB/Serial connection.
-This module acts as the master node, collecting telemetry and sensor data from
-slaves over a private channel.
+A Python application for controlling and monitoring a Meshtastic mesh network.
+Connects to a local device via USB and communicates with slave firmware nodes
+over a private channel using a custom binary protocol.
 
-Architecture:
-    Master (this module)
-        │
-        ├── USB/Serial
-        ▼
-    Meshtastic Device (connected to PC)
-        │
-        ├── Private Channel (RF)
-        ▼
-    Slave Nodes (custom firmware, NO GPS)
-        - Send device telemetry via STANDARD Meshtastic (battery, voltage, temp)
-        - Send sensor data batches via CUSTOM binary protocol (port 485)
-        - Receive master position via standard Meshtastic
-        - Receive commands via custom protocol
-
-Data Flow:
-    Standard Meshtastic (built-in):
-        - Master → Slaves: Position broadcasts
-        - Slaves → Master: Device telemetry (battery, voltage, channel util)
-        - Slaves → Master: Environment metrics (temp, humidity, pressure)
-
-    Custom Binary Protocol (port 485):
-        - Slaves → Master: Sensor data batches (DATA_BATCH)
-        - Master → Slaves: ACK with batch_id (slave can delete batch from memory)
-        - Master → Slaves: Commands (COMMAND, REQUEST_DATA, etc.)
-
-ACK Flow (batch memory management):
-    1. Slave sends DATA_BATCH with batch_id, keeps batch in memory
-    2. Master processes batch, sends ACK with batch_id
-    3. Slave receives ACK, extracts batch_id using parse_ack_message()
-    4. Slave deletes acknowledged batch from memory
+Module Structure:
+    controller.py  - MasterController class (main controller logic)
+    models.py      - Data classes (MasterConfig, SlaveNode, MasterState)
+    device.py      - DeviceManager (connection, key mgmt, CLI operations)
+    protocol.py    - Binary protocol definitions
+    api.py         - REST API (optional, requires fastapi/uvicorn)
+    cli.py         - Command-line interface
 
 Usage:
+    # CLI
+    python -m meshtastic_app                  # Run with default config
+    python -m meshtastic_app --api            # Run with REST API
+    python -m meshtastic_app --info           # Show device info
+
+    # Programmatic
     from meshtastic_app import MasterController, MasterConfig
 
     config = MasterConfig.from_yaml("config.yaml")
     master = MasterController(config)
-
-    # Register handlers
-    master.on_telemetry(lambda slave, telem: print(f"{slave.node_id}: bat={slave.battery_level}%"))
-    master.on_data_batch(lambda slave, batch: print(f"Batch: {batch.batch_id}"))
-
-    # Initialize (connects + auto-verifies key)
-    master.initialize()
-
-    # Get slave info
-    for slave in master.get_slaves():
-        print(f"{slave.node_id}: bat={slave.battery_level}%, batches={slave.batch_count}")
-
-    # Run main loop
     master.run()
 """
 
-from .master import MasterController, MasterConfig, MasterState, SlaveNode
+# Controller
+from .controller import MasterController
+
+# Models
+from .models import (
+    MasterConfig,
+    MasterState,
+    SlaveNode,
+    ApiConfig,
+    MAX_SLAVES,
+    MAX_EVENT_HANDLERS,
+)
+
+# Device Manager
+from .device import DeviceManager
+
+# Protocol
 from .protocol import (
     PRIVATE_PORT_NUM,
     CommandType,
@@ -72,6 +58,9 @@ from .protocol import (
     parse_ack_message,
 )
 
+# CLI
+from .cli import main
+
 # API module (optional - requires fastapi, uvicorn)
 try:
     from .api import create_api, run_api_server, run_api_server_async
@@ -80,22 +69,37 @@ except ImportError:
     _HAS_API = False
 
     def create_api(*args, **kwargs):
-        raise ImportError("API module requires fastapi and uvicorn. Install with: pip3 install fastapi uvicorn")
+        raise ImportError(
+            "API module requires fastapi and uvicorn. "
+            "Install with: pip3 install fastapi uvicorn"
+        )
 
     def run_api_server(*args, **kwargs):
-        raise ImportError("API module requires fastapi and uvicorn. Install with: pip3 install fastapi uvicorn")
+        raise ImportError(
+            "API module requires fastapi and uvicorn. "
+            "Install with: pip3 install fastapi uvicorn"
+        )
 
     def run_api_server_async(*args, **kwargs):
-        raise ImportError("API module requires fastapi and uvicorn. Install with: pip3 install fastapi uvicorn")
+        raise ImportError(
+            "API module requires fastapi and uvicorn. "
+            "Install with: pip3 install fastapi uvicorn"
+        )
 
-__version__ = "0.9.0"
+__version__ = "1.0.0"
 __all__ = [
-    # Master
+    # Controller
     "MasterController",
+    # Models
     "MasterConfig",
     "MasterState",
     "SlaveNode",
-    # Protocol (for custom sensor data batches)
+    "ApiConfig",
+    "MAX_SLAVES",
+    "MAX_EVENT_HANDLERS",
+    # Device
+    "DeviceManager",
+    # Protocol
     "PRIVATE_PORT_NUM",
     "MessageType",
     "MessageFlags",
@@ -106,8 +110,10 @@ __all__ = [
     "SlaveStatusReport",
     "MasterCommand",
     "parse_ack_message",
-    # API (optional)
+    # API
     "create_api",
     "run_api_server",
     "run_api_server_async",
+    # CLI
+    "main",
 ]
