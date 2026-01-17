@@ -70,7 +70,7 @@ from .protocol import (
 
 
 # =============================================================================
-# Constants
+# Constants (NASA Rule 2: Fixed bounds for all limits)
 # =============================================================================
 
 # Maximum telemetry history per slave
@@ -81,6 +81,21 @@ MAX_DATA_BATCHES = 50
 
 # Slave offline timeout (seconds)
 SLAVE_OFFLINE_TIMEOUT = 600
+
+# Maximum number of slaves to track (NASA Rule 2: bounded collections)
+MAX_SLAVES = 256
+
+# Maximum retry attempts for operations (NASA Rule 2: bounded loops)
+MAX_RETRY_ATTEMPTS = 10
+
+# Maximum handlers per event type (NASA Rule 2: bounded collections)
+MAX_EVENT_HANDLERS = 32
+
+# CLI command timeout (seconds)
+CLI_TIMEOUT_SECONDS = 60
+
+# Device reboot wait time (seconds)
+DEVICE_REBOOT_WAIT = 10
 
 
 # =============================================================================
@@ -154,7 +169,8 @@ class MasterConfig:
     device_timeout: int = 30
 
     # Security settings
-    private_key: str = ""  # Base64 encoded
+    private_key: str = ""  # Base64 encoded private key
+    public_key: str = ""   # Base64 encoded public key (for slave admin_key setup)
 
     # Channel settings
     private_channel_index: int = 1
@@ -193,6 +209,7 @@ class MasterConfig:
             device_port=data.get("device", {}).get("port", ""),
             device_timeout=data.get("device", {}).get("timeout", 30),
             private_key=data.get("security", {}).get("private_key", ""),
+            public_key=data.get("security", {}).get("public_key", ""),
             private_channel_index=data.get("channel", {}).get("private_channel_index", 1),
             private_port_num=data.get("protocol", {}).get("port_num", PRIVATE_PORT_NUM),
             send_ack=data.get("protocol", {}).get("send_ack", True),
@@ -355,7 +372,9 @@ class MasterController:
         msg, payload = parse_message(data)
         if not msg:
             self.logger.warning(f"Invalid protocol message from {from_id}")
-            self._get_or_create_slave(from_id).error_count += 1
+            slave = self._get_or_create_slave(from_id)
+            if slave:  # NASA Rule 7: Check return values
+                slave.error_count += 1
             return
 
         self.logger.debug(
@@ -363,8 +382,12 @@ class MasterController:
             f"flags={msg.flags:#x}, payload_len={len(msg.payload)}"
         )
 
-        # Update slave tracking
+        # Update slave tracking (NASA Rule 7: Check return values)
         slave = self._get_or_create_slave(from_id)
+        if not slave:
+            self.logger.warning(f"Cannot track slave {from_id}")
+            return
+
         slave.last_seen = time.time()
         slave.is_online = True
 
@@ -454,8 +477,11 @@ class MasterController:
         if from_id == self.my_node_id:
             return
 
-        # Update slave tracking for any traffic
+        # Update slave tracking (NASA Rule 7: Check return values)
         slave = self._get_or_create_slave(from_id)
+        if not slave:
+            return
+
         slave.last_seen = time.time()
         slave.is_online = True
 
@@ -523,16 +549,31 @@ class MasterController:
             except Exception as e:
                 self.logger.error(f"Telemetry handler error: {e}")
 
-    def _get_or_create_slave(self, node_id: str) -> SlaveNode:
-        """Get existing slave or create new one."""
+    def _get_or_create_slave(self, node_id: str) -> Optional[SlaveNode]:
+        """
+        Get existing slave or create new one.
+
+        NASA Rule 2: Bounded collection - max MAX_SLAVES nodes.
+        NASA Rule 5: Validate parameters.
+        """
+        # NASA Rule 5: Parameter validation
+        if not node_id or not isinstance(node_id, str):
+            self.logger.error("Invalid node_id for slave tracking")
+            return None
+
         if node_id not in self.slaves:
+            # NASA Rule 2: Enforce collection bounds
+            if len(self.slaves) >= MAX_SLAVES:
+                self.logger.warning(f"Max slaves ({MAX_SLAVES}) reached, cannot track {node_id}")
+                return None
+
             now = time.time()
             self.slaves[node_id] = SlaveNode(
                 node_id=node_id,
                 first_seen=now,
                 last_seen=now,
             )
-            self.logger.info(f"New slave discovered: {node_id}")
+            self.logger.info(f"New slave discovered: {node_id} (total: {len(self.slaves)})")
 
         return self.slaves[node_id]
 
@@ -1031,6 +1072,182 @@ class MasterController:
             return False
 
     # -------------------------------------------------------------------------
+    # Public API - Remote Administration (Admin Module)
+    # -------------------------------------------------------------------------
+    # Slaves must have master's public key in their security.admin_key
+    # to allow remote configuration via these methods.
+
+    def get_public_key(self) -> Optional[str]:
+        """
+        Get the master device's public key (for slave admin_key setup).
+
+        Slaves need this key in their security.admin_key to allow
+        remote administration from the master.
+
+        Returns:
+            Base64 encoded public key, or None on error.
+        """
+        # NASA Rule 5: Validate state
+        if not self.interface:
+            self.logger.error("Cannot get public key: not connected")
+            return None
+
+        try:
+            local_node = self.interface.getNode("^local")
+            if not local_node or not hasattr(local_node, "localConfig"):
+                self.logger.error("Cannot access local node config")
+                return None
+
+            security = local_node.localConfig.security
+            if hasattr(security, "public_key") and security.public_key:
+                public_key = base64.b64encode(bytes(security.public_key)).decode()
+                self.logger.info(f"Master public key: {public_key}")
+                return public_key
+
+            self.logger.warning("No public key found on device")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error getting public key: {e}")
+            return None
+
+    def admin_get_setting(self, destination: str, setting: str) -> bool:
+        """
+        Get a setting from a remote slave via admin module.
+
+        The slave must have master's public key in security.admin_key.
+
+        Args:
+            destination: Target slave node ID (e.g., "!28979058").
+            setting: Setting path to get (e.g., "security.admin_key").
+
+        Returns:
+            True if command sent (response comes asynchronously).
+        """
+        # NASA Rule 5: Validate parameters
+        assert destination and destination.startswith("!"), "Invalid node ID format"
+        assert setting and isinstance(setting, str), "Invalid setting path"
+
+        return self._run_admin_cli(["--get", setting], destination)
+
+    def admin_set_setting(self, destination: str, setting: str, value: str) -> bool:
+        """
+        Set a setting on a remote slave via admin module.
+
+        The slave must have master's public key in security.admin_key.
+
+        Args:
+            destination: Target slave node ID (e.g., "!28979058").
+            setting: Setting path to set (e.g., "device.role").
+            value: Value to set.
+
+        Returns:
+            True if command sent successfully.
+        """
+        # NASA Rule 5: Validate parameters
+        assert destination and destination.startswith("!"), "Invalid node ID format"
+        assert setting and isinstance(setting, str), "Invalid setting path"
+        assert value is not None, "Value cannot be None"
+
+        return self._run_admin_cli(["--set", setting, str(value)], destination)
+
+    def setup_slave_admin_key(self, destination: str) -> bool:
+        """
+        Configure a slave's admin_key with master's public key.
+
+        This must be done LOCALLY on the slave first (physical access required),
+        OR the slave must already have an admin_key that allows this master.
+
+        After setup, master can remotely configure the slave.
+
+        Args:
+            destination: Target slave node ID.
+
+        Returns:
+            True if command sent successfully.
+        """
+        public_key = self.config.public_key or self.get_public_key()
+        if not public_key:
+            self.logger.error("Cannot setup admin: no public key available")
+            return False
+
+        # NASA Rule 5: Validate before proceeding
+        assert destination and destination.startswith("!"), "Invalid node ID"
+
+        self.logger.info(f"Setting admin_key on {destination} to master's public key")
+        return self.admin_set_setting(
+            destination,
+            "security.admin_key",
+            f"base64:{public_key}"
+        )
+
+    def _run_admin_cli(self, args: List[str], destination: str) -> bool:
+        """
+        Run a meshtastic CLI command for remote administration.
+
+        Args:
+            args: CLI arguments (e.g., ["--set", "device.role", "CLIENT"]).
+            destination: Target node ID.
+
+        Returns:
+            True if command executed successfully.
+        """
+        # NASA Rule 5: Validate parameters
+        if not args or not destination:
+            self.logger.error("Invalid admin CLI parameters")
+            return False
+
+        # Close interface for CLI (NASA Rule 7: check return values)
+        interface_was_open = self.interface is not None
+        if interface_was_open:
+            self.interface.close()
+            self.interface = None
+            time.sleep(2)
+
+        try:
+            cmd = ["meshtastic"]
+
+            if self.config.device_port:
+                cmd.extend(["--port", self.config.device_port])
+
+            cmd.extend(args)
+            cmd.extend(["--dest", destination])
+
+            self.logger.debug(f"Admin CLI: {' '.join(cmd)}")
+
+            # NASA Rule 2: Bounded timeout
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=CLI_TIMEOUT_SECONDS,
+            )
+
+            if result.returncode == 0:
+                self.logger.info(f"Admin command successful: {args[0]} {args[1] if len(args) > 1 else ''}")
+                if result.stdout:
+                    self.logger.debug(f"Output: {result.stdout}")
+                return True
+            else:
+                self.logger.error(f"Admin command failed: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            self.logger.error("Admin CLI command timed out")
+            return False
+        except FileNotFoundError:
+            self.logger.error("meshtastic CLI not found")
+            return False
+        except Exception as e:
+            self.logger.error(f"Admin CLI error: {e}")
+            return False
+        finally:
+            # Reconnect if we were connected (NASA Rule 7)
+            if interface_was_open:
+                time.sleep(DEVICE_REBOOT_WAIT)
+                self._connect()
+
+    # -------------------------------------------------------------------------
     # Public API - Position Broadcasting (Standard Meshtastic)
     # -------------------------------------------------------------------------
 
@@ -1089,7 +1306,7 @@ class MasterController:
     # Public API - Handlers
     # -------------------------------------------------------------------------
 
-    def on_telemetry(self, handler: Callable[[SlaveNode, Dict], None]):
+    def on_telemetry(self, handler: Callable[[SlaveNode, Dict], None]) -> bool:
         """
         Register a handler for standard Meshtastic telemetry.
 
@@ -1098,32 +1315,60 @@ class MasterController:
         The telemetry dict contains the raw Meshtastic telemetry with:
         - deviceMetrics: batteryLevel, voltage, channelUtilization, airUtilTx
         - environmentMetrics: temperature, relativeHumidity, barometricPressure
-        """
-        self._telemetry_handlers.append(handler)
 
-    def on_data_batch(self, handler: Callable[[SlaveNode, DataBatch], None]):
+        Returns:
+            True if registered, False if max handlers reached (NASA Rule 2).
+        """
+        if len(self._telemetry_handlers) >= MAX_EVENT_HANDLERS:
+            self.logger.warning("Max telemetry handlers reached")
+            return False
+        self._telemetry_handlers.append(handler)
+        return True
+
+    def on_data_batch(self, handler: Callable[[SlaveNode, DataBatch], None]) -> bool:
         """
         Register a data batch handler.
 
         Handler signature: handler(slave: SlaveNode, batch: DataBatch)
-        """
-        self._data_batch_handlers.append(handler)
 
-    def on_status(self, handler: Callable[[SlaveNode, SlaveStatusReport], None]):
+        Returns:
+            True if registered, False if max handlers reached (NASA Rule 2).
+        """
+        if len(self._data_batch_handlers) >= MAX_EVENT_HANDLERS:
+            self.logger.warning("Max data batch handlers reached")
+            return False
+        self._data_batch_handlers.append(handler)
+        return True
+
+    def on_status(self, handler: Callable[[SlaveNode, SlaveStatusReport], None]) -> bool:
         """
         Register a status handler.
 
         Handler signature: handler(slave: SlaveNode, status: SlaveStatusReport)
-        """
-        self._status_handlers.append(handler)
 
-    def on_state_change(self, handler: Callable[[MasterState, MasterState], None]):
+        Returns:
+            True if registered, False if max handlers reached (NASA Rule 2).
+        """
+        if len(self._status_handlers) >= MAX_EVENT_HANDLERS:
+            self.logger.warning("Max status handlers reached")
+            return False
+        self._status_handlers.append(handler)
+        return True
+
+    def on_state_change(self, handler: Callable[[MasterState, MasterState], None]) -> bool:
         """
         Register a state change handler.
 
         Handler signature: handler(old_state: MasterState, new_state: MasterState)
+
+        Returns:
+            True if registered, False if max handlers reached (NASA Rule 2).
         """
+        if len(self._state_handlers) >= MAX_EVENT_HANDLERS:
+            self.logger.warning("Max state handlers reached")
+            return False
         self._state_handlers.append(handler)
+        return True
 
     # -------------------------------------------------------------------------
     # Public API - Slave Management

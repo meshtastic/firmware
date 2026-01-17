@@ -21,19 +21,30 @@ device:
   timeout: 30
 
 # -----------------------------------------------------------------------------
-# Security - Private Key Configuration
+# Security - Key Configuration
 # -----------------------------------------------------------------------------
 # The master controller AUTOMATICALLY verifies and updates the device's
 # private key on startup. If the device key doesn't match the configured
 # key, it will be updated via the meshtastic CLI.
 #
-# To get your current device key:
-#   meshtastic --export-config | grep private_key
+# To get your current device keys:
+#   meshtastic --get security.private_key
+#   meshtastic --get security.public_key
+#
+# Remote Administration Setup:
+#   Slaves must have master's public_key in their security.admin_key
+#   to allow remote configuration. Set on each slave:
+#     meshtastic --set security.admin_key "base64:MASTER_PUBLIC_KEY"
 #
 security:
   # Your device's private key (base64 encoded)
   # This key is verified on every startup and updated if different
   private_key: ""
+
+  # Your device's public key (base64 encoded)
+  # Share this with slaves for admin_key setup
+  # Slaves with this key in admin_key can be remotely configured
+  public_key: ""
 
 # -----------------------------------------------------------------------------
 # Private Channel Configuration
