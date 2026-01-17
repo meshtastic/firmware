@@ -135,7 +135,7 @@ position:
 # REST API Configuration
 # -----------------------------------------------------------------------------
 # The master can run with a REST API server for web access.
-# Run with: python -m meshtastic_app.master --api
+# Run with: python -m meshtastic_app --api
 #
 # API Endpoints:
 #   GET  /api/status                     - Master controller status

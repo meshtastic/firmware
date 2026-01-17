@@ -42,6 +42,12 @@ CLI_TIMEOUT_SECONDS = 60
 # Device reboot wait time (seconds)
 DEVICE_REBOOT_WAIT = 10
 
+# API constants
+API_MAX_LIST_ITEMS = 100
+API_MAX_BATCHES_PER_REQUEST = 50
+API_DEFAULT_HOST = "0.0.0.0"
+API_DEFAULT_PORT = 8080
+
 
 # =============================================================================
 # Enums
@@ -110,8 +116,8 @@ class SlaveNode:
 class ApiConfig:
     """API server configuration."""
     enabled: bool = False
-    host: str = "0.0.0.0"
-    port: int = 8080
+    host: str = API_DEFAULT_HOST
+    port: int = API_DEFAULT_PORT
 
 
 @dataclass

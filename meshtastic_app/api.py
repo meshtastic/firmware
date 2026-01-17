@@ -48,17 +48,18 @@ except ImportError:
     )
 
 from .protocol import CommandType, SlaveStatus
+from .models import (
+    API_MAX_LIST_ITEMS,
+    API_MAX_BATCHES_PER_REQUEST,
+    API_DEFAULT_HOST,
+    API_DEFAULT_PORT,
+)
 
 
-# =============================================================================
-# Constants (NASA Rule 2: Fixed bounds)
-# =============================================================================
-
-# Maximum items to return in list endpoints
-MAX_LIST_ITEMS = 100
-
-# Maximum batches to return per request
-MAX_BATCHES_PER_REQUEST = 50
+def _get_version() -> str:
+    """Get package version (lazy import to avoid circular dependency)."""
+    from . import __version__
+    return __version__
 
 
 # =============================================================================
@@ -179,7 +180,7 @@ def create_api(master_controller) -> FastAPI:
     app = FastAPI(
         title="Meshtastic Master Controller API",
         description="REST API for monitoring and controlling Meshtastic slave nodes",
-        version="0.8.0",
+        version=_get_version(),
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
@@ -305,7 +306,7 @@ def create_api(master_controller) -> FastAPI:
     @app.get("/api/slaves", response_model=SlaveListResponse, tags=["Slaves"])
     async def list_slaves(
         online_only: bool = Query(False, description="Only return online slaves"),
-        limit: int = Query(MAX_LIST_ITEMS, ge=1, le=MAX_LIST_ITEMS, description="Max slaves to return"),
+        limit: int = Query(API_MAX_LIST_ITEMS, ge=1, le=API_MAX_LIST_ITEMS, description="Max slaves to return"),
         offset: int = Query(0, ge=0, description="Offset for pagination"),
     ):
         """
@@ -404,7 +405,7 @@ def create_api(master_controller) -> FastAPI:
     @app.get("/api/slaves/{node_id}/batches", response_model=List[DataBatchResponse], tags=["Data"])
     async def get_slave_batches(
         node_id: str,
-        limit: int = Query(10, ge=1, le=MAX_BATCHES_PER_REQUEST, description="Max batches to return"),
+        limit: int = Query(10, ge=1, le=API_MAX_BATCHES_PER_REQUEST, description="Max batches to return"),
     ):
         """
         Get data batches received from a slave.
@@ -571,8 +572,8 @@ def create_api(master_controller) -> FastAPI:
 
 def run_api_server(
     app: FastAPI,
-    host: str = "0.0.0.0",
-    port: int = 8080,
+    host: str = API_DEFAULT_HOST,
+    port: int = API_DEFAULT_PORT,
     log_level: str = "info",
 ):
     """
@@ -594,8 +595,8 @@ def run_api_server(
 
 async def run_api_server_async(
     app: FastAPI,
-    host: str = "0.0.0.0",
-    port: int = 8080,
+    host: str = API_DEFAULT_HOST,
+    port: int = API_DEFAULT_PORT,
     log_level: str = "info",
 ):
     """

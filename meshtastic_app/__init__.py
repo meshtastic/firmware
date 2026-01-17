@@ -39,6 +39,8 @@ from .models import (
     ApiConfig,
     MAX_SLAVES,
     MAX_EVENT_HANDLERS,
+    API_DEFAULT_HOST,
+    API_DEFAULT_PORT,
 )
 
 # Device Manager
@@ -97,6 +99,8 @@ __all__ = [
     "ApiConfig",
     "MAX_SLAVES",
     "MAX_EVENT_HANDLERS",
+    "API_DEFAULT_HOST",
+    "API_DEFAULT_PORT",
     # Device
     "DeviceManager",
     # Protocol
