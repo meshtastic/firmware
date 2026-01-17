@@ -160,45 +160,38 @@ class ProtocolMessage:
 @dataclass
 class TelemetryData:
     """
-    Telemetry data from a slave node.
+    Telemetry data from a slave node (NO GPS - slaves don't have GPS).
 
-    Binary Format (20 bytes):
-        Bytes 0-3:   Timestamp (uint32, seconds since epoch)
-        Bytes 4-7:   Latitude (int32, degrees * 1e7)
-        Bytes 8-11:  Longitude (int32, degrees * 1e7)
-        Bytes 12-13: Altitude (int16, meters)
-        Bytes 14:    Battery (uint8, percentage)
-        Bytes 15:    Status (uint8, SlaveStatus)
-        Bytes 16-17: Temperature (int16, Celsius * 100)
-        Bytes 18-19: Reserved
+    Binary Format (12 bytes):
+        Bytes 0-3:   Timestamp (uint32, seconds since epoch or uptime)
+        Bytes 4:     Battery (uint8, percentage 0-100)
+        Bytes 5:     Status (uint8, SlaveStatus)
+        Bytes 6-7:   Temperature (int16, Celsius * 100, e.g., 2550 = 25.50C)
+        Bytes 8-9:   Voltage (uint16, millivolts, e.g., 3700 = 3.7V)
+        Bytes 10-11: Reserved (for future use)
+
+    Note: Slaves do NOT have GPS. Master broadcasts its position to slaves.
     """
     timestamp: int = 0
-    latitude: float = 0.0
-    longitude: float = 0.0
-    altitude: int = 0
     battery_percent: int = 0
     status: SlaveStatus = SlaveStatus.OK
-    temperature: float = 0.0
+    temperature: float = 0.0  # Celsius
+    voltage_mv: int = 0  # Millivolts
 
-    # Format: uint32, int32, int32, int16, uint8, uint8, int16, uint16
-    STRUCT_FORMAT = "<IiihBBhH"
-    STRUCT_SIZE = 20
+    STRUCT_FORMAT = "<IBBhHH"  # uint32, uint8, uint8, int16, uint16, uint16
+    STRUCT_SIZE = 12
 
     def encode(self) -> bytes:
         """Encode telemetry to binary."""
-        lat_encoded = int(self.latitude * 1e7)
-        lon_encoded = int(self.longitude * 1e7)
         temp_encoded = int(self.temperature * 100)
 
         return struct.pack(
             self.STRUCT_FORMAT,
             self.timestamp,
-            lat_encoded,
-            lon_encoded,
-            self.altitude,
             self.battery_percent,
             self.status,
             temp_encoded,
+            self.voltage_mv,
             0,  # Reserved
         )
 
@@ -211,23 +204,19 @@ class TelemetryData:
         try:
             (
                 timestamp,
-                lat_encoded,
-                lon_encoded,
-                altitude,
                 battery,
                 status,
                 temp_encoded,
+                voltage_mv,
                 _reserved,
             ) = struct.unpack(cls.STRUCT_FORMAT, data[: cls.STRUCT_SIZE])
 
             return cls(
                 timestamp=timestamp,
-                latitude=lat_encoded / 1e7,
-                longitude=lon_encoded / 1e7,
-                altitude=altitude,
                 battery_percent=battery,
                 status=SlaveStatus(status),
                 temperature=temp_encoded / 100.0,
+                voltage_mv=voltage_mv,
             )
         except (struct.error, ValueError):
             return None

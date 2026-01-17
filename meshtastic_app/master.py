@@ -236,12 +236,11 @@ class MasterController:
         self.my_node_info: Dict = {}
         self.slaves: Dict[str, SlaveNode] = {}
 
-        # Callbacks
+        # Callbacks for slave data
         self._telemetry_handlers: List[Callable] = []
         self._data_batch_handlers: List[Callable] = []
         self._status_handlers: List[Callable] = []
         self._state_handlers: List[Callable] = []
-        self._position_handlers: List[Callable] = []  # For standard meshtastic position
 
         # Internal state
         self._subscribed = False  # Track pub/sub subscription state
@@ -380,7 +379,7 @@ class MasterController:
             self._send_ack(from_id, msg.msg_type)
 
     def _handle_telemetry(self, slave: SlaveNode, telemetry: TelemetryData, msg: ProtocolMessage):
-        """Handle incoming telemetry data."""
+        """Handle incoming telemetry data from slave (no GPS)."""
         if not telemetry:
             self.logger.warning(f"Invalid telemetry from {slave.node_id}")
             slave.error_count += 1
@@ -391,8 +390,8 @@ class MasterController:
 
         self.logger.info(
             f"[TELEMETRY] {slave.node_id}: "
-            f"pos=({telemetry.latitude:.6f}, {telemetry.longitude:.6f}), "
             f"bat={telemetry.battery_percent}%, "
+            f"voltage={telemetry.voltage_mv}mV, "
             f"temp={telemetry.temperature:.1f}C, "
             f"status={telemetry.status.name}"
         )
@@ -455,38 +454,25 @@ class MasterController:
                 self.logger.error(f"Status handler error: {e}")
 
     def _handle_other_traffic(self, from_id: str, decoded: Dict, packet: Dict):
-        """Handle non-protocol traffic on private channel (standard Meshtastic)."""
+        """
+        Handle non-protocol traffic on private channel (standard Meshtastic).
+
+        Note: Slaves do NOT have GPS, so we don't expect position data from them.
+        This handler is mainly for text messages or other standard traffic.
+        """
         portnum = decoded.get("portnum", "")
 
         # Ignore our own messages
         if from_id == self.my_node_id:
             return
 
+        # Update slave tracking for any traffic
+        slave = self._get_or_create_slave(from_id)
+        slave.last_seen = time.time()
+        slave.is_online = True
+
         if "text" in decoded:
-            self.logger.debug(f"[TEXT] {from_id}: {decoded['text']}")
-
-        elif portnum == "POSITION_APP":
-            pos = decoded.get("position", {})
-            lat = pos.get("latitude")
-            lon = pos.get("longitude")
-            alt = pos.get("altitude", 0)
-
-            if lat is not None and lon is not None:
-                # Update slave tracking with standard Meshtastic position
-                slave = self._get_or_create_slave(from_id)
-                slave.last_seen = time.time()
-                slave.is_online = True
-
-                self.logger.info(
-                    f"[POSITION] {from_id}: ({lat:.6f}, {lon:.6f}, alt={alt}m)"
-                )
-
-                # Dispatch to position handlers
-                for handler in self._position_handlers:
-                    try:
-                        handler(slave, pos)
-                    except Exception as e:
-                        self.logger.error(f"Position handler error: {e}")
+            self.logger.info(f"[TEXT] {from_id}: {decoded['text']}")
 
     def _get_or_create_slave(self, node_id: str) -> SlaveNode:
         """Get existing slave or create new one."""
@@ -949,15 +935,6 @@ class MasterController:
         """
         self._state_handlers.append(handler)
 
-    def on_position(self, handler: Callable[[SlaveNode, Dict], None]):
-        """
-        Register a position handler for standard Meshtastic position updates.
-
-        Handler signature: handler(slave: SlaveNode, position: dict)
-        Position dict contains: latitude, longitude, altitude, etc.
-        """
-        self._position_handlers.append(handler)
-
     # -------------------------------------------------------------------------
     # Public API - Slave Management
     # -------------------------------------------------------------------------
@@ -1040,12 +1017,10 @@ class MasterController:
                 "telemetry_history": [
                     {
                         "timestamp": t.timestamp,
-                        "latitude": t.latitude,
-                        "longitude": t.longitude,
-                        "altitude": t.altitude,
                         "battery_percent": t.battery_percent,
-                        "status": t.status.name,
+                        "voltage_mv": t.voltage_mv,
                         "temperature": t.temperature,
+                        "status": t.status.name,
                     }
                     for t in slave.telemetry_history
                 ],
@@ -1094,15 +1069,15 @@ class MasterController:
             filepath = f"telemetry_{timestamp}.csv"
 
         with open(filepath, "w") as f:
-            # Header
-            f.write("node_id,timestamp,latitude,longitude,altitude,battery_percent,status,temperature\n")
+            # Header (no position - slaves don't have GPS)
+            f.write("node_id,timestamp,battery_percent,voltage_mv,temperature,status\n")
 
             # Data
             for node_id, slave in self.slaves.items():
                 for t in slave.telemetry_history:
                     f.write(
-                        f"{node_id},{t.timestamp},{t.latitude},{t.longitude},"
-                        f"{t.altitude},{t.battery_percent},{t.status.name},{t.temperature}\n"
+                        f"{node_id},{t.timestamp},{t.battery_percent},"
+                        f"{t.voltage_mv},{t.temperature},{t.status.name}\n"
                     )
 
         self.logger.info(f"Telemetry exported to {filepath}")
