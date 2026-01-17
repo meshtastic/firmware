@@ -472,13 +472,66 @@ def create_command_message(command: MasterCommand) -> bytes:
     return msg.encode()
 
 
-def create_ack_message(for_msg_type: MessageType) -> bytes:
-    """Create an acknowledgment message."""
+def create_ack_message(for_msg_type: MessageType, batch_id: int = None) -> bytes:
+    """
+    Create an acknowledgment message.
+
+    For DATA_BATCH acknowledgments, includes the batch_id so the slave knows
+    which specific batch was successfully processed and can be deleted from memory.
+
+    ACK Payload Format:
+        Byte 0:     Message type being acknowledged (uint8)
+        Bytes 1-4:  Batch ID (uint32, only for DATA_BATCH ACKs)
+
+    Args:
+        for_msg_type: The message type being acknowledged.
+        batch_id: For DATA_BATCH ACKs, the batch ID that was processed.
+
+    Returns:
+        Encoded ACK message bytes.
+    """
+    if for_msg_type == MessageType.DATA_BATCH and batch_id is not None:
+        # Include batch_id so slave knows which batch to delete from memory
+        payload = struct.pack("<BI", for_msg_type, batch_id)
+    else:
+        payload = struct.pack("<B", for_msg_type)
+
     msg = ProtocolMessage(
         msg_type=MessageType.MASTER_ACK,
-        payload=struct.pack("<B", for_msg_type),
+        payload=payload,
     )
     return msg.encode()
+
+
+def parse_ack_message(payload: bytes) -> Tuple[Optional[MessageType], Optional[int]]:
+    """
+    Parse an ACK message payload.
+
+    This is used by slaves to extract the acknowledged message type and batch_id.
+    For DATA_BATCH ACKs, the batch_id tells the slave which batch was successfully
+    processed and can be deleted from memory.
+
+    Args:
+        payload: The ACK message payload bytes.
+
+    Returns:
+        Tuple of (acked_msg_type, batch_id) or (None, None) on error.
+        batch_id is None for non-DATA_BATCH ACKs.
+    """
+    if not payload or len(payload) < 1:
+        return None, None
+
+    try:
+        acked_type = MessageType(payload[0])
+
+        # DATA_BATCH ACKs include the batch_id (5 bytes total)
+        if acked_type == MessageType.DATA_BATCH and len(payload) >= 5:
+            batch_id = struct.unpack("<I", payload[1:5])[0]
+            return acked_type, batch_id
+
+        return acked_type, None
+    except (ValueError, struct.error):
+        return None, None
 
 
 def create_heartbeat_message() -> bytes:

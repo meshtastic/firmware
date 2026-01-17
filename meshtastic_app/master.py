@@ -370,8 +370,12 @@ class MasterController:
 
         # Handle by message type (custom protocol)
         # Note: Standard Meshtastic telemetry is handled in _handle_other_traffic()
+        batch_id = None  # Track batch_id for ACK
+
         if msg.msg_type == MessageType.DATA_BATCH:
             self._handle_data_batch(slave, payload, msg)
+            if payload:
+                batch_id = payload.batch_id  # Save for ACK
 
         elif msg.msg_type == MessageType.STATUS:
             self._handle_status(slave, payload, msg)
@@ -382,9 +386,9 @@ class MasterController:
         elif msg.msg_type == MessageType.SLAVE_ACK:
             self.logger.debug(f"ACK from {from_id}")
 
-        # Send ACK if requested
+        # Send ACK if requested (includes batch_id for DATA_BATCH so slave can delete from memory)
         if (msg.flags & MessageFlags.ACK_REQUESTED) and self.config.send_ack:
-            self._send_ack(from_id, msg.msg_type)
+            self._send_ack(from_id, msg.msg_type, batch_id)
 
     def _handle_data_batch(self, slave: SlaveNode, batch: DataBatch, msg: ProtocolMessage):
         """Handle incoming data batch."""
@@ -532,17 +536,30 @@ class MasterController:
 
         return self.slaves[node_id]
 
-    def _send_ack(self, destination: str, for_msg_type: MessageType):
-        """Send acknowledgment to a slave."""
+    def _send_ack(self, destination: str, for_msg_type: MessageType, batch_id: int = None):
+        """
+        Send acknowledgment to a slave.
+
+        For DATA_BATCH ACKs, includes the batch_id so the slave knows which
+        specific batch was successfully processed and can delete it from memory.
+
+        Args:
+            destination: Target slave node ID.
+            for_msg_type: The message type being acknowledged.
+            batch_id: For DATA_BATCH ACKs, the batch ID that was processed.
+        """
         try:
-            ack_data = create_ack_message(for_msg_type)
+            ack_data = create_ack_message(for_msg_type, batch_id)
             self.interface.sendData(
                 data=ack_data,
                 destinationId=destination,
                 portNum=self.config.private_port_num,
                 channelIndex=self.config.private_channel_index,
             )
-            self.logger.debug(f"ACK sent to {destination} for {for_msg_type.name}")
+            if batch_id is not None:
+                self.logger.debug(f"ACK sent to {destination} for {for_msg_type.name} batch_id={batch_id}")
+            else:
+                self.logger.debug(f"ACK sent to {destination} for {for_msg_type.name}")
         except Exception as e:
             self.logger.error(f"Failed to send ACK: {e}")
 

@@ -16,7 +16,7 @@ Architecture:
         ▼
     Slave Nodes (custom firmware, NO GPS)
         - Send device telemetry via STANDARD Meshtastic (battery, voltage, temp)
-        - Send sensor data batches via CUSTOM binary protocol (port 257)
+        - Send sensor data batches via CUSTOM binary protocol (port 485)
         - Receive master position via standard Meshtastic
         - Receive commands via custom protocol
 
@@ -26,9 +26,16 @@ Data Flow:
         - Slaves → Master: Device telemetry (battery, voltage, channel util)
         - Slaves → Master: Environment metrics (temp, humidity, pressure)
 
-    Custom Binary Protocol (port 257):
+    Custom Binary Protocol (port 485):
         - Slaves → Master: Sensor data batches (DATA_BATCH)
+        - Master → Slaves: ACK with batch_id (slave can delete batch from memory)
         - Master → Slaves: Commands (COMMAND, REQUEST_DATA, etc.)
+
+ACK Flow (batch memory management):
+    1. Slave sends DATA_BATCH with batch_id, keeps batch in memory
+    2. Master processes batch, sends ACK with batch_id
+    3. Slave receives ACK, extracts batch_id using parse_ack_message()
+    4. Slave deletes acknowledged batch from memory
 
 Usage:
     from meshtastic_app import MasterController, MasterConfig
@@ -62,9 +69,10 @@ from .protocol import (
     ProtocolMessage,
     SlaveStatus,
     SlaveStatusReport,
+    parse_ack_message,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __all__ = [
     # Master
     "MasterController",
@@ -81,4 +89,5 @@ __all__ = [
     "DataBatch",
     "SlaveStatusReport",
     "MasterCommand",
+    "parse_ack_message",
 ]
