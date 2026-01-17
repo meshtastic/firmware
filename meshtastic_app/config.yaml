@@ -66,17 +66,24 @@ slaves:
   offline_timeout: 600
 
 # -----------------------------------------------------------------------------
-# Position Broadcasting (Optional)
+# Position Broadcasting (Standard Meshtastic)
 # -----------------------------------------------------------------------------
-# Master can optionally broadcast its position to slaves.
-# Disabled by default since master is typically stationary.
+# Master broadcasts its position to slaves using STANDARD Meshtastic position.
+# Position is sent ONLY on the private channel, NOT the public channel.
+# This allows slaves to know the master's location without exposing it publicly.
 #
 position:
-  enabled: false
+  # Enable periodic position broadcasting
+  enabled: true
+
+  # Broadcast interval in seconds
   interval_seconds: 300
-  fixed_latitude: null
-  fixed_longitude: null
-  fixed_altitude: null
+
+  # Fixed position coordinates (required if device has no GPS)
+  # Master is typically stationary, so set these values
+  fixed_latitude: null    # e.g., 37.7749
+  fixed_longitude: null   # e.g., -122.4194
+  fixed_altitude: null    # e.g., 10 (meters)
 
 # -----------------------------------------------------------------------------
 # Logging

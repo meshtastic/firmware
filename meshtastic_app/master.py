@@ -782,6 +782,61 @@ class MasterController:
             return False
 
     # -------------------------------------------------------------------------
+    # Public API - Position Broadcasting (Standard Meshtastic)
+    # -------------------------------------------------------------------------
+
+    def send_position(
+        self,
+        latitude: float = None,
+        longitude: float = None,
+        altitude: int = None,
+    ) -> bool:
+        """
+        Broadcast position on the private channel using standard Meshtastic.
+
+        This uses the standard Meshtastic POSITION_APP, NOT our custom protocol.
+        Position is sent ONLY on the private channel, not the public channel.
+
+        Args:
+            latitude: GPS latitude (uses config if None).
+            longitude: GPS longitude (uses config if None).
+            altitude: Altitude in meters (uses config if None).
+
+        Returns:
+            True if sent successfully.
+        """
+        if self.state != MasterState.READY:
+            self.logger.error(f"Cannot send position: state is {self.state.value}")
+            return False
+
+        lat = latitude if latitude is not None else self.config.fixed_latitude
+        lon = longitude if longitude is not None else self.config.fixed_longitude
+        alt = altitude if altitude is not None else (self.config.fixed_altitude or 0)
+
+        if lat is None or lon is None:
+            self.logger.warning("No position available (set fixed_latitude/longitude in config)")
+            return False
+
+        try:
+            # Use standard Meshtastic sendPosition on PRIVATE channel only
+            self.interface.sendPosition(
+                latitude=lat,
+                longitude=lon,
+                altitude=alt,
+                channelIndex=self.config.private_channel_index,
+            )
+
+            self.logger.info(
+                f"Position broadcast on private CH{self.config.private_channel_index}: "
+                f"({lat:.6f}, {lon:.6f}, alt={alt}m)"
+            )
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Send position failed: {e}")
+            return False
+
+    # -------------------------------------------------------------------------
     # Public API - Handlers
     # -------------------------------------------------------------------------
 
@@ -871,8 +926,9 @@ class MasterController:
 
         This will:
         1. Initialize (connect + verify key)
-        2. Listen for slave telemetry and data
-        3. Periodically update slave status
+        2. Periodically broadcast position on private channel (if enabled)
+        3. Listen for slave telemetry and data
+        4. Periodically update slave status
         """
         if not self.initialize():
             self.logger.error("Initialization failed")
@@ -880,11 +936,27 @@ class MasterController:
 
         self.running = True
         last_status_check = 0
+        last_position_broadcast = 0
         STATUS_CHECK_INTERVAL = 60
+
+        # Log position broadcast settings
+        if self.config.position_enabled:
+            self.logger.info(
+                f"Position broadcasting enabled: every {self.config.position_interval}s "
+                f"on private CH{self.config.private_channel_index}"
+            )
+        else:
+            self.logger.info("Position broadcasting disabled")
 
         try:
             while self.running and self.state == MasterState.READY:
                 now = time.time()
+
+                # Periodically broadcast position on private channel
+                if self.config.position_enabled:
+                    if (now - last_position_broadcast) >= self.config.position_interval:
+                        self.send_position()
+                        last_position_broadcast = now
 
                 # Periodically check slave status
                 if (now - last_status_check) >= STATUS_CHECK_INTERVAL:
