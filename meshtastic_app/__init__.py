@@ -57,8 +57,13 @@ from .protocol import (
     ProtocolMessage,
     SlaveStatus,
     SlaveStatusReport,
+    TimestampedBatch,
+    TimestampedRecord,
     parse_ack_message,
 )
+
+# Storage
+from .storage import DataStorage, StoredRecord
 
 # CLI
 from .cli import main
@@ -112,8 +117,13 @@ __all__ = [
     "ProtocolMessage",
     "DataBatch",
     "SlaveStatusReport",
+    "TimestampedBatch",
+    "TimestampedRecord",
     "MasterCommand",
     "parse_ack_message",
+    # Storage
+    "DataStorage",
+    "StoredRecord",
     # API
     "create_api",
     "run_api_server",

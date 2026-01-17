@@ -106,6 +106,25 @@ class DataBatchResponse(BaseModel):
     records_hex: List[str] = Field(..., description="Records as hex strings")
 
 
+class StoredRecordResponse(BaseModel):
+    """A stored record from the database."""
+    id: int = Field(..., description="Database record ID")
+    slave_id: str = Field(..., description="Source slave node ID")
+    batch_id: int = Field(..., description="Original batch ID")
+    timestamp: int = Field(..., description="Absolute Unix timestamp")
+    timestamp_iso: str = Field(..., description="ISO formatted timestamp")
+    data: str = Field(..., description="Record data as UTF-8 string")
+    data_hex: str = Field(..., description="Record data as hex string")
+
+
+class DayRecordsResponse(BaseModel):
+    """Records for a specific day."""
+    slave_id: str = Field(..., description="Slave node ID")
+    date: str = Field(..., description="Date in YYYY-MM-DD format")
+    record_count: int = Field(..., ge=0, description="Number of records")
+    records: List[StoredRecordResponse] = Field(..., description="Records ordered by timestamp")
+
+
 class SlaveResponse(BaseModel):
     """Full slave information."""
     node_id: str = Field(..., description="Node ID (e.g., !28979058)")
@@ -562,6 +581,111 @@ def create_api(master_controller) -> FastAPI:
             success=success,
             message=f"Command {command.name} broadcast" if success else "Broadcast failed",
         )
+
+    # -------------------------------------------------------------------------
+    # Stored Data Endpoints (SQLite database)
+    # -------------------------------------------------------------------------
+
+    def record_to_response(rec) -> StoredRecordResponse:
+        """Convert StoredRecord to API response."""
+        from datetime import datetime
+        return StoredRecordResponse(
+            id=rec.id,
+            slave_id=rec.slave_id,
+            batch_id=rec.batch_id,
+            timestamp=rec.timestamp,
+            timestamp_iso=datetime.utcfromtimestamp(rec.timestamp).isoformat() + "Z",
+            data=rec.data.decode("utf-8", errors="replace"),
+            data_hex=rec.data.hex(),
+        )
+
+    @app.get("/api/data/{slave_id}/day/{year}/{month}/{day}", response_model=DayRecordsResponse, tags=["Data"])
+    async def get_records_by_day(
+        slave_id: str,
+        year: int = Query(..., ge=2020, le=2100, description="Year"),
+        month: int = Query(..., ge=1, le=12, description="Month"),
+        day: int = Query(..., ge=1, le=31, description="Day"),
+    ):
+        """
+        Get all stored records for a slave on a specific day.
+
+        Records are returned in chronological order, suitable for
+        displaying a day's data from beginning to end.
+        """
+        master = get_master()
+        records = master.storage.get_records_by_day(slave_id, year, month, day)
+
+        return DayRecordsResponse(
+            slave_id=slave_id,
+            date=f"{year:04d}-{month:02d}-{day:02d}",
+            record_count=len(records),
+            records=[record_to_response(r) for r in records],
+        )
+
+    @app.get("/api/data/{slave_id}/latest", response_model=List[StoredRecordResponse], tags=["Data"])
+    async def get_latest_records(
+        slave_id: str,
+        limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
+    ):
+        """
+        Get the most recent stored records for a slave.
+
+        Records are returned newest first.
+        """
+        master = get_master()
+        records = master.storage.get_latest_records(slave_id, limit)
+
+        return [record_to_response(r) for r in records]
+
+    @app.get("/api/data/{slave_id}/range", response_model=List[StoredRecordResponse], tags=["Data"])
+    async def get_records_by_range(
+        slave_id: str,
+        start: int = Query(..., description="Start Unix timestamp (inclusive)"),
+        end: int = Query(..., description="End Unix timestamp (exclusive)"),
+        limit: int = Query(1000, ge=1, le=10000, description="Max records to return"),
+    ):
+        """
+        Get stored records for a slave within a time range.
+
+        Records are returned in chronological order.
+        """
+        master = get_master()
+        records = master.storage.get_records_by_range(slave_id, start, end, limit)
+
+        return [record_to_response(r) for r in records]
+
+    @app.get("/api/data/slaves", response_model=List[str], tags=["Data"])
+    async def get_data_slaves():
+        """Get list of all slave IDs with stored data."""
+        master = get_master()
+        return master.storage.get_all_slave_ids()
+
+    @app.get("/api/data/{slave_id}/stats", tags=["Data"])
+    async def get_data_stats(slave_id: str):
+        """Get storage statistics for a slave."""
+        master = get_master()
+        count = master.storage.get_record_count(slave_id)
+        date_range = master.storage.get_date_range(slave_id)
+
+        from datetime import datetime
+        result = {
+            "slave_id": slave_id,
+            "record_count": count,
+            "first_record": None,
+            "last_record": None,
+        }
+
+        if date_range:
+            result["first_record"] = {
+                "timestamp": date_range[0],
+                "iso": datetime.utcfromtimestamp(date_range[0]).isoformat() + "Z",
+            }
+            result["last_record"] = {
+                "timestamp": date_range[1],
+                "iso": datetime.utcfromtimestamp(date_range[1]).isoformat() + "Z",
+            }
+
+        return result
 
     return app
 

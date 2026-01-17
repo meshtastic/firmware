@@ -78,10 +78,11 @@ HEADER_SIZE = 4
 class MessageType(IntEnum):
     """Protocol message types."""
     # Slave -> Master
-    TELEMETRY = 0x01      # Telemetry data from slave
-    DATA_BATCH = 0x02     # Batch of sensor/collected data
-    STATUS = 0x03         # Slave status report
-    SLAVE_ACK = 0x04      # Slave acknowledgment
+    TELEMETRY = 0x01           # Telemetry data from slave
+    DATA_BATCH = 0x02          # Batch of sensor/collected data (fixed-size records)
+    STATUS = 0x03              # Slave status report
+    SLAVE_ACK = 0x04           # Slave acknowledgment
+    TIMESTAMPED_BATCH = 0x05   # Batch with timestamps (variable-size records)
 
     # Master -> Slave
     COMMAND = 0x10        # Command to slave
@@ -299,6 +300,126 @@ class DataBatch:
             )
         except struct.error:
             return None
+
+
+@dataclass
+class TimestampedRecord:
+    """A single record with delta timestamp."""
+    delta_seconds: int  # Offset from batch timestamp
+    data: bytes
+
+
+@dataclass
+class TimestampedBatch:
+    """
+    A batch of timestamped records from a slave.
+
+    Used for logging data with timestamps (e.g., keystrokes, sensor readings).
+    Each record has a delta (seconds from batch creation) and variable-length data.
+
+    Binary Format:
+        Bytes 0-3:   Batch ID (uint32)
+        Bytes 4-7:   Batch Timestamp (uint32, Unix epoch when batch was created)
+        Bytes 8:     Record Count (uint8, max 255 records)
+        Bytes 9:     Reserved
+        Bytes 10+:   Records (variable length)
+
+    Record Format (variable length):
+        Bytes 0-1:   Delta seconds (uint16, offset from batch timestamp)
+        Byte 2:      Data length (uint8, max 255 bytes)
+        Bytes 3+:    Data (variable)
+
+    Example:
+        Batch created at 1737100800 with 3 records:
+        - delta=0,   "Hello"         (at batch creation)
+        - delta=300, "Still here"    (5 minutes later)
+        - delta=312, "Enter pressed" (12 seconds after that)
+    """
+    batch_id: int = 0
+    batch_timestamp: int = 0  # Unix epoch when batch was created on slave
+    records: List[TimestampedRecord] = field(default_factory=list)
+
+    HEADER_FORMAT = "<IIBB"  # batch_id, timestamp, count, reserved
+    HEADER_SIZE = 10
+    RECORD_HEADER_FORMAT = "<HB"  # delta (uint16), length (uint8)
+    RECORD_HEADER_SIZE = 3
+    MAX_RECORDS = 255
+    MAX_DATA_LENGTH = 255
+
+    def encode(self) -> bytes:
+        """Encode timestamped batch to binary."""
+        record_count = min(len(self.records), self.MAX_RECORDS)
+        header = struct.pack(
+            self.HEADER_FORMAT,
+            self.batch_id,
+            self.batch_timestamp,
+            record_count,
+            0,  # Reserved
+        )
+
+        record_data = b""
+        for i, rec in enumerate(self.records[:record_count]):
+            data_len = min(len(rec.data), self.MAX_DATA_LENGTH)
+            record_data += struct.pack(
+                self.RECORD_HEADER_FORMAT,
+                rec.delta_seconds & 0xFFFF,  # Clamp to uint16
+                data_len,
+            )
+            record_data += rec.data[:data_len]
+
+        return header + record_data
+
+    @classmethod
+    def decode(cls, data: bytes) -> Optional["TimestampedBatch"]:
+        """Decode binary to timestamped batch."""
+        if len(data) < cls.HEADER_SIZE:
+            return None
+
+        try:
+            batch_id, batch_timestamp, record_count, _ = struct.unpack(
+                cls.HEADER_FORMAT, data[:cls.HEADER_SIZE]
+            )
+
+            records = []
+            offset = cls.HEADER_SIZE
+
+            for _ in range(record_count):
+                if offset + cls.RECORD_HEADER_SIZE > len(data):
+                    break
+
+                delta, data_len = struct.unpack(
+                    cls.RECORD_HEADER_FORMAT,
+                    data[offset:offset + cls.RECORD_HEADER_SIZE]
+                )
+                offset += cls.RECORD_HEADER_SIZE
+
+                if offset + data_len > len(data):
+                    break
+
+                record_data = data[offset:offset + data_len]
+                offset += data_len
+
+                records.append(TimestampedRecord(
+                    delta_seconds=delta,
+                    data=record_data,
+                ))
+
+            return cls(
+                batch_id=batch_id,
+                batch_timestamp=batch_timestamp,
+                records=records,
+            )
+        except struct.error:
+            return None
+
+    def to_storage_format(self) -> List[Tuple[int, bytes]]:
+        """
+        Convert to format suitable for DataStorage.store_batch().
+
+        Returns:
+            List of (delta_seconds, data) tuples.
+        """
+        return [(r.delta_seconds, r.data) for r in self.records]
 
 
 @dataclass
@@ -629,6 +750,8 @@ def parse_message(data: bytes) -> Tuple[Optional[ProtocolMessage], Optional[obje
     # Note: TELEMETRY is deprecated - use standard Meshtastic TELEMETRY_APP
     if msg.msg_type == MessageType.DATA_BATCH:
         payload = DataBatch.decode(msg.payload)
+    elif msg.msg_type == MessageType.TIMESTAMPED_BATCH:
+        payload = TimestampedBatch.decode(msg.payload)
     elif msg.msg_type == MessageType.STATUS:
         payload = SlaveStatusReport.decode(msg.payload)
     elif msg.msg_type == MessageType.COMMAND:

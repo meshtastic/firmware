@@ -51,11 +51,13 @@ from .protocol import (
     MessageType,
     ProtocolMessage,
     SlaveStatusReport,
+    TimestampedBatch,
     create_ack_message,
     create_command_message,
     create_heartbeat_message,
     parse_message,
 )
+from .storage import DataStorage
 
 
 class MasterController:
@@ -82,6 +84,9 @@ class MasterController:
 
         # Device manager for connection and hardware operations
         self.device = DeviceManager(config, self.logger)
+
+        # Data storage for timestamped batches
+        self.storage = DataStorage()
 
         # Node tracking
         self.slaves: Dict[str, SlaveNode] = {}
@@ -224,6 +229,11 @@ class MasterController:
             if payload:
                 batch_id = payload.batch_id
 
+        elif msg.msg_type == MessageType.TIMESTAMPED_BATCH:
+            self._handle_timestamped_batch(slave, payload, msg)
+            if payload:
+                batch_id = payload.batch_id
+
         elif msg.msg_type == MessageType.STATUS:
             self._handle_status(slave, payload, msg)
 
@@ -254,6 +264,38 @@ class MasterController:
             f"record_size={batch.record_size}"
         )
 
+        for handler in self._data_batch_handlers:
+            try:
+                handler(slave, batch)
+            except Exception as e:
+                self.logger.error(f"Data batch handler error: {e}")
+
+    def _handle_timestamped_batch(self, slave: SlaveNode, batch: TimestampedBatch, msg: ProtocolMessage):
+        """Handle incoming timestamped batch - store to database."""
+        if not batch:
+            self.logger.warning(f"Invalid timestamped batch from {slave.node_id}")
+            slave.error_count += 1
+            return
+
+        # Store to SQLite database
+        stored = self.storage.store_batch(
+            slave_id=slave.node_id,
+            batch_id=batch.batch_id,
+            batch_timestamp=batch.batch_timestamp,
+            records=batch.to_storage_format(),
+        )
+
+        slave.batch_count += 1
+
+        self.logger.info(
+            f"[TIMESTAMPED_BATCH] {slave.node_id}: "
+            f"batch_id={batch.batch_id}, "
+            f"timestamp={batch.batch_timestamp}, "
+            f"records={len(batch.records)}, "
+            f"stored={stored}"
+        )
+
+        # Also call data batch handlers (for backwards compatibility)
         for handler in self._data_batch_handlers:
             try:
                 handler(slave, batch)
