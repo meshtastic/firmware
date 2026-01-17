@@ -38,6 +38,9 @@ const Emote emotes[] = {
     {"\U0001F60E", cool, cool_width, cool_height},                                           // 😎 Smiling Face with Sunglasses
     {"\U0001F440", eyes, eyes_width, eyes_height},                                           // 👀 Eyes
     {"\U0001F441\uFE0F", eye, eye_width, eye_height},                                        // 👁️ Eye
+    {"\U0001F344", mushroom, mushroom_width, mushroom_height}, // 🍄 Mushroom
+    {"\U0001F42E", cow, cow_width, cow_height},               // 🐮 Cow Face
+    {"\U0001F404", cow, cow_width, cow_height},               // 🐄 Cow (use same bitmap)
 
     // --- Gestures and People ---
     {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},             // 👋 Waving Hand
@@ -475,6 +478,46 @@ const unsigned char eyes[] PROGMEM = {0x00, 0x00, 0x3C, 0x3C, 0x42, 0x42, 0x81, 
 const unsigned char eye[] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x07, 0xF8, 0x1F, 0xF4,
                                      0x2F, 0x7A, 0x5E, 0x39, 0x9C, 0x39, 0x9C, 0x7A, 0x5E, 0xF4, 0x2F,
                                      0xF8, 0x1F, 0xE0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+// 🍄 Mushroom - rounded cap with spots, stem below
+const unsigned char mushroom[] PROGMEM = {
+    0x00, 0x00, // Row 0
+    0xE0, 0x07, // Row 1  - top of cap
+    0xF8, 0x1F, // Row 2
+    0xFC, 0x3F, // Row 3
+    0xFE, 0x7F, // Row 4
+    0x9E, 0x79, // Row 5  - cap with spots
+    0xCF, 0xF3, // Row 6
+    0xEF, 0xF7, // Row 7
+    0xFF, 0xFF, // Row 8  - bottom of cap
+    0xF0, 0x0F, // Row 9  - top of stem
+    0xE0, 0x07, // Row 10
+    0xE0, 0x07, // Row 11
+    0xE0, 0x07, // Row 12
+    0xE0, 0x07, // Row 13
+    0xF0, 0x0F, // Row 14 - bottom of stem
+    0x00, 0x00  // Row 15
+};
+
+// 🐮 Cow Face - connected face with ears, eyes, snout and nostrils
+const unsigned char cow[] PROGMEM = {
+    0x0C, 0x30, // Row 0  - ears top
+    0x1E, 0x78, // Row 1  - ears wider
+    0xFF, 0xFF, // Row 2  - head top
+    0xFF, 0xFF, // Row 3  - head
+    0x37, 0xEC, // Row 4  - eyes (dark dots)
+    0x37, 0xEC, // Row 5  - eyes
+    0xFF, 0xFF, // Row 6  - face
+    0xFF, 0xFF, // Row 7  - face
+    0xFE, 0x7F, // Row 8  - snout top
+    0xCE, 0x73, // Row 9  - nostrils (holes)
+    0xFE, 0x7F, // Row 10 - snout
+    0xFC, 0x3F, // Row 11 - snout bottom
+    0x00, 0x00, // Row 12
+    0x00, 0x00, // Row 13
+    0x00, 0x00, // Row 14
+    0x00, 0x00  // Row 15
+};
 #endif
 
 } // namespace graphics

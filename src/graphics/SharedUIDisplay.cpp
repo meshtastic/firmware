@@ -505,16 +505,42 @@ std::string sanitizeString(const std::string &input)
     replaceAll(s, "\xC2\xA0", " "); // U+00A0
 
     // Now do your original sanitize pass over the normalized string.
-    for (unsigned char uc : s) {
-        char c = static_cast<char>(uc);
-        if (std::isalnum(uc) || isAllowedPunctuation(c)) {
-            output += c;
-            inReplacement = false;
-        } else {
-            if (!inReplacement) {
-                output += static_cast<char>(0xBF); // ISO-8859-1 for inverted question mark
-                inReplacement = true;
+    // Preserve UTF-8 multi-byte sequences (emojis) so emote system can render them
+    size_t i = 0;
+    while (i < s.size()) {
+        unsigned char uc = static_cast<unsigned char>(s[i]);
+
+        // Determine UTF-8 sequence length
+        int seqLen = 1;
+        if ((uc & 0x80) == 0) {
+            // ASCII (0xxxxxxx) - single byte
+            seqLen = 1;
+        } else if ((uc & 0xE0) == 0xC0) {
+            // 2-byte sequence (110xxxxx)
+            seqLen = 2;
+        } else if ((uc & 0xF0) == 0xE0) {
+            // 3-byte sequence (1110xxxx)
+            seqLen = 3;
+        } else if ((uc & 0xF8) == 0xF0) {
+            // 4-byte sequence (11110xxx) - typically emojis
+            seqLen = 4;
+        }
+
+        // For ASCII, check if printable
+        if (seqLen == 1) {
+            char c = static_cast<char>(uc);
+            if (std::isalnum(uc) || isAllowedPunctuation(c)) {
+                output += c;
             }
+            // Skip non-printable ASCII silently (no replacement char)
+            i++;
+        } else {
+            // Multi-byte UTF-8 sequence (likely emoji or special char)
+            // Preserve the entire sequence so the emote system can render it
+            for (int j = 0; j < seqLen && (i + j) < s.size(); ++j) {
+                output += s[i + j];
+            }
+            i += seqLen;
         }
     }
 

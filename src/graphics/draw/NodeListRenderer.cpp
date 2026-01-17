@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
+#include "MessageRenderer.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
 #include "UIRenderer.h"
@@ -8,6 +9,7 @@
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -26,8 +28,20 @@ static uint32_t lastSwitchTime = 0;
 #endif
 namespace graphics
 {
+
+// Use emotes for rendering node names with emoji support
+using graphics::Emote;
+using graphics::emotes;
+using graphics::numEmotes;
+
 namespace NodeListRenderer
 {
+
+// Helper to draw node name with emoji support
+static void drawNodeNameWithEmotes(OLEDDisplay *display, int x, int y, const char *nodeName)
+{
+    MessageRenderer::drawStringWithEmotes(display, x, y, std::string(nodeName), emotes, numEmotes);
+}
 
 // Function moved from Screen.cpp to NodeListRenderer.cpp since it's primarily used here
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
@@ -229,7 +243,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
+    drawNodeNameWithEmotes(display, x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -268,7 +282,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    drawNodeNameWithEmotes(display, x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -369,7 +383,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    drawNodeNameWithEmotes(display, x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -422,7 +436,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    drawNodeNameWithEmotes(display, x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);

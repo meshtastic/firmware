@@ -333,6 +333,14 @@ extern const unsigned char eyes[] PROGMEM;
 #define eye_width 16
 #define eye_height 16
 extern const unsigned char eye[] PROGMEM;
+
+#define mushroom_width 16
+#define mushroom_height 16
+extern const unsigned char mushroom[] PROGMEM;
+
+#define cow_width 16
+#define cow_height 16
+extern const unsigned char cow[] PROGMEM;
 #endif // EXCLUDE_EMOJI
 
 } // namespace graphics
