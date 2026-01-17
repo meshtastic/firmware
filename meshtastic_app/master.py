@@ -438,7 +438,7 @@ class MasterController:
                 self.logger.error(f"Data batch handler error: {e}")
 
     def _handle_status(self, slave: SlaveNode, status: SlaveStatusReport, msg: ProtocolMessage):
-        """Handle incoming status report."""
+        """Handle incoming extended status report with power and memory metrics."""
         if not status:
             self.logger.warning(f"Invalid status from {slave.node_id}")
             slave.error_count += 1
@@ -446,15 +446,30 @@ class MasterController:
 
         slave.last_status = status
 
+        # Update slave's cached telemetry from status (since it comes via private channel)
+        slave.battery_level = status.battery_percent
+        if status.voltage_mv > 0:
+            slave.voltage = status.voltage_mv / 1000.0  # Convert mV to V
+
+        # Log core status
         self.logger.info(
             f"[STATUS] {slave.node_id}: "
             f"uptime={status.uptime}s, "
             f"bat={status.battery_percent}%, "
-            f"mem={status.free_memory_kb}KB, "
-            f"pending={status.pending_data_bytes}B, "
-            f"errors={status.error_count}, "
+            f"voltage={status.voltage_mv}mV, "
             f"status={status.status.name}"
         )
+
+        # Log memory metrics if available
+        mem_parts = [f"heap={status.free_heap_kb}KB"]
+        if status.total_fram_kb > 0:
+            mem_parts.append(f"fram={status.free_fram_kb}/{status.total_fram_kb}KB")
+        if status.total_flash_kb > 0:
+            mem_parts.append(f"flash={status.free_flash_kb}/{status.total_flash_kb}KB")
+        mem_parts.append(f"pending={status.pending_data_bytes}B")
+        mem_parts.append(f"errors={status.error_count}")
+
+        self.logger.info(f"[MEMORY] {slave.node_id}: {', '.join(mem_parts)}")
 
         # Dispatch to handlers
         for handler in self._status_handlers:

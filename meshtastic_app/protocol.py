@@ -304,26 +304,51 @@ class DataBatch:
 @dataclass
 class SlaveStatusReport:
     """
-    Status report from a slave.
+    Extended status report from a slave.
 
-    Binary Format (16 bytes):
-        Bytes 0-3:   Uptime (uint32, seconds)
-        Bytes 4:     Status code (uint8)
-        Bytes 5:     Battery (uint8, percentage)
-        Bytes 6-7:   Free memory (uint16, KB)
-        Bytes 8-11:  Pending data size (uint32, bytes)
-        Bytes 12-13: Error count (uint16)
-        Bytes 14-15: Reserved
+    Includes device metrics (battery, voltage), memory stats (heap, FRAM, flash),
+    and operational status. Sent via custom protocol on private channel.
+
+    Binary Format (24 bytes):
+        Bytes 0-3:   Uptime (uint32, seconds since boot)
+        Bytes 4:     Status code (uint8, SlaveStatus enum)
+        Bytes 5:     Battery (uint8, percentage 0-100)
+        Bytes 6-7:   Voltage (uint16, millivolts, e.g., 3700 = 3.7V)
+        Bytes 8-9:   Free heap memory (uint16, KB)
+        Bytes 10-11: Free FRAM/external memory (uint16, KB, 0 if not available)
+        Bytes 12-13: Free flash storage (uint16, KB)
+        Bytes 14-17: Pending data size (uint32, bytes waiting to send)
+        Bytes 18-19: Error count (uint16, cumulative errors)
+        Bytes 20-21: Total FRAM capacity (uint16, KB, 0 if not available)
+        Bytes 22-23: Total flash capacity (uint16, KB)
+
+    This extended format allows master to monitor:
+    - Power: battery level, voltage
+    - Memory: heap usage, FRAM usage, flash usage
+    - Data: pending bytes to transmit
+    - Health: error count, operational status
     """
+    # Core status
     uptime: int = 0
     status: SlaveStatus = SlaveStatus.OK
     battery_percent: int = 0
-    free_memory_kb: int = 0
+
+    # Power metrics
+    voltage_mv: int = 0  # Millivolts
+
+    # Memory metrics (all in KB)
+    free_heap_kb: int = 0
+    free_fram_kb: int = 0  # 0 if no FRAM
+    free_flash_kb: int = 0
+    total_fram_kb: int = 0  # 0 if no FRAM
+    total_flash_kb: int = 0
+
+    # Operational metrics
     pending_data_bytes: int = 0
     error_count: int = 0
 
-    STRUCT_FORMAT = "<IBBHIHH"
-    STRUCT_SIZE = 16
+    STRUCT_FORMAT = "<IBBHHHHIHH"
+    STRUCT_SIZE = 24
 
     def encode(self) -> bytes:
         """Encode status report to binary."""
@@ -332,16 +357,23 @@ class SlaveStatusReport:
             self.uptime,
             self.status,
             self.battery_percent,
-            self.free_memory_kb,
+            self.voltage_mv,
+            self.free_heap_kb,
+            self.free_fram_kb,
+            self.free_flash_kb,
             self.pending_data_bytes,
             self.error_count,
-            0,  # Reserved
+            self.total_fram_kb,
+            self.total_flash_kb,
         )
 
     @classmethod
     def decode(cls, data: bytes) -> Optional["SlaveStatusReport"]:
         """Decode binary to status report."""
         if len(data) < cls.STRUCT_SIZE:
+            # Try legacy 16-byte format for backwards compatibility
+            if len(data) >= 16:
+                return cls._decode_legacy(data)
             return None
 
         try:
@@ -349,19 +381,58 @@ class SlaveStatusReport:
                 uptime,
                 status,
                 battery,
-                free_mem,
+                voltage_mv,
+                free_heap_kb,
+                free_fram_kb,
+                free_flash_kb,
                 pending_data,
-                errors,
-                _reserved,
+                error_count,
+                total_fram_kb,
+                total_flash_kb,
             ) = struct.unpack(cls.STRUCT_FORMAT, data[: cls.STRUCT_SIZE])
 
             return cls(
                 uptime=uptime,
                 status=SlaveStatus(status),
                 battery_percent=battery,
-                free_memory_kb=free_mem,
+                voltage_mv=voltage_mv,
+                free_heap_kb=free_heap_kb,
+                free_fram_kb=free_fram_kb,
+                free_flash_kb=free_flash_kb,
+                total_fram_kb=total_fram_kb,
+                total_flash_kb=total_flash_kb,
                 pending_data_bytes=pending_data,
-                error_count=errors,
+                error_count=error_count,
+            )
+        except (struct.error, ValueError):
+            return None
+
+    @classmethod
+    def _decode_legacy(cls, data: bytes) -> Optional["SlaveStatusReport"]:
+        """Decode legacy 16-byte format for backwards compatibility."""
+        try:
+            (
+                uptime,
+                status,
+                battery,
+                free_memory_kb,
+                pending_data,
+                error_count,
+                _reserved,
+            ) = struct.unpack("<IBBHIHH", data[:16])
+
+            return cls(
+                uptime=uptime,
+                status=SlaveStatus(status),
+                battery_percent=battery,
+                voltage_mv=0,  # Not available in legacy format
+                free_heap_kb=free_memory_kb,
+                free_fram_kb=0,
+                free_flash_kb=0,
+                total_fram_kb=0,
+                total_flash_kb=0,
+                pending_data_bytes=pending_data,
+                error_count=error_count,
             )
         except (struct.error, ValueError):
             return None
