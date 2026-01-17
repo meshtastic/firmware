@@ -5,7 +5,7 @@
 #define PIN_EINK_RES 11
 #define PIN_EINK_SCLK 14
 #define PIN_EINK_MOSI 15
-#define PIN_EINK_DC -1
+#define PIN_EINK_DC 12
 #define PIN_EINK_EN 42
 
 #define SPI_INTERFACES_COUNT 2
