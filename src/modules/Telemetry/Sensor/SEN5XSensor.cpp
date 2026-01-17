@@ -1,10 +1,11 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SEN5XSensor.h"
 #include "TelemetrySensor.h"
+#include "../detect/reClockI2C.h"
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "SafeFile.h"
@@ -12,16 +13,9 @@
 #include <pb_encode.h>
 #include <float.h> // FLT_MAX
 
-SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X") {}
-
-bool SEN5XSensor::restoreClock(uint32_t currentClock){
-#ifdef SEN5X_I2C_CLOCK_SPEED
-    if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        return bus->setClock(currentClock);
-    }
-    return true;
-#endif
+SEN5XSensor::SEN5XSensor()
+    : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X")
+{
 }
 
 bool SEN5XSensor::getVersion()
@@ -117,24 +111,31 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
     }
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    uint32_t currentClock;
-    currentClock = bus->getClock();
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
     if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", SEN5X_I2C_CLOCK_SPEED);
-        bus->setClock(SEN5X_I2C_CLOCK_SPEED);
+        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
+        return false;
     }
-#endif
+#elif !HAS_SCREEN
+    reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SEN5X_I2C_CLOCK_SPEED */
+
 
     // Transmit the data
     // LOG_DEBUG("Beginning connection to SEN5X: 0x%x. Size: %u", address, bufferSize);
     // Note: this is necessary to allow for long-buffers
     delay(20);
-    bus->beginTransmission(address);
-    size_t writtenBytes = bus->write(toSend, bufferSize);
-    uint8_t i2c_error = bus->endTransmission();
+    _bus->beginTransmission(_address);
+    size_t writtenBytes = _bus->write(toSend, bufferSize);
+    uint8_t i2c_error = _bus->endTransmission();
 
-#ifdef SEN5X_I2C_CLOCK_SPEED
-    restoreClock(currentClock);
+#if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
 #endif
 
     if (writtenBytes != bufferSize) {
@@ -152,15 +153,21 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
 uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
 {
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    uint32_t currentClock;
-    currentClock = bus->getClock();
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
     if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", SEN5X_I2C_CLOCK_SPEED);
-        bus->setClock(SEN5X_I2C_CLOCK_SPEED);
+        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
+        return false;
     }
-#endif
+#elif !HAS_SCREEN
+    reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SEN5X_I2C_CLOCK_SPEED */
 
-    size_t readBytes = bus->requestFrom(address, byteNumber);
+    size_t readBytes = _bus->requestFrom(_address, byteNumber);
     if (readBytes != byteNumber) {
         LOG_ERROR("SEN5X: Error reading I2C bus");
         return 0;
@@ -169,9 +176,9 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
     uint8_t i = 0;
     uint8_t receivedBytes = 0;
     while (readBytes > 0) {
-        buffer[i++] = bus->read(); // Just as a reminder: i++ returns i and after that increments.
-        buffer[i++] = bus->read();
-        uint8_t recvCRC = bus->read();
+        buffer[i++] = _bus->read(); // Just as a reminder: i++ returns i and after that increments.
+        buffer[i++] = _bus->read();
+        uint8_t recvCRC = _bus->read();
         uint8_t calcCRC = sen5xCRC(&buffer[i - 2]);
         if (recvCRC != calcCRC) {
             LOG_ERROR("SEN5X: Checksum error while receiving msg");
@@ -180,8 +187,8 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
         readBytes -=3;
         receivedBytes += 2;
     }
-#ifdef SEN5X_I2C_CLOCK_SPEED
-    restoreClock(currentClock);
+#if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
 #endif
 
     return receivedBytes;
@@ -207,13 +214,9 @@ uint8_t SEN5XSensor::sen5xCRC(uint8_t* buffer)
     return crc;
 }
 
-bool SEN5XSensor::I2Cdetect(TwoWire *_Wire, uint8_t address)
-{
-    _Wire->beginTransmission(address);
-    byte error = _Wire->endTransmission();
-
-    if (error == 0) return true;
-    else return false;
+void SEN5XSensor::sleep(){
+    // TODO Check this works
+    idle(true);
 }
 
 bool SEN5XSensor::idle(bool checkState)
@@ -566,35 +569,32 @@ bool SEN5XSensor::startCleaning()
     return true;
 }
 
-int32_t SEN5XSensor::runOnce()
+bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     state = SEN5X_NOT_DETECTED;
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
 
-    bus = nodeTelemetrySensorsMap[sensorType].second;
-    address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
+    _bus = bus;
+    _address = dev->address.address;
 
     delay(50); // without this there is an error on the deviceReset function
 
     if (!sendCommand(SEN5X_RESET)) {
         LOG_ERROR("SEN5X: Error reseting device");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+        return false;
     }
     delay(200); // From Sensirion Datasheet
 
     if (!findModel()) {
         LOG_ERROR("SEN5X: error finding sensor model");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+        return false;
     }
 
     // Check the firmware version
-    if (!getVersion()) return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    if (!getVersion()) return false;
     if (firmwareVer < 2) {
         LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+        return false;
     }
     delay(200); // From Sensirion Datasheet
 
@@ -658,11 +658,8 @@ int32_t SEN5XSensor::runOnce()
     idle(false);
     rhtGasMeasureStarted = now;
 
-    return initI2CSensor();
-}
-
-void SEN5XSensor::setup()
-{
+    initI2CSensor();
+    return true;
 }
 
 bool SEN5XSensor::readValues()
@@ -842,7 +839,12 @@ uint8_t SEN5XSensor::getMeasurements()
     return 0;
 }
 
-int32_t SEN5XSensor::pendingForReady(){
+int32_t SEN5XSensor::wakeUpTimeMs()
+{
+    return SEN5X_WARMUP_MS_2;
+}
+
+int32_t SEN5XSensor::pendingForReadyMs(){
     uint32_t now;
     now = getTime();
     uint32_t sincePmMeasureStarted = (now - pmMeasureStarted)*1000;

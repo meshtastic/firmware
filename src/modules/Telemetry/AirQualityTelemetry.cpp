@@ -17,11 +17,12 @@
 #include "main.h"
 #include "sleep.h"
 #include <Throttle.h>
-#include "Sensor/AddI2CSensorTemplate.h"
+
 
 // Sensors
+#include "Sensor/AddI2CSensorTemplate.h"
 #include "Sensor/PMSA003ISensor.h"
-
+#include "Sensor/SEN5XSensor.h"
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -43,18 +44,8 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
     // order by priority of metrics/values (low top, high bottom)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
+    addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
 }
-
-// TODO - Small hack to review
-#ifndef INCLUDE_SEN5X
-#define INCLUDE_SEN5X 1
-#endif
-
-#ifdef INCLUDE_SEN5X
-#include "Sensor/SEN5XSensor.h"
-SEN5XSensor sen5xSensor;
-
-#include "graphics/ScreenFonts.h"
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
@@ -67,7 +58,6 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
-    uint32_t sen5xPendingForReady;
 
     if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
@@ -98,30 +88,26 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it
-        LOG_INFO("Waking up sensors");
+        LOG_INFO("Waking up sensors...");
         for (TelemetrySensor *sensor : sensors) {
-            if (((lastSentToMesh == 0) ||
-                    !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->warmup_time, Default::getConfiguredOrDefaultMsScaled(
-                                                                        moduleConfig.telemetry.air_quality_interval,
-                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
+            if (!sensor->canSleep()) {
+                LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
+            } else if (((lastSentToMesh == 0) ||
+                    !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->wakeUpTimeMs(), Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
+                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                    airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) && airTime->isTxAllowedAirUtil()) {
                 if (!sensor->isActive()) {
+                    LOG_DEBUG("Waking up: %s", sensor->sensorName);
                     return sensor->wakeUp();
+                } else {
+                    int32_t pendingForReadyMs = sensor->pendingForReadyMs();
+                    LOG_DEBUG("%s. Pending for ready %ums", sensor->sensorName, pendingForReadyMs);
+                    if (pendingForReadyMs) {
+                        return pendingForReadyMs;
+                    }
                 }
             }
         }
-
-
-        // Check if sen5x is ready to return data, or if it needs more time because of the low concentration threshold
-        if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
-            sen5xPendingForReady = sen5xSensor.pendingForReady();
-            LOG_DEBUG("SEN5X: Pending for ready %ums", sen5xPendingForReady);
-            if (sen5xPendingForReady > 0) {
-                return sen5xPendingForReady;
-            }
-        }
-        LOG_DEBUG("Checking if sending telemetry");
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -140,17 +126,16 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Send to sleep sensors that consume power
-        LOG_INFO("Sending sensors to sleep");
+        LOG_DEBUG("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
-            // TODO FIX
-            if (sensor->isActive()) {
-                if (sensor.warmup_time < Default::getConfiguredOrDefaultMsScaled(
+            if (sensor->isActive() && sensor->canSleep()) {
+                if (sensor->wakeUpTimeMs() < Default::getConfiguredOrDefaultMsScaled(
                     moduleConfig.telemetry.air_quality_interval,
                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
-                        LOG_DEBUG("SEN5X: Disabling sensor until next period");
+                        LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
                         sensor->sleep();
                 } else {
-                    LOG_DEBUG("SEN5X: Sensor stays enabled due to warm up period");
+                    LOG_DEBUG("Sensor stays enabled due to warm up period");
                 }
             }
         }
@@ -282,16 +267,14 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = false;
+    bool valid = true;
     bool hasSensor = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m->variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
 
-    // TODO - Should we check for sensor state here?
-    // If a sensor is sleeping, we should know and check to wake it up
     for (TelemetrySensor *sensor : sensors) {
-        LOG_INFO("Reading AQ sensors");
+        LOG_DEBUG("Reading %s", sensor->sensorName);
         valid = valid && sensor->getMetrics(m);
         hasSensor = true;
     }
@@ -332,9 +315,6 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
-
-    // TODO - if one sensor fails here, we will stop taking measurements from everything
-    // Can we do this in a smarter way, for instance checking the nodeTelemetrySensor map and making it dynamic?
 
     if (getAirQualityTelemetry(&m)) {
         LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u",
@@ -396,13 +376,6 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
             return result;
     }
 
-    if (sen5xSensor.hasSensor()) {
-        result = sen5xSensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
-
-#endif
     return result;
 }
 

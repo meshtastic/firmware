@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -56,8 +56,8 @@ struct _SEN5XMeasurements {
 class SEN5XSensor : public TelemetrySensor
 {
   private:
-    TwoWire * bus;
-    uint8_t address;
+    TwoWire * _bus{};
+    uint8_t _address{};
 
     bool getVersion();
     float firmwareVer = -1;
@@ -92,13 +92,17 @@ class SEN5XSensor : public TelemetrySensor
     bool oneShotMode = true;
     void setMode(bool setOneShot);
     bool vocStateValid();
+    /* Sensirion recommends taking a reading after 15 seconds,
+    if the Particle number reading is over 100#/cm3 the reading is OK,
+    but if it is lower wait until 30 seconds and take it again.
+    See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
+    */
+    #define SEN5X_PN4P0_CONC_THD 100
 
     bool sendCommand(uint16_t command);
     bool sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNumber=0);
     uint8_t readBuffer(uint8_t* buffer, uint8_t byteNumber); // Return number of bytes received
     uint8_t sen5xCRC(uint8_t* buffer);
-    bool I2Cdetect(TwoWire *_Wire, uint8_t address);
-    bool restoreClock(uint32_t);
     bool startCleaning();
     uint8_t getMeasurements();
     // bool readRawValues();
@@ -108,6 +112,8 @@ class SEN5XSensor : public TelemetrySensor
     uint32_t pmMeasureStarted = 0;
     uint32_t rhtGasMeasureStarted = 0;
     _SEN5XMeasurements sen5xmeasurement;
+
+    bool idle(bool checkState=true);
 
   protected:
     // Store status of the sensor in this file
@@ -132,26 +138,21 @@ class SEN5XSensor : public TelemetrySensor
     bool vocStateStable();
     bool vocStateRecent(uint32_t now);
 
-    virtual void setup() override;
-
   public:
 
     SEN5XSensor();
-    bool isActive();
-    uint32_t wakeUp();
-    bool idle(bool checkState=true);
-    virtual int32_t runOnce() override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 
-    /* Sensirion recommends taking a reading after 15 seconds,
-    if the Particle number reading is over 100#/cm3 the reading is OK,
-    but if it is lower wait until 30 seconds and take it again.
-    See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
-    */
-    #define SEN5X_PN4P0_CONC_THD 100
+    virtual bool isActive() override;
+    virtual void sleep() override;
+    virtual uint32_t wakeUp() override;
+    virtual bool canSleep() override { return true; }
+    virtual int32_t wakeUpTimeMs() override;
+    virtual int32_t pendingForReadyMs() override;
+
     // TODO - Add a way to take averages of samples
     // This value represents the time needed for pending data
-    int32_t pendingForReady();
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request, meshtastic_AdminMessage *response) override;
 };
 
