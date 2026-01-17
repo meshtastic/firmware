@@ -1676,6 +1676,120 @@ class MasterController:
         self._set_state(MasterState.DISCONNECTED)
         self.logger.info("Master controller stopped")
 
+    def run_with_api(
+        self,
+        api_host: str = "0.0.0.0",
+        api_port: int = 8080,
+        auto_reconnect: bool = True,
+        max_reconnect_attempts: int = 5,
+    ):
+        """
+        Run the master controller with the REST API server.
+
+        This starts both the master controller main loop and the FastAPI server
+        in the same process using asyncio.
+
+        Args:
+            api_host: Host to bind API server to.
+            api_port: Port for API server.
+            auto_reconnect: Enable automatic reconnection on disconnect.
+            max_reconnect_attempts: Maximum consecutive reconnect attempts.
+        """
+        try:
+            from .api import create_api
+        except ImportError:
+            self.logger.error("API module requires fastapi and uvicorn")
+            self.logger.error("Install with: pip3 install fastapi uvicorn")
+            return False
+
+        import asyncio
+        import threading
+
+        if not self.initialize():
+            self.logger.error("Initialization failed")
+            return False
+
+        # Create API app
+        app = create_api(self)
+
+        # Run master loop in background thread
+        def master_loop():
+            self._run_loop(auto_reconnect, max_reconnect_attempts)
+
+        master_thread = threading.Thread(target=master_loop, daemon=True)
+        master_thread.start()
+
+        self.logger.info(f"API server starting on http://{api_host}:{api_port}")
+        self.logger.info(f"API docs available at http://{api_host}:{api_port}/api/docs")
+
+        # Run API server in main thread (blocking)
+        try:
+            import uvicorn
+            uvicorn.run(app, host=api_host, port=api_port, log_level="info")
+        except KeyboardInterrupt:
+            self.logger.info("Interrupted by user")
+        finally:
+            self.shutdown()
+
+        return True
+
+    def _run_loop(self, auto_reconnect: bool, max_reconnect_attempts: int):
+        """
+        Internal run loop for master controller.
+
+        Used by run_with_api() to run in a background thread.
+        """
+        last_status_check = 0
+        last_position_broadcast = 0
+        reconnect_attempts = 0
+        STATUS_CHECK_INTERVAL = 60
+        RECONNECT_DELAY = 5
+
+        if self.config.position_broadcast_enabled:
+            self.logger.info(
+                f"Position broadcasting enabled: every {self.config.position_broadcast_interval}s "
+                f"on private CH{self.config.private_channel_index}"
+            )
+
+        try:
+            while self.running:
+                if self.state == MasterState.DISCONNECTED:
+                    if auto_reconnect and reconnect_attempts < max_reconnect_attempts:
+                        reconnect_attempts += 1
+                        self.logger.info(
+                            f"Attempting reconnect ({reconnect_attempts}/{max_reconnect_attempts})..."
+                        )
+                        time.sleep(RECONNECT_DELAY)
+
+                        if self._connect():
+                            self._set_state(MasterState.READY)
+                            reconnect_attempts = 0
+                            self.logger.info("Reconnected successfully")
+                        else:
+                            self.logger.warning("Reconnect failed")
+                    else:
+                        if reconnect_attempts >= max_reconnect_attempts:
+                            self.logger.error("Max reconnect attempts reached")
+                        break
+
+                if self.state == MasterState.READY:
+                    reconnect_attempts = 0
+                    now = time.time()
+
+                    if self.config.position_broadcast_enabled:
+                        if (now - last_position_broadcast) >= self.config.position_broadcast_interval:
+                            self.send_position()
+                            last_position_broadcast = now
+
+                    if (now - last_status_check) >= STATUS_CHECK_INTERVAL:
+                        self.update_slave_status()
+                        last_status_check = now
+
+                time.sleep(1)
+
+        except Exception as e:
+            self.logger.error(f"Master loop error: {e}")
+
 
 # =============================================================================
 # CLI Entry Point
@@ -1694,6 +1808,8 @@ Examples:
   python -m meshtastic_app.master -c config.yaml   # Run with custom config
   python -m meshtastic_app.master --info           # Show device info and exit
   python -m meshtastic_app.master --configure      # Configure device settings via CLI
+  python -m meshtastic_app.master --api            # Run with REST API server
+  python -m meshtastic_app.master --api --api-port 8000  # Custom API port
         """
     )
     parser.add_argument(
@@ -1710,6 +1826,22 @@ Examples:
         "--configure",
         action="store_true",
         help="Configure device settings (position precision, etc.) via CLI and exit",
+    )
+    parser.add_argument(
+        "--api",
+        action="store_true",
+        help="Run with REST API server for web access",
+    )
+    parser.add_argument(
+        "--api-host",
+        default="0.0.0.0",
+        help="API server host (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=8080,
+        help="API server port (default: 8080)",
     )
 
     args = parser.parse_args()
@@ -1760,7 +1892,23 @@ Examples:
             master.shutdown()
         sys.exit(0)
 
-    # Run main loop
+    # Run with API server
+    if args.api:
+        print("\n" + "=" * 50)
+        print("MASTER CONTROLLER + REST API")
+        print("=" * 50)
+        print(f"API Host:        {args.api_host}")
+        print(f"API Port:        {args.api_port}")
+        print(f"Private Channel: {config.private_channel_index}")
+        print(f"Private Port:    {config.private_port_num}")
+        print("=" * 50)
+        master.run_with_api(
+            api_host=args.api_host,
+            api_port=args.api_port,
+        )
+        sys.exit(0)
+
+    # Run main loop (no API)
     master.run()
 
 

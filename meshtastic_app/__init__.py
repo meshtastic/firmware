@@ -72,7 +72,23 @@ from .protocol import (
     parse_ack_message,
 )
 
-__version__ = "0.8.0"
+# API module (optional - requires fastapi, uvicorn)
+try:
+    from .api import create_api, run_api_server, run_api_server_async
+    _HAS_API = True
+except ImportError:
+    _HAS_API = False
+
+    def create_api(*args, **kwargs):
+        raise ImportError("API module requires fastapi and uvicorn. Install with: pip3 install fastapi uvicorn")
+
+    def run_api_server(*args, **kwargs):
+        raise ImportError("API module requires fastapi and uvicorn. Install with: pip3 install fastapi uvicorn")
+
+    def run_api_server_async(*args, **kwargs):
+        raise ImportError("API module requires fastapi and uvicorn. Install with: pip3 install fastapi uvicorn")
+
+__version__ = "0.9.0"
 __all__ = [
     # Master
     "MasterController",
@@ -90,4 +106,8 @@ __all__ = [
     "SlaveStatusReport",
     "MasterCommand",
     "parse_ack_message",
+    # API (optional)
+    "create_api",
+    "run_api_server",
+    "run_api_server_async",
 ]

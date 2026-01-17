@@ -132,6 +132,32 @@ position:
   gps_update_interval: 0
 
 # -----------------------------------------------------------------------------
+# REST API Configuration
+# -----------------------------------------------------------------------------
+# The master can run with a REST API server for web access.
+# Run with: python -m meshtastic_app.master --api
+#
+# API Endpoints:
+#   GET  /api/status                     - Master controller status
+#   GET  /api/slaves                     - List all slaves
+#   GET  /api/slaves/{node_id}           - Get slave details
+#   GET  /api/slaves/{node_id}/telemetry - Get slave telemetry
+#   GET  /api/slaves/{node_id}/status    - Get extended status
+#   GET  /api/slaves/{node_id}/batches   - Get data batches
+#   POST /api/slaves/{node_id}/command   - Send command
+#   GET  /api/docs                       - Swagger documentation
+#
+api:
+  # Enable API server (can also use --api CLI flag)
+  enabled: false
+
+  # Host to bind to (0.0.0.0 = all interfaces)
+  host: "0.0.0.0"
+
+  # Port for API server
+  port: 8080
+
+# -----------------------------------------------------------------------------
 # Logging
 # -----------------------------------------------------------------------------
 logging:
