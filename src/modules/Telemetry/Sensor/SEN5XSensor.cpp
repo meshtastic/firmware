@@ -4,7 +4,6 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SEN5XSensor.h"
-#include "TelemetrySensor.h"
 #include "../detect/reClockI2C.h"
 #include "FSCommon.h"
 #include "SPILock.h"
