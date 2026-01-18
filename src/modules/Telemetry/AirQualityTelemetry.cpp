@@ -278,7 +278,7 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    bool valid = false;
     bool hasSensor = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
@@ -286,7 +286,7 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 
     for (TelemetrySensor *sensor : sensors) {
         LOG_DEBUG("Reading %s", sensor->sensorName);
-        valid = valid && sensor->getMetrics(m);
+        valid = valid || sensor->getMetrics(m);
         hasSensor = true;
     }
 
