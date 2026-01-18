@@ -129,13 +129,18 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         LOG_DEBUG("Skip send NodeInfo > 40%% ch. util");
         return NULL;
     }
+    uint32_t timeout_min = 5;
+    bool bigMesh = nodeStatus->getNumOnline() >= 100 || nodeStatus->getNumOnline() >= MAX_NUM_NODES / 2;
+    if (shorterTimeout) {
+        timeout_min = 1;
+    }
+    if (bigMesh) {
+        timeout_min *= 10;
+    }
+
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
-    if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
-        LOG_DEBUG("Skip send NodeInfo since we sent it <5min ago");
-        ignoreRequest = true; // Mark it as ignored for MeshModule
-        return NULL;
-    } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
-        LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
+    if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, timeout_min * 60 * 1000)) {
+        LOG_DEBUG("Skip send NodeInfo since we sent it <%umin ago", timeout_min);
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else {
