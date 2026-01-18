@@ -348,7 +348,8 @@ void menuHandler::RadioPresetPicker()
             }
 
             config.lora.modem_preset = option.value;
-            config.lora.channel_num = 0; // Reset to default channel for the preset
+            config.lora.channel_num = 0;        // Reset to default channel for the preset
+            config.lora.override_frequency = 0; // Clear any custom frequency
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
