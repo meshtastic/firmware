@@ -419,6 +419,7 @@ void setup()
         io.pinMode(EXPANDS_TOUCH_RST, OUTPUT);
         io.digitalWrite(EXPANDS_TOUCH_RST, HIGH);
         delay(1);
+        // io.pinMode(EXPANDS_SD_DET, INPUT);
     } else {
         LOG_ERROR("io expander initialisation failed!");
     }

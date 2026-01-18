@@ -17,6 +17,7 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
+#define USE_TFTDISPLAY 1
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 12
@@ -32,6 +33,10 @@
 // External expansion chip XL9555
 #define USE_XL9555
 
+// PCF85063 RTC Module
+#define PCF85063_RTC 0x51
+#define HAS_RTC 1
+
 // MAX98357A
 #define HAS_I2S
 #define DAC_I2S_BCK 9
@@ -41,7 +46,6 @@
 
 #define HAS_AXP2101
 // #define PMU_IRQ 7
-#define HAS_RTC 1
 #define HAS_DRV2605 1
 
 #define I2C_SDA 3
