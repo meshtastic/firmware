@@ -18,7 +18,6 @@
 
 int32_t DeviceTelemetryModule::runOnce()
 {
-    sendLocalStatsToPhone();
 
     refreshUptime();
     bool isImpoliteRole =
