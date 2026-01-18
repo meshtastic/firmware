@@ -1349,8 +1349,26 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1268)
-#if defined(SX126X_DIO3_TCXO_VOLTAGE) && defined(TCXO_OPTIONAL)
+#if defined(USE_SX1268) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL) && RADIOLIB_EXCLUDE_SX126X != 1
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
+        auto *sxIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+#ifdef SX126X_DIO3_TCXO_VOLTAGE
+        sxIf->setTCXOVoltage(SX126X_DIO3_TCXO_VOLTAGE);
+#endif
+        if (!sxIf->init()) {
+            LOG_WARN("No SX1268 radio");
+            delete sxIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("SX1268 init success");
+            rIf = sxIf;
+            radioType = SX1268_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_SX1268) && !defined(ARCH_PORTDUINO) && defined(TCXO_OPTIONAL)
+#if defined(SX126X_DIO3_TCXO_VOLTAGE)
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // try using the specified TCXO voltage
         auto *sxIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
@@ -1369,11 +1387,11 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("No SX1268 radio");
+            LOG_WARN("No SX1268 radio with XTAL, Vref 0.0V");;
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1268 init success");
+            LOG_INFO("SX1268 init success, XTAL, Vref 0.0V");
             radioType = SX1268_RADIO;
         }
     }
