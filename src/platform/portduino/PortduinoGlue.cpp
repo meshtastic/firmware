@@ -847,6 +847,7 @@ bool loadConfig(const char *configPath)
         }
 
         if (yamlConfig["Config"]) {
+            portduino_config.has_config_overrides = true;
             if (yamlConfig["Config"]["DisplayMode"]) {
                 portduino_config.has_configDisplayMode = true;
                 if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
@@ -858,6 +859,13 @@ bool loadConfig(const char *configPath)
                 } else {
                     portduino_config.configDisplayMode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
                 }
+            }
+            if (yamlConfig["Config"]["StatusMessage"]) {
+                portduino_config.has_statusMessage = true;
+                portduino_config.statusMessage = (yamlConfig["Config"]["StatusMessage"]).as<std::string>("");
+            }
+            if ((yamlConfig["Config"]["EnableUDP"]).as<bool>(false)) {
+                portduino_config.enable_UDP = true;
             }
         }
 

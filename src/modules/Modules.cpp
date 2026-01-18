@@ -108,6 +108,9 @@
 #if !MESHTASTIC_EXCLUDE_DROPZONE
 #include "modules/DropzoneModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_STATUS
+#include "modules/StatusMessageModule.h"
+#endif
 
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
@@ -164,6 +167,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_DROPZONE
     dropzoneModule = new DropzoneModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUS
+    statusMessageModule = new StatusMessageModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
     new GenericThreadModule();

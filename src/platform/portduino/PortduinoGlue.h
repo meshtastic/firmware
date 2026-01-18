@@ -168,8 +168,12 @@ extern struct portduino_config_struct {
     int hostMetrics_channel = 0;
 
     // config
+    bool has_config_overrides = false;
     int configDisplayMode = 0;
     bool has_configDisplayMode = false;
+    std::string statusMessage = "";
+    bool has_statusMessage = false;
+    bool enable_UDP = false;
 
     // General
     std::string mac_address = "";
@@ -485,21 +489,32 @@ extern struct portduino_config_struct {
         }
 
         // config
-        if (has_configDisplayMode) {
+        if (has_config_overrides) {
             out << YAML::Key << "Config" << YAML::Value << YAML::BeginMap;
-            switch (configDisplayMode) {
-            case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
-                break;
+            if (has_configDisplayMode) {
+
+                switch (configDisplayMode) {
+                case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+                    break;
+                }
+            }
+            if (has_statusMessage) {
+                out << YAML::Key << "StatusMessage" << YAML::Value << statusMessage;
+
+            }
+            if (enable_UDP) {
+                out << YAML::Key << "EnableUDP" << YAML::Value << true;
+
             }
 
             out << YAML::EndMap; // Config

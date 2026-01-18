@@ -1410,6 +1410,14 @@ void NodeDB::loadFromDisk()
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
     }
+    if (portduino_config.has_statusMessage) {
+        moduleConfig.has_statusmessage = true;
+        strncpy(moduleConfig.statusmessage.node_status, portduino_config.statusMessage.c_str(), sizeof(moduleConfig.statusmessage.node_status));
+        moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
+    }
+    if (portduino_config.enable_UDP) {
+        config.network.enabled_protocols = true;
+    }
 
 #endif
 }
@@ -1510,6 +1518,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
+        moduleConfig.has_statusmessage = true;
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
