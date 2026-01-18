@@ -124,6 +124,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SX126X_MAX_POWER 8
 #endif
 
+#ifdef EBYTE_E22_400M33S
+// E22-400M33S: 433/470MHz variant - per RF output power curve from E22-M Series manual
+// Actual PA gain: 12 dB (21 dBm input → 33 dBm output from curve)
+// Virtual gain: 9 dB - scales app's 0-30 dBm range to module's 0-33 dBm range
+// This makes: App 30dBm = SX1268 21dBm = Module 33dBm (full power)
+#define TX_GAIN_LORA 9
+#define SX126X_MAX_POWER 21
+#endif
+
 #ifdef NICERF_MINIF27
 // Note that datasheet power level of 9 corresponds with SX1262 at 22dBm
 // Maximum output power of 29dBm with VCC_PA = 5V
