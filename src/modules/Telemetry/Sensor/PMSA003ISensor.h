@@ -12,6 +12,18 @@
 
 class PMSA003ISensor : public TelemetrySensor
 {
+private:
+    enum class State { IDLE, ACTIVE };
+    State state = State::ACTIVE;
+
+    uint16_t computedChecksum = 0;
+    uint16_t receivedChecksum = 0;
+    uint32_t pmMeasureStarted = 0;
+
+    uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
+    TwoWire * _bus{};
+    uint8_t _address{};
+
 public:
     PMSA003ISensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
@@ -24,17 +36,6 @@ public:
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;
 
-private:
-    enum class State { IDLE, ACTIVE };
-    State state = State::ACTIVE;
-
-    uint16_t computedChecksum = 0;
-    uint16_t receivedChecksum = 0;
-    uint32_t pmMeasureStarted = 0;
-
-    uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
-    TwoWire * _bus{};
-    uint8_t _address{};
 };
 
 #endif

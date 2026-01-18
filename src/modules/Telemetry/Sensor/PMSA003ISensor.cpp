@@ -4,10 +4,7 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
-#include "TelemetrySensor.h"
 #include "../detect/reClockI2C.h"
-
-#include <Wire.h>
 
 PMSA003ISensor::PMSA003ISensor()
     : TelemetrySensor(meshtastic_TelemetrySensorType_PMSA003I, "PMSA003I")
