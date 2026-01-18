@@ -252,8 +252,9 @@ void menuHandler::DeviceRolePicker()
 
 void menuHandler::FrequencySlotPicker()
 {
+
     enum ReplyOptions : int { Back = -1 };
-    constexpr int MAX_CHANNEL_OPTIONS = 201;
+    constexpr int MAX_CHANNEL_OPTIONS = 202;
     static const char *optionsArray[MAX_CHANNEL_OPTIONS];
     static int optionsEnumArray[MAX_CHANNEL_OPTIONS];
     static char channelText[MAX_CHANNEL_OPTIONS - 1][12];
@@ -266,24 +267,62 @@ void menuHandler::FrequencySlotPicker()
     // Calculate number of channels (copied from RadioInterface::applyModemConfig())
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     double bw = loraConfig.bandwidth;
+    if (loraConfig.use_preset) {
+        switch (loraConfig.modem_preset) {
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+            bw = (myRegion->wideLora) ? 1625.0 : 500;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+            bw = (myRegion->wideLora) ? 1625.0 : 500;
+            break;
+        default:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+            bw = (myRegion->wideLora) ? 406.25 : 125;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+            bw = (myRegion->wideLora) ? 406.25 : 125;
+            break;
+        }
+    } else {
+        bw = loraConfig.bandwidth;
+        if (bw == 31) // This parameter is not an integer
+            bw = 31.25;
+        if (bw == 62) // Fix for 62.5Khz bandwidth
+            bw = 62.5;
+        if (bw == 200)
+            bw = 203.125;
+        if (bw == 400)
+            bw = 406.25;
+        if (bw == 800)
+            bw = 812.5;
+        if (bw == 1600)
+            bw = 1625.0;
+    }
 
-    if (bw == 31)
-        bw = 31.25;
-    if (bw == 62)
-        bw = 62.5;
-    if (bw == 200)
-        bw = 203.125;
-    if (bw == 400)
-        bw = 406.25;
-    if (bw == 800)
-        bw = 812.5;
-    if (bw == 1600)
-        bw = 1625.0;
+    uint32_t numChannels = 0;
+    if (myRegion) {
+        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
+    } else {
+        LOG_WARN("Region not set, cannot calculate number of channels");
+        return;
+    }
 
-    uint32_t numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
-
-    if (numChannels > (uint32_t)(MAX_CHANNEL_OPTIONS - 1))
-        numChannels = (uint32_t)(MAX_CHANNEL_OPTIONS - 1);
+    if (numChannels > (uint32_t)(MAX_CHANNEL_OPTIONS - 2))
+        numChannels = (uint32_t)(MAX_CHANNEL_OPTIONS - 2);
 
     for (uint32_t ch = 1; ch <= numChannels; ch++) {
         snprintf(channelText[ch - 1], sizeof(channelText[ch - 1]), "Slot %lu", (unsigned long)ch);
