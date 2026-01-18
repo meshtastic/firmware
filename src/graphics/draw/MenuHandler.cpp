@@ -299,7 +299,7 @@ void menuHandler::FrequencySlotPicker()
 
     // Start highlight on current channel if possible, otherwise on "1"
     int initial = (int)config.lora.channel_num + 1;
-    if (initial < 2 || initial > (int)numChannels)
+    if (initial < 2 || initial > (int)numChannels + 1)
         initial = 1;
     bannerOptions.InitialSelected = initial;
 
