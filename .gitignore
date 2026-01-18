@@ -50,3 +50,9 @@ idf_component.yml
 CMakeLists.txt
 /sdkconfig.*
 .dummy/*
+
+# Test build artifacts
+*.o
+src/stechat/compressor/test_compressor
+src/stechat/compressor/test/test_compressor
+src/stechat/compressor/test/packet_demo
