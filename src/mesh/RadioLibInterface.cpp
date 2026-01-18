@@ -254,13 +254,8 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
     return txQueue.find(from, id);
 }
 
-// ============================================================================
-// NOISE FLOOR IMPLEMENTATION
-// ============================================================================
-
 void RadioLibInterface::updateNoiseFloor()
 {
-    // Only update if we're in receive mode and not actively receiving
     if (!isReceiving) {
         LOG_DEBUG("Skipping noise floor update - not in receive mode or actively receiving");
         return;
@@ -286,40 +281,46 @@ void RadioLibInterface::updateNoiseFloor()
         return;
     }
 
-    // Check if we need to restart collection (hit max samples)
-    if (noiseFloorSampleCount >= NOISE_FLOOR_SAMPLES) {
-        LOG_INFO("Noise floor sample collection complete (%d samples, avg: %.1f dBm). Restarting.", NOISE_FLOOR_SAMPLES,
-                 currentNoiseFloor);
-        noiseFloorSampleCount = 0;
-        // Clear the array
-        for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
-            noiseFloorSamples[i] = 0;
-        }
+    // Store the sample in the rolling window
+    noiseFloorSamples[currentSampleIndex] = (float)rssi;
+    currentSampleIndex++;
+
+    // Wrap around when we reach the buffer size - this creates the rolling window
+    if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
+        currentSampleIndex = 0;
+        isNoiseFloorBufferFull = true;
     }
 
-    // Store the sample
-    noiseFloorSamples[noiseFloorSampleCount] = (float)rssi;
-    noiseFloorSampleCount++;
-
-    // Calculate the new average
+    // Calculate the new average using the rolling window
     currentNoiseFloor = getAverageNoiseFloor();
 
-    LOG_INFO("Noise floor: %.1f dBm (sample %d/%d: %d dBm)", currentNoiseFloor, noiseFloorSampleCount, NOISE_FLOOR_SAMPLES, rssi);
+    LOG_DEBUG("Noise floor: %.1f dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCount(), rssi);
 }
 
 float RadioLibInterface::getAverageNoiseFloor()
 {
-    if (noiseFloorSampleCount == 0) {
-        return NOISE_FLOOR_MIN; // Return minimum if no samples
+    uint8_t sampleCount = getNoiseFloorSampleCount();
+
+    if (sampleCount == 0) {
+        return 0; // Return minimum if no samples
     }
 
     float sum = 0.0f;
 
-    for (uint8_t i = 0; i < noiseFloorSampleCount; i++) {
-        sum += noiseFloorSamples[i];
+    // Calculate sum using the rolling window
+    if (isNoiseFloorBufferFull) {
+        // Buffer is full - sum all samples
+        for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
+            sum += noiseFloorSamples[i];
+        }
+    } else {
+        // Buffer not yet full - sum only collected samples
+        for (uint8_t i = 0; i < currentSampleIndex; i++) {
+            sum += noiseFloorSamples[i];
+        }
     }
 
-    float average = sum / noiseFloorSampleCount;
+    float average = sum / sampleCount;
 
     // Clamp to minimum of -120 dBm
     if (average < NOISE_FLOOR_MIN) {
@@ -331,18 +332,11 @@ float RadioLibInterface::getAverageNoiseFloor()
 
 void RadioLibInterface::resetNoiseFloor()
 {
-    noiseFloorSampleCount = 0;
+    currentSampleIndex = 0;
+    isNoiseFloorBufferFull = false;
     currentNoiseFloor = NOISE_FLOOR_MIN;
-    for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
-        noiseFloorSamples[i] = 0;
-    }
-    lastNoiseFloorUpdate = 0;
-    LOG_INFO("Noise floor reset - collection will restart");
+    LOG_INFO("Noise floor reset - rolling window collection will restart");
 }
-
-// ============================================================================
-// END NOISE FLOOR IMPLEMENTATION
-// ============================================================================
 
 /** radio helper thread callback.
 We never immediately transmit after any operation (either Rx or Tx). Instead we should wait a random multiple of

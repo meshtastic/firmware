@@ -98,18 +98,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool isReceiving = false;
 
   protected:
-    // Noise floor tracking - collects up to 20 samples then restarts
+    // Noise floor tracking - rolling window of samples
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
     static const int16_t NOISE_FLOOR_MIN = -120; // Minimum noise floor clamp in dBm
     float noiseFloorSamples[NOISE_FLOOR_SAMPLES];
-    uint8_t noiseFloorSampleCount = 0;
+    uint8_t currentSampleIndex = 0;
+    bool isNoiseFloorBufferFull = false;
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     float currentNoiseFloor = NOISE_FLOOR_MIN;
 
     /**
      * Update the noise floor measurement by sampling RSSI when not receiving
-     * Collects up to 20 samples then automatically restarts
+     * Uses a rolling window approach to maintain recent samples
      */
     void updateNoiseFloor();
 
@@ -194,12 +195,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Check if we have collected any noise floor samples
      */
-    bool hasNoiseFloorSamples() { return noiseFloorSampleCount > 0; }
+    bool hasNoiseFloorSamples() { return isNoiseFloorBufferFull || currentSampleIndex > 0; }
 
     /**
-     * Get the number of samples collected in current cycle (0-20)
+     * Get the number of samples in the rolling window
      */
-    uint8_t getNoiseFloorSampleCount() { return noiseFloorSampleCount; }
+    uint8_t getNoiseFloorSampleCount() { return isNoiseFloorBufferFull ? NOISE_FLOOR_SAMPLES : currentSampleIndex; }
 
     /**
      * Reset the noise floor calibration

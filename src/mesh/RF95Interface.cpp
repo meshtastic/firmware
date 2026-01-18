@@ -338,4 +338,10 @@ bool RF95Interface::sleep()
 
     return true;
 }
+
+int16_t RF95Interface::getCurrentRSSI()
+{
+    float rssi = lora->getRSSI(false);
+    return (int16_t)round(rssi);
+}
 #endif
