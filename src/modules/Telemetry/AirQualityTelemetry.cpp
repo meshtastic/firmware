@@ -337,9 +337,9 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                     m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard, \
                     m.variant.air_quality_metrics.pm100_standard);
             if (m.variant.air_quality_metrics.has_pm10_environmental)
-            LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
-                m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
-                m.variant.air_quality_metrics.pm100_environmental);
+                LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
+                    m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
+                    m.variant.air_quality_metrics.pm100_environmental);
         }
 
         bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature || m.variant.air_quality_metrics.has_co2_humidity;
