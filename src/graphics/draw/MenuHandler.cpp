@@ -65,8 +65,8 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Channel Picker", "LoRa Region"};
-    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, channel_picker = 3, lora_picker = 4 };
+    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
+    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, frequency_slot = 3, lora_picker = 4 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -78,8 +78,8 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::device_role_picker;
         } else if (selected == radio_preset_picker) {
             menuHandler::menuQueue = menuHandler::radio_preset_picker;
-        } else if (selected == channel_picker) {
-            menuHandler::menuQueue = menuHandler::channel_picker;
+        } else if (selected == frequency_slot) {
+            menuHandler::menuQueue = menuHandler::frequency_slot;
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
         }
@@ -250,17 +250,17 @@ void menuHandler::DeviceRolePicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::ChannelPicker()
+void menuHandler::FrequencySlotPicker()
 {
     enum ReplyOptions : int { Back = -1 };
     constexpr int MAX_CHANNEL_OPTIONS = 201;
     static const char *optionsArray[MAX_CHANNEL_OPTIONS];
     static int optionsEnumArray[MAX_CHANNEL_OPTIONS];
-    static char channelText[MAX_CHANNEL_OPTIONS - 1][8];
+    static char channelText[MAX_CHANNEL_OPTIONS - 1][12];
     int options = 0;
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
-    optionsArray[options] = "Ch 0 (Auto)";
+    optionsArray[options] = "Slot 0 (Auto)";
     optionsEnumArray[options++] = 0;
 
     // Calculate number of channels (copied from RadioInterface::applyModemConfig())
@@ -286,13 +286,13 @@ void menuHandler::ChannelPicker()
         numChannels = (uint32_t)(MAX_CHANNEL_OPTIONS - 1);
 
     for (uint32_t ch = 1; ch <= numChannels; ch++) {
-        snprintf(channelText[ch - 1], sizeof(channelText[ch - 1]), "Ch %lu", (unsigned long)ch);
+        snprintf(channelText[ch - 1], sizeof(channelText[ch - 1]), "Slot %lu", (unsigned long)ch);
         optionsArray[options] = channelText[ch - 1];
         optionsEnumArray[options++] = (int)ch;
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Channel Picker";
+    bannerOptions.message = "Frequency Slot";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -2622,8 +2622,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case radio_preset_picker:
         RadioPresetPicker();
         break;
-    case channel_picker:
-        ChannelPicker();
+    case frequency_slot:
+        FrequencySlotPicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);
