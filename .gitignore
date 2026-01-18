@@ -55,3 +55,4 @@ CMakeLists.txt
 *.o
 src/stechat/compressor/test_compressor
 src/stechat/compressor/test/test_compressor
+src/stechat/compressor/test/packet_demo
