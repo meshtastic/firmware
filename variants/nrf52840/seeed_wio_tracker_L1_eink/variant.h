@@ -33,17 +33,10 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-#ifdef BUTTON_PIN
-#undef BUTTON_PIN
-#endif
-
-#define BUTTON_PIN D13 // This is the Program Button
+#define CANCEL_BUTTON_PIN D13 // This is the Program Button
 // #define BUTTON_NEED_PULLUP   1
-#define BUTTON_ACTIVE_LOW true
-#define BUTTON_ACTIVE_PULLUP false
-
-#define BUTTON_PIN_TOUCH 13 // Touch button
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP false
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Digital Pin Mapping (D0-D10)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -116,7 +109,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define PIN_EINK_SCLK 31
 #define PIN_EINK_MOSI 33
 #define PIN_EINK_EN 14   // unused
-#define PIN_SPI1_MISO 15 // unused
+#define PIN_SPI1_MISO -1 // 15 unused
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 
@@ -129,21 +122,21 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
 #define AREF_VOLTAGE 3.6
+#define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define PIN_GPS_RX D6 // P0.26
-#define PIN_GPS_TX D7
+#define GPS_TX_PIN D6 // P0.26 - This is data from the MCU
+#define GPS_RX_PIN D7 // P0.27 - This is data from the GNSS
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
-#define GPS_RX_PIN PIN_GPS_TX
-#define GPS_TX_PIN PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
 
 // #define GPS_DEBUG
@@ -175,7 +168,17 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  joystick
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// trackball
+#define HAS_TRACKBALL 1
+#define TB_UP 25
+#define TB_DOWN 26
+#define TB_LEFT 27
+#define TB_RIGHT 28
+#define TB_PRESS 29
+#define TB_DIRECTION FALLING
+
 #define CANNED_MESSAGE_MODULE_ENABLE 1
+#define CANNED_MESSAGE_ADD_CONFIRMATION 1
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions

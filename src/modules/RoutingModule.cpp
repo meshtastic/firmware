@@ -42,26 +42,27 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
 
 meshtastic_MeshPacket *RoutingModule::allocReply()
 {
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-        return NULL;
     assert(currentRequest);
 
     return NULL;
 }
 
-void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit)
+void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
+                               bool ackWantsAck)
 {
     auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit);
+
+    // Allow the caller to set want_ack on this ACK packet if it's important that the ACK be delivered reliably
+    p->want_ack = ackWantsAck;
 
     router->sendLocal(p); // we sometimes send directly to the local node
 }
 
-uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit)
+uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
 {
-    if (hopStart != 0) {
-        // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
-        uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
-        if (hopsUsed > config.lora.hop_limit) {
+    const int8_t hopsUsed = getHopsAway(mp);
+    if (hopsUsed >= 0) {
+        if (hopsUsed > (int32_t)(config.lora.hop_limit)) {
 // In event mode, we never want to send packets with more than our default 3 hops.
 #if !(EVENTMODE)             // This falls through to the default.
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
@@ -71,6 +72,12 @@ uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit
         }
     }
     return Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit); // Use the default hop limit
+}
+
+meshtastic_MeshPacket *RoutingModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                                  uint8_t hopLimit)
+{
+    return MeshModule::allocAckNak(err, to, idFrom, chIndex, hopLimit);
 }
 
 RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)

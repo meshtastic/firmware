@@ -19,4 +19,5 @@ Do not expect a working Meshtastic device with this target.
 // #define LED_PIN PB3 // LED2
 #define LED_STATE_ON 1
 
+#define EBYTE_E77_MBL
 #endif

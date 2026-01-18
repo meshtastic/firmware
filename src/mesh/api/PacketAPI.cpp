@@ -19,6 +19,7 @@ PacketAPI *PacketAPI::create(PacketServer *_server)
 PacketAPI::PacketAPI(PacketServer *_server)
     : concurrency::OSThread("PacketAPI"), isConnected(false), programmingMode(false), server(_server)
 {
+    api_type = TYPE_PACKET;
 }
 
 int32_t PacketAPI::runOnce()
@@ -59,6 +60,7 @@ bool PacketAPI::receivePacket(void)
         switch (mr->which_payload_variant) {
         case meshtastic_ToRadio_packet_tag: {
             meshtastic_MeshPacket *mp = &mr->packet;
+            mp->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API;
             printPacket("PACKET FROM QUEUE", mp);
             service->handleToRadio(*mp);
             break;
@@ -70,7 +72,7 @@ bool PacketAPI::receivePacket(void)
             break;
         }
         case meshtastic_ToRadio_heartbeat_tag:
-            if (mr->heartbeat.dummy_field == 1) {
+            if (mr->heartbeat.nonce == 1) {
                 if (nodeInfoModule) {
                     LOG_INFO("Broadcasting nodeinfo ping");
                     nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);

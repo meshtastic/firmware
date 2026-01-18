@@ -53,12 +53,29 @@
 #define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAG
 #elif defined(GAT562_MESH_TRIAL_TRACKER)
 #define HW_VENDOR meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER
+#elif defined(NOMADSTAR_METEOR_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+#elif defined(R1_NEO)
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_R1_NEO
+#elif defined(RAK3401)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3401
+// MAke sure all custom RAK4630 boards are defined before the generic RAK4630
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(T_ECHO_LITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
+#elif defined(TTGO_T_ECHO_PLUS)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_PLUS
 #elif defined(ELECROW_ThinkNode_M1)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
+#elif defined(ELECROW_ThinkNode_M3)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M3
+#elif defined(ELECROW_ThinkNode_M6)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M6
+#elif defined(ELECROW_ThinkNode_M4)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M4
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
@@ -89,12 +106,14 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
 #elif defined(HELTEC_MESH_POCKET)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
-#elif defined(NOMADSTAR_METEOR_PRO)
-#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
 #elif defined(SEEED_WIO_TRACKER_L1_EINK)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
+#elif defined(HELTEC_MESH_SOLAR)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
+#elif defined(MUZI_BASE)
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -119,7 +138,9 @@
 
 #endif
 
+#ifdef PIN_LED1
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#endif
 
 #ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
@@ -144,3 +165,6 @@
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif
+
+// Detect if running in ISR context (ARM Cortex-M4)
+#define xPortInIsrContext() ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0 ? pdFALSE : pdTRUE)

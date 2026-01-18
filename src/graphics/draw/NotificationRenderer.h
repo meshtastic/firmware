@@ -3,6 +3,10 @@
 #include "OLEDDisplay.h"
 #include "OLEDDisplayUi.h"
 #include "graphics/Screen.h"
+#include "graphics/VirtualKeyboard.h"
+#include "modules/OnScreenKeyboardModule.h"
+#include <functional>
+#include <string>
 #define MAX_LINES 5
 
 namespace graphics
@@ -22,14 +26,18 @@ class NotificationRenderer
     static std::function<void(int)> alertBannerCallback;
     static uint32_t numDigits;
     static uint32_t currentNumber;
+    static VirtualKeyboard *virtualKeyboard;
+    static std::function<void(const std::string &)> textInputCallback;
 
     static bool pauseBanner;
 
     static void resetBanner();
+    static void showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs);
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
                                     uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
 

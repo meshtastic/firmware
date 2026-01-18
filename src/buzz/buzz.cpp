@@ -16,6 +16,7 @@ struct ToneDuration {
 };
 
 // Some common frequencies.
+#define NOTE_SILENT 1
 #define NOTE_C3 131
 #define NOTE_CS3 139
 #define NOTE_D3 147
@@ -29,11 +30,24 @@ struct ToneDuration {
 #define NOTE_AS3 233
 #define NOTE_B3 247
 #define NOTE_CS4 277
+#define NOTE_B4 494
+#define NOTE_F5 698
+#define NOTE_G6 1568
+#define NOTE_E7 2637
 
+#define NOTE_C4 262
+#define NOTE_E4 330
+#define NOTE_G4 392
+#define NOTE_A4 440
+#define NOTE_C5 523
+#define NOTE_E5 659
+#define NOTE_G5 784
+
+const int DURATION_1_16 = 62;  // 1/16 note
 const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
 const int DURATION_1_2 = 500;  // 1/2 note
-const int DURATION_3_4 = 750;  // 1/4 note
+const int DURATION_3_4 = 750;  // 3/4 note
 const int DURATION_1_1 = 1000; // 1/1 note
 
 void playTones(const ToneDuration *tone_durations, int size)
@@ -59,7 +73,7 @@ void playTones(const ToneDuration *tone_durations, int size)
 
 void playBeep()
 {
-    ToneDuration melody[] = {{NOTE_B3, DURATION_1_8}};
+    ToneDuration melody[] = {{NOTE_B3, DURATION_1_16}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
@@ -71,13 +85,24 @@ void playLongBeep()
 
 void playGPSEnableBeep()
 {
+#if defined(R1_NEO) || defined(MUZI_BASE)
+    ToneDuration melody[] = {
+        {NOTE_F5, DURATION_1_2}, {NOTE_G6, DURATION_1_8}, {NOTE_E7, DURATION_1_4}, {NOTE_SILENT, DURATION_1_2}};
+#else
     ToneDuration melody[] = {{NOTE_C3, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_CS4, DURATION_1_4}};
+#endif
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
 void playGPSDisableBeep()
 {
+#if defined(R1_NEO) || defined(MUZI_BASE)
+    ToneDuration melody[] = {{NOTE_B4, DURATION_1_16}, {NOTE_B4, DURATION_1_16},   {NOTE_SILENT, DURATION_1_8},
+                             {NOTE_F3, DURATION_1_16}, {NOTE_F3, DURATION_1_16},   {NOTE_SILENT, DURATION_1_8},
+                             {NOTE_C3, DURATION_1_1},  {NOTE_SILENT, DURATION_1_1}};
+#else
     ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_C3, DURATION_1_4}};
+#endif
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
@@ -96,7 +121,14 @@ void playShutdownMelody()
 void playChirp()
 {
     // A short, friendly "chirp" sound for key presses
-    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Very short AS3 note
+    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Short AS3 note
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void playClick()
+{
+    // A very short "click" sound with minimum delay; ideal for rotary encoder events
+    ToneDuration melody[] = {{NOTE_AS3, 1}}; // Very Short AS3
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
@@ -140,6 +172,10 @@ bool playNextLeadUpNote()
     playTones(&note, 1); // Play single note using existing playTones function
 
     leadUpNoteIndex++;
+
+    if (leadUpNoteIndex >= leadUpNotesCount) {
+        return false; // this was the final note
+    }
     return true; // Note was played (playTones handles buzzer availability internally)
 }
 
@@ -159,5 +195,19 @@ void playComboTune()
         {NOTE_CS4, 60}, // Quick trill up
         {NOTE_B3, 120}  // Ending chirp
     };
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void play4ClickDown()
+{
+    ToneDuration melody[] = {{NOTE_G5, 55}, {NOTE_E5, 55}, {NOTE_C5, 60},  {NOTE_A4, 55},  {NOTE_G4, 55},
+                             {NOTE_E4, 65}, {NOTE_C4, 80}, {NOTE_G3, 120}, {NOTE_E3, 160}, {NOTE_SILENT, 120}};
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void play4ClickUp()
+{
+    // Quick high-pitched notes with trills
+    ToneDuration melody[] = {{NOTE_F5, 50}, {NOTE_G6, 45}, {NOTE_E7, 60}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }

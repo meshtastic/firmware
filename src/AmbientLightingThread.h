@@ -183,9 +183,9 @@ class AmbientLightingThread : public concurrency::OSThread
 #endif
 #endif
             pixels.show();
-            LOG_DEBUG("Init NeoPixel Ambient light w/ brightness(current)=%d, red=%d, green=%d, blue=%d",
-                      moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
-                      moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+            // LOG_DEBUG("Init NeoPixel Ambient light w/ brightness(current)=%d, red=%d, green=%d, blue=%d",
+            //        moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
+            //        moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
 #ifdef RGBLED_CA
             analogWrite(RGBLED_RED, 255 - moduleConfig.ambient_lighting.red);

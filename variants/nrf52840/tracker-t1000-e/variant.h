@@ -124,8 +124,7 @@ extern "C" {
 #define GPS_RTC_INT (0 + 15)     // P0.15, normal is LOW, wake by HIGH
 #define GPS_RESETB_OUT (32 + 14) // P1.14, always input pull_up
 
-#define GPS_FIX_HOLD_TIME 15000 // ms
-#define BATTERY_PIN 2           // P0.02/AIN0, BAT_ADC
+#define BATTERY_PIN 2 // P0.02/AIN0, BAT_ADC
 #define BATTERY_IMMUTABLE
 #define ADC_MULTIPLIER (2.0F)
 // P0.04/AIN2 is VCC_ADC, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
@@ -142,6 +141,8 @@ extern "C" {
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+
+#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
 
 // Buzzer
 #define BUZZER_EN_PIN (32 + 5) // P1.05, always high
