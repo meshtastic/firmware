@@ -1387,7 +1387,8 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("No SX1268 radio with XTAL, Vref 0.0V");;
+            LOG_WARN("No SX1268 radio with XTAL, Vref 0.0V");
+            ;
             delete rIf;
             rIf = NULL;
         } else {
