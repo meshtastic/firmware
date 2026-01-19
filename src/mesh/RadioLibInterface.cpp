@@ -297,15 +297,15 @@ void RadioLibInterface::updateNoiseFloor()
     LOG_DEBUG("Noise floor: %.1f dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCount(), rssi);
 }
 
-float RadioLibInterface::getAverageNoiseFloor()
+int32_t RadioLibInterface::getAverageNoiseFloor()
 {
     uint8_t sampleCount = getNoiseFloorSampleCount();
 
     if (sampleCount == 0) {
-        return 0; // Return minimum if no samples
+        return NOISE_FLOOR_MIN; // Return minimum if no samples
     }
 
-    float sum = 0.0f;
+    int32_t sum = 0;
 
     // Calculate sum using the rolling window
     if (isNoiseFloorBufferFull) {
@@ -320,7 +320,7 @@ float RadioLibInterface::getAverageNoiseFloor()
         }
     }
 
-    float average = sum / sampleCount;
+    int32_t average = sum / sampleCount;
 
     // Clamp to minimum of -120 dBm
     if (average < NOISE_FLOOR_MIN) {

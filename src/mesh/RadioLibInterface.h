@@ -100,13 +100,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     // Noise floor tracking - rolling window of samples
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
-    static const int16_t NOISE_FLOOR_MIN = -120; // Minimum noise floor clamp in dBm
-    float noiseFloorSamples[NOISE_FLOOR_SAMPLES];
+    static const int32_t NOISE_FLOOR_MIN = -120; // Minimum noise floor clamp in dBm
+    int32_t noiseFloorSamples[NOISE_FLOOR_SAMPLES];
     uint8_t currentSampleIndex = 0;
     bool isNoiseFloorBufferFull = false;
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
-    float currentNoiseFloor = NOISE_FLOOR_MIN;
+    int32_t currentNoiseFloor = NOISE_FLOOR_MIN;
 
     /**
      * Update the noise floor measurement by sampling RSSI when not receiving
