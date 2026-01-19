@@ -417,8 +417,12 @@ void setup()
         io.digitalWrite(EXPANDS_DISP_EN, HIGH);
         delay(1);
         io.pinMode(EXPANDS_TOUCH_RST, OUTPUT);
+        io.digitalWrite(EXPANDS_TOUCH_RST, LOW);
+        delay(20);
         io.digitalWrite(EXPANDS_TOUCH_RST, HIGH);
-        delay(1);
+        delay(60);
+        io.pinMode(EXPANDS_LORA_RF_SW, OUTPUT);
+        io.digitalWrite(EXPANDS_LORA_RF_SW, HIGH); // set RF switch to built-in LoRa antenna
         // io.pinMode(EXPANDS_SD_DET, INPUT);
     } else {
         LOG_ERROR("io expander initialisation failed!");

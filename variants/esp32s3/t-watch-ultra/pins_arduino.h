@@ -79,6 +79,7 @@ static const uint8_t SCK = 35;
 #define EXPANDS_DISP_EN (7)
 #define EXPANDS_TOUCH_RST (8)
 #define EXPANDS_SD_DET (10)
+#define EXPANDS_LORA_RF_SW (11)
 
 // Peripheral definition exists
 #define USING_XL9555_EXPANDS
