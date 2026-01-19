@@ -1,29 +1,29 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(MESHTASTIC_BME680_HEADER)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && (__has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>))
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 
-#if MESHTASTIC_BME680_BSEC2_SUPPORTED == 1
+#if __has_include(<bsec2.h>)
 #include <bme68xLibrary.h>
 #include <bsec2.h>
 #else
 #include <Adafruit_BME680.h>
 #include <memory>
-#endif // MESHTASTIC_BME680_BSEC2_SUPPORTED
+#endif
 
 #define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of millis()
 
-#if MESHTASTIC_BME680_BSEC2_SUPPORTED == 1
+#if __has_include(<bsec2.h>)
 const uint8_t bsec_config[] = {
 #include "config/bme680/bme680_iaq_33v_3s_4d/bsec_iaq.txt"
 };
-#endif // MESHTASTIC_BME680_BSEC2_SUPPORTED
+#endif
 class BME680Sensor : public TelemetrySensor
 {
   private:
-#if MESHTASTIC_BME680_BSEC2_SUPPORTED == 1
+#if __has_include(<bsec2.h>)
     Bsec2 bme680;
 #else
     using BME680Ptr = std::unique_ptr<Adafruit_BME680>;
@@ -31,10 +31,10 @@ class BME680Sensor : public TelemetrySensor
     static BME680Ptr makeBME680(TwoWire *bus) { return std::make_unique<Adafruit_BME680>(bus); }
 
     BME680Ptr bme680;
-#endif // MESHTASTIC_BME680_BSEC2_SUPPORTED
+#endif
 
   protected:
-#if MESHTASTIC_BME680_BSEC2_SUPPORTED == 1
+#if __has_include(<bsec2.h>)
     const char *bsecConfigFileName = "/prefs/bsec.dat";
     uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
     uint8_t accuracy = 0;
@@ -51,13 +51,13 @@ class BME680Sensor : public TelemetrySensor
     void loadState();
     void updateState();
     void checkStatus(const char *functionName);
-#endif // MESHTASTIC_BME680_BSEC2_SUPPORTED
+#endif
 
   public:
     BME680Sensor();
-#if MESHTASTIC_BME680_BSEC2_SUPPORTED == 1
+#if __has_include(<bsec2.h>)
     virtual int32_t runOnce() override;
-#endif // MESHTASTIC_BME680_BSEC2_SUPPORTED
+#endif
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
