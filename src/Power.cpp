@@ -1199,7 +1199,7 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300); // RTC Button battery
             PMU->enablePowerOutput(XPOWERS_VBACKUP);
 
-            //            PMU->enablePowerOutput(XPOWERS_DLDO1); // NFC
+            // PMU->enablePowerOutput(XPOWERS_DLDO1); // NFC
 
             // UNUSED POWER CHANNEL
             PMU->disablePowerOutput(XPOWERS_DCDC2);
@@ -1214,10 +1214,8 @@ bool Power::axpChipInit()
             PMU->enableBattVoltageMeasure();
             PMU->enableSystemVoltageMeasure();
             PMU->enableTemperatureMeasure();
-
-            // Clear all PMU interrupts
-            PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
         }
+
         // disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
 
