@@ -55,6 +55,7 @@ void cpuDeepSleep(uint32_t msecs)
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
 int TCPPort = SERVER_API_DEFAULT_PORT;
+bool checkConfigPort = true;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
@@ -63,6 +64,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         if (sscanf(arg, "%d", &TCPPort) < 1)
             return ARGP_ERR_UNKNOWN;
         else
+            checkConfigPort = false;
             printf("Using config file %d\n", TCPPort);
         break;
     case 'c':
@@ -487,6 +489,11 @@ void portduinoSetup()
             max_GPIO = i->pin;
     }
 
+    for (auto i : portduino_config.extra_pins) {
+        if (i.enabled && i.pin > max_GPIO)
+            max_GPIO = i.pin;
+    }
+
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
@@ -500,6 +507,19 @@ void portduinoSetup()
         if (i->enabled) {
             if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
                 printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    for (auto i : portduino_config.extra_pins) {
+        // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
+        // Those GPIO are handled in our usermode driver instead.
+        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+            continue;
+        }
+        if (i.enabled) {
+            if (initGPIOPin(i.pin, gpioChipName + std::to_string(i.gpiochip), i.line) != ERRNO_OK) {
+                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.line);
                 exit(EXIT_FAILURE);
             }
         }
@@ -717,6 +737,16 @@ bool loadConfig(const char *configPath)
                 portduino_config.has_gps = 1;
             }
         }
+        if (yamlConfig["GPIO"]["ExtraPins"]) {
+            for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
+                portduino_config.extra_pins.push_back(pinMapping());
+                portduino_config.extra_pins.back().config_section = "GPIO";
+                portduino_config.extra_pins.back().config_name = "ExtraPins";
+                portduino_config.extra_pins.back().enabled = true;
+                readGPIOFromYaml(extra_pin, portduino_config.extra_pins.back());
+            }
+        }
+
         if (yamlConfig["I2C"]) {
             portduino_config.i2cdev = yamlConfig["I2C"]["I2CDevice"].as<std::string>("");
         }
@@ -841,6 +871,14 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
                 exit(EXIT_FAILURE);
+            }
+            if (checkConfigPort) {
+                portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
+                if (portduino_config.api_port != -1 &&
+                portduino_config.api_port > 1023 &&
+                portduino_config.api_port < 65536) {
+                TCPPort = (portduino_config.api_port);
+                }
             }
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
             if (portduino_config.mac_address != "") {

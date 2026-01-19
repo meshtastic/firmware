@@ -2,6 +2,7 @@
 #include <fstream>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 #include "LR11x0Interface.h"
 #include "Module.h"
@@ -97,6 +98,7 @@ extern struct portduino_config_struct {
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
+    std::vector<pinMapping> extra_pins = {};
 
     // GPS
     bool has_gps = false;
@@ -173,6 +175,7 @@ extern struct portduino_config_struct {
     std::string mac_address = "";
     bool mac_address_explicit = false;
     std::string mac_address_source = "";
+    int api_port = -1;
     std::string config_directory = "";
     std::string available_directory = "/etc/meshtasticd/available.d/";
     int maxtophone = 100;
@@ -299,6 +302,20 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // rfswitch_table
         }
         out << YAML::EndMap; // Lora
+
+        if (!extra_pins.empty()) {
+            out << YAML::Key << "GPIO" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "ExtraPins" << YAML::Value << YAML::BeginSeq;
+            for (auto extra : extra_pins) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "pin" << YAML::Value << extra.pin;
+                out << YAML::Key << "line" << YAML::Value << extra.line;
+                out << YAML::Key << "gpiochip" << YAML::Value << extra.gpiochip;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq;
+            out << YAML::EndMap; // GPIO
+        }
 
         if (i2cdev != "") {
             out << YAML::Key << "I2C" << YAML::Value << YAML::BeginMap;
@@ -492,6 +509,8 @@ extern struct portduino_config_struct {
         out << YAML::Key << "General" << YAML::Value << YAML::BeginMap;
         if (config_directory != "")
             out << YAML::Key << "ConfigDirectory" << YAML::Value << config_directory;
+        if (api_port != -1)
+            out << YAML::Key << "TCPPort" << YAML::Value << api_port;
         if (mac_address_explicit)
             out << YAML::Key << "MACAddress" << YAML::Value << mac_address;
         if (mac_address_source != "")
