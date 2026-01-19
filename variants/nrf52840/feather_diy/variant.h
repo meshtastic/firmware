@@ -86,6 +86,11 @@ extern "C" {
 
 #define PIN_NEOPIXEL_POWER 34 // P1.14 34 - Neopixel power on RevE, not connected on RevD
 
+#define BATTERY_PIN 20      // P0.29 A6
+#define ADC_MULTIPLIER 2.0f // 100K/100K voltage divider
+#define AREF_VOLTAGE 3.6f
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+
 #undef USE_EINK
 
 // supported modules list
