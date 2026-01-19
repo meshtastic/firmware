@@ -282,7 +282,7 @@ void RadioLibInterface::updateNoiseFloor()
     }
 
     // Store the sample in the rolling window
-    noiseFloorSamples[currentSampleIndex] = (float)rssi;
+    noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
     currentSampleIndex++;
 
     // Wrap around when we reach the buffer size - this creates the rolling window
