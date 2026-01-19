@@ -1000,6 +1000,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
+    case meshtastic_ModuleConfig_traffic_management_tag:
+        LOG_INFO("Set module config: Traffic Management");
+        moduleConfig.has_traffic_management = true;
+        moduleConfig.traffic_management = c.payload_variant.traffic_management;
+        break;
     }
     saveChanges(SEGMENT_MODULECONFIG);
     return true;
@@ -1179,6 +1184,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_TRAFFICMANAGEMENT_CONFIG:
+            LOG_INFO("Get module config: Traffic Management");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
+            res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
         }
 

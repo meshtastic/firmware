@@ -51,6 +51,9 @@
 #include "modules/PowerStressModule.h"
 #endif
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -123,6 +126,13 @@ void setupModules()
 #endif
 #if defined(LED_CHARGE) || defined(LED_PAIRING)
     statusLEDModule = new StatusLEDModule();
+#endif
+
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+    // Instantiate only when enabled to avoid extra memory use and background work.
+    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled) {
+        trafficManagementModule = new TrafficManagementModule();
+    }
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN
