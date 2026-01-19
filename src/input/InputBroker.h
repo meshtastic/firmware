@@ -3,6 +3,12 @@
 #include "Observer.h"
 #include "freertosinc.h"
 
+#ifdef InputBrokerDebug
+#define LOG_INPUT(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_INPUT(...)
+#endif
+
 enum input_broker_event {
     INPUT_BROKER_NONE = 0,
     INPUT_BROKER_SELECT = 10,
@@ -47,6 +53,7 @@ typedef struct _InputEvent {
 class InputPollable
 {
   public:
+    virtual ~InputPollable() = default;
     virtual void pollOnce() = 0;
 };
 
@@ -59,7 +66,7 @@ class InputBroker : public Observable<const InputEvent *>
     InputBroker();
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     void requestPollSoon(InputPollable *pollable);
     void queueInputEvent(const InputEvent *event);
     void processInputEventQueue();
@@ -69,7 +76,7 @@ class InputBroker : public Observable<const InputEvent *>
     int handleInputEvent(const InputEvent *event);
 
   private:
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     QueueHandle_t inputEventQueue;
     QueueHandle_t pollSoonQueue;
     TaskHandle_t pollSoonTask;

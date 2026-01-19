@@ -193,7 +193,7 @@ bool RF95Interface::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
-void INTERRUPT_ATTR RF95Interface::disableInterrupt()
+void RF95Interface::disableInterrupt()
 {
     lora->clearDio0Action();
 }
@@ -260,6 +260,7 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
 void RF95Interface::setStandby()

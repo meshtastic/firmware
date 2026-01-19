@@ -148,7 +148,7 @@ bool EInkDisplay::connect()
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 

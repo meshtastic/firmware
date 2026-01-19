@@ -11,6 +11,7 @@
  * For more information, see: https://meshtastic.org/
  */
 #include "power.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
@@ -194,7 +195,7 @@ static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level se
 
 #ifdef BATTERY_PIN
 
-static void adcEnable()
+void battery_adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
 #ifdef ADC_USE_PULLUP
@@ -214,7 +215,7 @@ static void adcEnable()
 #endif
 }
 
-static void adcDisable()
+static void battery_adcDisable()
 {
 #ifdef ADC_CTRL // disable adc voltage divider when we need to read
 #ifdef ADC_USE_PULLUP
@@ -278,6 +279,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 break;
             }
         }
+#if defined(BATTERY_CHARGING_INV)
+        // bit of trickery to show 99% up until the charge finishes
+        if (!digitalRead(BATTERY_CHARGING_INV) && battery_SOC > 99)
+            battery_SOC = 99;
+#endif
         return clamp((int)(battery_SOC), 0, 100);
     }
 
@@ -320,7 +326,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             uint32_t raw = 0;
             float scaled = 0;
 
-            adcEnable();
+            battery_adcEnable();
 #ifdef ARCH_ESP32 // ADC block for espressif platforms
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
@@ -332,7 +338,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
-            adcDisable();
+            battery_adcDisable();
 
             if (!initial_read_done) {
                 // Flush the smoothing filter with an ADC reading, if the reading is plausibly correct
@@ -455,6 +461,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
         // if it's not HIGH - check the battery
 #endif
+#elif defined(MUZI_BASE)
+        return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
 #endif
         return getBattVoltage() > chargingVolt;
     }
@@ -468,8 +476,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
         }
 #endif
-#ifdef EXT_CHRG_DETECT
+#if defined(ELECROW_ThinkNode_M6)
+        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value || isVbusIn();
+#elif EXT_CHRG_DETECT
         return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+#elif defined(BATTERY_CHARGING_INV)
+        return !digitalRead(BATTERY_CHARGING_INV);
 #else
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(DISABLE_INA_CHARGING_DETECTION)
         if (hasINA()) {
@@ -683,6 +695,8 @@ bool Power::setup()
         found = true;
     } else if (lipoChargerInit()) {
         found = true;
+    } else if (serialBatteryInit()) {
+        found = true;
     } else if (meshSolarInit()) {
         found = true;
     } else if (analogInit()) {
@@ -698,11 +712,18 @@ bool Power::setup()
         []() {
             power->setIntervalFromNow(0);
             runASAP = true;
-            BaseType_t higherWake = 0;
         },
         CHANGE);
 #endif
-
+#ifdef BATTERY_CHARGING_INV
+    attachInterrupt(
+        BATTERY_CHARGING_INV,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        CHANGE);
+#endif
     enabled = found;
     low_voltage_counter = 0;
 
@@ -759,6 +780,8 @@ void Power::shutdown()
     if (screen) {
 #ifdef T_DECK_PRO
         screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
+#elif defined(USE_EINK)
+        screen->showSimpleBanner("Shutting Down...", 2250); // dismiss after 3 seconds to avoid the banner on the sleep screen
 #else
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
 #endif
@@ -768,7 +791,9 @@ void Power::shutdown()
     playShutdownMelody();
 #endif
     nodeDB->saveToDisk();
-
+#if HAS_SCREEN
+    messageStore.saveToFlash();
+#endif
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
@@ -839,8 +864,11 @@ void Power::readPowerStatus()
 
     // Notify any status instances that are observing us
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
-    LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
-              powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+    if (millis() > lastLogTime + 50 * 1000) {
+        LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(),
+                  powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+        lastLogTime = millis();
+    }
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
@@ -903,13 +931,8 @@ void Power::readPowerStatus()
             low_voltage_counter++;
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
-#ifdef ARCH_NRF52
-                // We can't trigger deep sleep on NRF52, it's freezing the board
-                LOG_DEBUG("Low voltage detected, but not trigger deep sleep");
-#else
                 LOG_INFO("Low voltage detected, trigger deep sleep");
                 powerFSM.trigger(EVENT_LOW_BATTERY);
-#endif
             }
         } else {
             low_voltage_counter = 0;
@@ -1130,11 +1153,11 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO1);
 
-            // sdcard power channel
+            // sdcard (T-Beam S3) / gnns (T-Watch S3 Plus) power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+#ifndef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_BLDO1);
-
-#ifdef T_WATCH_S3
+#else
             // DRV2605 power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300);
             PMU->enablePowerOutput(XPOWERS_BLDO2);
@@ -1437,7 +1460,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return PPM->getVbusVoltage() > 0; }
+    virtual bool isVbusIn() override { return PPM->isVbusIn(); }
 
     /**
      * return true if the battery is currently charging
@@ -1546,6 +1569,138 @@ bool Power::meshSolarInit()
  * The meshSolar battery level sensor is unavailable - default to AnalogBatteryLevel
  */
 bool Power::meshSolarInit()
+{
+    return false;
+}
+#endif
+
+#ifdef HAS_SERIAL_BATTERY_LEVEL
+#include <SoftwareSerial.h>
+
+/**
+ * SerialBatteryLevel class for pulling battery information from a secondary MCU over serial.
+ */
+class SerialBatteryLevel : public HasBatteryLevel
+{
+
+  public:
+    /**
+     * Init the I2C meshSolar battery level sensor
+     */
+    bool runOnce()
+    {
+        BatterySerial.begin(4800);
+
+        return true;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return v_percent; }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return voltage * 1000; }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override
+    {
+        // definitely need to gobble up more bytes at once
+        if (BatterySerial.available() > 5) {
+            // LOG_WARN("SerialBatteryLevel: %u bytes available", BatterySerial.available());
+            while (BatterySerial.available() > 11) {
+                BatterySerial.read(); // flush old data
+            }
+            // LOG_WARN("SerialBatteryLevel: %u bytes now available", BatterySerial.available());
+            int tries = 0;
+            while (BatterySerial.read() != 0xFE) {
+                tries++; // wait for start byte
+                if (tries > 10) {
+                    LOG_WARN("SerialBatteryLevel: no start byte found");
+                    return 1;
+                }
+            }
+
+            Data[1] = BatterySerial.read();
+            Data[2] = BatterySerial.read();
+            Data[3] = BatterySerial.read();
+            Data[4] = BatterySerial.read();
+            Data[5] = BatterySerial.read();
+            if (Data[5] != 0xFD) {
+                LOG_WARN("SerialBatteryLevel: invalid end byte %02x", Data[5]);
+                return true;
+            }
+            v_percent = Data[1];
+            voltage = Data[2] + (((float)Data[3]) / 100) + (((float)Data[4]) / 10000);
+            voltage *= 2;
+            // LOG_WARN("SerialBatteryLevel: received data %u, %f, %02x", v_percent, voltage, Data[5]);
+            return true;
+        }
+        // This function runs first, so use it to grab the latest data from the secondary MCU
+        return true;
+    }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override
+    {
+#if defined(EXT_CHRG_DETECT)
+
+        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+
+#endif
+        return false;
+    }
+
+    virtual bool isCharging() override
+    {
+#ifdef EXT_CHRG_DETECT
+        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+
+#endif
+        // by default, we check the battery voltage only
+        return isVbusIn();
+    }
+
+  private:
+    SoftwareSerial BatterySerial = SoftwareSerial(SERIAL_BATTERY_RX, SERIAL_BATTERY_TX);
+    uint8_t Data[6] = {0};
+    int v_percent = 0;
+    float voltage = 0.0;
+};
+
+SerialBatteryLevel serialBatteryLevel;
+
+/**
+ * Init the serial battery level sensor
+ */
+bool Power::serialBatteryInit()
+{
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, INPUT);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
+#endif
+
+    bool result = serialBatteryLevel.runOnce();
+    LOG_DEBUG("Power::serialBatteryInit serial battery sensor is %s", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &serialBatteryLevel;
+    return true;
+}
+
+#else
+/**
+ * If this device has no serial battery level sensor, don't try to use it.
+ */
+bool Power::serialBatteryInit()
 {
     return false;
 }
