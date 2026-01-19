@@ -65,12 +65,12 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "LoRa Region"};
-    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, lora_picker = 3 };
+    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
+    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, frequency_slot = 3, lora_picker = 4 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
@@ -78,6 +78,8 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::device_role_picker;
         } else if (selected == radio_preset_picker) {
             menuHandler::menuQueue = menuHandler::radio_preset_picker;
+        } else if (selected == frequency_slot) {
+            menuHandler::menuQueue = menuHandler::frequency_slot;
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
         }
@@ -248,6 +250,113 @@ void menuHandler::DeviceRolePicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::FrequencySlotPicker()
+{
+
+    enum ReplyOptions : int { Back = -1 };
+    constexpr int MAX_CHANNEL_OPTIONS = 202;
+    static const char *optionsArray[MAX_CHANNEL_OPTIONS];
+    static int optionsEnumArray[MAX_CHANNEL_OPTIONS];
+    static char channelText[MAX_CHANNEL_OPTIONS - 1][12];
+    int options = 0;
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+    optionsArray[options] = "Slot 0 (Auto)";
+    optionsEnumArray[options++] = 0;
+
+    // Calculate number of channels (copied from RadioInterface::applyModemConfig())
+    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+    double bw = loraConfig.bandwidth;
+    if (loraConfig.use_preset) {
+        switch (loraConfig.modem_preset) {
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+            bw = (myRegion->wideLora) ? 1625.0 : 500;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+            bw = (myRegion->wideLora) ? 1625.0 : 500;
+            break;
+        default:
+            bw = (myRegion->wideLora) ? 812.5 : 250;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+            bw = (myRegion->wideLora) ? 406.25 : 125;
+            break;
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+            bw = (myRegion->wideLora) ? 406.25 : 125;
+            break;
+        }
+    } else {
+        bw = loraConfig.bandwidth;
+        if (bw == 31) // This parameter is not an integer
+            bw = 31.25;
+        if (bw == 62) // Fix for 62.5Khz bandwidth
+            bw = 62.5;
+        if (bw == 200)
+            bw = 203.125;
+        if (bw == 400)
+            bw = 406.25;
+        if (bw == 800)
+            bw = 812.5;
+        if (bw == 1600)
+            bw = 1625.0;
+    }
+
+    uint32_t numChannels = 0;
+    if (myRegion) {
+        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
+    } else {
+        LOG_WARN("Region not set, cannot calculate number of channels");
+        return;
+    }
+
+    if (numChannels > (uint32_t)(MAX_CHANNEL_OPTIONS - 2))
+        numChannels = (uint32_t)(MAX_CHANNEL_OPTIONS - 2);
+
+    for (uint32_t ch = 1; ch <= numChannels; ch++) {
+        snprintf(channelText[ch - 1], sizeof(channelText[ch - 1]), "Slot %lu", (unsigned long)ch);
+        optionsArray[options] = channelText[ch - 1];
+        optionsEnumArray[options++] = (int)ch;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Frequency Slot";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+
+    // Start highlight on current channel if possible, otherwise on "1"
+    int initial = (int)config.lora.channel_num + 1;
+    if (initial < 2 || initial > (int)numChannels + 1)
+        initial = 1;
+    bannerOptions.InitialSelected = initial;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::lora_Menu;
+            screen->runNow();
+            return;
+        }
+
+        config.lora.channel_num = selected;
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    };
+
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::RadioPresetPicker()
 {
     static const RadioPresetOption presetOptions[] = {
@@ -278,6 +387,8 @@ void menuHandler::RadioPresetPicker()
             }
 
             config.lora.modem_preset = option.value;
+            config.lora.channel_num = 0;        // Reset to default channel for the preset
+            config.lora.override_frequency = 0; // Clear any custom frequency
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
@@ -2550,6 +2661,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case radio_preset_picker:
         RadioPresetPicker();
+        break;
+    case frequency_slot:
+        FrequencySlotPicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);
