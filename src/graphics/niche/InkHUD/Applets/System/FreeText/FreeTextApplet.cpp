@@ -188,19 +188,19 @@ void InkHUD::FreeTextApplet::onBackground()
 
 void InkHUD::FreeTextApplet::onButtonShortPress()
 {
-    if (inkhud->freetext.length() < TEXT_LIMIT) {
-        char ch = keys[selectRow * KBD_COLS + selectCol];
-        if (ch == '\b') {
-            if (!inkhud->freetext.empty()) {
-                inkhud->freetext.pop_back();
-                requestUpdate(EInk::UpdateTypes::FAST);
-            }
-        } else if (ch == '\n') {
-            sendToBackground();
-        } else if (ch == '\x1b') {
-            inkhud->freetext.erase();
-            sendToBackground();
-        } else {
+    char ch = keys[selectRow * KBD_COLS + selectCol];
+    if (ch == '\b') {
+        if (!inkhud->freetext.empty()) {
+            inkhud->freetext.pop_back();
+            requestUpdate(EInk::UpdateTypes::FAST);
+        }
+    } else if (ch == '\n') {
+        sendToBackground();
+    } else if (ch == '\x1b') {
+        inkhud->freetext.erase();
+        sendToBackground();
+    } else {
+        if (inkhud->freetext.length() < TEXT_LIMIT) {
             inkhud->freetext += ch;
             requestUpdate(EInk::UpdateTypes::FAST);
         }
@@ -209,25 +209,25 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
 
 void InkHUD::FreeTextApplet::onButtonLongPress()
 {
-    if (inkhud->freetext.length() < TEXT_LIMIT) {
-        char ch = keys[selectRow * KBD_COLS + selectCol];
-        if (ch == '\b') {
-            if (!inkhud->freetext.empty()) {
-                inkhud->freetext.pop_back();
-                requestUpdate(EInk::UpdateTypes::FAST);
-            }
-        } else if (ch == '\n') {
-            sendToBackground();
-        } else if (ch == '\x1b') {
-            inkhud->freetext.erase();
-            sendToBackground();
-        } else {
+    char ch = keys[selectRow * KBD_COLS + selectCol];
+    if (ch == '\b') {
+        if (!inkhud->freetext.empty()) {
+            inkhud->freetext.pop_back();
+            requestUpdate(EInk::UpdateTypes::FAST);
+        }
+    } else if (ch == '\n') {
+        sendToBackground();
+    } else if (ch == '\x1b') {
+        inkhud->freetext.erase();
+        sendToBackground();
+    } else {
+        if (inkhud->freetext.length() < TEXT_LIMIT) {
             if (ch >= 0x61)
                 ch -= 32; // capitalize
             inkhud->freetext += ch;
             requestUpdate(EInk::UpdateTypes::FAST);
+            }
         }
-    }
 }
 
 void InkHUD::FreeTextApplet::onExitShort()
