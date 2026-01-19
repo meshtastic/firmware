@@ -43,9 +43,9 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 
-    // Initialize noise floor samples array
+    // Initialize noise floor samples array with a valid baseline
     for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
-        noiseFloorSamples[i] = 0;
+        noiseFloorSamples[i] = NOISE_FLOOR_MIN;
     }
 
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
@@ -256,13 +256,17 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
 
 void RadioLibInterface::updateNoiseFloor()
 {
-    if (!isReceiving) {
-        LOG_DEBUG("Skipping noise floor update - not in receive mode or actively receiving");
+    // Only sample when the radio is not actively transmitting or receiving
+    // This allows sampling both when truly idle and after transmitting (when isReceiving may be false)
+    bool busyTx = sendingPacket != NULL;
+    bool busyRx = isReceiving && isActivelyReceiving();
+
+    if (busyTx || busyRx) {
         return;
     }
 
-    // Don't try to read RSSI if we're not in a stable receive state
-    if (sendingPacket != NULL) {
+    // Also check for pending interrupts
+    if (isIRQPending()) {
         return;
     }
 
@@ -276,7 +280,7 @@ void RadioLibInterface::updateNoiseFloor()
     // Get current RSSI from the radio
     int16_t rssi = getCurrentRSSI();
 
-    if (rssi == 0 || rssi < NOISE_FLOOR_MIN) {
+    if (rssi > 0 || rssi < NOISE_FLOOR_MIN) {
         LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
@@ -294,7 +298,7 @@ void RadioLibInterface::updateNoiseFloor()
     // Calculate the new average using the rolling window
     currentNoiseFloor = getAverageNoiseFloor();
 
-    LOG_DEBUG("Noise floor: %.1f dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCount(), rssi);
+    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCount(), rssi);
 }
 
 int32_t RadioLibInterface::getAverageNoiseFloor()

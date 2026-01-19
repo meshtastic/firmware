@@ -109,7 +109,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     int32_t currentNoiseFloor = NOISE_FLOOR_MIN;
 
     /**
-     * Update the noise floor measurement by sampling RSSI when not receiving
+     * Update the noise floor measurement by sampling RSSI when receiving
      * Uses a rolling window approach to maintain recent samples
      */
     void updateNoiseFloor();
@@ -125,10 +125,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static RadioLibInterface *instance;
 
     /**
+     * Get the current calculated noise floor in dBm
+     * Returns -120 dBm if not yet calibrated
+     */
+    int32_t getNoiseFloor() { return currentNoiseFloor; }
+
+    /**
      * Calculate the average noise floor from collected samples
      * Clamps result to minimum of -120 dBm
      */
-    float getAverageNoiseFloor();
+    int32_t getAverageNoiseFloor();
 
     /**
      * Glue functions called from ISR land
@@ -185,12 +191,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
-
-    /**
-     * Get the current calculated noise floor in dBm
-     * Returns -120 dBm if not yet calibrated
-     */
-    float getNoiseFloor() { return currentNoiseFloor; }
 
     /**
      * Check if we have collected any noise floor samples
