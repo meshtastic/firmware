@@ -118,7 +118,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.air_util_tx = airTime->utilizationTXPercent();
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
-    telemetry.variant.local_stats.noise_floor = (float)RadioLibInterface::instance->getAverageNoiseFloor();
+    telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
     if (RadioLibInterface::instance) {
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
