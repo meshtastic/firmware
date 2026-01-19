@@ -2029,6 +2029,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
             // if we found a "boring" node, evict it
             if (oldestBoringIndex != -1) {
+                evictedAge = sinceLastSeen(&meshNodes->at(oldestBoringIndex));
                 oldestIndex = oldestBoringIndex;
             }
 
@@ -2040,6 +2041,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 (numMeshNodes)--;
             }
         }
+        LOG_WARN("Evicted node %u secs old", evictedAge);
         // add the node at the end
         lite = &meshNodes->at((numMeshNodes)++);
 

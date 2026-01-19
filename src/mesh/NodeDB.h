@@ -307,7 +307,10 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
+    uint32_t get_evicted_age() { return evictedAge; }
+
   private:
+    uint32_t evictedAge = UINT32_MAX;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
