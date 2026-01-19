@@ -8,9 +8,9 @@ void InkHUD::FreeTextApplet::onRender()
     // Calculate the keyboard position
     uint16_t kbdH = KBD_ROWS * fontSmall.lineHeight() * 1.2;
     uint16_t kbdTop = Y(1.0) - kbdH;
-
+    
     // Draw the text input box
-    drawInputField(0, 0, width(), kbdTop - 1, inkhud->freetext);
+    drawInputField(0, fontSmall.lineHeight(), width(), Y(1.0) - kbdH - fontSmall.lineHeight() - 1, inkhud->freetext);
 
     // Draw the keyboard
     drawKeyboard(0, kbdTop, width(), kbdH, selectCol, selectRow);
@@ -40,7 +40,7 @@ void InkHUD::FreeTextApplet::drawInputField(uint16_t left, uint16_t top, uint16_
     }
 
     uint16_t textCursorX = text.empty() ? 1 : getCursorX();
-    uint16_t textCursorY = text.empty() ? 0 : getCursorY() - fontSmall.lineHeight() + 3;
+    uint16_t textCursorY = text.empty() ? fontSmall.lineHeight() + 2 : getCursorY() - fontSmall.lineHeight() + 3;
 
     if (textCursorX + 1 > width - 5) {
         textCursorX = getCursorX() - width + 5;
@@ -52,6 +52,9 @@ void InkHUD::FreeTextApplet::drawInputField(uint16_t left, uint16_t top, uint16_
     // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
     fillRect(0, 0, X(1.0), top, WHITE);
     // printAt(0, 0, header);
+    std::string ftlen = std::to_string(text.length()) + "/" + to_string(TEXT_LIMIT);
+    uint16_t textLen = getTextWidth(ftlen);
+    printAt(X(1.0) - textLen - 2, 0, ftlen);
     drawRect(0, top, width, wrapMaxH + 5, BLACK);
 }
 
@@ -185,41 +188,45 @@ void InkHUD::FreeTextApplet::onBackground()
 
 void InkHUD::FreeTextApplet::onButtonShortPress()
 {
-    char ch = keys[selectRow * KBD_COLS + selectCol];
-    if (ch == '\b') {
-        if (!inkhud->freetext.empty()) {
-            inkhud->freetext.pop_back();
+    if (inkhud->freetext.length() < TEXT_LIMIT) {
+        char ch = keys[selectRow * KBD_COLS + selectCol];
+        if (ch == '\b') {
+            if (!inkhud->freetext.empty()) {
+                inkhud->freetext.pop_back();
+                requestUpdate(EInk::UpdateTypes::FAST);
+            }
+        } else if (ch == '\n') {
+            sendToBackground();
+        } else if (ch == '\x1b') {
+            inkhud->freetext.erase();
+            sendToBackground();
+        } else {
+            inkhud->freetext += ch;
             requestUpdate(EInk::UpdateTypes::FAST);
         }
-    } else if (ch == '\n') {
-        sendToBackground();
-    } else if (ch == '\x1b') {
-        inkhud->freetext.erase();
-        sendToBackground();
-    } else {
-        inkhud->freetext += ch;
-        requestUpdate(EInk::UpdateTypes::FAST);
     }
 }
 
 void InkHUD::FreeTextApplet::onButtonLongPress()
 {
-    char ch = keys[selectRow * KBD_COLS + selectCol];
-    if (ch == '\b') {
-        if (!inkhud->freetext.empty()) {
-            inkhud->freetext.pop_back();
+    if (inkhud->freetext.length() < TEXT_LIMIT) {
+        char ch = keys[selectRow * KBD_COLS + selectCol];
+        if (ch == '\b') {
+            if (!inkhud->freetext.empty()) {
+                inkhud->freetext.pop_back();
+                requestUpdate(EInk::UpdateTypes::FAST);
+            }
+        } else if (ch == '\n') {
+            sendToBackground();
+        } else if (ch == '\x1b') {
+            inkhud->freetext.erase();
+            sendToBackground();
+        } else {
+            if (ch >= 0x61)
+                ch -= 32; // capitalize
+            inkhud->freetext += ch;
             requestUpdate(EInk::UpdateTypes::FAST);
         }
-    } else if (ch == '\n') {
-        sendToBackground();
-    } else if (ch == '\x1b') {
-        inkhud->freetext.erase();
-        sendToBackground();
-    } else {
-        if (ch >= 0x61)
-            ch -= 32; // capitalize
-        inkhud->freetext += ch;
-        requestUpdate(EInk::UpdateTypes::FAST);
     }
 }
 
