@@ -13,6 +13,7 @@ class menuHandler
         lora_picker,
         device_role_picker,
         radio_preset_picker,
+        frequency_slot,
         no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
@@ -63,6 +64,7 @@ class menuHandler
     static void loraMenu();
     static void DeviceRolePicker();
     static void RadioPresetPicker();
+    static void FrequencySlotPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
