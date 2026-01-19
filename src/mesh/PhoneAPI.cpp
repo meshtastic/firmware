@@ -447,11 +447,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
+#if HAS_TRAFFIC_MANAGEMENT
         case meshtastic_ModuleConfig_traffic_management_tag:
             LOG_DEBUG("Send module config: traffic management");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+#endif
         default:
             LOG_ERROR("Unknown module config type %d", config_state);
         }
