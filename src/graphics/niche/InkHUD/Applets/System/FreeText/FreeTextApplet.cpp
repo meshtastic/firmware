@@ -3,100 +3,154 @@
 
 using namespace NicheGraphics;
 
-InkHUD::FreeTextApplet::FreeTextApplet()
-{
-    for (int i = 0; i < KEYBOARD_ROWS; i++) {
-        for (int j = 0; j < KEYBOARD_COLS; j++) {
-            if (keyboardLayout[i][j] == '\b') {
-                keyboard[i][j] = {'<', BACKSPACE};
-            } else if (keyboardLayout[i][j] == '\n') {
-                keyboard[i][j] = {'>', ENTER};
-            } else if (keyboardLayout[i][j] == '\x1b') {
-                keyboard[i][j] = {'~', ESCAPE};
-            } else {
-                keyboard[i][j] = {keyboardLayout[i][j], NONE};
-            }
-        }
-    }
-}
-
 void InkHUD::FreeTextApplet::onRender()
 {
+    // Calculate the keyboard position
+    uint16_t kbdH = KBD_ROWS * fontSmall.lineHeight() * 1.2;
+    uint16_t kbdTop = Y(1.0) - kbdH;
+
+    // Draw the text input box
+    drawInputField(0, 0, width(), kbdTop - 1, inkhud->freetext);
+
+    // Draw the keyboard
+    drawKeyboard(0, kbdTop, width(), kbdH, selectCol, selectRow);
+}
+
+// Draw a text input box with a cursor
+// The printed text wraps and scrolls as it overflows
+void InkHUD::FreeTextApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text)
+{
     setFont(fontSmall);
-    //std::string header = "Free Text";
-    float padding = 0.01;
-    uint16_t keyW = (width() / 11);
-    uint16_t r = (width() % 10) / 10;
-    uint16_t c = 0;
-    uint16_t keyH = X(1.0) > Y(1.0) ? fontSmall.lineHeight() + Y(padding) : fontSmall.lineHeight() + (2 * X(padding));
-    uint16_t yStartKb = Y(1.0) - (5 * keyH);
-    uint16_t yStartBox = 0;
-    uint16_t inputBoxW = X(1.0);
-    uint16_t inputBoxH = 0;
+    uint16_t wrapMaxH = 0;
 
     // Draw the text, input box, and cursor
     // Adjusting the box for screen height
-    while (inputBoxH < yStartKb - fontSmall.lineHeight()) {
-        inputBoxH += fontSmall.lineHeight();
+    while (wrapMaxH < height - fontSmall.lineHeight()) {
+        wrapMaxH += fontSmall.lineHeight();
     }
 
     // If the text is so long that it goes outside of the input box, the text is actually rendered off screen.
-    uint32_t textHeight = getWrappedTextHeight(0, inputBoxW - 5, inkhud->freetext);
-    if (!inkhud->freetext.empty()) 
-    {
-        
-        uint16_t textPadding = X(1.0) > Y(1.0) ? inputBoxH - textHeight : inputBoxH - textHeight + 1;
-        if (textHeight > inputBoxH) 
-            printWrapped(2, textPadding, inputBoxW - 5, inkhud->freetext);
+    uint32_t textHeight = getWrappedTextHeight(0, width - 5, text);
+    if (!text.empty()) {
+        uint16_t textPadding = X(1.0) > Y(1.0) ? wrapMaxH - textHeight : wrapMaxH - textHeight + 1;
+        if (textHeight > wrapMaxH)
+            printWrapped(2, textPadding, width - 5, text);
         else
-            printWrapped(2, yStartBox + 2, inputBoxW - 5, inkhud->freetext);
+            printWrapped(2, top + 2, width - 5, text);
     }
-    
-    uint16_t textCursorX = inkhud->freetext.empty() ? 1 : getCursorX();
-    uint16_t textCursorY = inkhud->freetext.empty() ? 0: getCursorY() - fontSmall.lineHeight() + 3;
 
-    if (textCursorX + 1 > inputBoxW - 5) {
-        textCursorX = getCursorX() - inputBoxW + 5;
+    uint16_t textCursorX = text.empty() ? 1 : getCursorX();
+    uint16_t textCursorY = text.empty() ? 0 : getCursorY() - fontSmall.lineHeight() + 3;
+
+    if (textCursorX + 1 > width - 5) {
+        textCursorX = getCursorX() - width + 5;
         textCursorY += fontSmall.lineHeight();
     }
-    
-    fillRect(textCursorX + 1, textCursorY, 1, keyH - 2, BLACK);
-    
+
+    fillRect(textCursorX + 1, textCursorY, 1, fontSmall.lineHeight(), BLACK);
+
     // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
-    fillRect(0, 0, X(1.0), yStartBox, WHITE);
-    //printAt(0, 0, header);
-    drawRect(0, yStartBox, inputBoxW, inputBoxH + 5, BLACK);
-    
-    
-    // Draw the keyboard
-    for (uint8_t i = 0; i < FreeTextApplet::KEYBOARD_ROWS; i++) {
-        for (uint8_t j = 0; j < FreeTextApplet::KEYBOARD_COLS; j++) {
-            char temp[2] = "\0";
-            temp[0] = keyboardLayout[i][j];
-            // drawRect(c, yStartKb, keyW + r, keyH, BLACK);
-            if (keyCursorX == j && keyCursorY == i) {
-                fillRect(c, yStartKb, keyW + r, keyH, BLACK);
-                setTextColor(WHITE);
-            } else {
-                setTextColor(BLACK);
+    fillRect(0, 0, X(1.0), top, WHITE);
+    // printAt(0, 0, header);
+    drawRect(0, top, width, wrapMaxH + 5, BLACK);
+}
+
+// Draw a qwerty keyboard
+// The key at the select index is drawn inverted with a black background
+void InkHUD::FreeTextApplet::drawKeyboard(uint16_t left, uint16_t top, uint16_t width, uint16_t height, uint16_t selectCol,
+                                          uint8_t selectRow)
+{
+    setFont(fontSmall);
+    uint16_t em = fontSmall.lineHeight(); // 16 pt
+    uint16_t keyH = height / KBD_ROWS;
+    int16_t keyTopPadding = (keyH - fontSmall.lineHeight()) / 2;
+
+    for (uint8_t row = 0; row < KBD_ROWS; row++) {
+        uint8_t col;
+        // Calculate the remaining space to be used as padding
+        uint16_t sum = 0;
+        for (col = 0; col < KBD_COLS; col++)
+            sum += keyWidths[row * KBD_COLS + col];
+        int16_t keyXPadding = width - ((sum * em) >> 4);
+        // Draw keys
+        uint16_t xPos = 0;
+        for (col = 0; col < KBD_COLS; col++) {
+            Color fgcolor = BLACK;
+            uint8_t index = row * KBD_COLS + col;
+            uint16_t keyX = left + ((xPos * em) >> 4) + ((col * keyXPadding) / (KBD_COLS - 1));
+            uint16_t keyY = top + row * keyH;
+            uint16_t keyW = (keyWidths[index] * em) >> 4;
+            if (col == selectCol && row == selectRow) {
+                fgcolor = WHITE;
+                fillRect(keyX, keyY, keyW, keyH, BLACK);
             }
-            if (keyboardLayout[i][j] == '\b') {
-                printAt(c + 1, yStartKb + 1, "<");
-            } else if (keyboardLayout[i][j] == '\n') {
-                printAt(c + 1, yStartKb + 1, ">");
-            } else if (keyboardLayout[i][j] == ' ') {
-                printAt(c + 1, yStartKb + 1, "_");
-            } else if (keyboardLayout[i][j] == '\x1b') {
-                printAt(c + 1, yStartKb + 1, "~");
+            char key = keys[index];
+            if (key == '\b') {
+                // Draw backspace glyph: 13 x 9 px
+                /**
+                 *         [][][][][][][][][]
+                 *       [][]              []
+                 *     [][]    []      []  []
+                 *   [][]        []  []    []
+                 * [][]            []      []
+                 *   [][]        []  []    []
+                 *     [][]    []      []  []
+                 *       [][]              []
+                 *         [][][][][][][][][]
+                 */
+                const uint8_t bsBitmap[] = {0x0f, 0xf8, 0x18, 0x08, 0x32, 0x28, 0x61, 0x48, 0xc0,
+                                            0x88, 0x61, 0x48, 0x32, 0x28, 0x18, 0x08, 0x0f, 0xf8};
+                uint16_t keyLeftPadding = (keyW - 13) >> 1;
+                drawBitmap(keyX + keyLeftPadding, keyY + keyTopPadding + 1, bsBitmap, 13, 9, fgcolor);
+            } else if (key == '\n') {
+                // Draw done glyph: 12 x 9 px
+                /**
+                 *                     [][]
+                 *                   [][]
+                 *                 [][]
+                 *               [][]
+                 *             [][]
+                 * [][]      [][]
+                 *   [][]  [][]
+                 *     [][][]
+                 *       []
+                 */
+                const uint8_t doneBitmap[] = {0x00, 0x30, 0x00, 0x60, 0x00, 0xc0, 0x01, 0x80, 0x03,
+                                              0x00, 0xc6, 0x00, 0x6c, 0x00, 0x38, 0x00, 0x10, 0x00};
+                uint16_t keyLeftPadding = (keyW - 12) >> 1;
+                drawBitmap(keyX + keyLeftPadding, keyY + keyTopPadding + 1, doneBitmap, 12, 9, fgcolor);
+            } else if (key == ' ') {
+                // Draw space glyph: 13 x 9 px
+                /**
+                 *
+                 *
+                 *
+                 *
+                 * []                      []
+                 * []                      []
+                 * [][][][][][][][][][][][][]
+                 *
+                 *
+                 */
+                const uint8_t spaceBitmap[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+                                               0x08, 0x80, 0x08, 0xff, 0xf8, 0x00, 0x00, 0x00, 0x00};
+                uint16_t keyLeftPadding = (keyW - 13) >> 1;
+                drawBitmap(keyX + keyLeftPadding, keyY + keyTopPadding + 1, spaceBitmap, 13, 9, fgcolor);
+            } else if (key == '\x1b') {
+                setTextColor(fgcolor);
+                std::string keyText = "ESC";
+                uint16_t keyLeftPadding = (keyW - getTextWidth(keyText)) >> 1;
+                printAt(keyX + keyLeftPadding, keyY + keyTopPadding, keyText);
             } else {
-                if (temp[0] >= 0x61)
-                    temp[0] -= 32;
-                printAt(c + 1, yStartKb + 1, temp);
+                setTextColor(fgcolor);
+                if (key >= 0x61)
+                    key -= 32; // capitalize
+                std::string keyText = std::string(1, key);
+                uint16_t keyLeftPadding = (keyW - getTextWidth(keyText)) >> 1;
+                printAt(keyX + keyLeftPadding, keyY + keyTopPadding, keyText);
             }
-            c += (keyW + r);
+            xPos += keyWidths[index];
         }
-        c = 0;
-        yStartKb += X(1.0) > Y(1.0) ? keyH : keyH + Y(padding);
     }
 }
 
@@ -108,6 +162,10 @@ void InkHUD::FreeTextApplet::onForeground()
     SystemApplet::lockRequests = true;
 
     handleInput = true; // Intercept the button input for our applet
+
+    // Select the first key
+    selectCol = 0;
+    selectRow = 0;
 }
 
 void InkHUD::FreeTextApplet::onBackground()
@@ -127,18 +185,18 @@ void InkHUD::FreeTextApplet::onBackground()
 
 void InkHUD::FreeTextApplet::onButtonShortPress()
 {
-
-    char ch = keyboard[keyCursorY][keyCursorX].c;
-    enum KEY_ACTIONS a = keyboard[keyCursorY][keyCursorX].action;
-    if (a == BACKSPACE && !inkhud->freetext.empty()) {
-        inkhud->freetext.pop_back();
-        requestUpdate(EInk::UpdateTypes::FAST);
-    } else if (a == ENTER) {
+    char ch = keys[selectRow * KBD_COLS + selectCol];
+    if (ch == '\b') {
+        if (!inkhud->freetext.empty()) {
+            inkhud->freetext.pop_back();
+            requestUpdate(EInk::UpdateTypes::FAST);
+        }
+    } else if (ch == '\n') {
         sendToBackground();
-    } else if (a == ESCAPE) {
+    } else if (ch == '\x1b') {
         inkhud->freetext.erase();
         sendToBackground();
-    } else if (a == NONE) {
+    } else {
         inkhud->freetext += ch;
         requestUpdate(EInk::UpdateTypes::FAST);
     }
@@ -146,19 +204,20 @@ void InkHUD::FreeTextApplet::onButtonShortPress()
 
 void InkHUD::FreeTextApplet::onButtonLongPress()
 {
-    char ch = keyboard[keyCursorY][keyCursorX].c;
-    enum KEY_ACTIONS a = keyboard[keyCursorY][keyCursorX].action;
-    if (a == BACKSPACE && !inkhud->freetext.empty()) {
-        inkhud->freetext.pop_back();
-        requestUpdate(EInk::UpdateTypes::FAST);
-    } else if (a == ENTER) {
+    char ch = keys[selectRow * KBD_COLS + selectCol];
+    if (ch == '\b') {
+        if (!inkhud->freetext.empty()) {
+            inkhud->freetext.pop_back();
+            requestUpdate(EInk::UpdateTypes::FAST);
+        }
+    } else if (ch == '\n') {
         sendToBackground();
-    } else if (a == ESCAPE) {
+    } else if (ch == '\x1b') {
         inkhud->freetext.erase();
         sendToBackground();
-    } else if (a == NONE) {
+    } else {
         if (ch >= 0x61)
-            ch -= 32;
+            ch -= 32; // capitalize
         inkhud->freetext += ch;
         requestUpdate(EInk::UpdateTypes::FAST);
     }
@@ -178,31 +237,31 @@ void InkHUD::FreeTextApplet::onExitLong()
 
 void InkHUD::FreeTextApplet::onNavUp()
 {
-    if (keyCursorY == 0)
-        keyCursorY = KEYBOARD_ROWS - 1;
+    if (selectRow == 0)
+        selectRow = KBD_ROWS - 1;
     else
-        keyCursorY--;
+        selectRow--;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::FreeTextApplet::onNavDown()
 {
-    keyCursorY = (keyCursorY + 1) % KEYBOARD_ROWS;
+    selectRow = (selectRow + 1) % KBD_ROWS;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::FreeTextApplet::onNavLeft()
 {
-    if (keyCursorX == 0)
-        keyCursorX = KEYBOARD_COLS - 1;
+    if (selectCol == 0)
+        selectCol = KBD_COLS - 1;
     else
-        keyCursorX--;
+        selectCol--;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::FreeTextApplet::onNavRight()
 {
-    keyCursorX = (keyCursorX + 1) % KEYBOARD_COLS;
+    selectCol = (selectCol + 1) % KBD_COLS;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 #endif
