@@ -100,6 +100,9 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.environment_metrics.has_iaq) {
                         msgPayload["iaq"] = new JSONValue((uint)decoded->variant.environment_metrics.iaq);
                     }
+                    if (decoded->variant.environment_metrics.has_distance) {
+                        msgPayload["distance"] = new JSONValue(decoded->variant.environment_metrics.distance);
+                    }
                     if (decoded->variant.environment_metrics.has_wind_speed) {
                         msgPayload["wind_speed"] = new JSONValue(decoded->variant.environment_metrics.wind_speed);
                     }
@@ -115,6 +118,27 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.environment_metrics.has_radiation) {
                         msgPayload["radiation"] = new JSONValue(decoded->variant.environment_metrics.radiation);
                     }
+                    if (decoded->variant.environment_metrics.has_ir_lux) {
+                        msgPayload["ir_lux"] = new JSONValue(decoded->variant.environment_metrics.ir_lux);
+                    }
+                    if (decoded->variant.environment_metrics.has_uv_lux) {
+                        msgPayload["uv_lux"] = new JSONValue(decoded->variant.environment_metrics.uv_lux);
+                    }
+                    if (decoded->variant.environment_metrics.has_weight) {
+                        msgPayload["weight"] = new JSONValue(decoded->variant.environment_metrics.weight);
+                    }
+                    if (decoded->variant.environment_metrics.has_rainfall_1h) {
+                        msgPayload["rainfall_1h"] = new JSONValue(decoded->variant.environment_metrics.rainfall_1h);
+                    }
+                    if (decoded->variant.environment_metrics.has_rainfall_24h) {
+                        msgPayload["rainfall_24h"] = new JSONValue(decoded->variant.environment_metrics.rainfall_24h);
+                    }
+                    if (decoded->variant.environment_metrics.has_soil_moisture) {
+                        msgPayload["soil_moisture"] = new JSONValue((uint)decoded->variant.environment_metrics.soil_moisture);
+                    }
+                    if (decoded->variant.environment_metrics.has_soil_temperature) {
+                        msgPayload["soil_temperature"] = new JSONValue(decoded->variant.environment_metrics.soil_temperature);
+                    }
                 } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
                     if (decoded->variant.air_quality_metrics.has_pm10_standard) {
                         msgPayload["pm10"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_standard);
@@ -125,17 +149,26 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.air_quality_metrics.has_pm100_standard) {
                         msgPayload["pm100"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_standard);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
-                        msgPayload["pm10_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_environmental);
+                    // if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
+                    //     msgPayload["pm10_e"] =
+                    //         new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_environmental);
+                    // }
+                    // if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
+                    //     msgPayload["pm25_e"] =
+                    //         new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_environmental);
+                    // }
+                    // if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
+                    //     msgPayload["pm100_e"] =
+                    //         new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_environmental);
+                    // }
+                    if (decoded->variant.air_quality_metrics.has_co2) {
+                        msgPayload["co2"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.co2);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
-                        msgPayload["pm25_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_environmental);
+                    if (decoded->variant.air_quality_metrics.has_co2_temperature) {
+                        msgPayload["co2_temperature"] = new JSONValue(decoded->variant.air_quality_metrics.co2_temperature);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
-                        msgPayload["pm100_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_environmental);
+                    if (decoded->variant.air_quality_metrics.has_co2_humidity) {
+                        msgPayload["co2_humidity"] = new JSONValue(decoded->variant.air_quality_metrics.co2_humidity);
                     }
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     if (decoded->variant.power_metrics.has_ch1_voltage) {
@@ -389,13 +422,14 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     jsonObj["from"] = new JSONValue((unsigned int)mp->from);
     jsonObj["channel"] = new JSONValue((unsigned int)mp->channel);
     jsonObj["type"] = new JSONValue(msgType.c_str());
-    jsonObj["sender"] = new JSONValue(owner.id);
+    jsonObj["sender"] = new JSONValue(nodeDB->getNodeId().c_str());
     if (mp->rx_rssi != 0)
         jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
-    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
-        jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
+    const int8_t hopsAway = getHopsAway(*mp);
+    if (hopsAway >= 0) {
+        jsonObj["hops_away"] = new JSONValue((unsigned int)(hopsAway));
         jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
     }
 
@@ -426,8 +460,9 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
         jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
-    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
-        jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
+    const int8_t hopsAway = getHopsAway(*mp);
+    if (hopsAway >= 0) {
+        jsonObj["hops_away"] = new JSONValue((unsigned int)(hopsAway));
         jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
     }
     jsonObj["size"] = new JSONValue((unsigned int)mp->encrypted.size);

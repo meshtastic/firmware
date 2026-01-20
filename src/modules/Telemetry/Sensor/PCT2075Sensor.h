@@ -12,13 +12,10 @@ class PCT2075Sensor : public TelemetrySensor
   private:
     Adafruit_PCT2075 pct2075;
 
-  protected:
-    virtual void setup() override;
-
   public:
     PCT2075Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

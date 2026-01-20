@@ -5,7 +5,7 @@
 
 BuzzerFeedbackThread *buzzerFeedbackThread;
 
-BuzzerFeedbackThread::BuzzerFeedbackThread() : OSThread("BuzzerFeedback")
+BuzzerFeedbackThread::BuzzerFeedbackThread()
 {
     if (inputBroker)
         inputObserver.observe(inputBroker);
@@ -15,24 +15,31 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
 {
     // Only provide feedback if buzzer is enabled for notifications
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY) {
+        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY ||
+        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY) {
         return 0; // Let other handlers process the event
     }
 
-    // Track last event time for potential future use
-    lastEventTime = millis();
-    needsUpdate = true;
-
     // Handle different input events with appropriate buzzer feedback
     switch (event->inputEvent) {
+#ifdef INPUTDRIVER_ENCODER_TYPE
+    case INPUT_BROKER_SELECT:
+    case INPUT_BROKER_SELECT_LONG:
+        playClick();
+        break;
+#else
     case INPUT_BROKER_USER_PRESS:
     case INPUT_BROKER_ALT_PRESS:
     case INPUT_BROKER_SELECT:
-        playBeep(); // Confirmation feedback
+    case INPUT_BROKER_SELECT_LONG:
+        playBeep();
         break;
+#endif
 
     case INPUT_BROKER_UP:
+    case INPUT_BROKER_UP_LONG:
     case INPUT_BROKER_DOWN:
+    case INPUT_BROKER_DOWN_LONG:
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_RIGHT:
         playChirp(); // Navigation feedback
@@ -47,10 +54,6 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
         playComboTune(); // Ping sent feedback
         break;
 
-    case INPUT_BROKER_SHUTDOWN:
-        playShutdownMelody(); // Shutdown feedback
-        break;
-
     default:
         // For other events, check if it's a printable character
         if (event->kbchar >= 32 && event->kbchar <= 126) {
@@ -62,18 +65,4 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
     }
 
     return 0; // Allow other handlers to process the event
-}
-
-int32_t BuzzerFeedbackThread::runOnce()
-{
-    // This thread is primarily event-driven, but we can use runOnce
-    // for any periodic tasks if needed in the future
-
-    if (needsUpdate) {
-        needsUpdate = false;
-        // Could add any periodic processing here
-    }
-
-    // Run every 100ms when active, less frequently when idle
-    return needsUpdate ? 100 : 1000;
 }

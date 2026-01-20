@@ -13,8 +13,9 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
 
 #if HAS_SCREEN
 #define IF_SCREEN(X)                                                                                                             \
-    if (screen)                                                                                                                  \
-        X;
+    if (screen) {                                                                                                                \
+        X;                                                                                                                       \
+    }
 #else
 #define IF_SCREEN(...)
 #endif

@@ -8,7 +8,7 @@
 meshtastic_MeshPacket *ReplyModule::allocReply()
 {
     assert(currentRequest); // should always be !NULL
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     auto req = *currentRequest;
     auto &p = req.decoded;
     // The incoming message is in p.payload

@@ -37,6 +37,9 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     _activeLow = config.activeLow;
     _touchQuirk = config.touchQuirk;
     _intRoutine = config.intRoutine;
+    _pressHandler = config.onPress;
+    _releaseHandler = config.onRelease;
+    _suppressLeadUp = config.suppressLeadUpSound;
     _longLongPress = config.longLongPress;
 
     userButton = OneButton(config.pinNumber, config.activeLow, config.activePullup);
@@ -53,23 +56,21 @@ bool ButtonThread::initButton(const ButtonConfig &config)
         },
         this);
 
-    if (config.longPress != INPUT_BROKER_NONE) {
-        _longPress = config.longPress;
-        userButton.attachLongPressStart(
-            [](void *callerThread) -> void {
-                ButtonThread *thread = (ButtonThread *)callerThread;
-                // if (millis() > 30000) // hold off 30s after boot
-                thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
-            },
-            this);
-        userButton.attachLongPressStop(
-            [](void *callerThread) -> void {
-                ButtonThread *thread = (ButtonThread *)callerThread;
-                // if (millis() > 30000) // hold off 30s after boot
-                thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
-            },
-            this);
-    }
+    _longPress = config.longPress;
+    userButton.attachLongPressStart(
+        [](void *callerThread) -> void {
+            ButtonThread *thread = (ButtonThread *)callerThread;
+            // if (millis() > 30000) // hold off 30s after boot
+            thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
+        },
+        this);
+    userButton.attachLongPressStop(
+        [](void *callerThread) -> void {
+            ButtonThread *thread = (ButtonThread *)callerThread;
+            // if (millis() > 30000) // hold off 30s after boot
+            thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
+        },
+        this);
 
     if (config.doublePress != INPUT_BROKER_NONE) {
         _doublePress = config.doublePress;
@@ -94,8 +95,11 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     if (config.shortLong != INPUT_BROKER_NONE) {
         _shortLong = config.shortLong;
     }
-
+#ifdef USE_EINK
+    userButton.setDebounceMs(0);
+#else
     userButton.setDebounceMs(1);
+#endif
     userButton.setPressMs(_longPressTime);
 
     if (screen) {
@@ -132,6 +136,8 @@ int32_t ButtonThread::runOnce()
 
     // Detect start of button press
     if (buttonCurrentlyPressed && !buttonWasPressed) {
+        if (_pressHandler)
+            _pressHandler();
         buttonPressStartTime = millis();
         leadUpPlayed = false;
         leadUpSequenceActive = false;
@@ -139,8 +145,7 @@ int32_t ButtonThread::runOnce()
     }
 
     // Progressive lead-up sound system
-    if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
-        (millis() - buttonPressStartTime) < _longLongPressTime) {
+    if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
 
         // Start the progressive sequence if not already active
         if (!leadUpSequenceActive) {
@@ -152,13 +157,16 @@ int32_t ButtonThread::runOnce()
         else if ((millis() - lastLeadUpNoteTime) >= 400) { // 400ms interval between notes
             if (playNextLeadUpNote()) {
                 lastLeadUpNoteTime = millis();
+            } else {
+                leadUpPlayed = true;
             }
         }
     }
 
     // Reset when button is released
     if (!buttonCurrentlyPressed && buttonWasPressed) {
-        leadUpPlayed = false;
+        if (_releaseHandler)
+            _releaseHandler();
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
@@ -202,11 +210,11 @@ int32_t ButtonThread::runOnce()
 
                 break;
             }
-
-            // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
-            evt.inputEvent = _longPress;
-            this->notifyObservers(&evt);
-
+            if (_longPress != INPUT_BROKER_NONE) {
+                // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
+                evt.inputEvent = _longPress;
+                this->notifyObservers(&evt);
+            }
             // Reset combination tracking
             waitingForLongPress = false;
 
@@ -240,7 +248,21 @@ int32_t ButtonThread::runOnce()
                 this->notifyObservers(&evt);
                 playComboTune();
                 break;
-
+#if !HAS_SCREEN
+            case 4:
+                if (moduleConfig.external_notification.enabled && externalNotificationModule) {
+                    externalNotificationModule->setMute(!externalNotificationModule->getMute());
+                    IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow();)
+                    if (externalNotificationModule->getMute()) {
+                        LOG_INFO("Temporarily Muted");
+                        play4ClickDown(); // Disable tone
+                    } else {
+                        LOG_INFO("Unmuted");
+                        play4ClickUp(); // Enable tone
+                    }
+                }
+                break;
+#endif
             // No valid multipress action
             default:
                 break;
@@ -253,14 +275,15 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
 
-            LOG_INFO("LONG PRESS RELEASE");
+            LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
             if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
-                (millis() - buttonPressStartTime) >= _longLongPressTime) {
+                (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
                 evt.inputEvent = _longLongPress;
                 this->notifyObservers(&evt);
             }
             // Reset combination tracking
             waitingForLongPress = false;
+            leadUpPlayed = false;
 
             break;
         }
@@ -272,7 +295,12 @@ int32_t ButtonThread::runOnce()
         }
     }
     btnEvent = BUTTON_EVENT_NONE;
-    return 50;
+
+    // only pull when the button is pressed, we get notified via IRQ on a new press
+    if (!userButton.isIdle() || waitingForLongPress) {
+        return 50;
+    }
+    return 100; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
 }
 
 /*

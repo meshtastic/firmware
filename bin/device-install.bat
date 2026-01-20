@@ -5,20 +5,14 @@ TITLE Meshtastic device-install
 SET "SCRIPT_NAME=%~nx0"
 SET "DEBUG=0"
 SET "PYTHON="
-SET "TFT_BUILD=0"
-SET "BIGDB8=0"
-SET "BIGDB16=0"
 SET "ESPTOOL_BAUD=115200"
 SET "ESPTOOL_CMD="
 SET "LOGCOUNTER=0"
 SET "BPS_RESET=0"
-
-@REM FIXME: Determine mcu from PlatformIO variant, this is unmaintainable.
-SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
-SET "C3=esp32c3"
-@REM FIXME: Determine flash size from PlatformIO variant, this is unmaintainable.
-SET "BIGDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
-SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite t-watch-s3"
+@REM Default offsets.
+@REM https://github.com/meshtastic/web-flasher/blob/main/stores/firmwareStore.ts#L202
+SET "OTA_OFFSET=0x260000"
+SET "SPIFFS_OFFSET=0x300000"
 
 GOTO getopts
 :help
@@ -27,7 +21,7 @@ ECHO.
 ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] [--1200bps-reset]
 ECHO.
 ECHO Options:
-ECHO     -f filename      The firmware .bin file to flash.  Custom to your device type and region. (required)
+ECHO     -f filename      The firmware .factory.bin file to flash.  Custom to your device type and region. (required)
 ECHO                      The file must be located in this current directory.
 ECHO     -p PORT          Set the environment variable for ESPTOOL_PORT.
 ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
@@ -38,12 +32,12 @@ ECHO     --1200bps-reset  Attempt to place the device in correct mode. (1200bps 
 ECHO                      Some hardware requires this twice.
 ECHO.
 ECHO Example: %SCRIPT_NAME% -p COM17 --1200bps-reset
-ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
-ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11
+ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.factory.bin -p COM11
+ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.factory.bin -p COM11
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.2]
+ECHO %SCRIPT_NAME% [Version 2.7.0]
 ECHO Meshtastic
 GOTO eof
 
@@ -76,8 +70,8 @@ IF "__!FILENAME!__"=="____" (
         CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
         GOTO help
     )
-    IF "__!FILENAME:firmware-=!__"=="__!FILENAME!__" (
-        CALL :LOG_MESSAGE ERROR "Filename must be a firmware-* file."
+    IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
+        CALL :LOG_MESSAGE ERROR "Filename must be a firmware-*.factory.bin file."
         GOTO help
     )
     @REM Remove ".\" or "./" file prefix if present.
@@ -91,23 +85,36 @@ IF NOT EXIST !FILENAME! (
     GOTO eof
 )
 
-IF NOT "!FILENAME:update=!"=="!FILENAME!" (
-    CALL :LOG_MESSAGE DEBUG "We are working with a *update* file. !FILENAME!"
-    CALL :LOG_MESSAGE INFO "Use script device-update.bat to flash update !FILENAME!."
-    GOTO eof
+CALL :LOG_MESSAGE DEBUG "Checking for metadata..."
+@REM Derive metadata filename from firmware filename.
+SET "METAFILE=!FILENAME:.factory.bin=!.mt.json"
+IF EXIST !METAFILE! (
+    @REM Print parsed json with powershell
+    CALL :LOG_MESSAGE INFO "Firmware metadata: !METAFILE!"
+    powershell -NoProfile -Command "(Get-Content '!METAFILE!' | ConvertFrom-Json | Out-String).Trim()"
+
+    @REM Save metadata values to variables for later use.
+    FOR /f "usebackq" %%A IN (`powershell -NoProfile -Command ^
+        "(Get-Content '!METAFILE!' | ConvertFrom-Json).mcu"`) DO SET "MCU=%%A"
+    FOR /f "usebackq" %%A IN (`powershell -NoProfile -Command ^
+        "(Get-Content '!METAFILE!' | ConvertFrom-Json).part | Where-Object { $_.subtype -eq 'ota_1' } | Select-Object -ExpandProperty offset"`
+    ) DO SET "OTA_OFFSET=%%A"
+    FOR /f "usebackq" %%A IN (`powershell -NoProfile -Command ^
+        "(Get-Content '!METAFILE!' | ConvertFrom-Json).part | Where-Object { $_.subtype -eq 'spiffs' } | Select-Object -ExpandProperty offset"`
+    ) DO SET "SPIFFS_OFFSET=%%A"
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
+    CALL :LOG_MESSAGE ERROR "No metadata file found: !METAFILE!"
+    GOTO eof
 )
 
 :skip-filename
-SET "ESPTOOL_BAUD=1200"
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
     SET "ESPTOOL_CMD=!PYTHON! -m esptool"
     CALL :LOG_MESSAGE DEBUG "Python interpreter supplied."
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool...
+    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool..."
     WHERE esptool >nul 2>&1
     IF %ERRORLEVEL% EQU 0 (
         @REM WHERE exits with code 0 if esptool is found.
@@ -120,11 +127,10 @@ IF NOT "__%PYTHON%__"=="____" (
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 !ESPTOOL_CMD! >nul 2>&1
-IF %ERRORLEVEL% GEQ 2 (
-    @REM esptool exits with code 1 if help is displayed.
+IF %ERRORLEVEL% EQU 9009 (
+    @REM 9009 = command not found on Windows
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
-    GOTO eof
 )
 IF %DEBUG% EQU 1 (
     CALL :LOG_MESSAGE DEBUG "Skipping ESPTOOL_CMD steps."
@@ -142,87 +148,29 @@ CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
 IF %BPS_RESET% EQU 1 (
     @REM Attempt to change mode via 1200bps Reset.
-    CALL :RUN_ESPTOOL !ESPTOOL_BAUD! --after no_reset read_flash_status
+    CALL :RUN_ESPTOOL 1200 --after no_reset read_flash_status
     GOTO eof
 )
 
-@REM Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
-@REM https://github.com/meshtastic/web-flasher/blob/main/types/resources.ts#L3
-IF NOT "!FILENAME:-tft-=!"=="!FILENAME!" (
-    CALL :LOG_MESSAGE DEBUG "We are working with a *-tft-* file. !FILENAME!"
-    SET "TFT_BUILD=1"
+@REM Extract PROGNAME from %FILENAME% for later use.
+SET "PROGNAME=!FILENAME:.factory.bin=!"
+CALL :LOG_MESSAGE DEBUG "Computed PROGNAME: !PROGNAME!"
+
+IF "__!MCU!__" == "__esp32s3__" (
+    @REM We are working with ESP32-S3
+    SET "OTA_FILENAME=bleota-s3.bin"
+) ELSE IF "__!MCU!__" == "__esp32c3__" (
+    @REM We are working with ESP32-C3
+    SET "OTA_FILENAME=bleota-c3.bin"
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "We are NOT working with a *-tft-* file. !FILENAME!"
+    @REM Everything else
+    SET "OTA_FILENAME=bleota.bin"
 )
-
-FOR %%a IN (%BIGDB_8MB%) DO (
-    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
-        @REM We are working with any of %BIGDB_8MB%.
-        SET "BIGDB8=1"
-        GOTO end_loop_bigdb_8mb
-    )
-)
-:end_loop_bigdb_8mb
-
-FOR %%a IN (%BIGDB_16MB%) DO (
-    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
-        @REM We are working with any of %BIGDB_16MB%.
-        SET "BIGDB16=1"
-        GOTO end_loop_bigdb_16mb
-    )
-)
-:end_loop_bigdb_16mb
-
-IF %BIGDB8% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 8mb partition selected."
-IF %BIGDB16% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 16mb partition selected."
-
-@REM Extract BASENAME from %FILENAME% for later use.
-SET "BASENAME=!FILENAME:firmware-=!"
-CALL :LOG_MESSAGE DEBUG "Computed firmware basename: !BASENAME!"
-
-@REM Account for S3 and C3 board's different OTA partition.
-FOR %%a IN (%S3%) DO (
-    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
-        @REM We are working with any of %S3%.
-        SET "OTA_FILENAME=bleota-s3.bin"
-        GOTO :end_loop_s3
-    )
-)
-
-FOR %%a IN (%C3%) DO (
-    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
-        @REM We are working with any of %C3%.
-        SET "OTA_FILENAME=bleota-c3.bin"
-        GOTO :end_loop_c3
-    )
-)
-
-@REM Everything else
-SET "OTA_FILENAME=bleota.bin"
-:end_loop_s3
-:end_loop_c3
 CALL :LOG_MESSAGE DEBUG "Set OTA_FILENAME to: !OTA_FILENAME!"
 
 @REM Set SPIFFS filename with "littlefs-" prefix.
-SET "SPIFFS_FILENAME=littlefs-%BASENAME%"
+SET "SPIFFS_FILENAME=littlefs-!PROGNAME:firmware-=!.bin"
 CALL :LOG_MESSAGE DEBUG "Set SPIFFS_FILENAME to: !SPIFFS_FILENAME!"
-
-@REM Default offsets.
-@REM https://github.com/meshtastic/web-flasher/blob/main/stores/firmwareStore.ts#L202
-SET "OTA_OFFSET=0x260000"
-SET "SPIFFS_OFFSET=0x300000"
-
-@REM Offsets for BigDB 8mb.
-IF %BIGDB8% EQU 1 (
-    SET "OTA_OFFSET=0x340000"
-    SET "SPIFFS_OFFSET=0x670000"
-)
-
-@REM Offsets for BigDB 16mb.
-IF %BIGDB16% EQU 1 (
-    SET "OTA_OFFSET=0x650000"
-    SET "SPIFFS_OFFSET=0xc90000"
-)
 
 CALL :LOG_MESSAGE DEBUG "Set OTA_OFFSET to: !OTA_OFFSET!"
 CALL :LOG_MESSAGE DEBUG "Set SPIFFS_OFFSET to: !SPIFFS_OFFSET!"

@@ -23,14 +23,11 @@ class ScanI2CTwoWire : public ScanI2C
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
 
-    TwoWire *fetchI2CBus(ScanI2C::DeviceAddress) const;
-
     bool exists(ScanI2C::DeviceType) const override;
 
     size_t countDevices() const override;
 
-    bool setClockSpeed(ScanI2C::I2CPort, uint32_t);
-    uint32_t getClockSpeed(ScanI2C::I2CPort);
+    static TwoWire *fetchI2CBus(ScanI2C::DeviceAddress);
 
   protected:
     FoundDevice firstOfOrNONE(size_t, DeviceType[]) const override;

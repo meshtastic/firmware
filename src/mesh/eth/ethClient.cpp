@@ -21,7 +21,7 @@ uint32_t ntp_renew = 0;
 #endif
 
 EthernetUDP syslogClient;
-Syslog syslog(syslogClient);
+meshtastic::Syslog syslog(syslogClient);
 
 bool ethStartupComplete = 0;
 
@@ -66,6 +66,11 @@ static int32_t reconnectETH()
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
             if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
                 initApiServer();
+            }
+#endif
+#if HAS_UDP_MULTICAST
+            if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+                udpHandler->start();
             }
 #endif
 

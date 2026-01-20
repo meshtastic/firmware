@@ -136,12 +136,12 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     display->drawString(x, y += _fontHeight(FONT_SMALL), tempStr);
     if (lastMeasurement.variant.health_metrics.has_heart_bpm) {
         char heartStr[32];
-        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %.0f bpm", lastMeasurement.variant.health_metrics.heart_bpm);
+        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %u bpm", lastMeasurement.variant.health_metrics.heart_bpm);
         display->drawString(x, y += _fontHeight(FONT_SMALL), heartStr);
     }
     if (lastMeasurement.variant.health_metrics.has_spO2) {
         char spo2Str[32];
-        snprintf(spo2Str, sizeof(spo2Str), "spO2: %.0f %%", lastMeasurement.variant.health_metrics.spO2);
+        snprintf(spo2Str, sizeof(spo2Str), "spO2: %u %%", lastMeasurement.variant.health_metrics.spO2);
         display->drawString(x, y += _fontHeight(FONT_SMALL), spo2Str);
     }
 }
@@ -149,7 +149,7 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
 bool HealthTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_health_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): temperature=%f, heart_bpm=%d, spO2=%d,", sender, t->variant.health_metrics.temperature,

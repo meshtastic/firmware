@@ -27,6 +27,8 @@ class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> 
     }*/
     virtual bool wantUIFrame() { return false; };
     bool sendInitialRequest(NodeNum remoteNode);
+    void generateVerificationCode(char *); // fills char with the user readable verification code
+    uint32_t getCurrentRemoteNode() { return currentRemoteNode; }
 
   protected:
     /* Called to handle a particular incoming message
@@ -56,9 +58,8 @@ class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> 
     char message[40] = {0};
 
     void processSecurityNumber(uint32_t);
-    void updateState();                    // check the timeouts and maybe reset the state to idle
-    void resetToIdle();                    // Zero out module state
-    void generateVerificationCode(char *); // fills char with the user readable verification code
+    void updateState(); // check the timeouts and maybe reset the state to idle
+    void resetToIdle(); // Zero out module state
 };
 
 extern KeyVerificationModule *keyVerificationModule;

@@ -45,6 +45,9 @@
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
+#ifndef HAS_32768HZ
+#define HAS_32768HZ 0
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU
@@ -98,8 +101,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_WATCH_S3
 #elif defined(GENIEBLOCKS)
 #define HW_VENDOR meshtastic_HardwareModel_GENIEBLOCKS
-#elif defined(PRIVATE_HW)
-#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(NANO_G1)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
 #elif defined(M5STACK)
@@ -146,6 +147,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_EBYTE_ESP32_S3
 #elif defined(ELECROW_ThinkNode_M2)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M2
+#elif defined(ELECROW_ThinkNode_M5)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M5
 #elif defined(ESP32_S3_PICO)
 #define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
 #elif defined(SENSELORA_S3)
@@ -186,8 +189,24 @@
 #define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
 #elif defined(RAK3312)
 #define HW_VENDOR meshtastic_HardwareModel_RAK3312
+#elif defined(RAK_WISMESH_TAP_V2)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP_V2
 #elif defined(LINK_32)
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
+#elif defined(T_DECK_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
+#elif defined(T_BEAM_1W)
+#define HW_VENDOR meshtastic_HardwareModel_TBEAM_1_WATT
+#elif defined(T_LORA_PAGER)
+#define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
+#elif defined(HELTEC_V4)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4
+#elif defined(M5STACK_UNITC6L)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
+#elif defined(HELTEC_WIRELESS_TRACKER_V2)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#else
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
 
 // -----------------------------------------------------------------------------
@@ -211,3 +230,13 @@
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.
+
+// Setup flag, which indicates if our device supports power management
+#ifdef CONFIG_PM_ENABLE
+#define HAS_ESP32_PM_SUPPORT 1
+#endif
+
+// Setup flag, which indicates if our device supports dynamic light sleep
+#if defined(HAS_ESP32_PM_SUPPORT) && defined(CONFIG_FREERTOS_USE_TICKLESS_IDLE)
+#define HAS_ESP32_DYNAMIC_LIGHT_SLEEP 1
+#endif

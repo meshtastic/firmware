@@ -1,49 +1,41 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_PM25AQI.h>)
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include "detect/ScanI2CTwoWire.h"
-#include <Adafruit_PM25AQI.h>
+#include "RTC.h"
 
-#ifndef PMSA003I_WARMUP_MS
-// from the PMSA003I datasheet:
-// "Stable data should be got at least 30 seconds after the sensor wakeup
-// from the sleep mode because of the fan’s performance."
+#define PMSA003I_I2C_CLOCK_SPEED 100000
+#define PMSA003I_FRAME_LENGTH  32
 #define PMSA003I_WARMUP_MS 30000
-#endif
 
 class PMSA003ISensor : public TelemetrySensor
 {
-  private:
-    Adafruit_PM25AQI pmsa003i = Adafruit_PM25AQI();
-    PM25_AQI_Data pmsa003iData = {0};
-
-  protected:
-    virtual void setup() override;
-
-  public:
-    enum State {
-        IDLE = 0,
-        ACTIVE = 1,
-    };
-
-#ifdef PMSA003I_ENABLE_PIN
-    void sleep();
-    uint32_t wakeUp();
-    // the PMSA003I sensor uses about 300mW on its own; support powering it off when it's not actively taking
-    // a reading
-    // put the sensor to sleep on startup
-    State state = State::IDLE;
-#else
+private:
+    enum class State { IDLE, ACTIVE };
     State state = State::ACTIVE;
-#endif
 
+    uint16_t computedChecksum = 0;
+    uint16_t receivedChecksum = 0;
+    uint32_t pmMeasureStarted = 0;
+
+    uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
+    TwoWire * _bus{};
+    uint8_t _address{};
+
+public:
     PMSA003ISensor();
-    bool isActive();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+
+    virtual bool isActive() override;
+    virtual void sleep() override;
+    virtual uint32_t wakeUp() override;
+    virtual bool canSleep() override;
+    virtual int32_t wakeUpTimeMs() override;
+    virtual int32_t pendingForReadyMs() override;
+
 };
 
 #endif
