@@ -96,7 +96,7 @@ void InkHUD::MenuApplet::onBackground()
     SystemApplet::handleInput = false;
 
     handleFreeText = false;
-
+    freeTextMode = false;
     // Restore the user applet whose tile we borrowed
     if (borrowedTileOwner)
         borrowedTileOwner->bringToForeground();
@@ -169,10 +169,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
-    case FREE_TEXT:
-        OSThread::enabled = false;
-        inkhud->openKeyboard();
-        break;
+    // case FREE_TEXT:
+    //     OSThread::enabled = false;
+    //     inkhud->openKeyboard();
+    //     break;
 
     case STORE_CANNEDMESSAGE_SELECTION:
         if (!settings->joystick.enabled)
@@ -312,6 +312,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         populateSendPage();
         previousPage = MenuPage::ROOT;
         break;
+    
+    case FREE_TEXT:
+        // Draw the text input box
+        freeTextMode = true;
+        OSThread::enabled = false;
+        previousPage = MenuPage::SEND;
+        break;
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
@@ -399,9 +406,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
 void InkHUD::MenuApplet::onRender()
 {
+    if (freeTextMode) {
+        drawInputField(0, fontSmall.lineHeight(), X(1.0), Y(1.0) - fontSmall.lineHeight() - 1, inkhud->freetext);
+        return;
+    }
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
-
+    
     // Dimensions for the slots where we will draw menuItems
     const float padding = 0.05;
     const uint16_t itemH = fontSmall.lineHeight() * 2;
@@ -503,6 +514,7 @@ void InkHUD::MenuApplet::onRender()
 
 void InkHUD::MenuApplet::onButtonShortPress()
 {
+    if (!freeTextMode) {
     // Push the auto-close timer back
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
@@ -521,10 +533,12 @@ void InkHUD::MenuApplet::onButtonShortPress()
         if (!wantsToRender())
             requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
+    }
 }
 
 void InkHUD::MenuApplet::onButtonLongPress()
 {
+    if (!freeTextMode) {
     // Push the auto-close timer back
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
@@ -538,18 +552,21 @@ void InkHUD::MenuApplet::onButtonLongPress()
     // FAST keeps things responsive: important because we're dealing with user input
     if (!wantsToRender())
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onExitShort()
 {
     // Exit the menu
+    freeTextMode = false;
     showPage(MenuPage::EXIT);
-
+    
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onNavUp()
 {
+    if (!freeTextMode) {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     // Move menu cursor to previous entry, then update
@@ -562,10 +579,12 @@ void InkHUD::MenuApplet::onNavUp()
         cursorShown = true;
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onNavDown()
 {
+    if (!freeTextMode) {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
     // Move menu cursor to next entry, then update
@@ -575,25 +594,30 @@ void InkHUD::MenuApplet::onNavDown()
         cursorShown = true;
 
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onNavLeft()
 {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
-
     // Go to the previous menu page
+    if (freeTextMode) {
+        freeTextMode = !freeTextMode;
+        OSThread::enabled = true;
+    }
     showPage(previousPage);
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onNavRight()
 {
+    if (!freeTextMode) {
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
-
     if (cursorShown)
         execute(items.at(cursor));
     if (!wantsToRender())
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onFreeText()
@@ -666,7 +690,7 @@ void InkHUD::MenuApplet::populateSendPage()
 
     // If joystick is available, include the Free Text option
     if (settings->joystick.enabled)
-        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
+        items.push_back(MenuItem("Free Text", MenuPage::FREE_TEXT));
 
     // One menu item for each canned message
     uint8_t count = cm.store->size();
@@ -767,6 +791,45 @@ void InkHUD::MenuApplet::populateRecipientPage()
     items.push_back(MenuItem("Exit", MenuPage::EXIT));
 }
 
+void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text)
+{
+    setFont(fontSmall);
+    uint16_t wrapMaxH = 0;
+
+    // Draw the text, input box, and cursor
+    // Adjusting the box for screen height
+    while (wrapMaxH < height - fontSmall.lineHeight()) {
+        wrapMaxH += fontSmall.lineHeight();
+    }
+
+    // If the text is so long that it goes outside of the input box, the text is actually rendered off screen.
+    uint32_t textHeight = getWrappedTextHeight(0, width - 5, text);
+    if (!text.empty()) {
+        uint16_t textPadding = X(1.0) > Y(1.0) ? wrapMaxH - textHeight : wrapMaxH - textHeight + 1;
+        if (textHeight > wrapMaxH)
+            printWrapped(2, textPadding, width - 5, text);
+        else
+            printWrapped(2, top + 2, width - 5, text);
+    }
+
+    uint16_t textCursorX = text.empty() ? 1 : getCursorX();
+    uint16_t textCursorY = text.empty() ? fontSmall.lineHeight() + 2 : getCursorY() - fontSmall.lineHeight() + 3;
+
+    if (textCursorX + 1 > width - 5) {
+        textCursorX = getCursorX() - width + 5;
+        textCursorY += fontSmall.lineHeight();
+    }
+
+    fillRect(textCursorX + 1, textCursorY, 1, fontSmall.lineHeight(), BLACK);
+
+    // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
+    fillRect(0, 0, X(1.0), top, WHITE);
+    // printAt(0, 0, header);
+    std::string ftlen = std::to_string(text.length()) + "/" + to_string(200);
+    uint16_t textLen = getTextWidth(ftlen);
+    printAt(X(1.0) - textLen - 2, 0, ftlen);
+    drawRect(0, top, width, wrapMaxH + 5, BLACK);
+}
 // Renders the panel shown at the top of the root menu.
 // Displays the clock, and several other pieces of instantaneous system info,
 // which we'd prefer not to have displayed in a normal applet, as they update too frequently.

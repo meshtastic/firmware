@@ -50,7 +50,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateAppletPage();    // Dynamically create MenuItems for toggling loaded applets
     void populateAutoshowPage();  // Dynamically create MenuItems for selecting which applets can autoshow
     void populateRecentsPage();   // Create menu items: a choice of values for settings.recentlyActiveSeconds
-
+    
+    void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text);                                                  // Draw input field for free text
     uint16_t getSystemInfoPanelHeight();
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr);                   // Info panel at top of root menu
@@ -61,7 +62,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     MenuPage previousPage = MenuPage::EXIT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
-
+    bool freeTextMode = false;
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
 
     std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
