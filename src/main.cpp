@@ -105,6 +105,43 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include <string>
 #endif
 
+#ifdef ARCH_ESP32
+#ifdef DEBUG_PARTITION_TABLE
+#include "esp_partition.h"
+
+void printPartitionTable()
+{
+    printf("\n--- Partition Table ---\n");
+    // Print Column Headers
+    printf("| %-16s | %-4s | %-7s | %-10s | %-10s |\n", "Label", "Type", "Subtype", "Offset", "Size");
+    printf("|------------------|------|---------|------------|------------|\n");
+
+    // Create an iterator to find ALL partitions (Type ANY, Subtype ANY)
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+
+    // Loop through the iterator
+    if (it != NULL) {
+        do {
+            const esp_partition_t *part = esp_partition_get(it);
+
+            // Print details: Label, Type (Hex), Subtype (Hex), Offset (Hex), Size (Hex)
+            printf("| %-16s | 0x%02x | 0x%02x    | 0x%08x | 0x%08x |\n", part->label, part->type, part->subtype, part->address,
+                   part->size);
+
+            // Move to next partition
+            it = esp_partition_next(it);
+        } while (it != NULL);
+
+        // Release the iterator memory
+        esp_partition_iterator_release(it);
+    } else {
+        printf("No partitions found.\n");
+    }
+    printf("-----------------------\n");
+}
+#endif // DEBUG_PARTITION_TABLE
+#endif // ARCH_ESP32
+
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "input/ButtonThread.h"
 
@@ -674,7 +711,11 @@ void setup()
         sensor_detected = true;
 #endif
     }
-
+#ifdef ARCH_ESP32
+#ifdef DEBUG_PARTITION_TABLE
+    printPartitionTable();
+#endif
+#endif // ARCH_ESP32
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
