@@ -16,6 +16,8 @@ Do not expect a working Meshtastic device with this target.
 #define LED_PIN PA0 // Green LED
 #define LED_STATE_ON 1
 
+#define BATTERY_PIN AVBAT
+
 #define RAK3172
 
 #endif
