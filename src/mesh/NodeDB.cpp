@@ -1412,7 +1412,8 @@ void NodeDB::loadFromDisk()
     }
     if (portduino_config.has_statusMessage) {
         moduleConfig.has_statusmessage = true;
-        strncpy(moduleConfig.statusmessage.node_status, portduino_config.statusMessage.c_str(), sizeof(moduleConfig.statusmessage.node_status));
+        strncpy(moduleConfig.statusmessage.node_status, portduino_config.statusMessage.c_str(),
+                sizeof(moduleConfig.statusmessage.node_status));
         moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
     }
     if (portduino_config.enable_UDP) {

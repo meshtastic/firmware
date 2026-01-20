@@ -65,7 +65,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
             return ARGP_ERR_UNKNOWN;
         else
             checkConfigPort = false;
-            printf("Using config file %d\n", TCPPort);
+        printf("Using config file %d\n", TCPPort);
         break;
     case 'c':
         configPath = arg;
@@ -882,10 +882,8 @@ bool loadConfig(const char *configPath)
             }
             if (checkConfigPort) {
                 portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
-                if (portduino_config.api_port != -1 &&
-                portduino_config.api_port > 1023 &&
-                portduino_config.api_port < 65536) {
-                TCPPort = (portduino_config.api_port);
+                if (portduino_config.api_port != -1 && portduino_config.api_port > 1023 && portduino_config.api_port < 65536) {
+                    TCPPort = (portduino_config.api_port);
                 }
             }
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");

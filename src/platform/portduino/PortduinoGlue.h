@@ -510,11 +510,9 @@ extern struct portduino_config_struct {
             }
             if (has_statusMessage) {
                 out << YAML::Key << "StatusMessage" << YAML::Value << statusMessage;
-
             }
             if (enable_UDP) {
                 out << YAML::Key << "EnableUDP" << YAML::Value << true;
-
             }
 
             out << YAML::EndMap; // Config
