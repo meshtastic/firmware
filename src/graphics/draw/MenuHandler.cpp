@@ -2097,7 +2097,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
-    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR) || defined(ARDUINO_NESSO_N1)
             const ScreenColor &color = option.value;
             if (color.useVariant) {
                 LOG_INFO("Setting color to system default or defined variant");
@@ -2358,7 +2358,7 @@ void menuHandler::screenOptionsMenu()
 
     // Only show screen color for TFT displays
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
-    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
+    HAS_TFT || defined(HACKADAY_COMMUNICATOR) || defined(ARDUINO_NESSO_N1)
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
