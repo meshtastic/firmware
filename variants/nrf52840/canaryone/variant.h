@@ -103,7 +103,7 @@ static const uint8_t A0 = PIN_A0;
 #define EXTERNAL_FLASH_USE_QSPI
 
 // Add a delay on startup to allow LoRa and GPS to power up
-#define PIN_PWR_DELAY_MS 100
+#define PERIPHERAL_WARMUP_MS 100
 
 /*
  * Lora radio
@@ -128,13 +128,13 @@ static const uint8_t A0 = PIN_A0;
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 #define PIN_GPS_PPS (GPIO_PORT1 + 4) // Pulse per second input from the GPS
-#define GPS_TX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
 #define GPS_RESET_PIN (GPIO_PORT1 + 5) // GPS reset pin
 

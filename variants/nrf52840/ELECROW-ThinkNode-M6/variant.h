@@ -44,8 +44,10 @@ extern "C" {
 #define LED_BLUE -1
 #define LED_CHARGE (12)
 #define LED_PAIRING (7)
+#define PIN_LED2 LED_PAIRING
 
-#define LED_STATE_ON 1
+#define LED_STATE_ON HIGH
+#define LED_STATE_OFF LOW
 
 // USB power detection
 #define EXT_PWR_DETECT (13)
@@ -107,19 +109,20 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_GPS_REINIT (29)
 #define PIN_GPS_STANDBY (30)
 #define PIN_GPS_PPS (31)
-#define GPS_TX_PIN (3)
-#define GPS_RX_PIN (2)
+#define GPS_TX_PIN (2)
+#define GPS_RX_PIN (3)
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
 // Secondary UART
 #define PIN_SERIAL2_RX (22)
 #define PIN_SERIAL2_TX (24)
 
 // PCF8563 RTC Module
-#define PCF8563_RTC 0x51
+// REVISIT https://github.com/meshtastic/firmware/pull/9084
+// #define PCF8563_RTC 0x51
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
@@ -131,11 +134,13 @@ static const uint8_t A0 = PIN_A0;
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
 #undef AREF_VOLTAGE
-#define AREF_VOLTAGE 3.0
-#define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+#define AREF_VOLTAGE 2.4
+#define VBAT_AR_INTERNAL AR_INTERNAL_2_4
 #define ADC_MULTIPLIER (1.75F)
 
 #define HAS_SOLAR
+
+#define OCV_ARRAY 4080, 3990, 3935, 3880, 3825, 3770, 3715, 3660, 3605, 3550, 3450
 
 #ifdef __cplusplus
 }

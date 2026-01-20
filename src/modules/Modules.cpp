@@ -181,24 +181,24 @@ void setupModules()
     // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-#ifndef T_LORA_PAGER
-        rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-        if (!rotaryEncoderInterruptImpl1->init()) {
-            delete rotaryEncoderInterruptImpl1;
-            rotaryEncoderInterruptImpl1 = nullptr;
-        }
-#elif defined(T_LORA_PAGER)
+#if defined(T_LORA_PAGER)
         // use a special FSM based rotary encoder version for T-LoRa Pager
         rotaryEncoderImpl = new RotaryEncoderImpl();
         if (!rotaryEncoderImpl->init()) {
             delete rotaryEncoderImpl;
             rotaryEncoderImpl = nullptr;
         }
-#else
+#elif defined(INPUTDRIVER_ENCODER_TYPE) && (INPUTDRIVER_ENCODER_TYPE == 2)
         upDownInterruptImpl1 = new UpDownInterruptImpl1();
         if (!upDownInterruptImpl1->init()) {
             delete upDownInterruptImpl1;
             upDownInterruptImpl1 = nullptr;
+        }
+#else
+        rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
+        if (!rotaryEncoderInterruptImpl1->init()) {
+            delete rotaryEncoderInterruptImpl1;
+            rotaryEncoderInterruptImpl1 = nullptr;
         }
 #endif
         cardKbI2cImpl = new CardKbI2cImpl();
@@ -217,7 +217,7 @@ void setupModules()
     }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR && portduino_config.i2cdev != "") {
         seesawRotary = new SeesawRotary("SeesawRotary");
         if (!seesawRotary->init()) {
             delete seesawRotary;
@@ -252,9 +252,9 @@ void setupModules()
         (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
         new EnvironmentTelemetryModule();
     }
-#if __has_include("Adafruit_PM25AQI.h")
-    if (moduleConfig.has_telemetry && moduleConfig.telemetry.air_quality_enabled &&
-        nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+    if (moduleConfig.has_telemetry &&
+        (moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled)) {
         new AirQualityTelemetryModule();
     }
 #endif

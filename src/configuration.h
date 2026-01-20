@@ -29,12 +29,35 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("pcf8563.h")
-#include "pcf8563.h"
+#if __has_include("SensorRtcHelper.hpp")
+#include "SensorRtcHelper.hpp"
 #endif
 
 /* Offer chance for variant-specific defines */
 #include "variant.h"
+
+// -----------------------------------------------------------------------------
+// Display feature overrides
+// -----------------------------------------------------------------------------
+
+// Allow build environments to opt-in explicitly to the E-Ink UI stack while
+// keeping headless targets slim by default. Existing variants that already
+// define USE_EINK continue to work without additional flags.
+#ifndef MESHTASTIC_USE_EINK_UI
+#ifdef USE_EINK
+#define MESHTASTIC_USE_EINK_UI 1
+#else
+#define MESHTASTIC_USE_EINK_UI 0
+#endif
+#endif
+
+#if MESHTASTIC_USE_EINK_UI
+#ifndef USE_EINK
+#define USE_EINK
+#endif
+#else
+#undef USE_EINK
+#endif
 
 // -----------------------------------------------------------------------------
 // Version
@@ -149,11 +172,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
+#define SSD1306_ADDRESS_L 0x3C // Addr = 0
+#define SSD1306_ADDRESS_H 0x3D // Addr = 1
+
 #if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
-#define SSD1306_ADDRESS 0x3D
+#define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
-#else
-#define SSD1306_ADDRESS 0x3C
 #endif
 #define ST7567_ADDRESS 0x3F
 
@@ -182,7 +206,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
 #define MAX1704X_ADDR 0x36
-#define QMC6310_ADDR 0x1C
+#define QMC6310U_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
@@ -191,7 +215,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_4x_ADDR 0x44
 #define SHT31_4x_ADDR_ALT 0x45
-#define PMSA0031_ADDR 0x12
+#define PMSA003I_ADDR 0x12
 #define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
 #define RCWL9620_ADDR 0x57
@@ -371,6 +395,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
 #endif
+#ifndef USE_TFTDISPLAY
+#define USE_TFTDISPLAY 0
+#endif
 
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined
@@ -442,6 +469,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR 1
 #define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
 #define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
 #define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
