@@ -630,7 +630,28 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         char chanType[32] = "";
         if (currentMode == ThreadMode::ALL) {
             if (m.dest == NODENUM_BROADCAST) {
-                snprintf(chanType, sizeof(chanType), "#%s", channels.getName(m.channelIndex));
+                const char *name = channels.getName(m.channelIndex);
+                if (currentResolution == ScreenResolution::Low || currentResolution == ScreenResolution::UltraLow) {
+                    if (strcmp(name, "ShortTurbo") == 0)
+                        name = "ShortT";
+                    else if (strcmp(name, "ShortSlow") == 0)
+                        name = "ShortS";
+                    else if (strcmp(name, "ShortFast") == 0)
+                        name = "ShortF";
+                    else if (strcmp(name, "MediumSlow") == 0)
+                        name = "MedS";
+                    else if (strcmp(name, "MediumFast") == 0)
+                        name = "MedF";
+                    else if (strcmp(name, "LongSlow") == 0)
+                        name = "LongS";
+                    else if (strcmp(name, "LongFast") == 0)
+                        name = "LongF";
+                    else if (strcmp(name, "LongTurbo") == 0)
+                        name = "LongT";
+                    else if (strcmp(name, "LongMod") == 0)
+                        name = "LongM";
+                }
+                snprintf(chanType, sizeof(chanType), "#%s", name);
             } else {
                 snprintf(chanType, sizeof(chanType), "(DM)");
             }
@@ -697,11 +718,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Shrink Sender name if needed
-        int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
-                         display->getStringWidth(" @...") - 12;
-        if (currentMode == ThreadMode::ALL) {
-            availWidth -= 6;
-        }
+        int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
+                         display->getStringWidth(chanType) - display->getStringWidth("   @...");
         if (availWidth < 0)
             availWidth = 0;
 
