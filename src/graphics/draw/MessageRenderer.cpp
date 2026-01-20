@@ -560,9 +560,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     constexpr int LEFT_MARGIN = 2;
     constexpr int RIGHT_MARGIN = 2;
     constexpr int SCROLLBAR_WIDTH = 3;
+    constexpr int BUBBLE_PAD_X = 3;
+    constexpr int BUBBLE_PAD_Y = 4;
+    constexpr int BUBBLE_RADIUS = 4;
+    constexpr int BUBBLE_MIN_W = 24;
+    constexpr int BUBBLE_TEXT_INDENT = 2;
 
-    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN;
-
+    // Derived widths
+    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (BUBBLE_PAD_X * 2);
     const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
 
     // Title string depending on mode
@@ -794,11 +799,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int finalScroll = (int)scrollY;
     int yOffset = -finalScroll + getTextPositions(display)[1];
-    constexpr int BUBBLE_PAD_X = 3;
-    constexpr int BUBBLE_PAD_Y = 4;
-    constexpr int BUBBLE_RADIUS = 4;
-    constexpr int BUBBLE_MIN_W = 24;
-    constexpr int BUBBLE_TEXT_INDENT = 2;
     const int contentTop = getTextPositions(display)[1];
     const int contentBottom = scrollBottom; // already excludes nav line
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
@@ -928,7 +928,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
-                    headerX = x + BUBBLE_TEXT_INDENT;
+                    headerX = x + BUBBLE_PAD_X + BUBBLE_TEXT_INDENT;
                 }
                 display->drawString(headerX, lineY, cachedLines[i].c_str());
 
@@ -974,7 +974,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
-                    drawStringWithEmotes(display, x + BUBBLE_TEXT_INDENT, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, x + BUBBLE_PAD_X + BUBBLE_TEXT_INDENT, lineY, cachedLines[i], emotes,
+                                         numEmotes);
                 }
             }
         }
