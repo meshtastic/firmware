@@ -23,7 +23,7 @@ class SystemApplet : public Applet
     // System applets have the right to:
 
     bool handleInput = false;    // - respond to input from the user button
-    bool handleFreeText = false; // - handle text from the FreeTextApplet
+    bool handleFreeText = false; // - respond to free text input
     bool lockRendering = false;  // - prevent other applets from being rendered during an update
     bool lockRequests = false;   // - prevent other applets from triggering display updates
 

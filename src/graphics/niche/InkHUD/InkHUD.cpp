@@ -168,11 +168,23 @@ void InkHUD::InkHUD::navRight()
     }
 }
 
-// This should only be called by FreeTextApplet
-// Signals that the FreeText Applet has closed
-void InkHUD::InkHUD::freeTextClosed()
+// Call this for keyboard input
+// The Keyboard Applet also calls this
+void InkHUD::InkHUD::freeText(char c)
 {
-    events->onFreeText();
+    events->onFreeText(c);
+}
+
+// Call this to complete a freetext input
+void InkHUD::InkHUD::freeTextDone()
+{
+    events->onFreeTextDone();
+}
+
+// Call this to cancel a freetext input
+void InkHUD::InkHUD::freeTextCancel()
+{
+    events->onFreeTextCancel();
 }
 
 // Cycle the next user applet to the foreground
@@ -204,10 +216,18 @@ void InkHUD::InkHUD::openAlignStick()
     windowManager->openAlignStick();
 }
 
+// Open the on-screen keyboard
 void InkHUD::InkHUD::openKeyboard()
 {
     windowManager->openKeyboard();
 }
+
+// Close the on-screen keyboard
+void InkHUD::InkHUD::closeKeyboard()
+{
+    windowManager->closeKeyboard();
+}
+
 // In layouts where multiple applets are shown at once, change which tile is focused
 // The focused tile in the one which cycles applets on button short press, and displays menu on long press
 void InkHUD::InkHUD::nextTile()

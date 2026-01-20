@@ -36,7 +36,10 @@ class Events
     void onNavLeft();     // Navigate left
     void onNavRight();    // Navigate right
 
-    void onFreeText(); // free text applet closed
+    // Free text typing events
+    void onFreeText(char c); // New freetext character input
+    void onFreeTextDone();
+    void onFreeTextCancel();
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot

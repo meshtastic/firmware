@@ -96,7 +96,9 @@ class Applet : public GFX
     virtual void onNavDown() {}
     virtual void onNavLeft() {}
     virtual void onNavRight() {}
-    virtual void onFreeText() {}
+    virtual void onFreeText(char c) {}
+    virtual void onFreeTextDone() {}
+    virtual void onFreeTextCancel() {}
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 

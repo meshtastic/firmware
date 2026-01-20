@@ -1,66 +1,17 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
-#include "./FreeTextApplet.h"
+#include "./KeyboardApplet.h"
 
 using namespace NicheGraphics;
 
-void InkHUD::FreeTextApplet::onRender()
+void InkHUD::KeyboardApplet::onRender()
 {
-    // Calculate the keyboard position
-    uint16_t kbdH = KBD_ROWS * fontSmall.lineHeight() * 1.2;
-    uint16_t kbdTop = Y(1.0) - kbdH;
-    
-    // Draw the text input box
-    drawInputField(0, fontSmall.lineHeight(), width(), Y(1.0) - kbdH - fontSmall.lineHeight() - 1, inkhud->freetext);
-
-    // Draw the keyboard
-    drawKeyboard(0, kbdTop, width(), kbdH, selectCol, selectRow);
-}
-
-// Draw a text input box with a cursor
-// The printed text wraps and scrolls as it overflows
-void InkHUD::FreeTextApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text)
-{
-    setFont(fontSmall);
-    uint16_t wrapMaxH = 0;
-
-    // Draw the text, input box, and cursor
-    // Adjusting the box for screen height
-    while (wrapMaxH < height - fontSmall.lineHeight()) {
-        wrapMaxH += fontSmall.lineHeight();
-    }
-
-    // If the text is so long that it goes outside of the input box, the text is actually rendered off screen.
-    uint32_t textHeight = getWrappedTextHeight(0, width - 5, text);
-    if (!text.empty()) {
-        uint16_t textPadding = X(1.0) > Y(1.0) ? wrapMaxH - textHeight : wrapMaxH - textHeight + 1;
-        if (textHeight > wrapMaxH)
-            printWrapped(2, textPadding, width - 5, text);
-        else
-            printWrapped(2, top + 2, width - 5, text);
-    }
-
-    uint16_t textCursorX = text.empty() ? 1 : getCursorX();
-    uint16_t textCursorY = text.empty() ? fontSmall.lineHeight() + 2 : getCursorY() - fontSmall.lineHeight() + 3;
-
-    if (textCursorX + 1 > width - 5) {
-        textCursorX = getCursorX() - width + 5;
-        textCursorY += fontSmall.lineHeight();
-    }
-
-    fillRect(textCursorX + 1, textCursorY, 1, fontSmall.lineHeight(), BLACK);
-
-    // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
-    fillRect(0, 0, X(1.0), top, WHITE);
-    // printAt(0, 0, header);
-    std::string ftlen = std::to_string(text.length()) + "/" + to_string(TEXT_LIMIT);
-    uint16_t textLen = getTextWidth(ftlen);
-    printAt(X(1.0) - textLen - 2, 0, ftlen);
-    drawRect(0, top, width, wrapMaxH + 5, BLACK);
+    // Draw the qwerty interface
+    drawKeyboard(0, 0, X(1.0), Y(1.0), selectCol, selectRow);
 }
 
 // Draw a qwerty keyboard
 // The key at the select index is drawn inverted with a black background
-void InkHUD::FreeTextApplet::drawKeyboard(uint16_t left, uint16_t top, uint16_t width, uint16_t height, uint16_t selectCol,
+void InkHUD::KeyboardApplet::drawKeyboard(uint16_t left, uint16_t top, uint16_t width, uint16_t height, uint16_t selectCol,
                                           uint8_t selectRow)
 {
     setFont(fontSmall);
@@ -157,13 +108,8 @@ void InkHUD::FreeTextApplet::drawKeyboard(uint16_t left, uint16_t top, uint16_t 
     }
 }
 
-void InkHUD::FreeTextApplet::onForeground()
+void InkHUD::KeyboardApplet::onForeground()
 {
-    // Prevent most other applets from requesting update, and skip their rendering entirely
-    // Another system applet with a higher precedence can potentially ignore this
-    SystemApplet::lockRendering = true;
-    SystemApplet::lockRequests = true;
-
     handleInput = true; // Intercept the button input for our applet
 
     // Select the first key
@@ -171,78 +117,54 @@ void InkHUD::FreeTextApplet::onForeground()
     selectRow = 0;
 }
 
-void InkHUD::FreeTextApplet::onBackground()
+void InkHUD::KeyboardApplet::onBackground()
 {
-    // Allow normal update behavior to resume
-    SystemApplet::lockRendering = false;
-    SystemApplet::lockRequests = false;
-    SystemApplet::handleInput = false;
-
-    // Special free text event for returning to the originating applet
-    inkhud->freeTextClosed();
-
-    // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
-    // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    handleInput = false;
 }
 
-void InkHUD::FreeTextApplet::onButtonShortPress()
+void InkHUD::KeyboardApplet::onButtonShortPress()
 {
     char ch = keys[selectRow * KBD_COLS + selectCol];
-    if (ch == '\b') {
-        if (!inkhud->freetext.empty()) {
-            inkhud->freetext.pop_back();
-            requestUpdate(EInk::UpdateTypes::FAST);
-        }
-    } else if (ch == '\n') {
-        sendToBackground();
+    if (ch == '\n') {
+        inkhud->freeTextDone();
+        inkhud->closeKeyboard();
     } else if (ch == '\x1b') {
-        inkhud->freetext.erase();
-        sendToBackground();
+        inkhud->freeTextCancel();
+        inkhud->closeKeyboard();
     } else {
-        if (inkhud->freetext.length() < TEXT_LIMIT) {
-            inkhud->freetext += ch;
-            requestUpdate(EInk::UpdateTypes::FAST);
-        }
+        inkhud->freeText(ch);
     }
 }
 
-void InkHUD::FreeTextApplet::onButtonLongPress()
+void InkHUD::KeyboardApplet::onButtonLongPress()
 {
     char ch = keys[selectRow * KBD_COLS + selectCol];
-    if (ch == '\b') {
-        if (!inkhud->freetext.empty()) {
-            inkhud->freetext.pop_back();
-            requestUpdate(EInk::UpdateTypes::FAST);
-        }
-    } else if (ch == '\n') {
-        sendToBackground();
+    if (ch == '\n') {
+        inkhud->freeTextDone();
+        inkhud->closeKeyboard();
     } else if (ch == '\x1b') {
-        inkhud->freetext.erase();
-        sendToBackground();
+        inkhud->freeTextCancel();
+        inkhud->closeKeyboard();
     } else {
-        if (inkhud->freetext.length() < TEXT_LIMIT) {
-            if (ch >= 0x61)
-                ch -= 32; // capitalize
-            inkhud->freetext += ch;
-            requestUpdate(EInk::UpdateTypes::FAST);
-            }
-        }
+        if (ch >= 0x61)
+            ch -= 32; // capitalize
+        inkhud->freeText(ch);
+    }
 }
 
-void InkHUD::FreeTextApplet::onExitShort()
+void InkHUD::KeyboardApplet::onExitShort()
 {
-    inkhud->freetext.erase();
-    sendToBackground();
+    inkhud->freeTextCancel();
+    inkhud->closeKeyboard();
 }
 
-void InkHUD::FreeTextApplet::onExitLong()
+void InkHUD::KeyboardApplet::onExitLong()
 {
-    inkhud->freetext.erase();
-    sendToBackground();
+    inkhud->freeTextCancel();
+    inkhud->closeKeyboard();
 }
 
-void InkHUD::FreeTextApplet::onNavUp()
+void InkHUD::KeyboardApplet::onNavUp()
 {
     if (selectRow == 0)
         selectRow = KBD_ROWS - 1;
@@ -251,13 +173,13 @@ void InkHUD::FreeTextApplet::onNavUp()
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::FreeTextApplet::onNavDown()
+void InkHUD::KeyboardApplet::onNavDown()
 {
     selectRow = (selectRow + 1) % KBD_ROWS;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::FreeTextApplet::onNavLeft()
+void InkHUD::KeyboardApplet::onNavLeft()
 {
     if (selectCol == 0)
         selectCol = KBD_COLS - 1;
@@ -266,9 +188,15 @@ void InkHUD::FreeTextApplet::onNavLeft()
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
-void InkHUD::FreeTextApplet::onNavRight()
+void InkHUD::KeyboardApplet::onNavRight()
 {
     selectCol = (selectCol + 1) % KBD_COLS;
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+}
+
+uint16_t InkHUD::KeyboardApplet::getKeyboardHeight()
+{
+    const uint16_t keyH = fontSmall.lineHeight() * 1.2;
+    return keyH * KBD_ROWS;
 }
 #endif

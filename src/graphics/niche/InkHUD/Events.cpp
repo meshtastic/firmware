@@ -238,17 +238,37 @@ void InkHUD::Events::onNavRight()
     }
 }
 
-void InkHUD::Events::onFreeText()
+void InkHUD::Events::onFreeText(char c)
 {
-    // Check which system applet wants to handle the text
+    // Trigger the first system applet that wants to handle the new character
     for (SystemApplet *sa : inkhud->systemApplets) {
         if (sa->handleFreeText) {
-            sa->onFreeText();
+            sa->onFreeText(c);
             break;
         }
     }
+}
 
-    inkhud->freetext.erase();
+void InkHUD::Events::onFreeTextDone()
+{
+    // Trigger the first system applet that wants to handle it
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeTextDone();
+            break;
+        }
+    }
+}
+
+void InkHUD::Events::onFreeTextCancel()
+{
+    // Trigger the first system applet that wants to handle it
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeTextCancel();
+            break;
+        }
+    }
 }
 
 // Callback for deepSleepObserver

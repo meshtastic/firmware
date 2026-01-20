@@ -62,9 +62,10 @@ class InkHUD
     void navLeft();
     void navRight();
 
-    // Handle Freetext
-    void freeTextClosed();
-    std::string freetext;
+    // Freetext handlers
+    void freeText(char c);
+    void freeTextDone();
+    void freeTextCancel();
 
     // Trigger UI changes
     // - called by various InkHUD components
@@ -75,6 +76,7 @@ class InkHUD
     void openMenu();
     void openAlignStick();
     void openKeyboard();
+    void closeKeyboard();
     void nextTile();
     void prevTile();
     void rotate();

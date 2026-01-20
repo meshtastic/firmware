@@ -2,7 +2,7 @@
 
 /*
 
-System Applet to send a message using a virtual keyboard
+System Applet to render an on-screeen keyboard
 
 */
 
@@ -15,7 +15,7 @@ System Applet to send a message using a virtual keyboard
 namespace NicheGraphics::InkHUD
 {
 
-class FreeTextApplet : public SystemApplet
+class KeyboardApplet : public SystemApplet
 {
   public:
     void onRender() override;
@@ -30,12 +30,11 @@ class FreeTextApplet : public SystemApplet
     void onNavLeft() override;
     void onNavRight() override;
 
+    static uint16_t getKeyboardHeight(); // used to set the keyboard tile height
   protected:
-    void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text);
     void drawKeyboard(uint16_t left, uint16_t top, uint16_t width, uint16_t height, uint16_t selectCol, uint8_t selectRow);
 
   private:
-    static const uint16_t TEXT_LIMIT = 200;
     static const uint8_t KBD_COLS = 11;
     static const uint8_t KBD_ROWS = 4;
 
@@ -51,7 +50,6 @@ class FreeTextApplet : public SystemApplet
 
     uint8_t selectCol = 0;
     uint8_t selectRow = 0;
-
 };
 
 } // namespace NicheGraphics::InkHUD

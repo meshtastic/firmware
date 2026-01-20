@@ -32,7 +32,9 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onNavDown() override;
     void onNavLeft() override;
     void onNavRight() override;
-    void onFreeText() override;
+    void onFreeText(char c) override;
+    void onFreeTextDone() override;
+    void onFreeTextCancel() override;
     void onRender() override;
 
     void show(Tile *t); // Open the menu, onto a user tile
@@ -50,8 +52,9 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateAppletPage();    // Dynamically create MenuItems for toggling loaded applets
     void populateAutoshowPage();  // Dynamically create MenuItems for selecting which applets can autoshow
     void populateRecentsPage();   // Create menu items: a choice of values for settings.recentlyActiveSeconds
-    
-    void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text);                                                  // Draw input field for free text
+
+    void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+                        std::string text); // Draw input field for free text
     uint16_t getSystemInfoPanelHeight();
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr);                   // Info panel at top of root menu
