@@ -896,6 +896,20 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 r = maxR;
 
             drawRoundedRectOutline(display, bubbleX, topY, bubbleW, bubbleH, r);
+            const int extra = 3;
+            const int rr = r + extra;
+            int x1 = bubbleX + bubbleW - 1;
+            int y1 = topY + bubbleH - 1;
+
+            if (!b.mine) {
+                // top-left corner square
+                display->drawLine(bubbleX, topY, bubbleX + rr, topY);
+                display->drawLine(bubbleX, topY, bubbleX, topY + rr);
+            } else {
+                // bottom-right corner square
+                display->drawLine(x1 - rr, y1, x1, y1);
+                display->drawLine(x1, y1 - rr, x1, y1);
+            }
         }
     }
 
