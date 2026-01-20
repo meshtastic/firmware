@@ -53,6 +53,9 @@ static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for cha
 static bool isMqttServerAddressPrivate = false;
 static bool isConnected = false;
 
+static uint32_t lastPositionUnavailableWarning = 0;
+static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
+
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
@@ -848,8 +851,13 @@ void MQTT::perhapsReportToMap()
     if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs) && last_report_to_map != 0)
         return;
 
-    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
+        if (Throttle::isWithinTimespanMs(lastPositionUnavailableWarning, POSITION_UNAVAILABLE_WARNING_INTERVAL_MS) == false) {
+            LOG_WARN("MQTT Map report enabled, but no position available");
+            lastPositionUnavailableWarning = millis();
+        }
         return;
+    }
 
     // Allocate MeshPacket and fill it
     meshtastic_MeshPacket *mp = packetPool.allocZeroed();
