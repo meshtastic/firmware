@@ -698,7 +698,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // Shrink Sender name if needed
         int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
-                         display->getStringWidth(" @...") - 10;
+                         display->getStringWidth(" @...") - 12;
+        if (currentMode == ThreadMode::ALL) {
+            availWidth -= 6;
+        }
         if (availWidth < 0)
             availWidth = 0;
 
