@@ -43,9 +43,9 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 
-    // Initialize noise floor samples array with a valid baseline
+    // Initialize noise floor samples array with 0
     for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
-        noiseFloorSamples[i] = NOISE_FLOOR_MIN;
+        noiseFloorSamples[i] = 0;
     }
 
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
@@ -306,7 +306,7 @@ int32_t RadioLibInterface::getAverageNoiseFloor()
     uint8_t sampleCount = getNoiseFloorSampleCount();
 
     if (sampleCount == 0) {
-        return NOISE_FLOOR_MIN; // Return minimum if no samples
+        return 0; // Return 0 if no samples
     }
 
     int32_t sum = 0;
