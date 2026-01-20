@@ -31,8 +31,8 @@ uint8_t gpio_ext_get(uint8_t address, uint8_t pin);
 #undef LORA_CS
 
 // battery charger BQ25896
-//#define HAS_PPM 1
-//#define XPOWERS_CHIP_BQ25896
+// #define HAS_PPM 1
+// #define XPOWERS_CHIP_BQ25896
 
 // battery quality management BQ27220
 #define HAS_BQ27220 1
@@ -58,6 +58,7 @@ uint8_t gpio_ext_get(uint8_t address, uint8_t pin);
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 3.0
 
+#define USE_TFTDISPLAY 1
 #define ST7789_DRIVER
 #define ST7789_CS 17
 #define ST7789_RS 16
@@ -76,6 +77,7 @@ uint8_t gpio_ext_get(uint8_t address, uint8_t pin);
 #define TFT_OFFSET_ROTATION 1
 #define SCREEN_TRANSITION_FRAMERATE 10
 #define BRIGHTNESS_DEFAULT 130
+
 #define HAS_TOUCHSCREEN 1
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38
