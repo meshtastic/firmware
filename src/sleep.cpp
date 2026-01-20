@@ -524,12 +524,13 @@ void enableModemSleep()
 #elif CONFIG_IDF_TARGET_ESP32C6
     esp32_config.max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32C3
-    esp32_config.max_freq_mhz = CONFIG_ESP32C3_DEFAULT_CPU_FREQ_MHZ;
+    esp32_config.max_freq_mhz = F_CPU/1000/1000;//CONFIG_ESP32C3_DEFAULT_CPU_FREQ_MHZ;
 #else
     esp32_config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
 #endif
     esp32_config.min_freq_mhz = 20; // 10Mhz is minimum recommended
     esp32_config.light_sleep_enable = false;
+
     int rv = esp_pm_configure(&esp32_config);
     LOG_DEBUG("Sleep request result %x", rv);
 }

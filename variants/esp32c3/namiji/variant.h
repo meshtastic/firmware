@@ -10,11 +10,16 @@ extern "C" {
 #endif // __cplusplus
 
 // I2C (Wire) & OLED
-// #define WIRE_INTERFACES_COUNT (1)
-#define I2C_SDA (1)
+#define WIRE_INTERFACES_COUNT (1)
+#define I2C_SDA (2)
 #define I2C_SCL (0)
 
 //#define USE_SSD1306
+
+// VIN ADC
+#define BATTERY_PIN (1)
+#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_MULTIPLIER 5.52
 
 // GPS
 #undef GPS_RX_PIN
@@ -34,14 +39,36 @@ extern "C" {
 #define EBYTE_E22_400M33S
 
 #define LORA_DIO0 RADIOLIB_NC
+
+#ifdef NAMIJI_PREVIEW
 #define LORA_RESET (10)
 #define LORA_DIO1 (21)
-#define LORA_RXEN (5)
 #define LORA_BUSY (20)
+#define LORA_RXEN (5)
+#define LORA_SCK (7)
+#define LORA_MISO (9)
+#define LORA_MOSI (8)
+#define LORA_CS (6)
+#elif defined(NAMIJI_C3V0)
+#define LORA_RESET (10)
+#define LORA_DIO1 (21)
+#define LORA_BUSY (20)
+#define LORA_RXEN (5)
 #define LORA_SCK (6)
 #define LORA_MISO (9)
 #define LORA_MOSI (8)
 #define LORA_CS (7)
+#elif defined(NAMIJI_C3V1) || defined(SAKURAPI_NAMIJI)
+#define LORA_RESET (10)
+#define LORA_DIO1 (20)
+#define LORA_BUSY (21)
+#define LORA_RXEN (5)
+#define LORA_SCK (6)
+#define LORA_MISO (9)
+#define LORA_MOSI (8)
+#define LORA_CS (7)
+#endif
+
 
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
