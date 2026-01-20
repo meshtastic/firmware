@@ -455,9 +455,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case LPS22HB_ADDR_ALT:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD060), 48); // get device marking
+                if (registerValue != 0) {
+                    type = SFA30;
+                    logFoundDevice("SFA30", (uint8_t)addr.address);
+                    break;
+                }
+                // TODO - What happens with these two?
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
                 SCAN_SIMPLE_CASE(QMC6310U_ADDR, QMC6310U, "QMC6310U", (uint8_t)addr.address)
-                // TODO - Missing SFA30
 
             case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID

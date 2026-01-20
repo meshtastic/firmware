@@ -27,7 +27,7 @@
 #if __has_include(<SensirionI2cScd4x.h>)
 #include "Sensor/SCD4XSensor.h"
 #endif
-#if __has_include("SensirionI2CSfa3x.h")
+#if __has_include(<SensirionI2cSfa3x.h>)
 #include "Sensor/SFA30Sensor.h"
 #endif
 
@@ -53,7 +53,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
     addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
     addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
-    addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SFA30);
+    addSensor<SFA30Sensor>(i2cScanner, ScanI2C::DeviceType::SFA30);
 }
 
 int32_t AirQualityTelemetryModule::runOnce()

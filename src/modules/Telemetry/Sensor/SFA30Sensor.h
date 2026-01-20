@@ -1,36 +1,39 @@
-#ifndef SFA30SENSOR_H
-
-#define SFA30SENSOR_H
-
-
-#include "Wire.h"
 #include "configuration.h"
 
-// #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Sensirion_SFA30>)
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cSfa3x.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include "SensirionI2CSfa3x.h"
+#include <SensirionI2cSfa3x.h>
+#include "RTC.h"
 
-#ifndef SENSIRION_I2C_CLOCK
-#define SENSIRION_I2C_CLOCK 100000
-#endif
+#define SFA30_I2C_CLOCK_SPEED 100000
+#define SFA30_WARMUP_MS 10000
+#define SFA30_NO_ERROR 0
 
 class SFA30Sensor : public TelemetrySensor
 {
   private:
-     SensirionI2CSfa3x sfa30;
-      TwoWire *wire;
+    enum class State { IDLE, ACTIVE };
+    State state = State::IDLE;
+    uint32_t measureStarted = 0;
 
-  protected:
-    virtual void setup() override;
+    SensirionI2cSfa3x sfa30;
+    TwoWire * _bus{};
+    uint8_t _address{};
+    bool isError(uint16_t response);
 
   public:
     SFA30Sensor();
-    virtual int32_t runOnce() override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+
+    virtual bool isActive() override;
+    virtual void sleep() override;
+    virtual uint32_t wakeUp() override;
+    virtual bool canSleep() override;
+    virtual int32_t wakeUpTimeMs() override;
+    virtual int32_t pendingForReadyMs() override;
 };
 
-// #endif
-
-#endif /* end of include guard: SFA30SENSOR_H */
+#endif
