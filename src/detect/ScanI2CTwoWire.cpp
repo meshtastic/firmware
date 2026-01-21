@@ -508,8 +508,33 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
+
             case CST328_ADDR:
-                // Do we have the CST328 or the CST226SE
+                // Do we have the CST328 or the CST226SE,CST3530
+                {
+                    // T-Deck pro V1.1 new touch panel use CST3530
+                    int retry = 5;
+                    while(retry--) {
+                        uint8_t buffer[7];
+                        uint8_t r_cmd[] = {0x0d0,0x03,0x00,0x00};
+                        i2cBus->beginTransmission(addr.address);
+                        i2cBus->write(r_cmd, sizeof(r_cmd));
+                        if(i2cBus->endTransmission() == 0){
+                            i2cBus->requestFrom((int)addr.address,7);
+                            i2cBus->readBytes(buffer,7);
+                            if(buffer[2] == 0xCA && buffer[3] == 0xCA){
+                                logFoundDevice("CST3530", (uint8_t)addr.address);
+                                type = CST3530;
+                                break;
+                            }
+                        }
+                        uint8_t cmd1[] = {0xD0,0x00,0x04,0x00};
+                        i2cBus->beginTransmission(addr.address);
+                        i2cBus->write(cmd1, sizeof(cmd1));
+                        i2cBus->endTransmission();
+                        delay(50);
+                    }
+                }
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
                 if (registerValue == 0xA9) {
                     type = CST226SE;
