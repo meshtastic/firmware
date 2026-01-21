@@ -286,7 +286,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_NP_865 = 25,
     /* Brazil 902MHz */
     meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
-    /* EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
+    /* EU 866MHz band (Band no. 47b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_866 = 27,
     /* EU 868MHz band, with narrow presets */
     meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 = 28
@@ -321,12 +321,12 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
  This preset performs similarly to LongFast, but with 500Khz bandwidth. */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO = 9,
     /* Lite Fast
- Medium range preset optimized for EU 866MHz RFID band with 125kHz bandwidth.
- Comparable link budget to MEDIUM_FAST but compliant with ETSI EN 302 208. */
+ Medium range preset optimized for EU 866MHz SRD band with 125kHz bandwidth.
+ Comparable link budget to MEDIUM_FAST but compliant with Band no. 47b of 2006/771/EC. */
     meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST = 10,
     /* Lite Slow
- Medium-to-moderate range preset optimized for EU 866MHz RFID band with 125kHz bandwidth.
- Comparable link budget to LONG_FAST but compliant with ETSI EN 302 208. */
+ Medium-to-moderate range preset optimized for EU 866MHz SRD band with 125kHz bandwidth.
+ Comparable link budget to LONG_FAST but compliant with Band no. 47b of 2006/771/EC. */
     meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW = 11,
     /* Narrow Fast
  Medium-to-moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
