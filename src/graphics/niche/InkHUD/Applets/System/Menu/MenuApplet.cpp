@@ -627,7 +627,7 @@ void InkHUD::MenuApplet::onFreeText(char c)
     } else {
         cm.freeTextItem.rawText += c;
     }
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onFreeTextDone()
