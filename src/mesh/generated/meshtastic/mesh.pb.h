@@ -298,6 +298,11 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MESHSTICK_1262 = 121,
     /* LilyGo T-Beam 1W */
     meshtastic_HardwareModel_TBEAM_1_WATT = 122,
+   /* ------------------------------------------------------------------------------------------------------------------------------------------
+   MeshCN community hardware IDs are assigned in reverse order starting from 254.
+   ------------------------------------------------------------------------------------------------------------------------------------------*/
+   /* SakuraPi Pocket Namiji */
+   meshtastic_HardwareModel_SAKURAPI_NAMIJI = 254,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
