@@ -18,7 +18,6 @@ namespace NicheGraphics::InkHUD
 enum MenuPage : uint8_t {
     ROOT, // Initial menu page
     SEND,
-    FREE_TEXT,
     CANNEDMESSAGE_RECIPIENT, // Select destination for a canned message
     OPTIONS,
     APPLETS,

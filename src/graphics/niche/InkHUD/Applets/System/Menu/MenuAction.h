@@ -19,7 +19,7 @@ namespace NicheGraphics::InkHUD
 enum MenuAction {
     NO_ACTION,
     SEND_PING,
-    START_FREE_TEXT,
+    FREE_TEXT,
     STORE_CANNEDMESSAGE_SELECTION,
     SEND_CANNEDMESSAGE,
     SHUTDOWN,

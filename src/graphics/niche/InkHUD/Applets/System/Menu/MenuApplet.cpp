@@ -168,10 +168,11 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
-    case START_FREE_TEXT:
+    case FREE_TEXT:
         OSThread::enabled = false;
-        cm.freeTextItem.rawText.erase(); // clear the previous freetext message
         handleFreeText = true;
+        cm.freeTextItem.rawText.erase(); // clear the previous freetext message
+        freeTextMode = true;             // render input field instead of normal menu
         // Open the on-screen keyboard if the joystick is enabled
         if (settings->joystick.enabled)
             inkhud->openKeyboard();
@@ -316,11 +317,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         previousPage = MenuPage::ROOT;
         break;
 
-    case FREE_TEXT:
-        freeTextMode = true; // disable normal menu rendering and behavior
-        previousPage = MenuPage::SEND;
-        break;
-
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
         previousPage = MenuPage::OPTIONS;
@@ -407,10 +403,12 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
 void InkHUD::MenuApplet::onRender()
 {
+    // Free text mode draws a text input field and skips the normal rendering
     if (freeTextMode) {
         drawInputField(0, fontSmall.lineHeight(), X(1.0), Y(1.0) - fontSmall.lineHeight() - 1, cm.freeTextItem.rawText);
         return;
     }
+
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
 
@@ -599,15 +597,13 @@ void InkHUD::MenuApplet::onNavDown()
 
 void InkHUD::MenuApplet::onNavLeft()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
-    if (freeTextMode) {
-        freeTextMode = false;
-        OSThread::enabled = true;
-    }
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    // Go to the previous menu page
-    showPage(previousPage);
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // Go to the previous menu page
+        showPage(previousPage);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onNavRight()
@@ -643,9 +639,7 @@ void InkHUD::MenuApplet::onFreeTextDone()
     handleFreeText = false;
     freeTextMode = false;
 
-    if (cm.freeTextItem.rawText.empty()) {
-        showPage(MenuPage::SEND);
-    } else {
+    if (!cm.freeTextItem.rawText.empty()) {
         cm.selectedMessageItem = &cm.freeTextItem;
         showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
     }
@@ -664,7 +658,6 @@ void InkHUD::MenuApplet::onFreeTextCancel()
     // Clear the free text message
     cm.freeTextItem.rawText.erase();
 
-    showPage(MenuPage::SEND);
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
@@ -721,7 +714,7 @@ void InkHUD::MenuApplet::populateSendPage()
 
     // If joystick is available, include the Free Text option
     if (settings->joystick.enabled)
-        items.push_back(MenuItem("Free Text", MenuAction::START_FREE_TEXT, MenuPage::FREE_TEXT));
+        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message
     uint8_t count = cm.store->size();
