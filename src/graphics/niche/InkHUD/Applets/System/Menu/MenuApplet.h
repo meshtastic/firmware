@@ -67,7 +67,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
     bool freeTextMode = false;
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
-
+    uint16_t menuTextLimit = 200;
     std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
 
     // Data for selecting and sending canned messages via the menu

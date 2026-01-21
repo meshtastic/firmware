@@ -408,7 +408,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 void InkHUD::MenuApplet::onRender()
 {
     if (freeTextMode) {
-        drawInputField(0, fontSmall.lineHeight(), X(1.0), Y(1.0) - fontSmall.lineHeight(), cm.freeTextItem.rawText);
+        drawInputField(0, fontSmall.lineHeight(), X(1.0), Y(1.0) - fontSmall.lineHeight() - 1, cm.freeTextItem.rawText);
         return;
     }
     if (items.size() == 0)
@@ -623,6 +623,8 @@ void InkHUD::MenuApplet::onNavRight()
 
 void InkHUD::MenuApplet::onFreeText(char c)
 {
+    if (cm.freeTextItem.rawText.length() >= menuTextLimit && c != '\b')
+        return;
     if (c == '\b') {
         if (!cm.freeTextItem.rawText.empty())
             cm.freeTextItem.rawText.pop_back();
@@ -854,7 +856,7 @@ void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t wi
     // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
     fillRect(0, 0, X(1.0), top, WHITE);
     // printAt(0, 0, header);
-    std::string ftlen = std::to_string(text.length()) + "/" + to_string(200);
+    std::string ftlen = std::to_string(text.length()) + "/" + to_string(menuTextLimit);
     uint16_t textLen = getTextWidth(ftlen);
     printAt(X(1.0) - textLen - 2, 0, ftlen);
     drawRect(0, top, width, wrapMaxH + 5, BLACK);
