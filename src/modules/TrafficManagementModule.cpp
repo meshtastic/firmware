@@ -520,20 +520,26 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag)
         return;
 
-    if (!isFromUs(&mp))
+    // Skip our own packets - only zero-hop relayed packets from other nodes
+    if (isFromUs(&mp))
         return;
 
     // -------------------------------------------------------------------------
-    // Local-Only Broadcast Hop Exhaustion
+    // Relayed Broadcast Hop Exhaustion
     // -------------------------------------------------------------------------
-    // For locally-originated broadcasts of telemetry or position, optionally
-    // set hop_limit=0 so the packet only reaches direct neighbors.
-    // Useful for high-frequency sensor data that doesn't need mesh-wide distribution.
+    // For relayed telemetry or position broadcasts from other nodes, optionally
+    // set hop_limit=0 so they don't propagate further through the mesh.
+    // Our own packets are unaffected and will use normal hop_limit.
 
     const auto &cfg = moduleConfig.traffic_management;
     const bool isTelemetry = mp.decoded.portnum == meshtastic_PortNum_TELEMETRY_APP;
     const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
-    const bool shouldExhaust = (isTelemetry && cfg.local_only_telemetry) || (isPosition && cfg.local_only_position);
+    const bool shouldExhaust = (isTelemetry && cfg.zero_hop_telemetry) || (isPosition && cfg.zero_hop_position);
+
+    TM_LOG_DEBUG("alterReceived: from=0x%08x port=%d isTelemetry=%d isPosition=%d zeroHopTelem=%d zeroHopPos=%d shouldExhaust=%d "
+                 "isBroadcast=%d hop_limit=%d",
+                 getFrom(&mp), mp.decoded.portnum, isTelemetry, isPosition, cfg.zero_hop_telemetry, cfg.zero_hop_position,
+                 shouldExhaust, isBroadcast(mp.to), mp.hop_limit);
 
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;
@@ -545,6 +551,8 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     }
 
     if (mp.hop_limit > 0) {
+        const char *reason = isTelemetry ? "zero-hop-telemetry" : "zero-hop-position";
+        logAction("exhaust", &mp, reason);
         exhaustHops(&mp);
         incrementStat(&stats.hop_exhausted_packets);
     }
