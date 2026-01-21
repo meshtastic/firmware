@@ -724,6 +724,16 @@ bool Power::setup()
         },
         CHANGE);
 #endif
+#ifdef EXT_CHRG_DETECT
+    attachInterrupt(
+        EXT_CHRG_DETECT,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+        },
+        CHANGE);
+#endif
     enabled = found;
     low_voltage_counter = 0;
 
