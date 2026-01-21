@@ -15,6 +15,8 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
     {
         if (moduleConfig.has_statusmessage && moduleConfig.statusmessage.node_status[0] != '\0') {
             this->setInterval(2 * 60 * 1000);
+        } else {
+            this->setInterval(1000 * 12 * 60 * 60);
         }
         // TODO: If we have a string, set the initial delay (15 minutes maybe)
     }

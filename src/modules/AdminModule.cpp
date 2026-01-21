@@ -905,10 +905,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
+    bool shouldReboot = true;
     // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
     // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction &&
-        !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag)) {
+    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
+                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
         disableBluetooth();
     }
 
@@ -1004,9 +1005,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         LOG_INFO("Set module config: StatusMessage");
         moduleConfig.has_statusmessage = true;
         moduleConfig.statusmessage = c.payload_variant.statusmessage;
+        shouldReboot = false;
         break;
     }
-    saveChanges(SEGMENT_MODULECONFIG);
+    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
 }
 
