@@ -215,27 +215,29 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * Wire Interfaces
  * Keep this section after potentially conflicting pin definitions
  */
-#define I2C_NO_RESCAN // I2C is a bit finicky, don't scan too much
-#define WIRE_INTERFACES_COUNT 2
+#define I2C_NO_RESCAN           // I2C is a bit finicky, don't scan too much
+#define WIRE_INTERFACES_COUNT 1 // changed to 1 for now, as LSM6DS3TR has issues.
 
 #if defined(XIAO_BLE_LEGACY_PINOUT)
 // Used for I2C by DIY xiao_ble variant
 #define PIN_WIRE_SDA D4
 #define PIN_WIRE_SCL D5
 #else
+// Put the I2C pins on the NFC pins by default
 #if defined(SEEED_XIAO_NRF_KIT_DEFAULT) || defined(SEEED_XIAO_NRF_WIO_BTB)
 #define PIN_WIRE_SDA 30
 #define PIN_WIRE_SCL 31
 #else
-// If D6 and D7 are free, I2C is probably the most versatile assignment
+// If not on legacy or defauly, we're wanting I2C on the back pins
 #define PIN_WIRE_SDA D6
 #define PIN_WIRE_SCL D7
 #endif // defined(SEEED_XIAO_NRF_KIT_DEFAULT) || defined(SEEED_XIAO_NRF_WIO_BTB)
 #endif // defined(XIAO_BLE_LEGACY_PINOUT)
 
-// Internal LSM6DS3TR on XIAO nRF52840 Series - put it on wire1
-#define PIN_WIRE1_SDA (17)
-#define PIN_WIRE1_SCL (16)
+// // Internal LSM6DS3TR on XIAO nRF52840 Series - put it on wire1
+// // Note: disabled for now, as there are some issues with the LSM.
+// #define PIN_WIRE1_SDA (17)
+// #define PIN_WIRE1_SCL (16)
 
 static const uint8_t SDA = PIN_WIRE_SDA; // Not sure if this is needed
 static const uint8_t SCL = PIN_WIRE_SCL; // Not sure if this is needed
