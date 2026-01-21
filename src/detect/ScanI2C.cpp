@@ -25,8 +25,8 @@ ScanI2C::FoundDevice ScanI2C::firstScreen() const
 
 ScanI2C::FoundDevice ScanI2C::firstRTC() const
 {
-    ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563, RTC_RX8130CE};
-    return firstOfOrNONE(3, types);
+    ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563, RTC_PCF85063, RTC_RX8130CE};
+    return firstOfOrNONE(4, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
@@ -43,7 +43,7 @@ ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 
 ScanI2C::FoundDevice ScanI2C::firstAQI() const
 {
-    ScanI2C::DeviceType types[] = {PMSA0031, SCD4X};
+    ScanI2C::DeviceType types[] = {PMSA003I, SCD4X};
     return firstOfOrNONE(2, types);
 }
 

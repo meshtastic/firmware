@@ -57,6 +57,7 @@ typedef struct _InputEvent {
 class InputPollable
 {
   public:
+    virtual ~InputPollable() = default;
     virtual void pollOnce() = 0;
 };
 
