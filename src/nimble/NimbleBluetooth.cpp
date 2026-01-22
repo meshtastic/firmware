@@ -665,7 +665,9 @@ static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 void NimbleBluetooth::startAdvertising()
 {
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->stop();
     pAdvertising->reset();
+
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     // if (powerStatus->getHasBattery() == 1) {
     //     pAdvertising->addServiceUUID(BLEUUID((uint16_t)0x180f));
@@ -679,8 +681,9 @@ void NimbleBluetooth::startAdvertising()
 
     if (!pAdvertising->start(0)) {
         LOG_ERROR("BLE failed to start advertising");
+    } else {
+        LOG_DEBUG("BLE Advertising started");
     }
-    LOG_DEBUG("BLE Advertising started");
 }
 
 void NimbleBluetooth::shutdown()
