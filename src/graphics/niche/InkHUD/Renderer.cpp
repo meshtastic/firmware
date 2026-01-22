@@ -422,12 +422,14 @@ void InkHUD::Renderer::renderUserApplets()
     for (Applet *ua : inkhud->userApplets) {
         if (ua && ua->isActive() && ua->isForeground() && (ua->wantsToRender() || renderAll)) {
 
-            // Clear the tile unless everything is getting re-rendered
-            if (!renderAll)
+            // Clear the tile unless the applet wants to draw over its previous render
+            // or everything is getting re-rendered anyways
+            if (!ua->keepOldCanvas() && !renderAll)
                 clearTile(ua->getTile());
 
             uint32_t start = millis();
-            ua->render(); // Draw!
+            bool dirty = ua->keepOldCanvas() && !renderAll;
+            ua->render(dirty); // Draw!
             uint32_t stop = millis();
             LOG_DEBUG("%s took %dms to render", ua->name, stop - start);
         }
@@ -463,12 +465,14 @@ void InkHUD::Renderer::renderSystemApplets()
 
         assert(sa->getTile());
 
-        // Clear the tile unless everything is getting re-rendered
-        if (!renderAll)
+        // Clear the tile unless the applet wants to draw over its previous render
+        // or everything is getting re-rendered anyways
+        if (!sa->keepOldCanvas() && !renderAll)
             clearTile(sa->getTile());
 
         // uint32_t start = millis();
-        sa->render(); // Draw!
+        bool dirty = sa->keepOldCanvas() && !renderAll;
+        sa->render(dirty); // Draw!
         // uint32_t stop = millis();
         // LOG_DEBUG("%s took %dms to render", sa->name, stop - start);
     }
@@ -496,7 +500,7 @@ void InkHUD::Renderer::renderPlaceholders()
     for (Tile *t : emptyTiles) {
         t->assignApplet(placeholder);
         // Clear the tile unless everything is getting re-rendered
-        if (renderAll)
+        if (!renderAll)
             clearTile(t);
         placeholder->render();
         t->assignApplet(nullptr);

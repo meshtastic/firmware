@@ -86,7 +86,7 @@ class InkHUD
     // Updating the display
     // - called by various InkHUD components
 
-    void requestUpdate(bool all = false);
+    void requestUpdate();
     void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool all = false,
                      bool async = true);
     void awaitUpdate();

@@ -55,7 +55,7 @@ InkHUD::Tile *InkHUD::Applet::getTile()
 }
 
 // Draw the applet
-void InkHUD::Applet::render()
+void InkHUD::Applet::render(bool dirty)
 {
     assert(assignedTile);                              // Ensure that we have a tile
     assert(assignedTile->getAssignedApplet() == this); // Ensure that we have a reciprocal link with the tile
@@ -65,10 +65,14 @@ void InkHUD::Applet::render()
     wantRender = false;                                       // Flag set by requestUpdate
     wantAutoshow = false;                                     // Flag set by requestAutoShow. May or may not have been honored.
     wantUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // Update type we wanted. May on may not have been granted.
+    wantOldCanvas = false;                                    // Flag set by requestUpdate
 
     updateDimensions();
     resetDrawingSpace();
-    onRender(); // Derived applet's drawing takes place here
+    if (dirty)
+        onDirtyRender(); // Draw over the previous render
+    else
+        onRender(); // Draw the full applet on a blank canvas
 
     // Handle "Tile Highlighting"
     // Some devices may use an auxiliary button to switch between tiles
@@ -115,6 +119,11 @@ Drivers::EInk::UpdateTypes InkHUD::Applet::wantsUpdateType()
     return wantUpdateType;
 }
 
+bool InkHUD::Applet::keepOldCanvas()
+{
+    return wantOldCanvas;
+}
+
 // Get size of the applet's drawing space from its tile
 // Performed immediately before derived applet's drawing code runs
 void InkHUD::Applet::updateDimensions()
@@ -142,10 +151,11 @@ void InkHUD::Applet::resetDrawingSpace()
 // Once the renderer has given other applets a chance to process whatever event we just detected,
 // it will run Applet::render(), which may draw our applet to screen, if it is shown (foreground)
 // We should requestUpdate even if our applet is currently background, because this might be changed by autoshow
-void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type)
+void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type, bool keepOld)
 {
     wantRender = true;
     wantUpdateType = type;
+    wantOldCanvas = keepOld;
     inkhud->requestUpdate();
 }
 
