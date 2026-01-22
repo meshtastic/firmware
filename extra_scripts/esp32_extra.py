@@ -43,14 +43,14 @@ def esp32_create_combined_bin(source, target, env):
     cmd = [
         "--chip",
         chip,
-        "merge-bin",
+        "merge_bin",
         "-o",
         new_file_name,
-        "--flash-mode",
+        "--flash_mode",
         flash_mode,
-        "--flash-freq",
+        "--flash_freq",
         flash_freq,
-        "--flash-size",
+        "--flash_size",
         flash_size,
     ]
 
