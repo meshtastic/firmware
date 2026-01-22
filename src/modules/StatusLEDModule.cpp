@@ -50,9 +50,10 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
-            ble_state = connected;
-            PAIRING_LED_starttime = millis();
-            break;
+            if (ble_state != connected) {
+                ble_state = connected;
+                PAIRING_LED_starttime = millis();
+            }
         }
         }
 
