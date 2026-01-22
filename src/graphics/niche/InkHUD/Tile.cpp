@@ -190,6 +190,18 @@ void InkHUD::Tile::handleAppletPixel(int16_t x, int16_t y, Color c)
     }
 }
 
+// Used in Renderer for clearing the tile
+int16_t InkHUD::Tile::getLeft()
+{
+    return left;
+}
+
+// Used in Renderer for clearing the tile
+int16_t InkHUD::Tile::getTop()
+{
+    return top;
+}
+
 // Called by Applet base class, when setting applet dimensions, immediately before render
 uint16_t InkHUD::Tile::getWidth()
 {

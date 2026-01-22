@@ -219,7 +219,7 @@ void InkHUD::Renderer::render(bool async)
         Drivers::EInk::UpdateTypes updateType = decideUpdateType();
 
         // Render the new image
-        clearBuffer();
+        // clearBuffer();
         renderUserApplets();
         renderPlaceholders();
         renderSystemApplets();
@@ -257,6 +257,77 @@ void InkHUD::Renderer::render(bool async)
 void InkHUD::Renderer::clearBuffer()
 {
     memset(imageBuffer, 0xFF, imageBufferHeight * imageBufferWidth);
+}
+
+// Manually clear the pixels below a tile
+void InkHUD::Renderer::clearTile(Tile *t)
+{
+    // Rotate the tile dimensions
+    int16_t left = 0;
+    int16_t top = 0;
+    uint16_t width = 0;
+    uint16_t height = 0;
+    switch (settings->rotation) {
+    case 0:
+        left = t->getLeft();
+        top = t->getTop();
+        width = t->getWidth();
+        height = t->getHeight();
+        break;
+    case 1:
+        left = driver->width - (t->getTop() + t->getHeight());
+        top = t->getLeft();
+        width = t->getHeight();
+        height = t->getWidth();
+        break;
+    case 2:
+        left = driver->width - (t->getLeft() + t->getWidth());
+        top = driver->height - (t->getTop() + t->getHeight());
+        width = t->getWidth();
+        height = t->getHeight();
+        break;
+    case 3:
+        left = t->getTop();
+        top = driver->height - (t->getLeft() + t->getWidth());
+        width = t->getHeight();
+        height = t->getWidth();
+        break;
+    }
+
+    // Calculate the bounds
+    uint16_t xStart = (left < 0) ? 0 : left;
+    uint16_t yStart = (top < 0) ? 0 : top;
+    if (xStart >= driver->width || yStart >= driver->height) // the box is completely off the screen
+        return;
+
+    uint16_t xEnd = (left + width < 0) ? 0 : left + width;
+    uint16_t yEnd = (top + height < 0) ? 0 : top + height;
+    if (xEnd > driver->width)
+        xEnd = driver->width;
+    if (yEnd > driver->height)
+        yEnd = driver->height;
+
+    // Clear the pixels
+    if (xStart == 0 && xEnd == driver->width) { // full width box is easier to clear
+        memset(imageBuffer + (yStart * imageBufferWidth), 0xFF, (yEnd - yStart) * imageBufferWidth);
+    } else {
+        uint16_t byteStart = (xStart >> 3) + 1;
+        uint16_t byteEnd = xEnd >> 3;
+        uint8_t leadingByte = 0x00FF >> (xStart - ((byteStart - 1) << 3));
+        uint8_t trailingByte = 0xFF00 >> (xEnd - (byteEnd << 3));
+        if (byteStart > byteEnd) {
+            for (uint16_t y = yStart; y < yEnd; y++) {
+                imageBuffer[y * imageBufferWidth + byteStart - 1] |= leadingByte;
+                imageBuffer[y * imageBufferWidth + byteEnd] |= trailingByte;
+            }
+        } else {
+            for (uint16_t y = yStart; y < yEnd; y++) {
+                memset(imageBuffer + (y * imageBufferWidth) + byteStart, 0xFF, byteEnd - byteStart);
+                imageBuffer[y * imageBufferWidth + byteStart - 1] |= leadingByte;
+                imageBuffer[y * imageBufferWidth + byteEnd] |= trailingByte;
+            }
+        }
+    }
 }
 
 void InkHUD::Renderer::checkLocks()
@@ -348,6 +419,7 @@ void InkHUD::Renderer::renderUserApplets()
     for (Applet *ua : inkhud->userApplets) {
         if (ua && ua->isActive() && ua->isForeground()) {
             uint32_t start = millis();
+            clearTile(ua->getTile());
             ua->render(); // Draw!
             uint32_t stop = millis();
             LOG_DEBUG("%s took %dms to render", ua->name, stop - start);
@@ -382,6 +454,7 @@ void InkHUD::Renderer::renderSystemApplets()
         assert(sa->getTile());
 
         // uint32_t start = millis();
+        clearTile(sa->getTile());
         sa->render(); // Draw!
         // uint32_t stop = millis();
         // LOG_DEBUG("%s took %dms to render", sa->name, stop - start);
@@ -409,6 +482,7 @@ void InkHUD::Renderer::renderPlaceholders()
     // uint32_t start = millis();
     for (Tile *t : emptyTiles) {
         t->assignApplet(placeholder);
+        clearTile(t);
         placeholder->render();
         t->assignApplet(nullptr);
     }

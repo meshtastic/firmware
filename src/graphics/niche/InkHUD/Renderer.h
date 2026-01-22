@@ -65,6 +65,7 @@ class Renderer : protected concurrency::OSThread
     // Steps of the rendering process
 
     void clearBuffer();
+    void clearTile(Tile *t);
     void checkLocks();
     bool shouldUpdate();
     Drivers::EInk::UpdateTypes decideUpdateType();
