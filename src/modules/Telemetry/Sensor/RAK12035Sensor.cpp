@@ -4,6 +4,18 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RAK12035Sensor.h"
 
+// The RAK12035 library's sensor_sleep() sets WB_IO2 (GPIO 34) LOW, which controls
+// the 3.3V switched power rail (PIN_3V3_EN). This turns off power to ALL peripherals
+// including GPS. We need to restore power after the library turns it off.
+#ifdef PIN_3V3_EN
+#define RESTORE_3V3_POWER()                                                                                                        \
+    do {                                                                                                                           \
+        digitalWrite(PIN_3V3_EN, HIGH);                                                                                            \
+    } while (0)
+#else
+#define RESTORE_3V3_POWER()
+#endif
+
 RAK12035Sensor::RAK12035Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_RAK12035, "RAK12035") {}
 
 bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
@@ -21,6 +33,7 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("RAK12035Sensor Init Succeed \nSensor1 Firmware version: %i, Sensor Name: %s", data, sensorName);
         status = true;
         sensor.sensor_sleep();
+        RESTORE_3V3_POWER(); // Restore power after sensor_sleep() turns off WB_IO2
     } else {
         // If we reach here, it means the sensor did not initialize correctly.
         LOG_INFO("Init sensor: %s", sensorName);
@@ -71,6 +84,7 @@ void RAK12035Sensor::setup()
         LOG_INFO("Wet calibration reset complete. New value is %d", hundred_val);
     }
     sensor.sensor_sleep();
+    RESTORE_3V3_POWER(); // Restore power after sensor_sleep() turns off WB_IO2
     delay(200);
     LOG_INFO("Dry calibration value is %d", zero_val);
     LOG_INFO("Wet calibration value is %d", hundred_val);
@@ -97,6 +111,7 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
     success &= sensor.get_sensor_temperature(&temp);
     delay(200);
     sensor.sensor_sleep();
+    RESTORE_3V3_POWER(); // Restore power after sensor_sleep() turns off WB_IO2
 
     if (success == false) {
         LOG_ERROR("Failed to read sensor data");
