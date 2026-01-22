@@ -267,19 +267,21 @@ void InkHUD::InkHUD::toggleBatteryIcon()
 // This allows multiple applets to observe the same event, and then share the same opportunity to update
 // Applets should requestUpdate, whether or not they are currently displayed ("foreground")
 // This is because they *might* be automatically brought to foreground by WindowManager::autoshow
-void InkHUD::InkHUD::requestUpdate()
+// If the all parameter is true, the whole screen buffer is cleared and re-rendered
+void InkHUD::InkHUD::requestUpdate(bool all)
 {
-    renderer->requestUpdate();
+    renderer->requestUpdate(all);
 }
 
 // Demand that the display be updated
 // Ignores all diplomacy:
 //  - the display *will* update
 //  - the specified update type *will* be used
+// If the all parameter is true, the whole screen buffer is cleared and re-rendered
 // If the async parameter is false, code flow is blocked while the update takes place
-void InkHUD::InkHUD::forceUpdate(EInk::UpdateTypes type, bool async)
+void InkHUD::InkHUD::forceUpdate(EInk::UpdateTypes type, bool all, bool async)
 {
-    renderer->forceUpdate(type, async);
+    renderer->forceUpdate(type, all, async);
 }
 
 // Wait for any in-progress display update to complete before continuing

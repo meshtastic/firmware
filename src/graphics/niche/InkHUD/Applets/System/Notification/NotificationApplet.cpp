@@ -139,54 +139,47 @@ void InkHUD::NotificationApplet::onForeground()
 void InkHUD::NotificationApplet::onBackground()
 {
     handleInput = false;
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 void InkHUD::NotificationApplet::onButtonShortPress()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onButtonLongPress()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onExitShort()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onExitLong()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavUp()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavDown()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavLeft()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavRight()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification

@@ -56,15 +56,16 @@ void InkHUD::Renderer::setDisplayResilience(uint8_t fastPerFull, float stressMul
 
 void InkHUD::Renderer::begin()
 {
-    forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
+    forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
 }
 
 // Set a flag, which will be picked up by runOnce, ASAP.
 // Quite likely, multiple applets will all want to respond to one event (Observable, etc)
 // Each affected applet can independently call requestUpdate(), and all share the one opportunity to render, at next runOnce
-void InkHUD::Renderer::requestUpdate()
+void InkHUD::Renderer::requestUpdate(bool all)
 {
     requested = true;
+    renderAll |= all;
 
     // We will run the thread as soon as we loop(),
     // after all Applets have had a chance to observe whatever event set this off
@@ -79,10 +80,11 @@ void InkHUD::Renderer::requestUpdate()
 // Sometimes, however, we will want to trigger a display update manually, in the absence of any sort of applet event
 // Display health, for example.
 // In these situations, we use forceUpdate
-void InkHUD::Renderer::forceUpdate(Drivers::EInk::UpdateTypes type, bool async)
+void InkHUD::Renderer::forceUpdate(Drivers::EInk::UpdateTypes type, bool all, bool async)
 {
     requested = true;
     forced = true;
+    renderAll |= all;
     displayHealth.forceUpdateType(type);
 
     // Normally, we need to start the timer, in case the display is busy and we briefly defer the update
@@ -219,7 +221,8 @@ void InkHUD::Renderer::render(bool async)
         Drivers::EInk::UpdateTypes updateType = decideUpdateType();
 
         // Render the new image
-        // clearBuffer();
+        if (renderAll)
+            clearBuffer();
         renderUserApplets();
         renderPlaceholders();
         renderSystemApplets();
@@ -247,6 +250,7 @@ void InkHUD::Renderer::render(bool async)
     // Tidy up, ready for a new request
     requested = false;
     forced = false;
+    renderAll = false;
 }
 
 // Manually fill the image buffer with WHITE
@@ -394,12 +398,12 @@ Drivers::EInk::UpdateTypes InkHUD::Renderer::decideUpdateType()
     if (!forced) {
         // User applets
         for (Applet *ua : inkhud->userApplets) {
-            if (ua && ua->isForeground())
+            if (ua && ua->isForeground() && (ua->wantsToRender() || renderAll))
                 displayHealth.requestUpdateType(ua->wantsUpdateType());
         }
         // System Applets
         for (SystemApplet *sa : inkhud->systemApplets) {
-            if (sa && sa->isForeground())
+            if (sa && sa->isForeground() && (sa->wantsToRender() || sa->alwaysRender || renderAll))
                 displayHealth.requestUpdateType(sa->wantsUpdateType());
         }
     }
@@ -417,9 +421,13 @@ void InkHUD::Renderer::renderUserApplets()
 
     // Render any user applets which are currently visible
     for (Applet *ua : inkhud->userApplets) {
-        if (ua && ua->isActive() && ua->isForeground()) {
+        if (ua && ua->isActive() && ua->isForeground() && (ua->wantsToRender() || renderAll)) {
+
+            // Clear the tile unless everything is getting re-rendered
+            if (!renderAll)
+                clearTile(ua->getTile());
+
             uint32_t start = millis();
-            clearTile(ua->getTile());
             ua->render(); // Draw!
             uint32_t stop = millis();
             LOG_DEBUG("%s took %dms to render", ua->name, stop - start);
@@ -442,6 +450,9 @@ void InkHUD::Renderer::renderSystemApplets()
         if (!sa->isForeground())
             continue;
 
+        if (!sa->wantsToRender() && !sa->alwaysRender && !renderAll)
+            continue;
+
         // Skip if locked by another applet
         if (lockRendering && lockRendering != sa)
             continue;
@@ -453,8 +464,11 @@ void InkHUD::Renderer::renderSystemApplets()
 
         assert(sa->getTile());
 
+        // Clear the tile unless everything is getting re-rendered
+        if (!renderAll)
+            clearTile(sa->getTile());
+
         // uint32_t start = millis();
-        clearTile(sa->getTile());
         sa->render(); // Draw!
         // uint32_t stop = millis();
         // LOG_DEBUG("%s took %dms to render", sa->name, stop - start);
@@ -482,7 +496,9 @@ void InkHUD::Renderer::renderPlaceholders()
     // uint32_t start = millis();
     for (Tile *t : emptyTiles) {
         t->assignApplet(placeholder);
-        clearTile(t);
+        // Clear the tile unless everything is getting re-rendered
+        if (renderAll)
+            clearTile(t);
         placeholder->render();
         t->assignApplet(nullptr);
     }

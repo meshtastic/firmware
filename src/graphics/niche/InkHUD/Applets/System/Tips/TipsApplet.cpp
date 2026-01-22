@@ -218,7 +218,7 @@ void InkHUD::TipsApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 // While our SystemApplet::handleInput flag is true
@@ -235,10 +235,7 @@ void InkHUD::TipsApplet::onButtonShortPress()
             inkhud->persistence->saveSettings();
         }
 
-        // Close applet, and full refresh to clean the screen
-        // Need to force update, because our request would be ignored otherwise, as we are now background
         sendToBackground();
-        inkhud->forceUpdate(EInk::UpdateTypes::FULL);
     }
 
     // More tips left

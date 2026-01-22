@@ -45,7 +45,7 @@ void InkHUD::PairingApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *status)

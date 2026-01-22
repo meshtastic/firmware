@@ -299,7 +299,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     // then prepared a final powered-off screen for us, which shows device shortname.
     // We're updating to show that one now.
 
-    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
     delay(1000); // Cooldown, before potentially yanking display power
 
     // InkHUD shutdown complete
