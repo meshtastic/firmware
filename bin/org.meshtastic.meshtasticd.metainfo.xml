@@ -87,6 +87,9 @@
   </screenshots>
 
   <releases>
+    <release version="2.7.19" date="2026-01-22">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.19</url>
+    </release>
     <release version="2.7.18" date="2026-01-02">
       <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.18</url>
     </release>
