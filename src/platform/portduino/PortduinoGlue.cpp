@@ -61,11 +61,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
     case 'p':
-        if (sscanf(arg, "%d", &TCPPort) < 1)
+        if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
-        else
+        } else {
             checkConfigPort = false;
-        printf("Using config file %d\n", TCPPort);
+            printf("Using config file %d\n", TCPPort);
+        }
         break;
     case 'c':
         configPath = arg;
