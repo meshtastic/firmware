@@ -57,14 +57,6 @@ void SpecialCharacterInputModule::handleButtonRelease(uint32_t now, uint32_t dur
     }
 }
 
-void SpecialCharacterInputModule::handleButtonHeld(uint32_t now, uint32_t duration)
-{
-    // Long press (≥2s) opens menu
-    if (duration >= 2000) {
-        SingleButtonInputBase::handleButtonHeld(now, duration);
-    }
-}
-
 void SpecialCharacterInputModule::handleIdle(uint32_t now)
 {
     if (menuOpen) {
@@ -196,31 +188,6 @@ void SpecialCharacterInputModule::addCharacterToInput(char c)
     }
 }
 
-void SpecialCharacterInputModule::handleModeSwitch(int modeIndex)
-{
-    std::string savedText = inputText;
-    auto savedCallback = callback;
-    std::string savedHeader = headerText;
-    
-    // Stop this module without calling callback
-    stop(false);
-    
-    // Switch mode based on index
-    if (modeIndex == 0) { // Morse
-        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_MORSE);
-    } else if (modeIndex == 1) { // Grid Keyboard
-        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_GRID_KEYBOARD);
-    } else if (modeIndex == 2) { // Special Characters (current mode)
-        // Already in Special Characters mode, just close menu
-        menuOpen = false;
-        inputModeMenuOpen = false;
-        return;
-    }
-    
-    // Start the new module with saved state
-    SingleButtonInputManager::instance().start(savedHeader.c_str(), savedText.c_str(), 0, savedCallback);
-}
-
 void SpecialCharacterInputModule::handleMenuSelection(int selection)
 {
     // Let base class handle all menu items
@@ -246,22 +213,9 @@ void SpecialCharacterInputModule::drawGridInterface(OLEDDisplay *display, int16_
     display->drawLine(x, currentY, x + display->getWidth(), currentY);
     currentY += 2;
 
-    // Input Text with blinking cursor
-    std::string displayInput = inputText;
-    if ((millis() / 500) % 2 == 0) {
-        displayInput += "_";
-    }
-
-    // Handle scrolling if text is too long
-    int width = display->getStringWidth(displayInput.c_str());
-    int maxWidth = display->getWidth();
-    if (width > maxWidth) {
-        int charWidth = 6;
-        int maxChars = maxWidth / charWidth;
-        if (displayInput.length() > (size_t)maxChars) {
-            displayInput = "..." + displayInput.substr(displayInput.length() - maxChars + 3);
-        }
-    }
+    // Input Text with blinking cursor and scrolling
+    std::string displayInput = getDisplayTextWithCursor();
+    displayInput = formatDisplayTextWithScrolling(display, displayInput);
 
     display->drawString(x, currentY, displayInput.c_str());
 

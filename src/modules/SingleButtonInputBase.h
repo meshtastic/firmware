@@ -154,6 +154,20 @@ class SingleButtonInputBase : public concurrency::OSThread, public Observable<co
      * @param y Y offset
      */
     void drawMenu(OLEDDisplay *display, int16_t x, int16_t y);
+    
+    /**
+     * @brief Get input text with blinking cursor appended
+     * @return Display string with cursor if appropriate
+     */
+    std::string getDisplayTextWithCursor() const;
+    
+    /**
+     * @brief Format display text with scrolling (truncation) if too long
+     * @param display The display to measure text width
+     * @param text The text to format
+     * @return Formatted text with "..." prefix if truncated
+     */
+    std::string formatDisplayTextWithScrolling(OLEDDisplay *display, const std::string &text) const;
 };
 
 } // namespace graphics

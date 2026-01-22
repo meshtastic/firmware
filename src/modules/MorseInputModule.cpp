@@ -62,8 +62,6 @@ void MorseInputModule::handleButtonRelease(uint32_t now, uint32_t duration)
     }
     
     // Morse input
-    // Fixed timing: < 300ms = Dot, > 300ms = Dash
-    // Menu opens at 2000ms, so Dash is 300ms - 2000ms
     if (duration < 300) { // Dot
         consecutiveDots++;
         if (consecutiveDots == 8) {
@@ -96,7 +94,7 @@ void MorseInputModule::handleButtonRelease(uint32_t now, uint32_t duration)
 void MorseInputModule::handleButtonHeld(uint32_t now, uint32_t duration)
 {
     if (menuOpen) {
-        if (duration > 500) { // Long press -> Select immediately
+        if (duration > 500) {
             handleMenuSelection(menuSelection);
             ignoreRelease = true;
             waitForRelease = true;
@@ -108,7 +106,7 @@ void MorseInputModule::handleButtonHeld(uint32_t now, uint32_t duration)
         }
     } else {
         // Force update when crossing dot/dash threshold
-        if (duration >= 300 && duration < 340) {
+        if (duration >= 300) {
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
@@ -132,18 +130,18 @@ void MorseInputModule::handleIdle(uint32_t now)
 {
     if (!menuOpen && !currentMorse.empty()) {
         // Auto-commit character (fixed timing)
-        if (now - lastInputTime > 1000) {
+        if (now - lastInputTime > 800) {
             commitCharacter();
             consecutiveDots = 0;
         }
     } else if (!menuOpen && currentMorse.empty()) {
         // Reset backspace tracking if enough time has passed
-        if (consecutiveDots > 0 && now - lastInputTime > 1000) {
+        if (consecutiveDots > 0 && now - lastInputTime > 800) {
             consecutiveDots = 0;
         }
 
         // Auto-space
-        if (now - lastInputTime > 3000 && !inputText.empty() && inputText.back() != ' ') {
+        if (now - lastInputTime > 2000 && !inputText.empty() && inputText.back() != ' ') {
             inputText += " ";
             lastInputTime = now;
             UIFrameEvent e;
@@ -185,43 +183,6 @@ void MorseInputModule::commitCharacter()
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
-}
-
-void MorseInputModule::handleModeSwitch(int modeIndex)
-{
-    if (modeIndex == 1) { // Switch to Grid Keyboard mode
-        // Save current text and callback
-        std::string savedText = inputText;
-        auto savedCallback = callback;
-        std::string savedHeader = headerText;
-        
-        // Stop this module without calling callback
-        stop(false);
-        
-        // Switch mode
-        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_GRID_KEYBOARD);
-        
-        // Start grid keyboard module with saved state
-        SingleButtonInputManager::instance().start(savedHeader.c_str(), savedText.c_str(), 0, savedCallback);
-    } else if (modeIndex == 2) { // Switch to Special Characters mode
-        // Save current text and callback
-        std::string savedText = inputText;
-        auto savedCallback = callback;
-        std::string savedHeader = headerText;
-        
-        // Stop this module without calling callback
-        stop(false);
-        
-        // Switch mode
-        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_SPECIAL_CHARACTERS);
-        
-        // Start special character module with saved state
-        SingleButtonInputManager::instance().start(savedHeader.c_str(), savedText.c_str(), 0, savedCallback);
-    } else {
-        // Already in Morse mode, just close menu
-        menuOpen = false;
-        inputModeMenuOpen = false;
-    }
 }
 
 void MorseInputModule::handleMenuSelection(int selection)
@@ -284,21 +245,8 @@ void MorseInputModule::drawMorseInterface(OLEDDisplay *display, int16_t x, int16
     display->drawLine(x, currentY, x + display->getWidth(), currentY);
     currentY += 1;
     
-    std::string displayInput = inputText;
-    if ((millis() / 500) % 2 == 0) {
-        displayInput += "_";
-    }
-    
-    // Handle scrolling if text is too long
-    int width = display->getStringWidth(displayInput.c_str());
-    int maxWidth = display->getWidth();
-    if (width > maxWidth) {
-        int charWidth = 6; 
-        int maxChars = maxWidth / charWidth;
-        if (displayInput.length() > (size_t)maxChars) {
-            displayInput = "..." + displayInput.substr(displayInput.length() - maxChars + 3);
-        }
-    }
+    std::string displayInput = getDisplayTextWithCursor();
+    displayInput = formatDisplayTextWithScrolling(display, displayInput);
     
     display->drawString(x, currentY, displayInput.c_str());
     
@@ -312,14 +260,10 @@ void MorseInputModule::drawMorseInterface(OLEDDisplay *display, int16_t x, int16
         "ABCD EFGH IJKL MNOP",
         "QRST UVW XYZ ,.?!"
     };
-
-    // const char *rows[] = {
-    //     "ABCD EFGH IJKL MNOP QRST",
-    //     "UVW XYZ ,.? 0123 456 789"
-    // };
     
     int startX = x;
-    int charSpacing = 5; 
+    int charSpacing = 7;
+    int blockSpacing = 5;
     
     for (int r = 0; r < 2; ++r) {
         const char *layout = rows[r];
@@ -329,7 +273,7 @@ void MorseInputModule::drawMorseInterface(OLEDDisplay *display, int16_t x, int16
             char c = layout[i];
 
             if (c == ' ') {
-                currentX += charSpacing;
+                currentX += blockSpacing;
                 continue;
             }
 

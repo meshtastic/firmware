@@ -1,6 +1,7 @@
 #include "modules/SingleButtonInputBase.h"
 #if HAS_SCREEN && defined(BUTTON_PIN)
 
+#include "modules/SingleButtonInputManager.h"
 #include "graphics/SharedUIDisplay.h"
 #include "input/ButtonThread.h"
 #include <Arduino.h>
@@ -168,10 +169,25 @@ void SingleButtonInputBase::handleIdle(uint32_t now)
 
 void SingleButtonInputBase::handleModeSwitch(int modeIndex)
 {
-    // Default implementation - subclasses should override
-    // Close menu by default
-    menuOpen = false;
-    inputModeMenuOpen = false;
+    // Save current state
+    std::string savedText = inputText;
+    auto savedCallback = callback;
+    std::string savedHeader = headerText;
+    
+    // Stop this module without calling callback
+    stop(false);
+    
+    // Switch mode based on index
+    if (modeIndex == 0) {
+        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_MORSE);
+    } else if (modeIndex == 1) {
+        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_GRID_KEYBOARD);
+    } else if (modeIndex == 2) {
+        SingleButtonInputManager::instance().setMode(SingleButtonInputManager::MODE_SPECIAL_CHARACTERS);
+    }
+    
+    // Start the new module with saved state
+    SingleButtonInputManager::instance().start(savedHeader.c_str(), savedText.c_str(), 0, savedCallback);
 }
 
 void SingleButtonInputBase::handleMenuSelection(int selection)
@@ -353,6 +369,33 @@ const char **SingleButtonInputBase::getMenuItems(int &itemCount)
     };
     itemCount = 7;
     return items;
+}
+
+std::string SingleButtonInputBase::getDisplayTextWithCursor() const
+{
+    std::string displayText = inputText;
+    // Blinking cursor (500ms on/off cycle)
+    if ((millis() / 500) % 2 == 0) {
+        displayText += "_";
+    }
+    return displayText;
+}
+
+std::string SingleButtonInputBase::formatDisplayTextWithScrolling(OLEDDisplay *display, const std::string &text) const
+{
+    int width = display->getStringWidth(text.c_str());
+    int maxWidth = display->getWidth();
+    
+    if (width > maxWidth) {
+        int charWidth = 6;  // Approximate character width
+        int maxChars = maxWidth / charWidth;
+        if (text.length() > (size_t)maxChars) {
+            // Truncate with "..." prefix, showing the end of the text
+            return "..." + text.substr(text.length() - maxChars + 3);
+        }
+    }
+    
+    return text;
 }
 
 } // namespace graphics

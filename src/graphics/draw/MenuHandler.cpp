@@ -623,17 +623,17 @@ void menuHandler::replyMenu()
         if (selected == ReplyFreetext) {
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
-                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch);
+                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch, true);
 
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
-                cannedMessageModule->LaunchFreetextWithDestination(peer);
+                cannedMessageModule->LaunchFreetextWithDestination(peer, 0, true);
 
             } else {
                 // Fallback for last received message
                 if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
+                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel, true);
                 } else {
-                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
+                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from, 0, true);
                 }
             }
 

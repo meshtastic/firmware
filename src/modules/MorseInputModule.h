@@ -26,7 +26,6 @@ class MorseInputModule : public SingleButtonInputBase
     void handleIdle(uint32_t now) override;
     
     void handleMenuSelection(int selection) override;
-    void handleModeSwitch(int modeIndex) override;
     void drawInterface(OLEDDisplay *display, int16_t x, int16_t y) override;
 
   private:

@@ -22,11 +22,9 @@ class SpecialCharacterInputModule : public SingleButtonInputBase
   protected:
     void handleButtonPress(uint32_t now) override;
     void handleButtonRelease(uint32_t now, uint32_t duration) override;
-    void handleButtonHeld(uint32_t now, uint32_t duration) override;
     void handleIdle(uint32_t now) override;
     
     void handleMenuSelection(int selection) override;
-    void handleModeSwitch(int modeIndex) override;
     void drawInterface(OLEDDisplay *display, int16_t x, int16_t y) override;
 
   private:
