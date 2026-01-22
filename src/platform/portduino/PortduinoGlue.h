@@ -2,6 +2,7 @@
 #include <fstream>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 #include "LR11x0Interface.h"
 #include "Module.h"
@@ -90,6 +91,8 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    int num_pa_points = 1; // default to 1 point, with 0 gain
+    uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
     pinMapping lora_irq_pin = {"Lora", "IRQ"};
     pinMapping lora_busy_pin = {"Lora", "Busy"};
@@ -97,6 +100,7 @@ extern struct portduino_config_struct {
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
+    std::vector<pinMapping> extra_pins = {};
 
     // GPS
     bool has_gps = false;
@@ -173,6 +177,7 @@ extern struct portduino_config_struct {
     std::string mac_address = "";
     bool mac_address_explicit = false;
     std::string mac_address_source = "";
+    int api_port = -1;
     std::string config_directory = "";
     std::string available_directory = "/etc/meshtasticd/available.d/";
     int maxtophone = 100;
@@ -228,6 +233,17 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
         if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
+
+        if (num_pa_points > 1) {
+            out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+            for (int i = 0; i < num_pa_points; i++) {
+                out << YAML::Value << tx_gain_lora[i];
+            }
+            out << YAML::EndSeq;
+        } else if (tx_gain_lora[0] != 0) {
+            out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << tx_gain_lora[0];
+        }
+
         out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
@@ -299,6 +315,20 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // rfswitch_table
         }
         out << YAML::EndMap; // Lora
+
+        if (!extra_pins.empty()) {
+            out << YAML::Key << "GPIO" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "ExtraPins" << YAML::Value << YAML::BeginSeq;
+            for (auto extra : extra_pins) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "pin" << YAML::Value << extra.pin;
+                out << YAML::Key << "line" << YAML::Value << extra.line;
+                out << YAML::Key << "gpiochip" << YAML::Value << extra.gpiochip;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq;
+            out << YAML::EndMap; // GPIO
+        }
 
         if (i2cdev != "") {
             out << YAML::Key << "I2C" << YAML::Value << YAML::BeginMap;
@@ -492,6 +522,8 @@ extern struct portduino_config_struct {
         out << YAML::Key << "General" << YAML::Value << YAML::BeginMap;
         if (config_directory != "")
             out << YAML::Key << "ConfigDirectory" << YAML::Value << config_directory;
+        if (api_port != -1)
+            out << YAML::Key << "TCPPort" << YAML::Value << api_port;
         if (mac_address_explicit)
             out << YAML::Key << "MACAddress" << YAML::Value << mac_address;
         if (mac_address_source != "")

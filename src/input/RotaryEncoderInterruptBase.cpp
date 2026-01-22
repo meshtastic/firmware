@@ -93,6 +93,8 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 
     if (!pressDetected) {
         this->action = ROTARY_ACTION_NONE;
+    } else if (now - pressStartTime < LONG_PRESS_DURATION) {
+        return (20); // keep checking for long/short until time expires
     }
 
     return INT32_MAX;

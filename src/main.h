@@ -81,6 +81,7 @@ extern uint32_t timeLastPowered;
 
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
+extern bool suppressRebootBanner;
 
 extern uint32_t serialSinceMsec;
 
