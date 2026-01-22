@@ -534,12 +534,13 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     const auto &cfg = moduleConfig.traffic_management;
     const bool isTelemetry = mp.decoded.portnum == meshtastic_PortNum_TELEMETRY_APP;
     const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
-    const bool shouldExhaust = (isTelemetry && cfg.zero_hop_telemetry) || (isPosition && cfg.zero_hop_position);
+    const bool shouldExhaust = (isTelemetry && cfg.exhaust_hop_telemetry) || (isPosition && cfg.exhaust_hop_position);
 
-    TM_LOG_DEBUG("alterReceived: from=0x%08x port=%d isTelemetry=%d isPosition=%d zeroHopTelem=%d zeroHopPos=%d shouldExhaust=%d "
-                 "isBroadcast=%d hop_limit=%d",
-                 getFrom(&mp), mp.decoded.portnum, isTelemetry, isPosition, cfg.zero_hop_telemetry, cfg.zero_hop_position,
-                 shouldExhaust, isBroadcast(mp.to), mp.hop_limit);
+    TM_LOG_DEBUG(
+        "alterReceived: from=0x%08x port=%d isTelemetry=%d isPosition=%d zeroHopTelem=%d exhaustHopPos=%d shouldExhaust=%d "
+        "isBroadcast=%d hop_limit=%d",
+        getFrom(&mp), mp.decoded.portnum, isTelemetry, isPosition, cfg.exhaust_hop_telemetry, cfg.exhaust_hop_position,
+        shouldExhaust, isBroadcast(mp.to), mp.hop_limit);
 
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;
@@ -551,7 +552,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     }
 
     if (mp.hop_limit > 0) {
-        const char *reason = isTelemetry ? "zero-hop-telemetry" : "zero-hop-position";
+        const char *reason = isTelemetry ? "zero-hop-telemetry" : "exhaust-hop-position";
         logAction("exhaust", &mp, reason);
         exhaustHops(&mp);
         incrementStat(&stats.hop_exhausted_packets);
@@ -847,7 +848,9 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
 
 void TrafficManagementModule::exhaustHops(meshtastic_MeshPacket *p)
 {
-    p->hop_limit = 0;
+    // Set to 1 so packet still gets relayed once, but after normal hop decrement
+    // the outgoing packet has hop_limit=0 and won't propagate further
+    p->hop_limit = 1;
 }
 
 #if defined(ARCH_NRF52)
