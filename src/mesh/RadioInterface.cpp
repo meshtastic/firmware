@@ -220,11 +220,11 @@ const RegionInfo regions[] = {
         Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 475 kHz gap between channels, 27 dBm, duty cycle 2.5% (mobile) or 10%
        (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
     */
-    RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, true, false, false, false, 0, LITE_FAST, PRESETS_LITE),
+    RDEF(EU_866, 865.6375f, 867.5625f, 2.5, 0.475, 27, false, false, false, false, 0, LITE_FAST, PRESETS_LITE),
 
     /*
-        EU 868MHz band: 3 channels at 868.415/868.4925/868.570 MHz
-        Channel centres at 868.431/868.509/868.586 MHz,
+        EU 868MHz band: 3 channels at 869.415/869.4925/869.570 MHz
+        Channel centres at 869.446/869.524/869.601 MHz,
         15 kHz gap between channels, 27 dBm, duty cycle 10%
     */
     RDEF(NARROW_868, 869.4f, 869.65f, 10, 0.015, 27, false, false, false, false, 1, NARROW_FAST, PRESETS_NARROW),
