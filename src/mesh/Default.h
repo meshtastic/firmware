@@ -34,7 +34,7 @@
 #endif
 #define default_network_ipv6_enabled false
 
-#define default_mqtt_address "mqtt.meshtastic.org"
+#define default_mqtt_address "mqtt.mess.host"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
 #define default_mqtt_root "msh"

@@ -47,7 +47,7 @@ Messages are published/subscribed using a hierarchical topic format:
 #### Configuration Defaults (from `Default.h`)
 
 ```cpp
-#define default_mqtt_address "mqtt.meshtastic.org"
+#define default_mqtt_address "mqtt.mess.host"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
 #define default_mqtt_root "msh"
