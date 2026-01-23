@@ -41,37 +41,40 @@ void RAK12035Sensor::setup()
     // Read calibration values from the sensor and set defaults if not calibrated
     uint16_t zero_val = 0;
     uint16_t hundred_val = 0;
-    const uint16_t default_zero_val = 550;
-    const uint16_t default_hundred_val = 420;
+    const uint16_t default_zero_val = 510;
+    const uint16_t default_hundred_val = 390;
 
     sensor.sensor_on();
+    sensor.begin();
     delay(200);
     sensor.get_dry_cal(&zero_val);
     delay(200);
     sensor.get_wet_cal(&hundred_val);
     delay(200);
-    LOG_INFO("You can recalibrate this sensor using the calibration sketch included here: "
-             "https://github.com/RAKWireless/RAK12035_SoilMoisture.");
+
+    bool calibrationReset = false;
 
     if (zero_val == 0) {
         LOG_INFO("Dry calibration not set, using default: %d", default_zero_val);
         sensor.set_dry_cal(default_zero_val);
+        delay(200);
         zero_val = default_zero_val;
+        calibrationReset = true;
     }
     if (hundred_val == 0 || hundred_val >= zero_val) {
         LOG_INFO("Wet calibration not set, using default: %d", default_hundred_val);
         sensor.set_wet_cal(default_hundred_val);
+        delay(200);
         hundred_val = default_hundred_val;
+        calibrationReset = true;
     }
-    if(zero_val == default_zero_val || hundred_val == default_hundred_val){
-        LOG_INFO("Consider running the calibration sketch to improve accuracy."
-                 "You can recalibrate this sensor using the calibration sketch included here: "
-                 "https://github.com/RAKWireless/RAK12035_SoilMoisture.");
+    if (calibrationReset) {
+        LOG_INFO("Default calibration values applied. Consider running the calibration sketch for better accuracy: "
+                 "https://github.com/RAKWireless/RAK12035_SoilMoisture");
     }
 
-    sensor.sensor_sleep();
-    delay(200);
     LOG_INFO("Dry calibration value: %d, Wet calibration value: %d", zero_val, hundred_val);
+    sensor.sensor_sleep();
 }
 
 bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
