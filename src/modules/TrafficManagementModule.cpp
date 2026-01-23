@@ -111,33 +111,23 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 // Allocate unified cache using cuckoo hash table sizing
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     const uint16_t allocSize = cacheSize();
-    TM_LOG_INFO("Allocating unified cache: %u entries (%u bytes)", allocSize, allocSize * sizeof(UnifiedCacheEntry));
+    TM_LOG_INFO("Allocating unified cache: %u entries (%u bytes, %s mode)", allocSize, allocSize * sizeof(UnifiedCacheEntry),
+                useCompactTimestamps ? "compact" : "full");
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    // PSRAM-equipped boards: prefer PSRAM for large allocations
+    // ESP32 with PSRAM: prefer PSRAM for large allocations (20 bytes/entry)
     cache = static_cast<UnifiedCacheEntry *>(ps_calloc(allocSize, sizeof(UnifiedCacheEntry)));
-#if defined(ARCH_NRF52)
-    hashCache = static_cast<HashDedupEntry *>(ps_calloc(allocSize, sizeof(HashDedupEntry)));
-#endif
-    if (!cache
-#if defined(ARCH_NRF52)
-        || !hashCache
-#endif
-    ) {
+    if (!cache) {
         TM_LOG_WARN("PSRAM allocation failed, falling back to heap");
-        if (!cache)
-            cache = new UnifiedCacheEntry[allocSize]();
-#if defined(ARCH_NRF52)
-        if (!hashCache)
-            hashCache = new HashDedupEntry[allocSize]();
-#endif
+        cache = new UnifiedCacheEntry[allocSize]();
     }
-#else
-    // Non-PSRAM: direct heap allocation with zero-initialization
+#elif defined(ARCH_PORTDUINO)
+    // Native/Portduino: heap allocation with full 20-byte structure (abundant memory)
     cache = new UnifiedCacheEntry[allocSize]();
-#if defined(ARCH_NRF52)
-    hashCache = new HashDedupEntry[allocSize]();
-#endif
+#else
+    // Memory-constrained boards (NRF52, non-PSRAM ESP32): compact 12-byte entries
+    // Memory savings: 40% reduction vs full structure (12KB vs 20KB at 1024 entries)
+    cache = new UnifiedCacheEntry[allocSize]();
 #endif
 
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -311,7 +301,15 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 
     for (uint16_t i = 0; i < cacheSize(); i++) {
         // Use max of all timestamp fields as "last activity"
+        // For eviction, we need to compare across all time fields
+#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+        // Full mode: pos_time_secs is 16-bit seconds
         uint16_t entryTime = cache[i].pos_time_secs;
+#else
+        // Compact mode: pos_time_mins is 8-bit minutes, scale to ~seconds for comparison
+        // Multiply by 60 to get rough second equivalent (won't overflow uint16_t)
+        uint16_t entryTime = static_cast<uint16_t>(cache[i].pos_time_mins) * 60;
+#endif
         if (cache[i].rate_window_secs > entryTime)
             entryTime = cache[i].rate_window_secs;
         if (cache[i].unknown_secs > entryTime)
@@ -332,48 +330,6 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 #endif
 }
 
-#if defined(ARCH_NRF52)
-/**
- * Find or create hash entry for NRF52 position deduplication.
- * Uses same cuckoo hashing approach but keyed on content hash instead of NodeNum.
- */
-TrafficManagementModule::HashDedupEntry *TrafficManagementModule::findHashEntry(uint32_t hash, bool *isNew)
-{
-    if (!hashCache) {
-        if (isNew)
-            *isNew = false;
-        return nullptr;
-    }
-
-    uint16_t h1 = hash & cacheMask();
-    uint16_t h2 = ((hash * 2654435769u) >> (32 - cuckooHashBits())) & cacheMask();
-
-    // Check if entry exists
-    if (hashCache[h1].hash == hash && hashCache[h1].last_seen_ms != 0) {
-        if (isNew)
-            *isNew = false;
-        return &hashCache[h1];
-    }
-    if (hashCache[h2].hash == hash && hashCache[h2].last_seen_ms != 0) {
-        if (isNew)
-            *isNew = false;
-        return &hashCache[h2];
-    }
-
-    // Insert new entry
-    uint16_t slot = (hashCache[h1].last_seen_ms == 0)                           ? h1
-                    : (hashCache[h2].last_seen_ms == 0)                         ? h2
-                    : (hashCache[h1].last_seen_ms < hashCache[h2].last_seen_ms) ? h1
-                                                                                : h2;
-
-    memset(&hashCache[slot], 0, sizeof(HashDedupEntry));
-    hashCache[slot].hash = hash;
-    if (isNew)
-        *isNew = true;
-    return &hashCache[slot];
-}
-#endif
-
 // =============================================================================
 // Epoch Management
 // =============================================================================
@@ -382,18 +338,25 @@ TrafficManagementModule::HashDedupEntry *TrafficManagementModule::findHashEntry(
  * Reset the timestamp epoch when relative offsets approach overflow.
  *
  * This invalidates all cached timestamps, effectively clearing time-based
- * state while preserving node associations. Called during periodic maintenance
- * when epoch age exceeds ~17 hours.
+ * state while preserving node associations. Called during periodic maintenance:
+ * - Full mode (PSRAM): when epoch age exceeds ~17 hours (16-bit seconds)
+ * - Compact mode: when epoch age exceeds ~3.5 hours (8-bit minutes for position)
  */
 void TrafficManagementModule::resetEpoch(uint32_t nowMs)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    TM_LOG_DEBUG("Resetting cache epoch");
+    TM_LOG_DEBUG("Resetting cache epoch (%s mode)", useCompactTimestamps ? "compact" : "full");
     cacheEpochMs = nowMs;
 
     // Invalidate all relative timestamps
     for (uint16_t i = 0; i < cacheSize(); i++) {
+#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+        // Full mode: clear 16-bit second timestamps
         cache[i].pos_time_secs = 0;
+#else
+        // Compact mode: clear 8-bit minute timestamp
+        cache[i].pos_time_mins = 0;
+#endif
         cache[i].rate_window_secs = 0;
         cache[i].unknown_secs = 0;
         cache[i].rate_count = 0;
@@ -402,6 +365,42 @@ void TrafficManagementModule::resetEpoch(uint32_t nowMs)
 #else
     (void)nowMs;
 #endif
+}
+
+// =============================================================================
+// Position Hash (Compact Mode)
+// =============================================================================
+
+/**
+ * Compute an 8-bit hash from truncated lat/lon coordinates.
+ *
+ * This hash is used on memory-constrained platforms (NRF52, non-PSRAM ESP32)
+ * instead of storing full 32-bit coordinates. The hash saves 7 bytes per cache
+ * entry (8 bytes for two int32_t vs 1 byte for hash).
+ *
+ * Hash quality considerations:
+ * - Uses golden ratio multiplication (2654435761) for good bit mixing
+ * - XOR combines lat/lon to spread coordinate changes across all bits
+ * - Final fold ensures all 32 bits contribute to the 8-bit result
+ *
+ * Collision probability: ~0.4% (1/256) for random positions
+ * Impact of collision: May drop a valid position update (acceptable trade-off)
+ *
+ * @param lat_truncated  Precision-truncated latitude
+ * @param lon_truncated  Precision-truncated longitude
+ * @return               8-bit hash suitable for deduplication
+ */
+uint8_t TrafficManagementModule::computePositionHash(int32_t lat_truncated, int32_t lon_truncated)
+{
+    // Combine coordinates using golden ratio hash for good distribution
+    // 2654435761 is the closest prime to 2^32 / golden_ratio
+    uint32_t h = static_cast<uint32_t>(lat_truncated) ^ (static_cast<uint32_t>(lon_truncated) * 2654435761u);
+
+    // Fold 32 bits down to 8 bits, ensuring all bits contribute
+    h ^= (h >> 16);
+    h ^= (h >> 8);
+
+    return static_cast<uint8_t>(h);
 }
 
 // =============================================================================
@@ -573,7 +572,9 @@ int32_t TrafficManagementModule::runOnce()
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     const uint32_t nowMs = millis();
 
-    // Check if epoch reset needed (approaching 16-bit overflow)
+    // Check if epoch reset needed
+    // - Full mode (PSRAM): ~17 hours (approaching 16-bit second overflow)
+    // - Compact mode: ~3.5 hours (approaching 8-bit minute overflow for position)
     if (needsEpochReset(nowMs)) {
         concurrency::LockGuard guard(&cacheLock);
         resetEpoch(nowMs);
@@ -581,14 +582,18 @@ int32_t TrafficManagementModule::runOnce()
     }
 
     // Calculate TTLs for cache expiration
+    // Position TTL: 4x the configured interval, or default (~10 min)
     const uint32_t positionIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
     const uint64_t positionTtlCalc =
         (positionIntervalMs > 0) ? static_cast<uint64_t>(positionIntervalMs) * 4ULL : kDefaultCacheTtlMs;
     const uint32_t positionTtlMs = positionTtlCalc > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(positionTtlCalc);
 
+    // Rate limit TTL: 2x the window, or default
     const uint32_t rateIntervalMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
     const uint64_t rateTtlCalc = (rateIntervalMs > 0) ? static_cast<uint64_t>(rateIntervalMs) * 2ULL : kDefaultCacheTtlMs;
     const uint32_t rateTtlMs = rateTtlCalc > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(rateTtlCalc);
+
+    // Unknown packet TTL: 5x the reset window
     const uint32_t unknownTtlMs = kUnknownResetMs * 5;
 
     // Sweep cache and clear expired entries
@@ -599,7 +604,11 @@ int32_t TrafficManagementModule::runOnce()
 
         bool anyValid = false;
 
+        // ---------------------------------------------------------------------
         // Check and clear expired position data
+        // ---------------------------------------------------------------------
+#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+        // Full mode: 16-bit second timestamps, stores actual coordinates
         if (cache[i].pos_time_secs != 0) {
             uint32_t posTimeMs = fromRelativeSecs(cache[i].pos_time_secs);
             if (!isWithinWindow(nowMs, posTimeMs, positionTtlMs)) {
@@ -610,8 +619,22 @@ int32_t TrafficManagementModule::runOnce()
                 anyValid = true;
             }
         }
+#else
+        // Compact mode: 8-bit minute timestamps, stores position hash
+        if (cache[i].pos_time_mins != 0) {
+            uint32_t posTimeMs = fromRelativeMins(cache[i].pos_time_mins);
+            if (!isWithinWindow(nowMs, posTimeMs, positionTtlMs)) {
+                cache[i].pos_hash = 0;
+                cache[i].pos_time_mins = 0;
+            } else {
+                anyValid = true;
+            }
+        }
+#endif
 
-        // Check and clear expired rate limit data
+        // ---------------------------------------------------------------------
+        // Check and clear expired rate limit data (same for both modes)
+        // ---------------------------------------------------------------------
         if (cache[i].rate_window_secs != 0) {
             uint32_t rateTimeMs = fromRelativeSecs(cache[i].rate_window_secs);
             if (!isWithinWindow(nowMs, rateTimeMs, rateTtlMs)) {
@@ -622,7 +645,9 @@ int32_t TrafficManagementModule::runOnce()
             }
         }
 
-        // Check and clear expired unknown tracking data
+        // ---------------------------------------------------------------------
+        // Check and clear expired unknown tracking data (same for both modes)
+        // ---------------------------------------------------------------------
         if (cache[i].unknown_secs != 0) {
             uint32_t unknownTimeMs = fromRelativeSecs(cache[i].unknown_secs);
             if (!isWithinWindow(nowMs, unknownTimeMs, unknownTtlMs)) {
@@ -638,17 +663,6 @@ int32_t TrafficManagementModule::runOnce()
             memset(&cache[i], 0, sizeof(UnifiedCacheEntry));
         }
     }
-
-#if defined(ARCH_NRF52)
-    // Clean up hash cache for NRF52
-    if (hashCache) {
-        for (uint16_t i = 0; i < cacheSize(); i++) {
-            if (hashCache[i].last_seen_ms != 0 && !isWithinWindow(nowMs, hashCache[i].last_seen_ms, positionTtlMs)) {
-                memset(&hashCache[i], 0, sizeof(HashDedupEntry));
-            }
-        }
-    }
-#endif
 
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
@@ -678,30 +692,19 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lon_truncated = truncateLatLon(pos->longitude_i, precision);
     const uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
-#if defined(ARCH_NRF52)
-    // NRF52: Use hash-based deduplication to save memory
-    const uint32_t hash = computePacketHash(p, precision);
-    bool isNew = false;
-    concurrency::LockGuard guard(&cacheLock);
-    HashDedupEntry *entry = findHashEntry(hash, &isNew);
-    if (!entry)
-        return false;
-
-    const bool same = !isNew && entry->hash == hash;
-    const bool within = (minIntervalMs == 0) ? true : isWithinWindow(nowMs, entry->last_seen_ms, minIntervalMs);
-
-    entry->hash = hash;
-    entry->last_seen_ms = nowMs;
-
-    return same && within;
-#else
-    // Other platforms: Use unified cache with per-node coordinates
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
     UnifiedCacheEntry *entry = findOrCreateEntry(p->from, &isNew);
     if (!entry)
         return false;
 
+#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+    // -------------------------------------------------------------------------
+    // Full mode (PSRAM): Compare actual truncated coordinates
+    // -------------------------------------------------------------------------
+    // Stores complete lat/lon for precise duplicate detection.
+    // Uses 16-bit second timestamps (~18 hour range).
+    //
     const bool same = !isNew && entry->lat_truncated == lat_truncated && entry->lon_truncated == lon_truncated;
     const bool within =
         (minIntervalMs == 0) ? true : isWithinWindow(nowMs, fromRelativeSecs(entry->pos_time_secs), minIntervalMs);
@@ -709,9 +712,24 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     entry->lat_truncated = lat_truncated;
     entry->lon_truncated = lon_truncated;
     entry->pos_time_secs = toRelativeSecs(nowMs);
+#else
+    // -------------------------------------------------------------------------
+    // Compact mode (NRF52, non-PSRAM ESP32): Compare 8-bit position hash
+    // -------------------------------------------------------------------------
+    // Saves 7 bytes per entry by hashing coordinates instead of storing them.
+    // Hash collision (~0.4%) may occasionally drop a valid position - acceptable.
+    // Uses 8-bit minute timestamps (~4 hour range, default for position dedup).
+    //
+    const uint8_t posHash = computePositionHash(lat_truncated, lon_truncated);
+    const bool same = !isNew && entry->pos_hash == posHash;
+    const bool within =
+        (minIntervalMs == 0) ? true : isWithinWindow(nowMs, fromRelativeMins(entry->pos_time_mins), minIntervalMs);
+
+    entry->pos_hash = posHash;
+    entry->pos_time_mins = toRelativeMins(nowMs);
+#endif
 
     return same && within;
-#endif
 #endif
 }
 
@@ -855,53 +873,6 @@ void TrafficManagementModule::exhaustHops(meshtastic_MeshPacket *p)
     // even if router_preserve_hops or favorite node logic would normally prevent decrement.
     p->hop_limit = 0;
 }
-
-#if defined(ARCH_NRF52)
-/**
- * Compute a hash for position deduplication on memory-constrained NRF52.
- *
- * The hash combines:
- * - Node ID (sender)
- * - Port number (should be POSITION_APP)
- * - Truncated latitude and longitude
- * - A salt from the device's private key
- *
- * Using a content-based hash instead of storing per-node coordinates
- * saves 8 bytes per cache entry (no lat/lon fields needed).
- */
-uint32_t TrafficManagementModule::computePacketHash(const meshtastic_MeshPacket *p, uint8_t precision) const
-{
-    // Initialize with salt from private key to prevent cross-device collisions
-    uint32_t hash = 0xA5A5A5A5;
-    if (config.security.private_key.size >= 3) {
-        hash = config.security.private_key.bytes[0];
-        hash ^= static_cast<uint32_t>(config.security.private_key.bytes[1]) << 8;
-        hash ^= static_cast<uint32_t>(config.security.private_key.bytes[2]) << 16;
-    }
-
-    // Mix in sender and port
-    hash ^= getFrom(p);
-    hash = (hash * 31) + static_cast<uint32_t>(p->decoded.portnum);
-
-    // Mix in truncated position if this is a position packet
-    if (p->decoded.portnum == meshtastic_PortNum_POSITION_APP) {
-        meshtastic_Position pos = meshtastic_Position_init_zero;
-        if (pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_Position_msg, &pos)) {
-            const int32_t lat_truncated = truncateLatLon(pos.latitude_i, precision);
-            const int32_t lon_truncated = truncateLatLon(pos.longitude_i, precision);
-            hash = (hash * 31) + static_cast<uint32_t>(lat_truncated);
-            hash = (hash * 31) + static_cast<uint32_t>(lon_truncated);
-        }
-    }
-
-    // Final mixing (MurmurHash3 finalizer)
-    hash ^= (hash >> 16);
-    hash *= 0x85ebca6b;
-    hash ^= (hash >> 13);
-
-    return hash;
-}
-#endif
 
 void TrafficManagementModule::logAction(const char *action, const meshtastic_MeshPacket *p, const char *reason) const
 {
