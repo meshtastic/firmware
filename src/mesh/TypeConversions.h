@@ -2,7 +2,7 @@
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
 #pragma once
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 class TypeConversions
 {

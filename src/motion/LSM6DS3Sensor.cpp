@@ -1,5 +1,5 @@
 #include "LSM6DS3Sensor.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_LSM6DS3TRC.h>)
 

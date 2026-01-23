@@ -2,9 +2,9 @@
 #if HAS_SCREEN
 #include "../Screen.h"
 #include "DebugRenderer.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
@@ -17,6 +17,18 @@
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "sleep.h"
+#include <cstdint>
+#if defined(ARCH_NRF52)
+#include "InternalFileSystem.h"
+#include <littlefs/lfs.h>
+extern "C" {
+extern uint32_t __flash_arduino_start[];
+extern uint32_t __flash_arduino_end[];
+extern uint32_t __etext[];
+extern uint32_t __data_start__[];
+extern uint32_t __data_end__[];
+}
+#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -54,6 +66,91 @@ namespace graphics
 {
 namespace DebugRenderer
 {
+
+#if defined(ARCH_NRF52)
+namespace
+{
+struct BlockCountContext {
+    uint32_t usedBlocks = 0;
+};
+
+int countUsedBlock(void *ctx, lfs_block_t block)
+{
+    (void)block;
+    auto *data = static_cast<BlockCountContext *>(ctx);
+    data->usedBlocks++;
+    return 0;
+}
+
+bool computeInternalFsUsage(uint32_t &usedBytesOut, uint32_t &totalBytesOut) // compute usage of internal LittleFS filesystem
+{
+#if defined(USE_EXTERNAL_FLASH) // if using external flash, internal FS might not be mounted
+    static bool triedMount = false;
+    static bool mounted = false;
+    if (!triedMount) {
+        triedMount = true;
+        mounted = InternalFS.begin();
+    }
+    if (!mounted) {
+        return false;
+    }
+#endif
+    lfs_t *lfs = InternalFS._getFS();            // get LittleFS filesystem object
+    if (lfs == nullptr || lfs->cfg == nullptr) { // sanity check
+        return false;
+    }
+
+    BlockCountContext blockCount;                                        // context to hold used block count
+    InternalFS._lockFS();                                                // lock filesystem during operation
+    int traverseResult = lfs_traverse(lfs, countUsedBlock, &blockCount); // traverse filesystem to count used blocks
+    uint32_t blockSize = lfs->cfg->block_size;                           // get block size
+    uint32_t blockCountTotal = lfs->cfg->block_count;                    // get total block count
+    InternalFS._unlockFS();                                              // unlock filesystem after operation
+
+    if (traverseResult < 0 || blockSize == 0 || blockCountTotal == 0) { // check for errors
+        return false;
+    }
+
+    uint64_t totalBytes = static_cast<uint64_t>(blockSize) * blockCountTotal;      // compute total bytes
+    uint64_t usedBytes = static_cast<uint64_t>(blockSize) * blockCount.usedBlocks; // compute used bytes
+    if (usedBytes > totalBytes) {                                                  // sanity check
+        usedBytes = totalBytes;                                                    // cap used to total
+    }
+
+    totalBytesOut = static_cast<uint32_t>(totalBytes); // set output total bytes
+    usedBytesOut = static_cast<uint32_t>(usedBytes);   // set output used bytes
+    return true;
+}
+
+bool computeFirmwareFlashUsage(uint32_t &usedBytesOut, uint32_t &totalBytesOut) // compute flash space occupied by firmware
+{
+    uintptr_t flashStart = reinterpret_cast<uintptr_t>(__flash_arduino_start); // get start of arduino flash section
+    uintptr_t flashEnd = reinterpret_cast<uintptr_t>(__flash_arduino_end);     // get end of arduino flash section
+    if (flashEnd <= flashStart) {                                              // sanity check
+        return false;
+    }
+
+    uintptr_t totalBytes = flashEnd - flashStart;                           // compute total flash size
+    uintptr_t textEnd = reinterpret_cast<uintptr_t>(__etext);               // get end of text segment
+    uintptr_t dataStart = reinterpret_cast<uintptr_t>(__data_start__);      // get start of data segment
+    uintptr_t dataEnd = reinterpret_cast<uintptr_t>(__data_end__);          // get end of data segment
+    uintptr_t dataSize = (dataEnd > dataStart) ? (dataEnd - dataStart) : 0; // compute data segment size
+
+    // Assumes .data immediately follows .text in flash (typical for these linker scripts)
+    uintptr_t firmwareEnd = textEnd + dataSize; // compute end of firmware in flash
+    if (firmwareEnd < flashStart) {             // sanity check
+        return false;
+    }
+    if (firmwareEnd > flashEnd) { // cap to flash end
+        firmwareEnd = flashEnd;
+    }
+
+    totalBytesOut = static_cast<uint32_t>(totalBytes);              // set output total bytes
+    usedBytesOut = static_cast<uint32_t>(firmwareEnd - flashStart); // set output used bytes
+    return true;
+}
+} // namespace
+#endif
 
 void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -588,9 +685,46 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t psramTotal = memGet.getPsramSize();
 
     uint32_t flashUsed = 0, flashTotal = 0;
-#ifdef ESP32
+#ifdef USE_EXTERNAL_FLASH // compute external flash usage
+    uint32_t bytesPerCluster = fatfs.bytesPerCluster();
+    uint32_t totalCapacity = fatfs.clusterCount() * bytesPerCluster;
+    uint32_t freeSpace = fatfs.freeClusterCount() * bytesPerCluster;
+    flashUsed = (totalCapacity - freeSpace);
+    flashTotal = totalCapacity;
+
+#elif defined(ESP32)
     flashUsed = FSCom.usedBytes();
     flashTotal = FSCom.totalBytes();
+#endif
+    uint32_t internalFsUsed = 0;
+    uint32_t internalFsTotal = 0;
+    bool internalFsStatsValid = false;
+    uint32_t firmwareFlashUsed = 0;
+    uint32_t firmwareFlashTotal = 0;
+    bool firmwareFlashStatsValid = false;
+#if defined(ARCH_NRF52) // compute internal filesystem and firmware flash usage
+    internalFsStatsValid = computeInternalFsUsage(internalFsUsed, internalFsTotal);
+    firmwareFlashStatsValid = computeFirmwareFlashUsage(firmwareFlashUsed, firmwareFlashTotal);
+#endif
+
+    uint32_t combinedInternalFlashUsed = 0;
+    uint32_t combinedInternalFlashTotal = 0;
+    bool showInternalFlashRow = false;
+#if defined(ARCH_NRF52)
+    if (firmwareFlashStatsValid) {                        // if firmware flash stats are valid, include them
+        combinedInternalFlashUsed += firmwareFlashUsed;   // firmware uses internal flash, so include it
+        combinedInternalFlashTotal += firmwareFlashTotal; // total internal flash size
+        showInternalFlashRow = true;
+    }
+    if (internalFsStatsValid) {                        // if internal FS stats are valid, include them too
+        combinedInternalFlashUsed += internalFsUsed;   // internal FS uses internal flash, so include it
+        combinedInternalFlashTotal += internalFsTotal; // total internal flash size
+        showInternalFlashRow = true;
+    }
+    if (showInternalFlashRow && combinedInternalFlashTotal > 0 &&
+        combinedInternalFlashUsed > combinedInternalFlashTotal) { // Sanity check
+        combinedInternalFlashUsed = combinedInternalFlashTotal;   // cap used to total
+    }
 #endif
 
     uint32_t sdUsed = 0, sdTotal = 0;
@@ -614,6 +748,18 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     if (flashTotal > 0) {
         line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);
+    }
+#endif
+#ifdef USE_EXTERNAL_FLASH
+    if (flashTotal > 0) { // show external flash usage if size > 0
+        line += 1;
+        drawUsageRow("ExtFl:", flashUsed, flashTotal); // draw external flash usage
+    }
+#endif
+#if defined(ARCH_NRF52)
+    if (showInternalFlashRow && combinedInternalFlashTotal > 0) { // show internal flash usage if size > 0
+        line += 1;
+        drawUsageRow("IntFl:", combinedInternalFlashUsed, combinedInternalFlashTotal); // draw internal flash usage
     }
 #endif
     if (hasSD && sdTotal > 0) {

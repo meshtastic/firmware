@@ -8,7 +8,7 @@
 #include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"

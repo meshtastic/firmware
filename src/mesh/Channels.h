@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CryptoEngine.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 

@@ -1,5 +1,5 @@
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "airtime.h"
@@ -13,7 +13,7 @@
 #include "SPILock.h"
 #include "power.h"
 #include "serialization/JSON.h"
-#include <FSCommon.h>
+#include "Filesystem/FSCommon.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>

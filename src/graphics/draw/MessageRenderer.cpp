@@ -4,7 +4,7 @@
 
 // Core includes
 #include "MessageStore.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "UIRenderer.h"
 #include "gps/RTC.h"
 #include "graphics/Screen.h"

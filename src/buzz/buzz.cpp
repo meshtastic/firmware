@@ -1,5 +1,5 @@
 #include "buzz.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "configuration.h"
 
 #if !defined(ARCH_ESP32) && !defined(ARCH_RP2040) && !defined(ARCH_PORTDUINO)

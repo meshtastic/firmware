@@ -3,7 +3,7 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"

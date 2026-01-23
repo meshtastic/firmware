@@ -3,7 +3,7 @@
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "RTC.h"
 
 #include "configuration.h"

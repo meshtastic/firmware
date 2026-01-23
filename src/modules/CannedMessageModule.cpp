@@ -5,10 +5,10 @@
 #if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "Channels.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
 #include "MessageStore.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "SPILock.h"
 #include "buzz.h"
 #include "detect/ScanI2C.h"
@@ -2375,7 +2375,14 @@ bool CannedMessageModule::saveProtoForModule()
 {
     bool okay = true;
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    spiLock->lock();
+    if (!fatfs.exists("/prefs")) {
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        fatfs.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();

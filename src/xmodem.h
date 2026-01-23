@@ -32,13 +32,13 @@
 
 #pragma once
 
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "configuration.h"
 #include "mesh/generated/meshtastic/xmodem.pb.h"
 
 #define MAXRETRANS 25
 
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
 
 class XModemAdapter
 {
@@ -60,11 +60,14 @@ class XModemAdapter
     int retrans = MAXRETRANS;
 
     uint16_t packetno = 0;
-
+#if defined(USE_EXTERNAL_FLASH)
+    FatFile file;
+#else
 #if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     File file = File(FSCom);
 #else
     File file;
+#endif
 #endif
 
     char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};

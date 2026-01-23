@@ -37,7 +37,7 @@ mail:   marchammermann@googlemail.com
 #ifdef PORTDUINO_LINUX_HARDWARE
 #if __has_include(<ulfius.h>)
 #include "PiWebServer.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"

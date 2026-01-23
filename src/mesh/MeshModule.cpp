@@ -1,7 +1,7 @@
 #include "MeshModule.h"
 #include "Channels.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "configuration.h"
 #include "modules/RoutingModule.h"
 #include <algorithm>

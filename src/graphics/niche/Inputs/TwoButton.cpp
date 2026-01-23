@@ -2,7 +2,7 @@
 
 #include "./TwoButton.h"
 
-#include "NodeDB.h" // For the helper function TwoButton::getUserButtonPin
+#include "Filesystem/NodeDB.h" // For the helper function TwoButton::getUserButtonPin
 #include "PowerFSM.h"
 #include "sleep.h"
 

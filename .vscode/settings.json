@@ -10,5 +10,8 @@
   },
   "[powershell]": {
     "editor.defaultFormatter": "ms-vscode.powershell"
+  },
+  "files.associations": {
+    "fstream": "cpp"
   }
 }
