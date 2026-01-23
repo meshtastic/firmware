@@ -220,6 +220,34 @@ void initRegion()
     myRegion = r;
 }
 
+void RadioInterface::bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig)
+{
+    if (!loraConfig.use_preset) {
+        return;
+    }
+
+    // Find region info to determine whether "wide" LoRa is permitted (2.4 GHz uses wider bandwidth codes).
+    const RegionInfo *r = regions;
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != loraConfig.region; r++)
+        ;
+
+    const bool wideLora = r ? r->wideLora : false;
+
+    float bwKHz = 0;
+    uint8_t sf = 0;
+    uint8_t cr = 0;
+    modemPresetToParams(loraConfig.modem_preset, wideLora, bwKHz, sf, cr);
+
+    // If selected preset requests a bandwidth larger than the region span, fall back to LONG_FAST.
+    if (r && (r->freqEnd - r->freqStart) < (bwKHz / 1000.0f)) {
+        loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        modemPresetToParams(loraConfig.modem_preset, wideLora, bwKHz, sf, cr);
+    }
+
+    loraConfig.bandwidth = bwKHzToCode(bwKHz);
+    loraConfig.spread_factor = sf;
+}
+
 /**
  * ## LoRaWAN for North America
 
