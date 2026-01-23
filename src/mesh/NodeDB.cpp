@@ -1297,6 +1297,35 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved config version %d", config.version);
         }
     }
+
+    // Coerce LoRa config fields derived from presets while bootstrapping.
+    // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
+    if (config.has_lora && config.lora.use_preset) {
+        auto regionForCode = [](meshtastic_Config_LoRaConfig_RegionCode code) -> const RegionInfo * {
+            const RegionInfo *r = regions;
+            for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != code; r++)
+                ;
+            return r;
+        };
+
+        const RegionInfo *r = regionForCode(config.lora.region);
+        const bool wideLora = r ? r->wideLora : false;
+
+        float bwKHz = 0;
+        uint8_t sf = 0;
+        uint8_t cr = 0;
+        modemPresetToParams(config.lora.modem_preset, wideLora, bwKHz, sf, cr);
+
+        // If selected preset requests a bandwidth larger than the region span, fall back to LONG_FAST.
+        if (r && (r->freqEnd - r->freqStart) < (bwKHz / 1000.0f)) {
+            config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+            modemPresetToParams(config.lora.modem_preset, wideLora, bwKHz, sf, cr);
+        }
+
+        config.lora.bandwidth = bwKHzToCode(bwKHz);
+        config.lora.spread_factor = sf;
+    }
+
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
