@@ -23,6 +23,9 @@
 #include "error.h"
 #include "power.h"
 
+// VL53L1X Time-of-Flight sensor
+#include <Adafruit_VL53L1X.h>
+
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
 #include "detect/ScanI2CTwoWire.h"
@@ -312,6 +315,8 @@ static int32_t ledBlinker()
 uint32_t timeLastPowered = 0;
 
 static Periodic *ledPeriodic;
+static Periodic *testMessagePeriodic;
+static Periodic *vl53l1xPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
 
@@ -319,6 +324,82 @@ RadioInterface *rIf = NULL;
 #ifdef ARCH_PORTDUINO
 RadioLibHal *RadioLibHAL = NULL;
 #endif
+
+// VL53L1X Distance Sensor
+static Adafruit_VL53L1X vl53 = Adafruit_VL53L1X();
+static bool vl53l1x_found = false;
+
+// Forward declarations
+bool sendTextToChannel(const char *channelName, const char *message);
+
+/**
+ * Periodic callback to read VL53L1X distance sensor and send to mesh every 5 minutes
+ * This runs at 5 minute intervals to conserve power
+ */
+static int32_t readVL53L1X()
+{
+    if (!vl53l1x_found) {
+        // Sensor not found, check again in 5 minutes
+        return 300000; // 5 minutes
+    }
+    
+    LOG_INFO("VL53L1X: Starting ranging measurement");
+    
+    // Start ranging for this measurement
+    if (!vl53.startRanging()) {
+        LOG_WARN("VL53L1X: Failed to start ranging");
+        return 300000; // Try again in 5 minutes
+    }
+    
+    // Wait for measurement to be ready (typically ~50ms)
+    uint32_t startWait = millis();
+    while (!vl53.dataReady() && (millis() - startWait) < 1000) {
+        delay(10);
+    }
+    
+    if (vl53.dataReady()) {
+        int16_t distance = vl53.distance();
+        
+        if (distance == -1) {
+            LOG_WARN("VL53L1X: Error reading distance");
+        } else {
+            // Output to serial console
+            LOG_INFO("VL53L1X Distance: %d mm", distance);
+            
+            // Send to frmy-data channel
+            char message[64];
+            snprintf(message, sizeof(message), "Distance: %d mm", distance);
+            
+            if (sendTextToChannel("frmy-data", message)) {
+                LOG_INFO("Sent distance to frmy-data channel");
+            } else {
+                LOG_WARN("Failed to send distance to frmy-data channel");
+            }
+        }
+        
+        // Clear the interrupt
+        vl53.clearInterrupt();
+    } else {
+        LOG_WARN("VL53L1X: Measurement timeout");
+    }
+    
+    // Stop ranging to save power
+    vl53.stopRanging();
+    LOG_DEBUG("VL53L1X: Stopped ranging, entering low power until next measurement");
+    
+    // Return 5 minutes (300000 ms) for next reading
+    return 300000;
+}
+
+/**
+ * Periodic callback to send test message every 30 minutes
+ */
+static int32_t sendTestMessage()
+{
+    sendTextToChannel("frmy-data", "Sensor platform operational");
+    
+    return 1800000; // Run again in 30 minutes
+}
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
@@ -912,12 +993,12 @@ void setup()
         screen_model = config.display.oled;
 
 #if defined(USE_SH1107)
-    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+    screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     screen_geometry = GEOMETRY_128_128;
 #endif
 
 #if defined(USE_SH1107_128_64)
-    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+    screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -1163,8 +1244,8 @@ void setup()
         }
         touchBacklightActive = false;
     };
-#endif
     TouchButtonThread->initButton(touchConfig);
+#endif
 #endif
 
 #if defined(CANCEL_BUTTON_PIN)
@@ -1627,8 +1708,23 @@ void setup()
 
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
+    
+    // Initialize VL53L1X Time-of-Flight distance sensor
+    LOG_INFO("Initializing VL53L1X distance sensor...");
+    if (vl53.begin(0x29, &Wire)) {
+        LOG_INFO("VL53L1X found at address 0x29");
+        vl53l1x_found = true;
+    } else {
+        LOG_WARN("VL53L1X not found on I2C bus");
+        vl53l1x_found = false;
+    }
+    
+    // Start periodic task to read VL53L1X sensor
+    vl53l1xPeriodic = new Periodic("VL53L1X", readVL53L1X);
+    
+    // Start periodic task to send test messages
+    testMessagePeriodic = new Periodic("TestMessage", sendTestMessage);
 }
-
 #endif
 uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
@@ -1758,5 +1854,72 @@ void loop()
 #endif
         mainDelay.delay(delayMsec);
     }
+}
+
+/**
+ * Send a text message to a specific channel by name
+ * @param channelName The name of the channel to send to (e.g., "frag-mesh")
+ * @param message The text message to send
+ * @return true if the channel was found and message was sent, false otherwise
+ */
+bool sendTextToChannel(const char *channelName, const char *message)
+{
+    // Find the channel by name
+    meshtastic_Channel *targetChannel = nullptr;
+    ChannelIndex targetChannelIndex = 0;
+    
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++) {
+        meshtastic_Channel &ch = channels.getByIndex(i);
+        
+        // Skip disabled channels
+        if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED)
+            continue;
+            
+        // Check if the channel name matches
+        const char *chName = channels.getName(i);
+        if (strcasecmp(chName, channelName) == 0) {
+            targetChannel = &ch;
+            targetChannelIndex = i;
+            break;
+        }
+    }
+    
+    // Channel not found
+    if (targetChannel == nullptr) {
+        LOG_WARN("Channel '%s' not found or is disabled", channelName);
+        return false;
+    }
+    
+    LOG_INFO("Found channel '%s' at index %d", channelName, targetChannelIndex);
+    
+    // Allocate a new packet
+    meshtastic_MeshPacket *p = router->allocForSending();
+    if (p == nullptr) {
+        LOG_ERROR("Failed to allocate packet");
+        return false;
+    }
+    
+    // Set up the packet
+    p->to = NODENUM_BROADCAST;  // Broadcast to all nodes on the channel
+    p->channel = targetChannelIndex;
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p->want_ack = false;  // Don't request acknowledgment for this test message
+    
+    // Copy the message into the payload
+    size_t msgLen = strlen(message);
+    if (msgLen > meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        msgLen = meshtastic_Constants_DATA_PAYLOAD_LEN;
+        LOG_WARN("Message truncated to %d bytes", msgLen);
+    }
+    
+    p->decoded.payload.size = msgLen;
+    memcpy(p->decoded.payload.bytes, message, msgLen);
+    
+    LOG_INFO("Sending message to channel '%s': %.*s", channelName, msgLen, message);
+    
+    // Send the packet to the mesh
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    
+    return true;
 }
 #endif
