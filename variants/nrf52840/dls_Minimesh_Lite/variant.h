@@ -70,9 +70,9 @@ extern "C" {
 // Serial interfaces
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (0 + 2)   
-#define PIN_SPI_MOSI (32 + 15) 
-#define PIN_SPI_SCK (32 + 11)  
+#define PIN_SPI_MISO (0 + 2)
+#define PIN_SPI_MOSI (32 + 15)
+#define PIN_SPI_SCK (32 + 11)
 
 #define LORA_MISO PIN_SPI_MISO
 #define LORA_MOSI PIN_SPI_MOSI
@@ -85,14 +85,14 @@ extern "C" {
 #define USE_SX1268
 
 // SX126X CONFIG
-#define SX126X_CS (32 + 13)      
-#define SX126X_DIO1 (0 + 10)     
-#define SX126X_DIO2_AS_RF_SWITCH 
-                                 
-#define SX126X_BUSY (0 + 29)     
-#define SX126X_RESET (0 + 9)     
-#define SX126X_RXEN (0 + 17)     
-#define SX126X_TXEN RADIOLIB_NC  
+#define SX126X_CS (32 + 13)
+#define SX126X_DIO1 (0 + 10)
+#define SX126X_DIO2_AS_RF_SWITCH
+
+#define SX126X_BUSY (0 + 29)
+#define SX126X_RESET (0 + 9)
+#define SX126X_RXEN (0 + 17)
+#define SX126X_TXEN RADIOLIB_NC
 
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #define TCXO_OPTIONAL // make it so that the firmware can try both TCXO and XTAL
