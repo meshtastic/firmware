@@ -1,16 +1,21 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "Filesystem/FSCommon.h"
-#include "MessageStore.h"
 #include "Filesystem/NodeDB.h"
-#include "SPILock.h"
 #include "Filesystem/SafeFile.h"
+#include "MessageStore.h"
+#include "SPILock.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
 #define MESSAGE_TEXT_POOL_SIZE (MAX_MESSAGES_SAVED * MAX_MESSAGE_SIZE)
+#endif
+
+// Default autosave interval 2 hours, override per device later with -DMESSAGE_AUTOSAVE_INTERVAL_SEC=300 (etc)
+#ifndef MESSAGE_AUTOSAVE_INTERVAL_SEC
+#define MESSAGE_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
 #endif
 
 // Global message text pool and state
@@ -39,14 +44,14 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
         LOG_ERROR("MessageStore: Pool not allocated!");
         return 0;
     }
-    
+
     if (len >= MAX_MESSAGE_SIZE)
         len = MAX_MESSAGE_SIZE - 1;
 
     // Check if we have enough space - don't wrap to avoid invalidating existing offsets
     if (g_poolWritePos + len + 1 >= MESSAGE_TEXT_POOL_SIZE) {
-        LOG_WARN("MessageStore: Pool full (%u + %u >= %u), cannot store new message", 
-                 g_poolWritePos, len + 1, MESSAGE_TEXT_POOL_SIZE);
+        LOG_WARN("MessageStore: Pool full (%u + %u >= %u), cannot store new message", g_poolWritePos, len + 1,
+                 MESSAGE_TEXT_POOL_SIZE);
         // Return offset 0 which will point to empty string after reset
         return 0;
     }
@@ -121,6 +126,60 @@ void MessageStore::addLiveMessage(const StoredMessage &msg)
     pushWithLimit(liveMessages, msg);
 }
 
+#if ENABLE_MESSAGE_PERSISTENCE
+static bool g_messageStoreHasUnsavedChanges = false;
+static uint32_t g_lastAutoSaveMs = 0; // last time we actually saved
+
+static inline uint32_t autosaveIntervalMs()
+{
+    uint32_t sec = (uint32_t)MESSAGE_AUTOSAVE_INTERVAL_SEC;
+    if (sec < 60)
+        sec = 60;
+    return sec * 1000UL;
+}
+
+static inline bool reachedMs(uint32_t now, uint32_t target)
+{
+    return (int32_t)(now - target) >= 0;
+}
+
+// Mark new messages in RAM that need to be saved later
+static inline void markMessageStoreUnsaved()
+{
+    g_messageStoreHasUnsavedChanges = true;
+
+    if (g_lastAutoSaveMs == 0) {
+        g_lastAutoSaveMs = millis();
+    }
+}
+
+// Called periodically from the main loop in main.cpp
+static inline void autosaveTick(MessageStore *store)
+{
+    if (!store)
+        return;
+
+    uint32_t now = millis();
+
+    if (g_lastAutoSaveMs == 0) {
+        g_lastAutoSaveMs = now;
+        return;
+    }
+
+    if (!reachedMs(now, g_lastAutoSaveMs + autosaveIntervalMs()))
+        return;
+
+    // Autosave interval reached, only save if there are unsaved messages.
+    if (g_messageStoreHasUnsavedChanges) {
+        LOG_INFO("Autosaving MessageStore to flash");
+        store->saveToFlash();
+    } else {
+        LOG_INFO("Autosave skipped, no changes to save");
+        g_lastAutoSaveMs = now;
+    }
+}
+#endif
+
 // Add from incoming/outgoing packet
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
@@ -150,6 +209,11 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     }
 
     addLiveMessage(sm);
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    markMessageStoreUnsaved();
+#endif
+
     return liveMessages.back();
 }
 
@@ -174,6 +238,10 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     sm.ackStatus = AckStatus::NONE;
 
     addLiveMessage(sm);
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    markMessageStoreUnsaved();
+#endif
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -278,6 +346,10 @@ void MessageStore::saveToFlash()
     spiLock->unlock(); // MUST unlock BEFORE calling f.close() to avoid deadlock!
     f.close();
 #endif
+
+    // Reset autosave state after any save
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 }
 
 void MessageStore::loadFromFlash()
@@ -347,7 +419,7 @@ void MessageStore::loadFromFlash()
 
     f.close();
 #endif
-LOG_INFO("MessageStore loaded from flash");
+    LOG_INFO("MessageStore loaded from flash");
 }
 
 #else
@@ -366,6 +438,11 @@ void MessageStore::clearAllMessages()
     uint8_t count = 0;
     f.write(&count, 1); // write "0 messages"
     f.close();
+#endif
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 #endif
 }
 
@@ -497,6 +574,14 @@ uint16_t MessageStore::storeText(const char *src, size_t len)
     // Wrapper around the internal helper
     return storeTextInPool(src, len);
 }
+
+#if ENABLE_MESSAGE_PERSISTENCE
+void messageStoreAutosaveTick()
+{
+    // Called from the main loop to check autosave timing
+    autosaveTick(&messageStore);
+}
+#endif
 
 // Global definition
 MessageStore messageStore("default");

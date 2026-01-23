@@ -171,7 +171,8 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, false),
 
     /*
         Nepal
@@ -245,7 +246,9 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
 {
-    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
+    size_t numbytes = p->which_payload_variant == meshtastic_MeshPacket_decoded_tag
+                          ? pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded)
+                          : p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
     uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
     // Make sure enough time has elapsed for this packet to be sent and an ACK is received.
     // LOG_DEBUG("Waiting for flooding message with airtime %d and slotTime is %d", packetAirtime, slotTimeMsec);
@@ -519,6 +522,10 @@ void RadioInterface::applyModemConfig()
                 sf = 12;
                 break;
             }
+            if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cr) {
+                cr = loraConfig.coding_rate;
+                LOG_INFO("Using custom Coding Rate %u", cr);
+            }
         } else {
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
@@ -659,18 +666,24 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         power = maxPower;
     }
 
-#ifndef NUM_PA_POINTS
-    if (TX_GAIN_LORA > 0 && !devicestate.owner.is_licensed) {
-        LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, TX_GAIN_LORA);
-        power -= TX_GAIN_LORA;
-    }
+#ifdef ARCH_PORTDUINO
+    size_t num_pa_points = portduino_config.num_pa_points;
+    const uint16_t *tx_gain = portduino_config.tx_gain_lora;
 #else
-    if (!devicestate.owner.is_licensed) {
+    size_t num_pa_points = NUM_PA_POINTS;
+    const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
+#endif
+
+    if (num_pa_points == 1) {
+        if (tx_gain[0] > 0 && !devicestate.owner.is_licensed) {
+            LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[0]);
+            power -= tx_gain[0];
+        }
+    } else if (!devicestate.owner.is_licensed) {
         // we have an array of PA gain values.  Find the highest power setting that works.
-        const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
-        for (int radio_dbm = 0; radio_dbm < NUM_PA_POINTS; radio_dbm++) {
+        for (int radio_dbm = 0; radio_dbm < num_pa_points; radio_dbm++) {
             if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
-                ((radio_dbm == (NUM_PA_POINTS - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
+                ((radio_dbm == (num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
                 // we've exceeded the power limit, or hit the max we can do
                 LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
                 power -= tx_gain[radio_dbm];
@@ -678,7 +691,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
             }
         }
     }
-#endif
+
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
 

@@ -30,4 +30,4 @@ echo "Copying uf2 file"
 cp $BUILDDIR/$basename.uf2 $OUTDIR/$basename.uf2
 
 echo "Copying manifest"
-cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json || true

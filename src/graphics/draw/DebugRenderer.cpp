@@ -535,7 +535,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz (%d)", freqStr, config.lora.channel_num);
         } else {
-            snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %sMHz (%d)", freqStr, config.lora.channel_num);
+            snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %sMHz (%d)", freqStr, config.lora.channel_num);
         }
     }
     size_t len = strlen(frequencyslot);

@@ -110,6 +110,10 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
+/// Given a packet, return the number of hops used to reach this node.
+/// Returns defaultIfUnknown if the number of hops couldn't be determined.
+int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown = -1);
+
 enum LoadFileResult {
     // Successfully opened the file
     LOAD_SUCCESS = 1,
@@ -374,6 +378,8 @@ extern meshtastic_CriticalErrorCode error_code;
 extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
+#define NODEINFO_BITFIELD_IS_MUTED_SHIFT 1
+#define NODEINFO_BITFIELD_IS_MUTED_MASK (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT)
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

@@ -115,7 +115,6 @@ namespace graphics
 extern int bannerSignalBars;
 }
 extern ScanI2C::DeviceAddress cardkb_found;
-extern bool graphics::isMuted;
 extern bool osk_found;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";

@@ -13,6 +13,7 @@ class menuHandler
         lora_picker,
         device_role_picker,
         radio_preset_picker,
+        frequency_slot,
         no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
@@ -33,13 +34,13 @@ class menuHandler
         brightness_picker,
         reboot_menu,
         shutdown_menu,
-        add_favorite,
+        NodePicker_menu,
+        Manage_Node_menu,
         remove_favorite,
         test_menu,
         number_test,
         wifi_toggle_menu,
         bluetooth_toggle_menu,
-        notifications_menu,
         screen_options_menu,
         power_menu,
         system_base_menu,
@@ -56,12 +57,14 @@ class menuHandler
         DisplayUnits
     };
     static screenMenus menuQueue;
+    static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
 
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
     static void DeviceRolePicker();
     static void RadioPresetPicker();
+    static void FrequencySlotPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
@@ -91,6 +94,8 @@ class menuHandler
     static void BrightnessPickerMenu();
     static void rebootMenu();
     static void shutdownMenu();
+    static void NodePicker();
+    static void ManageNodeMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void traceRouteMenu();
@@ -98,7 +103,6 @@ class menuHandler
     static void numberTest();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
-    static void notificationsMenu();
     static void screenOptionsMenu();
     static void powerMenu();
     static void nodeNameLengthMenu();
@@ -130,7 +134,29 @@ template <typename T> struct MenuOption {
     MenuOption(const char *labelIn, OptionsAction actionIn) : label(labelIn), action(actionIn), hasValue(false), value() {}
 };
 
+struct ScreenColor {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    bool useVariant;
+
+    ScreenColor(uint8_t rIn = 0, uint8_t gIn = 0, uint8_t bIn = 0, bool variantIn = false)
+        : r(rIn), g(gIn), b(bIn), useVariant(variantIn)
+    {
+    }
+};
+
 using RadioPresetOption = MenuOption<meshtastic_Config_LoRaConfig_ModemPreset>;
+using LoraRegionOption = MenuOption<meshtastic_Config_LoRaConfig_RegionCode>;
+using TimezoneOption = MenuOption<const char *>;
+using CompassOption = MenuOption<meshtastic_CompassMode>;
+using ScreenColorOption = MenuOption<ScreenColor>;
+using GPSToggleOption = MenuOption<meshtastic_Config_PositionConfig_GpsMode>;
+using GPSFormatOption = MenuOption<meshtastic_DeviceUIConfig_GpsCoordinateFormat>;
+using NodeNameOption = MenuOption<bool>;
+using PositionMenuOption = MenuOption<int>;
+using ManageNodeOption = MenuOption<int>;
+using ClockFaceOption = MenuOption<bool>;
 
 } // namespace graphics
 #endif
