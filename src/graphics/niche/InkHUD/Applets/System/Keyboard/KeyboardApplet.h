@@ -18,6 +18,8 @@ namespace NicheGraphics::InkHUD
 class KeyboardApplet : public SystemApplet
 {
   public:
+    KeyboardApplet();
+
     void onRender() override;
     void onForeground() override;
     void onBackground() override;
@@ -31,25 +33,31 @@ class KeyboardApplet : public SystemApplet
     void onNavRight() override;
 
     static uint16_t getKeyboardHeight(); // used to set the keyboard tile height
-  protected:
-    void drawKeyboard(uint16_t left, uint16_t top, uint16_t width, uint16_t height, uint16_t selectCol, uint8_t selectRow);
 
   private:
+    void drawKeyLabel(uint16_t left, uint16_t top, uint16_t width, char key, Color color);
+
     static const uint8_t KBD_COLS = 11;
     static const uint8_t KBD_ROWS = 4;
 
-    const char keys[KBD_COLS * KBD_ROWS] = {'1', '2', '3', '4', '5', '6', '7',  '8', '9', '0', '\b', 'q', 'w', 'e',   'r',
-                                            't', 'y', 'u', 'i', 'o', 'p', '\n', 'a', 's', 'd', 'f',  'g', 'h', 'j',   'k',
-                                            'l', '!', ' ', 'z', 'x', 'c', 'v',  'b', 'n', 'm', ',',  '.', '?', '\x1b'};
+    const char keys[KBD_COLS * KBD_ROWS] = {
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\b',  // row 0
+        'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '\n',  // row 1
+        'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '!', ' ',   // row 2
+        'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '?', '\x1b' // row 3
+    };
 
     // This array represents the widths of each key in points
     // 16 pt = line height of the text
-    const uint16_t keyWidths[KBD_COLS * KBD_ROWS] = {16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, 16, 16, 16, 16,
-                                                     16, 16, 16, 16, 16, 16, 24, 16, 16, 16, 16, 16, 16, 16, 16,
-                                                     16, 16, 24, 16, 16, 16, 16, 16, 16, 16, 10, 10, 12, 40};
+    const uint16_t keyWidths[KBD_COLS * KBD_ROWS] = {
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, // row 0
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, // row 1
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, // row 2
+        16, 16, 16, 16, 16, 16, 16, 10, 10, 12, 40  // row 3
+    };
 
-    uint8_t selectCol = 0;
-    uint8_t selectRow = 0;
+    uint16_t rowWidths[KBD_ROWS];
+    uint8_t selectedKey = 0; // selected key index
 };
 
 } // namespace NicheGraphics::InkHUD
