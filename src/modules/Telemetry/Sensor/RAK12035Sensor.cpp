@@ -38,42 +38,40 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 void RAK12035Sensor::setup()
 {
-    // Set the calibration values
-    // Reading the saved calibration values from the sensor.
-    // TODO:: Check for and run calibration check for up to 2 additional sensors if present.
+    // Read calibration values from the sensor and set defaults if not calibrated
     uint16_t zero_val = 0;
     uint16_t hundred_val = 0;
-    uint16_t default_zero_val = 550;
-    uint16_t default_hundred_val = 420;
+    const uint16_t default_zero_val = 550;
+    const uint16_t default_hundred_val = 420;
+
     sensor.sensor_on();
     delay(200);
     sensor.get_dry_cal(&zero_val);
+    delay(200);
     sensor.get_wet_cal(&hundred_val);
     delay(200);
-    if (zero_val == 0 || zero_val <= hundred_val) {
-        LOG_INFO("Dry calibration value is %d", zero_val);
-        LOG_INFO("Wet calibration value is %d", hundred_val);
-        LOG_INFO("This does not make sense. You can recalibrate this sensor using the calibration sketch included here: "
-                 "https://github.com/RAKWireless/RAK12035_SoilMoisture.");
-        LOG_INFO("For now, setting default calibration value for Dry Calibration: %d", default_zero_val);
+    LOG_INFO("You can recalibrate this sensor using the calibration sketch included here: "
+             "https://github.com/RAKWireless/RAK12035_SoilMoisture.");
+
+    if (zero_val == 0) {
+        LOG_INFO("Dry calibration not set, using default: %d", default_zero_val);
         sensor.set_dry_cal(default_zero_val);
-        sensor.get_dry_cal(&zero_val);
-        LOG_INFO("Dry calibration reset complete. New value is %d", zero_val);
+        zero_val = default_zero_val;
     }
     if (hundred_val == 0 || hundred_val >= zero_val) {
-        LOG_INFO("Dry calibration value is %d", zero_val);
-        LOG_INFO("Wet calibration value is %d", hundred_val);
-        LOG_INFO("This does not make sense. You can recalibrate this sensor using the calibration sketch included here: "
-                 "https://github.com/RAKWireless/RAK12035_SoilMoisture.");
-        LOG_INFO("For now, setting default calibration value for Wet Calibration: %d", default_hundred_val);
+        LOG_INFO("Wet calibration not set, using default: %d", default_hundred_val);
         sensor.set_wet_cal(default_hundred_val);
-        sensor.get_wet_cal(&hundred_val);
-        LOG_INFO("Wet calibration reset complete. New value is %d", hundred_val);
+        hundred_val = default_hundred_val;
     }
+    if(zero_val == default_zero_val || hundred_val == default_hundred_val){
+        LOG_INFO("Consider running the calibration sketch to improve accuracy."
+                 "You can recalibrate this sensor using the calibration sketch included here: "
+                 "https://github.com/RAKWireless/RAK12035_SoilMoisture.");
+    }
+
     sensor.sensor_sleep();
     delay(200);
-    LOG_INFO("Dry calibration value is %d", zero_val);
-    LOG_INFO("Wet calibration value is %d", hundred_val);
+    LOG_INFO("Dry calibration value: %d, Wet calibration value: %d", zero_val, hundred_val);
 }
 
 bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
