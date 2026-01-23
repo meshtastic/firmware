@@ -938,7 +938,7 @@ void Power::readPowerStatus()
             low_voltage_counter++;
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52) && !defined(ELECROW_ThinkNode_M6)
                 // We can't trigger deep sleep on NRF52, it's freezing the board
                 LOG_DEBUG("Low voltage detected, but not trigger deep sleep");
 #else
