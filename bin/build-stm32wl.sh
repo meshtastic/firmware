@@ -30,4 +30,4 @@ echo "Copying STM32 bin file"
 cp $BUILDDIR/$basename.bin $OUTDIR/$basename.bin
 
 echo "Copying manifest"
-cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json || true

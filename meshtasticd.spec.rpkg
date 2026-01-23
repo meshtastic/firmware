@@ -39,6 +39,7 @@ BuildRequires: pkgconfig(bluez)
 BuildRequires: pkgconfig(libusb-1.0)
 BuildRequires: libi2c-devel
 BuildRequires: pkgconfig(libuv)
+BuildRequires: pkgconfig(sqlite3)
 # Web components:
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)
@@ -94,6 +95,9 @@ cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
 
 # Install systemd service
 install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+
+# Install meshtasticd start wrapper
+install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-start.sh
 
 # Install the web files under /usr/share/meshtasticd/web
 mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
