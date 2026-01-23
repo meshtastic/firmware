@@ -28,7 +28,7 @@ extern "C" {
 #define GPS_TX_PIN (4)
 
 // Button
-#define BUTTON_PIN (2) // BOOT button
+//#define BUTTON_PIN (2) // BOOT button
 
 // LoRa
 // #define USE_LLCC68
