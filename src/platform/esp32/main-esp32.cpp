@@ -59,8 +59,13 @@ void getMacAddr(uint8_t *dmac)
     auto res = esp_base_mac_addr_get(dmac);
     assert(res == ESP_OK);
 #else
-    auto res = esp_efuse_mac_get_default(dmac);
-    assert(res == ESP_OK);
+    // Try to get custom MAC first, if not available, use default
+    auto res = esp_efuse_mac_get_custom(dmac);
+    if (res != ESP_OK) {
+        // No custom MAC, use default
+        res = esp_efuse_mac_get_default(dmac);
+        assert(res == ESP_OK);
+    }
 #endif
 }
 
