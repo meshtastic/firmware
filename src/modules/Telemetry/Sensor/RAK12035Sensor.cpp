@@ -18,7 +18,7 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     sensor.get_sensor_version(&data);
     if (data != 0) {
         LOG_INFO("Init sensor: %s", sensorName);
-        LOG_INFO("RAK12035Sensor Init Succeed \nSensor1 Firmware version: %i, Sensor Name: %s", data, sensorName);
+        LOG_INFO("RAK12035Sensor Init Succeed \nSensor Firmware version: %i, Sensor Name: %s", data, sensorName);
         status = true;
         sensor.sensor_sleep();
     } else {
