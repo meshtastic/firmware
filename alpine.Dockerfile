@@ -11,7 +11,7 @@ RUN apk --no-cache add \
         bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
         libgpiod-dev yaml-cpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
-        libx11-dev libinput-dev libxkbcommon-dev \
+        libx11-dev libinput-dev libxkbcommon-dev sqlite-dev \
     && rm -rf /var/cache/apk/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
