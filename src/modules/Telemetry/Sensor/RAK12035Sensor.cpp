@@ -8,8 +8,7 @@
 // the 3.3V switched power rail (PIN_3V3_EN). This turns off power to ALL peripherals
 // including GPS. We need to restore power after the library turns it off.
 #ifdef PIN_3V3_EN
-#define RESTORE_3V3_POWER()                                                                                                        \                                                                                                                      \
-        digitalWrite(PIN_3V3_EN, HIGH);                                                                                            \
+#define RESTORE_3V3_POWER() digitalWrite(PIN_3V3_EN, HIGH)
 #else
 #define RESTORE_3V3_POWER()
 #endif
