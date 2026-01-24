@@ -31,7 +31,7 @@
 #define LED_STATE_ON 1 // State when LED is litted
 
 #define BATTERY_PIN 1
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 
 #ifdef _VARIANT_RAK3112_ //  Modular variant (stamp)
 #define ADC_MULTIPLIER 2.11
