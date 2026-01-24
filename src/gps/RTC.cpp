@@ -435,6 +435,7 @@ time_t gm_mktime(const struct tm *tm)
 
     return result;
 #else
-    return mktime(tm);
+    struct tm tmCopy = *tm;
+    return mktime(&tmCopy);
 #endif
 }
