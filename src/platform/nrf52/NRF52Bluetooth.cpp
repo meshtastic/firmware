@@ -243,10 +243,8 @@ int NRF52Bluetooth::getRssi()
 
 // Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".
 // See https://docs.nordicsemi.com/bundle/ps_nrf52840/page/keyfeatures_html5.html
-#define VALID_BLE_TX_POWER(x) \
-    ((x) == -20 || (x) == -16 || (x) == -12 || \
-     (x) == -8  || (x) == -4  || (x) == 0  || \
-     (x) == 4  || (x) == 8)
+#define VALID_BLE_TX_POWER(x)                                                                                                    \
+    ((x) == -20 || (x) == -16 || (x) == -12 || (x) == -8 || (x) == -4 || (x) == 0 || (x) == 4 || (x) == 8)
 
 void NRF52Bluetooth::setup()
 {
@@ -284,7 +282,6 @@ void NRF52Bluetooth::setup()
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
-  
     // Do not change Slave Latency to value other than 0 !!!
     // There is probably a bug in SoftDevice + certain Apple iOS versions being
     // brain damaged causing connectivity problems.
@@ -300,8 +297,8 @@ void NRF52Bluetooth::setup()
     // So those are relatively safe values so Apple braindead firmware won't get angry and at least we may try
     // to negotiate some longer connection interval to save battery.
 
-    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not worth
-    // dying on a hill here.
+    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not
+    // worth dying on a hill here.
 
     Bluefruit.Periph.setConnSlaveLatency(0);
     // 1.25 ms units - so min, max is 15, 100 ms range.
