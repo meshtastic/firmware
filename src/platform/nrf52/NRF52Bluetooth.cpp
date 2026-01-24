@@ -240,6 +240,14 @@ int NRF52Bluetooth::getRssi()
 {
     return 0; // FIXME figure out where to source this
 }
+
+// Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".
+// See https://docs.nordicsemi.com/bundle/ps_nrf52840/page/keyfeatures_html5.html
+#define VALID_BLE_TX_POWER(x) \
+    ((x) == -20 || (x) == -16 || (x) == -12 || \
+     (x) == -8  || (x) == -4  || (x) == 0  || \
+     (x) == 4  || (x) == 8)
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -251,6 +259,9 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
+#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
+    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
+#endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
                                 ? config.bluetooth.fixed_pin
