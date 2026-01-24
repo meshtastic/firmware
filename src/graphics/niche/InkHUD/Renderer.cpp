@@ -301,10 +301,10 @@ void InkHUD::Renderer::clearTile(Tile *t)
     // Calculate the bounds to clear
     uint16_t xStart = (left < 0) ? 0 : left;
     uint16_t yStart = (top < 0) ? 0 : top;
-    if (xStart >= driver->width || yStart >= driver->height) // the box is completely off the screen
-        return;
-    uint16_t xEnd = (left + width < 0) ? 0 : left + width;
-    uint16_t yEnd = (top + height < 0) ? 0 : top + height;
+    if (xStart >= driver->width || yStart >= driver->height || left + width < 0 || top + height < 0)
+        return; // the box is completely off the screen
+    uint16_t xEnd = left + width;
+    uint16_t yEnd = top + height;
     if (xEnd > driver->width)
         xEnd = driver->width;
     if (yEnd > driver->height)
@@ -314,10 +314,10 @@ void InkHUD::Renderer::clearTile(Tile *t)
     if (xStart == 0 && xEnd == driver->width) { // full width box is easier to clear
         memset(imageBuffer + (yStart * imageBufferWidth), 0xFF, (yEnd - yStart) * imageBufferWidth);
     } else {
-        const uint16_t byteStart = (xStart >> 3) + 1;
-        const uint16_t byteEnd = xEnd >> 3;
-        const uint8_t leadingByte = 0x00FF >> (xStart - ((byteStart - 1) << 3));
-        const uint8_t trailingByte = 0xFF00 >> (xEnd - (byteEnd << 3));
+        const uint16_t byteStart = (xStart / 8) + 1;
+        const uint16_t byteEnd = xEnd / 8;
+        const uint8_t leadingByte = 0x00FF >> (xStart - ((byteStart - 1) * 8));
+        const uint8_t trailingByte = 0xFF00 >> (xEnd - (byteEnd * 8));
         for (uint16_t i = yStart * imageBufferWidth; i < yEnd * imageBufferWidth; i += imageBufferWidth) {
             // Set the leading byte
             imageBuffer[i + byteStart - 1] |= leadingByte;
