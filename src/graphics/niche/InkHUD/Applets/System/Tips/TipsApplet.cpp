@@ -42,7 +42,7 @@ InkHUD::TipsApplet::TipsApplet()
         bringToForeground();
 }
 
-void InkHUD::TipsApplet::onRender()
+void InkHUD::TipsApplet::onRender(bool full)
 {
     switch (tipQueue.front()) {
     case Tip::WELCOME:

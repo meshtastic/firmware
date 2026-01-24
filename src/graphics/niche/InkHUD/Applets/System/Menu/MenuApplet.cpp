@@ -401,7 +401,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     currentPage = page;
 }
 
-void InkHUD::MenuApplet::onRender()
+void InkHUD::MenuApplet::onRender(bool full)
 {
     // Free text mode draws a text input field and skips the normal rendering
     if (freeTextMode) {

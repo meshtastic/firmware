@@ -46,7 +46,7 @@ int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *sta
     return 0; // Tell Observable to continue informing other observers
 }
 
-void InkHUD::BatteryIconApplet::onRender()
+void InkHUD::BatteryIconApplet::onRender(bool full)
 {
     // Fill entire tile
     // - size of icon controlled by size of tile

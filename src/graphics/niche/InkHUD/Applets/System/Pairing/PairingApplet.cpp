@@ -9,7 +9,7 @@ InkHUD::PairingApplet::PairingApplet()
     bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
 }
 
-void InkHUD::PairingApplet::onRender()
+void InkHUD::PairingApplet::onRender(bool full)
 {
     // Header
     setFont(fontMedium);

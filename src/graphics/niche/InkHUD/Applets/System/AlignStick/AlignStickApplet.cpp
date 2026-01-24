@@ -10,7 +10,7 @@ InkHUD::AlignStickApplet::AlignStickApplet()
         bringToForeground();
 }
 
-void InkHUD::AlignStickApplet::onRender()
+void InkHUD::AlignStickApplet::onRender(bool full)
 {
     setFont(fontMedium);
     printAt(0, 0, "Align Joystick:");

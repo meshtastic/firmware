@@ -35,7 +35,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onFreeText(char c) override;
     void onFreeTextDone() override;
     void onFreeTextCancel() override;
-    void onRender() override;
+    void onRender(bool full) override;
 
     void show(Tile *t); // Open the menu, onto a user tile
 

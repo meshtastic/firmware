@@ -30,7 +30,7 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     // This is then drawn with a FULL refresh by Renderer::begin
 }
 
-void InkHUD::LogoApplet::onRender()
+void InkHUD::LogoApplet::onRender(bool full)
 {
     // Size  of the region which the logo should "scale to fit"
     uint16_t logoWLimit = X(0.8);

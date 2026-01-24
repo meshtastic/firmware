@@ -65,7 +65,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     return 0;
 }
 
-void InkHUD::NotificationApplet::onRender()
+void InkHUD::NotificationApplet::onRender(bool full)
 {
     // Clear the region beneath the tile
     // Most applets are drawing onto an empty frame buffer and don't need to do this
