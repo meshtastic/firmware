@@ -31,9 +31,8 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("RAK12035Sensor Init Succeed \nSensor1 Firmware version: %i, Sensor Name: %s", data, sensorName);
         status = true;
         sensor.sensor_sleep();
-        RESTORE_3V3_POWER(); // Restore power after sensor_sleep() turns off WB_IO2
+        RESTORE_3V3_POWER();
     } else {
-        // If we reach here, it means the sensor did not initialize correctly.
         LOG_INFO("Init sensor: %s", sensorName);
         LOG_ERROR("RAK12035Sensor Init Failed");
         status = false;
