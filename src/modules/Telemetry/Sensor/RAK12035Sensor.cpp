@@ -22,7 +22,6 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     delay(100);
     sensor.begin(dev->address.address);
 
-    // Get sensor firmware version
     uint8_t data = 0;
     sensor.get_sensor_version(&data);
     if (data != 0) {
@@ -47,8 +46,6 @@ bool RAK12035Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 void RAK12035Sensor::setup()
 {
-    // Set the calibration values
-    // Reading the saved calibration values from the sensor.
     // TODO:: Check for and run calibration check for up to 2 additional sensors if present.
     uint16_t zero_val = 0;
     uint16_t hundred_val = 0;
@@ -80,7 +77,7 @@ void RAK12035Sensor::setup()
         LOG_INFO("Wet calibration reset complete. New value is %d", hundred_val);
     }
     sensor.sensor_sleep();
-    RESTORE_3V3_POWER(); // Restore power after sensor_sleep() turns off WB_IO2
+    RESTORE_3V3_POWER();
     delay(200);
     LOG_INFO("Dry calibration value is %d", zero_val);
     LOG_INFO("Wet calibration value is %d", hundred_val);
@@ -89,10 +86,6 @@ void RAK12035Sensor::setup()
 bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // TODO:: read and send metrics for up to 2 additional soil monitors if present.
-    //  -- how to do this.. this could get a little complex..
-    //     ie - 1> we combine them into an average and send that, 2> we send them as separate metrics
-    //      ^-- these scenarios would require different handling of the metrics in the receiving end and maybe a setting in the
-    //      device ui and an additional proto for that?
     measurement->variant.environment_metrics.has_soil_temperature = true;
     measurement->variant.environment_metrics.has_soil_moisture = true;
 
@@ -107,7 +100,7 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
     success &= sensor.get_sensor_temperature(&temp);
     delay(200);
     sensor.sensor_sleep();
-    RESTORE_3V3_POWER(); // Restore power after sensor_sleep() turns off WB_IO2
+    RESTORE_3V3_POWER();
 
     if (success == false) {
         LOG_ERROR("Failed to read sensor data");
