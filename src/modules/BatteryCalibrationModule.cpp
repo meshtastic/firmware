@@ -39,9 +39,9 @@ bool BatteryCalibrationModule::persistCalibrationOcv()
         return false;
     }
     LOG_INFO("Persisting battery calibration OCV array");
-    config.power.OCV_count = NUM_OCV_POINTS;
+    config.power.ocv_count = NUM_OCV_POINTS;
     for (size_t i = 0; i < NUM_OCV_POINTS; ++i) {
-        config.power.OCV[i] = calibrationOcv[i];
+        config.power.ocv[i] = calibrationOcv[i];
         LOG_INFO("OCV[%u]=%u", static_cast<unsigned>(i), static_cast<unsigned>(calibrationOcv[i]));
     }
     LOG_INFO("Battery calibration OCV array persisted to config");

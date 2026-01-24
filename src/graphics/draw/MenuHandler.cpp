@@ -2467,9 +2467,9 @@ void menuHandler::batteryCalibrationMenu()
             if (batteryCalibrationSampler) {
                 batteryCalibrationSampler->resetSamples();
             }
-            config.power.OCV_count = 0;
+            config.power.ocv_count = 0;
             for (size_t i = 0; i < NUM_OCV_POINTS; ++i) {
-                config.power.OCV[i] = 0;
+                config.power.ocv[i] = 0;
             }
             if (nodeDB) {
                 nodeDB->saveToDisk(SEGMENT_CONFIG);
