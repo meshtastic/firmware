@@ -91,6 +91,8 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    int num_pa_points = 1; // default to 1 point, with 0 gain
+    uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
     pinMapping lora_irq_pin = {"Lora", "IRQ"};
     pinMapping lora_busy_pin = {"Lora", "Busy"};
@@ -175,6 +177,7 @@ extern struct portduino_config_struct {
     std::string mac_address = "";
     bool mac_address_explicit = false;
     std::string mac_address_source = "";
+    int api_port = -1;
     std::string config_directory = "";
     std::string available_directory = "/etc/meshtasticd/available.d/";
     int maxtophone = 100;
@@ -230,6 +233,17 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
         if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
+
+        if (num_pa_points > 1) {
+            out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+            for (int i = 0; i < num_pa_points; i++) {
+                out << YAML::Value << tx_gain_lora[i];
+            }
+            out << YAML::EndSeq;
+        } else if (tx_gain_lora[0] != 0) {
+            out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << tx_gain_lora[0];
+        }
+
         out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
@@ -508,6 +522,8 @@ extern struct portduino_config_struct {
         out << YAML::Key << "General" << YAML::Value << YAML::BeginMap;
         if (config_directory != "")
             out << YAML::Key << "ConfigDirectory" << YAML::Value << config_directory;
+        if (api_port != -1)
+            out << YAML::Key << "TCPPort" << YAML::Value << api_port;
         if (mac_address_explicit)
             out << YAML::Key << "MACAddress" << YAML::Value << mac_address;
         if (mac_address_source != "")
