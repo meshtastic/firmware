@@ -21,6 +21,8 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/BatteryCalibrationModule.h"
+#include "modules/BatteryCalibrationSampler.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
@@ -2440,6 +2442,90 @@ void menuHandler::powerMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::batteryCalibrationMenu()
+{
+
+    static const char *optionsArrayIdle[] = { "Back", "Begin Calibration", "Reset OCV Array" };
+    static const char *optionsArrayActive[] = { "Back", "Stop Calibration", "Reset OCV Array", "Save OCV & End" };
+
+    enum optionsNumbers { Back = 0, Start = 1, Reset = 2, Apply = 3 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Battery Calibration Action";
+    const bool calibrationActive = batteryCalibrationModule && batteryCalibrationModule->isCalibrationActive();
+    bannerOptions.optionsArrayPtr = calibrationActive ? optionsArrayActive : optionsArrayIdle;
+    bannerOptions.optionsCount = calibrationActive ? 4 : 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Start) {
+            if (batteryCalibrationModule && batteryCalibrationModule->isCalibrationActive()) {
+                batteryCalibrationModule->stopCalibration();
+                IF_SCREEN(screen->showSimpleBanner("Calibration stopped.", 2000));
+            } else {
+                menuHandler::menuQueue = menuHandler::battery_calibration_confirm_menu;
+                screen->runNow();
+            }
+        } else if (selected == Reset) {
+            if (batteryCalibrationSampler) {
+                batteryCalibrationSampler->resetSamples();
+            }
+            config.power.OCV_count = 0;
+            for (size_t i = 0; i < NUM_OCV_POINTS; ++i) {
+                config.power.OCV[i] = 0;
+            }
+            if (nodeDB) {
+                nodeDB->saveToDisk(SEGMENT_CONFIG);
+            }
+            IF_SCREEN(screen->showSimpleBanner("OCV array reset.\nRebooting...", 2000));
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            screen->runNow();
+        } else if (selected == Apply) {
+            if (batteryCalibrationModule && batteryCalibrationModule->isCalibrationActive()) {
+                if (batteryCalibrationModule->persistCalibrationOcv()) {
+                    if (nodeDB) {
+                        nodeDB->saveToDisk(SEGMENT_CONFIG);
+                    } else {
+                    }
+                    batteryCalibrationModule->stopCalibration();
+                    IF_SCREEN(screen->showSimpleBanner("OCV saved.\nCalibration ended.", 2000));
+                } else {
+                    IF_SCREEN(screen->showSimpleBanner("OCV not ready yet.", 2000));
+                }
+            } else {
+            }
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+
+}
+
+void menuHandler::batteryCalibrationConfirmMenu()
+{
+    static const char *optionsArray[] = { "Back", "Start Calibration" };
+    enum optionsNumbers { Back = 0, Start = 1 };
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Confirm Battery Calibration\n"
+                            "1) Fully charge battery\n"
+                            "2) Remove charger\n"
+                            "3) Start calibration";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Start) {
+            if (batteryCalibrationModule) {
+                batteryCalibrationModule->startCalibration();
+                IF_SCREEN(screen->showSimpleBanner("Calibration started.\nUse device as normal.\nDo not charge until battery dies.", 5000));
+            } else if (batteryCalibrationSampler) {
+                batteryCalibrationSampler->resetSamples();
+            }
+        } else {
+            menuHandler::menuQueue = menuHandler::battery_calibration_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::keyVerificationInitMenu()
 {
     screen->showNodePicker("Node to Verify", 30000,
@@ -2768,6 +2854,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case power_menu:
         powerMenu();
+        break;
+    case battery_calibration_menu:
+        batteryCalibrationMenu();
+        break;
+    case battery_calibration_confirm_menu:
+        batteryCalibrationConfirmMenu();
         break;
     case FrameToggles:
         FrameToggles_menu();

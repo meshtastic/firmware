@@ -43,6 +43,8 @@ class menuHandler
         bluetooth_toggle_menu,
         screen_options_menu,
         power_menu,
+        battery_calibration_menu,
+        battery_calibration_confirm_menu,
         system_base_menu,
         key_verification_init,
         key_verification_final_prompt,
@@ -105,6 +107,8 @@ class menuHandler
     static void wifiToggleMenu();
     static void screenOptionsMenu();
     static void powerMenu();
+    static void batteryCalibrationMenu();
+    static void batteryCalibrationConfirmMenu();
     static void nodeNameLengthMenu();
     static void FrameToggles_menu();
     static void DisplayUnits_menu();

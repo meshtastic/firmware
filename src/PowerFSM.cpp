@@ -18,6 +18,9 @@
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_BATTERY_CALIBRATION
+#include "modules/BatteryCalibrationModule.h"
+#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -65,6 +68,12 @@ static void sdsEnter()
 static void lowBattSDSEnter()
 {
     LOG_POWERFSM("State: Lower batt SDS");
+// Save OCV array to persistent memory if in battery calibration 
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_BATTERY_CALIBRATION
+    if (batteryCalibrationModule && batteryCalibrationModule->persistCalibrationOcv()) {
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
 }
 extern Power *power;

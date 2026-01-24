@@ -32,6 +32,10 @@
 #if !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
 #include "modules/CannedMessageModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BATTERY_CALIBRATION
+#include "modules/BatteryCalibrationModule.h"
+#include "modules/BatteryCalibrationSampler.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
 #include "modules/DetectionSensorModule.h"
 #endif
@@ -243,6 +247,10 @@ void setupModules()
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
+#endif
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_BATTERY_CALIBRATION
+    new BatteryCalibrationModule();
+    new BatteryCalibrationSampler();
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();

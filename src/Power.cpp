@@ -25,6 +25,10 @@
 #include "power/PowerHAL.h"
 #include "sleep.h"
 
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_BATTERY_CALIBRATION
+#include "modules/BatteryCalibrationModule.h"
+#endif
+
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
@@ -175,6 +179,26 @@ Power *power;
 
 using namespace meshtastic;
 
+// pulls saved OCV array from config 
+namespace
+{
+bool copyOcvFromConfig(uint16_t *dest, size_t len)
+{
+    if (config.power.OCV_count == 0) {
+        return false;
+    }
+    if (config.power.OCV_count != len) {
+        LOG_WARN("Power config OCV array has %u entries, expected %u; using defaults", config.power.OCV_count,
+                 static_cast<unsigned>(len));
+        return false;
+    }
+    for (size_t i = 0; i < len; ++i) {
+        dest[i] = static_cast<uint16_t>(config.power.OCV[i]);
+    }
+    return true;
+}
+} // namespace
+
 // NRF52 has AREF_VOLTAGE defined in architecture.h but
 // make sure it's included. If something is wrong with NRF52
 // definition - compilation will fail on missing definition
@@ -229,10 +253,26 @@ static void battery_adcDisable()
 /**
  * A simple battery level sensor that assumes the battery voltage is attached
  * via a voltage-divider to an analog input
+ * OCV array is pulled from saved config if available
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
   public:
+    void applyOcvConfig(bool reset_read_value = false)
+    {
+        bool ocv_loaded = copyOcvFromConfig(OCV, NUM_OCV_POINTS);
+        LOG_INFO("OCV load from config: %s (first: %u, last: %u)", ocv_loaded ? "true" : "false", OCV[0],
+                 OCV[NUM_OCV_POINTS - 1]);
+        if (!ocv_loaded) {
+            return;
+        }
+        chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+        noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+        if (reset_read_value || !initial_read_done) {
+            last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+        }
+    }
+
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -510,9 +550,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// For heltecs with no battery connected, the measured voltage is 2204, so
     // need to be higher than that, in this case is 2500mV (3000-500)
-    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
-    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
-    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+    uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+    float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+    float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
     // Start value from minimum voltage for the filter to not start from 0
     // that could trigger some events.
     // This value is over-written by the first ADC reading, it the voltage seems
@@ -605,7 +645,18 @@ Power::Power() : OSThread("Power")
     lastheap = memGet.getFreeHeap();
 #endif
 }
-
+// Allows overwriting defaults with values loaded from config independent of boot sequence
+void Power::loadOcvFromConfig()
+{
+    copyOcvFromConfig(OCV, NUM_OCV_POINTS);
+}
+bool Power::reloadOcvFromConfig()
+{
+    bool loaded = copyOcvFromConfig(OCV, NUM_OCV_POINTS);
+    analogLevel.applyOcvConfig(true);
+    LOG_INFO("Power OCV reload %s (first=%u last=%u)", loaded ? "ok" : "failed", OCV[0], OCV[NUM_OCV_POINTS - 1]);
+    return loaded;
+}
 bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
@@ -672,7 +723,7 @@ bool Power::analogInit()
 #ifndef ARCH_ESP32
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #endif
-
+    analogLevel.applyOcvConfig();
     batteryLevel = &analogLevel;
     return true;
 #else
@@ -688,6 +739,7 @@ bool Power::analogInit()
 bool Power::setup()
 {
     bool found = false;
+    analogLevel.applyOcvConfig();
     if (axpChipInit()) {
         found = true;
     } else if (lipoInit()) {
