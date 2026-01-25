@@ -30,4 +30,7 @@ extern RadioInterface *rIf;
 extern RadioLibHal *RadioLibHAL;
 extern uint32_t rebootAtMsec;
 extern graphics::Screen *screen;
+#if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+extern SPIClass SPI1;
+#endif
 #endif
