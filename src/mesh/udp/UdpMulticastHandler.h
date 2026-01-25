@@ -39,6 +39,12 @@ class UdpMulticastHandler final
         }
     }
 
+    void stop()
+    {
+        LOG_DEBUG("Stopping UDP Multicast");
+        udp.close();
+    }
+
     void onReceive(AsyncUDPPacket packet)
     {
         size_t packetLength = packet.length();
