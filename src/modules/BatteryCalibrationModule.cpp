@@ -277,28 +277,6 @@ void BatteryCalibrationModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiStat
         display->drawString(durationX, lineY, durationStr);
     }
 
-    const int ocvLineY = graphics::getTextPositions(display)[2];
-    char ocvStr[96] = {0};
-    if (power) {
-        const uint16_t *ocvValues = power->getOcvArray();
-        if (calibrationActive && calibrationOcvValid) {
-            ocvValues = calibrationOcv;
-        }
-        int offset = snprintf(ocvStr, sizeof(ocvStr), "OCV:");
-        for (size_t i = 0; i < NUM_OCV_POINTS && offset > 0 && static_cast<size_t>(offset) < sizeof(ocvStr); ++i) {
-            const int written =
-                snprintf(ocvStr + offset, sizeof(ocvStr) - static_cast<size_t>(offset), "%s%u",
-                         i == 0 ? "" : ",", ocvValues[i]);
-            if (written <= 0) {
-                break;
-            }
-            offset += written;
-        }
-    } else {
-        snprintf(ocvStr, sizeof(ocvStr), "OCV:N/A");
-    }
-    display->drawString(x, ocvLineY, ocvStr);
-
     int16_t graphX = 0;
     int16_t graphY = 0;
     int16_t graphW = 0;
