@@ -10,6 +10,7 @@
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
+#include "power/PowerHAL.h"
 
 #include "FSCommon.h"
 #include "Led.h"
@@ -104,6 +105,43 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include <iostream>
 #include <string>
 #endif
+
+#ifdef ARCH_ESP32
+#ifdef DEBUG_PARTITION_TABLE
+#include "esp_partition.h"
+
+void printPartitionTable()
+{
+    printf("\n--- Partition Table ---\n");
+    // Print Column Headers
+    printf("| %-16s | %-4s | %-7s | %-10s | %-10s |\n", "Label", "Type", "Subtype", "Offset", "Size");
+    printf("|------------------|------|---------|------------|------------|\n");
+
+    // Create an iterator to find ALL partitions (Type ANY, Subtype ANY)
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+
+    // Loop through the iterator
+    if (it != NULL) {
+        do {
+            const esp_partition_t *part = esp_partition_get(it);
+
+            // Print details: Label, Type (Hex), Subtype (Hex), Offset (Hex), Size (Hex)
+            printf("| %-16s | 0x%02x | 0x%02x    | 0x%08x | 0x%08x |\n", part->label, part->type, part->subtype, part->address,
+                   part->size);
+
+            // Move to next partition
+            it = esp_partition_next(it);
+        } while (it != NULL);
+
+        // Release the iterator memory
+        esp_partition_iterator_release(it);
+    } else {
+        printf("No partitions found.\n");
+    }
+    printf("-----------------------\n");
+}
+#endif // DEBUG_PARTITION_TABLE
+#endif // ARCH_ESP32
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "input/ButtonThread.h"
@@ -295,6 +333,43 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void lateInitVariant() __attribute__((weak));
 void lateInitVariant() {}
 
+// NRF52 (and probably other platforms) can report when system is in power failure mode
+// (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
+// For example NRF52 will prevent any flash writes in that case automatically
+// (but it causes issues we need to handle).
+// This detection is independent from whatever ADC or dividers used in Meshtastic
+// boards and is internal to chip.
+
+// we use powerHAL layer to get this info and delay booting until power level is safe
+
+// wait until power level is safe to continue booting (to avoid bootloops)
+// blink user led in 3 flashes sequence to indicate what is happening
+void waitUntilPowerLevelSafe()
+{
+
+#ifdef LED_PIN
+    pinMode(LED_PIN, OUTPUT);
+#endif
+
+    while (powerHAL_isPowerLevelSafe() == false) {
+
+#ifdef LED_PIN
+
+        // 3x: blink for 300 ms, pause for 300 ms
+
+        for (int i = 0; i < 3; i++) {
+            digitalWrite(LED_PIN, LED_STATE_ON);
+            delay(300);
+            digitalWrite(LED_PIN, LED_STATE_OFF);
+            delay(300);
+        }
+#endif
+
+        // sleep for 2s
+        delay(2000);
+    }
+}
+
 /**
  * Print info as a structured log message (for automated log processing)
  */
@@ -305,6 +380,14 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+
+    // initialize power HAL layer as early as possible
+    powerHAL_init();
+
+    // prevent booting if device is in power failure mode
+    // boot sequence will follow when battery level raises to safe mode
+    waitUntilPowerLevelSafe();
+
 #if defined(R1_NEO)
     pinMode(DCDC_EN_HOLD, OUTPUT);
     digitalWrite(DCDC_EN_HOLD, HIGH);
@@ -648,7 +731,11 @@ void setup()
         sensor_detected = true;
 #endif
     }
-
+#ifdef ARCH_ESP32
+#ifdef DEBUG_PARTITION_TABLE
+    printPartitionTable();
+#endif
+#endif // ARCH_ESP32
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
