@@ -78,10 +78,6 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "mqtt/MQTT.h"
 #endif
 
-#ifdef ARCH_STM32WL
-#include "STM32WLE5JCInterface.h"
-#endif
-
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
 #include "mesh/raspihttp/PiWebServer.h"

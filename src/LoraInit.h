@@ -21,8 +21,13 @@
 #include "platform/portduino/USBHal.h"
 #endif
 
+#ifdef ARCH_STM32WL
+#include "STM32WLE5JCInterface.h"
+#endif
+
 bool initLoRa();
 extern RadioInterface *rIf;
 extern RadioLibHal *RadioLibHAL;
 extern uint32_t rebootAtMsec;
+extern graphics::Screen *screen;
 #endif
