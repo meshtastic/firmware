@@ -24,4 +24,5 @@
 bool initLoRa();
 extern RadioInterface *rIf;
 extern RadioLibHal *RadioLibHAL;
+extern uint32_t rebootAtMsec;
 #endif
