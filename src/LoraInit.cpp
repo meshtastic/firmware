@@ -50,6 +50,10 @@ bool initLoRa()
     if (portduino_config.lora_spi_dev == "ch341") {
         RadioLibHAL = ch341Hal;
     } else {
+        if (RadioLibHAL != nullptr) {
+            delete RadioLibHAL;
+            RadioLibHAL = nullptr;
+        }
         RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
     }
     rIf =
@@ -254,7 +258,7 @@ bool initLoRa()
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
 
-        if (!rIf->reconfigure()) {
+        if (rIf && !rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
@@ -262,4 +266,5 @@ bool initLoRa()
             rebootAtMsec = millis() + 5000;
         }
     }
+    return rIf != nullptr;
 }
