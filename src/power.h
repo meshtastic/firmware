@@ -103,7 +103,7 @@ class Power : private concurrency::OSThread
 
     void powerCommandsCheck();
     void readPowerStatus();
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     void handleWifiPowerManagement();
 #endif
     virtual bool setup();

@@ -30,7 +30,7 @@
 #include "input/LinuxInputImpl.h"
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -54,7 +54,7 @@
 #endif
 
 // WiFi power management state
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 static uint32_t wifiPowerLossTimerStart = 0;
 static bool wifiPowerLossTimerActive = false;
 static bool wifiWasDisabledByPowerLoss = false;
@@ -967,7 +967,7 @@ void Power::readPowerStatus()
     }
 }
 
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 /**
  * Handle automatic WiFi enable/disable based on power source.
  * When wifi_on_external_power_only is enabled:
@@ -1022,13 +1022,13 @@ void Power::handleWifiPowerManagement()
         }
     }
 }
-#endif // HAS_WIFI
+#endif // HAS_WIFI && !defined(ARCH_PORTDUINO)
 
 int32_t Power::runOnce()
 {
     readPowerStatus();
 
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     handleWifiPowerManagement();
 #endif
 
