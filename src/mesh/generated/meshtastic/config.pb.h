@@ -469,6 +469,14 @@ typedef struct _meshtastic_Config_NetworkConfig {
     uint32_t enabled_protocols;
     /* Enable/Disable ipv6 support */
     bool ipv6_enabled;
+    /* Only enable WiFi when connected to external power (USB).
+     WiFi will be automatically disabled when running on battery
+     after wifi_power_loss_timeout_secs delay. */
+    bool wifi_on_external_power_only;
+    /* Delay in seconds before disabling WiFi after external power is lost.
+     This allows for brief power interruptions without toggling WiFi.
+     Default: 30 seconds. Set to 0 for immediate disable. */
+    uint32_t wifi_power_loss_timeout_secs;
 } meshtastic_Config_NetworkConfig;
 
 /* Display Config */
@@ -730,7 +738,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
+#define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
@@ -741,7 +749,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
+#define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
@@ -798,6 +806,8 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_rsyslog_server_tag 9
 #define meshtastic_Config_NetworkConfig_enabled_protocols_tag 10
 #define meshtastic_Config_NetworkConfig_ipv6_enabled_tag 11
+#define meshtastic_Config_NetworkConfig_wifi_on_external_power_only_tag 12
+#define meshtastic_Config_NetworkConfig_wifi_power_loss_timeout_secs_tag 13
 #define meshtastic_Config_DisplayConfig_screen_on_secs_tag 1
 #define meshtastic_Config_DisplayConfig_gps_format_tag 2
 #define meshtastic_Config_DisplayConfig_auto_screen_carousel_secs_tag 3
@@ -1038,7 +1048,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_DisplayConfig_size     34
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
-#define meshtastic_Config_NetworkConfig_size     204
+#define meshtastic_Config_NetworkConfig_size     212
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
 #define meshtastic_Config_SecurityConfig_size    178
