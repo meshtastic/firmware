@@ -61,11 +61,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
     case 'p':
-        if (sscanf(arg, "%d", &TCPPort) < 1)
+        if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
-        else
+        } else {
             checkConfigPort = false;
-        printf("Using config file %d\n", TCPPort);
+            printf("Using config file %d\n", TCPPort);
+        }
         break;
     case 'c':
         configPath = arg;
@@ -648,6 +649,19 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
+
+            if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
+                YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
+                if (tx_gain_node.IsSequence() && tx_gain_node.size() != 0) {
+                    portduino_config.num_pa_points = min(tx_gain_node.size(), std::size(portduino_config.tx_gain_lora));
+                    for (int i = 0; i < portduino_config.num_pa_points; i++) {
+                        portduino_config.tx_gain_lora[i] = tx_gain_node[i].as<int>();
+                    }
+                } else {
+                    portduino_config.num_pa_points = 1;
+                    portduino_config.tx_gain_lora[0] = tx_gain_node.as<int>(0);
+                }
+            }
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
                 !portduino_config.force_simradio) {
