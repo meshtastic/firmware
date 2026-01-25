@@ -217,7 +217,6 @@ void BatteryCalibrationModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiStat
     graphics::drawCommonHeader(display, x, y, titleStr);
 
     char voltageStr[12] = {0};
-    char percentStr[8] = {0};
     char durationStr[32] = {0};
     const bool hasBattery = powerStatus && powerStatus->getHasBattery();
     const bool calibrating = calibrationActive;
@@ -227,16 +226,12 @@ void BatteryCalibrationModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiStat
         const int batMv = powerStatus->getBatteryVoltageMv(); //just for debug use mV
         //snprintf(voltageStr, sizeof(voltageStr), "%01d.%02dV", batV, batCv);
         snprintf(voltageStr, sizeof(voltageStr), "%04dmV", batMv); //just for debug use mV
-        snprintf(percentStr, sizeof(percentStr), "%3d%%", powerStatus->getBatteryChargePercent());
     } else {
         snprintf(voltageStr, sizeof(voltageStr), "USB");
-        snprintf(percentStr, sizeof(percentStr), "USB");
     }
 
     const int lineY = graphics::getTextPositions(display)[1];
     display->drawString(x, lineY, voltageStr);
-    const int16_t percentX = static_cast<int16_t>(x + SCREEN_WIDTH - display->getStringWidth(percentStr));
-    display->drawString(percentX, lineY, percentStr);
 
     uint32_t displayWindowMs = 0;
     const BatteryCalibrationSampler::BatterySample *samples = nullptr;
@@ -254,29 +249,37 @@ void BatteryCalibrationModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiStat
         displayWindowMs = (lastTimestamp >= firstTimestamp) ? (lastTimestamp - firstTimestamp) : 0;
     }
     const uint32_t hourMs = 60 * 60 * 1000U;
- if (calibrating) {
-        snprintf(durationStr, sizeof(durationStr), "Calibrating...");
-    } else if (displayWindowMs >= hourMs && displayWindowMs % hourMs == 0) {
+    if (displayWindowMs >= hourMs && displayWindowMs % hourMs == 0) {
         snprintf(durationStr, sizeof(durationStr), "%luh", static_cast<unsigned long>(displayWindowMs / hourMs));
     } else {
         snprintf(durationStr, sizeof(durationStr), "%lum", static_cast<unsigned long>(displayWindowMs / 60000U));
     }
+
     const int16_t leftWidth = display->getStringWidth(voltageStr);
-    const int16_t rightWidth = display->getStringWidth(percentStr);
     const int16_t durationWidth = display->getStringWidth(durationStr);
-    const int16_t midStart = static_cast<int16_t>(x + leftWidth);
-    const int16_t midWidth = static_cast<int16_t>(SCREEN_WIDTH - leftWidth - rightWidth);
-    int16_t durationX = static_cast<int16_t>(midStart + (midWidth - durationWidth) / 2);
-    if (durationX < midStart) {
-        durationX = midStart;
-    }
-    if (durationX + durationWidth > percentX) {
-        durationX = static_cast<int16_t>(percentX - durationWidth);
-    }
-    if (durationX >= x && durationX + durationWidth <= x + SCREEN_WIDTH) {
+    const int16_t durationX = static_cast<int16_t>(x + SCREEN_WIDTH - durationWidth);
+    if (durationX >= x + leftWidth) {
         display->drawString(durationX, lineY, durationStr);
     }
 
+    if (calibrating) {
+        const char *calibratingLabel = "Calibrating...";
+        const int16_t rightWidth = durationWidth;
+        const int16_t labelWidth = display->getStringWidth(calibratingLabel);
+        const int16_t midStart = static_cast<int16_t>(x + leftWidth);
+        const int16_t midWidth = static_cast<int16_t>(SCREEN_WIDTH - leftWidth - rightWidth);
+        int16_t labelX = static_cast<int16_t>(midStart + (midWidth - labelWidth) / 2);
+        if (labelX < midStart) {
+            labelX = midStart;
+        }
+        if (labelX + labelWidth > durationX) {
+            labelX = static_cast<int16_t>(durationX - labelWidth);
+        }
+        if (labelX >= x && labelX + labelWidth <= x + SCREEN_WIDTH) {
+            display->drawString(labelX, lineY, calibratingLabel);
+        }
+    }
+    
     int16_t graphX = 0;
     int16_t graphY = 0;
     int16_t graphW = 0;
