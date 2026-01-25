@@ -18,7 +18,7 @@
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
-
+#include "mesh/RadioInterface.h"
 extern RadioInterface *rIf;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
