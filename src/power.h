@@ -103,6 +103,9 @@ class Power : private concurrency::OSThread
 
     void powerCommandsCheck();
     void readPowerStatus();
+#if HAS_WIFI
+    void handleWifiPowerManagement();
+#endif
     virtual bool setup();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }

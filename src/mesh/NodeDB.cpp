@@ -743,6 +743,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.network.ipv6_enabled = default_network_ipv6_enabled;
 #endif
 
+    // WiFi power management defaults
+    config.network.wifi_on_external_power_only = false;
+    config.network.wifi_power_loss_timeout_secs = 30;
+
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif

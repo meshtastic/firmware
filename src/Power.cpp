@@ -30,6 +30,10 @@
 #include "input/LinuxInputImpl.h"
 #endif
 
+#if HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
+#endif
+
 // Working USB detection for powered/charging states on the RAK platform
 #ifdef NRF_APM
 #include "nrfx_power.h"
@@ -47,6 +51,13 @@
 #define ETH ETH2
 #endif // HAS_ETHERNET
 
+#endif
+
+// WiFi power management state
+#if HAS_WIFI
+static uint32_t wifiPowerLossTimerStart = 0;
+static bool wifiPowerLossTimerActive = false;
+static bool wifiWasDisabledByPowerLoss = false;
 #endif
 
 #ifndef DELAY_FOREVER
@@ -956,9 +967,70 @@ void Power::readPowerStatus()
     }
 }
 
+#if HAS_WIFI
+/**
+ * Handle automatic WiFi enable/disable based on power source.
+ * When wifi_on_external_power_only is enabled:
+ * - WiFi is enabled when external power (USB) is connected
+ * - WiFi is disabled after timeout when running on battery
+ */
+void Power::handleWifiPowerManagement()
+{
+    // Feature disabled - nothing to do
+    if (!config.network.wifi_on_external_power_only) {
+        return;
+    }
+
+    // WiFi not configured - nothing to do
+    if (!config.network.wifi_enabled || !config.network.wifi_ssid[0]) {
+        return;
+    }
+
+    bool hasExternalPower = powerStatus && powerStatus->getHasUSB();
+    uint32_t timeoutSecs = config.network.wifi_power_loss_timeout_secs;
+    if (timeoutSecs == 0) {
+        timeoutSecs = 30; // Default 30 seconds if not configured
+    }
+
+    if (!hasExternalPower && isWifiAvailable()) {
+        // Running on battery with WiFi active - start/check timer
+        if (!wifiPowerLossTimerActive) {
+            LOG_INFO("External power lost, WiFi will disable in %u seconds", timeoutSecs);
+            wifiPowerLossTimerStart = millis();
+            wifiPowerLossTimerActive = true;
+        }
+
+        // Check if timeout expired
+        if (millis() - wifiPowerLossTimerStart >= timeoutSecs * 1000) {
+            LOG_INFO("Power loss timeout expired, disabling WiFi");
+            deinitWifi();
+            wifiPowerLossTimerActive = false;
+            wifiWasDisabledByPowerLoss = true;
+        }
+    } else if (hasExternalPower) {
+        // External power connected
+        if (wifiPowerLossTimerActive) {
+            LOG_INFO("External power restored, canceling WiFi disable timer");
+            wifiPowerLossTimerActive = false;
+        }
+
+        // Re-enable WiFi if it was disabled by power loss
+        if (wifiWasDisabledByPowerLoss && !isWifiAvailable()) {
+            LOG_INFO("External power restored, re-enabling WiFi");
+            initWifi();
+            wifiWasDisabledByPowerLoss = false;
+        }
+    }
+}
+#endif // HAS_WIFI
+
 int32_t Power::runOnce()
 {
     readPowerStatus();
+
+#if HAS_WIFI
+    handleWifiPowerManagement();
+#endif
 
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from
