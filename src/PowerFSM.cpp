@@ -19,6 +19,8 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+extern RadioInterface *rIf;
+
 #if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -59,12 +61,18 @@ static void sdsEnter()
 {
     LOG_POWERFSM("State: SDS");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
+    if (rIf) {
+        rIf->sleep();
+    }
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, false);
 }
 
 static void lowBattSDSEnter()
 {
     LOG_POWERFSM("State: Lower batt SDS");
+    if (rIf) {
+        rIf->sleep();
+    }
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
 }
 extern Power *power;
