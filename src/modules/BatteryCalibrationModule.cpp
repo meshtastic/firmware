@@ -108,12 +108,14 @@ bool BatteryCalibrationModule::computeOcvFromSamples(uint16_t *ocvOut, size_t oc
         const BatteryCalibrationSampler::BatterySample *prevSample = &sampleAt(0);
         const BatteryCalibrationSampler::BatterySample *nextSample = nullptr;
         for (uint16_t j = 1; j < sampleCount; ++j) {
-            const BatteryCalibrationSampler::BatterySample &candidate = sampleAt(j);
-            if (candidate.timestampMs >= targetTimestamp) {
-                nextSample = &candidate;
+            const uint16_t sampleIndex =
+                static_cast<uint16_t>((sampleStart + j) % BatteryCalibrationSampler::kMaxSamples);
+            const BatteryCalibrationSampler::BatterySample *candidate = &samples[sampleIndex];
+            if (candidate->timestampMs >= targetTimestamp) {
+                nextSample = candidate;
                 break;
             }
-            prevSample = &candidate;
+            prevSample = candidate;
         }
         if (!nextSample) {
             ocvOut[i] = sampleAt(static_cast<uint16_t>(sampleCount - 1)).voltageMv;
