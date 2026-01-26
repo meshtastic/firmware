@@ -7,6 +7,9 @@
 #include "airtime.h"
 #include "error.h"
 
+// Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
+typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
+
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
 #define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
@@ -114,6 +117,12 @@ class RadioInterface
     RadioInterface();
 
     virtual ~RadioInterface() {}
+
+    /**
+     * Coerce LoRa config fields (bandwidth/spread_factor) derived from presets.
+     * This is used during early bootstrapping so UIs that display these fields directly remain consistent.
+     */
+    static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig);
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
