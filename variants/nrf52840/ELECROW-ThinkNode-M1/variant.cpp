@@ -46,24 +46,17 @@ void initVariant()
 void variant_shutdown()
 {
     for (int pin = 0; pin < 48; pin++) {
-        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
-            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+        if (pin == SX126X_BUSY || pin == PIN_SPI_SCK || pin == SX126X_DIO1 || pin == PIN_SPI_MOSI || pin == PIN_SPI_MISO ||
+            pin == SX126X_CS || pin == SX126X_RESET || pin == PIN_NFC1 || pin == PIN_NFC2 || pin == PIN_BUTTON1 ||
+            pin == PIN_BUTTON2) {
             continue;
         }
         pinMode(pin, OUTPUT);
-    }
-    for (int pin = 0; pin < 48; pin++) {
-        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
-            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
-            continue;
-        }
         digitalWrite(pin, LOW);
-    }
-    for (int pin = 0; pin < 48; pin++) {
-        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
-            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
-            continue;
+        if (pin >= 32) {
+            NRF_P1->DIRCLR = (1 << (pin - 32));
+        } else {
+            NRF_GPIO->DIRCLR = (1 << pin);
         }
-        NRF_GPIO->DIRCLR = (1 << pin);
     }
 }
