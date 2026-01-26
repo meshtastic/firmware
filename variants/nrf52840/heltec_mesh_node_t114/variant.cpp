@@ -36,3 +36,10 @@ void initVariant()
     pinMode(PIN_LED1, OUTPUT);
     ledOff(PIN_LED1);
 }
+
+void variant_shutdown()
+{
+    nrf_gpio_cfg_default(PIN_GPS_PPS);
+    detachInterrupt(PIN_GPS_PPS);
+    detachInterrupt(PIN_BUTTON1);
+}

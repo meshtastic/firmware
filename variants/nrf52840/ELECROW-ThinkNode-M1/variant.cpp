@@ -42,3 +42,28 @@ void initVariant()
     pinMode(PIN_LED3, OUTPUT);
     ledOff(PIN_LED3);
 }
+
+void variant_shutdown()
+{
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        digitalWrite(pin, LOW);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        NRF_GPIO->DIRCLR = (1 << pin);
+    }
+}

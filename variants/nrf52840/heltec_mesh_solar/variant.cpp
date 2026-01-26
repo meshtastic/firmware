@@ -38,3 +38,10 @@ void initVariant()
     digitalWrite(PIN_SCREEN_VDD_CTL, LOW); // Start with power on
 #endif
 }
+
+void variant_shutdown()
+{
+    nrf_gpio_cfg_default(PIN_GPS_PPS);
+    detachInterrupt(PIN_GPS_PPS);
+    detachInterrupt(PIN_BUTTON1);
+}
