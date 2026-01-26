@@ -398,14 +398,6 @@ void setup()
 #endif
 #endif
 
-#if defined(T_DECK_PRO)
-
-#elif defined(T_LORA_PAGER)
-
-#elif defined(HACKADAY_COMMUNICATOR)
-    pinMode(KB_INT, INPUT);
-#endif
-
     concurrency::hasBeenSetup = true;
 
     meshtastic_Config_DisplayConfig_OledType screen_model =
