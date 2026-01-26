@@ -2,6 +2,9 @@
 #if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
+#if defined(USE_U8G2_EINK_TEXT)
+#include "modules/ChineseIme.h"
+#endif
 
 // ============================
 //        Enums & Defines
@@ -93,6 +96,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     cannedMessageModuleRunState getRunState() const { return runState; }
 #endif
 
+#if defined(USE_U8G2_EINK_TEXT)
+    bool isImeActiveWithCandidates() const;
+#endif
+
     // === Packet Interest Filter ===
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override
     {
@@ -139,6 +146,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void installDefaultCannedMessageModuleConfig();
 
   private:
+#if defined(USE_U8G2_EINK_TEXT)
+    enum class ImeMode { CN, EN, NUM };
+#endif
     // === Input Observers ===
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =
         CallbackObserver<CannedMessageModule, const InputEvent *>(this, &CannedMessageModule::handleInputEvent);
@@ -182,6 +192,25 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
 
+#if defined(USE_U8G2_EINK_TEXT)
+    ChineseIme ime;
+    ImeMode imeMode = ImeMode::EN;
+    int imePage = 0;
+    int imePageSize = 0;
+    static constexpr int kImeMaxCandidates = 18;
+    int imeCandidateHitCount = 0;
+    int imeCandidateStartX[kImeMaxCandidates];
+    int imeCandidateEndX[kImeMaxCandidates];
+    int imeCandidateIndexMap[kImeMaxCandidates];
+    int imeSelectedOffset = 0;
+    int imeArrowLeftX0 = 0;
+    int imeArrowLeftX1 = 0;
+    int imeArrowRightX0 = 0;
+    int imeArrowRightX1 = 0;
+    int imeBarY = 0;
+    int imeBarHeight = 0;
+#endif
+
 #if defined(USE_VIRTUAL_KEYBOARD)
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
@@ -194,7 +223,14 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
-
+    void insertTextAtCursor(const String &text);
+    void deleteCharBeforeCursor();
+    void moveCursorLeftUtf8();
+    void moveCursorRightUtf8();
+    void resetImeState();
+#if defined(USE_U8G2_EINK_TEXT)
+    void cycleImeMode();
+#endif
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},

@@ -5,6 +5,11 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
+#ifdef USE_U8G2_EINK_TEXT
+#include <Adafruit_GFX.h>
+#include <U8g2_for_Adafruit_GFX.h>
+#endif
+
 #ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
 #include "GxEPD2Multi.h"
 #endif
@@ -66,6 +71,10 @@ class EInkDisplay : public OLEDDisplay
      */
     void setDetected(uint8_t detected);
 
+#ifdef USE_U8G2_EINK_TEXT
+    U8G2_FOR_ADAFRUIT_GFX *getU8g2();
+#endif
+
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
     virtual int getBufferOffset(void) override { return 0; }
@@ -84,6 +93,33 @@ class EInkDisplay : public OLEDDisplay
 #else
     // AdafruitGFX display object (for single display model) - instantiated in connect(), variant specific
     GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
+#endif
+
+#ifdef USE_U8G2_EINK_TEXT
+    U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
+    bool u8g2Ready = false;
+    class EInkBufferGFX : public Adafruit_GFX
+    {
+      public:
+        explicit EInkBufferGFX(OLEDDisplay *display)
+            : Adafruit_GFX(display ? display->getWidth() : 0, display ? display->getHeight() : 0), display(display)
+        {
+        }
+
+        void drawPixel(int16_t x, int16_t y, uint16_t color) override
+        {
+            if (!display)
+                return;
+            if (x < 0 || y < 0 || x >= display->getWidth() || y >= display->getHeight())
+                return;
+            display->setColor(color ? WHITE : BLACK);
+            display->setPixel(x, y);
+        }
+
+      private:
+        OLEDDisplay *display;
+    };
+    EInkBufferGFX *u8g2Target = nullptr;
 #endif
 
     // If display uses HSPI
