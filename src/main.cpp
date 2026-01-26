@@ -2,7 +2,6 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
-#include "LoraInit.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
