@@ -282,7 +282,8 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
             resetBanner();
         } else {
             inEvent.inputEvent = INPUT_BROKER_NONE;
-        }        return;
+        }
+        return;
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
         resetBanner();
@@ -408,7 +409,8 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                 resetBanner();
             } else {
                 inEvent.inputEvent = INPUT_BROKER_NONE;
-            }            return;
+            }
+            return;
         } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                    alertBannerUntil != 0) {
             resetBanner();

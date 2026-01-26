@@ -1,7 +1,7 @@
 #pragma once
 
-#include "SinglePortModule.h"
 #include "BatteryCalibrationSampler.h"
+#include "SinglePortModule.h"
 #include "power.h"
 
 class BatteryCalibrationModule : public SinglePortModule
@@ -34,6 +34,5 @@ class BatteryCalibrationModule : public SinglePortModule
                           const BatteryCalibrationSampler::BatterySample *samples, uint16_t sampleCount, uint16_t sampleStart,
                           uint32_t minMv, uint32_t maxMv);
 #endif
-
 };
 extern BatteryCalibrationModule *batteryCalibrationModule;

@@ -179,7 +179,7 @@ Power *power;
 
 using namespace meshtastic;
 
-// pulls saved OCV array from config 
+// pulls saved OCV array from config
 namespace
 {
 bool copyOcvFromConfig(uint16_t *dest, size_t len)

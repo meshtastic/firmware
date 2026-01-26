@@ -19,10 +19,10 @@
 #include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
 #include "modules/AdminModule.h"
-#include "modules/CannedMessageModule.h"
-#include "modules/ExternalNotificationModule.h"
 #include "modules/BatteryCalibrationModule.h"
 #include "modules/BatteryCalibrationSampler.h"
+#include "modules/CannedMessageModule.h"
+#include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
@@ -2445,8 +2445,8 @@ void menuHandler::powerMenu()
 void menuHandler::batteryCalibrationMenu()
 {
 
-    static const char *optionsArrayIdle[] = { "Back", "Begin Calibration", "Reset OCV Array" };
-    static const char *optionsArrayActive[] = { "Back", "Stop Calibration", "Reset OCV Array", "Save OCV & End" };
+    static const char *optionsArrayIdle[] = {"Back", "Begin Calibration", "Reset OCV Array"};
+    static const char *optionsArrayActive[] = {"Back", "Stop Calibration", "Reset OCV Array", "Save OCV & End"};
 
     enum optionsNumbers { Back = 0, Start = 1, Reset = 2, Apply = 3 };
     BannerOverlayOptions bannerOptions;
@@ -2495,12 +2495,11 @@ void menuHandler::batteryCalibrationMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
-
 }
 
 void menuHandler::batteryCalibrationConfirmMenu()
 {
-    static const char *optionsArray[] = { "Back", "Start Calibration" };
+    static const char *optionsArray[] = {"Back", "Start Calibration"};
     enum optionsNumbers { Back = 0, Start = 1 };
 
     BannerOverlayOptions bannerOptions;
@@ -2514,7 +2513,8 @@ void menuHandler::batteryCalibrationConfirmMenu()
         if (selected == Start) {
             if (batteryCalibrationModule) {
                 batteryCalibrationModule->startCalibration();
-                IF_SCREEN(screen->showSimpleBanner("Calibration started.\nUse device as normal.\nDo not charge until battery dies.", 5000));
+                IF_SCREEN(screen->showSimpleBanner(
+                    "Calibration started.\nUse device as normal.\nDo not charge until battery dies.", 5000));
             } else if (batteryCalibrationSampler) {
                 batteryCalibrationSampler->resetSamples();
             }

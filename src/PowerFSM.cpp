@@ -68,7 +68,7 @@ static void sdsEnter()
 static void lowBattSDSEnter()
 {
     LOG_POWERFSM("State: Lower batt SDS");
-// Save OCV array to persistent memory if in battery calibration 
+// Save OCV array to persistent memory if in battery calibration
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_BATTERY_CALIBRATION
     if (batteryCalibrationModule && batteryCalibrationModule->persistCalibrationOcv()) {
         nodeDB->saveToDisk(SEGMENT_CONFIG);

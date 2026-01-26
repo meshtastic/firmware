@@ -156,7 +156,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
-    NotificationRenderer::bannerGeneration++; // bugfix for external modules 
+    NotificationRenderer::bannerGeneration++; // bugfix for external modules
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, banner_overlay_options.message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
@@ -228,7 +228,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
                            std::function<void(const std::string &)> textCallback)
 {
     LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
-    
+
     NotificationRenderer::bannerGeneration++;
 
     // Start OnScreenKeyboardModule session (non-touch variant)
@@ -1748,8 +1748,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                        this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
-                if (batteryCalibrationModule &&
-                    this->ui->getUiState()->currentFrame < moduleFrames.size() &&
+                if (batteryCalibrationModule && this->ui->getUiState()->currentFrame < moduleFrames.size() &&
                     moduleFrames.at(this->ui->getUiState()->currentFrame) == batteryCalibrationModule) {
                     menuHandler::batteryCalibrationMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {

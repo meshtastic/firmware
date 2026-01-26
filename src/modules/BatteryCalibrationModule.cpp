@@ -1,14 +1,12 @@
 #include "BatteryCalibrationModule.h"
-#include "graphics/SharedUIDisplay.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
 #include "power.h"
 #include <algorithm>
 
-
 BatteryCalibrationModule *batteryCalibrationModule;
 
-BatteryCalibrationModule::BatteryCalibrationModule()
-    : SinglePortModule("battery-calibration", meshtastic_PortNum_PRIVATE_APP)
+BatteryCalibrationModule::BatteryCalibrationModule() : SinglePortModule("battery-calibration", meshtastic_PortNum_PRIVATE_APP)
 {
     batteryCalibrationModule = this;
 }
@@ -81,8 +79,7 @@ bool BatteryCalibrationModule::computeOcvFromSamples(uint16_t *ocvOut, size_t oc
     }
 
     auto sampleAt = [&](uint16_t logicalIndex) -> const BatteryCalibrationSampler::BatterySample & {
-        const uint16_t sampleIndex =
-            static_cast<uint16_t>((sampleStart + logicalIndex) % BatteryCalibrationSampler::kMaxSamples);
+        const uint16_t sampleIndex = static_cast<uint16_t>((sampleStart + logicalIndex) % BatteryCalibrationSampler::kMaxSamples);
         return samples[sampleIndex];
     };
 
@@ -108,8 +105,7 @@ bool BatteryCalibrationModule::computeOcvFromSamples(uint16_t *ocvOut, size_t oc
         const BatteryCalibrationSampler::BatterySample *prevSample = &sampleAt(0);
         const BatteryCalibrationSampler::BatterySample *nextSample = nullptr;
         for (uint16_t j = 1; j < sampleCount; ++j) {
-            const uint16_t sampleIndex =
-                static_cast<uint16_t>((sampleStart + j) % BatteryCalibrationSampler::kMaxSamples);
+            const uint16_t sampleIndex = static_cast<uint16_t>((sampleStart + j) % BatteryCalibrationSampler::kMaxSamples);
             const BatteryCalibrationSampler::BatterySample *candidate = &samples[sampleIndex];
             if (candidate->timestampMs >= targetTimestamp) {
                 nextSample = candidate;
@@ -127,9 +123,8 @@ bool BatteryCalibrationModule::computeOcvFromSamples(uint16_t *ocvOut, size_t oc
             continue;
         }
 
-        const float timeFraction =
-            static_cast<float>(targetTimestamp - prevSample->timestampMs) /
-            static_cast<float>(nextSample->timestampMs - prevSample->timestampMs);
+        const float timeFraction = static_cast<float>(targetTimestamp - prevSample->timestampMs) /
+                                   static_cast<float>(nextSample->timestampMs - prevSample->timestampMs);
         const float voltage =
             static_cast<float>(prevSample->voltageMv) +
             timeFraction * (static_cast<float>(nextSample->voltageMv) - static_cast<float>(prevSample->voltageMv));
@@ -160,10 +155,10 @@ void BatteryCalibrationModule::computeGraphBounds(OLEDDisplay *display, int16_t 
     }
 }
 
-void BatteryCalibrationModule::drawBatteryGraph(OLEDDisplay *display, int16_t graphX, int16_t graphY, int16_t graphW, int16_t graphH,
-                                                const BatteryCalibrationSampler::BatterySample *samples, uint16_t sampleCount,
-                                                uint16_t sampleStart, uint32_t minMv, uint32_t maxMv)
-                                                {
+void BatteryCalibrationModule::drawBatteryGraph(OLEDDisplay *display, int16_t graphX, int16_t graphY, int16_t graphW,
+                                                int16_t graphH, const BatteryCalibrationSampler::BatterySample *samples,
+                                                uint16_t sampleCount, uint16_t sampleStart, uint32_t minMv, uint32_t maxMv)
+{
     if (!samples || sampleCount < 2 || graphW <= 1 || graphH <= 1 || maxMv <= minMv) {
         return;
     }
@@ -186,7 +181,8 @@ void BatteryCalibrationModule::drawBatteryGraph(OLEDDisplay *display, int16_t gr
 
     auto voltageToY = [&](uint16_t voltageMv) -> int16_t {
         const uint32_t denom = (rangeMv == 0) ? 1 : rangeMv;
-        const int32_t scaled = static_cast<int32_t>(static_cast<int32_t>(voltageMv) - static_cast<int32_t>(minMv)) * ySpan / denom;
+        const int32_t scaled =
+            static_cast<int32_t>(static_cast<int32_t>(voltageMv) - static_cast<int32_t>(minMv)) * ySpan / denom;
         const int16_t yValue = static_cast<int16_t>(graphY + ySpan - scaled);
         return clampY(yValue);
     };
@@ -223,9 +219,9 @@ void BatteryCalibrationModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiStat
     if (hasBattery) {
         const int batV = powerStatus->getBatteryVoltageMv() / 1000;
         const int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
-        const int batMv = powerStatus->getBatteryVoltageMv(); //just for debug use mV
-        //snprintf(voltageStr, sizeof(voltageStr), "%01d.%02dV", batV, batCv);
-        snprintf(voltageStr, sizeof(voltageStr), "%04dmV", batMv); //just for debug use mV
+        const int batMv = powerStatus->getBatteryVoltageMv(); // just for debug use mV
+        // snprintf(voltageStr, sizeof(voltageStr), "%01d.%02dV", batV, batCv);
+        snprintf(voltageStr, sizeof(voltageStr), "%04dmV", batMv); // just for debug use mV
     } else {
         snprintf(voltageStr, sizeof(voltageStr), "USB");
     }
@@ -279,7 +275,7 @@ void BatteryCalibrationModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiStat
             display->drawString(labelX, lineY, calibratingLabel);
         }
     }
-    
+
     int16_t graphX = 0;
     int16_t graphY = 0;
     int16_t graphW = 0;

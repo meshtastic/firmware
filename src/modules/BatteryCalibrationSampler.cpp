@@ -4,9 +4,9 @@
 
 #if HAS_SCREEN
 
-#include <Arduino.h>
 #include "mesh/NodeDB.h"
 #include "power.h"
+#include <Arduino.h>
 
 BatteryCalibrationSampler *batteryCalibrationSampler;
 
@@ -71,8 +71,7 @@ void BatteryCalibrationSampler::downsampleSamples()
         const uint16_t firstIndex = static_cast<uint16_t>((sampleStart + (2 * i)) % kMaxSamples);
         const uint16_t secondIndex = static_cast<uint16_t>((sampleStart + (2 * i + 1)) % kMaxSamples);
         const uint32_t avgVoltage =
-            (static_cast<uint32_t>(samples[firstIndex].voltageMv) + static_cast<uint32_t>(samples[secondIndex].voltageMv)) /
-            2U;
+            (static_cast<uint32_t>(samples[firstIndex].voltageMv) + static_cast<uint32_t>(samples[secondIndex].voltageMv)) / 2U;
         const uint32_t avgTimestamp = (samples[firstIndex].timestampMs + samples[secondIndex].timestampMs) / 2U;
         samples[i].voltageMv = static_cast<uint16_t>(avgVoltage);
         samples[i].timestampMs = avgTimestamp;
