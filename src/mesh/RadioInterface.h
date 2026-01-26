@@ -7,7 +7,7 @@
 #include "airtime.h"
 #include "error.h"
 
-// Forward decls to avoid pulling generated config headers into this widely-included file.
+// Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
