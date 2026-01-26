@@ -220,6 +220,34 @@ void initRegion()
     myRegion = r;
 }
 
+void RadioInterface::bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig)
+{
+    if (!loraConfig.use_preset) {
+        return;
+    }
+
+    // Find region info to determine whether "wide" LoRa is permitted (2.4 GHz uses wider bandwidth codes).
+    const RegionInfo *r = regions;
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != loraConfig.region; r++)
+        ;
+
+    const bool regionWideLora = r->wideLora;
+
+    float bwKHz = 0;
+    uint8_t sf = 0;
+    uint8_t cr = 0;
+    modemPresetToParams(loraConfig.modem_preset, regionWideLora, bwKHz, sf, cr);
+
+    // If selected preset requests a bandwidth larger than the region span, fall back to LONG_FAST.
+    if (r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && (r->freqEnd - r->freqStart) < (bwKHz / 1000.0f)) {
+        loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        modemPresetToParams(loraConfig.modem_preset, regionWideLora, bwKHz, sf, cr);
+    }
+
+    loraConfig.bandwidth = bwKHzToCode(bwKHz);
+    loraConfig.spread_factor = sf;
+}
+
 /**
  * ## LoRaWAN for North America
 
@@ -474,54 +502,7 @@ void RadioInterface::applyModemConfig()
     bool validConfig = false; // We need to check for a valid configuration
     while (!validConfig) {
         if (loraConfig.use_preset) {
-
-            switch (loraConfig.modem_preset) {
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-                bw = (myRegion->wideLora) ? 1625.0 : 500;
-                cr = 5;
-                sf = 7;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-                bw = (myRegion->wideLora) ? 812.5 : 250;
-                cr = 5;
-                sf = 7;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-                bw = (myRegion->wideLora) ? 812.5 : 250;
-                cr = 5;
-                sf = 8;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-                bw = (myRegion->wideLora) ? 812.5 : 250;
-                cr = 5;
-                sf = 9;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-                bw = (myRegion->wideLora) ? 812.5 : 250;
-                cr = 5;
-                sf = 10;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
-                bw = (myRegion->wideLora) ? 1625.0 : 500;
-                cr = 8;
-                sf = 11;
-                break;
-            default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
-                bw = (myRegion->wideLora) ? 812.5 : 250;
-                cr = 5;
-                sf = 11;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-                bw = (myRegion->wideLora) ? 406.25 : 125;
-                cr = 8;
-                sf = 11;
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-                bw = (myRegion->wideLora) ? 406.25 : 125;
-                cr = 8;
-                sf = 12;
-                break;
-            }
+            modemPresetToParams(loraConfig.modem_preset, myRegion->wideLora, bw, sf, cr);
             if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cr) {
                 cr = loraConfig.coding_rate;
                 LOG_INFO("Using custom Coding Rate %u", cr);
@@ -529,20 +510,7 @@ void RadioInterface::applyModemConfig()
         } else {
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
-            bw = loraConfig.bandwidth;
-
-            if (bw == 31) // This parameter is not an integer
-                bw = 31.25;
-            if (bw == 62) // Fix for 62.5Khz bandwidth
-                bw = 62.5;
-            if (bw == 200)
-                bw = 203.125;
-            if (bw == 400)
-                bw = 406.25;
-            if (bw == 800)
-                bw = 812.5;
-            if (bw == 1600)
-                bw = 1625.0;
+            bw = bwCodeToKHz(loraConfig.bandwidth);
         }
 
         if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
