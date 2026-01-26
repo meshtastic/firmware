@@ -42,3 +42,21 @@ void initVariant()
     pinMode(PIN_LED3, OUTPUT);
     ledOff(PIN_LED3);
 }
+
+void variant_shutdown()
+{
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == SX126X_BUSY || pin == PIN_SPI_SCK || pin == SX126X_DIO1 || pin == PIN_SPI_MOSI || pin == PIN_SPI_MISO ||
+            pin == SX126X_CS || pin == SX126X_RESET || pin == PIN_NFC1 || pin == PIN_NFC2 || pin == PIN_BUTTON1 ||
+            pin == PIN_BUTTON2) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+        if (pin >= 32) {
+            NRF_P1->DIRCLR = (1 << (pin - 32));
+        } else {
+            NRF_GPIO->DIRCLR = (1 << pin);
+        }
+    }
+}
