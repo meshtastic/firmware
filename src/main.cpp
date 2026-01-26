@@ -43,10 +43,6 @@
 #include "MessageStore.h"
 #endif
 
-#ifdef ELECROW_ThinkNode_M5
-PCA9557 io(0x18, &Wire);
-#endif
-
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -312,6 +308,9 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void lateInitVariant() __attribute__((weak));
 void lateInitVariant() {}
 
+void earlyInitVariant() __attribute__((weak));
+void earlyInitVariant() {}
+
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
 // For example NRF52 will prevent any flash writes in that case automatically
@@ -367,25 +366,12 @@ void setup()
     // boot sequence will follow when battery level raises to safe mode
     waitUntilPowerLevelSafe();
 
-    // TODO remove all device-specific setup code to variant.cpp
-#if defined(R1_NEO)
-    pinMode(DCDC_EN_HOLD, OUTPUT);
-    digitalWrite(DCDC_EN_HOLD, HIGH);
-    pinMode(NRF_ON, OUTPUT);
-    digitalWrite(NRF_ON, HIGH);
-#endif
+    // Defined in variant.cpp for early init code
+    earlyInitVariant();
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-#endif
-
-#if defined(ELECROW_ThinkNode_M5)
-    Wire.begin(48, 47);
-    io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
-    io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
-    io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
-    // io.pinMode(C2_PIN, OUTPUT);
 #endif
 
 #ifdef LED_POWER
@@ -412,58 +398,10 @@ void setup()
 #endif
 #endif
 
-#if defined(T_DECK)
-    // GPIO10 manages all peripheral power supplies
-    // Turn on peripheral power immediately after MUC starts.
-    // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-    // e.g. when detecting the SD card
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    delay(100);
-#elif defined(T_DECK_PRO)
-    pinMode(LORA_EN, OUTPUT);
-    digitalWrite(LORA_EN, HIGH);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(PIN_EINK_CS, OUTPUT);
-    digitalWrite(PIN_EINK_CS, HIGH);
+#if defined(T_DECK_PRO)
+
 #elif defined(T_LORA_PAGER)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    pinMode(KB_INT, INPUT_PULLUP);
-    // io expander
-    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
-    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
-    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
-    io.pinMode(EXPANDS_KB_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.pinMode(EXPANDS_SD_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
-    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+
 #elif defined(HACKADAY_COMMUNICATOR)
     pinMode(KB_INT, INPUT);
 #endif

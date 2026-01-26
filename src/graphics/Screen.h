@@ -103,6 +103,11 @@ class Screen
 #include <string>
 #include <vector>
 
+#ifdef ELECROW_ThinkNode_M5
+#include <PCA9557.h>
+extern PCA9557 io;
+#endif
+
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
 #define BRIGHTNESS_DEFAULT 150
