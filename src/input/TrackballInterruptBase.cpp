@@ -1,5 +1,7 @@
 #include "TrackballInterruptBase.h"
+#include "Throttle.h"
 #include "configuration.h"
+
 extern bool osk_found;
 
 TrackballInterruptBase::TrackballInterruptBase(const char *name) : concurrency::OSThread(name), _originName(name) {}
@@ -56,7 +58,7 @@ int32_t TrackballInterruptBase::runOnce()
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
 #if TB_THRESHOLD
-    if (lastInterruptTime && lastInterruptTime < millis() - 1000) {
+    if (lastInterruptTime && !Throttle::isWithinTimespanMs(lastInterruptTime, 1000)) {
         left_counter = 0;
         right_counter = 0;
         up_counter = 0;
@@ -162,12 +164,12 @@ int32_t TrackballInterruptBase::runOnce()
         e.inputEvent = this->_eventDown;
     } else if (left_counter >= TB_THRESHOLD) {
 #ifdef INPUT_DEBUG
-        LOG_DEBUG("Trackball event LEFT, %u", millis());
+        LOG_DEBUG("Trackball event LEFT %u", millis());
 #endif
         e.inputEvent = this->_eventLeft;
     } else if (right_counter >= TB_THRESHOLD) {
 #ifdef INPUT_DEBUG
-        LOG_DEBUG("Trackball event RIGHT, %u", millis());
+        LOG_DEBUG("Trackball event RIGHT %u", millis());
 #endif
         e.inputEvent = this->_eventRight;
     }
@@ -222,14 +224,14 @@ int32_t TrackballInterruptBase::runOnce()
 
 void TrackballInterruptBase::intPressHandler()
 {
-    if (TB_THRESHOLD || lastInterruptTime < millis() - 10)
+    if (!Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_PRESSED;
     lastInterruptTime = millis();
 }
 
 void TrackballInterruptBase::intDownHandler()
 {
-    if (TB_THRESHOLD || lastInterruptTime < millis() - 10)
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_DOWN;
     lastInterruptTime = millis();
 
@@ -240,7 +242,7 @@ void TrackballInterruptBase::intDownHandler()
 
 void TrackballInterruptBase::intUpHandler()
 {
-    if (TB_THRESHOLD || lastInterruptTime < millis() - 10)
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_UP;
     lastInterruptTime = millis();
 
@@ -251,7 +253,7 @@ void TrackballInterruptBase::intUpHandler()
 
 void TrackballInterruptBase::intLeftHandler()
 {
-    if (TB_THRESHOLD || lastInterruptTime < millis() - 10)
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_LEFT;
     lastInterruptTime = millis();
 #if TB_THRESHOLD
@@ -261,7 +263,7 @@ void TrackballInterruptBase::intLeftHandler()
 
 void TrackballInterruptBase::intRightHandler()
 {
-    if (TB_THRESHOLD || lastInterruptTime < millis() - 10)
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_RIGHT;
     lastInterruptTime = millis();
 #if TB_THRESHOLD
