@@ -69,12 +69,12 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     input_broker_event _eventPressedLong = INPUT_BROKER_NONE;
     const char *_originName;
     TrackballInterruptBaseActionType lastEvent = TB_ACTION_NONE;
-    uint32_t lastInterruptTime = 0;
+    volatile uint32_t lastInterruptTime = 0;
 
 #if TB_THRESHOLD
-    uint8_t left_counter = 0;
-    uint8_t right_counter = 0;
-    uint8_t up_counter = 0;
-    uint8_t down_counter = 0;
+    volatile uint8_t left_counter = 0;
+    volatile uint8_t right_counter = 0;
+    volatile uint8_t up_counter = 0;
+    volatile uint8_t down_counter = 0;
 #endif
 };
