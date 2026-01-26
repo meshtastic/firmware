@@ -61,11 +61,7 @@ int32_t TrackballInterruptBase::runOnce()
         uint32_t pressDuration = millis() - pressStartTime;
         bool buttonStillPressed = false;
 
-#if defined(T_DECK)
-        buttonStillPressed = (this->action == TB_ACTION_PRESSED);
-#else
         buttonStillPressed = !digitalRead(_pinPress);
-#endif
 
         if (!buttonStillPressed) {
             // Button released
@@ -135,7 +131,7 @@ int32_t TrackballInterruptBase::runOnce()
     }
 
 #if defined(T_DECK) // T-deck gets a super-simple debounce on trackball
-    if (this->action == TB_ACTION_PRESSED && !pressDetected) {
+    if (this->action == TB_ACTION_PRESSED && (!pressDetected || pressStartTime == 0)) {
         // Start long press detection
         pressDetected = true;
         pressStartTime = millis();
