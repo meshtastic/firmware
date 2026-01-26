@@ -29,6 +29,7 @@
 #include "platform/portduino/USBHal.h"
 
 portduino_config_struct portduino_config;
+portduino_status_struct portduino_status;
 std::ofstream traceFile;
 std::ofstream JSONFile;
 Ch341Hal *ch341Hal = nullptr;
@@ -400,6 +401,10 @@ void portduinoSetup()
                 if (found_hat) {
                     product_config =
                         cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
+                    if (strncmp(hat_vendor, "RAK", 14) == 0 && strncmp(autoconf_product, "6421 Pi Hat", 14) == 0) {
+                        std::cout << "autoconf: Setting hardwareModel to RAK6421" << std::endl;
+                        portduino_status.hardwareModel = meshtastic_HardwareModel_RAK6421;
+                    }
                 } else if (found_ch341) {
                     product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
                     // look for more data after the null terminator
@@ -408,6 +413,10 @@ void portduinoSetup()
                         memcpy(portduino_config.device_id, autoconf_product + len + 1, 16);
                         if (!memfll(portduino_config.device_id, '\0', 16) && !memfll(portduino_config.device_id, 0xff, 16)) {
                             portduino_config.has_device_id = true;
+                            if (strncmp(autoconf_product, "MESHSTICK 1262", 14) == 0) {
+                                std::cout << "autoconf: Setting hardwareModel to Meshstick 1262" << std::endl;
+                                portduino_status.hardwareModel = meshtastic_HardwareModel_MESHSTICK_1262;
+                            }
                         }
                     }
                 }

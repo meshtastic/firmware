@@ -1401,13 +1401,46 @@ void loop()
     if (inputBroker)
         inputBroker->processInputEventQueue();
 #endif
-#if ARCH_PORTDUINO && HAS_TFT
+#if ARCH_PORTDUINO
+    if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
+        ch341Hal->checkError();
+    }
+    if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
+        LOG_ERROR("LoRa in error detected, attempting to recover");
+        if (portduino_config.lora_spi_dev == "ch341") {
+            if (ch341Hal != nullptr) {
+                delete ch341Hal;
+                ch341Hal = nullptr;
+                sleep(3);
+            }
+            try {
+                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                        portduino_config.lora_usb_pid);
+            } catch (std::exception &e) {
+                std::cerr << e.what() << std::endl;
+                std::cerr << "Could not initialize CH341 device!" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        if (initLoRa()) {
+            router->addInterface(rIf);
+            portduino_status.LoRa_in_error = false;
+        } else {
+            LOG_WARN("Reconfigure failed, rebooting");
+            if (screen) {
+                screen->showSimpleBanner("Rebooting...");
+            }
+            rebootAtMsec = millis() + 25;
+        }
+    }
+#if HAS_TFT
     if (screen && portduino_config.displayPanel == x11 &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();
     }
+#endif
 #endif
 #if HAS_SCREEN && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
