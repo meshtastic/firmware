@@ -475,60 +475,29 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             const uint32_t nagCycleCutoff =
                 now + (moduleConfig.external_notification.nag_timeout ? (moduleConfig.external_notification.nag_timeout * 1000UL)
                                                                       : moduleConfig.external_notification.output_ms);
+            const bool buzzer_modeisDirectOnly =
+                (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
-            // Start Contains Bell Code - this means the device will do all the things!
-            if (containsBell) {
+            if (containsBell || !is_muted) {
                 if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
                     (moduleConfig.external_notification.alert_bell_buzzer && canBuzz())) {
                     isNagging = true;
                 }
 
-                if (moduleConfig.external_notification.alert_bell) {
-                    LOG_INFO("externalNotificationModule - Notification Bell");
+                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message) {
+                    LOG_INFO("externalNotificationModule - Notification Module or Bell");
                     setExternalState(0, true);
                 }
 
-                if (moduleConfig.external_notification.alert_bell_vibra) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (Vibra)");
+                if (moduleConfig.external_notification.alert_bell_vibra ||
+                    moduleConfig.external_notification.alert_message_vibra) {
+                    LOG_INFO("externalNotificationModule - Notification Module or Bell (Vibra)");
                     setExternalState(1, true);
                 }
 
                 if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
-
-#ifdef HAS_I2S
-                    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-                        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-                    } else
-#endif
-                        if (moduleConfig.external_notification.use_pwm) {
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-                    } else {
-                        setExternalState(2, true);
-                    }
-                }
-            }
-            // End Contains Bell Code
-
-            if (!is_muted) {
-                if (moduleConfig.external_notification.alert_message) {
-                    LOG_INFO("externalNotificationModule - Notification Module");
-                    isNagging = true;
-                    setExternalState(0, true);
-                }
-
-                if (moduleConfig.external_notification.alert_message_vibra) {
-                    LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
-                    isNagging = true;
-                    setExternalState(1, true);
-                }
-
-                if (moduleConfig.external_notification.alert_message_buzzer && canBuzz()) {
-                    LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
-                    const bool buzzer_modeisDirectOnly =
-                        (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
-
-                    if (buzzer_modeisDirectOnly && !isDmToUs) {
+                    LOG_INFO("externalNotificationModule - Notification Module or Bell (Buzzer)");
+                    if (buzzer_modeisDirectOnly && !isDmToUs && !containsBell) {
                         LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                     } else {
                         // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
