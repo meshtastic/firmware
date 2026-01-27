@@ -1133,13 +1133,10 @@ int32_t GPS::runOnce()
         // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
         uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
-        // 1. Got a time for the first time
+        // Got a time for the first time
         bool gotTime = (getRTCQuality() >= RTCQualityGPS);
-        if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
-            gotTime = true;
-        }
 
-        // 2. Got a lock for the first time, or 3. Got a lock after turning back on
+        // Got a lock for the first time, or Got a lock after turning back on
         bool gotLoc = lookForLocation();
         if (gotLoc) {
 #ifdef GPS_DEBUG
@@ -1147,6 +1144,10 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("hasValidLocation RISING EDGE");
             }
 #endif
+            if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
+                gotTime = true;
+            }
+
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
