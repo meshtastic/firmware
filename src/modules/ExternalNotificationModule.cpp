@@ -479,8 +479,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
             if (containsBell || !is_muted) {
-                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
-                    (moduleConfig.external_notification.alert_bell_buzzer && canBuzz())) {
+                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message ||
+                    moduleConfig.external_notification.alert_bell_vibra ||
+                    moduleConfig.external_notification.alert_message_vibra ||
+                    ((moduleConfig.external_notification.alert_bell_buzzer ||
+                      moduleConfig.external_notification.alert_message_buzzer) &&
+                     canBuzz())) {
                     isNagging = true;
                 }
 
@@ -495,7 +499,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     setExternalState(1, true);
                 }
 
-                if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
+                if ((moduleConfig.external_notification.alert_bell_buzzer ||
+                     moduleConfig.external_notification.alert_message_buzzer) &&
+                    canBuzz()) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell (Buzzer)");
                     if (buzzer_modeisDirectOnly && !isDmToUs && !containsBell) {
                         LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
