@@ -130,99 +130,6 @@ static int32_t gpsSwitch()
 static concurrency::Periodic *gpsPeriodic;
 #endif
 
-static void UBXChecksum(uint8_t *message, size_t length)
-{
-    uint8_t CK_A = 0, CK_B = 0;
-
-    // Calculate the checksum, starting from the CLASS field (which is message[2])
-    for (size_t i = 2; i < length - 2; i++) {
-        CK_A = (CK_A + message[i]) & 0xFF;
-        CK_B = (CK_B + CK_A) & 0xFF;
-    }
-
-    // Place the calculated checksum values in the message
-    message[length - 2] = CK_A;
-    message[length - 1] = CK_B;
-}
-
-// Calculate the checksum for a CAS packet
-static void CASChecksum(uint8_t *message, size_t length)
-{
-    uint32_t cksum = ((uint32_t)message[5] << 24); // Message ID
-    cksum += ((uint32_t)message[4]) << 16;         // Class
-    cksum += message[2];                           // Payload Len
-
-    // Iterate over the payload as a series of uint32_t's and
-    // accumulate the cksum
-    for (size_t i = 0; i < (length - 10) / 4; i++) {
-        uint32_t pl = 0;
-        memcpy(&pl, (message + 6) + (i * sizeof(uint32_t)), sizeof(uint32_t)); // avoid pointer dereference
-        cksum += pl;
-    }
-
-    // Place the checksum values in the message
-    message[length - 4] = (cksum & 0xFF);
-    message[length - 3] = (cksum & (0xFF << 8)) >> 8;
-    message[length - 2] = (cksum & (0xFF << 16)) >> 16;
-    message[length - 1] = (cksum & (0xFF << 24)) >> 24;
-}
-
-// Function to create a ublox packet for editing in memory
-uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
-{
-    // Construct the UBX packet
-    UBXscratch[0] = 0xB5;         // header
-    UBXscratch[1] = 0x62;         // header
-    UBXscratch[2] = class_id;     // class
-    UBXscratch[3] = msg_id;       // id
-    UBXscratch[4] = payload_size; // length
-    UBXscratch[5] = 0x00;
-
-    UBXscratch[6 + payload_size] = 0x00; // CK_A
-    UBXscratch[7 + payload_size] = 0x00; // CK_B
-
-    for (int i = 0; i < payload_size; i++) {
-        UBXscratch[6 + i] = pgm_read_byte(&msg[i]);
-    }
-    UBXChecksum(UBXscratch, (payload_size + 8));
-    return (payload_size + 8);
-}
-
-// Function to create a CAS packet for editing in memory
-uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
-{
-    // General CAS structure
-    //        | H1   | H2   | payload_len | cls  | msg  | Payload       ...   | Checksum                  |
-    // Size:  | 1    | 1    | 2           | 1    | 1    | payload_len         | 4                         |
-    // Pos:   | 0    | 1    | 2    | 3    | 4    | 5    | 6    | 7      ...   | 6 + payload_len ...       |
-    //        |------|------|-------------|------|------|------|--------------|---------------------------|
-    //        | 0xBA | 0xCE | 0xXX | 0xXX | 0xXX | 0xXX | 0xXX | 0xXX   ...   | 0xXX | 0xXX | 0xXX | 0xXX |
-
-    // Construct the CAS packet
-    UBXscratch[0] = 0xBA;         // header 1 (0xBA)
-    UBXscratch[1] = 0xCE;         // header 2 (0xCE)
-    UBXscratch[2] = payload_size; // length 1
-    UBXscratch[3] = 0;            // length 2
-    UBXscratch[4] = class_id;     // class
-    UBXscratch[5] = msg_id;       // id
-
-    UBXscratch[6 + payload_size] = 0x00; // Checksum
-    UBXscratch[7 + payload_size] = 0x00;
-    UBXscratch[8 + payload_size] = 0x00;
-    UBXscratch[9 + payload_size] = 0x00;
-
-    for (int i = 0; i < payload_size; i++) {
-        UBXscratch[6 + i] = pgm_read_byte(&msg[i]);
-    }
-    CASChecksum(UBXscratch, (payload_size + 10));
-
-#if defined(GPS_DEBUG) && defined(DEBUG_PORT)
-    LOG_DEBUG("CAS packet: ");
-    DEBUG_PORT.hexDump(MESHTASTIC_LOG_LEVEL_DEBUG, UBXscratch, payload_size + 10);
-#endif
-    return (payload_size + 10);
-}
-
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
@@ -587,14 +494,14 @@ bool GPS::setup()
             delay(250);
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
             // Set the intial configuration of the device - these _should_ work for most AT6558 devices
-            msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            msglen = makeCASPacket(UBXscratch, 0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
             }
 
             // Set the update frequence to 1Hz
-            msglen = makeCASPacket(0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
+            msglen = makeCASPacket(UBXscratch, 0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x04, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Update Frequency");
@@ -606,7 +513,7 @@ bool GPS::setup()
             for (unsigned int i = 0; i < sizeof(fields); i++) {
                 // Construct a CAS-CFG-MSG packet
                 uint8_t cas_cfg_msg_packet[] = {0x4e, fields[i], 0x01, 0x00};
-                msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
+                msglen = makeCASPacket(UBXscratch, 0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
                 _serial_gps->write(UBXscratch, msglen);
                 if (getACKCas(0x06, 0x01, 250) != GNSS_RESPONSE_OK) {
                     LOG_WARN("ATGM336H: Could not enable NMEA MSG: %d", fields[i]);
@@ -674,7 +581,7 @@ bool GPS::setup()
             SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersave details for GPS", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_AID, "disable UBX-AID", 500);
 
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            msglen = makeUBXPacket(UBXscratch, 0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module config");
@@ -684,10 +591,10 @@ bool GPS::setup()
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9)) {
             if (gnssModel == GNSS_MODEL_UBLOX7) {
                 LOG_DEBUG("Set GPS+SBAS");
-                msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
+                msglen = makeUBXPacket(UBXscratch, 0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
                 _serial_gps->write(UBXscratch, msglen);
             } else { // 8,9
-                msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_8), _message_GNSS_8);
+                msglen = makeUBXPacket(UBXscratch, 0x06, 0x3e, sizeof(_message_GNSS_8), _message_GNSS_8);
                 _serial_gps->write(UBXscratch, msglen);
             }
 
@@ -743,7 +650,7 @@ bool GPS::setup()
                 SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersave details for GPS", 500);
             }
 
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            msglen = makeUBXPacket(UBXscratch, 0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module config");
@@ -791,7 +698,7 @@ bool GPS::setup()
             // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
             // BBR will survive a restart, and power off for a while, but modules with small backup
             // batteries or super caps will not retain the config for a long power off time.
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE_10), _message_SAVE_10);
+            msglen = makeUBXPacket(UBXscratch, 0x06, 0x09, sizeof(_message_SAVE_10), _message_SAVE_10);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module config");
@@ -977,14 +884,14 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
                 _message_PMREQ[0 + i] = sleepMs >> (i * 8);
 
             // Record the message length
-            msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ), _message_PMREQ);
+            msglen = makeUBXPacket(gps->UBXscratch, 0x02, 0x41, sizeof(_message_PMREQ), _message_PMREQ);
         } else {
             // Encode the sleep time in millis into the packet
             for (int i = 0; i < 4; i++)
                 _message_PMREQ_10[4 + i] = sleepMs >> (i * 8);
 
             // Record the message length
-            msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ_10), _message_PMREQ_10);
+            msglen = makeUBXPacket(gps->UBXscratch, 0x02, 0x41, sizeof(_message_PMREQ_10), _message_PMREQ_10);
         }
 
         // Send the UBX packet
@@ -1578,8 +1485,9 @@ GPS *GPS::createGps()
     gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
 #endif
 
-// Currently disabled per issue #525 (TinyGPS++ crash bug)
-// when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
+    // Currently disabled per issue #525 (TinyGPS++ crash bug)
+    // when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
+
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // see NMEAGPS.h
     gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
