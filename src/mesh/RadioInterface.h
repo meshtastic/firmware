@@ -279,5 +279,7 @@ class RadioInterface
     }
 };
 
+bool initLoRa();
+
 /// Debug printing for packets
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p);
