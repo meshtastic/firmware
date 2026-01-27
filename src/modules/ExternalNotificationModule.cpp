@@ -471,10 +471,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
                                      : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
 
-            const uint32_t now = millis();
-            const uint32_t nagCycleCutoff =
-                now + (moduleConfig.external_notification.nag_timeout ? (moduleConfig.external_notification.nag_timeout * 1000UL)
-                                                                      : moduleConfig.external_notification.output_ms);
+            const uint32_t nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
+                                                            ? (moduleConfig.external_notification.nag_timeout * 1000)
+                                                            : moduleConfig.external_notification.output_ms);
             const bool buzzer_modeisDirectOnly =
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
@@ -485,6 +484,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     ((moduleConfig.external_notification.alert_bell_buzzer ||
                       moduleConfig.external_notification.alert_message_buzzer) &&
                      canBuzz())) {
+                    LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
                     isNagging = true;
                 }
 
@@ -507,7 +507,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                     } else {
                         // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-                        isNagging = true;
 #ifdef T_LORA_PAGER
                         drv.setWaveform(0, 16); // Long buzzer 100%
                         drv.setWaveform(1, 0);  // Pause
