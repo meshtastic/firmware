@@ -60,11 +60,15 @@ extern "C" {
  * Buttons
  */
 
-#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
+#if defined(GAT562_MESH_TRACKER_PRO)
+#define CANCEL_BUTTON_PIN 9
 #define BUTTON_NEED_PULLUP
-#define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP false
+#else
+#define PIN_BUTTON1 9
+#define BUTTON_NEED_PULLUP
+#endif
 
 /*
  * Analog pins
