@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -401,7 +402,8 @@ void portduinoSetup()
                 if (found_hat) {
                     product_config =
                         cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
-                    if (strncmp(hat_vendor, "RAK", 14) == 0 && strncmp(autoconf_product, "6421 Pi Hat", 14) == 0) {
+                    if (strncmp(hat_vendor, "RAK", strlen("RAK")) == 0 &&
+                        strncmp(autoconf_product, "6421 Pi Hat", strlen("6421 Pi Hat")) == 0) {
                         std::cout << "autoconf: Setting hardwareModel to RAK6421" << std::endl;
                         portduino_status.hardwareModel = meshtastic_HardwareModel_RAK6421;
                     }
@@ -413,7 +415,7 @@ void portduinoSetup()
                         memcpy(portduino_config.device_id, autoconf_product + len + 1, 16);
                         if (!memfll(portduino_config.device_id, '\0', 16) && !memfll(portduino_config.device_id, 0xff, 16)) {
                             portduino_config.has_device_id = true;
-                            if (strncmp(autoconf_product, "MESHSTICK 1262", 14) == 0) {
+                            if (strncmp(autoconf_product, "MESHSTICK 1262", strlen("MESHSTICK 1262")) == 0) {
                                 std::cout << "autoconf: Setting hardwareModel to Meshstick 1262" << std::endl;
                                 portduino_status.hardwareModel = meshtastic_HardwareModel_MESHSTICK_1262;
                             }

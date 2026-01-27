@@ -1407,6 +1407,10 @@ void loop()
     }
     if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
         LOG_ERROR("LoRa in error detected, attempting to recover");
+        if (rIf != nullptr) {
+            delete rIf;
+            rIf = nullptr;
+        }
         if (portduino_config.lora_spi_dev == "ch341") {
             if (ch341Hal != nullptr) {
                 delete ch341Hal;
