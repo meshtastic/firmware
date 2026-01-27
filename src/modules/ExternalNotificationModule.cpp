@@ -467,9 +467,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // If we receive a broadcast message, apply channel mute setting
             // If we receive a direct message and the receipent is us, apply DM mute setting
             // Else we just handle it as not muted.
-            const bool directToUs = !isBroadcast(mp.to) && isToUs(&mp);
-            bool is_muted = directToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
-                                       : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
+            const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
+            bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
+                                     : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
+
             const uint32_t now = millis();
             const uint32_t nagCycleCutoff =
                 now + (moduleConfig.external_notification.nag_timeout ? (moduleConfig.external_notification.nag_timeout * 1000UL)
@@ -522,12 +523,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     setExternalState(1, true);
                 }
 
-                if (moduleConfig.external_notification.alert_message_buzzer) {
+                if (moduleConfig.external_notification.alert_message_buzzer && canBuzz()) {
                     LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                     const bool buzzer_modeisDirectOnly =
                         (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
-
-                    const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
 
                     if (buzzer_modeisDirectOnly && !isDmToUs) {
                         LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
@@ -535,17 +534,15 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                         isNagging = true;
 #ifdef T_LORA_PAGER
-                        if (canBuzz()) {
-                            drv.setWaveform(0, 16); // Long buzzer 100%
-                            drv.setWaveform(1, 0);  // Pause
-                            drv.setWaveform(2, 16);
-                            drv.setWaveform(3, 0);
-                            drv.setWaveform(4, 16);
-                            drv.setWaveform(5, 0);
-                            drv.setWaveform(6, 16);
-                            drv.setWaveform(7, 0);
-                            drv.go();
-                        }
+                        drv.setWaveform(0, 16); // Long buzzer 100%
+                        drv.setWaveform(1, 0);  // Pause
+                        drv.setWaveform(2, 16);
+                        drv.setWaveform(3, 0);
+                        drv.setWaveform(4, 16);
+                        drv.setWaveform(5, 0);
+                        drv.setWaveform(6, 16);
+                        drv.setWaveform(7, 0);
+                        drv.go();
 #endif
 #ifdef HAS_I2S
                         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
@@ -560,6 +557,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     }
                 }
             }
+
             setIntervalFromNow(0); // run once so we know if we should do something
         }
     } else {
