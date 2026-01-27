@@ -119,7 +119,7 @@ void startAdv(void)
     Bluefruit.Advertising.addService(meshBleService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
-     * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
+     * - Interval:  fast mode = 20 ms, slow mode = 417,5 ms
      * - Timeout for fast mode is 30 seconds
      * - Start(timeout) with timeout = 0 will advertise forever (until connected)
      *
@@ -127,7 +127,7 @@ void startAdv(void)
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
@@ -240,6 +240,12 @@ int NRF52Bluetooth::getRssi()
 {
     return 0; // FIXME figure out where to source this
 }
+
+// Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".
+// See https://docs.nordicsemi.com/bundle/ps_nrf52840/page/keyfeatures_html5.html
+#define VALID_BLE_TX_POWER(x)                                                                                                    \
+    ((x) == -20 || (x) == -16 || (x) == -12 || (x) == -8 || (x) == -4 || (x) == 0 || (x) == 4 || (x) == 8)
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -251,6 +257,9 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
+#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
+    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
+#endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
                                 ? config.bluetooth.fixed_pin
@@ -272,6 +281,29 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+
+    // Do not change Slave Latency to value other than 0 !!!
+    // There is probably a bug in SoftDevice + certain Apple iOS versions being
+    // brain damaged causing connectivity problems.
+
+    // On one side it seems SoftDevice is using SlaveLatency value even
+    // if connection parameter negotation failed and phone sees it as connectivity errors.
+
+    // On the other hand Apple can randomly refuse any parameter negotiation and shutdown connection
+    // even if you meet Apple Developer Guidelines for BLE devices. Because f* you, that's why.
+
+    // While this API call sets preferred connection parameters (PPCP) - many phones ignore it (yeah) and it seems SoftDevice
+    // will try to renegotiate connection parameters based on those values after phone connection.
+    // So those are relatively safe values so Apple braindead firmware won't get angry and at least we may try
+    // to negotiate some longer connection interval to save battery.
+
+    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not
+    // worth dying on a hill here.
+
+    Bluefruit.Periph.setConnSlaveLatency(0);
+    // 1.25 ms units - so min, max is 15, 100 ms range.
+    Bluefruit.Periph.setConnInterval(12, 80);
+
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
@@ -300,7 +332,7 @@ void NRF52Bluetooth::setup()
 void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }

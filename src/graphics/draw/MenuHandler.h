@@ -140,7 +140,7 @@ struct ScreenColor {
     uint8_t b;
     bool useVariant;
 
-    ScreenColor(uint8_t rIn = 0, uint8_t gIn = 0, uint8_t bIn = 0, bool variantIn = false)
+    explicit ScreenColor(uint8_t rIn = 0, uint8_t gIn = 0, uint8_t bIn = 0, bool variantIn = false)
         : r(rIn), g(gIn), b(bIn), useVariant(variantIn)
     {
     }
