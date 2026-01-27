@@ -667,7 +667,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
     resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
-    strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
+    strncpy(config.network.ntp_server, "ntp.aliyun.com", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
      defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT)) &&                                                                        \
