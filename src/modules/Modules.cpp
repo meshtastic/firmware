@@ -52,6 +52,7 @@
 #endif
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
+#include "mesh/AckBatcher.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
@@ -307,5 +308,11 @@ void setupModules()
 #endif
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
+    // Initialize ACK batcher before routing module
+    ackBatcher = new AckBatcher();
+#ifdef ACK_BATCHING_ENABLED
+    ackBatcher->setEnabled(true);
+    LOG_INFO("ACK batching enabled by build flag");
+#endif
     routingModule = new RoutingModule();
 }

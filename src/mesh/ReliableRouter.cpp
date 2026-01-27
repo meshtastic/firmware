@@ -1,4 +1,5 @@
 #include "ReliableRouter.h"
+#include "AckBatcher.h"
 #include "Default.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
@@ -149,6 +150,20 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
         // A nak is a routing packt that has an  error code
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
+
+        // Check for batched ACK packets (Phase 2 feature)
+        // Batched ACKs use a special encoding in the payload
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_ROUTING_APP &&
+            AckBatcher::isBatchedAckPacket(p->decoded.payload.bytes, p->decoded.payload.size)) {
+            std::vector<AckBatcher::BatchedAckEntry> entries;
+            if (AckBatcher::parseBatchedAck(p, entries)) {
+                LOG_INFO("Processed batched ACK packet with %d entries", entries.size());
+                for (size_t i = 0; i < entries.size(); i++) {
+                    stopRetransmission(p->to, entries[i].id);
+                }
+            }
+        }
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if ((ackId || nakId) &&

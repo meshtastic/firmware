@@ -9,6 +9,7 @@
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
+#include "mesh/AckBatcher.h"
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -20,6 +21,29 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     // add packet ID to the rolling list of packets
     textPacketList[textPacketListIndex] = mp.id;
     textPacketListIndex = (textPacketListIndex + 1) % TEXT_PACKET_LIST_SIZE;
+
+
+    // Check for !ackbatch command (DM to self)
+    if (mp.to == nodeDB->getNodeNum() && mp.from == nodeDB->getNodeNum()) {
+        const char *msg = (const char *)mp.decoded.payload.bytes;
+        size_t len = mp.decoded.payload.size;
+        if (len >= 9 && strncasecmp(msg, "!ackbatch", 9) == 0) {
+            if (ackBatcher) {
+                bool newState = ackBatcher->isEnabled();
+                if (len >= 12 && strncasecmp(msg + 10, "on", 2) == 0) {
+                    newState = true;
+                    LOG_INFO("ACK batching ENABLED");
+                } else if (len >= 13 && strncasecmp(msg + 10, "off", 3) == 0) {
+                    newState = false;
+                    LOG_INFO("ACK batching DISABLED");
+                } else {
+                    LOG_INFO("ACK batching is %s", ackBatcher->isEnabled() ? "ON" : "OFF");
+                }
+                ackBatcher->setEnabled(newState);
+            }
+            return ProcessMessage::STOP;
+        }
+    }
 
     // We only store/display messages destined for us.
     devicestate.rx_text_message = mp;
