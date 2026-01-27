@@ -877,13 +877,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // Send Message (Right side)
                 display->drawRect(x1 - bubbleW, y1 - bubbleH, bubbleW + 1, bubbleH);
                 // Top Right Corner
-                display->drawRect(x1 - 3, topY, 3, 1);
-                display->drawRect(x1 - 1, topY, 1, 3);
-                display->drawRect(x1 - 2, topY + 1, 1, 1);
+                display->drawRect(x1 - 2, topY, 2, 1);
+                display->drawRect(x1 - 1, topY, 1, 2);
                 // Bottom Right Corner
-                display->drawRect(x1 - 3, bottomY - 2, 3, 1);
-                display->drawRect(x1 - 1, bottomY - 4, 1, 3);
-                display->drawRect(x1 - 2, bottomY - 3, 1, 1);
+                display->drawRect(x1 - 2, bottomY - 2, 2, 1);
+                display->drawRect(x1 - 1, bottomY - 3, 1, 2);
                 // Knock the corners off to make a bubble
                 display->setColor(BLACK);
                 display->drawRect(x1 - bubbleW, topY - 1, 1, 1);
@@ -893,13 +891,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // Received Message (Left Side)
                 display->drawRect(bubbleX, topY, bubbleW + 1, bubbleH);
                 // Top Left Corner
-                display->drawRect(bubbleX + 1, topY + 1, 3, 1);
-                display->drawRect(bubbleX + 1, topY + 1, 1, 3);
-                display->drawRect(bubbleX + 2, topY + 2, 1, 1);
+                display->drawRect(bubbleX + 1, topY + 1, 2, 1);
+                display->drawRect(bubbleX + 1, topY + 1, 1, 2);
                 // Bottom Left Corner
-                display->drawRect(bubbleX + 1, bottomY - 1, 3, 1);
-                display->drawRect(bubbleX + 1, bottomY - 3, 1, 3);
-                display->drawRect(bubbleX + 2, bottomY - 2, 1, 1);
+                display->drawRect(bubbleX + 1, bottomY - 1, 2, 1);
+                display->drawRect(bubbleX + 1, bottomY - 2, 1, 2);
                 // Knock the corners off to make a bubble
                 display->setColor(BLACK);
                 display->drawRect(bubbleX + bubbleW, topY, 1, 1);
@@ -968,12 +964,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
 
-                    drawStringWithEmotes(
-                        display,
-                        rightX - (currentResolution == ScreenResolution::UltraLow || currentResolution == ScreenResolution::Low
-                                      ? 3
-                                      : 0),
-                        lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
                     drawStringWithEmotes(display, x + BUBBLE_PAD_X + BUBBLE_TEXT_INDENT, lineY, cachedLines[i], emotes,
                                          numEmotes);
