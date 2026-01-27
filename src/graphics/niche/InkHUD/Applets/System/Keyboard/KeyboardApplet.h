@@ -20,7 +20,7 @@ class KeyboardApplet : public SystemApplet
   public:
     KeyboardApplet();
 
-    void onRender() override;
+    void onRender(bool full) override;
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;
@@ -58,6 +58,7 @@ class KeyboardApplet : public SystemApplet
 
     uint16_t rowWidths[KBD_ROWS];
     uint8_t selectedKey = 0; // selected key index
+    uint8_t prevSelectedKey = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -13,34 +13,63 @@ InkHUD::KeyboardApplet::KeyboardApplet()
     }
 }
 
-void InkHUD::KeyboardApplet::onRender()
+void InkHUD::KeyboardApplet::onRender(bool full)
 {
     uint16_t em = fontSmall.lineHeight(); // 16 pt
     uint16_t keyH = Y(1.0) / KBD_ROWS;
     int16_t keyTopPadding = (keyH - fontSmall.lineHeight()) / 2;
 
-    // Draw keyboard
-    for (uint8_t row = 0; row < KBD_ROWS; row++) {
+    if (full) { // Draw full keyboard
+        for (uint8_t row = 0; row < KBD_ROWS; row++) {
 
-        // Calculate the remaining space to be used as padding
-        int16_t keyXPadding = X(1.0) - ((rowWidths[row] * em) >> 4);
+            // Calculate the remaining space to be used as padding
+            int16_t keyXPadding = X(1.0) - ((rowWidths[row] * em) >> 4);
 
-        // Draw keys
-        uint16_t xPos = 0;
-        for (uint8_t col = 0; col < KBD_COLS; col++) {
-            Color fgcolor = BLACK;
-            uint8_t index = row * KBD_COLS + col;
-            uint16_t keyX = ((xPos * em) >> 4) + ((col * keyXPadding) / (KBD_COLS - 1));
-            uint16_t keyY = row * keyH;
-            uint16_t keyW = (keyWidths[index] * em) >> 4;
-            if (index == selectedKey) {
-                fgcolor = WHITE;
-                fillRect(keyX, keyY, keyW, keyH, BLACK);
+            // Draw keys
+            uint16_t xPos = 0;
+            for (uint8_t col = 0; col < KBD_COLS; col++) {
+                Color fgcolor = BLACK;
+                uint8_t index = row * KBD_COLS + col;
+                uint16_t keyX = ((xPos * em) >> 4) + ((col * keyXPadding) / (KBD_COLS - 1));
+                uint16_t keyY = row * keyH;
+                uint16_t keyW = (keyWidths[index] * em) >> 4;
+                if (index == selectedKey) {
+                    fgcolor = WHITE;
+                    fillRect(keyX, keyY, keyW, keyH, BLACK);
+                }
+                drawKeyLabel(keyX, keyY + keyTopPadding, keyW, keys[index], fgcolor);
+                xPos += keyWidths[index];
             }
-            drawKeyLabel(keyX, keyY + keyTopPadding, keyW, keys[index], fgcolor);
-            xPos += keyWidths[index];
+        }
+    } else { // Only draw the difference
+        if (selectedKey != prevSelectedKey) {
+            // Draw previously selected key
+            uint8_t row = prevSelectedKey / KBD_COLS;
+            int16_t keyXPadding = X(1.0) - ((rowWidths[row] * em) >> 4);
+            uint16_t xPos = 0;
+            for (uint8_t i = prevSelectedKey - (prevSelectedKey % KBD_COLS); i < prevSelectedKey; i++)
+                xPos += keyWidths[i];
+            uint16_t keyX = ((xPos * em) >> 4) + (((prevSelectedKey % KBD_COLS) * keyXPadding) / (KBD_COLS - 1));
+            uint16_t keyY = row * keyH;
+            uint16_t keyW = (keyWidths[prevSelectedKey] * em) >> 4;
+            fillRect(keyX, keyY, keyW, keyH, WHITE);
+            drawKeyLabel(keyX, keyY + keyTopPadding, keyW, keys[prevSelectedKey], BLACK);
+
+            // Draw newly selected key
+            row = selectedKey / KBD_COLS;
+            keyXPadding = X(1.0) - ((rowWidths[row] * em) >> 4);
+            xPos = 0;
+            for (uint8_t i = selectedKey - (selectedKey % KBD_COLS); i < selectedKey; i++)
+                xPos += keyWidths[i];
+            keyX = ((xPos * em) >> 4) + (((selectedKey % KBD_COLS) * keyXPadding) / (KBD_COLS - 1));
+            keyY = row * keyH;
+            keyW = (keyWidths[selectedKey] * em) >> 4;
+            fillRect(keyX, keyY, keyW, keyH, BLACK);
+            drawKeyLabel(keyX, keyY + keyTopPadding, keyW, keys[selectedKey], WHITE);
         }
     }
+
+    prevSelectedKey = selectedKey;
 }
 
 void InkHUD::KeyboardApplet::drawKeyLabel(uint16_t left, uint16_t top, uint16_t width, char key, Color color)
@@ -117,6 +146,7 @@ void InkHUD::KeyboardApplet::onForeground()
 
     // Select the first key
     selectedKey = 0;
+    prevSelectedKey = 0;
 }
 
 void InkHUD::KeyboardApplet::onBackground()
@@ -172,14 +202,16 @@ void InkHUD::KeyboardApplet::onNavUp()
         selectedKey += KBD_COLS * (KBD_ROWS - 1);
     else // move 1 row back
         selectedKey -= KBD_COLS;
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
 }
 
 void InkHUD::KeyboardApplet::onNavDown()
 {
     selectedKey += KBD_COLS;
     selectedKey %= (KBD_COLS * KBD_ROWS);
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
 }
 
 void InkHUD::KeyboardApplet::onNavLeft()
@@ -188,7 +220,8 @@ void InkHUD::KeyboardApplet::onNavLeft()
         selectedKey += KBD_COLS - 1;
     else // move 1 column back
         selectedKey--;
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
 }
 
 void InkHUD::KeyboardApplet::onNavRight()
@@ -197,7 +230,8 @@ void InkHUD::KeyboardApplet::onNavRight()
         selectedKey -= KBD_COLS - 1;
     else // move 1 column forward
         selectedKey++;
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
 }
 
 uint16_t InkHUD::KeyboardApplet::getKeyboardHeight()
