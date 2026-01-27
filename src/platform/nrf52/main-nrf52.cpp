@@ -464,22 +464,6 @@ void cpuDeepSleep(uint32_t msecToWake)
         // FIXME, use non-init RAM per
         // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
 
-#ifdef ELECROW_ThinkNode_M1
-        nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
-        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW;
-        nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense);
-
-        nrf_gpio_cfg_input(PIN_BUTTON2, NRF_GPIO_PIN_PULLUP);
-        nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
-        nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
-#endif
-
-#ifdef PROMICRO_DIY_TCXO
-        nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
-        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
-        nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
-#endif
-
 #ifdef BATTERY_LPCOMP_INPUT
         // Wake up if power rises again
         nrf_lpcomp_config_t c;
