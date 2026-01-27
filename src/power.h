@@ -91,6 +91,9 @@ class Power : private concurrency::OSThread
 
     void powerCommandsCheck();
     void readPowerStatus();
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    void handleWifiPowerManagement();
+#endif
     virtual bool setup();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }

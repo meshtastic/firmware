@@ -6,6 +6,7 @@
 #include <functional>
 
 void initWebServer();
+void deinitWebServer();
 void createSSLCert();
 
 class WebServerThread : private concurrency::OSThread

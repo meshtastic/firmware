@@ -248,12 +248,47 @@ bool isWifiAvailable()
     }
 }
 
+// Deinit all WiFi-dependent services (called before WiFi off)
+static void deinitWifiServices()
+{
+    LOG_DEBUG("Deinit WiFi services");
+
+    // Disable syslog
+    syslog.disable();
+
+    // Stop API server
+    deInitApiServer();
+
+#ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+    // Stop web server
+    deinitWebServer();
+#endif
+
+    // Stop mDNS
+    MDNS.end();
+#endif
+
+#ifndef DISABLE_NTP
+    // Stop NTP client
+    timeClient.end();
+#endif
+
+    // Reset flag so services reinitialize on reconnect
+    APStartupComplete = false;
+
+    LOG_INFO("WiFi services stopped");
+}
+
 // Disable WiFi
 void deinitWifi()
 {
     LOG_INFO("WiFi deinit");
 
     if (isWifiAvailable()) {
+        // First stop all services that depend on WiFi
+        deinitWifiServices();
+
 #ifdef ARCH_ESP32
         WiFi.disconnect(true, false);
 #elif defined(ARCH_RP2040)
