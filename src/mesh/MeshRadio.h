@@ -16,8 +16,11 @@ struct RegionInfo {
     bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
-    bool licensedOnly;    // Only allow in HAM mode
-    uint8_t overrideSlot; // default frequency slot if not using channel hashing
+    bool licensedOnly;        // Only allow in HAM mode
+    int8_t textThrottle;      // text broadcast throttle - signed to allow future changes
+    int8_t positionThrottle;  // position broadcast throttle - signed to allow future changes
+    int8_t telemetryThrottle; // telemetry broadcast throttle - signed to allow future changes
+    uint8_t overrideSlot;     // default frequency slot if not using channel hashing
     meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
     // static list of available presets
     const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
