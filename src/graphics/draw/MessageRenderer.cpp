@@ -431,45 +431,6 @@ static int getDrawnLinePixelBottom(int lineTopY, const std::string &line, bool i
     return iconTop + tallest - 1;
 }
 
-static void drawRoundedRectOutline(OLEDDisplay *display, int x, int y, int w, int h, int r)
-{
-    if (w <= 1 || h <= 1)
-        return;
-
-    if (r < 0)
-        r = 0;
-
-    int maxR = (std::min(w, h) / 2) - 1;
-    if (r > maxR)
-        r = maxR;
-
-    if (r == 0) {
-        display->drawRect(x, y, w, h);
-        return;
-    }
-
-    const int x0 = x;
-    const int y0 = y;
-    const int x1 = x + w - 1;
-    const int y1 = y + h - 1;
-
-    // sides
-    if (x0 + r <= x1 - r) {
-        display->drawLine(x0 + r, y0, x1 - r, y0); // top
-        display->drawLine(x0 + r, y1, x1 - r, y1); // bottom
-    }
-    if (y0 + r <= y1 - r) {
-        display->drawLine(x0, y0 + r, x0, y1 - r); // left
-        display->drawLine(x1, y0 + r, x1, y1 - r); // right
-    }
-
-    // corner arcs
-    display->drawCircleQuads(x0 + r, y0 + r, r, 2); // top left
-    display->drawCircleQuads(x1 - r, y0 + r, r, 1); // top right
-    display->drawCircleQuads(x1 - r, y1 - r, r, 8); // bottom right
-    display->drawCircleQuads(x0 + r, y1 - r, r, 4); // bottom left
-}
-
 static std::vector<MessageBlock> buildMessageBlocks(const std::vector<bool> &isHeaderVec, const std::vector<bool> &isMineVec)
 {
     std::vector<MessageBlock> blocks;
@@ -909,27 +870,41 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             bubbleW = std::max(1, rightEdge - bubbleX);
 
         if (bubbleW > 1 && bubbleH > 1) {
-            int r = BUBBLE_RADIUS;
-            int maxR = (std::min(bubbleW, bubbleH) / 2) - 1;
-            if (maxR < 0)
-                maxR = 0;
-            if (r > maxR)
-                r = maxR;
-
-            drawRoundedRectOutline(display, bubbleX, topY, bubbleW, bubbleH, r);
-            const int extra = 3;
-            const int rr = r + extra;
             int x1 = bubbleX + bubbleW - 1;
             int y1 = topY + bubbleH - 1;
 
-            if (!b.mine) {
-                // top-left corner square
-                display->drawLine(bubbleX, topY, bubbleX + rr, topY);
-                display->drawLine(bubbleX, topY, bubbleX, topY + rr);
+            if (b.mine) {
+                // Send Message (Right side)
+                display->drawRect(x1 - bubbleW, y1 - bubbleH, bubbleW + 1, bubbleH);
+                // Top Right Corner
+                display->drawRect(x1 - 3, topY, 3, 1);
+                display->drawRect(x1 - 1, topY, 1, 3);
+                display->drawRect(x1 - 2, topY + 1, 1, 1);
+                // Bottom Right Corner
+                display->drawRect(x1 - 3, bottomY - 2, 3, 1);
+                display->drawRect(x1 - 1, bottomY - 4, 1, 3);
+                display->drawRect(x1 - 2, bottomY - 3, 1, 1);
+                // Knock the corners off to make a bubble
+                display->setColor(BLACK);
+                display->drawRect(x1 - bubbleW, topY - 1, 1, 1);
+                display->drawRect(x1 - bubbleW, bottomY - 1, 1, 1);
+                display->setColor(WHITE);
             } else {
-                // bottom-right corner square
-                display->drawLine(x1 - rr, y1, x1, y1);
-                display->drawLine(x1, y1 - rr, x1, y1);
+                // Received Message (Left Side)
+                display->drawRect(bubbleX, topY, bubbleW + 1, bubbleH);
+                // Top Left Corner
+                display->drawRect(bubbleX + 1, topY + 1, 3, 1);
+                display->drawRect(bubbleX + 1, topY + 1, 1, 3);
+                display->drawRect(bubbleX + 2, topY + 2, 1, 1);
+                // Bottom Left Corner
+                display->drawRect(bubbleX + 1, bottomY - 1, 3, 1);
+                display->drawRect(bubbleX + 1, bottomY - 3, 1, 3);
+                display->drawRect(bubbleX + 2, bottomY - 2, 1, 1);
+                // Knock the corners off to make a bubble
+                display->setColor(BLACK);
+                display->drawRect(bubbleX + bubbleW, topY, 1, 1);
+                display->drawRect(bubbleX + bubbleW, bottomY, 1, 1);
+                display->setColor(WHITE);
             }
         }
     }
@@ -993,7 +968,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
 
-                    drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(
+                        display,
+                        rightX - (currentResolution == ScreenResolution::UltraLow || currentResolution == ScreenResolution::Low
+                                      ? 3
+                                      : 0),
+                        lineY, cachedLines[i], emotes, numEmotes);
                 } else {
                     drawStringWithEmotes(display, x + BUBBLE_PAD_X + BUBBLE_TEXT_INDENT, lineY, cachedLines[i], emotes,
                                          numEmotes);
