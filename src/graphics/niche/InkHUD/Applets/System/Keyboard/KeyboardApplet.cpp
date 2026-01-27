@@ -72,6 +72,9 @@ void InkHUD::KeyboardApplet::onRender(bool full)
     prevSelectedKey = selectedKey;
 }
 
+// Draw the key label corresponding to the char
+// for most keys it draws the character itself
+// for ['\b', '\n', ' ', '\1xb'] it draws special glyphs
 void InkHUD::KeyboardApplet::drawKeyLabel(uint16_t left, uint16_t top, uint16_t width, char key, Color color)
 {
     if (key == '\b') {
