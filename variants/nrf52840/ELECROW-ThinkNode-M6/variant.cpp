@@ -67,4 +67,8 @@ void variant_shutdown()
     nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
     nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
     nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense1);
+
+    nrf_gpio_cfg_input(EXT_CHRG_DETECT, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+    nrf_gpio_pin_sense_t sense2 = NRF_GPIO_PIN_SENSE_LOW;
+    nrf_gpio_cfg_sense_set(EXT_CHRG_DETECT, sense2);
 }
