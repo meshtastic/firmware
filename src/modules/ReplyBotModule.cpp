@@ -1,4 +1,4 @@
-#if !DMESHTASTIC_EXCLUDE_REPLYBOT
+#if !MESHTASTIC_EXCLUDE_REPLYBOT
 /*
  * ReplyBotModule.cpp
  *
