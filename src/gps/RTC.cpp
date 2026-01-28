@@ -66,26 +66,26 @@ RTCSetResult readFromRTC()
             currentQuality = RTCQualityDevice;
         }
         return RTCSetResultSuccess;
+    } else {
+        LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
     }
-#elif defined(PCF8563_RTC)
+#elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
+#if defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
+#elif defined(PCF85063_RTC)
+    if (rtc_found.address == PCF85063_RTC) {
+#endif
         uint32_t now = millis();
-        PCF8563_Class rtc;
+        SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-        rtc.begin();
+        rtc.begin(Wire);
 #endif
 
-        auto tc = rtc.getDateTime();
-        tm t;
-        t.tm_year = tc.year - 1900;
-        t.tm_mon = tc.month - 1;
-        t.tm_mday = tc.day;
-        t.tm_hour = tc.hour;
-        t.tm_min = tc.minute;
-        t.tm_sec = tc.second;
+        RTC_DateTime datetime = rtc.getDateTime();
+        tm t = datetime.toUnixTime();
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
@@ -100,14 +100,16 @@ RTCSetResult readFromRTC()
         }
 #endif
 
-        LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
-                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        LOG_DEBUG("Read RTC time from %s getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
+                  t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
         }
         return RTCSetResultSuccess;
+    } else {
+        LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
     }
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
@@ -232,20 +234,28 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+        } else {
+            LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
         }
-#elif defined(PCF8563_RTC)
+#elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
+#if defined(PCF8563_RTC)
         if (rtc_found.address == PCF8563_RTC) {
-            PCF8563_Class rtc;
+#elif defined(PCF85063_RTC)
+        if (rtc_found.address == PCF85063_RTC) {
+#endif
+            SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
             rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-            rtc.begin();
+            rtc.begin(Wire);
 #endif
             tm *t = gmtime(&tv->tv_sec);
-            rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            rtc.setDateTime(*t);
+            LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1,
+                      t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+        } else {
+            LOG_WARN("RTC not found (found address 0x%02X)", rtc_found.address);
         }
 #elif defined(RX8130CE_RTC)
         if (rtc_found.address == RX8130CE_RTC) {
@@ -387,7 +397,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
     return (currentQuality >= minQuality) ? getTime(local) : 0;
 }
 
-time_t gm_mktime(struct tm *tm)
+time_t gm_mktime(const struct tm *tm)
 {
 #if !MESHTASTIC_EXCLUDE_TZ
     time_t result = 0;
@@ -403,8 +413,8 @@ time_t gm_mktime(struct tm *tm)
     days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
 
     // Now, within this tm->year, compute the days *before* this tm->month starts.
-    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
-    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
+    static const int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                             // tm->tm_mon is 0..11
 
     // If this is a leap year, and we're past February, add a day:
     if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
@@ -425,6 +435,7 @@ time_t gm_mktime(struct tm *tm)
 
     return result;
 #else
-    return mktime(tm);
+    struct tm tmCopy = *tm;
+    return mktime(&tmCopy);
 #endif
 }

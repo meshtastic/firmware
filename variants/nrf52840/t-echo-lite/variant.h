@@ -171,6 +171,8 @@ static const uint8_t A0 = PIN_A0;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
 
+#define SERIAL_PRINT_PORT 0
+
 // #define NO_EXT_GPIO 1
 // PINs back side
 // Batt & solar connector left up corner

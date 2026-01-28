@@ -475,8 +475,10 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
-        strcpy(msg->topic, topic);
-        strcpy(msg->payload_variant.text, payload);
+        strncpy(msg->topic, topic, sizeof(msg->topic));
+        msg->topic[sizeof(msg->topic) - 1] = '\0';
+        strncpy(msg->payload_variant.text, payload, sizeof(msg->payload_variant.text));
+        msg->payload_variant.text[sizeof(msg->payload_variant.text) - 1] = '\0';
         msg->retained = retained;
         service->sendMqttMessageToClientProxy(msg);
         return true;
@@ -494,7 +496,8 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
-        strlcpy(msg->topic, topic, sizeof(msg->topic));
+        strncpy(msg->topic, topic, sizeof(msg->topic));
+        msg->topic[sizeof(msg->topic) - 1] = '\0'; // Ensure null termination
         if (length > sizeof(msg->payload_variant.data.bytes))
             length = sizeof(msg->payload_variant.data.bytes);
         msg->payload_variant.data.size = length;

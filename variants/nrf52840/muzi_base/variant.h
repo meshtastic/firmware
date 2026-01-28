@@ -176,6 +176,8 @@ extern "C" {
 #define EXTERNAL_FLASH_DEVICES W25Q32JVSS
 #define EXTERNAL_FLASH_USE_QSPI
 
+#define SERIAL_PRINT_PORT 0
+
 // NFC is disabled via CONFIG_NFCT_PINS_AS_GPIOS=1 build flag
 // This configures P0.09 and P0.10 as regular GPIO pins instead of NFC pins
 
