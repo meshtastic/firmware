@@ -205,16 +205,22 @@ void InkHUD::KeyboardApplet::onNavUp()
         selectedKey += KBD_COLS * (KBD_ROWS - 1);
     else // move 1 row back
         selectedKey -= KBD_COLS;
-    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
+
+    // Request rendering over the previously drawn render
+    requestUpdate(EInk::UpdateTypes::FAST, false);
+    // Force an update to bypass lockRequests
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::KeyboardApplet::onNavDown()
 {
     selectedKey += KBD_COLS;
     selectedKey %= (KBD_COLS * KBD_ROWS);
-    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
+
+    // Request rendering over the previously drawn render
+    requestUpdate(EInk::UpdateTypes::FAST, false);
+    // Force an update to bypass lockRequests
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::KeyboardApplet::onNavLeft()
@@ -223,8 +229,11 @@ void InkHUD::KeyboardApplet::onNavLeft()
         selectedKey += KBD_COLS - 1;
     else // move 1 column back
         selectedKey--;
-    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
+
+    // Request rendering over the previously drawn render
+    requestUpdate(EInk::UpdateTypes::FAST, false);
+    // Force an update to bypass lockRequests
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::KeyboardApplet::onNavRight()
@@ -233,8 +242,11 @@ void InkHUD::KeyboardApplet::onNavRight()
         selectedKey -= KBD_COLS - 1;
     else // move 1 column forward
         selectedKey++;
-    requestUpdate(EInk::UpdateTypes::FAST, false); // partial update
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);  // bypass lockRequests
+
+    // Request rendering over the previously drawn render
+    requestUpdate(EInk::UpdateTypes::FAST, false);
+    // Force an update to bypass lockRequests
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 uint16_t InkHUD::KeyboardApplet::getKeyboardHeight()
