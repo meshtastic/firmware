@@ -59,7 +59,7 @@ static int popupMaxPage = 1;
 static const uint32_t POPUP_DURATION_MS = 1000; // 1 second visible
 
 // =============================
-// Scrolling Logic
+// Cached Filtered Node List
 // =============================
 void scrollUp()
 {
@@ -74,10 +74,6 @@ void scrollDown()
     scrollIndex++;
     popupTime = millis();
 }
-
-// =============================
-// Utility Functions
-// =============================
 
 const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth)
 {
@@ -531,7 +527,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int columnWidth = display->getWidth() / totalColumns;
 
-    int totalEntries = nodeDB->getNumMeshNodes();
+    int rawCount = nodeDB->getNumMeshNodes();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
     int numskipped = 0;
     int visibleNodeRows = totalRowsAvailable;
