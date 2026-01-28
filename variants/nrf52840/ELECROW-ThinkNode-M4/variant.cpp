@@ -49,3 +49,21 @@ void initVariant()
     pinMode(Battery_LED_4, OUTPUT);
     ledOff(Battery_LED_4);
 }
+
+/// called from main-nrf52.cpp during the cpuDeepSleep() function
+void variant_shutdown()
+{
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == PIN_GPS_EN || pin == PIN_BUTTON1) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+        if (pin >= 32) {
+            NRF_P1->DIRCLR = (1 << (pin - 32));
+        } else {
+            NRF_GPIO->DIRCLR = (1 << pin);
+        }
+    }
+    digitalWrite(PIN_GPS_EN, HIGH);
+}

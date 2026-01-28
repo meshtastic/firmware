@@ -13,6 +13,7 @@
 #include "PacketHistory.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "RadioInterface.h"
 #include "Router.h"
 #include "SPILock.h"
 #include "SafeFile.h"
@@ -26,6 +27,7 @@
 #include <algorithm>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <power/PowerHAL.h>
 #include <vector>
 
 #ifdef ARCH_ESP32
@@ -1303,6 +1305,13 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved config version %d", config.version);
         }
     }
+
+    // Coerce LoRa config fields derived from presets while bootstrapping.
+    // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
+    if (config.has_lora && config.lora.use_preset) {
+        RadioInterface::bootstrapLoRaConfigFromPreset(config.lora);
+    }
+
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
@@ -1424,6 +1433,14 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
+        return false;
+    }
+
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
@@ -1450,6 +1467,14 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
 bool NodeDB::saveChannelsToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveChannelsToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1460,6 +1485,14 @@ bool NodeDB::saveChannelsToDisk()
 
 bool NodeDB::saveDeviceStateToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveDeviceStateToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1472,6 +1505,14 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveNodeDatabaseToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1484,6 +1525,14 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
+        return false;
+    }
+
     bool success = true;
 #ifdef FSCom
     spiLock->lock();
@@ -1539,6 +1588,14 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 bool NodeDB::saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveToDisk() on unsafe device power level.");
+        return false;
+    }
+
     bool success = saveToDiskNoRetry(saveWhat);
 
     if (!success) {
@@ -2196,7 +2253,10 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 
     // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
-    LOG_ERROR("A critical failure occurred, portduino is exiting");
-    exit(2);
+    LOG_ERROR("A critical failure occurred");
+    // TODO: Determine if other critical errors should also cause an immediate exit
+    if (code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE ||
+        code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE)
+        exit(2);
 #endif
 }
