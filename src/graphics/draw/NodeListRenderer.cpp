@@ -548,6 +548,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Rebuild if: node count changes, locationScreen changes, or TTL expires (catches position updates)
     bool ttlExpired = (millis() - lastCacheRebuildMs) > CACHE_TTL_MS;
 
+<<<<<<< HEAD
     int totalEntries = 0;
 
     if (rawCount != lastCachedNodeCount || locationScreen != lastCachedLocationScreen || ttlExpired) {
@@ -574,6 +575,32 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
             cachedFilteredNodesList.push_back(n->num);
         }
         totalEntries = cachedFilteredNodesList.size();
+=======
+    if (rawCount != lastCachedNodeCount || locationScreen != lastCachedLocationScreen || ttlExpired) {
+        cachedFilteredNodesList.clear();
+        cachedFilteredNodesList.reserve(rawCount);
+
+        // Build filtered + ordered list of nodes (only when nodeDB changes)
+        for (int i = 0; i < rawCount; i++) {
+            auto *n = nodeDB->getMeshNodeByIndex(i);
+
+            if (!n)
+                continue;
+            if (n->num == nodeDB->getNodeNum())
+                continue;
+            if (locationScreen && !n->has_position)
+                continue;
+            if (!n)
+                continue;
+            if (n->num == nodeDB->getNodeNum())
+                continue;
+            if (locationScreen && !n->has_position)
+                continue;
+
+            drawList.push_back(n->num);
+        }
+        totalEntries = drawList.size();
+>>>>>>> 01f8f2063 (Optimize node list pagination and rendering PT.2)
         int perPage = visibleNodeRows * totalColumns;
 
         int maxScroll = 0;
@@ -592,7 +619,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         int rowCount = 0;
 
         for (int idx = startIndex; idx < endIndex; idx++) {
+<<<<<<< HEAD
             uint32_t nodeNum = cachedFilteredNodesList[idx];
+=======
+            uint32_t nodeNum = drawList[idx];
+>>>>>>> 01f8f2063 (Optimize node list pagination and rendering PT.2)
             auto *node = nodeDB->getMeshNode(nodeNum);
             int xPos = x + (col * columnWidth);
             int yPos = y + yOffset;
@@ -687,10 +718,17 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
             display->drawString(boxLeft + padding, boxTop + padding, buf);
         }
     }
+<<<<<<< HEAD
 }
 // =============================
 // Screen Frame Functions
 // =============================
+=======
+
+    // =============================
+    // Screen Frame Functions
+    // =============================
+>>>>>>> 01f8f2063 (Optimize node list pagination and rendering PT.2)
 
 #ifndef USE_EINK
 // Node list for Last Heard and Hop Signal views
