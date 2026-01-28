@@ -53,6 +53,7 @@ extern "C" {
  */
 #define PIN_SERIAL1_RX (32 + 8)
 #define PIN_SERIAL1_TX (7)
+#define SERIAL_PRINT_PORT 0
 
 /*
  * SPI Interfaces

@@ -35,6 +35,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onRender() override;
 
     void show(Tile *t); // Open the menu, onto a user tile
+    void setStartPage(MenuPage page);
 
   protected:
     Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
@@ -56,6 +57,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void sendText(NodeNum dest, ChannelIndex channel, const char *message); // Send a text message to mesh
     void freeCannedMessageResources();                                      // Clear MenuApplet's canned message processing data
 
+    MenuPage startPageOverride = MenuPage::ROOT;
     MenuPage currentPage = MenuPage::ROOT;
     MenuPage previousPage = MenuPage::EXIT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
@@ -63,7 +65,15 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
 
-    std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
+    std::vector<MenuItem> items;               // MenuItems for the current page. Filled by ShowPage
+    std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages
+    uint8_t selectedChannelIndex = 0;          // Currently selected LoRa channel (Node Config → Radio → Channel)
+    bool channelPositionEnabled = false;
+    bool gpsEnabled = false;
+
+    // Recents menu checkbox state (derived from settings.recentlyActiveSeconds)
+    static constexpr uint8_t RECENTS_COUNT = 6;
+    bool recentsSelected[RECENTS_COUNT] = {};
 
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only

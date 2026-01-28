@@ -87,6 +87,7 @@ static const uint8_t A0 = PIN_A0;
 /*
  * Serial interfaces
  */
+#define SERIAL_PRINT_PORT 0
 
 /*
 No longer populated on PCB

@@ -5,11 +5,10 @@
 #include "main.h"
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "BleOta.h"
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#include <WiFiOTA.h>
+#include <MeshtasticOTA.h>
 
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -144,22 +143,14 @@ void esp32Setup()
         preferences.putUInt("hwVendor", HW_VENDOR);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d", rebootCounter);
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
-    String BLEOTA = BleOta::getOtaAppVersion();
-    if (BLEOTA.isEmpty()) {
-        LOG_INFO("No BLE OTA firmware available");
-    } else {
-        LOG_INFO("BLE OTA firmware version %s", BLEOTA.c_str());
-    }
-#endif
 #if !MESHTASTIC_EXCLUDE_WIFI
-    String version = WiFiOTA::getVersion();
+    String version = MeshtasticOTA::getVersion();
     if (version.isEmpty()) {
-        LOG_INFO("No WiFi OTA firmware available");
+        LOG_INFO("MeshtasticOTA firmware not available");
     } else {
-        LOG_INFO("WiFi OTA firmware version %s", version.c_str());
+        LOG_INFO("MeshtasticOTA firmware version %s", version.c_str());
     }
-    WiFiOTA::initialize();
+    MeshtasticOTA::initialize();
 #endif
 
     // enableModemSleep();

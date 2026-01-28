@@ -141,6 +141,8 @@ No longer populated on PCB
 #define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
 #define BQ4050_EMERGENCY_SHUTDOWN_PIN (32 + 3) // Emergency shutdown pin
 
+#define SERIAL_PRINT_PORT 0
+
 #ifdef __cplusplus
 }
 #endif

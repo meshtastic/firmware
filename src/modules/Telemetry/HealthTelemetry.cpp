@@ -136,12 +136,12 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     display->drawString(x, y += _fontHeight(FONT_SMALL), tempStr);
     if (lastMeasurement.variant.health_metrics.has_heart_bpm) {
         char heartStr[32];
-        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %.0f bpm", lastMeasurement.variant.health_metrics.heart_bpm);
+        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %u bpm", lastMeasurement.variant.health_metrics.heart_bpm);
         display->drawString(x, y += _fontHeight(FONT_SMALL), heartStr);
     }
     if (lastMeasurement.variant.health_metrics.has_spO2) {
         char spo2Str[32];
-        snprintf(spo2Str, sizeof(spo2Str), "spO2: %.0f %%", lastMeasurement.variant.health_metrics.spO2);
+        snprintf(spo2Str, sizeof(spo2Str), "spO2: %u %%", lastMeasurement.variant.health_metrics.spO2);
         display->drawString(x, y += _fontHeight(FONT_SMALL), spo2Str);
     }
 }
