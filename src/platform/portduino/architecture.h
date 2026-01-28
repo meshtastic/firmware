@@ -6,7 +6,7 @@
 // set HW_VENDOR
 //
 
-#define HW_VENDOR meshtastic_HardwareModel_PORTDUINO
+#define HW_VENDOR portduino_status.hardwareModel
 
 #ifndef HAS_BUTTON
 #define HAS_BUTTON 1

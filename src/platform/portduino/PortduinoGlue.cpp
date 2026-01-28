@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -29,6 +30,7 @@
 #include "platform/portduino/USBHal.h"
 
 portduino_config_struct portduino_config;
+portduino_status_struct portduino_status;
 std::ofstream traceFile;
 std::ofstream JSONFile;
 Ch341Hal *ch341Hal = nullptr;
@@ -61,11 +63,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
     case 'p':
-        if (sscanf(arg, "%d", &TCPPort) < 1)
+        if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
-        else
+        } else {
             checkConfigPort = false;
             printf("Using config file %d\n", TCPPort);
+        }
         break;
     case 'c':
         configPath = arg;
@@ -399,6 +402,11 @@ void portduinoSetup()
                 if (found_hat) {
                     product_config =
                         cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
+                    if (strncmp(hat_vendor, "RAK", strlen("RAK")) == 0 &&
+                        strncmp(autoconf_product, "6421 Pi Hat", strlen("6421 Pi Hat")) == 0) {
+                        std::cout << "autoconf: Setting hardwareModel to RAK6421" << std::endl;
+                        portduino_status.hardwareModel = meshtastic_HardwareModel_RAK6421;
+                    }
                 } else if (found_ch341) {
                     product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
                     // look for more data after the null terminator
@@ -407,6 +415,10 @@ void portduinoSetup()
                         memcpy(portduino_config.device_id, autoconf_product + len + 1, 16);
                         if (!memfll(portduino_config.device_id, '\0', 16) && !memfll(portduino_config.device_id, 0xff, 16)) {
                             portduino_config.has_device_id = true;
+                            if (strncmp(autoconf_product, "MESHSTICK 1262", strlen("MESHSTICK 1262")) == 0) {
+                                std::cout << "autoconf: Setting hardwareModel to Meshstick 1262" << std::endl;
+                                portduino_status.hardwareModel = meshtastic_HardwareModel_MESHSTICK_1262;
+                            }
                         }
                     }
                 }
@@ -649,6 +661,19 @@ bool loadConfig(const char *configPath)
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
+            if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
+                YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
+                if (tx_gain_node.IsSequence() && tx_gain_node.size() != 0) {
+                    portduino_config.num_pa_points = min(tx_gain_node.size(), std::size(portduino_config.tx_gain_lora));
+                    for (int i = 0; i < portduino_config.num_pa_points; i++) {
+                        portduino_config.tx_gain_lora[i] = tx_gain_node[i].as<int>();
+                    }
+                } else {
+                    portduino_config.num_pa_points = 1;
+                    portduino_config.tx_gain_lora[0] = tx_gain_node.as<int>(0);
+                }
+            }
+
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
                 !portduino_config.force_simradio) {
                 portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
@@ -874,10 +899,8 @@ bool loadConfig(const char *configPath)
             }
             if (checkConfigPort) {
                 portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
-                if (portduino_config.api_port != -1 &&
-                portduino_config.api_port > 1023 &&
-                portduino_config.api_port < 65536) {
-                TCPPort = (portduino_config.api_port);
+                if (portduino_config.api_port != -1 && portduino_config.api_port > 1023 && portduino_config.api_port < 65536) {
+                    TCPPort = (portduino_config.api_port);
                 }
             }
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");

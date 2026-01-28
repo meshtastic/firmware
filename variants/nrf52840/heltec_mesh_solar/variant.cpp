@@ -19,6 +19,7 @@
 */
 
 #include "variant.h"
+#include "Arduino.h"
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
@@ -37,4 +38,11 @@ void initVariant()
     pinMode(PIN_SCREEN_VDD_CTL, OUTPUT);
     digitalWrite(PIN_SCREEN_VDD_CTL, LOW); // Start with power on
 #endif
+}
+
+void variant_shutdown()
+{
+    nrf_gpio_cfg_default(PIN_GPS_PPS);
+    detachInterrupt(PIN_GPS_PPS);
+    detachInterrupt(PIN_BUTTON1);
 }

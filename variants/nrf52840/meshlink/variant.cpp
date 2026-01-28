@@ -21,3 +21,10 @@ void initVariant()
     digitalWrite(PIN_WD_EN, HIGH); // Enable the Watchdog at boot
 #endif
 }
+
+void variant_shutdown()
+{
+#ifdef PIN_WD_EN
+    digitalWrite(PIN_WD_EN, LOW);
+#endif
+}
