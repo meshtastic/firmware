@@ -48,7 +48,9 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // order by priority of metrics/values (low top, high bottom)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
     addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
+#if __has_include(<SensirionI2cScd4x.h>)
     addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
+#endif
 }
 
 int32_t AirQualityTelemetryModule::runOnce()
