@@ -4,7 +4,7 @@
  *
  * This module implements a simple reply bot for the Meshtastic firmware.  It listens for
  * specific text commands ("/ping", "/hello" and "/test") delivered either via a direct
- * message (DM) or a broadcast on the LongFast channel.  When a supported command is
+ * message (DM) or a broadcast on the primary channel.  When a supported command is
  * received the bot responds with a short status message that includes the hop count
  * (minimum number of relays), RSSI and SNR of the received packet.  To avoid spamming
  * the network it enforces a per‑sender cooldown between responses.  By default the
