@@ -159,6 +159,8 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SERIAL1_TX GPS_TX_PIN
 #define PIN_SERIAL1_RX GPS_RX_PIN
 
+#define SERIAL_PRINT_PORT 0
+
 /*
  * SPI Interfaces
  */
