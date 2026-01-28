@@ -71,6 +71,7 @@
 #define TB_RIGHT 2
 #define TB_PRESS 0 // BUTTON_PIN
 #define TB_DIRECTION FALLING
+#define TB_THRESHOLD 3
 
 // microphone
 #define ES7210_SCK 47

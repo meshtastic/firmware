@@ -26,7 +26,12 @@ class TCA8418KeyboardBase
         GPS_TOGGLE = 0x9E,
         MUTE_TOGGLE = 0xAC,
         SEND_PING = 0xAF,
-        BL_TOGGLE = 0xAB
+        BL_TOGGLE = 0xAB,
+        FUNCTION_F1 = 0xF1,
+        FUNCTION_F2 = 0xF2,
+        FUNCTION_F3 = 0xF3,
+        FUNCTION_F4 = 0xF4,
+        FUNCTION_F5 = 0xF5
     };
 
     typedef uint8_t (*i2c_com_fptr_t)(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data, uint8_t len);

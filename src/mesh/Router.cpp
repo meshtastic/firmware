@@ -7,7 +7,6 @@
 #include "RTC.h"
 
 #include "configuration.h"
-#include "detect/LoRaRadioType.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
