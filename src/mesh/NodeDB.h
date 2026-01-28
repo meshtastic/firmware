@@ -104,6 +104,8 @@ static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
 static constexpr const char *backupFileName = "/backups/backup.proto";
 
+static constexpr uint32_t DISPLAY_SORT_THROTTLE_MS = 5000;
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
@@ -139,7 +141,7 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes;
+    std::vector<meshtastic_NodeInfoLite> *meshNodes;       // Sorted by NodeNum for O(log n) lookup
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
@@ -247,13 +249,9 @@ class NodeDB
 
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
 
-    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
-    {
-        assert(x < numMeshNodes);
-        return &meshNodes->at(x);
-    }
+    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x);  // Uses displayNodes (rebuilds if dirty)
 
-    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);  // NOT ISR-safe (uses binary search)
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
@@ -321,6 +319,9 @@ class NodeDB
      */
     bool sortingIsPaused = false;
 
+    std::vector<meshtastic_NodeInfoLite *> displayNodes;   // Pointers sorted by display order (own node → favorites → last_heard)
+    bool displayNodesDirty = true;                         // Set true when meshNodes changes, triggers rebuildDisplayOrder()
+
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
 
@@ -341,7 +342,12 @@ class NodeDB
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
-    void sortMeshDB();
+
+    /// Rebuilds displayNodes from meshNodes in display order
+    void rebuildDisplayOrder();
+
+    /// Sorts meshNodes by NodeNum for binary search
+    void sortByNodeNum();
 };
 
 extern NodeDB *nodeDB;
