@@ -471,9 +471,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
                                      : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
 
-            const uint32_t nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
-                                                            ? (moduleConfig.external_notification.nag_timeout * 1000)
-                                                            : moduleConfig.external_notification.output_ms);
+            nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
+                                             ? (moduleConfig.external_notification.nag_timeout * 1000)
+                                             : moduleConfig.external_notification.output_ms);
+
             const bool buzzer_modeisDirectOnly =
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
