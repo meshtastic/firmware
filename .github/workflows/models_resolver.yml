@@ -1,0 +1,12 @@
+name: Welcome New Contributors (disabled)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  disabled:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Welcome workflow disabled"

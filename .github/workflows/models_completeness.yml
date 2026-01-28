@@ -1,0 +1,52 @@
+name: Issue Completeness Check
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  models: read
+
+jobs:
+  check-completeness:
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event.issue.user.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if should skip
+        uses: actions/github-script@v8
+        id: check-skip
+        with:
+          script: |
+            const title = (context.payload.issue.title || '').toLowerCase();
+            const labels = (context.payload.issue.labels || []).map(label => label.name);
+            const hasFeatureRequest = title.includes('feature request');
+            const hasEnhancement = labels.includes('enhancement');
+            const shouldSkip = hasFeatureRequest && hasEnhancement;
+            core.setOutput('should_skip', shouldSkip);
+
+      - name: Check issue completeness
+        if: steps.check-skip.outputs.should_skip != 'true'
+        uses: actions/ai-inference@v2
+        id: ai
+        with:
+          prompt: |
+            Analyze this GitHub issue for completeness. If missing reproduction steps, version info, or expected/actual behavior, respond with a friendly request for the missing info. If complete, say so.
+
+            Title: ${{ github.event.issue.title }}
+            Body: ${{ github.event.issue.body }}
+          system-prompt: You are a helpful assistant that helps analyze GitHub issues for completeness.
+          model: openai/gpt-4o-mini
+          # temperature: 0.2
+
+      - name: Comment on issue
+        if: steps.check-skip.outputs.should_skip != 'true' && steps.ai.outputs.response != ''
+        uses: actions/github-script@v8
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.issue.number }},
+              body: `${{ steps.ai.outputs.response }}`
+            })
