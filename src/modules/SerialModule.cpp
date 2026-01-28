@@ -66,19 +66,27 @@ SerialModuleRadio *serialModuleRadio;
 #if defined(TTGO_T_ECHO) || defined(TTGO_T_ECHO_PLUS) || defined(CANARYONE) || defined(MESHLINK) ||                              \
     defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M5) ||                           \
     defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M3) || defined(MUZI_BASE)
+#define USES_SERIAL_PRINT
+#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172) || defined(EBYTE_E77_MBL)
+#define USES_SERIAL1_PRINT
+#else
+#define USES_SERIAL2_PRINT
+#endif
+
+#ifdef USES_SERIAL_PRINT
 
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial")
 {
     api_type = TYPE_SERIAL;
 }
 static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172) || defined(EBYTE_E77_MBL)
+#elif defined(USES_SERIAL1_PRINT)
 SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial")
 {
     api_type = TYPE_SERIAL;
 }
 static Print *serialPrint = &Serial1;
-#else
+#elif defined(USES_SERIAL2_PRINT)
 SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial")
 {
     api_type = TYPE_SERIAL;
@@ -205,9 +213,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) &&                     \
-    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M3) && !defined(ELECROW_ThinkNode_M4) &&  \
-    !defined(ELECROW_ThinkNode_M5) && !defined(MUZI_BASE)
+#elif !defined(USES_SERIAL_PRINT)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
@@ -264,9 +270,7 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) && \
-    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M3) && !defined(ELECROW_ThinkNode_M4) &&                        \
-    !defined(ELECROW_ThinkNode_M5) && !defined(MUZI_BASE)
+#if !defined(USES_SERIAL_PRINT)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -540,11 +544,7 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) &&                       \
-    !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) &&                               \
-    !defined(ELECROW_ThinkNode_M3) && \ 
-    !defined(ELECROW_ThinkNode_M4) &&                                                                                            \
-    !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL) && !defined(MUZI_BASE)
+#if !defined(USES_SERIAL_PRINT) && !defined(ARCH_STM32WL)
 
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
