@@ -49,7 +49,17 @@ extern FakeFsm powerFSM;
 void PowerFSM_setup();
 
 #else
+#include "input/InputBroker.h"
 #include <Fsm.h>
+
+class PowerFSMEventProcessor
+{
+
+  public:
+    PowerFSMEventProcessor() = default;
+    int handleInputEvent(const InputEvent *event);
+};
+
 extern Fsm powerFSM;
 extern State stateON, statePOWER, stateSERIAL, stateDARK;
 

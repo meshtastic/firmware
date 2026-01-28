@@ -37,6 +37,10 @@ enum input_broker_event {
 
 };
 
+#define INPUT_BROKER_IS_LONG_PRESS(input_broker_event)                                                                           \
+    ((input_broker_event) == INPUT_BROKER_SELECT_LONG || (input_broker_event) == INPUT_BROKER_UP_LONG ||                         \
+     (input_broker_event) == INPUT_BROKER_DOWN_LONG || (input_broker_event) == INPUT_BROKER_ALT_LONG)
+
 #define INPUT_BROKER_MSG_BRIGHTNESS_UP 0x11
 #define INPUT_BROKER_MSG_BRIGHTNESS_DOWN 0x12
 #define INPUT_BROKER_MSG_REBOOT 0x90
