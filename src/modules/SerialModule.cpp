@@ -63,36 +63,23 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(TTGO_T_ECHO_PLUS) || defined(CANARYONE) || defined(MESHLINK) ||                              \
-    defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M5) ||                           \
-    defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M3) || defined(MUZI_BASE)
-#define USES_SERIAL_PRINT
-#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172) || defined(EBYTE_E77_MBL)
-#define USES_SERIAL1_PRINT
-#else
-#define USES_SERIAL2_PRINT
+#ifndef SERIAL_PRINT_PORT
+#define SERIAL_PRINT_PORT 2
 #endif
 
-#ifdef USES_SERIAL_PRINT
-
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial")
-{
-    api_type = TYPE_SERIAL;
-}
-static Print *serialPrint = &Serial;
-#elif defined(USES_SERIAL1_PRINT)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial")
-{
-    api_type = TYPE_SERIAL;
-}
-static Print *serialPrint = &Serial1;
-#elif defined(USES_SERIAL2_PRINT)
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial")
-{
-    api_type = TYPE_SERIAL;
-}
-static Print *serialPrint = &Serial2;
+#if SERIAL_PRINT_PORT == 0
+#define SERIAL_PRINT_OBJECT Serial
+#elif SERIAL_PRINT_PORT == 1
+#define SERIAL_PRINT_OBJECT Serial1
+#elif SERIAL_PRINT_PORT == 2
+#define SERIAL_PRINT_OBJECT Serial2
 #endif
+
+SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
+{
+    api_type = TYPE_SERIAL;
+}
+static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 
 char serialBytes[512];
 size_t serialPayloadSize;
@@ -213,7 +200,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(USES_SERIAL_PRINT)
+#elif SERIAL_PRINT_PORT != 0
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
@@ -270,7 +257,7 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(USES_SERIAL_PRINT)
+#if SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -544,7 +531,7 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(USES_SERIAL_PRINT) && !defined(ARCH_STM32WL)
+#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL)
 
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
