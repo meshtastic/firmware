@@ -111,7 +111,7 @@ class SEN5XSensor : public TelemetrySensor
 
     uint32_t pmMeasureStarted = 0;
     uint32_t rhtGasMeasureStarted = 0;
-    _SEN5XMeasurements sen5xmeasurement;
+    _SEN5XMeasurements sen5xmeasurement {};
 
     bool idle(bool checkState=true);
 
@@ -129,7 +129,7 @@ class SEN5XSensor : public TelemetrySensor
 
     // VOC State
     #define SEN5X_VOC_STATE_BUFFER_SIZE 8
-    uint8_t vocState[SEN5X_VOC_STATE_BUFFER_SIZE];
+    uint8_t vocState[SEN5X_VOC_STATE_BUFFER_SIZE] {};
     uint32_t vocTime = 0;
     bool vocValid = false;
 
