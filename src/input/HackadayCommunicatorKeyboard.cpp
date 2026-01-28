@@ -20,20 +20,20 @@ constexpr uint8_t modifierLeftShift = 0b0001;
 
 // Num chars per key, Modulus for rotating through characters
 static uint8_t HackadayCommunicatorTapMod[_TCA8418_NUM_KEYS] = {
-    0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 0, 0, 0, 1, 2, 2, 2, 1, 2, 2, 0, 0, 0, 2, 1, 2, 2, 0, 1, 1, 0,
 };
 
 static unsigned char HackadayCommunicatorTapMap[_TCA8418_NUM_KEYS][2] = {{},
-                                                                         {},
+                                                                         {Key::FUNCTION_F1},
                                                                          {'+'},
                                                                          {'9'},
                                                                          {'8'},
                                                                          {'7'},
-                                                                         {'2'},
-                                                                         {'3'},
-                                                                         {'4'},
-                                                                         {'5'},
+                                                                         {Key::FUNCTION_F2},
+                                                                         {Key::FUNCTION_F3},
+                                                                         {Key::FUNCTION_F4},
+                                                                         {Key::FUNCTION_F5},
                                                                          {Key::ESC},
                                                                          {'q', 'Q'},
                                                                          {'w', 'W'},
@@ -141,6 +141,7 @@ void HackadayCommunicatorKeyboard::pressed(uint8_t key)
     if (state == Init || state == Busy) {
         return;
     }
+    LOG_DEBUG("Key pressed: %u", key);
 
     if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;
