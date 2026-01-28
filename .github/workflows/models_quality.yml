@@ -13,12 +13,13 @@ permissions:
 
 jobs:
   quality-check:
-    if: ${{ github.repository == 'meshtastic/firmware' && (github.event_name == 'issues' || (github.event_name == 'pull_request' && (github.event.pull_request.labels == null || !contains(join(github.event.pull_request.labels.*.name, ','), 'automation')))) }}
+    if: ${{ github.repository == 'meshtastic/firmware' && (github.event_name == 'issues' || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'automation'))) }}
     runs-on: ubuntu-latest
     steps:
       - name: Detect spam or low-quality content
         uses: actions/ai-inference@v2
         id: ai
+        continue-on-error: true
         with:
           prompt: |
             Is this GitHub ${{ github.event_name == 'issues' && 'issue' || 'pull request' }} spam, AI-generated slop, or low quality?
@@ -29,7 +30,6 @@ jobs:
             Respond with one of: spam, ai-generated, needs-review, or ok
           system-prompt: You detect spam and low-quality contributions. Be conservative - only flag obvious spam or AI slop.
           model: openai/gpt-4o-mini
-          # temperature: 0.1
 
       - name: Ensure label exists
         if: steps.ai.outputs.response != 'ok'

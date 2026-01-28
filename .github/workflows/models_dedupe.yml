@@ -17,7 +17,7 @@ jobs:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event.issue.user.type != 'Bot' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: pelikhan/action-genai-issue-dedup@v0
+      - uses: pelikhan/action-genai-issue-dedup@bdb3b5d9451c1090ffcdf123d7447a5e7c7a2528 # v0.0.19
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Optional tuning:

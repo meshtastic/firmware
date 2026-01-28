@@ -13,7 +13,7 @@ jobs:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event.issue.user.type != 'Bot' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check if should skip
+      - name: Determine if completeness check should be skipped
         uses: actions/github-script@v8
         id: check-skip
         with:
@@ -23,15 +23,32 @@ jobs:
             const hasFeatureRequest = title.includes('feature request');
             const hasEnhancement = labels.includes('enhancement');
             const shouldSkip = hasFeatureRequest && hasEnhancement;
-            core.setOutput('should_skip', shouldSkip);
+            core.setOutput('should_skip', shouldSkip ? 'true' : 'false');
 
       - name: Check issue completeness
         if: steps.check-skip.outputs.should_skip != 'true'
         uses: actions/ai-inference@v2
         id: ai
+        continue-on-error: true
         with:
           prompt: |
-            Analyze this GitHub issue for completeness. If missing reproduction steps, version info, or expected/actual behavior, respond with a friendly request for the missing info. If complete, say so.
+            Analyze this GitHub issue for completeness.
+
+            If this looks like a bug on the device/firmware (for example: crash, reboot, lockup, radio issues, GPS issues, display issues, power/sleep issues), request device logs and explain how to get them using either the Web Flasher or the Meshtastic CLI with --noproto.
+
+            Web Flasher logs:
+            - Go to https://flasher.meshtastic.org
+            - Connect the device via USB and click Connect
+            - Open the device console/log output, reproduce the problem, then copy/download and attach/paste the logs
+
+            Meshtastic CLI logs:
+            - Run: meshtastic --port <serial-port> --noproto
+            - Reproduce the problem, then copy/paste the terminal output (you can also save it with: ... | tee device.log)
+
+            Also request key context if missing: device model/variant, firmware version, region, steps to reproduce, expected vs actual.
+
+            Respond ONLY with JSON in the form: {"complete": true|false, "comment": "..."}.
+            If the issue is complete, set "comment" to "".
 
             Title: ${{ github.event.issue.title }}
             Body: ${{ github.event.issue.body }}
@@ -39,14 +56,40 @@ jobs:
           model: openai/gpt-4o-mini
           # temperature: 0.2
 
-      - name: Comment on issue
+      - name: Parse completeness result
         if: steps.check-skip.outputs.should_skip != 'true' && steps.ai.outputs.response != ''
         uses: actions/github-script@v8
+        id: parse
+        env:
+          AI_RESPONSE: ${{ steps.ai.outputs.response }}
+        with:
+          script: |
+            const raw = (process.env.AI_RESPONSE || '').trim();
+
+            let complete = false;
+            let comment = '';
+            try {
+              const parsed = JSON.parse(raw);
+              complete = !!parsed.complete;
+              comment = (parsed.comment ?? '').toString().trim();
+            } catch {
+              complete = false;
+              comment = raw;
+            }
+
+            core.setOutput('should_comment', (!complete && comment.length > 0) ? 'true' : 'false');
+            core.setOutput('comment_body', comment);
+
+      - name: Comment on issue
+        if: steps.check-skip.outputs.should_skip != 'true' && steps.parse.outputs.should_comment == 'true'
+        uses: actions/github-script@v8
+        env:
+          COMMENT_BODY: ${{ steps.parse.outputs.comment_body }}
         with:
           script: |
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: ${{ github.event.issue.number }},
-              body: `${{ steps.ai.outputs.response }}`
+              body: process.env.COMMENT_BODY
             })
