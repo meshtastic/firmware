@@ -29,12 +29,13 @@ class Events
 
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
-    void onExitShort();   // Exit button: short press
-    void onExitLong();    // Exit button: long press
-    void onNavUp();       // Navigate up
-    void onNavDown();     // Navigate down
-    void onNavLeft();     // Navigate left
-    void onNavRight();    // Navigate right
+    void applyingChanges();
+    void onExitShort(); // Exit button: short press
+    void onExitLong();  // Exit button: long press
+    void onNavUp();     // Navigate up
+    void onNavDown();   // Navigate down
+    void onNavLeft();   // Navigate left
+    void onNavRight();  // Navigate right
 
     // Free text typing events
     void onFreeText(char c); // New freetext character input
