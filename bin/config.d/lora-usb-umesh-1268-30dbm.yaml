@@ -1,0 +1,23 @@
+Lora:
+  Module: sx1268
+  CS: 0
+  IRQ: 6
+  Reset: 1
+  Busy: 4
+  RXen: 2
+  DIO2_AS_RF_SWITCH: true
+  spidev: ch341
+  USB_PID: 0x5512
+  USB_VID: 0x1A86
+  DIO3_TCXO_VOLTAGE: true
+#  USB_Serialnum: 12345678
+  SX126X_MAX_POWER: 22
+# Reduce output power to improve EMI
+  NUM_PA_POINTS: 22
+  TX_GAIN_LORA: 12, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 8, 8, 7
+# Note: This module integrates an additional PA to achieve higher output power.
+# The 'power' parameter here does not represent the actual RF output.
+# TX_GAIN_LORA defines the gain offset applied at each SX1262 input power step (1–22 dBm).
+# Each array element corresponds to the additional gain when that input level is set,
+# The effective RF output is: Pout ≈ Pset + TX_GAIN_LORA[index].
+# Please refer to https://github.com/linser233/uMesh/blob/main/RF_Power.md for detailed information.
