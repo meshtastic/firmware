@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/OSThread.h"
 #include "freertosinc.h"
 
 #ifdef InputBrokerDebug
@@ -76,6 +77,7 @@ class InputBroker : public Observable<const InputEvent *>
     void queueInputEvent(const InputEvent *event);
     void processInputEventQueue();
 #endif
+    void Init();
 
   protected:
     int handleInputEvent(const InputEvent *event);
@@ -90,3 +92,4 @@ class InputBroker : public Observable<const InputEvent *>
 };
 
 extern InputBroker *inputBroker;
+extern bool runASAP;
