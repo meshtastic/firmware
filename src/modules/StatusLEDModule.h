@@ -5,6 +5,7 @@
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "input/InputBroker.h"
 #include <Arduino.h>
 #include <functional>
 
@@ -17,6 +18,8 @@ class StatusLEDModule : private concurrency::OSThread
 
     int handleStatusUpdate(const meshtastic::Status *);
 
+    int handleInputEvent(const InputEvent *arg);
+
   protected:
     unsigned int my_interval = 1000; // interval in millisconds
     virtual int32_t runOnce() override;
@@ -25,12 +28,15 @@ class StatusLEDModule : private concurrency::OSThread
         CallbackObserver<StatusLEDModule, const meshtastic::Status *>(this, &StatusLEDModule::handleStatusUpdate);
     CallbackObserver<StatusLEDModule, const meshtastic::Status *> powerStatusObserver =
         CallbackObserver<StatusLEDModule, const meshtastic::Status *>(this, &StatusLEDModule::handleStatusUpdate);
+    CallbackObserver<StatusLEDModule, const InputEvent *> inputObserver =
+        CallbackObserver<StatusLEDModule, const InputEvent *>(this, &StatusLEDModule::handleInputEvent);
 
   private:
     bool CHARGE_LED_state = LED_STATE_OFF;
     bool PAIRING_LED_state = LED_STATE_OFF;
 
     uint32_t PAIRING_LED_starttime = 0;
+    uint32_t lastUserbuttonTime = 0;
     uint32_t POWER_LED_starttime = 0;
     bool doing_fast_blink = false;
 

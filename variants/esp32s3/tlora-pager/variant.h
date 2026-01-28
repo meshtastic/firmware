@@ -26,6 +26,8 @@
 #define I2C_SDA SDA
 #define I2C_SCL SCL
 
+#define HAS_DRV2605 1
+
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 

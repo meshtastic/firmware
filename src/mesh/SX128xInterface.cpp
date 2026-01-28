@@ -69,6 +69,8 @@ template <typename T> bool SX128xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_INFO("SX128x init result %d", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+        return false;
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
@@ -155,7 +157,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR SX128xInterface<T>::disableInterrupt()
+template <typename T> void SX128xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();
 }
