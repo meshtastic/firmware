@@ -77,7 +77,9 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG = 11,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG = 12
+    meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG = 12,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_STATUSMESSAGE_CONFIG = 13
 } meshtastic_AdminMessage_ModuleConfigType;
 
 typedef enum _meshtastic_AdminMessage_BackupLocation {
@@ -168,6 +170,48 @@ typedef struct _meshtastic_KeyVerificationAdmin {
     bool has_security_number;
     uint32_t security_number;
 } meshtastic_KeyVerificationAdmin;
+
+typedef struct _meshtastic_SCD4X_config {
+    /* Set Automatic self-calibration enabled */
+    bool has_set_asc;
+    bool set_asc;
+    /* Recalibration target CO2 concentration in ppm (FRC or ASC) */
+    bool has_set_target_co2_conc;
+    uint32_t set_target_co2_conc;
+    /* Reference temperature in degC */
+    bool has_set_temperature;
+    float set_temperature;
+    /* Altitude of sensor in meters above sea level. 0 - 3000m (overrides ambient pressure) */
+    bool has_set_altitude;
+    uint32_t set_altitude;
+    /* Sensor ambient pressure in Pa. 70000 - 120000 Pa (overrides altitude) */
+    bool has_set_ambient_pressure;
+    uint32_t set_ambient_pressure;
+    /* Perform a factory reset of the sensor */
+    bool has_factory_reset;
+    bool factory_reset;
+    /* Power mode for sensor (true for low power, false for normal) */
+    bool has_set_power_mode;
+    bool set_power_mode;
+} meshtastic_SCD4X_config;
+
+typedef struct _meshtastic_SEN5X_config {
+    /* Reference temperature in degC */
+    bool has_set_temperature;
+    float set_temperature;
+    /* One-shot mode (true for low power - one-shot mode, false for normal - continuous mode) */
+    bool has_set_one_shot_mode;
+    bool set_one_shot_mode;
+} meshtastic_SEN5X_config;
+
+typedef struct _meshtastic_SensorConfig {
+    /* SCD4X CO2 Sensor configuration */
+    bool has_scd4x_config;
+    meshtastic_SCD4X_config scd4x_config;
+    /* SEN5X PM Sensor configuration */
+    bool has_sen5x_config;
+    meshtastic_SEN5X_config sen5x_config;
+} meshtastic_SensorConfig;
 
 typedef PB_BYTES_ARRAY_T(8) meshtastic_AdminMessage_session_passkey_t;
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
@@ -301,6 +345,8 @@ typedef struct _meshtastic_AdminMessage {
         bool nodedb_reset;
         /* Tell the node to reset into the OTA Loader */
         meshtastic_AdminMessage_OTAEvent ota_request;
+        /* Parameters and sensor configuration */
+        meshtastic_SensorConfig sensor_config;
     };
     /* The node generates this key and sends it with any get_x_response packets.
  The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
@@ -323,8 +369,8 @@ extern "C" {
 #define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG+1))
+#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_STATUSMESSAGE_CONFIG
+#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_STATUSMESSAGE_CONFIG+1))
 
 #define _meshtastic_AdminMessage_BackupLocation_MIN meshtastic_AdminMessage_BackupLocation_FLASH
 #define _meshtastic_AdminMessage_BackupLocation_MAX meshtastic_AdminMessage_BackupLocation_SD
@@ -349,6 +395,9 @@ extern "C" {
 #define meshtastic_KeyVerificationAdmin_message_type_ENUMTYPE meshtastic_KeyVerificationAdmin_MessageType
 
 
+
+
+
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
@@ -357,6 +406,9 @@ extern "C" {
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_SharedContact_init_default    {0, false, meshtastic_User_init_default, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_default {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
+#define meshtastic_SensorConfig_init_default     {false, meshtastic_SCD4X_config_init_default, false, meshtastic_SEN5X_config_init_default}
+#define meshtastic_SCD4X_config_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_SEN5X_config_init_default     {false, 0, false, 0}
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
@@ -364,6 +416,9 @@ extern "C" {
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_SharedContact_init_zero       {0, false, meshtastic_User_init_zero, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_zero {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
+#define meshtastic_SensorConfig_init_zero        {false, meshtastic_SCD4X_config_init_zero, false, meshtastic_SEN5X_config_init_zero}
+#define meshtastic_SCD4X_config_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_SEN5X_config_init_zero        {false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_AdminMessage_InputEvent_event_code_tag 1
@@ -385,6 +440,17 @@ extern "C" {
 #define meshtastic_KeyVerificationAdmin_remote_nodenum_tag 2
 #define meshtastic_KeyVerificationAdmin_nonce_tag 3
 #define meshtastic_KeyVerificationAdmin_security_number_tag 4
+#define meshtastic_SCD4X_config_set_asc_tag      1
+#define meshtastic_SCD4X_config_set_target_co2_conc_tag 2
+#define meshtastic_SCD4X_config_set_temperature_tag 3
+#define meshtastic_SCD4X_config_set_altitude_tag 4
+#define meshtastic_SCD4X_config_set_ambient_pressure_tag 5
+#define meshtastic_SCD4X_config_factory_reset_tag 6
+#define meshtastic_SCD4X_config_set_power_mode_tag 7
+#define meshtastic_SEN5X_config_set_temperature_tag 1
+#define meshtastic_SEN5X_config_set_one_shot_mode_tag 2
+#define meshtastic_SensorConfig_scd4x_config_tag 1
+#define meshtastic_SensorConfig_sen5x_config_tag 2
 #define meshtastic_AdminMessage_get_channel_request_tag 1
 #define meshtastic_AdminMessage_get_channel_response_tag 2
 #define meshtastic_AdminMessage_get_owner_request_tag 3
@@ -441,6 +507,7 @@ extern "C" {
 #define meshtastic_AdminMessage_factory_reset_config_tag 99
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
 #define meshtastic_AdminMessage_ota_request_tag  102
+#define meshtastic_AdminMessage_sensor_config_tag 103
 #define meshtastic_AdminMessage_session_passkey_tag 101
 
 /* Struct field encoding specification for nanopb */
@@ -501,7 +568,8 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_se
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,nodedb_reset,nodedb_reset), 100) \
 X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 102)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 102) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config), 103)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
@@ -523,6 +591,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 10
 #define meshtastic_AdminMessage_payload_variant_add_contact_MSGTYPE meshtastic_SharedContact
 #define meshtastic_AdminMessage_payload_variant_key_verification_MSGTYPE meshtastic_KeyVerificationAdmin
 #define meshtastic_AdminMessage_payload_variant_ota_request_MSGTYPE meshtastic_AdminMessage_OTAEvent
+#define meshtastic_AdminMessage_payload_variant_sensor_config_MSGTYPE meshtastic_SensorConfig
 
 #define meshtastic_AdminMessage_InputEvent_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   event_code,        1) \
@@ -569,6 +638,31 @@ X(a, STATIC,   OPTIONAL, UINT32,   security_number,   4)
 #define meshtastic_KeyVerificationAdmin_CALLBACK NULL
 #define meshtastic_KeyVerificationAdmin_DEFAULT NULL
 
+#define meshtastic_SensorConfig_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  scd4x_config,      1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  sen5x_config,      2)
+#define meshtastic_SensorConfig_CALLBACK NULL
+#define meshtastic_SensorConfig_DEFAULT NULL
+#define meshtastic_SensorConfig_scd4x_config_MSGTYPE meshtastic_SCD4X_config
+#define meshtastic_SensorConfig_sen5x_config_MSGTYPE meshtastic_SEN5X_config
+
+#define meshtastic_SCD4X_config_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, BOOL,     set_asc,           1) \
+X(a, STATIC,   OPTIONAL, UINT32,   set_target_co2_conc,   2) \
+X(a, STATIC,   OPTIONAL, FLOAT,    set_temperature,   3) \
+X(a, STATIC,   OPTIONAL, UINT32,   set_altitude,      4) \
+X(a, STATIC,   OPTIONAL, UINT32,   set_ambient_pressure,   5) \
+X(a, STATIC,   OPTIONAL, BOOL,     factory_reset,     6) \
+X(a, STATIC,   OPTIONAL, BOOL,     set_power_mode,    7)
+#define meshtastic_SCD4X_config_CALLBACK NULL
+#define meshtastic_SCD4X_config_DEFAULT NULL
+
+#define meshtastic_SEN5X_config_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, FLOAT,    set_temperature,   1) \
+X(a, STATIC,   OPTIONAL, BOOL,     set_one_shot_mode,   2)
+#define meshtastic_SEN5X_config_CALLBACK NULL
+#define meshtastic_SEN5X_config_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_InputEvent_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_OTAEvent_msg;
@@ -576,6 +670,9 @@ extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
 extern const pb_msgdesc_t meshtastic_SharedContact_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationAdmin_msg;
+extern const pb_msgdesc_t meshtastic_SensorConfig_msg;
+extern const pb_msgdesc_t meshtastic_SCD4X_config_msg;
+extern const pb_msgdesc_t meshtastic_SEN5X_config_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
@@ -585,6 +682,9 @@ extern const pb_msgdesc_t meshtastic_KeyVerificationAdmin_msg;
 #define meshtastic_NodeRemoteHardwarePinsResponse_fields &meshtastic_NodeRemoteHardwarePinsResponse_msg
 #define meshtastic_SharedContact_fields &meshtastic_SharedContact_msg
 #define meshtastic_KeyVerificationAdmin_fields &meshtastic_KeyVerificationAdmin_msg
+#define meshtastic_SensorConfig_fields &meshtastic_SensorConfig_msg
+#define meshtastic_SCD4X_config_fields &meshtastic_SCD4X_config_msg
+#define meshtastic_SEN5X_config_fields &meshtastic_SEN5X_config_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
@@ -594,6 +694,9 @@ extern const pb_msgdesc_t meshtastic_KeyVerificationAdmin_msg;
 #define meshtastic_HamParameters_size            31
 #define meshtastic_KeyVerificationAdmin_size     25
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
+#define meshtastic_SCD4X_config_size             29
+#define meshtastic_SEN5X_config_size             7
+#define meshtastic_SensorConfig_size             40
 #define meshtastic_SharedContact_size            127
 
 #ifdef __cplusplus
