@@ -548,6 +548,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Rebuild if: node count changes, locationScreen changes, or TTL expires (catches position updates)
     bool ttlExpired = (millis() - lastCacheRebuildMs) > CACHE_TTL_MS;
 
+    int totalEntries = 0;
+
     if (rawCount != lastCachedNodeCount || locationScreen != lastCachedLocationScreen || ttlExpired) {
         cachedFilteredNodesList.clear();
         cachedFilteredNodesList.reserve(rawCount);
@@ -569,9 +571,9 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
             if (locationScreen && !n->has_position)
                 continue;
 
-            drawList.push_back(n->num);
+            cachedFilteredNodesList.push_back(n->num);
         }
-        totalEntries = drawList.size();
+        totalEntries = cachedFilteredNodesList.size();
         int perPage = visibleNodeRows * totalColumns;
 
         int maxScroll = 0;
@@ -590,7 +592,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         int rowCount = 0;
 
         for (int idx = startIndex; idx < endIndex; idx++) {
-            uint32_t nodeNum = drawList[idx];
+            uint32_t nodeNum = cachedFilteredNodesList[idx];
             auto *node = nodeDB->getMeshNode(nodeNum);
             int xPos = x + (col * columnWidth);
             int yPos = y + yOffset;
@@ -685,169 +687,169 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
             display->drawString(boxLeft + padding, boxTop + padding, buf);
         }
     }
-
-    // =============================
-    // Screen Frame Functions
-    // =============================
+}
+// =============================
+// Screen Frame Functions
+// =============================
 
 #ifndef USE_EINK
-    // Node list for Last Heard and Hop Signal views
-    void drawDynamicListScreen_Nodes(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y)
-    {
-        // Static variables to track mode and duration
-        static ListMode_Node lastRenderedMode = MODE_COUNT_NODE;
-        static unsigned long modeStartTime = 0;
+// Node list for Last Heard and Hop Signal views
+void drawDynamicListScreen_Nodes(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Static variables to track mode and duration
+    static ListMode_Node lastRenderedMode = MODE_COUNT_NODE;
+    static unsigned long modeStartTime = 0;
 
-        unsigned long now = millis();
-
-#if defined(M5STACK_UNITC6L)
-        display->clear();
-        if (now - lastSwitchTime >= 3000) {
-            display->display();
-            lastSwitchTime = now;
-        }
-#endif
-        // On very first call (on boot or state enter)
-        if (lastRenderedMode == MODE_COUNT_NODE) {
-            currentMode_Nodes = MODE_LAST_HEARD;
-            modeStartTime = now;
-        }
-
-        // Time to switch to next mode?
-        if (now - modeStartTime >= getModeCycleIntervalMs()) {
-            currentMode_Nodes = static_cast<ListMode_Node>((currentMode_Nodes + 1) % MODE_COUNT_NODE);
-            modeStartTime = now;
-        }
-
-        // Render screen based on currentMode
-        const char *title = getCurrentModeTitle_Nodes(display->getWidth());
-        drawNodeListScreen(display, state, x, y, title, drawEntryDynamic_Nodes);
-
-        // Track the last mode to avoid reinitializing modeStartTime
-        lastRenderedMode = currentMode_Nodes;
-    }
-
-    // Node list for Distance and Bearings views
-    void drawDynamicListScreen_Location(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y)
-    {
-        // Static variables to track mode and duration
-        static ListMode_Location lastRenderedMode = MODE_COUNT_LOCATION;
-        static unsigned long modeStartTime = 0;
-
-        unsigned long now = millis();
+    unsigned long now = millis();
 
 #if defined(M5STACK_UNITC6L)
-        display->clear();
-        if (now - lastSwitchTime >= 3000) {
-            display->display();
-            lastSwitchTime = now;
-        }
-#endif
-        // On very first call (on boot or state enter)
-        if (lastRenderedMode == MODE_COUNT_LOCATION) {
-            currentMode_Location = MODE_DISTANCE;
-            modeStartTime = now;
-        }
-
-        // Time to switch to next mode?
-        if (now - modeStartTime >= getModeCycleIntervalMs()) {
-            currentMode_Location = static_cast<ListMode_Location>((currentMode_Location + 1) % MODE_COUNT_LOCATION);
-            modeStartTime = now;
-        }
-
-        // Render screen based on currentMode
-        const char *title = getCurrentModeTitle_Location(display->getWidth());
-
-        // Render screen based on currentMode_Location
-        if (currentMode_Location == MODE_DISTANCE) {
-            drawNodeListScreen(display, state, x, y, title, drawNodeDistance);
-        } else if (currentMode_Location == MODE_BEARING) {
-            drawNodeListWithCompasses(display, state, x, y);
-        }
-
-        // Track the last mode to avoid reinitializing modeStartTime
-        lastRenderedMode = currentMode_Location;
+    display->clear();
+    if (now - lastSwitchTime >= 3000) {
+        display->display();
+        lastSwitchTime = now;
     }
+#endif
+    // On very first call (on boot or state enter)
+    if (lastRenderedMode == MODE_COUNT_NODE) {
+        currentMode_Nodes = MODE_LAST_HEARD;
+        modeStartTime = now;
+    }
+
+    // Time to switch to next mode?
+    if (now - modeStartTime >= getModeCycleIntervalMs()) {
+        currentMode_Nodes = static_cast<ListMode_Node>((currentMode_Nodes + 1) % MODE_COUNT_NODE);
+        modeStartTime = now;
+    }
+
+    // Render screen based on currentMode
+    const char *title = getCurrentModeTitle_Nodes(display->getWidth());
+    drawNodeListScreen(display, state, x, y, title, drawEntryDynamic_Nodes);
+
+    // Track the last mode to avoid reinitializing modeStartTime
+    lastRenderedMode = currentMode_Nodes;
+}
+
+// Node list for Distance and Bearings views
+void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Static variables to track mode and duration
+    static ListMode_Location lastRenderedMode = MODE_COUNT_LOCATION;
+    static unsigned long modeStartTime = 0;
+
+    unsigned long now = millis();
+
+#if defined(M5STACK_UNITC6L)
+    display->clear();
+    if (now - lastSwitchTime >= 3000) {
+        display->display();
+        lastSwitchTime = now;
+    }
+#endif
+    // On very first call (on boot or state enter)
+    if (lastRenderedMode == MODE_COUNT_LOCATION) {
+        currentMode_Location = MODE_DISTANCE;
+        modeStartTime = now;
+    }
+
+    // Time to switch to next mode?
+    if (now - modeStartTime >= getModeCycleIntervalMs()) {
+        currentMode_Location = static_cast<ListMode_Location>((currentMode_Location + 1) % MODE_COUNT_LOCATION);
+        modeStartTime = now;
+    }
+
+    // Render screen based on currentMode
+    const char *title = getCurrentModeTitle_Location(display->getWidth());
+
+    // Render screen based on currentMode_Location
+    if (currentMode_Location == MODE_DISTANCE) {
+        drawNodeListScreen(display, state, x, y, title, drawNodeDistance);
+    } else if (currentMode_Location == MODE_BEARING) {
+        drawNodeListWithCompasses(display, state, x, y);
+    }
+
+    // Track the last mode to avoid reinitializing modeStartTime
+    lastRenderedMode = currentMode_Location;
+}
 #endif
 
 #ifdef USE_EINK
-    void drawLastHeardScreen(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y)
-    {
-        const char *title = "Last Heard";
-        drawNodeListScreen(display, state, x, y, title, drawEntryLastHeard);
-    }
+void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const char *title = "Last Heard";
+    drawNodeListScreen(display, state, x, y, title, drawEntryLastHeard);
+}
 
-    void drawHopSignalScreen(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y)
-    {
+void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
 #ifdef USE_EINK
-        const char *title = "Hops/Sig";
+    const char *title = "Hops/Sig";
 #else
 
-        const char *title = "Hops/Signal";
+    const char *title = "Hops/Signal";
 #endif
-        drawNodeListScreen(display, state, x, y, title, drawEntryHopSignal);
-    }
-    void drawDistanceScreen(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y)
-    {
-        const char *title = "Distance";
-        drawNodeListScreen(display, state, x, y, title, drawNodeDistance);
-    }
+    drawNodeListScreen(display, state, x, y, title, drawEntryHopSignal);
+}
+void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const char *title = "Distance";
+    drawNodeListScreen(display, state, x, y, title, drawNodeDistance);
+}
 #endif
-    void drawNodeListWithCompasses(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y)
-    {
-        float heading = 0;
-        bool validHeading = false;
-        auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        double lat = DegD(ourNode->position.latitude_i);
-        double lon = DegD(ourNode->position.longitude_i);
+void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    float heading = 0;
+    bool validHeading = false;
+    auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    double lat = DegD(ourNode->position.latitude_i);
+    double lon = DegD(ourNode->position.longitude_i);
 
 #if defined(M5STACK_UNITC6L)
-        display->clear();
-        uint32_t now = millis();
-        if (now - lastSwitchTime >= 2000) {
-            display->display();
-            lastSwitchTime = now;
-        }
+    display->clear();
+    uint32_t now = millis();
+    if (now - lastSwitchTime >= 2000) {
+        display->display();
+        lastSwitchTime = now;
+    }
 #endif
-        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
 #if HAS_GPS
-            if (screen->hasHeading()) {
-                heading = screen->getHeading(); // degrees
-                validHeading = true;
-            } else {
-                heading = screen->estimatedHeading(lat, lon);
-                validHeading = !isnan(heading);
-            }
+        if (screen->hasHeading()) {
+            heading = screen->getHeading(); // degrees
+            validHeading = true;
+        } else {
+            heading = screen->estimatedHeading(lat, lon);
+            validHeading = !isnan(heading);
+        }
 #endif
 
-            if (!validHeading)
-                return;
-        }
-        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
+        if (!validHeading)
+            return;
     }
+    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
+}
 
-    /// Draw a series of fields in a column, wrapping to multiple columns if needed
-    void drawColumns(OLEDDisplay * display, int16_t x, int16_t y, const char **fields)
-    {
-        // The coordinates define the left starting point of the text
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
+/// Draw a series of fields in a column, wrapping to multiple columns if needed
+void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+{
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-        const char **f = fields;
-        int xo = x, yo = y;
-        while (*f) {
-            display->drawString(xo, yo, *f);
-            if ((display->getColor() == BLACK) && config.display.heading_bold)
-                display->drawString(xo + 1, yo, *f);
+    const char **f = fields;
+    int xo = x, yo = y;
+    while (*f) {
+        display->drawString(xo, yo, *f);
+        if ((display->getColor() == BLACK) && config.display.heading_bold)
+            display->drawString(xo + 1, yo, *f);
 
-            display->setColor(WHITE);
-            yo += FONT_HEIGHT_SMALL;
-            if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
-                xo += SCREEN_WIDTH / 2;
-                yo = 0;
-            }
-            f++;
+        display->setColor(WHITE);
+        yo += FONT_HEIGHT_SMALL;
+        if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
+            xo += SCREEN_WIDTH / 2;
+            yo = 0;
         }
+        f++;
     }
+}
 
 } // namespace NodeListRenderer
 } // namespace graphics
