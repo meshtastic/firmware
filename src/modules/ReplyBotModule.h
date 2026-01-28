@@ -1,5 +1,5 @@
 #pragma once
-#if !DMESHTASTIC_EXCLUDE_REPLYBOT
+#if !MESHTASTIC_EXCLUDE_REPLYBOT
 #include "SinglePortModule.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
