@@ -307,7 +307,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = AHT10;
                 break;
 #endif
-#if !defined(M5STACK_UNITC6L)
+#if !defined(M5STACK_UNITC6L) && !defined(ARDUINO_NESSO_N1)
             case INA_ADDR:
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
