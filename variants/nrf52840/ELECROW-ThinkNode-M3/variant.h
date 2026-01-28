@@ -113,6 +113,8 @@ extern "C" {
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.3
 #define LR11X0_DIO_AS_RF_SWITCH
 
+#define SERIAL_PRINT_PORT 0
+
 // PCF8563 RTC Module
 // REVISIT https://github.com/meshtastic/firmware/pull/9084
 // #define PCF8563_RTC 0x51
