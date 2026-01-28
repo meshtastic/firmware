@@ -280,15 +280,20 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
+    // Note: this is different to the case in EnvironmentTelemetryModule
+    // There, if any sensor fails to read - valid = false.
     bool valid = false;
     bool hasSensor = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m->variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
 
+    bool sensor_get = false;
     for (TelemetrySensor *sensor : sensors) {
         LOG_DEBUG("Reading %s", sensor->sensorName);
-        valid = valid || sensor->getMetrics(m);
+        // Note - this function doesn't get properly called if within a conditional
+        sensor_get = sensor->getMetrics(m);
+        valid = valid || sensor_get;
         hasSensor = true;
     }
 
