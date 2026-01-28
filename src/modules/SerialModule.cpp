@@ -73,6 +73,8 @@ SerialModuleRadio *serialModuleRadio;
 #define SERIAL_PRINT_OBJECT Serial1
 #elif SERIAL_PRINT_PORT == 2
 #define SERIAL_PRINT_OBJECT Serial2
+#else
+#error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
 #endif
 
 SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
