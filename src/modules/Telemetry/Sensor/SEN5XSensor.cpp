@@ -112,10 +112,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
 #ifdef SEN5X_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
     uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
-    if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
-        return false;
-    }
 #elif !HAS_SCREEN
     reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
 #else
@@ -123,7 +119,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
     return false;
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SEN5X_I2C_CLOCK_SPEED */
-
 
     // Transmit the data
     // LOG_DEBUG("Beginning connection to SEN5X: 0x%x. Size: %u", address, bufferSize);
@@ -154,10 +149,6 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
 #ifdef SEN5X_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
     uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
-    if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
-        return false;
-    }
 #elif !HAS_SCREEN
     reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
 #else

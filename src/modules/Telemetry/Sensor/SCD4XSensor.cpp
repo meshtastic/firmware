@@ -23,10 +23,6 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SCD4X_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
     uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-    if (currentClock != SCD4X_I2C_CLOCK_SPEED){
-        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
-        return false;
-    }
 #elif !HAS_SCREEN
     reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
 #else
@@ -96,10 +92,6 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 #ifdef SCD4X_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
     uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-    if (currentClock != SCD4X_I2C_CLOCK_SPEED){
-        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
-        return false;
-    }
 #elif !HAS_SCREEN
     reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
 #else

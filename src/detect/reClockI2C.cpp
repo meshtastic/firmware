@@ -21,7 +21,7 @@ uint32_t reClockI2C(uint32_t desiredClock, TwoWire *i2cBus, bool force) {
     currentClock = i2cBus->getClock();
 #endif
 
-    if (currentClock != desiredClock || force){
+    if ((currentClock != desiredClock) || force){
         LOG_DEBUG("Changing I2C clock to %u", desiredClock);
         i2cBus->setClock(desiredClock);
     }
