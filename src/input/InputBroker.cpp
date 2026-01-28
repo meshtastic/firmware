@@ -5,6 +5,7 @@
 #include "modules/ExternalNotificationModule.h"
 
 #if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
 #include "input/LinuxInputImpl.h"
 #include "input/SeesawRotary.h"
 #endif
@@ -383,5 +384,5 @@ void InputBroker::Init()
     expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif
 
-#endif
+
 }
