@@ -1850,10 +1850,13 @@ void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t wi
 
     // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
     fillRect(0, 0, X(1.0), top, WHITE);
-    // printAt(0, 0, header);
+
+    // Draw character limit
     std::string ftlen = std::to_string(text.length()) + "/" + to_string(menuTextLimit);
     uint16_t textLen = getTextWidth(ftlen);
     printAt(X(1.0) - textLen - 2, 0, ftlen);
+
+    // Draw the border
     drawRect(0, top, width, wrapMaxH + 5, BLACK);
 }
 // Renders the panel shown at the top of the root menu.
