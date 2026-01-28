@@ -430,15 +430,6 @@ void cpuDeepSleep(uint32_t msecToWake)
         Serial1.end();
 #endif
 
-#ifdef TTGO_T_ECHO
-    // To power off the T-Echo, the display must be set
-    // as an input pin; otherwise, there will be leakage current.
-    pinMode(PIN_EINK_CS, INPUT);
-    pinMode(PIN_EINK_DC, INPUT);
-    pinMode(PIN_EINK_RES, INPUT);
-    pinMode(PIN_EINK_BUSY, INPUT);
-#endif
-
     setBluetoothEnable(false);
 
 #ifdef RAK4630
@@ -449,57 +440,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     // RAK-12039 set pin for Air quality sensor
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
-#ifdef RAK14014
-    // GPIO restores input status, otherwise there will be leakage current
-    nrf_gpio_cfg_default(TFT_BL);
-    nrf_gpio_cfg_default(TFT_DC);
-    nrf_gpio_cfg_default(TFT_CS);
-    nrf_gpio_cfg_default(TFT_SCLK);
-    nrf_gpio_cfg_default(TFT_MOSI);
-    nrf_gpio_cfg_default(TFT_MISO);
-    nrf_gpio_cfg_default(SCREEN_TOUCH_INT);
-    nrf_gpio_cfg_default(WB_I2C1_SCL);
-    nrf_gpio_cfg_default(WB_I2C1_SDA);
-
-    // nrf_gpio_cfg_default(WB_I2C2_SCL);
-    // nrf_gpio_cfg_default(WB_I2C2_SDA);
 #endif
-#endif
-#ifdef MESHLINK
-#ifdef PIN_WD_EN
-    digitalWrite(PIN_WD_EN, LOW);
-#endif
-#endif
-
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_MESH_SOLAR)
-    nrf_gpio_cfg_default(PIN_GPS_PPS);
-    detachInterrupt(PIN_GPS_PPS);
-    detachInterrupt(PIN_BUTTON1);
-#endif
-
-#ifdef ELECROW_ThinkNode_M1
-    for (int pin = 0; pin < 48; pin++) {
-        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
-            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
-            continue;
-        }
-        pinMode(pin, OUTPUT);
-    }
-    for (int pin = 0; pin < 48; pin++) {
-        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
-            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
-            continue;
-        }
-        digitalWrite(pin, LOW);
-    }
-    for (int pin = 0; pin < 48; pin++) {
-        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
-            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
-            continue;
-        }
-        NRF_GPIO->DIRCLR = (1 << pin);
-    }
-#endif
+    // Run shutdown code if specified in variant.cpp
     variant_shutdown();
 
     // Sleepy trackers or sensors can low power "sleep"
@@ -521,22 +463,6 @@ void cpuDeepSleep(uint32_t msecToWake)
         // FIXME, use system off mode with ram retention for key state?
         // FIXME, use non-init RAM per
         // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
-
-#ifdef ELECROW_ThinkNode_M1
-        nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
-        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW;
-        nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense);
-
-        nrf_gpio_cfg_input(PIN_BUTTON2, NRF_GPIO_PIN_PULLUP);
-        nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
-        nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
-#endif
-
-#ifdef PROMICRO_DIY_TCXO
-        nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
-        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
-        nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
-#endif
 
 #ifdef BATTERY_LPCOMP_INPUT
         // Wake up if power rises again

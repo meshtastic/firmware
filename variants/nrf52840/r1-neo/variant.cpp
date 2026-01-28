@@ -43,3 +43,11 @@ void initVariant()
     // pinMode(PIN_3V3_EN, OUTPUT);
     // digitalWrite(PIN_3V3_EN, HIGH);
 }
+
+void earlyInitVariant()
+{
+    pinMode(DCDC_EN_HOLD, OUTPUT);
+    digitalWrite(DCDC_EN_HOLD, HIGH);
+    pinMode(NRF_ON, OUTPUT);
+    digitalWrite(NRF_ON, HIGH);
+}

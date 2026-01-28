@@ -1,24 +1,7 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
-#include "input/ExpressLRSFiveWay.h"
-#include "input/InputBroker.h"
-#include "input/RotaryEncoderImpl.h"
-#include "input/RotaryEncoderInterruptImpl1.h"
-#include "input/SerialKeyboardImpl.h"
-#include "input/UpDownInterruptImpl1.h"
-#include "input/i2cButton.h"
 #include "modules/SystemCommandsModule.h"
-#if HAS_TRACKBALL
-#include "input/TrackballInterruptImpl1.h"
-#endif
-
-#include "modules/StatusLEDModule.h"
-
-#if !MESHTASTIC_EXCLUDE_I2C
-#include "input/cardKbI2cImpl.h"
-#endif
-#include "input/kbMatrixImpl.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
@@ -59,8 +42,6 @@
 #include "modules/WaypointModule.h"
 #endif
 #if ARCH_PORTDUINO
-#include "input/LinuxInputImpl.h"
-#include "input/SeesawRotary.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
@@ -185,63 +166,6 @@ void setupModules()
 #endif
     // Example: Put your module here
     // new ReplyModule();
-#if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-#if defined(T_LORA_PAGER)
-        // use a special FSM based rotary encoder version for T-LoRa Pager
-        rotaryEncoderImpl = new RotaryEncoderImpl();
-        if (!rotaryEncoderImpl->init()) {
-            delete rotaryEncoderImpl;
-            rotaryEncoderImpl = nullptr;
-        }
-#elif defined(INPUTDRIVER_ENCODER_TYPE) && (INPUTDRIVER_ENCODER_TYPE == 2)
-        upDownInterruptImpl1 = new UpDownInterruptImpl1();
-        if (!upDownInterruptImpl1->init()) {
-            delete upDownInterruptImpl1;
-            upDownInterruptImpl1 = nullptr;
-        }
-#else
-        rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-        if (!rotaryEncoderInterruptImpl1->init()) {
-            delete rotaryEncoderInterruptImpl1;
-            rotaryEncoderInterruptImpl1 = nullptr;
-        }
-#endif
-        cardKbI2cImpl = new CardKbI2cImpl();
-        cardKbI2cImpl->init();
-#if defined(M5STACK_UNITC6L)
-        i2cButton = new i2cButtonThread("i2cButtonThread");
-#endif
-#ifdef INPUTBROKER_MATRIX_TYPE
-        kbMatrixImpl = new KbMatrixImpl();
-        kbMatrixImpl->init();
-#endif // INPUTBROKER_MATRIX_TYPE
-#ifdef INPUTBROKER_SERIAL_TYPE
-        aSerialKeyboardImpl = new SerialKeyboardImpl();
-        aSerialKeyboardImpl->init();
-#endif // INPUTBROKER_MATRIX_TYPE
-    }
-#endif // HAS_BUTTON
-#if ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR && portduino_config.i2cdev != "") {
-        seesawRotary = new SeesawRotary("SeesawRotary");
-        if (!seesawRotary->init()) {
-            delete seesawRotary;
-            seesawRotary = nullptr;
-        }
-        aLinuxInputImpl = new LinuxInputImpl();
-        aLinuxInputImpl->init();
-    }
-#endif
-#if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        trackballInterruptImpl1 = new TrackballInterruptImpl1();
-        trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);
-    }
-#endif
-#ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
-    expressLRSFiveWayInput = new ExpressLRSFiveWay();
-#endif
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         cannedMessageModule = new CannedMessageModule();
