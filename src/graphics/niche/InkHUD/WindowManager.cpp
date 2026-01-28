@@ -152,17 +152,23 @@ void InkHUD::WindowManager::openAlignStick()
 void InkHUD::WindowManager::openKeyboard()
 {
     KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
-    keyboard->bringToForeground();
-    keyboardOpen = true;
-    changeLayout();
+
+    if (keyboard) {
+        keyboard->bringToForeground();
+        keyboardOpen = true;
+        changeLayout();
+    }
 }
 
 void InkHUD::WindowManager::closeKeyboard()
 {
     KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
-    keyboard->sendToBackground();
-    keyboardOpen = false;
-    changeLayout();
+
+    if (keyboard) {
+        keyboard->sendToBackground();
+        keyboardOpen = false;
+        changeLayout();
+    }
 }
 
 // On the currently focussed tile: cycle to the next available user applet
