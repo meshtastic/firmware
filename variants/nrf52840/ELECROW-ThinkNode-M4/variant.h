@@ -135,6 +135,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
 
+#define SERIAL_PRINT_PORT 0
+
 #ifdef __cplusplus
 }
 #endif

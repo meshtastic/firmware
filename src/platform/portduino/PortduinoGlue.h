@@ -1,14 +1,21 @@
 #pragma once
 #include <fstream>
 #include <map>
+#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
 #include "LR11x0Interface.h"
 #include "Module.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
-#include "platform/portduino/USBHal.h"
 #include "yaml-cpp/yaml.h"
+
+extern struct portduino_status_struct {
+    bool LoRa_in_error = false;
+    _meshtastic_HardwareModel hardwareModel = meshtastic_HardwareModel_PORTDUINO;
+} portduino_status;
+
+#include "platform/portduino/USBHal.h"
 
 // Product strings for auto-configuration
 // {"PRODUCT_STRING", "CONFIG.YAML"}

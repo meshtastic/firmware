@@ -138,6 +138,8 @@ static const uint8_t A0 = PIN_A0;
 // Battery / ADC already defined above
 #define HAS_RTC 1
 
+#define SERIAL_PRINT_PORT 0
+
 #ifdef __cplusplus
 }
 #endif
