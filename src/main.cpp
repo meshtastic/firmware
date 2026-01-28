@@ -950,8 +950,10 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
-
-    inputBroker->Init();
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+    if (inputBroker)
+        inputBroker->Init();
+#endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
     // After modules are setup, so we can observe modules
