@@ -1,5 +1,6 @@
 #pragma once
 #include <NodeDB.h>
+#include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
 #define ONE_DAY 24 * 60 * 60
@@ -57,31 +58,79 @@ class Default
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 
   private:
-    // Note: Kept as uint32_t to match the public API parameter type
+    /**
+     * Calculates a congestion scaling coefficient based on the number of online nodes.
+     *
+     * Uses power-law scaling (exponent 1.2) which provides a soft start that accelerates
+     * as node count increases - matching the superlinear growth of flood routing traffic.
+     *
+     * Scaling starts at 20 nodes (simulator shows congestion problems emerging early).
+     * Different modem presets have different channel capacities based on airtime per packet.
+     *
+     * Examples for LongFast (capacityMultiplier = 1.0):
+     *   20 nodes: 1.0x, 50 nodes: ~3.0x, 100 nodes: ~6.9x, 200 nodes: ~15.8x
+     * Examples for ShortFast (capacityMultiplier = 0.5):
+     *   20 nodes: 1.0x, 50 nodes: ~2.0x, 100 nodes: ~4.0x, 200 nodes: ~8.4x
+     */
     static float congestionScalingCoefficient(uint32_t numOnlineNodes)
     {
-        if (numOnlineNodes <= 40) {
-            return 1.0;
-        } else {
-            float throttlingFactor = 0.075;
-            if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
-                throttlingFactor = 0.04;
-            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
-                throttlingFactor = 0.02;
-            else if (config.lora.use_preset &&
-                     IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
-                throttlingFactor = 0.01;
+        // Start scaling at 20 nodes - meshes show congestion problems earlier than 40
+        if (numOnlineNodes <= 20) {
+            return 1.0f;
+        }
+
+        // Use power-law scaling (p=1.2) - soft start that accelerates with node count,
+        // matching the superlinear growth of flood routing traffic
+        float baseScale = powf(static_cast<float>(numOnlineNodes) / 20.0f, 1.2f);
+
+        // Apply modem-specific capacity multiplier based on relative channel capacity.
+        // Capacity is inversely proportional to airtime - faster modems can handle more
+        // traffic before congestion, so we scale their intervals less aggressively.
+        // Airtime values are for a typical 237-byte packet (max payload).
+        float capacityMultiplier = 1.0f;
+        if (config.lora.use_preset) {
+            switch (config.lora.modem_preset) {
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+                capacityMultiplier = 0.3f; // ~28ms airtime, BW500 SF5
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+                capacityMultiplier = 0.5f; // ~50ms airtime, BW500 SF7
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+                capacityMultiplier = 0.7f; // ~100ms airtime, BW500 SF8
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+                capacityMultiplier = 0.7f; // ~100ms airtime, BW250 SF7
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+                capacityMultiplier = 0.85f; // ~200ms airtime, BW250 SF8
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+                capacityMultiplier = 0.85f; // ~150ms airtime, BW250 SF9
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+                capacityMultiplier = 1.0f; // ~300ms airtime, BW250 SF10 (baseline)
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+                capacityMultiplier = 1.0f; // ~350ms airtime, BW125 SF9
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+                capacityMultiplier = 1.3f; // ~700ms airtime, BW125 SF10
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
+                capacityMultiplier = 1.3f; // ~1400ms airtime, BW62.5 SF11
+                break;
+            default:
+                capacityMultiplier = 1.0f;
+                break;
+            }
+        }
 
 #if USERPREFS_EVENT_MODE
-            // If we are in event mode, scale down the throttling factor
-            throttlingFactor = 0.04;
+        // Event mode: more aggressive throttling for dense temporary meshes
+        capacityMultiplier *= 1.5f;
 #endif
 
-            // Scaling up traffic based on number of nodes over 40
-            int nodesOverForty = (numOnlineNodes - 40);
-            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
-        }
+        return 1.0f + (baseScale - 1.0f) * capacityMultiplier;
     }
 };
