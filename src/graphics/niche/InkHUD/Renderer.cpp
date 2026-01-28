@@ -316,8 +316,8 @@ void InkHUD::Renderer::clearTile(Tile *t)
     } else {
         const uint16_t byteStart = (xStart / 8) + 1;
         const uint16_t byteEnd = xEnd / 8;
-        const uint8_t leadingByte = 0x00FF >> (xStart - ((byteStart - 1) * 8));
-        const uint8_t trailingByte = 0xFF00 >> (xEnd - (byteEnd * 8));
+        const uint8_t leadingByte = 0xFF >> (xStart - ((byteStart - 1) * 8));
+        const uint8_t trailingByte = (0xFF00 >> (xEnd - (byteEnd * 8))) & 0xFF;
         for (uint16_t i = yStart * imageBufferWidth; i < yEnd * imageBufferWidth; i += imageBufferWidth) {
             // Set the leading byte
             imageBuffer[i + byteStart - 1] |= leadingByte;
