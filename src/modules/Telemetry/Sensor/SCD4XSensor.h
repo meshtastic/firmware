@@ -32,7 +32,7 @@ class SCD4XSensor : public TelemetrySensor
     bool startMeasurement();
     bool stopMeasurement();
 
-    uint16_t ascActive;
+    uint16_t ascActive = 1;
    // low power measurement mode (on sensirion side). Disables sleep mode
    // Improvement and testing needed for timings
     bool lowPower = true;
@@ -45,7 +45,7 @@ class SCD4XSensor : public TelemetrySensor
 
     enum SCD4XState { SCD4X_OFF, SCD4X_IDLE, SCD4X_MEASUREMENT };
     SCD4XState state = SCD4X_OFF;
-    SCD4xSensorVariant sensorVariant;
+    SCD4xSensorVariant sensorVariant{};
 
     virtual bool isActive() override;
 
