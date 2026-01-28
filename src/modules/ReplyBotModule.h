@@ -3,8 +3,6 @@
 #include "SinglePortModule.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
-// Forward declaration ONLY (correct for Meshtastic headers)
-
 class ReplyBotModule : public SinglePortModule
 {
   public:
