@@ -58,7 +58,6 @@ extern "C" {
 #define LED_BLUE 37
 #define LED_PAIRING LED_BLUE // Signals the Status LED Module to handle this LED
 
-#define LED_BUILTIN -1
 #define LED_STATE_ON LOW
 #define LED_STATE_OFF HIGH
 
@@ -112,6 +111,8 @@ extern "C" {
 #define LR1110_SPI_MISO_PIN 47
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.3
 #define LR11X0_DIO_AS_RF_SWITCH
+
+#define SERIAL_PRINT_PORT 0
 
 // PCF8563 RTC Module
 // REVISIT https://github.com/meshtastic/firmware/pull/9084

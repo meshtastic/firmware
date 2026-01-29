@@ -45,7 +45,6 @@ extern "C" {
 #define PIN_LED1 (32 + 3) // P1.03, Green
 #define PIN_LED2 (32 + 4) // P1.04, Blue
 
-#define LED_BUILTIN -1 // PIN_LED1
 #define LED_BLUE PIN_LED2
 #define LED_STATE_ON 0 // State when LED is lit
 
@@ -175,6 +174,8 @@ extern "C" {
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES W25Q32JVSS
 #define EXTERNAL_FLASH_USE_QSPI
+
+#define SERIAL_PRINT_PORT 0
 
 // NFC is disabled via CONFIG_NFCT_PINS_AS_GPIOS=1 build flag
 // This configures P0.09 and P0.10 as regular GPIO pins instead of NFC pins
