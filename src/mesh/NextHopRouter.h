@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AckBatcher.h"
 #include "FloodingRouter.h"
 #include <unordered_map>
 
@@ -83,6 +84,16 @@ class NextHopRouter : public FloodingRouter
 
         // Also after calling runOnce there might be new packets to retransmit
         auto d = doRetransmissions();
+
+        // Check if any batched ACKs need to be flushed (Phase 2 feature)
+        if (ackBatcher && ackBatcher->isEnabled()) {
+            ackBatcher->checkAndFlush(millis());
+            // If we have pending ACKs, wake up sooner to check the batch window
+            if (ackBatcher->getPendingCount() > 0) {
+                return min(min(d, r), (int32_t)50); // Check every 50ms when batching
+            }
+        }
+
         return min(d, r);
     }
 
