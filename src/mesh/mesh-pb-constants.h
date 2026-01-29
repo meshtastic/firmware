@@ -74,7 +74,8 @@ static inline int get_max_num_nodes()
 size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc_t *fields, const void *src_struct);
 
 /// helper function for decoding a record as a protobuf, we will return false if the decoding failed
-bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct);
+bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct,
+                          bool suppress_errors = false);
 
 /// Read from an Arduino File
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count);
