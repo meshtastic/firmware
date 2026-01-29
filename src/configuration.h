@@ -435,6 +435,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LED_STATE_OFF (LED_STATE_ON ^ 1)
 #endif
 
+#ifndef ledOff
+#define ledOff(pin) pinMode(pin, INPUT)
+#endif
+
 // default mapping of pins
 #if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
 #define ALT_BUTTON_PIN PIN_BUTTON2
