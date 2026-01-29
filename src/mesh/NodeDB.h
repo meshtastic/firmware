@@ -131,11 +131,17 @@ static constexpr PreHopPacketsPolicy PREHOP_PACKETS_POLICY = PreHopPacketsPolicy
 
 inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 {
+    if (isFromUs(&p)) {
+        return false; // local-originated packets should never be dropped by pre-hop policy
+    }
     return (PREHOP_PACKETS_POLICY == PreHopPacketsPolicy::DROP_PACKET) && !isHopStartValidForForwarding(p);
 }
 
 inline bool isHopStartValidForPolicy(const meshtastic_MeshPacket &p)
 {
+    if (isFromUs(&p)) {
+        return true; // allow local-originated packets through all policy gates
+    }
     return (PREHOP_PACKETS_POLICY == PreHopPacketsPolicy::ALLOW) ? true : isHopStartValidForForwarding(p);
 }
 
