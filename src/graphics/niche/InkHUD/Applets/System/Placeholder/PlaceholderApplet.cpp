@@ -4,7 +4,7 @@
 
 using namespace NicheGraphics;
 
-void InkHUD::PlaceholderApplet::onRender()
+void InkHUD::PlaceholderApplet::onRender(bool full)
 {
     // This placeholder applet fills its area with sparse diagonal lines
     hatchRegion(0, 0, width(), height(), 8, BLACK);
