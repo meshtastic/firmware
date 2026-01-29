@@ -124,17 +124,20 @@ inline bool isHopStartValidForForwarding(const meshtastic_MeshPacket &p)
     return classifyHopStart(p) == HopStartStatus::VALID;
 }
 
-// Controls whether pre-hop packets (missing/invalid hop_start) are allowed,
-// only blocked from forwarding, or dropped entirely on receive.
-enum class PreHopPacketsPolicy : uint8_t { ALLOW = 0, PREVENT_FORWARDING = 1, DROP_PACKET = 2 };
-static constexpr PreHopPacketsPolicy PREHOP_PACKETS_POLICY = PreHopPacketsPolicy::DROP_PACKET;
+inline bool isModernOnlyRebroadcastMode()
+{
+    return config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_MODERN_ONLY;
+}
 
 inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 {
-    if (isFromUs(&p)) {
-        return false; // local-originated packets should never be dropped by pre-hop policy
+    if (!isModernOnlyRebroadcastMode()) {
+        return false;
     }
-    return (PREHOP_PACKETS_POLICY == PreHopPacketsPolicy::DROP_PACKET) && !isHopStartValidForForwarding(p);
+    if (isFromUs(&p)) {
+        return false; // local-originated packets should never be dropped by modern-only policy
+    }
+    return !isHopStartValidForForwarding(p);
 }
 
 inline bool isHopStartValidForPolicy(const meshtastic_MeshPacket &p)
@@ -142,7 +145,10 @@ inline bool isHopStartValidForPolicy(const meshtastic_MeshPacket &p)
     if (isFromUs(&p)) {
         return true; // allow local-originated packets through all policy gates
     }
-    return (PREHOP_PACKETS_POLICY == PreHopPacketsPolicy::ALLOW) ? true : isHopStartValidForForwarding(p);
+    if (!isModernOnlyRebroadcastMode()) {
+        return true;
+    }
+    return isHopStartValidForForwarding(p);
 }
 
 inline uint8_t effectiveHopLimitForForwarding(const meshtastic_MeshPacket &p)

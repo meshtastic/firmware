@@ -1707,7 +1707,9 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
     lastLogMs = millis();
     const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
     const bool hasBitfield = decoded && p.decoded.has_bitfield;
-    const char *verb = (context && strcmp(context, "rx-drop") == 0) ? "Drop packet" : "Drop forward";
+    const bool isDropPacket =
+        context && (strcmp(context, "rx-drop") == 0 || strcmp(context, "modern_only rebroadcast mode") == 0);
+    const char *verb = isDropPacket ? "Drop packet" : "Drop forward";
     LOG_DEBUG("%s (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)", verb,
               context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
 }

@@ -91,7 +91,9 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
     meshtastic_Config_DeviceConfig_RebroadcastMode_NONE = 4,
     /* Ignores packets from non-standard portnums such as: TAK, RangeTest, PaxCounter, etc.
  Only rebroadcasts packets with standard portnums: NodeInfo, Text, Position, Telemetry, and Routing. */
-    meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY = 5
+    meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY = 5,
+    /* Drops packets with missing/invalid hop_start metadata (pre-hop firmware behavior). */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_MODERN_ONLY = 6
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
 
 /* Defines buzzer behavior for audio feedback */
@@ -645,8 +647,8 @@ extern "C" {
 #define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY+1))
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_MODERN_ONLY
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_MODERN_ONLY+1))
 
 #define _meshtastic_Config_DeviceConfig_BuzzerMode_MIN meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
 #define _meshtastic_Config_DeviceConfig_BuzzerMode_MAX meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY

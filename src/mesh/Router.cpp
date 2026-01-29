@@ -824,7 +824,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (shouldDropPacketForPreHop(*p)) {
-        logHopStartDrop(*p, "rx-drop");
+        logHopStartDrop(*p, "modern_only rebroadcast mode");
         packetPool.release(p);
         return;
     }
