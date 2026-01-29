@@ -1,0 +1,138 @@
+name: PR Triage (Models)
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+  issues: write
+  models: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event.pull_request.user.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    steps:
+      # ─────────────────────────────────────────────────────────────────────────
+      # Step 1: Check if PR already has automation/type labels (skip if so)
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Check existing labels
+        uses: actions/github-script@v8
+        id: check-labels
+        with:
+          script: |
+            const skipLabels = new Set(['automation']);
+            const typeLabels = new Set(['bugfix', 'hardware-support', 'enhancement', 'dependencies', 'submodules', 'github_actions', 'trunk', 'cleanup']);
+            const prLabels = context.payload.pull_request.labels.map(l => l.name);
+
+            const shouldSkipAll = prLabels.some(l => skipLabels.has(l));
+            const hasTypeLabel = prLabels.some(l => typeLabels.has(l));
+
+            core.setOutput('skip_all', shouldSkipAll ? 'true' : 'false');
+            core.setOutput('has_type_label', hasTypeLabel ? 'true' : 'false');
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Step 2: Quality check (spam/AI-slop detection)
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Detect spam or low-quality content
+        if: steps.check-labels.outputs.skip_all != 'true'
+        uses: actions/ai-inference@v2
+        id: quality
+        continue-on-error: true
+        with:
+          max-tokens: 20
+          prompt: |
+            Is this GitHub pull request spam, AI-generated slop, or low quality?
+
+            Title: ${{ github.event.pull_request.title }}
+            Body: ${{ github.event.pull_request.body }}
+
+            Respond with exactly one of: spam, ai-generated, needs-review, ok
+          system-prompt: You detect spam and low-quality contributions. Be conservative - only flag obvious spam or AI slop.
+          model: openai/gpt-4o-mini
+
+      - name: Apply quality label if needed
+        if: steps.check-labels.outputs.skip_all != 'true' && steps.quality.outputs.response != '' && steps.quality.outputs.response != 'ok'
+        uses: actions/github-script@v8
+        id: quality-label
+        env:
+          QUALITY_LABEL: ${{ steps.quality.outputs.response }}
+        with:
+          script: |
+            const label = (process.env.QUALITY_LABEL || '').trim().toLowerCase();
+            const labelMeta = {
+              'spam': { color: 'd73a4a', description: 'Possible spam' },
+              'ai-generated': { color: 'fbca04', description: 'Possible AI-generated low-quality content' },
+              'needs-review': { color: 'f9d0c4', description: 'Needs human review' },
+            };
+            const meta = labelMeta[label];
+            if (!meta) return;
+
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label, color: meta.color, description: meta.description });
+            }
+
+            // Apply label
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, labels: [label] });
+
+            core.setOutput('is_spam', 'true');
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Step 3: Auto-label PR type (bugfix/hardware-support/enhancement)
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Classify PR for labeling
+        if: steps.check-labels.outputs.skip_all != 'true' && steps.check-labels.outputs.has_type_label != 'true' && (steps.quality.outputs.response == 'ok' || steps.quality.outputs.response == '')
+        uses: actions/ai-inference@v2
+        id: classify
+        continue-on-error: true
+        with:
+          max-tokens: 30
+          prompt: |
+            Classify this pull request into exactly one category.
+
+            Return exactly one of: bugfix, hardware-support, enhancement
+
+            Use bugfix if it fixes a bug, crash, or incorrect behavior.
+            Use hardware-support if it adds or improves support for a specific hardware device/variant.
+            Use enhancement if it adds a new feature, improves performance, or refactors code.
+
+            Title: ${{ github.event.pull_request.title }}
+            Body: ${{ github.event.pull_request.body }}
+          system-prompt: You classify pull requests into categories. Be conservative and pick the most appropriate single label.
+          model: openai/gpt-4o-mini
+
+      - name: Apply type label
+        if: steps.check-labels.outputs.skip_all != 'true' && steps.check-labels.outputs.has_type_label != 'true' && steps.classify.outputs.response != ''
+        uses: actions/github-script@v8
+        env:
+          TYPE_LABEL: ${{ steps.classify.outputs.response }}
+        with:
+          script: |
+            const label = (process.env.TYPE_LABEL || '').trim().toLowerCase();
+            const labelMeta = {
+              'bugfix': { color: 'd73a4a', description: 'Bug fix' },
+              'hardware-support': { color: '0e8a16', description: 'Hardware support addition or improvement' },
+              'enhancement': { color: 'a2eeef', description: 'New feature or enhancement' },
+            };
+            const meta = labelMeta[label];
+            if (!meta) return;
+
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label, color: meta.color, description: meta.description });
+            }
+
+            // Apply label
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, labels: [label] });

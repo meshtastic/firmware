@@ -43,10 +43,6 @@
 #include "MessageStore.h"
 #endif
 
-#ifdef ELECROW_ThinkNode_M5
-PCA9557 io(0x18, &Wire);
-#endif
-
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -123,31 +119,6 @@ void printPartitionTable()
 }
 #endif // DEBUG_PARTITION_TABLE
 #endif // ARCH_ESP32
-
-#if HAS_BUTTON || defined(ARCH_PORTDUINO)
-#include "input/ButtonThread.h"
-
-#if defined(BUTTON_PIN_TOUCH)
-ButtonThread *TouchButtonThread = nullptr;
-#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
-static bool touchBacklightWasOn = false;
-static bool touchBacklightActive = false;
-#endif
-#endif
-
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
-ButtonThread *UserButtonThread = nullptr;
-#endif
-
-#if defined(ALT_BUTTON_PIN)
-ButtonThread *BackButtonThread = nullptr;
-#endif
-
-#if defined(CANCEL_BUTTON_PIN)
-ButtonThread *CancelButtonThread = nullptr;
-#endif
-
-#endif
 
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
@@ -312,6 +283,9 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void lateInitVariant() __attribute__((weak));
 void lateInitVariant() {}
 
+void earlyInitVariant() __attribute__((weak));
+void earlyInitVariant() {}
+
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
 // For example NRF52 will prevent any flash writes in that case automatically
@@ -367,25 +341,12 @@ void setup()
     // boot sequence will follow when battery level raises to safe mode
     waitUntilPowerLevelSafe();
 
-    // TODO remove all device-specific setup code to variant.cpp
-#if defined(R1_NEO)
-    pinMode(DCDC_EN_HOLD, OUTPUT);
-    digitalWrite(DCDC_EN_HOLD, HIGH);
-    pinMode(NRF_ON, OUTPUT);
-    digitalWrite(NRF_ON, HIGH);
-#endif
+    // Defined in variant.cpp for early init code
+    earlyInitVariant();
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-#endif
-
-#if defined(ELECROW_ThinkNode_M5)
-    Wire.begin(48, 47);
-    io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
-    io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
-    io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
-    // io.pinMode(C2_PIN, OUTPUT);
 #endif
 
 #ifdef LED_POWER
@@ -410,62 +371,6 @@ void setup()
 #else
     digitalWrite(BLE_LED, LOW);
 #endif
-#endif
-
-#if defined(T_DECK)
-    // GPIO10 manages all peripheral power supplies
-    // Turn on peripheral power immediately after MUC starts.
-    // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-    // e.g. when detecting the SD card
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    delay(100);
-#elif defined(T_DECK_PRO)
-    pinMode(LORA_EN, OUTPUT);
-    digitalWrite(LORA_EN, HIGH);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(PIN_EINK_CS, OUTPUT);
-    digitalWrite(PIN_EINK_CS, HIGH);
-#elif defined(T_LORA_PAGER)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    pinMode(KB_INT, INPUT_PULLUP);
-    // io expander
-    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
-    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
-    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
-    io.pinMode(EXPANDS_KB_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.pinMode(EXPANDS_SD_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
-    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-#elif defined(HACKADAY_COMMUNICATOR)
-    pinMode(KB_INT, INPUT);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -579,30 +484,6 @@ void setup()
     LOG_INFO("Wait for peripherals to stabilize");
     delay(PERIPHERAL_WARMUP_MS);
 #endif
-
-#ifdef BUTTON_PIN
-#ifdef ARCH_ESP32
-
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-#ifdef BUTTON_NEED_PULLUP
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
-#else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
-#endif
-#else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
-#ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    delay(10);
-#endif
-#ifdef BUTTON_NEED_PULLUP2
-    gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
-    delay(10);
-#endif
-#endif
-#endif
-#endif
-
     initSPI();
 
     OSThread::setup();
@@ -1069,180 +950,9 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
-
-// buttons are now inputBroker, so have to come after setupModules
-#if HAS_BUTTON
-    int pullup_sense = 0;
-#ifdef INPUT_PULLUP_SENSE
-    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-#ifdef BUTTON_SENSE_TYPE
-    pullup_sense = BUTTON_SENSE_TYPE;
-#else
-    pullup_sense = INPUT_PULLUP_SENSE;
-#endif
-#endif
-#if defined(ARCH_PORTDUINO)
-
-    if (portduino_config.userButtonPin.enabled) {
-
-        LOG_DEBUG("Use GPIO%02d for button", portduino_config.userButtonPin.pin);
-        UserButtonThread = new ButtonThread("UserButton");
-        if (screen) {
-            ButtonConfig config;
-            config.pinNumber = (uint8_t)portduino_config.userButtonPin.pin;
-            config.activeLow = true;
-            config.activePullup = true;
-            config.pullupSense = INPUT_PULLUP;
-            config.intRoutine = []() {
-                UserButtonThread->userButton.tick();
-                UserButtonThread->setIntervalFromNow(0);
-                runASAP = true;
-                BaseType_t higherWake = 0;
-                mainDelay.interruptFromISR(&higherWake);
-            };
-            config.singlePress = INPUT_BROKER_USER_PRESS;
-            config.longPress = INPUT_BROKER_SELECT;
-            UserButtonThread->initButton(config);
-        }
-    }
-#endif
-
-#ifdef BUTTON_PIN_TOUCH
-    TouchButtonThread = new ButtonThread("BackButton");
-    ButtonConfig touchConfig;
-    touchConfig.pinNumber = BUTTON_PIN_TOUCH;
-    touchConfig.activeLow = true;
-    touchConfig.activePullup = true;
-    touchConfig.pullupSense = pullup_sense;
-    touchConfig.intRoutine = []() {
-        TouchButtonThread->userButton.tick();
-        TouchButtonThread->setIntervalFromNow(0);
-        runASAP = true;
-        BaseType_t higherWake = 0;
-        mainDelay.interruptFromISR(&higherWake);
-    };
-    touchConfig.singlePress = INPUT_BROKER_NONE;
-    touchConfig.longPress = INPUT_BROKER_BACK;
-#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
-    // On T-Echo Plus the touch pad should only drive the backlight, not UI navigation/sounds
-    touchConfig.longPress = INPUT_BROKER_NONE;
-    touchConfig.suppressLeadUpSound = true;
-    touchConfig.onPress = []() {
-        touchBacklightWasOn = uiconfig.screen_brightness == 1;
-        if (!touchBacklightWasOn) {
-            digitalWrite(PIN_EINK_EN, HIGH);
-        }
-        touchBacklightActive = true;
-    };
-    touchConfig.onRelease = []() {
-        if (touchBacklightActive && !touchBacklightWasOn) {
-            digitalWrite(PIN_EINK_EN, LOW);
-        }
-        touchBacklightActive = false;
-    };
-#endif
-    TouchButtonThread->initButton(touchConfig);
-#endif
-
-#if defined(CANCEL_BUTTON_PIN)
-    // Buttons. Moved here cause we need NodeDB to be initialized
-    CancelButtonThread = new ButtonThread("CancelButton");
-    ButtonConfig cancelConfig;
-    cancelConfig.pinNumber = CANCEL_BUTTON_PIN;
-    cancelConfig.activeLow = CANCEL_BUTTON_ACTIVE_LOW;
-    cancelConfig.activePullup = CANCEL_BUTTON_ACTIVE_PULLUP;
-    cancelConfig.pullupSense = pullup_sense;
-    cancelConfig.intRoutine = []() {
-        CancelButtonThread->userButton.tick();
-        CancelButtonThread->setIntervalFromNow(0);
-        runASAP = true;
-        BaseType_t higherWake = 0;
-        mainDelay.interruptFromISR(&higherWake);
-    };
-    cancelConfig.singlePress = INPUT_BROKER_CANCEL;
-    cancelConfig.longPress = INPUT_BROKER_SHUTDOWN;
-    cancelConfig.longPressTime = 4000;
-    CancelButtonThread->initButton(cancelConfig);
-#endif
-
-#if defined(ALT_BUTTON_PIN)
-    // Buttons. Moved here cause we need NodeDB to be initialized
-    BackButtonThread = new ButtonThread("BackButton");
-    ButtonConfig backConfig;
-    backConfig.pinNumber = ALT_BUTTON_PIN;
-    backConfig.activeLow = ALT_BUTTON_ACTIVE_LOW;
-    backConfig.activePullup = ALT_BUTTON_ACTIVE_PULLUP;
-    backConfig.pullupSense = pullup_sense;
-    backConfig.intRoutine = []() {
-        BackButtonThread->userButton.tick();
-        BackButtonThread->setIntervalFromNow(0);
-        runASAP = true;
-        BaseType_t higherWake = 0;
-        mainDelay.interruptFromISR(&higherWake);
-    };
-    backConfig.singlePress = INPUT_BROKER_ALT_PRESS;
-    backConfig.longPress = INPUT_BROKER_ALT_LONG;
-    backConfig.longPressTime = 500;
-    BackButtonThread->initButton(backConfig);
-#endif
-
-#if defined(BUTTON_PIN)
-#if defined(USERPREFS_BUTTON_PIN)
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
-#else
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
-#endif
-#ifndef BUTTON_ACTIVE_LOW
-#define BUTTON_ACTIVE_LOW true
-#endif
-#ifndef BUTTON_ACTIVE_PULLUP
-#define BUTTON_ACTIVE_PULLUP true
-#endif
-
-    // Buttons. Moved here cause we need NodeDB to be initialized
-    // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
-    UserButtonThread = new ButtonThread("UserButton");
-    if (screen) {
-        ButtonConfig userConfig;
-        userConfig.pinNumber = (uint8_t)_pinNum;
-        userConfig.activeLow = BUTTON_ACTIVE_LOW;
-        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfig.pullupSense = pullup_sense;
-        userConfig.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfig.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfig.longPress = INPUT_BROKER_SELECT;
-        userConfig.longPressTime = 500;
-        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
-        UserButtonThread->initButton(userConfig);
-    } else {
-        ButtonConfig userConfigNoScreen;
-        userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
-        userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
-        userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfigNoScreen.pullupSense = pullup_sense;
-        userConfigNoScreen.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
-        userConfigNoScreen.longPressTime = 500;
-        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
-        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
-        UserButtonThread->initButton(userConfigNoScreen);
-    }
-#endif
-
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+    if (inputBroker)
+        inputBroker->Init();
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -1471,13 +1181,50 @@ void loop()
     if (inputBroker)
         inputBroker->processInputEventQueue();
 #endif
-#if ARCH_PORTDUINO && HAS_TFT
+#if ARCH_PORTDUINO
+    if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
+        ch341Hal->checkError();
+    }
+    if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
+        LOG_ERROR("LoRa in error detected, attempting to recover");
+        if (rIf != nullptr) {
+            delete rIf;
+            rIf = nullptr;
+        }
+        if (portduino_config.lora_spi_dev == "ch341") {
+            if (ch341Hal != nullptr) {
+                delete ch341Hal;
+                ch341Hal = nullptr;
+                sleep(3);
+            }
+            try {
+                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                        portduino_config.lora_usb_pid);
+            } catch (std::exception &e) {
+                std::cerr << e.what() << std::endl;
+                std::cerr << "Could not initialize CH341 device!" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        if (initLoRa()) {
+            router->addInterface(rIf);
+            portduino_status.LoRa_in_error = false;
+        } else {
+            LOG_WARN("Reconfigure failed, rebooting");
+            if (screen) {
+                screen->showSimpleBanner("Rebooting...");
+            }
+            rebootAtMsec = millis() + 25;
+        }
+    }
+#if HAS_TFT
     if (screen && portduino_config.displayPanel == x11 &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();
     }
+#endif
 #endif
 #if HAS_SCREEN && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();

@@ -13,6 +13,7 @@
 #include "PacketHistory.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "RadioInterface.h"
 #include "Router.h"
 #include "SPILock.h"
 #include "SafeFile.h"
@@ -1298,6 +1299,13 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved config version %d", config.version);
         }
     }
+
+    // Coerce LoRa config fields derived from presets while bootstrapping.
+    // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
+    if (config.has_lora && config.lora.use_preset) {
+        RadioInterface::bootstrapLoRaConfigFromPreset(config.lora);
+    }
+
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
@@ -2239,7 +2247,10 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 
     // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
-    LOG_ERROR("A critical failure occurred, portduino is exiting");
-    exit(2);
+    LOG_ERROR("A critical failure occurred");
+    // TODO: Determine if other critical errors should also cause an immediate exit
+    if (code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE ||
+        code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE)
+        exit(2);
 #endif
 }
