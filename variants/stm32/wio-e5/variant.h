@@ -13,6 +13,7 @@ Do not expect a working Meshtastic device with this target.
 #define _VARIANT_WIOE5_
 
 #define USE_STM32WLx
+#define STM32WLx_TCXO_VOLTAGE 1.7
 
 #define LED_PIN PB5
 #define LED_STATE_ON 0
