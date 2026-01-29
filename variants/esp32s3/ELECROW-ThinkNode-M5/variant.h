@@ -81,4 +81,6 @@
 
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
+
+#define SERIAL_PRINT_PORT 0
 #endif
