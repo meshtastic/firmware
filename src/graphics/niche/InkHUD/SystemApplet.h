@@ -27,6 +27,7 @@ class SystemApplet : public Applet
     bool lockRequests = false;  // - prevent other applets from triggering display updates
 
     virtual void onReboot() { onShutdown(); } // - handle reboot specially
+    virtual void onApplyingChanges() {}
 
     // Other system applets may take precedence over our own system applet though
     // The order an applet is passed to WindowManager::addSystemApplet determines this hierarchy (added earlier = higher rank)
