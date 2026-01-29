@@ -823,6 +823,12 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
+    if (shouldDropPacketForPreHop(*p)) {
+        logHopStartDrop(*p, "rx-drop");
+        packetPool.release(p);
+        return;
+    }
+
     if (shouldFilterReceived(p)) {
         LOG_DEBUG("Incoming msg was filtered from 0x%x", p->from);
         packetPool.release(p);
