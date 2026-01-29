@@ -10,7 +10,6 @@
 
 #define LED_PIN 13 // 13 red, 2 blue, 15 red
 
-// #define HAS_BUTTON 0
 #define BUTTON_PIN 0
 #define BUTTON_NEED_PULLUP
 

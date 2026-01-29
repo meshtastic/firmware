@@ -49,8 +49,6 @@ extern "C" {
 #define PIN_LED1 (35)
 #define PIN_LED2 (36)
 
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
 
@@ -64,8 +62,6 @@ extern "C" {
 #define INPUTDRIVER_ENCODER_DOWN 4
 #define INPUTDRIVER_ENCODER_BTN 28
 #define UPDOWN_LONG_PRESS_REPEAT_INTERVAL 150
-
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 /*
  * Buzzer - PWM

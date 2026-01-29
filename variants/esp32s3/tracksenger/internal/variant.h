@@ -78,7 +78,6 @@
 // keyboard changes
 
 #define PIN_BUZZER 43
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 
