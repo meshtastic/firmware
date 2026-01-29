@@ -32,7 +32,6 @@
 #define PIN_LED1 LED_GREEN
 #define PIN_LED2 LED_BLUE
 
-#define LED_CONN LED_BLUE
 #define LED_PIN LED_GREEN
 #define ledOff(pin) pinMode(pin, INPUT)
 

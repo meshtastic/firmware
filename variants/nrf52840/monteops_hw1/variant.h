@@ -52,8 +52,6 @@ extern "C" {
 #define PIN_LED1 (35)
 #define PIN_LED2 (36) // Connected to WWAN host LED (if present)
 
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
 
