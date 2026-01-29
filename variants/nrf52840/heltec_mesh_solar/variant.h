@@ -42,7 +42,6 @@ extern "C" {
 #define PIN_LED1 (0 + 4)  // green (confirmed on 1.0 board)
 #define LED_BLUE PIN_LED1 // fake for bluefruit library
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
@@ -141,6 +140,8 @@ No longer populated on PCB
 #define BQ4050_SDA_PIN (32 + 1)                // I2C data line pin
 #define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
 #define BQ4050_EMERGENCY_SHUTDOWN_PIN (32 + 3) // Emergency shutdown pin
+
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }
