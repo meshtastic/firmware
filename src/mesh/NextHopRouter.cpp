@@ -39,6 +39,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     bool wasFallback = false;
     bool weWereNextHop = false;
     bool wasUpgraded = false;
+    const bool hopStartValid = isHopStartValidForForwarding(*p);
     bool seenRecently = wasSeenRecently(p, true, &wasFallback, &weWereNextHop,
                                         &wasUpgraded); // Updates history; returns false when an upgrade is detected
 
@@ -52,7 +53,9 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
         if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
             rxDupe++;
-            stopRetransmission(p->from, p->id);
+            if (hopStartValid) {
+                stopRetransmission(p->from, p->id);
+            }
         }
 
         // If it was a fallback to flooding, try to relay again
@@ -73,7 +76,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 }
-            } else if (!weWereNextHop) {
+            } else if (!weWereNextHop && hopStartValid) {
                 perhapsCancelDupe(p); // If it's a dupe, cancel relay if we were not explicitly asked to relay
             }
         }
@@ -89,7 +92,8 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
     uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) &&
                         (p->decoded.request_id != 0 || p->decoded.reply_id != 0);
-    if (isAckorReply) {
+    const bool hopStartValid = isHopStartValidForForwarding(*p);
+    if (isAckorReply && hopStartValid) {
         // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from"
         // is not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the
         // destination
@@ -126,7 +130,15 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 /* Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
-    if (!isToUs(p) && !isFromUs(p) && p->hop_limit > 0) {
+    const bool hopStartValid = isHopStartValidForForwarding(*p);
+    const uint8_t effectiveHopLimit = hopStartValid ? p->hop_limit : 0;
+    if (!isToUs(p) && !isFromUs(p)) {
+        if (!hopStartValid && p->hop_limit > 0) {
+            logHopStartDrop(*p, "lora");
+            return false;
+        }
+    }
+    if (!isToUs(p) && !isFromUs(p) && effectiveHopLimit > 0) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {

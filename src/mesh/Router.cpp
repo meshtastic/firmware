@@ -79,6 +79,10 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 {
+    if (!isHopStartValidForForwarding(*p)) {
+        return false;
+    }
+
     // First hop MUST always decrement to prevent retry issues
     if (getHopsAway(*p) == 0) {
         return true; // Always decrement on first hop
@@ -376,7 +380,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        if (isFromUs(p) || isHopStartValidForForwarding(*p)) {
+            udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        } else {
+            logHopStartDrop(*p, "udp");
+        }
     }
 #endif
 
@@ -761,8 +769,13 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                 p_encrypted->pki_encrypted = true;
             // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
             if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-                !isFromUs(p) && mqtt)
-                mqtt->onSend(*p_encrypted, *p, p->channel);
+                !isFromUs(p) && mqtt) {
+                if (isHopStartValidForForwarding(*p)) {
+                    mqtt->onSend(*p_encrypted, *p, p->channel);
+                } else {
+                    logHopStartDrop(*p, "mqtt");
+                }
+            }
         }
 #endif
     }

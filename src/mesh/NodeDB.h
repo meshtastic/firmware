@@ -114,6 +114,24 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 /// Returns defaultIfUnknown if the number of hops couldn't be determined.
 int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown = -1);
 
+enum class HopStartStatus : uint8_t { VALID = 0, MISSING_OR_UNKNOWN, INVALID };
+
+/// Classify hop_start validity for forwarding decisions.
+HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p);
+
+inline bool isHopStartValidForForwarding(const meshtastic_MeshPacket &p)
+{
+    return classifyHopStart(p) == HopStartStatus::VALID;
+}
+
+inline uint8_t effectiveHopLimitForForwarding(const meshtastic_MeshPacket &p)
+{
+    return isHopStartValidForForwarding(p) ? p.hop_limit : 0;
+}
+
+/// Rate-limited debug log when hop_start is invalid/missing for forwarding.
+void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
+
 enum LoadFileResult {
     // Successfully opened the file
     LOAD_SUCCESS = 1,

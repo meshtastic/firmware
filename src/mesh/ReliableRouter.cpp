@@ -48,20 +48,22 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
         // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
         // from the intended recipient.
-        auto key = GlobalPacketId(getFrom(p), p->id);
-        auto old = findPendingPacket(key);
-        if (old) {
-            LOG_DEBUG("Generate implicit ack");
-            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
-            // marked as wantAck
-            sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+        if (isHopStartValidForForwarding(*p)) {
+            auto key = GlobalPacketId(getFrom(p), p->id);
+            auto old = findPendingPacket(key);
+            if (old) {
+                LOG_DEBUG("Generate implicit ack");
+                // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to
+                // be marked as wantAck
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
-            // Only stop retransmissions if the rebroadcast came via LoRa
-            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-                stopRetransmission(key);
+                // Only stop retransmissions if the rebroadcast came via LoRa
+                if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+                    stopRetransmission(key);
+                }
+            } else {
+                LOG_DEBUG("Didn't find pending packet");
             }
-        } else {
-            LOG_DEBUG("Didn't find pending packet");
         }
     }
 
@@ -145,14 +147,17 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
+        const bool hopStartValid = isHopStartValidForForwarding(*p);
         if ((ackId || nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
-            LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
-            if (ackId) {
-                stopRetransmission(p->to, ackId);
-            } else {
-                stopRetransmission(p->to, nakId);
+            if (hopStartValid) {
+                LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
+                if (ackId) {
+                    stopRetransmission(p->to, ackId);
+                } else {
+                    stopRetransmission(p->to, nakId);
+                }
             }
         }
     }
