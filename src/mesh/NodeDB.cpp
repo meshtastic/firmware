@@ -1721,7 +1721,8 @@ void logPreHopRetransmissionIgnore(const meshtastic_MeshPacket &p, const char *c
     lastLogMs = millis();
     const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
     const bool hasBitfield = decoded && p.decoded.has_bitfield;
-    LOG_DEBUG("Ignore rebroadcast (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+    LOG_DEBUG("Ignore rebroadcast (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d "
+              "has_bitfield=%d)",
               context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
 }
 
