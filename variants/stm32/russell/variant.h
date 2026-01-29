@@ -13,6 +13,13 @@
 // #define EXT_CHRG_DETECT PA5
 // #define EXT_PWR_DETECT PA4
 
+#define BATTERY_PIN AVBAT
+/*
+Sample OCV curve for Li-SOCl2 primary lithium cells (e.g. Saft cells have fresh OCV of 3.67V)
+#define NUM_OCV_POINTS 11
+#define OCV_ARRAY 3670, 3650, 3630, 3610, 3590, 3560, 3530, 3480, 3400, 3200, 2500
+*/
+
 // Bosch Sensortec BME280
 #define HAS_SENSOR 1
 
