@@ -48,7 +48,9 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
         // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
         // from the intended recipient.
-        if (isHopStartValidForForwarding(*p)) {
+        if (!isHopStartValidForForwarding(*p)) {
+            logPreHopRetransmissionIgnore(*p, "implicit-ack");
+        } else {
             auto key = GlobalPacketId(getFrom(p), p->id);
             auto old = findPendingPacket(key);
             if (old) {

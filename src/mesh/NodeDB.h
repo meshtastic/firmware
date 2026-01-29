@@ -142,6 +142,9 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 /// Rate-limited debug log when hop_start is invalid/missing for forwarding.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
 
+/// Rate-limited debug log when a heard rebroadcast is ignored due to pre-hop rules.
+void logPreHopRetransmissionIgnore(const meshtastic_MeshPacket &p, const char *context);
+
 enum LoadFileResult {
     // Successfully opened the file
     LOAD_SUCCESS = 1,
