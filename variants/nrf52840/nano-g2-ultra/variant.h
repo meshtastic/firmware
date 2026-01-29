@@ -41,15 +41,6 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-// LEDs
-#define PIN_LED1 (-1)
-#define PIN_LED2 (-1)
-#define PIN_LED3 (-1)
-
-#define LED_RED PIN_LED3
-#define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
-
 #define LED_STATE_ON 0 // State when LED is lit
 
 /*
