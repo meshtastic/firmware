@@ -428,11 +428,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_RGB_LED
 #endif
 
-#ifndef LED_STATE_OFF
-#define LED_STATE_OFF 0
-#endif
 #ifndef LED_STATE_ON
 #define LED_STATE_ON 1
+#endif
+#ifndef LED_STATE_OFF
+#define LED_STATE_OFF (LED_STATE_ON ^ 1)
 #endif
 
 // default mapping of pins

@@ -354,9 +354,9 @@ void setup()
     digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
-#ifdef USER_LED
-    pinMode(USER_LED, OUTPUT);
-    digitalWrite(USER_LED, HIGH ^ LED_STATE_ON);
+#ifdef LED_NOTIFICATION
+    pinMode(LED_NOTIFICATION, OUTPUT);
+    digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
 #endif
 
 #ifdef WIFI_LED
