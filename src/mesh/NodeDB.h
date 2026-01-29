@@ -141,11 +141,9 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes; // Sorted by NodeNum for O(log n) lookup
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
-    pb_size_t numMeshNodes;
 
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
@@ -306,6 +304,9 @@ class NodeDB
     }
 
   private:
+    std::vector<meshtastic_NodeInfoLite> *meshNodes; // Sorted by NodeNum for O(log n) lookup
+    pb_size_t numMeshNodes;
+
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
