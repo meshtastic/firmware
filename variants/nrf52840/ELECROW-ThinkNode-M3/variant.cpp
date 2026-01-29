@@ -63,7 +63,7 @@ void initVariant()
 // called from main-nrf52.cpp during the cpuDeepSleep() function
 void variant_shutdown()
 {
-    digitalWrite(red_LED_PIN, HIGH);
+    digitalWrite(LED_RED, HIGH);
     digitalWrite(green_LED_PIN, HIGH);
     digitalWrite(LED_BLUE, HIGH);
 
@@ -82,7 +82,7 @@ void variant_shutdown()
             pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
             pin == LR1110_SPI_MOSI_PIN || pin == LR1110_SPI_SCK_PIN || pin == LR1110_SPI_NSS_PIN || pin == LR1110_BUSY_PIN ||
             pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == green_LED_PIN ||
-            pin == red_LED_PIN || pin == LED_BLUE) {
+            pin == LED_RED || pin == LED_BLUE) {
             continue;
         }
         pinMode(pin, OUTPUT);

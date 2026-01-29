@@ -50,8 +50,8 @@ extern "C" {
 #define EEPROM_POWER 7
 
 // LED
-#define red_LED_PIN 33
-#define LED_POWER red_LED_PIN
+#define LED_RED 33
+#define LED_POWER LED_RED
 #define LED_CHARGE LED_POWER // Signals the Status LED Module to handle this LED
 #define green_LED_PIN 35
 #define PIN_LED2 green_LED_PIN
