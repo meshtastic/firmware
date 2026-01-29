@@ -130,7 +130,6 @@ int32_t StatusLEDModule::runOnce()
 #ifdef LED_CHARGE
     digitalWrite(LED_CHARGE, CHARGE_LED_state);
 #endif
-    // digitalWrite(green_LED_PIN, LED_STATE_OFF);
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
