@@ -1,8 +1,11 @@
+#pragma once
+#include <Arduino.h>
+
 static const char *failMessage = "Unable to %s";
 
 #define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
     do {                                                                                                                         \
-        msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                    \
+        msglen = makeUBXPacket(UBXscratch, TYPE, ID, sizeof(DATA), DATA);                                                        \
         _serial_gps->write(UBXscratch, msglen);                                                                                  \
         if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                     \
             LOG_WARN(failMessage, #ERRMSG);                                                                                      \
@@ -10,7 +13,6 @@ static const char *failMessage = "Unable to %s";
     } while (0)
 
 // Power Management
-
 static uint8_t _message_PMREQ[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, // 4 bytes duration of request task (milliseconds)
     0x02, 0x00, 0x00, 0x00  // Bitfield, set backup = 1
@@ -478,3 +480,6 @@ b5 62 06 8a 0e 00 00 01 00 00 20 00 31 10 00 05 00 31 10 00 46 87
 BBR layer config message:
 b5 62 06 8a 0e 00 00 02 00 00 20 00 31 10 00 05 00 31 10 00 47 94
 */
+
+void UBXChecksum(uint8_t *message, size_t length);
+uint8_t makeUBXPacket(uint8_t *out, uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
