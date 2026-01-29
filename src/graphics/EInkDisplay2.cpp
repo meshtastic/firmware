@@ -104,8 +104,11 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 // End the update process - virtual method, overriden in derived class
 void EInkDisplay::endUpdate()
 {
+#ifndef EINK_NOT_HIBERNATE
     // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)
     adafruitDisplay->hibernate();
+#endif
+    
 }
 
 // Write the buffer to the display memory
