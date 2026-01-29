@@ -4,6 +4,10 @@
 #include "sys/time.h"
 #include <Arduino.h>
 
+#ifdef RX8130CE_RTC
+#include <ArtronShop_RX8130CE.h>
+#endif
+
 enum RTCQuality {
 
     /// We haven't had our RTC set yet
@@ -50,7 +54,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
 RTCSetResult readFromRTC();
 
-time_t gm_mktime(struct tm *tm);
+time_t gm_mktime(const struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

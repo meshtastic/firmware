@@ -188,7 +188,7 @@ void ExpressLRSFiveWay::determineAction(KeyType key, PressLength length)
 // Feed input to the canned messages module
 void ExpressLRSFiveWay::sendKey(input_broker_event key)
 {
-    InputEvent e;
+    InputEvent e = {};
     e.source = inputSourceName;
     e.inputEvent = key;
     notifyObservers(&e);

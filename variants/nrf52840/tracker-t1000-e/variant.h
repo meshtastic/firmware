@@ -48,7 +48,6 @@ extern "C" {
 
 #define PIN_LED1 (0 + 24) // P0.24
 #define LED_PIN PIN_LED1
-#define LED_BUILTIN -1
 #define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 
@@ -141,6 +140,8 @@ extern "C" {
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+
+#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
 
 // Buzzer
 #define BUZZER_EN_PIN (32 + 5) // P1.05, always high

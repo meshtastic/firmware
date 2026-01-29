@@ -55,12 +55,12 @@ HTTPClient httpClient;
 
 // We need to specify some content-type mapping, so the resources get delivered with the
 // right content type and are displayed correctly in the browser
-char contentTypes[][2][32] = {{".txt", "text/plain"},     {".html", "text/html"},
-                              {".js", "text/javascript"}, {".png", "image/png"},
-                              {".jpg", "image/jpg"},      {".gz", "application/gzip"},
-                              {".gif", "image/gif"},      {".json", "application/json"},
-                              {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
-                              {".svg", "image/svg+xml"},  {"", ""}};
+char const *contentTypes[][2] = {{".txt", "text/plain"},     {".html", "text/html"},
+                                 {".js", "text/javascript"}, {".png", "image/png"},
+                                 {".jpg", "image/jpg"},      {".gz", "application/gzip"},
+                                 {".gif", "image/gif"},      {".json", "application/json"},
+                                 {".css", "text/css"},       {".ico", "image/vnd.microsoft.icon"},
+                                 {".svg", "image/svg+xml"},  {"", ""}};
 
 // const char *certificate = NULL; // change this as needed, leave as is for no TLS check (yolo security)
 
@@ -148,6 +148,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
+    if (webServerThread)
+        webServerThread->markActivity();
 
     LOG_DEBUG("webAPI handleAPIv1FromRadio");
 
@@ -171,7 +173,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        // res->print(""); @todo remove
+        res->print("");
         return;
     }
 
@@ -221,7 +223,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        // res->print(""); @todo remove
+        res->print("");
         return;
     }
 
@@ -391,6 +393,9 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 
 void handleStatic(HTTPRequest *req, HTTPResponse *res)
 {
+    if (webServerThread)
+        webServerThread->markActivity();
+
     // Get access to the parameters
     ResourceParameters *params = req->getParams();
 

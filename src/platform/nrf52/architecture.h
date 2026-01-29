@@ -5,6 +5,25 @@
 //
 // defaults for NRF52 architecture
 //
+
+/*
+ * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
+ * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
+ *
+ * External Reference is VDD/4, with an adjustable gain of 1, 2 or 4, meaning
+ * VDD/4, VDD/2 or VDD for the ADC levels.
+ *
+ * Default settings are internal reference with 1/6 gain (GND..3.6V ADC range)
+ * Some variants overwrite it.
+ */
+#ifndef AREF_VOLTAGE
+#define AREF_VOLTAGE 3.6
+#endif
+
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
+#endif
+
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 1
 #endif
@@ -55,6 +74,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER
 #elif defined(NOMADSTAR_METEOR_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+#elif defined(R1_NEO)
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_R1_NEO
+#elif defined(RAK3401)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3401
 // MAke sure all custom RAK4630 boards are defined before the generic RAK4630
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
@@ -62,8 +85,16 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(T_ECHO_LITE)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
+#elif defined(TTGO_T_ECHO_PLUS)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_PLUS
 #elif defined(ELECROW_ThinkNode_M1)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
+#elif defined(ELECROW_ThinkNode_M3)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M3
+#elif defined(ELECROW_ThinkNode_M6)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M6
+#elif defined(ELECROW_ThinkNode_M4)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M4
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
@@ -100,6 +131,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #elif defined(HELTEC_MESH_SOLAR)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
+#elif defined(MUZI_BASE)
+#define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -124,7 +157,9 @@
 
 #endif
 
+#ifdef PIN_LED1
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#endif
 
 #ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
@@ -149,3 +184,6 @@
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif
+
+// Detect if running in ISR context (ARM Cortex-M4)
+#define xPortInIsrContext() ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0 ? pdFALSE : pdTRUE)

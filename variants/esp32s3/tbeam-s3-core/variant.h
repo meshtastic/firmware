@@ -15,6 +15,7 @@
 // not found then probe for SX1262
 #define USE_SX1262
 #define USE_SX1268
+#define USE_LR1121
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 5
@@ -34,11 +35,26 @@
 // code)
 #endif
 
+// LR1121
+#ifdef USE_LR1121
+#define LR1121_IRQ_PIN 1
+#define LR1121_NRESET_PIN LORA_RESET
+#define LR1121_BUSY_PIN 4
+#define LR1121_SPI_NSS_PIN 10
+#define LR1121_SPI_SCK_PIN 12
+#define LR1121_SPI_MOSI_PIN 11
+#define LR1121_SPI_MISO_PIN 13
+#define LR11X0_DIO3_TCXO_VOLTAGE 3.0
+#define LR11X0_DIO_AS_RF_SWITCH
+#endif
+
 // Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
 // and waking from light sleep
 // #define PMU_IRQ 40
 #define HAS_AXP2101
 
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
 #define HAS_RTC 1
 
 // Specify the PMU as Wire1. In the t-beam-s3 core, PCF8563 and PMU share the bus
@@ -58,10 +74,7 @@
 #define HAS_SDCARD // Have SPI interface SD card slot
 #define SDCARD_USE_SPI1
 
-// PCF8563 RTC Module
-// #define PCF8563_RTC 0x51         //Putting definitions in variant. h does not compile correctly
-
 // has 32768 Hz crystal
-#define HAS_32768HZ
+#define HAS_32768HZ 1
 
 #define USE_SH1106
