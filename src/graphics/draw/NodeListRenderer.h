@@ -63,9 +63,6 @@ void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields
 void scrollUp();
 void scrollDown();
 
-// Infinite scroll management (internal use, called by drawNodeListScreen)
-// These functions manage dynamic loading/unloading of nodes based on scroll position
-// to optimize memory usage for large node lists
 
 // Bitmap drawing function
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display);
