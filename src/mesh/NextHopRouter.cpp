@@ -39,7 +39,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     bool wasFallback = false;
     bool weWereNextHop = false;
     bool wasUpgraded = false;
-    const bool hopStartValid = isHopStartValidForForwarding(*p);
+    const bool hopStartValid = isHopStartValidForPolicy(*p);
     bool seenRecently = wasSeenRecently(p, true, &wasFallback, &weWereNextHop,
                                         &wasUpgraded); // Updates history; returns false when an upgrade is detected
 
@@ -92,7 +92,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
     uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) &&
                         (p->decoded.request_id != 0 || p->decoded.reply_id != 0);
-    const bool hopStartValid = isHopStartValidForForwarding(*p);
+    const bool hopStartValid = isHopStartValidForPolicy(*p);
     if (isAckorReply && hopStartValid) {
         // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from"
         // is not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the
@@ -130,7 +130,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 /* Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
-    const bool hopStartValid = isHopStartValidForForwarding(*p);
+    const bool hopStartValid = isHopStartValidForPolicy(*p);
     const uint8_t effectiveHopLimit = hopStartValid ? p->hop_limit : 0;
     if (!isToUs(p) && !isFromUs(p)) {
         if (!hopStartValid && p->hop_limit > 0) {

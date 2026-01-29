@@ -124,19 +124,24 @@ inline bool isHopStartValidForForwarding(const meshtastic_MeshPacket &p)
     return classifyHopStart(p) == HopStartStatus::VALID;
 }
 
-inline uint8_t effectiveHopLimitForForwarding(const meshtastic_MeshPacket &p)
-{
-    return isHopStartValidForForwarding(p) ? p.hop_limit : 0;
-}
-
-// Controls whether pre-hop packets (missing/invalid hop_start) are only blocked from forwarding,
-// or dropped entirely on receive. Adjust to DROP_PACKET to ignore them completely.
-enum class PreHopPacketsPolicy : uint8_t { PREVENT_FORWARDING = 0, DROP_PACKET = 1 };
+// Controls whether pre-hop packets (missing/invalid hop_start) are allowed,
+// only blocked from forwarding, or dropped entirely on receive.
+enum class PreHopPacketsPolicy : uint8_t { ALLOW = 0, PREVENT_FORWARDING = 1, DROP_PACKET = 2 };
 static constexpr PreHopPacketsPolicy PREHOP_PACKETS_POLICY = PreHopPacketsPolicy::DROP_PACKET;
 
 inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 {
     return (PREHOP_PACKETS_POLICY == PreHopPacketsPolicy::DROP_PACKET) && !isHopStartValidForForwarding(p);
+}
+
+inline bool isHopStartValidForPolicy(const meshtastic_MeshPacket &p)
+{
+    return (PREHOP_PACKETS_POLICY == PreHopPacketsPolicy::ALLOW) ? true : isHopStartValidForForwarding(p);
+}
+
+inline uint8_t effectiveHopLimitForForwarding(const meshtastic_MeshPacket &p)
+{
+    return isHopStartValidForPolicy(p) ? p.hop_limit : 0;
 }
 
 /// Rate-limited debug log when hop_start is invalid/missing for forwarding.

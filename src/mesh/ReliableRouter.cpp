@@ -48,7 +48,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
         // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
         // from the intended recipient.
-        if (!isHopStartValidForForwarding(*p)) {
+        if (!isHopStartValidForPolicy(*p)) {
             logPreHopRetransmissionIgnore(*p, "implicit-ack");
         } else {
             auto key = GlobalPacketId(getFrom(p), p->id);
@@ -149,7 +149,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        const bool hopStartValid = isHopStartValidForForwarding(*p);
+        const bool hopStartValid = isHopStartValidForPolicy(*p);
         if ((ackId || nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
