@@ -46,4 +46,5 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-// #define LED_PIN 1
+#define LED_NOTIFICATION 1
+#define LED_STATE_ON 0
