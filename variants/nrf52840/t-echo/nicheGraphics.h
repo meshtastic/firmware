@@ -105,7 +105,7 @@ void setupNicheGraphics()
     buttons->setHandlerDown(1, [inkhud, backlight]() {
         // Discard the button press if radio is active
         // Rare hardware fault: LoRa activity triggers touch button
-        if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
+        if (RadioLibInterface::instances.empty() || RadioLibInterface::instances.front()->isSending())
             return;
 
         // Backlight on (while held)

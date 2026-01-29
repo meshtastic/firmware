@@ -117,12 +117,13 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.air_util_tx = airTime->utilizationTXPercent();
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
-    if (RadioLibInterface::instance) {
-        telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
-        telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
-        telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
-        telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instance->txRelay;
-        telemetry.variant.local_stats.num_tx_dropped = RadioLibInterface::instance->txDrop;
+    if (!RadioLibInterface::instances.empty()) {
+        telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instances.front()->txGood;
+        telemetry.variant.local_stats.num_packets_rx =
+            RadioLibInterface::instances.front()->rxGood + RadioLibInterface::instances.front()->rxBad;
+        telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instances.front()->rxBad;
+        telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instances.front()->txRelay;
+        telemetry.variant.local_stats.num_tx_dropped = RadioLibInterface::instances.front()->txDrop;
     }
 #ifdef ARCH_PORTDUINO
     if (SimRadio::instance) {
