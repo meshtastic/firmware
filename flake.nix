@@ -49,7 +49,7 @@
               # Set up PlatformIO to use a local core directory.
               export PLATFORMIO_CORE_DIR=$PWD/.platformio
               # Tell pip to put packages into $PIP_PREFIX instead of the usual
-              # location. This is especialy necessary under NixOS to avoid having
+              # location. This is especially necessary under NixOS to avoid having
               # pip trying to write to the read-only Nix store. For more info,
               # see https://wiki.nixos.org/wiki/Python
               export PIP_PREFIX=$PWD/.python3
