@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
+#include "modules/StatusLEDModule.h"
 #include "modules/SystemCommandsModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
