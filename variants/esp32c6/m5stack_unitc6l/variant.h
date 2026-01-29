@@ -50,3 +50,5 @@ void c6l_init();
 #endif
 #define SCREEN_TRANSITION_FRAMERATE 10
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+
+#define SERIAL_PRINT_PORT 1

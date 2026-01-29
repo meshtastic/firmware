@@ -54,8 +54,6 @@ extern "C" {
 #define PIN_LED1 (0 + 6)      // P0.06
 #define PIN_LED2 (PINS_COUNT) // P0.14
 
-#define LED_BUILTIN PIN_LED1
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
 
