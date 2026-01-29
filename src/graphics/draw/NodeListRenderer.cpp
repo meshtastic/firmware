@@ -59,8 +59,14 @@ static int popupMaxPage = 1;
 static const uint32_t POPUP_DURATION_MS = 1000; // 1 second visible
 
 // =============================
-// Scrolling Logic
+// Cached Filtered Node List
 // =============================
+// Persistent filtered node list cache (only rebuild when node count/location changes or TTL expires)
+static std::vector<int> cachedFilteredNodesList;
+static int lastCachedNodeCount = -1;          // Track when cache is stale (raw node count)
+static bool lastCachedLocationScreen = false; // Track locationScreen mode changes
+static uint32_t lastCacheRebuildMs = 0;       // Track when cache was last rebuilt
+static const uint32_t CACHE_TTL_MS = 10000;   // Rebuild cache at most every 10s (catches position updates)
 void scrollUp()
 {
     if (scrollIndex > 0)
@@ -74,10 +80,6 @@ void scrollDown()
     scrollIndex++;
     popupTime = millis();
 }
-
-// =============================
-// Utility Functions
-// =============================
 
 const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth)
 {
@@ -496,7 +498,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
                         EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
-    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    const int rowYOffset = FONT_HEIGHT_SMALL + 1;
     bool locationScreen = false;
 
     if (strcmp(title, "Bearings") == 0)
@@ -531,141 +533,161 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int columnWidth = display->getWidth() / totalColumns;
 
-    int totalEntries = nodeDB->getNumMeshNodes();
+    int rawCount = nodeDB->getNumMeshNodes();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
     int numskipped = 0;
     int visibleNodeRows = totalRowsAvailable;
 
-    // Build filtered + ordered list
-    std::vector<int> drawList;
-    drawList.reserve(totalEntries);
-    for (int i = 0; i < totalEntries; i++) {
-        auto *n = nodeDB->getMeshNodeByIndex(i);
-
-        if (!n)
-            continue;
-        if (n->num == nodeDB->getNodeNum())
-            continue;
-        if (locationScreen && !n->has_position)
-            continue;
-
-        drawList.push_back(n->num);
-    }
-    totalEntries = drawList.size();
-    int perPage = visibleNodeRows * totalColumns;
-
-    int maxScroll = 0;
-    if (perPage > 0) {
-        maxScroll = std::max(0, (totalEntries - 1) / perPage);
+    // Cap maximum rows to limit nodes per page
+    const int MAX_VISIBLE_ROWS = 15;
+    if (visibleNodeRows > MAX_VISIBLE_ROWS) {
+        visibleNodeRows = MAX_VISIBLE_ROWS;
     }
 
-    if (scrollIndex > maxScroll)
-        scrollIndex = maxScroll;
-    int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
-    int yOffset = 0;
-    int col = 0;
-    int lastNodeY = y;
-    int shownCount = 0;
-    int rowCount = 0;
+    // Check if we need to rebuild the filtered node list cache
+    // Rebuild if: node count changes, locationScreen changes, or TTL expires (catches position updates)
+    bool ttlExpired = (millis() - lastCacheRebuildMs) > CACHE_TTL_MS;
 
-    for (int idx = startIndex; idx < endIndex; idx++) {
-        uint32_t nodeNum = drawList[idx];
-        auto *node = nodeDB->getMeshNode(nodeNum);
-        int xPos = x + (col * columnWidth);
-        int yPos = y + yOffset;
+    int totalEntries = 0;
 
-        renderer(display, node, xPos, yPos, columnWidth);
+    if (rawCount != lastCachedNodeCount || locationScreen != lastCachedLocationScreen || ttlExpired) {
+        cachedFilteredNodesList.clear();
+        cachedFilteredNodesList.reserve(rawCount);
 
-        if (extras)
-            extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
+        // Build filtered + ordered list of nodes (only when nodeDB changes)
+        for (int i = 0; i < rawCount; i++) {
+            auto *n = nodeDB->getMeshNodeByIndex(i);
 
-        lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
-        yOffset += rowYOffset;
-        shownCount++;
-        rowCount++;
+            if (!n)
+                continue;
+            if (n->num == nodeDB->getNodeNum())
+                continue;
+            if (locationScreen && !n->has_position)
+                continue;
+            if (!n)
+                continue;
+            if (n->num == nodeDB->getNodeNum())
+                continue;
+            if (locationScreen && !n->has_position)
+                continue;
 
-        if (rowCount >= totalRowsAvailable) {
-            yOffset = 0;
-            rowCount = 0;
-            col++;
-            if (col > (totalColumns - 1))
-                break;
+            cachedFilteredNodesList.push_back(n->num);
         }
-    }
-
-    // This should correct the scrollbar
-    totalEntries -= numskipped;
-
-    // Draw column separator
-    if (currentResolution != ScreenResolution::UltraLow && shownCount > 0) {
-        const int firstNodeY = y + 3;
-        for (int horizontal_offset = 1; horizontal_offset < totalColumns; horizontal_offset++) {
-            drawColumnSeparator(display, columnWidth * horizontal_offset, firstNodeY, lastNodeY);
-        }
-    }
-
-    const int scrollStartY = y + 3;
-    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, totalColumns, scrollStartY);
-    graphics::drawCommonFooter(display, x, y);
-
-    // Scroll Popup Overlay
-    if (millis() - popupTime < POPUP_DURATION_MS) {
-        popupTotal = totalEntries;
-
+        totalEntries = cachedFilteredNodesList.size();
         int perPage = visibleNodeRows * totalColumns;
 
-        popupStart = startIndex + 1;
-        popupEnd = std::min(startIndex + perPage, totalEntries);
+        int maxScroll = 0;
+        if (perPage > 0) {
+            maxScroll = std::max(0, (totalEntries - 1) / perPage);
+        }
 
-        popupPage = (scrollIndex + 1);
-        popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
+        if (scrollIndex > maxScroll)
+            scrollIndex = maxScroll;
+        int startIndex = scrollIndex * visibleNodeRows * totalColumns;
+        int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
+        int yOffset = 0;
+        int col = 0;
+        int lastNodeY = y;
+        int shownCount = 0;
+        int rowCount = 0;
 
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);
+        for (int idx = startIndex; idx < endIndex; idx++) {
+            uint32_t nodeNum = cachedFilteredNodesList[idx];
+            auto *node = nodeDB->getMeshNode(nodeNum);
+            int xPos = x + (col * columnWidth);
+            int yPos = y + yOffset;
 
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
+            renderer(display, node, xPos, yPos, columnWidth);
 
-        // Box padding
-        int padding = 2;
-        int textW = display->getStringWidth(buf);
-        int textH = FONT_HEIGHT_SMALL;
-        int boxWidth = textW + padding * 3;
-        int boxHeight = textH + padding * 2;
+            if (extras)
+                extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
 
-        // Center of usable screen area:
-        int headerHeight = FONT_HEIGHT_SMALL - 1;
-        int footerHeight = FONT_HEIGHT_SMALL + 2;
+            lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
+            yOffset += rowYOffset;
+            shownCount++;
+            rowCount++;
 
-        int usableTop = headerHeight;
-        int usableBottom = display->getHeight() - footerHeight;
-        int usableHeight = usableBottom - usableTop;
+            if (rowCount >= totalRowsAvailable) {
+                yOffset = 0;
+                rowCount = 0;
+                col++;
+                if (col > (totalColumns - 1))
+                    break;
+            }
+        }
 
-        // Center point inside usable area
-        int boxLeft = (display->getWidth() - boxWidth) / 2;
-        int boxTop = usableTop + (usableHeight - boxHeight) / 2;
+        // This should correct the scrollbar
+        totalEntries -= numskipped;
 
-        // Draw Box
-        display->setColor(BLACK);
-        display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
-        display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
-        display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
-        display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
-        display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
-        display->setColor(WHITE);
-        display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
-        display->setColor(BLACK);
-        display->fillRect(boxLeft, boxTop, 1, 1);
-        display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
-        display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
-        display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
-        display->setColor(WHITE);
+        // Draw column separator
+        if (currentResolution != ScreenResolution::UltraLow && shownCount > 0) {
+            const int firstNodeY = y + 3;
+            for (int horizontal_offset = 1; horizontal_offset < totalColumns; horizontal_offset++) {
+                drawColumnSeparator(display, columnWidth * horizontal_offset, firstNodeY, lastNodeY);
+            }
+        }
 
-        // Text
-        display->drawString(boxLeft + padding, boxTop + padding, buf);
+        const int scrollStartY = y + 3;
+        drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, totalColumns, scrollStartY);
+        graphics::drawCommonFooter(display, x, y);
+
+        // Scroll Popup Overlay
+        if (millis() - popupTime < POPUP_DURATION_MS) {
+            popupTotal = totalEntries;
+
+            int perPage = visibleNodeRows * totalColumns;
+
+            popupStart = startIndex + 1;
+            popupEnd = std::min(startIndex + perPage, totalEntries);
+
+            popupPage = (scrollIndex + 1);
+            popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
+
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);
+
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            // Box padding
+            int padding = 2;
+            int textW = display->getStringWidth(buf);
+            int textH = FONT_HEIGHT_SMALL;
+            int boxWidth = textW + padding * 3;
+            int boxHeight = textH + padding * 2;
+
+            // Center of usable screen area:
+            int headerHeight = FONT_HEIGHT_SMALL - 1;
+            int footerHeight = FONT_HEIGHT_SMALL + 2;
+
+            int usableTop = headerHeight;
+            int usableBottom = display->getHeight() - footerHeight;
+            int usableHeight = usableBottom - usableTop;
+
+            // Center point inside usable area
+            int boxLeft = (display->getWidth() - boxWidth) / 2;
+            int boxTop = usableTop + (usableHeight - boxHeight) / 2;
+
+            // Draw Box
+            display->setColor(BLACK);
+            display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+            display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
+            display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+            display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
+            display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+            display->setColor(WHITE);
+            display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+            display->setColor(BLACK);
+            display->fillRect(boxLeft, boxTop, 1, 1);
+            display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
+            display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
+            display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
+            display->setColor(WHITE);
+
+            // Text
+            display->drawString(boxLeft + padding, boxTop + padding, buf);
+        }
     }
 }
-
 // =============================
 // Screen Frame Functions
 // =============================
