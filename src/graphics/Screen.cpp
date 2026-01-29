@@ -312,6 +312,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
     // Only validate the combined value once
     if (rawRGB > 0 && rawRGB <= 255255255) {
+        LOG_INFO("Setting screen RGB color to user chosen: 0x%06X", rawRGB);
         // Extract each component as a normal int first
         int r = (rawRGB >> 16) & 0xFF;
         int g = (rawRGB >> 8) & 0xFF;
@@ -319,6 +320,16 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
             TFT_MESH = COLOR565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
         }
+#ifdef TFT_MESH_OVERRIDE
+    } else if (rawRGB == 0) {
+        LOG_INFO("Setting screen RGB color to TFT_MESH_OVERRIDE: 0x%04X", TFT_MESH_OVERRIDE);
+        // Default to TFT_MESH_OVERRIDE if available
+        TFT_MESH = TFT_MESH_OVERRIDE;
+#endif
+    } else {
+        // Default best readable yellow color
+        LOG_INFO("Setting screen RGB color to default: (255,255,128)");
+        TFT_MESH = COLOR565(255, 255, 128);
     }
 
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
@@ -814,7 +825,7 @@ int32_t Screen::runOnce()
 #endif
     }
 #endif
-    if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
+    if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0 && !suppressRebootBanner) {
         showSimpleBanner("Rebooting...", 0);
     }
 
@@ -1720,6 +1731,26 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showFrame(FrameDirection::NEXT);
+            } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
+                this->ui->switchToFrame(0);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
+                this->ui->switchToFrame(1);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
+                this->ui->switchToFrame(2);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
+                this->ui->switchToFrame(3);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
+                this->ui->switchToFrame(4);
+                lastScreenTransition = millis();
+                setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                 // Long press up button for fast frame switching
                 showPrevFrame();

@@ -1,0 +1,204 @@
+name: Issue Triage (Models)
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  models: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event.issue.user.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    steps:
+      # ─────────────────────────────────────────────────────────────────────────
+      # Step 1: Quality check (spam/AI-slop detection) - runs first, exits early if spam
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Detect spam or low-quality content
+        uses: actions/ai-inference@v2
+        id: quality
+        continue-on-error: true
+        with:
+          max-tokens: 20
+          prompt: |
+            Is this GitHub issue spam, AI-generated slop, or low quality?
+
+            Title: ${{ github.event.issue.title }}
+            Body: ${{ github.event.issue.body }}
+
+            Respond with exactly one of: spam, ai-generated, needs-review, ok
+          system-prompt: You detect spam and low-quality contributions. Be conservative - only flag obvious spam or AI slop.
+          model: openai/gpt-4o-mini
+
+      - name: Apply quality label if needed
+        if: steps.quality.outputs.response != '' && steps.quality.outputs.response != 'ok'
+        uses: actions/github-script@v8
+        env:
+          QUALITY_LABEL: ${{ steps.quality.outputs.response }}
+        with:
+          script: |
+            const label = (process.env.QUALITY_LABEL || '').trim().toLowerCase();
+            const labelMeta = {
+              'spam': { color: 'd73a4a', description: 'Possible spam' },
+              'ai-generated': { color: 'fbca04', description: 'Possible AI-generated low-quality content' },
+              'needs-review': { color: 'f9d0c4', description: 'Needs human review' },
+            };
+            const meta = labelMeta[label];
+            if (!meta) return;
+
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label, color: meta.color, description: meta.description });
+            }
+
+            // Apply label
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.issue.number, labels: [label] });
+
+            // Set output to skip remaining steps
+            core.setOutput('is_spam', 'true');
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Step 2: Duplicate detection - only if not spam
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Detect duplicate issues
+        if: steps.quality.outputs.response == 'ok' || steps.quality.outputs.response == ''
+        uses: pelikhan/action-genai-issue-dedup@bdb3b5d9451c1090ffcdf123d7447a5e7c7a2528 # v0.0.19
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Step 3: Completeness check + auto-labeling (combined into one AI call)
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Determine if completeness check should be skipped
+        if: steps.quality.outputs.response == 'ok' || steps.quality.outputs.response == ''
+        uses: actions/github-script@v8
+        id: check-skip
+        with:
+          script: |
+            const title = (context.payload.issue.title || '').toLowerCase();
+            const labels = (context.payload.issue.labels || []).map(label => label.name);
+            const hasFeatureRequest = title.includes('feature request');
+            const hasEnhancement = labels.includes('enhancement');
+            const shouldSkip = hasFeatureRequest && hasEnhancement;
+            core.setOutput('should_skip', shouldSkip ? 'true' : 'false');
+
+      - name: Analyze issue completeness and determine labels
+        if: (steps.quality.outputs.response == 'ok' || steps.quality.outputs.response == '') && steps.check-skip.outputs.should_skip != 'true'
+        uses: actions/ai-inference@v2
+        id: analysis
+        continue-on-error: true
+        with:
+          prompt: |
+            Analyze this GitHub issue for completeness and determine if it needs labels.
+
+            If this looks like a bug on the device/firmware (crash, reboot, lockup, radio issues, GPS issues, display issues, power/sleep issues), request device logs and explain how to get them:
+
+            Web Flasher logs:
+            - Go to https://flasher.meshtastic.org
+            - Connect the device via USB and click Connect
+            - Open the device console/log output, reproduce the problem, then copy/download and attach/paste the logs
+
+            Meshtastic CLI logs:
+            - Run: meshtastic --port <serial-port> --noproto
+            - Reproduce the problem, then copy/paste the terminal output
+
+            Also request key context if missing: device model/variant, firmware version, region, steps to reproduce, expected vs actual.
+
+            Respond ONLY with JSON:
+            {
+              "complete": true|false,
+              "comment": "Your helpful comment requesting missing info, or empty string if complete",
+              "label": "needs-logs" | "needs-info" | "none"
+            }
+
+            Use "needs-logs" if this is a device bug AND no logs are attached.
+            Use "needs-info" if basic info like firmware version or steps to reproduce are missing.
+            Use "none" if the issue is complete or is a feature request.
+
+            Title: ${{ github.event.issue.title }}
+            Body: ${{ github.event.issue.body }}
+          system-prompt: You are a helpful assistant that triages GitHub issues. Be conservative with labels.
+          model: openai/gpt-4o-mini
+
+      - name: Process analysis result
+        if: (steps.quality.outputs.response == 'ok' || steps.quality.outputs.response == '') && steps.check-skip.outputs.should_skip != 'true' && steps.analysis.outputs.response != ''
+        uses: actions/github-script@v8
+        id: process
+        env:
+          AI_RESPONSE: ${{ steps.analysis.outputs.response }}
+        with:
+          script: |
+            const raw = (process.env.AI_RESPONSE || '').trim();
+
+            let complete = false;
+            let comment = '';
+            let label = 'none';
+
+            try {
+              const parsed = JSON.parse(raw);
+              complete = !!parsed.complete;
+              comment = (parsed.comment ?? '').toString().trim();
+              label = (parsed.label ?? 'none').toString().trim().toLowerCase();
+            } catch {
+              // If JSON parse fails, treat as incomplete with raw response as comment
+              complete = false;
+              comment = raw;
+              label = 'none';
+            }
+
+            // Validate label
+            const allowedLabels = new Set(['needs-logs', 'needs-info', 'none']);
+            if (!allowedLabels.has(label)) label = 'none';
+
+            core.setOutput('should_comment', (!complete && comment.length > 0) ? 'true' : 'false');
+            core.setOutput('comment_body', comment);
+            core.setOutput('label', label);
+
+      - name: Apply triage label
+        if: steps.process.outputs.label != '' && steps.process.outputs.label != 'none'
+        uses: actions/github-script@v8
+        env:
+          LABEL_NAME: ${{ steps.process.outputs.label }}
+        with:
+          script: |
+            const label = process.env.LABEL_NAME;
+            const labelMeta = {
+              'needs-logs': { color: 'cfd3d7', description: 'Device logs requested for triage' },
+              'needs-info': { color: 'f9d0c4', description: 'More information requested for triage' },
+            };
+            const meta = labelMeta[label];
+            if (!meta) return;
+
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label, color: meta.color, description: meta.description });
+            }
+
+            // Apply label
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.issue.number, labels: [label] });
+
+      - name: Comment on issue
+        if: steps.process.outputs.should_comment == 'true'
+        uses: actions/github-script@v8
+        env:
+          COMMENT_BODY: ${{ steps.process.outputs.comment_body }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: process.env.COMMENT_BODY
+            });
