@@ -150,8 +150,6 @@ External serial flash W25Q16JV_IQ
 #define PIN_SPI_MOSI (0 + 11)
 #define PIN_SPI_SCK (0 + 12)
 
-// #define PIN_PWR_EN (0 + 6)
-
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
 

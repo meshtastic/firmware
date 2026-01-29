@@ -46,7 +46,6 @@
 #define SPI_MISO (10)
 #define SPI_CS (12)
 
-#define HAS_BUTTON 1
 #define BUTTON_PIN 0
 
 #define USE_VIRTUAL_KEYBOARD 1
