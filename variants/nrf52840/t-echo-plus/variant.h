@@ -25,7 +25,6 @@ extern "C" {
 #define LED_BLUE PIN_LED1
 #define LED_GREEN PIN_LED2
 
-#define LED_BUILTIN LED_BLUE
 #define LED_CONN LED_GREEN
 
 #define LED_STATE_ON 0
