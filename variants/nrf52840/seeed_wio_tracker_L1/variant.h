@@ -158,8 +158,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  joystick
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
-
 #define CANNED_MESSAGE_ADD_CONFIRMATION 1
 
 // trackball

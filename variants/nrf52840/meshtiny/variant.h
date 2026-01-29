@@ -66,8 +66,6 @@ extern "C" {
 #define INPUTDRIVER_ENCODER_BTN 28
 #define UPDOWN_LONG_PRESS_REPEAT_INTERVAL 150
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
-
 /*
  * Buzzer - PWM
  */

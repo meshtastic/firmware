@@ -177,7 +177,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define TB_PRESS 29
 #define TB_DIRECTION FALLING
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 #define CANNED_MESSAGE_ADD_CONFIRMATION 1
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

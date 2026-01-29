@@ -31,7 +31,6 @@
 // #define KB_SLAVE_ADDRESS TDECK_KB_ADDR // 0x55
 // #define KB_BL_PIN 46                   // not used for now
 #define KB_INT 13
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define TFT_DC 39
 #define TFT_CS 41
