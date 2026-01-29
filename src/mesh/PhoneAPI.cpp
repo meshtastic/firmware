@@ -267,7 +267,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_OWN_NODEINFO: {
         LOG_DEBUG("Send My NodeInfo");
-        auto us = nodeDB->readNextMeshNode(readIndex);
+        auto us = nodeDB->getMeshNode(nodeDB->getNodeNum());
         if (us) {
             auto info = TypeConversions::ConvertToNodeInfo(us);
             info.has_hops_away = false;
@@ -278,7 +278,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             }
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = info;
-            // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
                 nodeInfoForPhone.num = 0;

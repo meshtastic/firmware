@@ -1830,6 +1830,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // we need to clear the public key and other cruft, in addition to setting the node as ignored
         info->is_ignored = true;
         info->is_favorite = false;
+        displayNodesDirty = true;
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
@@ -1987,7 +1988,7 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
         displayNodesDirty = true;
-        saveNodeDatabaseToDisk();
+        saveToDisk(SEGMENT_NODEDATABASE);
     }
 }
 
@@ -2009,45 +2010,7 @@ bool NodeDB::isFavorite(uint32_t nodeId)
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
 {
-    // This method is logically equivalent to:
-    //   return isFavorite(p.from) || isFavorite(p.to);
-    // but is more efficient by:
-    //   1. doing only one pass through the database, instead of two
-    //   2. exiting early when a favorite is found, or if both from and to have been seen
-
-    if (p.to == NODENUM_BROADCAST)
-        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
-
-    meshtastic_NodeInfoLite *lite = NULL;
-
-    bool seenFrom = false;
-    bool seenTo = false;
-
-    for (int i = 0; i < numMeshNodes; i++) {
-        lite = &meshNodes->at(i);
-
-        if (lite->num == p.from) {
-            if (lite->is_favorite)
-                return true;
-
-            seenFrom = true;
-        }
-
-        if (lite->num == p.to) {
-            if (lite->is_favorite)
-                return true;
-
-            seenTo = true;
-        }
-
-        if (seenFrom && seenTo)
-            return false; // we've seen both, and neither is a favorite, so we can stop searching early
-
-        // Note: if we knew that rebuildDisplayOrder was always called after any change to is_favorite, we could exit early after
-        // searching all favorited nodes first.
-    }
-
-    return false;
+    return isFavorite(p.from) || isFavorite(p.to);
 }
 
 void NodeDB::pause_sort(bool paused)
@@ -2064,7 +2027,9 @@ void NodeDB::sortByNodeNum()
 void NodeDB::rebuildDisplayOrder()
 {
     // Always rebuild if dirty (data structure changed) or if throttle allows (periodic refresh)
-    bool shouldRebuild = displayNodesDirty || (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, DISPLAY_SORT_THROTTLE_MS)));
+    bool shouldRebuild =
+        displayNodesDirty ||
+        (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, DISPLAY_SORT_THROTTLE_MS)));
 
     if (sortingIsPaused && !displayNodesDirty) {
         return; // Don't rebuild if paused and not dirty
@@ -2095,12 +2060,29 @@ void NodeDB::rebuildDisplayOrder()
                       if (a->is_favorite != b->is_favorite)
                           return a->is_favorite; // Favorites come first
 
-                      // Then by last_heard (most recent first)
-                      return a->last_heard > b->last_heard;
+                      // Then by last_heard (most recent first), with nodeNum as tiebreaker
+                      if (a->last_heard != b->last_heard)
+                          return a->last_heard > b->last_heard;
+                      return a->num < b->num;
                   });
 
         displayNodesDirty = false;
+        rebuildFavoriteRouterIndex();
         LOG_INFO("Display order rebuild took %u milliseconds", millis() - lastSort);
+    }
+}
+
+void NodeDB::rebuildFavoriteRouterIndex()
+{
+    favoriteRouterLastBytes.clear();
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite &node = meshNodes->at(i);
+        if (!node.is_favorite || !node.has_user)
+            continue;
+        if (!IS_ONE_OF(node.user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE))
+            continue;
+        favoriteRouterLastBytes.push_back(getLastByteOfNodeNum(node.num));
     }
 }
 

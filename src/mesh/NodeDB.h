@@ -141,7 +141,7 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
-    std::vector<meshtastic_NodeInfoLite> *meshNodes;       // Sorted by NodeNum for O(log n) lookup
+    std::vector<meshtastic_NodeInfoLite> *meshNodes; // Sorted by NodeNum for O(log n) lookup
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
@@ -249,9 +249,9 @@ class NodeDB
 
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
 
-    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x);  // Uses displayNodes (rebuilds if dirty)
+    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x); // Uses displayNodes (rebuilds if dirty)
 
-    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);  // NOT ISR-safe (uses binary search)
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n); // NOT ISR-safe (uses binary search)
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
@@ -319,8 +319,9 @@ class NodeDB
      */
     bool sortingIsPaused = false;
 
-    std::vector<meshtastic_NodeInfoLite *> displayNodes;   // Pointers sorted by display order (own node → favorites → last_heard)
-    bool displayNodesDirty = true;                         // Set true when meshNodes changes, triggers rebuildDisplayOrder()
+    std::vector<meshtastic_NodeInfoLite *> displayNodes; // Pointers sorted by display order (own node → favorites → last_heard)
+    bool displayNodesDirty = true;                       // Set true when meshNodes changes, triggers rebuildDisplayOrder()
+    std::vector<uint8_t> favoriteRouterLastBytes;        // Cached last-byte of favorite routers for shouldDecrementHopLimit()
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
@@ -346,6 +347,18 @@ class NodeDB
     /// Rebuilds displayNodes from meshNodes in display order
     void rebuildDisplayOrder();
 
+    /// Rebuilds the favoriteRouterLastBytes cache
+    void rebuildFavoriteRouterIndex();
+
+  public:
+    const std::vector<uint8_t> &getFavoriteRouterLastBytes()
+    {
+        if (displayNodesDirty)
+            rebuildFavoriteRouterIndex();
+        return favoriteRouterLastBytes;
+    }
+
+  private:
     /// Sorts meshNodes by NodeNum for binary search
     void sortByNodeNum();
 };
