@@ -10,7 +10,7 @@ WatchdogThread::WatchdogThread() : OSThread("Watchdog")
 }
 
 void WatchdogThread::feedDog(void)
-{   
+{
     digitalWrite(HARDWARE_WATCHDOG_DONE, HIGH);
     delay(1);
     digitalWrite(HARDWARE_WATCHDOG_DONE, LOW);

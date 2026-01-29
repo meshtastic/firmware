@@ -39,8 +39,8 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_LED1 (32 + 15)  // green (confirmed on 1.0 board)
-#define LED_BLUE PIN_LED1 // fake for bluefruit library
+#define PIN_LED1 (32 + 15) // green (confirmed on 1.0 board)
+#define LED_BLUE PIN_LED1  // fake for bluefruit library
 #define LED_GREEN PIN_LED1
 #define LED_STATE_ON 0 // State when LED is lit
 
@@ -141,7 +141,7 @@ No longer populated on PCB
 #define HAS_HARDWARE_WATCHDOG
 #define HARDWARE_WATCHDOG_DONE (0 + 9)
 #define HARDWARE_WATCHDOG_WAKE (0 + 10)
-#define HARDWARE_WATCHDOG_TIMEOUT_MS (6*60*1000) // 6 minute watchdog
+#define HARDWARE_WATCHDOG_TIMEOUT_MS (6 * 60 * 1000) // 6 minute watchdog
 
 #define BQ4050_SDA_PIN (32 + 1)                // I2C data line pin
 #define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
