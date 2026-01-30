@@ -630,7 +630,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // Check for a known public key for the destination
             if (node == nullptr || node->user.public_key.size != 32) {
                 LOG_WARN("Unknown public key for destination node, refusing to send legacy DM");
-                return meshtastic_Routing_Error_PKI_FAILED;
+                return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
