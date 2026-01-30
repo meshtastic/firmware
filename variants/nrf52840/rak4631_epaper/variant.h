@@ -217,8 +217,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
 
-#define HAS_RTC 1
-
 #define RAK_4631 1
 
 #ifdef __cplusplus
