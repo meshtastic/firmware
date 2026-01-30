@@ -2198,6 +2198,11 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             endIt = meshNodes->begin() + numMeshNodes;
             it = std::lower_bound(meshNodes->begin(), endIt, n, nodeNumLessThan);
         }
+
+        if (isFull()) {
+            LOG_WARN("Node database full and no evictable node found; refusing to insert new node");
+            return nullptr;
+        }
     }
 
     // Insert new node at sorted position
