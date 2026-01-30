@@ -114,8 +114,8 @@ extern "C" {
 #define LR11X0_DIO_AS_RF_SWITCH
 
 // PCF8563 RTC Module
-// REVISIT https://github.com/meshtastic/firmware/pull/9084
-// #define PCF8563_RTC 0x51
+#define PCF8563_RTC 0x51
+#define HAS_RTC 1
 
 #ifdef __cplusplus
 }
