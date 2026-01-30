@@ -629,7 +629,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a known public key for the destination
             if (node == nullptr || node->user.public_key.size != 32) {
-                LOG_WARN("Unknown public key for destination node, refusing to send legacy DM");
+                LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
+                         p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
