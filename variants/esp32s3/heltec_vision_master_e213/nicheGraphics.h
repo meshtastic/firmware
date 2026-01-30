@@ -69,9 +69,9 @@ void setupNicheGraphics()
     else if (displayModel == EInkDetectionResult::E0213A367) // V1.1
         inkhud->setDisplayResilience(15, 3);
 
-    // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
+    // Select fonts (reduced by one size step for E213)
+    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_6PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings

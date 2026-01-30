@@ -326,6 +326,8 @@ InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
 Any generic AdafruitGFX font may be used, but the fonts which are bundled with InkHUD have been customized with extended-ASCII character sets and emoji.
 
+Some small displays may choose smaller sizes; for example, the Heltec Vision Master E213 uses 9pt/6pt/6pt to reduce text density on-screen.
+
 ### Parsing Unicode Text
 
 Text received by the firmware is encoded as UTF-8.
