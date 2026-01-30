@@ -325,10 +325,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
         break;
 
-    case BACK:
-        showPage(item.nextPage);
-        return;
-
     case NEXT_TILE:
         inkhud->nextTile();
         // Unselect menu item after tile change
@@ -868,6 +864,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     switch (page) {
     case ROOT:
+        previousPage = MenuPage::EXIT;
         // Optional: next applet
         if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
@@ -878,7 +875,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-        previousPage = MenuPage::EXIT;
         break;
 
     case SEND:
@@ -888,11 +884,12 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
-        previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::SEND;
         break;
 
     case OPTIONS:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
+        previousPage = MenuPage::ROOT;
+        items.push_back(MenuItem("Back", previousPage));
         // Optional: backlight
         if (settings->optionalMenuItems.backlight)
             items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
@@ -916,31 +913,32 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
         items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-        previousPage = MenuPage::ROOT;
         break;
 
     case APPLETS:
-        populateAppletPage(); // must be first
-        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
-        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         previousPage = MenuPage::OPTIONS;
+        populateAppletPage(); // must be first
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case AUTOSHOW:
-        populateAutoshowPage(); // must be first
-        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
-        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         previousPage = MenuPage::OPTIONS;
+        populateAutoshowPage(); // must be first
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case RECENTS:
+        previousPage = MenuPage::OPTIONS;
         populateRecentsPage(); // builds only the options
-        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
+        items.insert(items.begin(), MenuItem("Back", previousPage));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case NODE_CONFIG:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
+        previousPage = MenuPage::ROOT;
+        items.push_back(MenuItem("Back", previousPage));
         // Radio Config Section
         items.push_back(MenuItem::Header("Radio Config"));
         items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
@@ -965,8 +963,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case NODE_CONFIG_DEVICE: {
-
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *role = DisplayFormatters::getDeviceRole(config.device.role);
         nodeConfigLabels.emplace_back("Role: " + std::string(role));
@@ -981,7 +979,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_POSITION: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         const auto mode = config.position.gps_mode;
         if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
@@ -996,7 +995,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_POWER: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Powersave", MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT, &config.power.is_power_saving));
 #endif
@@ -1029,7 +1029,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_POWER_ADC_CAL: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_POWER));
+        previousPage = MenuPage::NODE_CONFIG_POWER;
+        items.push_back(MenuItem("Back", previousPage));
 
         // Instruction text (header-style, non-selectable)
         items.push_back(MenuItem::Header("Run on full charge Only"));
@@ -1042,7 +1043,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_NETWORK: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *wifiLabel = config.network.wifi_enabled ? "WiFi: On" : "WiFi: Off";
 
@@ -1099,7 +1101,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_DISPLAY: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         items.push_back(MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::NODE_CONFIG_DISPLAY,
                                  &config.display.use_12h_clock));
@@ -1114,7 +1117,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_BLUETOOTH: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *btLabel = config.bluetooth.enabled ? "Bluetooth: On" : "Bluetooth: Off";
         items.push_back(MenuItem(btLabel, MenuAction::TOGGLE_BLUETOOTH, MenuPage::EXIT));
@@ -1127,8 +1131,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_LORA: {
-
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *region = myRegion ? myRegion->name : "Unset";
         nodeConfigLabels.emplace_back("Region: " + std::string(region));
@@ -1150,7 +1154,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_CHANNELS: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
             meshtastic_Channel &ch = channels.getByIndex(i);
@@ -1181,7 +1186,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_CHANNEL_DETAIL: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_CHANNELS));
+        previousPage = MenuPage::NODE_CONFIG_CHANNELS;
+        items.push_back(MenuItem("Back", previousPage));
 
         meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
 
@@ -1226,7 +1232,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_CHANNEL_PRECISION: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
+        previousPage = MenuPage::NODE_CONFIG_CHANNEL_DETAIL;
+        items.push_back(MenuItem("Back", previousPage));
         meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
         if (!ch.settings.has_module_settings || ch.settings.module_settings.position_precision == 0) {
             items.push_back(MenuItem("Position is Off", MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
@@ -1247,7 +1254,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_DEVICE_ROLE: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
+        previousPage = MenuPage::NODE_CONFIG_DEVICE;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Client", MenuAction::SET_ROLE_CLIENT, MenuPage::EXIT));
         items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));
         items.push_back(MenuItem("Router", MenuAction::SET_ROLE_ROUTER, MenuPage::EXIT));
@@ -1257,7 +1265,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case TIMEZONE:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
+        previousPage = MenuPage::NODE_CONFIG_DEVICE;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("US/Hawaii", SET_TZ_US_HAWAII, MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("US/Alaska", SET_TZ_US_ALASKA, MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("US/Pacific", SET_TZ_US_PACIFIC, MenuPage::NODE_CONFIG_DEVICE));
@@ -1279,7 +1288,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case REGION:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_LORA));
+        previousPage = MenuPage::NODE_CONFIG_LORA;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("US", MenuAction::SET_REGION_US, MenuPage::EXIT));
         items.push_back(MenuItem("EU 868", MenuAction::SET_REGION_EU_868, MenuPage::EXIT));
         items.push_back(MenuItem("EU 433", MenuAction::SET_REGION_EU_433, MenuPage::EXIT));
@@ -1310,7 +1320,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case NODE_CONFIG_PRESET: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_LORA));
+        previousPage = MenuPage::NODE_CONFIG_LORA;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Long Moderate", MenuAction::SET_PRESET_LONG_MODERATE, MenuPage::EXIT));
         items.push_back(MenuItem("Long Fast", MenuAction::SET_PRESET_LONG_FAST, MenuPage::EXIT));
         items.push_back(MenuItem("Medium Slow", MenuAction::SET_PRESET_MEDIUM_SLOW, MenuPage::EXIT));
@@ -1323,7 +1334,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
     // Administration Section
     case NODE_CONFIG_ADMIN_RESET:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Reset All", MenuAction::RESET_NODEDB_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Keep Favorites Only", MenuAction::RESET_NODEDB_KEEP_FAVORITES, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
