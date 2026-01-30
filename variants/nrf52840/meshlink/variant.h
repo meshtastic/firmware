@@ -33,7 +33,6 @@ extern "C" {
 #define LED_BLUE PIN_LED1
 
 #define LED_STATE_ON 0 // State when LED is litted
-#define LED_INVERTED 1
 
 // Testing USB detection
 // #define NRF_APM
