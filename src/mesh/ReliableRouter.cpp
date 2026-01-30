@@ -52,8 +52,8 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         auto old = findPendingPacket(key);
         if (old) {
             LOG_DEBUG("Generate implicit ack");
-            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to
-            // be marked as wantAck
+            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
+            // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             // Only stop retransmissions if the rebroadcast came via LoRa
