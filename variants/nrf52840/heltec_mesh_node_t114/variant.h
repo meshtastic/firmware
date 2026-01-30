@@ -223,7 +223,6 @@ No longer populated on PCB
 // VBAT=4.04V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_2_8
 
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif
