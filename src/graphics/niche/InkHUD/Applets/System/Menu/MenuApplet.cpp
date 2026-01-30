@@ -90,6 +90,8 @@ void InkHUD::MenuApplet::onForeground()
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
 
+    freeTextMode = false;
+
     // Upgrade the refresh to FAST, for guaranteed responsiveness
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
@@ -115,6 +117,8 @@ void InkHUD::MenuApplet::onBackground()
     // Resume normal rendering and button behavior of user applets
     SystemApplet::lockRequests = false;
     SystemApplet::handleInput = false;
+
+    handleFreeText = false;
 
     // Restore the user applet whose tile we borrowed
     if (borrowedTileOwner)
@@ -340,12 +344,26 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
+    case FREE_TEXT:
+        OSThread::enabled = false;
+        handleFreeText = true;
+        cm.freeTextItem.rawText.erase(); // clear the previous freetext message
+        freeTextMode = true;             // render input field instead of normal menu
+        // Open the on-screen keyboard if the joystick is enabled
+        if (settings->joystick.enabled)
+            inkhud->openKeyboard();
+        break;
+
     case STORE_CANNEDMESSAGE_SELECTION:
-        cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        if (!settings->joystick.enabled)
+            cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        else
+            cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
         break;
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
+        // send selected message
         sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, cm.selectedMessageItem->rawText.c_str());
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL); // Next refresh should be FULL. Lots of button pressing to get here
         break;
@@ -1373,8 +1391,14 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     currentPage = page;
 }
 
-void InkHUD::MenuApplet::onRender()
+void InkHUD::MenuApplet::onRender(bool full)
 {
+    // Free text mode draws a text input field and skips the normal rendering
+    if (freeTextMode) {
+        drawInputField(0, fontSmall.lineHeight(), X(1.0), Y(1.0) - fontSmall.lineHeight() - 1, cm.freeTextItem.rawText);
+        return;
+    }
+
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
 
@@ -1493,44 +1517,48 @@ void InkHUD::MenuApplet::onRender()
 
 void InkHUD::MenuApplet::onButtonShortPress()
 {
-    // Push the auto-close timer back
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        // Push the auto-close timer back
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (!settings->joystick.enabled) {
-        if (!cursorShown) {
-            cursorShown = true;
-            cursor = 0;
-        } else {
-            do {
-                cursor = (cursor + 1) % items.size();
-            } while (items.at(cursor).isHeader);
-        }
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-    } else {
-        if (cursorShown)
-            execute(items.at(cursor));
-        else
-            showPage(MenuPage::EXIT);
-        if (!wantsToRender())
+        if (!settings->joystick.enabled) {
+            if (!cursorShown) {
+                cursorShown = true;
+                cursor = 0;
+            } else {
+                do {
+                    cursor = (cursor + 1) % items.size();
+                } while (items.at(cursor).isHeader);
+            }
             requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        } else {
+            if (cursorShown)
+                execute(items.at(cursor));
+            else
+                showPage(MenuPage::EXIT);
+            if (!wantsToRender())
+                requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        }
     }
 }
 
 void InkHUD::MenuApplet::onButtonLongPress()
 {
-    // Push the auto-close timer back
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        // Push the auto-close timer back
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (cursorShown)
-        execute(items.at(cursor));
-    else
-        showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
+        if (cursorShown)
+            execute(items.at(cursor));
+        else
+            showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
 
-    // If we didn't already request a specialized update, when handling a menu action,
-    // then perform the usual fast update.
-    // FAST keeps things responsive: important because we're dealing with user input
-    if (!wantsToRender())
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // If we didn't already request a specialized update, when handling a menu action,
+        // then perform the usual fast update.
+        // FAST keeps things responsive: important because we're dealing with user input
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onExitShort()
@@ -1543,56 +1571,107 @@ void InkHUD::MenuApplet::onExitShort()
 
 void InkHUD::MenuApplet::onNavUp()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (!cursorShown) {
-        cursorShown = true;
-        cursor = 0;
-    } else {
-        do {
-            if (cursor == 0)
-                cursor = items.size() - 1;
-            else
-                cursor--;
-        } while (items.at(cursor).isHeader);
+        if (!cursorShown) {
+            cursorShown = true;
+            cursor = 0;
+        } else {
+            do {
+                if (cursor == 0)
+                    cursor = items.size() - 1;
+                else
+                    cursor--;
+            } while (items.at(cursor).isHeader);
+        }
+
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
-
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onNavDown()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (!cursorShown) {
-        cursorShown = true;
-        cursor = 0;
-    } else {
-        do {
-            cursor = (cursor + 1) % items.size();
-        } while (items.at(cursor).isHeader);
+        if (!cursorShown) {
+            cursorShown = true;
+            cursor = 0;
+        } else {
+            do {
+                cursor = (cursor + 1) % items.size();
+            } while (items.at(cursor).isHeader);
+        }
+
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
-
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onNavLeft()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    // Go to the previous menu page
-    showPage(previousPage);
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // Go to the previous menu page
+        showPage(previousPage);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onNavRight()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+        if (cursorShown)
+            execute(items.at(cursor));
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
+}
 
-    if (cursorShown)
-        execute(items.at(cursor));
-    if (!wantsToRender())
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+void InkHUD::MenuApplet::onFreeText(char c)
+{
+    if (cm.freeTextItem.rawText.length() >= menuTextLimit && c != '\b')
+        return;
+    if (c == '\b') {
+        if (!cm.freeTextItem.rawText.empty())
+            cm.freeTextItem.rawText.pop_back();
+    } else {
+        cm.freeTextItem.rawText += c;
+    }
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onFreeTextDone()
+{
+    // Restart the auto-close timeout
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    OSThread::enabled = true;
+
+    handleFreeText = false;
+    freeTextMode = false;
+
+    if (!cm.freeTextItem.rawText.empty()) {
+        cm.selectedMessageItem = &cm.freeTextItem;
+        showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
+    }
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onFreeTextCancel()
+{
+    // Restart the auto-close timeout
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    OSThread::enabled = true;
+
+    handleFreeText = false;
+    freeTextMode = false;
+
+    // Clear the free text message
+    cm.freeTextItem.rawText.erase();
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 // Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu
@@ -1646,6 +1725,10 @@ void InkHUD::MenuApplet::populateSendPage()
 {
     // Position / NodeInfo packet
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
+
+    // If joystick is available, include the Free Text option
+    if (settings->joystick.enabled)
+        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message
     uint8_t count = cm.store->size();
@@ -1746,6 +1829,48 @@ void InkHUD::MenuApplet::populateRecipientPage()
     items.push_back(MenuItem("Exit", MenuPage::EXIT));
 }
 
+void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, std::string text)
+{
+    setFont(fontSmall);
+    uint16_t wrapMaxH = 0;
+
+    // Draw the text, input box, and cursor
+    // Adjusting the box for screen height
+    while (wrapMaxH < height - fontSmall.lineHeight()) {
+        wrapMaxH += fontSmall.lineHeight();
+    }
+
+    // If the text is so long that it goes outside of the input box, the text is actually rendered off screen.
+    uint32_t textHeight = getWrappedTextHeight(0, width - 5, text);
+    if (!text.empty()) {
+        uint16_t textPadding = X(1.0) > Y(1.0) ? wrapMaxH - textHeight : wrapMaxH - textHeight + 1;
+        if (textHeight > wrapMaxH)
+            printWrapped(2, textPadding, width - 5, text);
+        else
+            printWrapped(2, top + 2, width - 5, text);
+    }
+
+    uint16_t textCursorX = text.empty() ? 1 : getCursorX();
+    uint16_t textCursorY = text.empty() ? fontSmall.lineHeight() + 2 : getCursorY() - fontSmall.lineHeight() + 3;
+
+    if (textCursorX + 1 > width - 5) {
+        textCursorX = getCursorX() - width + 5;
+        textCursorY += fontSmall.lineHeight();
+    }
+
+    fillRect(textCursorX + 1, textCursorY, 1, fontSmall.lineHeight(), BLACK);
+
+    // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
+    fillRect(0, 0, X(1.0), top, WHITE);
+
+    // Draw character limit
+    std::string ftlen = std::to_string(text.length()) + "/" + to_string(menuTextLimit);
+    uint16_t textLen = getTextWidth(ftlen);
+    printAt(X(1.0) - textLen - 2, 0, ftlen);
+
+    // Draw the border
+    drawRect(0, top, width, wrapMaxH + 5, BLACK);
+}
 // Renders the panel shown at the top of the root menu.
 // Displays the clock, and several other pieces of instantaneous system info,
 // which we'd prefer not to have displayed in a normal applet, as they update too frequently.
