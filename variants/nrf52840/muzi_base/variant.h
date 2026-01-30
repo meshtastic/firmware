@@ -38,7 +38,6 @@ extern "C" {
 #define COMPASS_ORIENTATION meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270
 #define HAS_ICM20948 // forces the i2c address to be seen as this sensor
 
-#define HAS_RTC 1
 #define RX8130CE_RTC 0x32
 
 // LEDs
