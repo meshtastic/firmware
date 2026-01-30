@@ -140,27 +140,8 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
     return !isHopStartValidForForwarding(p);
 }
 
-inline bool isHopStartValidForPolicy(const meshtastic_MeshPacket &p)
-{
-    if (isFromUs(&p)) {
-        return true; // allow local-originated packets through all policy gates
-    }
-    if (!isModernOnlyRebroadcastMode()) {
-        return true;
-    }
-    return isHopStartValidForForwarding(p);
-}
-
-inline uint8_t effectiveHopLimitForForwarding(const meshtastic_MeshPacket &p)
-{
-    return isHopStartValidForPolicy(p) ? p.hop_limit : 0;
-}
-
-/// Rate-limited debug log when hop_start is invalid/missing for forwarding.
+/// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
-
-/// Rate-limited debug log when a heard rebroadcast is ignored due to pre-hop rules.
-void logPreHopRetransmissionIgnore(const meshtastic_MeshPacket &p, const char *context);
 
 enum LoadFileResult {
     // Successfully opened the file

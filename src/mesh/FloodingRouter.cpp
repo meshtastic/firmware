@@ -68,9 +68,6 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
-        if (!isHopStartValidForPolicy(*p)) {
-            return false;
-        }
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
         uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
@@ -123,9 +120,6 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (!isHopStartValidForPolicy(*p)) {
-        return;
-    }
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router!
         // But only LoRa packets should be able to trigger this.
@@ -153,10 +147,8 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         (p->decoded.request_id != 0 || p->decoded.reply_id != 0);
     if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
         // do not flood direct message that is ACKed or replied to
-        if (isHopStartValidForPolicy(*p)) {
-            LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");
-            Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
-        }
+        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");
+        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
 
     perhapsRebroadcast(p);
