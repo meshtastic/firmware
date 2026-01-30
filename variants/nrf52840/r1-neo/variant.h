@@ -132,8 +132,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define ADC_MULTIPLIER 1.667
 #define OCV_ARRAY 4120, 4020, 4000, 3940, 3870, 3820, 3750, 3630, 3550, 3450, 3100
 
-#define HAS_RTC 1
-
 #define RX8130CE_RTC 0x32
 
 #ifdef __cplusplus
