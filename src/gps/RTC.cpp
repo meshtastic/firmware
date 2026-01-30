@@ -276,10 +276,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         settimeofday(tv, NULL);
 #endif
 
-#if HAS_RTC
         readFromRTC();
-#endif
-
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time
