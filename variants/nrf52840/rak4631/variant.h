@@ -252,8 +252,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define RV3028_RTC (uint8_t)0b1010010
 
 // RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
+#define PIN_BUZZER 21 // IO3 is PWM2
 // NEW: set this via protobuf instead!
+
+// RAK4631 custom ringtone
+#undef USERPREFS_RINGTONE_RTTTL
+#define USERPREFS_RINGTONE_RTTTL "Rak:d=32,o=5,b=200:b7,p,b7,4p,p"
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
