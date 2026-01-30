@@ -811,7 +811,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (shouldDropPacketForPreHop(*p)) {
-        logHopStartDrop(*p, "prehop build flag");
+        logHopStartDrop(*p, "pre-hop drop");
         packetPool.release(p);
         return;
     }

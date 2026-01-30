@@ -131,7 +131,7 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
     return false;
 #else
     if (isFromUs(&p)) {
-        return false; // local-originated packets should never be dropped by pre-hop policy
+        return false; // local-originated packets should never be dropped by pre-hop drop policy
     }
     return !isHopStartValidForForwarding(p);
 #endif

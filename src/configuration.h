@@ -78,7 +78,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Configuration
 // -----------------------------------------------------------------------------
 
-// Pre-hop packet handling (compile-time flag).
+// Pre-hop drop handling (compile-time flag).
 #ifndef MESHTASTIC_PREHOP_DROP
 #define MESHTASTIC_PREHOP_DROP 1
 #endif
