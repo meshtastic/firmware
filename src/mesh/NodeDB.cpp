@@ -58,6 +58,24 @@
 #include <MeshtasticOTA.h>
 #endif
 
+static bool nodeNumLessThan(const meshtastic_NodeInfoLite &node, NodeNum num)
+{
+    return node.num < num;
+}
+
+static bool displaySortBefore(const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b, NodeNum myNum)
+{
+    bool aIsOwn = (a->num == myNum);
+    bool bIsOwn = (b->num == myNum);
+    if (aIsOwn != bIsOwn)
+        return aIsOwn;
+    if (a->is_favorite != b->is_favorite)
+        return a->is_favorite;
+    if (a->last_heard != b->last_heard)
+        return a->last_heard > b->last_heard;
+    return a->num < b->num;
+}
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -1073,8 +1091,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
         return;
 
     auto endIt = meshNodes->begin() + numMeshNodes;
-    auto it = std::lower_bound(meshNodes->begin(), endIt, nodeNum,
-                               [](const meshtastic_NodeInfoLite &node, NodeNum num) { return node.num < num; });
+    auto it = std::lower_bound(meshNodes->begin(), endIt, nodeNum, nodeNumLessThan);
 
     if (it != endIt && it->num == nodeNum) {
         size_t index = it - meshNodes->begin();
@@ -2005,8 +2022,13 @@ void NodeDB::pause_sort(bool paused)
 
 void NodeDB::sortByNodeNum()
 {
-    std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
-              [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) { return a.num < b.num; });
+    for (size_t i = 1; i < numMeshNodes; i++) {
+        size_t j = i;
+        while (j > 0 && meshNodes->at(j - 1).num > meshNodes->at(j).num) {
+            std::swap(meshNodes->at(j - 1), meshNodes->at(j));
+            j--;
+        }
+    }
 }
 
 void NodeDB::rebuildDisplayOrder()
@@ -2032,24 +2054,15 @@ void NodeDB::rebuildDisplayOrder()
 
         // Sort displayNodes by display order: own node → favorites → last_heard
         NodeNum myNum = getNodeNum();
-        std::sort(displayNodes.begin(), displayNodes.end(),
-                  [myNum](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) {
-                      // Strict weak ordering: must return false when a == b
-                      // Own node always first
-                      bool aIsOwn = (a->num == myNum);
-                      bool bIsOwn = (b->num == myNum);
-                      if (aIsOwn != bIsOwn)
-                          return aIsOwn; // Own node comes first
-
-                      // Favorites before non-favorites
-                      if (a->is_favorite != b->is_favorite)
-                          return a->is_favorite; // Favorites come first
-
-                      // Then by last_heard (most recent first), with nodeNum as tiebreaker
-                      if (a->last_heard != b->last_heard)
-                          return a->last_heard > b->last_heard;
-                      return a->num < b->num;
-                  });
+        for (size_t i = 1; i < displayNodes.size(); i++) {
+            meshtastic_NodeInfoLite *key = displayNodes[i];
+            size_t j = i;
+            while (j > 0 && displaySortBefore(key, displayNodes[j - 1], myNum)) {
+                displayNodes[j] = displayNodes[j - 1];
+                j--;
+            }
+            displayNodes[j] = key;
+        }
 
         displayNodesDirty = false;
         rebuildFavoriteRouterIndex();
@@ -2103,8 +2116,7 @@ std::string NodeDB::getNodeId() const
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
     auto endIt = meshNodes->begin() + numMeshNodes;
-    auto it = std::lower_bound(meshNodes->begin(), endIt, n,
-                               [](const meshtastic_NodeInfoLite &node, NodeNum num) { return node.num < num; });
+    auto it = std::lower_bound(meshNodes->begin(), endIt, n, nodeNumLessThan);
     if (it != endIt && it->num == n)
         return &(*it);
     return NULL;
@@ -2127,8 +2139,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     auto endIt = meshNodes->begin() + numMeshNodes;
-    auto it = std::lower_bound(meshNodes->begin(), endIt, n,
-                               [](const meshtastic_NodeInfoLite &node, NodeNum num) { return node.num < num; });
+    auto it = std::lower_bound(meshNodes->begin(), endIt, n, nodeNumLessThan);
 
     // Found existing node
     if (it != endIt && it->num == n) {
@@ -2175,8 +2186,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             numMeshNodes--;
             // Recalculate insertion point since array shifted
             endIt = meshNodes->begin() + numMeshNodes;
-            it = std::lower_bound(meshNodes->begin(), endIt, n,
-                                  [](const meshtastic_NodeInfoLite &node, NodeNum num) { return node.num < num; });
+            it = std::lower_bound(meshNodes->begin(), endIt, n, nodeNumLessThan);
         }
     }
 
