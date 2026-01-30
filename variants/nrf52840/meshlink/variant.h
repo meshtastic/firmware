@@ -32,7 +32,7 @@ extern "C" {
 #define PIN_LED1 (24) // Built in white led for status
 #define LED_BLUE PIN_LED1
 
-#define LED_STATE_ON 0 // State when LED is litted
+#define LED_STATE_ON 0 // State when LED is lit
 
 // Testing USB detection
 // #define NRF_APM

@@ -129,7 +129,6 @@ External serial flash W25Q16JV_IQ
 // PCF8563 RTC Module
 #define PIN_RTC_INT (0 + 14) // Interrupt from the PCF8563 RTC
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 /*
  * SPI Interfaces
