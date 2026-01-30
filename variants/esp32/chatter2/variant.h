@@ -79,7 +79,7 @@
                            // lower dB for lower voltage rnage
 #define ADC_MULTIPLIER 5.0 // VBATT---10k--pin34---2.5K---GND
 // Chatter2 uses 3 AAA cells
-#define CELL_TYPE_ALKALINE
+#define OCV_ARRAY 1580, 1400, 1350, 1300, 1280, 1250, 1230, 1190, 1150, 1100, 1000
 #define NUM_CELLS 3
 #undef EXT_PWR_DETECT
 
@@ -98,7 +98,6 @@
 #define KB_LOAD 21 // load values from the switch and store in shift register
 #define KB_CLK 22  // clock pin for serial data out
 #define KB_DATA 23 // data pin
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //

@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <power/PowerHAL.h>
 #include <vector>
 
 #ifdef ARCH_ESP32
@@ -823,16 +824,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
-    defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M6)
-    // Default to PIN_LED2 for external notification output (LED color depends on device variant)
+#if defined(LED_NOTIFICATION)
     moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.output = PIN_LED2;
-#if defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
-    moduleConfig.external_notification.active = false;
-#else
-    moduleConfig.external_notification.active = true;
-#endif
+    moduleConfig.external_notification.output = LED_NOTIFICATION;
+    moduleConfig.external_notification.active = LED_STATE_ON;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
@@ -855,15 +850,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
-#endif
-#ifdef ELECROW_ThinkNode_M1
-    // Default to Elecrow USER_LED (blue)
-    moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.output = USER_LED;
-    moduleConfig.external_notification.active = true;
-    moduleConfig.external_notification.alert_message = true;
-    moduleConfig.external_notification.output_ms = 1000;
-    moduleConfig.external_notification.nag_timeout = 60;
 #endif
 #ifdef T_LORA_PAGER
     moduleConfig.canned_message.updown1_enabled = true;
@@ -1426,6 +1412,14 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
+        return false;
+    }
+
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
@@ -1452,6 +1446,14 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
 bool NodeDB::saveChannelsToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveChannelsToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1462,6 +1464,14 @@ bool NodeDB::saveChannelsToDisk()
 
 bool NodeDB::saveDeviceStateToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveDeviceStateToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1474,6 +1484,14 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveNodeDatabaseToDisk() on unsafe device power level.");
+        return false;
+    }
+
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1486,6 +1504,14 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
+        return false;
+    }
+
     bool success = true;
 #ifdef FSCom
     spiLock->lock();
@@ -1541,6 +1567,14 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 bool NodeDB::saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
+
+    // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
+    // and all writes will fail anyway. Device should be sleeping at this point anyway.
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveToDisk() on unsafe device power level.");
+        return false;
+    }
+
     bool success = saveToDiskNoRetry(saveWhat);
 
     if (!success) {
@@ -2198,7 +2232,10 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 
     // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
-    LOG_ERROR("A critical failure occurred, portduino is exiting");
-    exit(2);
+    LOG_ERROR("A critical failure occurred");
+    // TODO: Determine if other critical errors should also cause an immediate exit
+    if (code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE ||
+        code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE)
+        exit(2);
 #endif
 }

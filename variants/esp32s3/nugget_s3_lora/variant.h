@@ -12,7 +12,7 @@
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 
 // Button A (44), B (43), R (12), U (13), L (11), D (18)
-#define BUTTON_PIN 44 // If defined, this will be used for user button presses
+#define BUTTON_PIN 43 // If defined, this will be used for user button presses
 #define BUTTON_NEED_PULLUP
 
 #define USE_RF95
@@ -20,8 +20,19 @@
 #define LORA_MISO 7
 #define LORA_MOSI 8
 #define LORA_CS 9
-#define LORA_DIO0 16 // a No connect on the SX1262 module
+#define LORA_DIO0 16
 #define LORA_RESET 4
 
 #define LORA_DIO1 RADIOLIB_NC
 #define LORA_DIO2 RADIOLIB_NC
+
+// jk, its not really a trackball but we're gonna pretend!
+#define HAS_TRACKBALL 1
+#define TB_UP 13
+#define TB_DOWN 18
+#define TB_LEFT 11
+#define TB_RIGHT 12
+#define TB_PRESS 44 // BUTTON_PIN
+#define TB_DIRECTION FALLING
+
+#define ENABLE_AMBIENTLIGHTING

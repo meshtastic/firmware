@@ -32,6 +32,19 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 1
 fi
 
+# esptool v5 supports commands with dashes and deprecates commands with
+# underscores. Prior versions only support commands with underscores
+if ${ESPTOOL_CMD} | grep --quiet write-flash
+then
+    ESPTOOL_WRITE_FLASH=write-flash
+    ESPTOOL_ERASE_FLASH=erase-flash
+    ESPTOOL_READ_FLASH_STATUS=read-flash-status
+else
+    ESPTOOL_WRITE_FLASH=write_flash
+    ESPTOOL_ERASE_FLASH=erase_flash
+    ESPTOOL_READ_FLASH_STATUS=read_flash_status
+fi
+
 set -e
 
 # Usage info
@@ -83,8 +96,8 @@ while [ $# -gt 0 ]; do
 done
 
 if [[ $BPS_RESET == true ]]; then
-	$ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
-	exit 0
+    $ESPTOOL_CMD --baud $RESET_BAUD --after no_reset ${ESPTOOL_READ_FLASH_STATUS}
+    exit 0
 fi
 
 [ -z "$FILENAME" ] && [ -n "$1" ] && {
@@ -144,12 +157,12 @@ if [[ -f "$FILENAME" && "$FILENAME" == *.factory.bin ]]; then
     fi
 
     echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
-    $ESPTOOL_CMD erase-flash
-    $ESPTOOL_CMD write-flash $FIRMWARE_OFFSET "${FILENAME}"
+    $ESPTOOL_CMD ${ESPTOOL_ERASE_FLASH}
+    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} $FIRMWARE_OFFSET "${FILENAME}"
     echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
-    $ESPTOOL_CMD write_flash $OTA_OFFSET "${OTAFILE}"
+    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} $OTA_OFFSET "${OTAFILE}"
     echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
-    $ESPTOOL_CMD write_flash $OFFSET "${SPIFFSFILE}"
+    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} $OFFSET "${SPIFFSFILE}"
 
 else
     show_help
