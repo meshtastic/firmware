@@ -119,11 +119,6 @@ enum class HopStartStatus : uint8_t { VALID = 0, MISSING_OR_UNKNOWN, INVALID };
 /// Classify hop_start validity for forwarding decisions.
 HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p);
 
-inline bool isHopStartValidForForwarding(const meshtastic_MeshPacket &p)
-{
-    return classifyHopStart(p) == HopStartStatus::VALID;
-}
-
 inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 {
 #if !MESHTASTIC_PREHOP_DROP
@@ -133,7 +128,7 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
     if (isFromUs(&p)) {
         return false; // local-originated packets should never be dropped by pre-hop drop policy
     }
-    return !isHopStartValidForForwarding(p);
+    return classifyHopStart(p) != HopStartStatus::VALID;
 #endif
 }
 
