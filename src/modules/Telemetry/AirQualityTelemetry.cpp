@@ -190,7 +190,7 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     const auto &m = telemetry.variant.air_quality_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard || m.has_co2;
+    bool hasAny = m.has_sen5xdata || m.has_pmsa003idata || m.has_scd4xdata;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -211,14 +211,24 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     // === Collect sensor readings as label strings (no icons) ===
     std::vector<String> entries;
 
-    if (m.has_pm10_standard)
-        entries.push_back("PM1: " + String(m.pm10_standard) + "ug/m3");
-    if (m.has_pm25_standard)
-        entries.push_back("PM2.5: " + String(m.pm25_standard) + "ug/m3");
-    if (m.has_pm100_standard)
-        entries.push_back("PM10: " + String(m.pm100_standard) + "ug/m3");
-    if (m.has_co2)
-        entries.push_back("CO2: " + String(m.co2) + "ppm");
+    if (m.has_pmsa003idata) {
+        if (m.pmsa003idata.has_pm10_standard)
+            entries.push_back("PM1: " + String(m.pmsa003idata.pm10_standard) + "ug/m3");
+        if (m.pmsa003idata.has_pm25_standard)
+            entries.push_back("PM2.5: " + String(m.pmsa003idata.pm25_standard) + "ug/m3");
+        if (m.pmsa003idata.has_pm100_standard)
+            entries.push_back("PM10: " + String(m.pmsa003idata.pm100_standard) + "ug/m3");
+    }
+    if (m.has_sen5xdata) {
+        if (m.sen5xdata.has_pm10_standard)
+            entries.push_back("PM1: " + String(m.sen5xdata.pm10_standard) + "ug/m3");
+        if (m.sen5xdata.has_pm25_standard)
+            entries.push_back("PM2.5: " + String(m.sen5xdata.pm25_standard) + "ug/m3");
+        if (m.sen5xdata.has_pm100_standard)
+            entries.push_back("PM10: " + String(m.sen5xdata.pm100_standard) + "ug/m3");
+    }
+    if (m.has_scd4xdata)
+        entries.push_back("CO2: " + String(m.scd4xdata.co2) + "ppm");
 
 
     // === Show first available metric on top-right of first line ===
@@ -255,18 +265,13 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
-                 t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
-                 t->variant.air_quality_metrics.pm100_standard);
+        // LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
+        //          t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
+        //          t->variant.air_quality_metrics.pm100_standard);
 
-        // TODO - Decide what to do with these
-        // LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
-        //          t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
-        //          t->variant.air_quality_metrics.pm100_environmental);
-
-        LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f",
-                 t->variant.air_quality_metrics.co2, t->variant.air_quality_metrics.co2_temperature,
-                 t->variant.air_quality_metrics.co2_humidity);
+        // LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f",
+        //          t->variant.air_quality_metrics.co2, t->variant.air_quality_metrics.co2_temperature,
+        //          t->variant.air_quality_metrics.co2_humidity);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -336,26 +341,21 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     if (getAirQualityTelemetry(&m)) {
 
-        bool hasAnyPM = m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard || m.variant.air_quality_metrics.has_pm100_standard  || m.variant.air_quality_metrics.has_pm10_environmental || m.variant.air_quality_metrics.has_pm25_environmental ||
-                    m.variant.air_quality_metrics.has_pm100_environmental;
+        // bool hasAnyPM = m.variant.air_quality_metrics.has_sen5xdata || m.variant.air_quality_metrics.has_pmsa003idata;
 
-        if (hasAnyPM) {
-            LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", \
-                    m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard, \
-                    m.variant.air_quality_metrics.pm100_standard);
-            if (m.variant.air_quality_metrics.has_pm10_environmental)
-                LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
-                    m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
-                    m.variant.air_quality_metrics.pm100_environmental);
-        }
+        // if (hasAnyPM) {
+        //     LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", \
+        //             m.variant.air_quality_metrics.sen5xdata.pm10_standard, m.variant.air_quality_metrics.sen5xdata.pm25_standard, \
+        //             m.variant.air_quality_metrics.sen5xdata.pm100_standard);
+        // }
 
-        bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature || m.variant.air_quality_metrics.has_co2_humidity;
+        // bool hasAnyCO2 = m.variant.air_quality_metrics.has_scd4xdata;
 
-        if (hasAnyCO2) {
-            LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f",
-                    m.variant.air_quality_metrics.co2, m.variant.air_quality_metrics.co2_temperature,
-                    m.variant.air_quality_metrics.co2_humidity);
-        }
+        // if (hasAnyCO2) {
+        //     LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f",
+        //             m.variant.air_quality_metrics.scd4xdata.co2, m.variant.air_quality_metrics.scd4xdata.co2_temperature,
+        //             m.variant.air_quality_metrics.scd4xdata.co2_humidity);
+        // }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

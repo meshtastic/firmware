@@ -111,24 +111,39 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                         jsonObj["payload"]["radiation"] = decoded->variant.environment_metrics.radiation;
                     }
                 } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
-                    if (decoded->variant.air_quality_metrics.has_pm10_standard) {
-                        jsonObj["payload"]["pm10"] = (unsigned int)decoded->variant.air_quality_metrics.pm10_standard;
+                    if (decoded->variant.air_quality_metrics.has_sen5xdata) {
+                        if (decoded->variant.air_quality_metrics.sen5xdata.has_pm10_standard) {
+                            jsonObj["payload"]["pm10"] = (unsigned int)decoded->variant.air_quality_metrics.sen5xdata.pm10_standard;
+                        }
+                        if (decoded->variant.air_quality_metrics.sen5xdata.has_pm25_standard) {
+                            jsonObj["payload"]["pm25"] = (unsigned int)decoded->variant.air_quality_metrics.sen5xdata.pm25_standard;
+                        }
+                        if (decoded->variant.air_quality_metrics.sen5xdata.has_pm100_standard) {
+                            jsonObj["payload"]["pm100"] = (unsigned int)decoded->variant.air_quality_metrics.sen5xdata.pm100_standard;
+                        }
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm25_standard) {
-                        jsonObj["payload"]["pm25"] = (unsigned int)decoded->variant.air_quality_metrics.pm25_standard;
+                    if (decoded->variant.air_quality_metrics.has_pmsa003idata) {
+                        if (decoded->variant.air_quality_metrics.pmsa003idata.has_pm10_standard) {
+                            jsonObj["payload"]["pm10"] = (unsigned int)decoded->variant.air_quality_metrics.pmsa003idata.pm10_standard;
+                        }
+                        if (decoded->variant.air_quality_metrics.pmsa003idata.has_pm25_standard) {
+                            jsonObj["payload"]["pm25"] = (unsigned int)decoded->variant.air_quality_metrics.pmsa003idata.pm25_standard;
+                        }
+                        if (decoded->variant.air_quality_metrics.pmsa003idata.has_pm100_standard) {
+                            jsonObj["payload"]["pm100"] = (unsigned int)decoded->variant.air_quality_metrics.pmsa003idata.pm100_standard;
+                        }
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm100_standard) {
-                        jsonObj["payload"]["pm100"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_standard;
+                    if (decoded->variant.air_quality_metrics.has_scd4xdata) {
+                        if (decoded->variant.air_quality_metrics.scd4xdata.has_co2) {
+                            jsonObj["payload"]["co2"] = (unsigned int)decoded->variant.air_quality_metrics.scd4xdata.co2;
+                        }
+                        if (decoded->variant.air_quality_metrics.scd4xdata.has_co2_temperature) {
+                            jsonObj["payload"]["co2_temperature"] = (unsigned int)decoded->variant.air_quality_metrics.scd4xdata.co2_temperature;
+                        }
+                        if (decoded->variant.air_quality_metrics.scd4xdata.has_co2_humidity) {
+                            jsonObj["payload"]["co2_humidity"] = (unsigned int)decoded->variant.air_quality_metrics.scd4xdata.co2has_co2_humidity;
+                        }
                     }
-                    // if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
-                    //     jsonObj["payload"]["pm10_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm10_environmental;
-                    // }
-                    // if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
-                    //     jsonObj["payload"]["pm25_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm25_environmental;
-                    // }
-                    // if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
-                    //     jsonObj["payload"]["pm100_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_environmental;
-                    // }
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     if (decoded->variant.power_metrics.has_ch1_voltage) {
                         jsonObj["payload"]["voltage_ch1"] = decoded->variant.power_metrics.ch1_voltage;

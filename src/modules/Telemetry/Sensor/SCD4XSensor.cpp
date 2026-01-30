@@ -121,12 +121,13 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
         }
         return false;
     } else {
-        measurement->variant.air_quality_metrics.has_co2_temperature = true;
-        measurement->variant.air_quality_metrics.has_co2_humidity = true;
-        measurement->variant.air_quality_metrics.has_co2 = true;
-        measurement->variant.air_quality_metrics.co2_temperature = temperature;
-        measurement->variant.air_quality_metrics.co2_humidity = humidity;
-        measurement->variant.air_quality_metrics.co2 = co2;
+        measurement->variant.air_quality_metrics.has_scd4xdata = true;
+        measurement->variant.air_quality_metrics.scd4xdata.has_co2_temperature = true;
+        measurement->variant.air_quality_metrics.scd4xdata.has_co2_humidity = true;
+        measurement->variant.air_quality_metrics.scd4xdata.has_co2 = true;
+        measurement->variant.air_quality_metrics.scd4xdata.co2_temperature = temperature;
+        measurement->variant.air_quality_metrics.scd4xdata.co2_humidity = humidity;
+        measurement->variant.air_quality_metrics.scd4xdata.co2 = co2;
         return true;
     }
 }
