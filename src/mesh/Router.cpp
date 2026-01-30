@@ -7,7 +7,6 @@
 #include "RTC.h"
 
 #include "configuration.h"
-#include "detect/LoRaRadioType.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -265,6 +264,13 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
                 p->channel = node->channel;
                 LOG_DEBUG("localSend to channel %d", p->channel);
             }
+        }
+
+        // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
+        // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
+        // counts and we want this message to get through the whole mesh, so use the default.
+        if (src == RX_SRC_USER && p->want_ack && p->hop_limit == 0) {
+            p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
 
         return send(p);

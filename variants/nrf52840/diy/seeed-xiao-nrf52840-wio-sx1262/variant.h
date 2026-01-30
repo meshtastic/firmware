@@ -36,9 +36,7 @@ extern "C" {
 #define PIN_LED3 LED_RED
 
 #define PIN_LED PIN_LED1
-#define LED_PWR (PINS_COUNT)
 
-#define LED_BUILTIN PIN_LED
 #define LED_STATE_ON 1 // State when LED is lit
 
 // XIAO Wio-SX1262 Shield User button
