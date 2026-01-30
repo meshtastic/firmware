@@ -124,20 +124,17 @@ inline bool isHopStartValidForForwarding(const meshtastic_MeshPacket &p)
     return classifyHopStart(p) == HopStartStatus::VALID;
 }
 
-inline bool isModernOnlyRebroadcastMode()
-{
-    return config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_MODERN_ONLY;
-}
-
 inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 {
-    if (!isModernOnlyRebroadcastMode()) {
-        return false;
-    }
+#if !MESHTASTIC_PREHOP_DROP
+    (void)p;
+    return false;
+#else
     if (isFromUs(&p)) {
-        return false; // local-originated packets should never be dropped by modern-only policy
+        return false; // local-originated packets should never be dropped by pre-hop policy
     }
     return !isHopStartValidForForwarding(p);
+#endif
 }
 
 /// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.

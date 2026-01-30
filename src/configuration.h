@@ -78,6 +78,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Configuration
 // -----------------------------------------------------------------------------
 
+// Pre-hop packet handling (compile-time flag).
+#ifndef MESHTASTIC_PREHOP_DROP
+#define MESHTASTIC_PREHOP_DROP 1
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
