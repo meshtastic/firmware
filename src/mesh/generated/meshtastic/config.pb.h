@@ -285,11 +285,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Nepal 865MHz */
     meshtastic_Config_LoRaConfig_RegionCode_NP_865 = 25,
     /* Brazil 902MHz */
-    meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
-    /* EU 866MHz band (Band no. 47b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
-    meshtastic_Config_LoRaConfig_RegionCode_EU_866 = 27,
-    /* EU 868MHz band, with narrow presets */
-    meshtastic_Config_LoRaConfig_RegionCode_NARROW_868 = 28
+    meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -319,24 +315,7 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO = 8,
     /* Long Range - Turbo
  This preset performs similarly to LongFast, but with 500Khz bandwidth. */
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO = 9,
-    /* Lite Fast
- Medium range preset optimized for EU 866MHz SRD band with 125kHz bandwidth.
- Comparable link budget to MEDIUM_FAST but compliant with Band no. 47b of 2006/771/EC. */
-    meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST = 10,
-    /* Lite Slow
- Medium-to-moderate range preset optimized for EU 866MHz SRD band with 125kHz bandwidth.
- Comparable link budget to LONG_FAST but compliant with Band no. 47b of 2006/771/EC. */
-    meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW = 11,
-    /* Narrow Fast
- Medium-to-moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
- Comparable link budget to SHORT_SLOW, but with half the data rate.
- Intended to avoid interference with other devices. */
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST = 12,
-    /* Narrow Slow
- Moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
- Comparable link budget and data rate to LONG_FAST. */
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO = 9
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -710,12 +689,12 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_NARROW_868
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_NARROW_868+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_BR_902
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_BR_902+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN
