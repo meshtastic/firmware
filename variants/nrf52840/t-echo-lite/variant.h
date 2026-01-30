@@ -52,8 +52,6 @@ extern "C" {
 
 #define BLE_LED LED_BLUE
 #define BLE_LED_INVERTED 1
-#define LED_BUILTIN LED_GREEN
-#define LED_CONN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 // Buttons
@@ -170,6 +168,8 @@ static const uint8_t A0 = PIN_A0;
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
+
+#define SERIAL_PRINT_PORT 0
 
 // #define NO_EXT_GPIO 1
 // PINs back side

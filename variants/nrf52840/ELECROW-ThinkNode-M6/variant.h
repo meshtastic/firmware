@@ -40,11 +40,10 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define LED_BUILTIN -1
 #define LED_BLUE -1
 #define LED_CHARGE (12)
 #define LED_PAIRING (7)
-#define PIN_LED2 LED_PAIRING
+#define LED_NOTIFICATION LED_PAIRING
 
 #define LED_STATE_ON HIGH
 #define LED_STATE_OFF LOW
