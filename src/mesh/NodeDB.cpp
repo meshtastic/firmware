@@ -565,6 +565,7 @@ void NodeDB::installDefaultNodeDatabase()
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
     displayNodesDirty = true;
+    favoriteRouterDirty = true;
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -1077,6 +1078,7 @@ void NodeDB::resetNodes(bool keepFavorites)
     // Re-sort by NodeNum after reset
     sortByNodeNum();
     displayNodesDirty = true;
+    favoriteRouterDirty = true;
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1102,6 +1104,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
         numMeshNodes--;
         meshNodes->at(numMeshNodes) = meshtastic_NodeInfoLite();
         displayNodesDirty = true;
+        favoriteRouterDirty = true;
         LOG_DEBUG("NodeDB::removeNodeByNum purged 1 entry. Save changes");
     } else {
         LOG_DEBUG("NodeDB::removeNodeByNum node not found");
@@ -1145,6 +1148,7 @@ void NodeDB::cleanupMeshDB()
     // Re-sort by NodeNum after cleanup to ensure binary search works
     sortByNodeNum();
     displayNodesDirty = true;
+    favoriteRouterDirty = true;
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
@@ -1312,6 +1316,7 @@ void NodeDB::loadFromDisk()
     // Sort by NodeNum for binary search lookups (existing data may have been sorted differently)
     sortByNodeNum();
     displayNodesDirty = true;
+    favoriteRouterDirty = true;
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1833,6 +1838,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         info->is_ignored = true;
         info->is_favorite = false;
         displayNodesDirty = true;
+        favoriteRouterDirty = true;
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
@@ -1865,6 +1871,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
         displayNodesDirty = true;
+        favoriteRouterDirty = true;
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
@@ -1967,6 +1974,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             if (info->last_heard != mp.rx_time) {
                 info->last_heard = mp.rx_time;
                 displayNodesDirty = true; // Only mark dirty when last_heard changes (affects display sort order)
+                favoriteRouterDirty = true;
             }
         }
 
@@ -1990,6 +1998,7 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
         displayNodesDirty = true;
+        favoriteRouterDirty = true;
         saveToDisk(SEGMENT_NODEDATABASE);
     }
 }
@@ -2072,6 +2081,7 @@ void NodeDB::rebuildDisplayOrder()
 
 void NodeDB::rebuildFavoriteRouterIndex()
 {
+    favoriteRouterDirty = false;
     favoriteRouterLastBytes.clear();
     for (size_t i = 0; i < numMeshNodes; i++) {
         const meshtastic_NodeInfoLite &node = meshNodes->at(i);
@@ -2205,6 +2215,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     lite->num = n;
 
     displayNodesDirty = true;
+    favoriteRouterDirty = true;
     LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
 
     return lite;

@@ -322,6 +322,7 @@ class NodeDB
 
     std::vector<meshtastic_NodeInfoLite *> displayNodes; // Pointers sorted by display order (own node → favorites → last_heard)
     bool displayNodesDirty = true;                       // Set true when meshNodes changes, triggers rebuildDisplayOrder()
+    bool favoriteRouterDirty = true;                     // Set true when meshNodes changes, triggers rebuildFavoriteRouterIndex()
     std::vector<uint8_t> favoriteRouterLastBytes;        // Cached last-byte of favorite routers for shouldDecrementHopLimit()
 
     /// pick a provisional nodenum we hope no one is using
@@ -354,7 +355,7 @@ class NodeDB
   public:
     const std::vector<uint8_t> &getFavoriteRouterLastBytes()
     {
-        if (displayNodesDirty)
+        if (favoriteRouterDirty)
             rebuildFavoriteRouterIndex();
         return favoriteRouterLastBytes;
     }
