@@ -188,7 +188,6 @@ External serial flash WP25R1635FZUIL0
 // PCF8563 RTC Module
 #define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 /*
  * SPI Interfaces
