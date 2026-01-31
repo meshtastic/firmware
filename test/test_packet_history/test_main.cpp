@@ -73,7 +73,7 @@ void test_init_minimum_size(void)
 
 void test_init_too_small_falls_back(void)
 {
-    // Size < 4 is clamped to PACKETHISTORY_MAX inside the constructor
+    // Sizes < 4 or > PACKETHISTORY_MAX are clamped to PACKETHISTORY_MAX inside the constructor
     PacketHistory h(2);
     TEST_ASSERT_TRUE(h.initOk());
 }
