@@ -445,20 +445,19 @@ void PacketHistory::insert(const PacketRecord &r)
     }
 
 #if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
-    // Maintain hash index: remove old entry if we're evicting a different packet
+    // Maintain hash index: remove old entry if evicting a different packet, then insert new entry
     bool isMatchingSlot = (tu->id == r.id && tu->sender == r.sender);
     if (!isMatchingSlot && tu->rxTimeMsec != 0) {
         hashRemove(tu->sender, tu->id);
     }
-#endif
 
     *tu = r; // store the packet
 
-#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
-    // Insert new entry into hash index (or update if matching slot with same key)
     if (!isMatchingSlot) {
         hashInsert(r.sender, r.id, (uint16_t)(tu - recentPackets));
     }
+#else
+    *tu = r; // store the packet
 #endif
 
 #if VERBOSE_PACKET_HISTORY
