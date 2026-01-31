@@ -426,7 +426,7 @@ uint32_t hash(const char *str)
     int c;
 
     while ((c = *str++) != 0)
-        hash = ((hash << 5) + hash) + (unsigned char)c; /* hash * 33 + c */
+        hash = ((hash << 5) + hash) + (unsigned char)c; /* hash * 32 + c */
 
     return hash;
 }
