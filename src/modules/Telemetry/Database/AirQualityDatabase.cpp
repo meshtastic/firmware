@@ -10,9 +10,9 @@
 #include <pb_encode.h>
 
 // Check for filesystem support
-#ifdef FSCom
-#include "FS.h"
-#endif
+#include "FSCommon.h"
+#include "SPILock.h"
+#include "SafeFile.h"
 
 /**
  * Convert DatabaseRecord to protobuf TelemetryDatabaseRecord
@@ -22,7 +22,7 @@ meshtastic_TelemetryDatabaseRecord AirQualityDatabase::recordToProtobuf(const Da
     meshtastic_TelemetryDatabaseRecord pb = {};
 
     pb.timestamp = record.timestamp;
-    pb.flags.delivered_to_mesh = record.flags.delivered_to_mesh;
+    pb.delivered = record.delivered;
 
     // Set the air quality metrics in the oneof field
     pb.which_telemetry_data = meshtastic_TelemetryDatabaseRecord_air_quality_metrics_tag;
@@ -39,7 +39,7 @@ AirQualityDatabase::DatabaseRecord AirQualityDatabase::recordFromProtobuf(const 
     DatabaseRecord record = {};
 
     record.timestamp = pb.timestamp;
-    record.flags.delivered_to_mesh = pb.flags.delivered_to_mesh;
+    record.delivered = pb.delivered;
 
     // Extract air quality metrics from oneof field
     if (pb.which_telemetry_data == meshtastic_TelemetryDatabaseRecord_air_quality_metrics_tag) {
@@ -99,7 +99,7 @@ std::vector<DatabaseRecord> AirQualityDatabase::getAllRecords() const
     return result;
 }
 
-bool AirQualityDatabase::markDeliveredToMesh(uint32_t index)
+bool AirQualityDatabase::markDelivered(uint32_t index)
 {
     concurrency::Lock lock(recordsLock);
 
@@ -107,16 +107,16 @@ bool AirQualityDatabase::markDeliveredToMesh(uint32_t index)
         return false;
     }
 
-    records[index].flags.delivered_to_mesh = true;
+    records[index].delivered = true;
     return saveToStorage();
 }
 
-bool AirQualityDatabase::markAllDeliveredToMesh()
+bool AirQualityDatabase::markAllDelivered()
 {
     concurrency::Lock lock(recordsLock);
 
     for (auto &record : records) {
-        record.flags.delivered_to_mesh = true;
+        record.delivered = true;
     }
 
     return saveToStorage();
@@ -171,10 +171,10 @@ bool AirQualityDatabase::loadFromStorage()
 
         // Create input stream with known buffer size
         pb_istream_t stream = pb_istream_from_buffer(buffer.data(), fileSize);
-        meshtastic_TelemetryDatabaseSnapshot snapshot = {};
+        meshtastic_TelemetryDatabase snapshot = {};
 
         // Decode the protobuf message
-        if (!pb_decode(&stream, meshtastic_TelemetryDatabaseSnapshot_fields, &snapshot)) {
+        if (!pb_decode(&stream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
             LOG_ERROR("AirQualityDatabase: Failed to decode snapshot: %s", PB_GET_ERROR(&stream));
             return false;
         }
@@ -207,8 +207,8 @@ bool AirQualityDatabase::saveToStorage()
 
     try {
         // Create snapshot from current records
-        meshtastic_TelemetryDatabaseSnapshot snapshot = {};
-        snapshot.snapshot_timestamp = getUnixTime(); // Current time
+        meshtastic_TelemetryDatabase snapshot = {};
+        snapshot.timestamp = getUnixTime(); // Current time
         snapshot.version = 1;
         snapshot.records_count = records.size();
 
@@ -227,7 +227,7 @@ bool AirQualityDatabase::saveToStorage()
         uint8_t buffer[65536]; // Max buffer size
         pb_ostream_t ostream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 
-        if (!pb_encode(&ostream, meshtastic_TelemetryDatabaseSnapshot_fields, &snapshot)) {
+        if (!pb_encode(&ostream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
             LOG_ERROR("AirQualityDatabase: Failed to encode snapshot: %s", PB_GET_ERROR(&ostream));
             return false;
         }
@@ -280,12 +280,26 @@ TelemetryDatabase<meshtastic_AirQualityMetrics>::Statistics AirQualityDatabase::
     stats.max_timestamp = records.back().timestamp;
 
     for (const auto &record : records) {
-        if (record.flags.delivered_to_mesh) {
-            stats.delivered_mesh++;
+        if (record.delivered) {
+            stats.delivered++;
         }
     }
 
     return stats;
 }
 
+std::vector<AirQualityDatabase::DatabaseRecord> AirQualityDatabase::getRecordsForRecovery() const
+{
+    concurrency::Lock lock(recordsLock);
+    std::vector<DatabaseRecord> recoveryRecords;
+
+    for (const auto &record : records) {
+        if (!record.delivered) {
+            recoveryRecords.push_back(record);
+        }
+    }
+
+    LOG_DEBUG("AirQualityDatabase: Found %d records for recovery", recoveryRecords.size());
+    return recoveryRecords;
+}
 #endif

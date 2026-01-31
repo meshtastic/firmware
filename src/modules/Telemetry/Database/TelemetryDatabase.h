@@ -15,30 +15,23 @@ template <typename TelemetryType> class TelemetryDatabase
 {
   public:
     /**
-     * Record flags to track delivery status
-     * Uses protobuf TelemetryRecordFlags message
-     */
-    using RecordFlags = meshtastic_TelemetryRecordFlags;
-
-    /**
      * Database record structure
      * Uses protobuf TelemetryDatabaseRecord message for serialization
      */
     struct DatabaseRecord {
         uint32_t timestamp;      // When the reading was taken
         TelemetryType telemetry; // The actual telemetry data
-        RecordFlags flags;       // Delivery status flags
+        bool delivered;          // Whether this record has been delivered
     };
 
     /**
      * Statistics about stored data
      */
     struct Statistics {
-        uint32_t record_count;   // Total number of records
-        uint32_t min_timestamp;  // Oldest record timestamp
-        uint32_t max_timestamp;  // Newest record timestamp
-        uint32_t delivered_mesh; // Count delivered to mesh
-        uint32_t delivered_mqtt; // Count delivered via MQTT
+        uint32_t record_count;  // Total number of records
+        uint32_t min_timestamp; // Oldest record timestamp
+        uint32_t max_timestamp; // Newest record timestamp
+        uint32_t delivered;     // Count delivered records
     };
 
     /**
@@ -49,7 +42,7 @@ template <typename TelemetryType> class TelemetryDatabase
     static meshtastic_TelemetryDatabaseSnapshot serializeToProtobuf(const std::vector<DatabaseRecord> &records)
     {
         meshtastic_TelemetryDatabaseSnapshot snapshot = {};
-        snapshot.snapshot_timestamp = esp_timer_get_time() / 1000000; // Current time in seconds
+        snapshot.snapshot_timestamp = getTime(); // Current time in seconds
         snapshot.version = 1;
 
         // Note: Actual implementation in derived classes
@@ -102,13 +95,13 @@ template <typename TelemetryType> class TelemetryDatabase
      * @param index The index of the record
      * @return true if successful
      */
-    virtual bool markDeliveredToMesh(uint32_t index) = 0;
+    virtual bool markDelivered(uint32_t index) = 0;
 
     /**
      * Mark all records as delivered to mesh
      * @return true if successful
      */
-    virtual bool markAllDeliveredToMesh() = 0;
+    virtual bool markAllDelivered() = 0;
 
     /**
      * Get the number of records in the database
@@ -145,4 +138,10 @@ template <typename TelemetryType> class TelemetryDatabase
      * @return Statistics struct with aggregated data
      */
     virtual Statistics getStatistics() const = 0;
+
+    /**
+     * Get records not yet delivered via MQTT (for MQTT recovery when connected)
+     * @return Vector of records that need MQTT delivery
+     */
+    virtual std::vector<DatabaseRecord> getRecordsForRecovery() const = 0;
 };

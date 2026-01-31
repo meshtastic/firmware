@@ -20,11 +20,11 @@ namespace StorageHelper
  * @param buffer_size Maximum size of output buffer
  * @return Number of bytes written, or 0 on error
  */
-inline size_t encodeSnapshot(const meshtastic_TelemetryDatabaseSnapshot &snapshot, uint8_t *buffer, size_t buffer_size)
+inline size_t encodeSnapshot(const meshtastic_TelemetryDatabase &snapshot, uint8_t *buffer, size_t buffer_size)
 {
     pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
 
-    if (!pb_encode(&stream, meshtastic_TelemetryDatabaseSnapshot_fields, &snapshot)) {
+    if (!pb_encode(&stream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
         LOG_ERROR("StorageHelper: Failed to encode snapshot: %s", PB_GET_ERROR(&stream));
         return 0;
     }
@@ -43,7 +43,7 @@ inline bool decodeSnapshot(const uint8_t *buffer, size_t buffer_size, meshtastic
 {
     pb_istream_t stream = pb_istream_from_buffer(buffer, buffer_size);
 
-    if (!pb_decode(&stream, meshtastic_TelemetryDatabaseSnapshot_fields, &snapshot)) {
+    if (!pb_decode(&stream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
         LOG_ERROR("StorageHelper: Failed to decode snapshot: %s", PB_GET_ERROR(&stream));
         return false;
     }
@@ -96,7 +96,7 @@ inline bool decodeRecord(const uint8_t *buffer, size_t buffer_size, meshtastic_T
  * @return true if successful
  */
 template <typename SaveCallback>
-inline bool saveSnapshotToFlash(const meshtastic_TelemetryDatabaseSnapshot &snapshot, SaveCallback save_callback)
+inline bool saveSnapshotToFlash(const meshtastic_TelemetryDatabase &snapshot, SaveCallback save_callback)
 {
     // Allocate buffer for encoded snapshot
     // Maximum size depends on max records, estimate ~200 bytes per record + overhead
@@ -125,7 +125,7 @@ inline bool saveSnapshotToFlash(const meshtastic_TelemetryDatabaseSnapshot &snap
  * @return true if successful
  */
 template <typename LoadCallback>
-inline bool loadSnapshotFromFlash(LoadCallback load_callback, meshtastic_TelemetryDatabaseSnapshot &snapshot)
+inline bool loadSnapshotFromFlash(LoadCallback load_callback, meshtastic_TelemetryDatabase &snapshot)
 {
     constexpr size_t MAX_SNAPSHOT_SIZE = 100 * 200 + 128;
     uint8_t buffer[MAX_SNAPSHOT_SIZE];
@@ -146,5 +146,3 @@ inline bool loadSnapshotFromFlash(LoadCallback load_callback, meshtastic_Telemet
 }
 
 } // namespace StorageHelper
-
-#endif

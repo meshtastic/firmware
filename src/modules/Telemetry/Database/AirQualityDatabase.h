@@ -19,7 +19,7 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
 {
   private:
     static constexpr uint32_t MAX_RECORDS = 100; // Maximum records to store in memory
-    static constexpr const char *STORAGE_KEY = "air_quality_db";
+    static constexpr const char *STORAGE_KEY = "/telemetry_db/air_quality";
 
     std::deque<DatabaseRecord> records;
     mutable concurrency::Lock recordsLock;
@@ -61,12 +61,12 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
     /**
      * Mark a record as delivered to mesh
      */
-    bool markDeliveredToMesh(uint32_t index) override;
+    bool markDelivered(uint32_t index) override;
 
     /**
      * Mark all records as delivered to mesh
      */
-    bool markAllDeliveredToMesh() override;
+    bool markAllDelivered() override;
 
     /**
      * Get the number of records in the database
@@ -99,6 +99,11 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
      * Get statistics about the stored data
      */
     Statistics getStatistics() const override;
+
+    /**
+     * Get records not yet delivered
+     */
+    std::vector<DatabaseRecord> getRecordsForRecovery() const override;
 };
 
 #endif

@@ -70,8 +70,17 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     uint32_t getDatabaseMinPM25();
     AirQualityDatabase &getDatabase() { return telemetryDatabase; }
 
+    /**
+     * Recover records not yet sent via MQTT
+     * Called when MQTT connection is established
+     * Sends all pending records and marks them as delivered_to_mqtt
+     * @return Number of records recovered/sent
+     */
+    uint32_t recoverMQTTRecords();
+
   private:
     bool firstTime = true;
+    bool mqttRecoveryAttempted = false; // Flag to track if MQTT recovery has been attempted
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;

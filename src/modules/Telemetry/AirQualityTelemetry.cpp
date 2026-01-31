@@ -19,6 +19,10 @@
 #include "sleep.h"
 #include <Throttle.h>
 
+#if HAS_NETWORKING
+#include "mqtt/MQTT.h"
+#endif
+
 // Sensors
 #include "Sensor/PMSA003ISensor.h"
 
@@ -60,6 +64,13 @@ int32_t AirQualityTelemetryModule::runOnce()
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
+    }
+
+    // Check for MQTT connectivity and attempt recovery if connected
+    if (mqtt && mqtt->isConnectedDirectly() && !mqttRecoveryAttempted) {
+        LOG_INFO("MQTT is connected, attempting recovery of pending records");
+        mqttRecoveryAttempted = true;
+        recoverMQTTRecords();
     }
 
     if (firstTime) {
@@ -303,14 +314,17 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
                  m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
 
-        // Record to database
-        TelemetryDatabase<meshtastic_AirQualityMetrics>::DatabaseRecord dbRecord;
-        dbRecord.timestamp = m.time;
-        dbRecord.telemetry = m.variant.air_quality_metrics;
-        dbRecord.flags.delivered_to_mesh = 0;
-        dbRecord.flags.delivered_to_mqtt = 0;
-        if (!telemetryDatabase.addRecord(dbRecord)) {
-            LOG_DEBUG("Failed to add record to air quality database");
+        if (m.time == 0) {
+            LOG_WARN("AirQualityTelemetry: Invalid time, not sending telemetry");
+        } else {
+            // Record to database
+            TelemetryDatabase<meshtastic_AirQualityMetrics>::DatabaseRecord dbRecord;
+            dbRecord.timestamp = m.time;
+            dbRecord.telemetry = m.variant.air_quality_metrics;
+            dbRecord.delivered = 0;
+            if (!telemetryDatabase.addRecord(dbRecord)) {
+                LOG_DEBUG("Failed to add record to air quality database");
+            }
         }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
@@ -336,7 +350,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             // Mark last record as delivered to mesh
             uint32_t recordCount = telemetryDatabase.getRecordCount();
             if (recordCount > 0) {
-                telemetryDatabase.markDeliveredToMesh(recordCount - 1);
+                telemetryDatabase.markDelivered(recordCount - 1);
             }
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
@@ -358,29 +372,85 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     return false;
 }
 
+uint32_t AirQualityTelemetryModule::recoverMQTTRecords()
+{
+    // Get all records not yet delivered via MQTT
+    auto recordsToRecover = telemetryDatabase.getRecordsForRecovery();
+
+    if (recordsToRecover.empty()) {
+        LOG_DEBUG("AirQualityTelemetry: No records to recover via MQTT");
+        return 0;
+    }
+
+    LOG_INFO("AirQualityTelemetry: Starting MQTT recovery for %d records", recordsToRecover.size());
+
+    uint32_t recovered = 0;
+
+    // Get all records for marking after successful send
+    std::vector<DatabaseRecord> allRecords = telemetryDatabase.getAllRecords();
+
+    // Iterate through records and send them individually
+    for (size_t i = 0; i < recordsToRecover.size(); i++) {
+        const auto &record = recordsToRecover[i];
+
+        // Create a telemetry message from the stored record
+        meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+        m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+        m.time = record.timestamp;
+        m.variant.air_quality_metrics = record.telemetry;
+
+        // Send via telemetry module (which will handle MQTT queuing)
+        meshtastic_MeshPacket *p = allocDataProtobuf(m);
+        p->to = NODENUM_BROADCAST;
+        p->decoded.want_response = false;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+
+        // Send to mesh (this will also queue for MQTT if configured)
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+        recovered++;
+        LOG_DEBUG("AirQualityTelemetry: Sent record %d/%d for recovery (timestamp: %u)", recovered, recordsToRecover.size(),
+                  record.timestamp);
+
+        // Mark record as delivered
+        // Find the record by timestamp and mark it
+        for (size_t idx = 0; idx < allRecords.size(); idx++) {
+            if (allRecords[idx].timestamp == record.timestamp) {
+                if (telemetryDatabase.markDelivered(idx)) {
+                    LOG_DEBUG("AirQualityTelemetry: Marked record (timestamp: %u) as delivered", record.timestamp);
+                } else {
+                    LOG_WARN("AirQualityTelemetry: Failed to mark record (timestamp: %u) as delivered", record.timestamp);
+                }
+                break;
+            }
+        }
+    }
+
+    LOG_INFO("AirQualityTelemetry: MQTT recovery completed - sent %d records", recovered);
+    return recovered;
+}
+
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                                 meshtastic_AdminMessage *request,
                                                                                 meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
 
-    // Check if this is a request for telemetry database information
-    // We'll use a simple approach: if request type is not handled by sensors, we handle database queries
-    if (request->which_payload_variant == meshtastic_AdminMessage_get_canned_message_module_messages_request_tag) {
-        // Could use this or a custom admin message type
-        // For now, we'll let sensors handle their own admin messages
-        for (TelemetrySensor *sensor : sensors) {
-            result = sensor->handleAdminMessage(mp, request, response);
-            if (result != AdminMessageHandleResult::NOT_HANDLED)
-                return result;
-        }
-    } else {
-        // Handle sensor messages
-        for (TelemetrySensor *sensor : sensors) {
-            result = sensor->handleAdminMessage(mp, request, response);
-            if (result != AdminMessageHandleResult::NOT_HANDLED)
-                return result;
-        }
+    // Handle manual recovery request
+
+    if (request->which_payload_variant == meshtastic_AdminMessage_aq_telemetry_recovery_tag) {
+
+        // Empty delete_file_request = trigger recovery
+        recoverMQTTRecords();
+
+        result = AdminMessageHandleResult::HANDLED;
+        return result;
+    }
+
+    for (TelemetrySensor *sensor : sensors) {
+        result = sensor->handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
     }
 
     return result;
@@ -392,8 +462,8 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
 void AirQualityTelemetryModule::getDatabaseStatsString(char *buffer, size_t bufferSize)
 {
     auto stats = telemetryDatabase.getStatistics();
-    snprintf(buffer, bufferSize, "Air Quality DB: %lu records, Mesh:%lu MQTT:%lu Age:%.1fh", stats.record_count,
-             stats.delivered_mesh, stats.delivered_mqtt, (getTime() - stats.min_timestamp) / 3600.0f);
+    snprintf(buffer, bufferSize, "Air Quality DB: %lu records, Mesh:%lu Age:%.1fh", stats.record_count, stats.delivered,
+             (getTime() - stats.min_timestamp) / 3600.0f);
 }
 
 /**
