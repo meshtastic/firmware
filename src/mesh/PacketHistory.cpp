@@ -522,6 +522,31 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, boo
     return found;
 }
 
+// Check two relayers against the same packet record with a single find() call,
+// avoiding redundant O(N) lookups when both are checked for the same (id, sender) pair.
+void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t id, NodeNum sender, bool *r1Result, bool *r2Result,
+                                  bool *r2WasSole)
+{
+    *r1Result = false;
+    *r2Result = false;
+    if (r2WasSole)
+        *r2WasSole = false;
+
+    if (!initOk()) {
+        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED!");
+        return;
+    }
+
+    const PacketRecord *found = find(sender, id);
+    if (!found)
+        return;
+
+    if (relayer1 != 0)
+        *r1Result = wasRelayer(relayer1, *found);
+    if (relayer2 != 0)
+        *r2Result = wasRelayer(relayer2, *found, r2WasSole);
+}
+
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
 void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {

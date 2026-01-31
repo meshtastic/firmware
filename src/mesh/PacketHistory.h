@@ -84,6 +84,16 @@ class PacketHistory
      * @return true if node was indeed a relayer, false if not */
     bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole = nullptr);
 
+    /**
+     * Check two relayers against the same packet record with a single lookup.
+     * Avoids redundant find() calls when checking multiple relayers for the same (id, sender) pair.
+     * @param r1Result set to true if relayer1 was a relayer
+     * @param r2Result set to true if relayer2 was a relayer
+     * @param r2WasSole if not nullptr, set to true if relayer2 was the sole relayer
+     */
+    void checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t id, NodeNum sender, bool *r1Result, bool *r2Result,
+                       bool *r2WasSole = nullptr);
+
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
