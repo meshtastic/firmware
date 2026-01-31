@@ -10,8 +10,7 @@
 #define I2C_SDA1 2
 #define I2C_SCL1 3
 
-#define LED_CONN PIN_LED2
-#define LED_PIN LED_BUILTIN
+#define LED_PIN PIN_LED
 #define ledOff(pin) pinMode(pin, INPUT)
 
 #define BUTTON_PIN 9
