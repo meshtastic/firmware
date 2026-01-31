@@ -30,7 +30,7 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     // This is then drawn with a FULL refresh by Renderer::begin
 }
 
-void InkHUD::LogoApplet::onRender()
+void InkHUD::LogoApplet::onRender(bool full)
 {
     // Size  of the region which the logo should "scale to fit"
     uint16_t logoWLimit = X(0.8);
@@ -120,7 +120,7 @@ void InkHUD::LogoApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 // Begin displaying the screen which is shown at shutdown
@@ -138,10 +138,10 @@ void InkHUD::LogoApplet::onShutdown()
     // Intention is to restore display health.
 
     inverted = true;
-    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    inkhud->forceUpdate(Drivers::EInk::FULL, true, false);
     delay(1000); // Cooldown. Back to back updates aren't great for health.
     inverted = false;
-    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    inkhud->forceUpdate(Drivers::EInk::FULL, true, false);
     delay(1000); // Cooldown
 
     // Prepare for the powered-off screen now
@@ -155,6 +155,18 @@ void InkHUD::LogoApplet::onShutdown()
     // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
 }
 
+void InkHUD::LogoApplet::onApplyingChanges()
+{
+    bringToForeground();
+
+    textLeft = "";
+    textRight = "";
+    textTitle = "Applying changes";
+    fontTitle = fontSmall;
+
+    inkhud->forceUpdate(Drivers::EInk::FAST, false);
+}
+
 void InkHUD::LogoApplet::onReboot()
 {
     bringToForeground();
@@ -164,7 +176,7 @@ void InkHUD::LogoApplet::onReboot()
     textTitle = "Rebooting...";
     fontTitle = fontSmall;
 
-    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    inkhud->forceUpdate(Drivers::EInk::FULL, true, false);
     // Perform the update right now, waiting here until complete
 }
 

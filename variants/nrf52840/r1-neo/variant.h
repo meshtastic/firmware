@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (32 + 4) // P1.04 Controls Green LED
-#define PIN_LED2 (28)     // P0.28 Controls Blue LED
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (28)     // P0.28 Controls Blue LED
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -134,8 +131,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.667
 #define OCV_ARRAY 4120, 4020, 4000, 3940, 3870, 3820, 3750, 3630, 3550, 3450, 3100
-
-#define HAS_RTC 1
 
 #define RX8130CE_RTC 0x32
 
