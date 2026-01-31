@@ -105,23 +105,10 @@ template <typename TelemetryType> class TelemetryDatabase
     virtual bool markDeliveredToMesh(uint32_t index) = 0;
 
     /**
-     * Mark a record as delivered via MQTT
-     * @param index The index of the record
-     * @return true if successful
-     */
-    virtual bool markDeliveredToMqtt(uint32_t index) = 0;
-
-    /**
      * Mark all records as delivered to mesh
      * @return true if successful
      */
     virtual bool markAllDeliveredToMesh() = 0;
-
-    /**
-     * Mark all records as delivered via MQTT
-     * @return true if successful
-     */
-    virtual bool markAllDeliveredToMqtt() = 0;
 
     /**
      * Get the number of records in the database

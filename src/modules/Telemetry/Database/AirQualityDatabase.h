@@ -64,19 +64,9 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
     bool markDeliveredToMesh(uint32_t index) override;
 
     /**
-     * Mark a record as delivered via MQTT
-     */
-    bool markDeliveredToMqtt(uint32_t index) override;
-
-    /**
      * Mark all records as delivered to mesh
      */
     bool markAllDeliveredToMesh() override;
-
-    /**
-     * Mark all records as delivered via MQTT
-     */
-    bool markAllDeliveredToMqtt() override;
 
     /**
      * Get the number of records in the database
@@ -102,3 +92,13 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
     /**
      * Save to persistent storage (flash)
      * Uses protobuf serialization via TelemetryDatabaseSnapshot
+     */
+    bool saveToStorage() override;
+
+    /**
+     * Get statistics about the stored data
+     */
+    Statistics getStatistics() const override;
+};
+
+#endif
