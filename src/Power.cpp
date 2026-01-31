@@ -817,6 +817,9 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
+#ifdef LED_NOTIFICATION
+    ledOff(LED_NOTIFICATION);
+#endif
     doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
     exit(EXIT_SUCCESS);
