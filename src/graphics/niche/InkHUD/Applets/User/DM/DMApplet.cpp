@@ -37,7 +37,7 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     return 0;
 }
 
-void InkHUD::DMApplet::onRender()
+void InkHUD::DMApplet::onRender(bool full)
 {
     // Abort if no text message
     if (!latestMessage->dm.sender) {
