@@ -51,8 +51,6 @@ extern "C" {
 #define LED_GREEN PIN_LED1
 
 #define BLE_LED LED_BLUE
-#define BLE_LED_INVERTED 1
-#define LED_CONN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 // Buttons
