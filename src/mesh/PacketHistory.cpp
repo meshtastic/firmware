@@ -256,13 +256,17 @@ void PacketHistory::hashRemove(NodeNum sender, PacketId id)
     if (!hashIndex)
         return;
     uint32_t bucket = hashSlot(sender, id);
-    while (hashIndex[bucket] != HASH_EMPTY) {
+    for (uint32_t i = 0; i < hashCapacity; i++) {
+        if (hashIndex[bucket] == HASH_EMPTY)
+            return;
         uint16_t idx = hashIndex[bucket];
         if (idx < recentPacketsCapacity && recentPackets[idx].sender == sender && recentPackets[idx].id == id) {
             // Found it — delete and re-insert subsequent entries to maintain probe chain integrity
             hashIndex[bucket] = HASH_EMPTY;
             uint32_t next = (bucket + 1) & hashMask;
-            while (hashIndex[next] != HASH_EMPTY) {
+            for (uint32_t j = 0; j < hashCapacity; j++) {
+                if (hashIndex[next] == HASH_EMPTY)
+                    break;
                 uint16_t displaced = hashIndex[next];
                 hashIndex[next] = HASH_EMPTY;
                 if (displaced < recentPacketsCapacity) {
@@ -305,7 +309,9 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
     // Use hash index for O(1) lookup when available
     if (hashIndex) {
         uint32_t bucket = hashSlot(sender, id);
-        while (hashIndex[bucket] != HASH_EMPTY) {
+        for (uint32_t i = 0; i < hashCapacity; i++) {
+            if (hashIndex[bucket] == HASH_EMPTY)
+                break;
             uint16_t idx = hashIndex[bucket];
             if (idx < recentPacketsCapacity && recentPackets[idx].id == id && recentPackets[idx].sender == sender) {
 #if VERBOSE_PACKET_HISTORY
