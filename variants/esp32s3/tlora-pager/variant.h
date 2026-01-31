@@ -40,7 +40,6 @@
 
 // PCF85063 RTC Module
 #define PCF85063_RTC 0x51
-#define HAS_RTC 1
 
 // Rotary
 #define ROTARY_A (40)

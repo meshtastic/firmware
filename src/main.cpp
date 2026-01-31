@@ -366,11 +366,7 @@ void setup()
 
 #ifdef BLE_LED
     pinMode(BLE_LED, OUTPUT);
-#ifdef BLE_LED_INVERTED
-    digitalWrite(BLE_LED, HIGH);
-#else
-    digitalWrite(BLE_LED, LOW);
-#endif
+    digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -493,7 +489,9 @@ void setup()
     // The ThinkNodes have their own blink logic
     // ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
 #else
+
     ledPeriodic = new Periodic("Blink", ledBlinker);
+
 #endif
 
     fsInit();
@@ -834,7 +832,7 @@ void setup()
     SPI.begin();
 #endif
 #else
-// ESP32
+        // ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
