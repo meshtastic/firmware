@@ -28,6 +28,20 @@ class PacketHistory
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
     PacketRecord *recentPackets = NULL; // Simple and fixed in size. Debloat.
 
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+    // Open-addressing hash table for O(1) lookup in find(), replacing the O(N) linear scan.
+    // Maps (sender, id) -> index into recentPackets[]. Uses linear probing with a load factor <= 0.5.
+    static constexpr uint16_t HASH_EMPTY = 0xFFFF;
+    uint16_t *hashIndex = NULL;
+    uint32_t hashCapacity = 0; // Always a power of 2
+    uint32_t hashMask = 0;     // hashCapacity - 1, for fast modular indexing
+
+    uint32_t hashSlot(NodeNum sender, PacketId id) const;
+    void hashInsert(NodeNum sender, PacketId id, uint16_t slotIdx);
+    void hashRemove(NodeNum sender, PacketId id);
+    void hashRebuild();
+#endif
+
     /** Find a packet record in history.
      * @param sender NodeNum
      * @param id PacketId
