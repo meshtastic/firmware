@@ -66,6 +66,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
 
+        // Initialize the telemetry database
+        if (!telemetryDatabase.init()) {
+            LOG_WARN("Failed to initialize air quality telemetry database");
+        }
+
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
 
@@ -298,6 +303,16 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
                  m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
 
+        // Record to database
+        TelemetryDatabase<meshtastic_AirQualityMetrics>::DatabaseRecord dbRecord;
+        dbRecord.timestamp = m.time;
+        dbRecord.telemetry = m.variant.air_quality_metrics;
+        dbRecord.flags.delivered_to_mesh = 0;
+        dbRecord.flags.delivered_to_mqtt = 0;
+        if (!telemetryDatabase.addRecord(dbRecord)) {
+            LOG_DEBUG("Failed to add record to air quality database");
+        }
+
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
         p->decoded.want_response = false;
@@ -317,6 +332,12 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         } else {
             LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+            // Mark last record as delivered to mesh
+            uint32_t recordCount = telemetryDatabase.getRecordCount();
+            if (recordCount > 0) {
+                telemetryDatabase.markDeliveredToMesh(recordCount - 1);
+            }
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
@@ -343,13 +364,89 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
 
-    for (TelemetrySensor *sensor : sensors) {
-        result = sensor->handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
+    // Check if this is a request for telemetry database information
+    // We'll use a simple approach: if request type is not handled by sensors, we handle database queries
+    if (request->which_payload_variant == meshtastic_AdminMessage_get_canned_message_module_messages_request_tag) {
+        // Could use this or a custom admin message type
+        // For now, we'll let sensors handle their own admin messages
+        for (TelemetrySensor *sensor : sensors) {
+            result = sensor->handleAdminMessage(mp, request, response);
+            if (result != AdminMessageHandleResult::NOT_HANDLED)
+                return result;
+        }
+    } else {
+        // Handle sensor messages
+        for (TelemetrySensor *sensor : sensors) {
+            result = sensor->handleAdminMessage(mp, request, response);
+            if (result != AdminMessageHandleResult::NOT_HANDLED)
+                return result;
+        }
     }
 
     return result;
+}
+
+/**
+ * Helper function to get database statistics as a formatted string
+ */
+void AirQualityTelemetryModule::getDatabaseStatsString(char *buffer, size_t bufferSize)
+{
+    auto stats = telemetryDatabase.getStatistics();
+    snprintf(buffer, bufferSize, "Air Quality DB: %lu records, Mesh:%lu MQTT:%lu Age:%.1fh", stats.record_count,
+             stats.delivered_mesh, stats.delivered_mqtt, (getTime() - stats.min_timestamp) / 3600.0f);
+}
+
+/**
+ * Get mean PM2.5 value from database records
+ */
+float AirQualityTelemetryModule::getDatabaseMeanPM25()
+{
+    auto stats = telemetryDatabase.getStatistics();
+    if (stats.record_count == 0)
+        return 0.0f;
+
+    auto records = telemetryDatabase.getAllRecords();
+    uint64_t sum = 0;
+    for (const auto &record : records) {
+        sum += record.telemetry.pm25_standard;
+    }
+    return static_cast<float>(sum) / records.size();
+}
+
+/**
+ * Get max PM2.5 value from database records
+ */
+uint32_t AirQualityTelemetryModule::getDatabaseMaxPM25()
+{
+    auto records = telemetryDatabase.getAllRecords();
+    if (records.empty())
+        return 0;
+
+    uint32_t maxVal = 0;
+    for (const auto &record : records) {
+        if (record.telemetry.pm25_standard > maxVal) {
+            maxVal = record.telemetry.pm25_standard;
+        }
+    }
+    return maxVal;
+}
+
+/**
+ * Get min PM2.5 value from database records
+ */
+uint32_t AirQualityTelemetryModule::getDatabaseMinPM25()
+{
+    auto records = telemetryDatabase.getAllRecords();
+    if (records.empty())
+        return 0;
+
+    uint32_t minVal = records[0].telemetry.pm25_standard;
+    for (const auto &record : records) {
+        if (record.telemetry.pm25_standard < minVal) {
+            minVal = record.telemetry.pm25_standard;
+        }
+    }
+    return minVal;
 }
 
 #endif

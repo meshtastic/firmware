@@ -9,6 +9,7 @@
 #endif
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Database/AirQualityDatabase.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include "detect/ScanI2CConsumer.h"
@@ -60,12 +61,22 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
                                                                  meshtastic_AdminMessage *response) override;
     void i2cScanFinished(ScanI2C *i2cScanner);
 
+    /**
+     * Database query helper methods (can be called from admin commands or WebUI)
+     */
+    void getDatabaseStatsString(char *buffer, size_t bufferSize);
+    float getDatabaseMeanPM25();
+    uint32_t getDatabaseMaxPM25();
+    uint32_t getDatabaseMinPM25();
+    AirQualityDatabase &getDatabase() { return telemetryDatabase; }
+
   private:
     bool firstTime = true;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
+    AirQualityDatabase telemetryDatabase; // Historical data storage
 };
 
 #endif
