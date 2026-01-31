@@ -21,12 +21,8 @@ meshtastic_TelemetryDatabaseRecord AirQualityDatabase::recordToProtobuf(const Da
 {
     meshtastic_TelemetryDatabaseRecord pb = {};
 
-    pb.timestamp = record.timestamp;
     pb.delivered = record.delivered;
-
-    // Set the air quality metrics in the oneof field
-    pb.which_telemetry_data = meshtastic_TelemetryDatabaseRecord_air_quality_metrics_tag;
-    pb.telemetry_data.air_quality_metrics = record.telemetry;
+    pb.telemetry = record.telemetry;
 
     return pb;
 }
@@ -34,17 +30,12 @@ meshtastic_TelemetryDatabaseRecord AirQualityDatabase::recordToProtobuf(const Da
 /**
  * Convert protobuf TelemetryDatabaseRecord to DatabaseRecord
  */
-AirQualityDatabase::DatabaseRecord AirQualityDatabase::recordFromProtobuf(const meshtastic_TelemetryDatabaseRecord &pb) const
+DatabaseRecord AirQualityDatabase::recordFromProtobuf(const meshtastic_TelemetryDatabaseRecord &pb) const
 {
     DatabaseRecord record = {};
 
-    record.timestamp = pb.timestamp;
     record.delivered = pb.delivered;
-
-    // Extract air quality metrics from oneof field
-    if (pb.which_telemetry_data == meshtastic_TelemetryDatabaseRecord_air_quality_metrics_tag) {
-        record.telemetry = pb.telemetry_data.air_quality_metrics;
-    }
+    record.telemetry = pb.telemetry;
 
     return record;
 }
@@ -56,7 +47,7 @@ AirQualityDatabase::AirQualityDatabase()
 
 bool AirQualityDatabase::init()
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
     records.clear();
     LOG_DEBUG("AirQualityDatabase: Initialized");
     return loadFromStorage();
@@ -64,7 +55,7 @@ bool AirQualityDatabase::init()
 
 bool AirQualityDatabase::addRecord(const DatabaseRecord &record)
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
 
     // If at capacity, remove oldest record
     if (records.size() >= MAX_RECORDS) {
@@ -81,7 +72,7 @@ bool AirQualityDatabase::addRecord(const DatabaseRecord &record)
 
 bool AirQualityDatabase::getRecord(uint32_t index, DatabaseRecord &record) const
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
 
     if (index >= records.size()) {
         return false;
@@ -93,7 +84,7 @@ bool AirQualityDatabase::getRecord(uint32_t index, DatabaseRecord &record) const
 
 std::vector<DatabaseRecord> AirQualityDatabase::getAllRecords() const
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
 
     std::vector<DatabaseRecord> result(records.begin(), records.end());
     return result;
@@ -101,7 +92,7 @@ std::vector<DatabaseRecord> AirQualityDatabase::getAllRecords() const
 
 bool AirQualityDatabase::markDelivered(uint32_t index)
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
 
     if (index >= records.size()) {
         return false;
@@ -113,24 +104,22 @@ bool AirQualityDatabase::markDelivered(uint32_t index)
 
 bool AirQualityDatabase::markAllDelivered()
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
 
     for (auto &record : records) {
         record.delivered = true;
     }
-
     return saveToStorage();
 }
 
 uint32_t AirQualityDatabase::getRecordCount() const
 {
-    concurrency::Lock lock(recordsLock);
     return records.size();
 }
 
 bool AirQualityDatabase::clearAll()
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
     records.clear();
     LOG_DEBUG("AirQualityDatabase: Cleared all records");
     return saveToStorage();
@@ -139,60 +128,55 @@ bool AirQualityDatabase::clearAll()
 bool AirQualityDatabase::loadFromStorage()
 {
 #ifdef FSCom
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
+    spiLock->lock();
 
-    try {
-        // Try to open the database file
-        File dbFile = FSCom.open(STORAGE_KEY, FILE_O_READ);
-        if (!dbFile) {
-            LOG_DEBUG("AirQualityDatabase: No saved database found (first boot)");
-            return true; // OK on first boot
-        }
+    // Try to open the database file
+    File dbFile = FSCom.open(STORAGE_KEY, FILE_O_READ);
+    if (!dbFile) {
+        LOG_DEBUG("AirQualityDatabase: No saved database found (first boot)");
+        return true; // OK on first boot
+    }
 
-        // Get file size to allocate buffer
-        size_t fileSize = dbFile.size();
-        if (fileSize == 0 || fileSize > 65536) { // Sanity check: max 64KB
-            LOG_WARN("AirQualityDatabase: Invalid database size: %zu bytes", fileSize);
-            dbFile.close();
-            return false;
-        }
-
-        // Allocate buffer for the entire file
-        std::vector<uint8_t> buffer(fileSize);
-
-        // Read entire file into buffer
-        size_t bytesRead = dbFile.read(buffer.data(), fileSize);
+    // Get file size to allocate buffer
+    size_t fileSize = dbFile.size();
+    if (fileSize == 0 || fileSize > 65536) { // Sanity check: max 64KB
+        LOG_WARN("AirQualityDatabase: Invalid database size: %zu bytes", fileSize);
         dbFile.close();
-
-        if (bytesRead != fileSize) {
-            LOG_ERROR("AirQualityDatabase: Failed to read complete database (read %zu of %zu bytes)", bytesRead, fileSize);
-            return false;
-        }
-
-        // Create input stream with known buffer size
-        pb_istream_t stream = pb_istream_from_buffer(buffer.data(), fileSize);
-        meshtastic_TelemetryDatabase snapshot = {};
-
-        // Decode the protobuf message
-        if (!pb_decode(&stream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
-            LOG_ERROR("AirQualityDatabase: Failed to decode snapshot: %s", PB_GET_ERROR(&stream));
-            return false;
-        }
-
-        // Clear existing records and load from snapshot
-        records.clear();
-        for (uint32_t i = 0; i < snapshot.records_count; i++) {
-            DatabaseRecord record = recordFromProtobuf(snapshot.records[i]);
-            records.push_back(record);
-        }
-
-        LOG_DEBUG("AirQualityDatabase: Loaded %d records from storage", records.size());
-        return true;
-
-    } catch (const std::exception &e) {
-        LOG_ERROR("AirQualityDatabase: Exception loading from storage: %s", e.what());
         return false;
     }
+
+    // Allocate buffer for the entire file
+    std::vector<uint8_t> buffer(fileSize);
+
+    // Read entire file into buffer
+    size_t bytesRead = dbFile.read(buffer.data(), fileSize);
+    dbFile.close();
+    spiLock->unlock();
+
+    if (bytesRead != fileSize) {
+        LOG_ERROR("AirQualityDatabase: Failed to read complete database (read %zu of %zu bytes)", bytesRead, fileSize);
+        return false;
+    }
+
+    // Create input stream with known buffer size
+    pb_istream_t stream = pb_istream_from_buffer(buffer.data(), fileSize);
+    meshtastic_TelemetryDatabase snapshot = meshtastic_TelemetryDatabase_init_zero;
+
+    // Decode the protobuf message
+    if (!pb_decode(&stream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
+        LOG_ERROR("AirQualityDatabase: Failed to decode snapshot: %s", PB_GET_ERROR(&stream));
+        return false;
+    }
+
+    // Clear existing records and load from snapshot
+    records.clear();
+    for (uint32_t i = 0; i < snapshot.record_count; i++) {
+        DatabaseRecord record = recordFromProtobuf(snapshot.records[i]);
+        records.push_back(record);
+    }
+    LOG_DEBUG("AirQualityDatabase: Loaded %d records from storage", records.size());
+    return true;
 
 #else
     LOG_DEBUG("AirQualityDatabase: FSCom not available, skipping storage load");
@@ -203,63 +187,55 @@ bool AirQualityDatabase::loadFromStorage()
 bool AirQualityDatabase::saveToStorage()
 {
 #ifdef FSCom
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
+    spiLock->lock();
 
-    try {
-        // Create snapshot from current records
-        meshtastic_TelemetryDatabase snapshot = {};
-        snapshot.timestamp = getUnixTime(); // Current time
-        snapshot.version = 1;
-        snapshot.records_count = records.size();
+    // Create snapshot from current records
+    meshtastic_TelemetryDatabase snapshot = meshtastic_TelemetryDatabase_init_zero;
+    snapshot.record_count = records.size();
 
-        // Check if we have too many records for fixed array
-        if (snapshot.records_count > 100) { // Sanity check
-            LOG_WARN("AirQualityDatabase: Too many records (%d), truncating to 100", snapshot.records_count);
-            snapshot.records_count = 100;
-        }
+    // Check if we have too many records for fixed array
+    if (snapshot.record_count > 100) { // Sanity check
+        LOG_WARN("AirQualityDatabase: Too many records (%d), truncating to 100", snapshot.record_count);
+        snapshot.record_count = 100;
+    }
 
-        // Convert each record to protobuf format
-        for (uint32_t i = 0; i < snapshot.records_count; i++) {
-            snapshot.records[i] = recordToProtobuf(records[i]);
-        }
+    // Convert each record to protobuf format
+    for (uint32_t i = 0; i < snapshot.record_count; i++) {
+        snapshot.records[i] = recordToProtobuf(records[i]);
+    }
 
-        // Encode to buffer first to determine size
-        uint8_t buffer[65536]; // Max buffer size
-        pb_ostream_t ostream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+    // Encode to buffer first to determine size
+    uint8_t buffer[65536]; // Max buffer size
+    pb_ostream_t ostream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 
-        if (!pb_encode(&ostream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
-            LOG_ERROR("AirQualityDatabase: Failed to encode snapshot: %s", PB_GET_ERROR(&ostream));
-            return false;
-        }
-
-        size_t encodedSize = ostream.bytes_written;
-
-        // Write to LittleFS file
-        File dbFile = FSCom.open(STORAGE_KEY, FILE_O_WRITE);
-        if (!dbFile) {
-            LOG_ERROR("AirQualityDatabase: Failed to open file for writing");
-            return false;
-        }
-
-        size_t bytesWritten = dbFile.write(buffer, encodedSize);
-        dbFile.close();
-
-        if (bytesWritten != encodedSize) {
-            LOG_ERROR("AirQualityDatabase: Failed to write complete database (wrote %zu of %zu bytes)", bytesWritten,
-                      encodedSize);
-            // Try to remove incomplete file
-            FSCom.remove(STORAGE_KEY);
-            return false;
-        }
-
-        LOG_DEBUG("AirQualityDatabase: Saved %d records to storage (%zu bytes)", records.size(), encodedSize);
-        return true;
-
-    } catch (const std::exception &e) {
-        LOG_ERROR("AirQualityDatabase: Exception saving to storage: %s", e.what());
+    if (!pb_encode(&ostream, meshtastic_TelemetryDatabase_fields, &snapshot)) {
+        LOG_ERROR("AirQualityDatabase: Failed to encode snapshot: %s", PB_GET_ERROR(&ostream));
         return false;
     }
 
+    size_t encodedSize = ostream.bytes_written;
+
+    // Write to LittleFS file
+    File dbFile = FSCom.open(STORAGE_KEY, FILE_O_WRITE);
+    if (!dbFile) {
+        LOG_ERROR("AirQualityDatabase: Failed to open file for writing");
+        return false;
+    }
+
+    size_t bytesWritten = dbFile.write(buffer, encodedSize);
+    dbFile.close();
+
+    if (bytesWritten != encodedSize) {
+        LOG_ERROR("AirQualityDatabase: Failed to write complete database (wrote %zu of %zu bytes)", bytesWritten,
+                    encodedSize);
+        // Try to remove incomplete file
+        FSCom.remove(STORAGE_KEY);
+        return false;
+    }
+    spiLock->unlock();
+    LOG_DEBUG("AirQualityDatabase: Saved %d records to storage (%zu bytes)", records.size(), encodedSize);
+    return true;
 #else
     LOG_DEBUG("AirQualityDatabase: FSCom not available, skipping storage save");
     return true;
@@ -268,7 +244,7 @@ bool AirQualityDatabase::saveToStorage()
 
 TelemetryDatabase<meshtastic_AirQualityMetrics>::Statistics AirQualityDatabase::getStatistics() const
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
     Statistics stats = {};
 
     if (records.empty()) {
@@ -276,21 +252,20 @@ TelemetryDatabase<meshtastic_AirQualityMetrics>::Statistics AirQualityDatabase::
     }
 
     stats.record_count = records.size();
-    stats.min_timestamp = records.front().timestamp;
-    stats.max_timestamp = records.back().timestamp;
+    stats.min_timestamp = records.front().telemetry.time;
+    stats.max_timestamp = records.back().telemetry.time;
 
     for (const auto &record : records) {
         if (record.delivered) {
             stats.delivered++;
         }
     }
-
     return stats;
 }
 
-std::vector<AirQualityDatabase::DatabaseRecord> AirQualityDatabase::getRecordsForRecovery() const
+std::vector<DatabaseRecord> AirQualityDatabase::getRecordsForRecovery() const
 {
-    concurrency::Lock lock(recordsLock);
+    concurrency::LockGuard g(recordsLock);
     std::vector<DatabaseRecord> recoveryRecords;
 
     for (const auto &record : records) {

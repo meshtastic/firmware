@@ -7,6 +7,15 @@
 #include <vector>
 
 /**
+* Database record structure
+* Uses protobuf TelemetryDatabaseRecord message for serialization
+*/
+struct DatabaseRecord {
+    meshtastic_Telemetry telemetry; // Telemetry data
+    bool delivered;                 // Whether this record has been delivered
+};
+
+/**
  * Base class for telemetry database storage
  * Provides a template for storing historical telemetry data with metadata
  * Uses protobuf messages for serialization and storage
@@ -14,15 +23,6 @@
 template <typename TelemetryType> class TelemetryDatabase
 {
   public:
-    /**
-     * Database record structure
-     * Uses protobuf TelemetryDatabaseRecord message for serialization
-     */
-    struct DatabaseRecord {
-        uint32_t timestamp;      // When the reading was taken
-        TelemetryType telemetry; // The actual telemetry data
-        bool delivered;          // Whether this record has been delivered
-    };
 
     /**
      * Statistics about stored data
@@ -39,11 +39,9 @@ template <typename TelemetryType> class TelemetryDatabase
      * @param records The records to serialize
      * @return Serialized protobuf snapshot
      */
-    static meshtastic_TelemetryDatabaseSnapshot serializeToProtobuf(const std::vector<DatabaseRecord> &records)
+    static meshtastic_TelemetryDatabase serializeToProtobuf(const std::vector<DatabaseRecord> &records)
     {
-        meshtastic_TelemetryDatabaseSnapshot snapshot = {};
-        snapshot.snapshot_timestamp = getTime(); // Current time in seconds
-        snapshot.version = 1;
+        meshtastic_TelemetryDatabase snapshot = {};
 
         // Note: Actual implementation in derived classes
         return snapshot;
@@ -54,7 +52,7 @@ template <typename TelemetryType> class TelemetryDatabase
      * @param snapshot The protobuf snapshot
      * @return Vector of deserialized records
      */
-    static std::vector<DatabaseRecord> deserializeFromProtobuf(const meshtastic_TelemetryDatabaseSnapshot &snapshot)
+    static std::vector<DatabaseRecord> deserializeFromProtobuf(const meshtastic_TelemetryDatabase &snapshot)
     {
         std::vector<DatabaseRecord> records;
         // Note: Actual implementation in derived classes
@@ -108,12 +106,6 @@ template <typename TelemetryType> class TelemetryDatabase
      * @return The record count
      */
     virtual uint32_t getRecordCount() const = 0;
-
-    /**
-     * Get the maximum number of records this database can hold
-     * @return The maximum capacity
-     */
-    virtual uint32_t getMaxRecords() const = 0;
 
     /**
      * Clear all records from the database

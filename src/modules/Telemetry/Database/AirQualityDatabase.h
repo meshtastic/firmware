@@ -5,10 +5,10 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "StorageHelper.h"
 #include "TelemetryDatabase.h"
 #include <deque>
 #include <vector>
+#include "../concurrency/LockGuard.h"
 
 /**
  * Air Quality Telemetry Database
@@ -22,7 +22,7 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
     static constexpr const char *STORAGE_KEY = "/telemetry_db/air_quality";
 
     std::deque<DatabaseRecord> records;
-    mutable concurrency::Lock recordsLock;
+    concurrency::Lock *recordsLock;
 
     /**
      * Convert DatabaseRecord to protobuf format
@@ -74,11 +74,6 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
     uint32_t getRecordCount() const override;
 
     /**
-     * Get the maximum number of records this database can hold
-     */
-    uint32_t getMaxRecords() const override { return MAX_RECORDS; }
-
-    /**
      * Clear all records from the database
      */
     bool clearAll() override;
@@ -91,7 +86,7 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
 
     /**
      * Save to persistent storage (flash)
-     * Uses protobuf serialization via TelemetryDatabaseSnapshot
+     * Uses protobuf serialization via TelemetryDatabase
      */
     bool saveToStorage() override;
 
