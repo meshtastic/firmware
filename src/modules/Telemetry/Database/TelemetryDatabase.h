@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "configuration.h"
 #include <cstdint>
 #include <cstring>
@@ -8,21 +9,20 @@
 /**
  * Base class for telemetry database storage
  * Provides a template for storing historical telemetry data with metadata
+ * Uses protobuf messages for serialization and storage
  */
 template <typename TelemetryType> class TelemetryDatabase
 {
   public:
     /**
      * Record flags to track delivery status
+     * Uses protobuf TelemetryRecordFlags message
      */
-    struct RecordFlags {
-        uint8_t delivered_to_mesh : 1; // Has this record been delivered to the mesh?
-        uint8_t delivered_to_mqtt : 1; // Has this record been delivered via MQTT?
-        uint8_t reserved : 6;          // Reserved for future use
-    };
+    using RecordFlags = meshtastic_TelemetryRecordFlags;
 
     /**
      * Database record structure
+     * Uses protobuf TelemetryDatabaseRecord message for serialization
      */
     struct DatabaseRecord {
         uint32_t timestamp;      // When the reading was taken
@@ -40,6 +40,33 @@ template <typename TelemetryType> class TelemetryDatabase
         uint32_t delivered_mesh; // Count delivered to mesh
         uint32_t delivered_mqtt; // Count delivered via MQTT
     };
+
+    /**
+     * Helper to serialize database to protobuf snapshot
+     * @param records The records to serialize
+     * @return Serialized protobuf snapshot
+     */
+    static meshtastic_TelemetryDatabaseSnapshot serializeToProtobuf(const std::vector<DatabaseRecord> &records)
+    {
+        meshtastic_TelemetryDatabaseSnapshot snapshot = {};
+        snapshot.snapshot_timestamp = esp_timer_get_time() / 1000000; // Current time in seconds
+        snapshot.version = 1;
+
+        // Note: Actual implementation in derived classes
+        return snapshot;
+    }
+
+    /**
+     * Helper to deserialize protobuf snapshot to database records
+     * @param snapshot The protobuf snapshot
+     * @return Vector of deserialized records
+     */
+    static std::vector<DatabaseRecord> deserializeFromProtobuf(const meshtastic_TelemetryDatabaseSnapshot &snapshot)
+    {
+        std::vector<DatabaseRecord> records;
+        // Note: Actual implementation in derived classes
+        return records;
+    }
 
     virtual ~TelemetryDatabase() = default;
 

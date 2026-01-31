@@ -5,6 +5,7 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "StorageHelper.h"
 #include "TelemetryDatabase.h"
 #include <deque>
 #include <vector>
@@ -12,6 +13,7 @@
 /**
  * Air Quality Telemetry Database
  * Stores historical air quality measurements with delivery status tracking
+ * Uses protobuf serialization for persistent storage in flash
  */
 class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics>
 {
@@ -21,6 +23,16 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
 
     std::deque<DatabaseRecord> records;
     mutable concurrency::Lock recordsLock;
+
+    /**
+     * Convert DatabaseRecord to protobuf format
+     */
+    meshtastic_TelemetryDatabaseRecord recordToProtobuf(const DatabaseRecord &record) const;
+
+    /**
+     * Convert protobuf record to DatabaseRecord
+     */
+    DatabaseRecord recordFromProtobuf(const meshtastic_TelemetryDatabaseRecord &pb) const;
 
   public:
     AirQualityDatabase();
@@ -83,18 +95,10 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
 
     /**
      * Load from persistent storage (flash)
+     * Uses protobuf deserialization
      */
     bool loadFromStorage() override;
 
     /**
      * Save to persistent storage (flash)
-     */
-    bool saveToStorage() override;
-
-    /**
-     * Get statistics about the stored data
-     */
-    Statistics getStatistics() const override;
-};
-
-#endif
+     * Uses protobuf serialization via TelemetryDatabaseSnapshot
