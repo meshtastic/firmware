@@ -37,6 +37,11 @@ class Events
     void onNavLeft();   // Navigate left
     void onNavRight();  // Navigate right
 
+    // Free text typing events
+    void onFreeText(char c); // New freetext character input
+    void onFreeTextDone();
+    void onFreeTextCancel();
+
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message
