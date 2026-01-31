@@ -83,6 +83,20 @@ This dual approach provides the reliability of coordinated networking with the e
 | **NextHopRouter** | 2 for intermediate hops, 3 for origin | Route reset on final failure |
 | **SignalRouting** | Iterative unicast route selection with fallback strategies | For SR-selected unicast routes |
 
+### Passive Node Behavior
+
+Passive SR nodes (TRACKER, SENSOR, TAK, or non-active-routing configured nodes) participate minimally in SR:
+
+1. **Topology Maintenance**: Only track directly-heard neighbors (hopStart == hopLimit)
+2. **SR Broadcasts**: Only process topology broadcasts from direct senders
+3. **Node Activity**: Only update activity for direct packets; ignore relayed packets
+4. **Graph Scope**: Limited to Level 1 neighbors - no multi-hop topology
+5. **Memory Usage**: Minimal - only stores direct connections
+6. **Broadcasting**: Send SR broadcasts with direct neighbors only
+7. **Routing**: Use standard flooding for routing decisions
+
+**Benefit**: Passive nodes participate in network awareness without the overhead of maintaining complex multi-hop topology, ideal for resource-constrained devices.
+
 ### Routing Delays and Timing
 
 | Router Type | Broadcast Delays | Unicast Timing |
@@ -91,9 +105,32 @@ This dual approach provides the reliability of coordinated networking with the e
 | **NextHopRouter** | SNR-based delays + next hop preference | iface->getRetransmissionMsec() timing |
 | **SignalRouting** | Backup relay contention windows (1-2s based on LoRa preset) | ETX-based route selection + speculative retransmit |
 
-## Core Concepts
+## Direct Neighbor Detection
 
-### Expected Transmission Count (ETX)
+### Reliable Detection Method: hopStart/hopLimit
+
+SignalRouting uses the hop counter to definitively determine if a packet was received directly from the sender:
+
+```cpp
+bool isDirectFromSender = (mp.hop_start == mp.hop_limit);
+```
+
+**How it works:**
+- When a sender transmits a packet, `hop_start` is set to the initial hop limit
+- Each relay decrements `hop_limit`
+- If `hop_start == hop_limit`, the packet has NOT been decremented, meaning it reached us directly from the sender without any relays
+
+**Advantages over relay_node matching:**
+- Immune to node ID collisions (multiple nodes sharing the same last byte)
+- Works correctly even when same packet received via different relay paths
+- More reliable than checking if relay_node matches sender's last byte
+- Handles SR broadcasts correctly since they maintain minimum hopLimit=1
+
+**Impact on Topology:**
+- Passive nodes only add neighbors from direct packets to their graph
+- Direct packets are identified by `hopStart == hopLimit` condition
+- Passive nodes skip all relayed packets (hopStart > hopLimit)
+- This ensures passive node topology shows only Level 1 neighbors
 
 ETX measures the expected number of transmissions needed to successfully deliver a packet over a wireless link. It's calculated from RSSI (Received Signal Strength Indicator) and SNR (Signal-to-Noise Ratio) measurements:
 
@@ -111,21 +148,39 @@ SignalRouting maintains a network topology graph where:
 
 #### Topology Discovery Mechanisms
 
-SignalRouting discovers network topology through multiple channels:
+SignalRouting discovers network topology through multiple channels. The scope of topology discovery depends on the node's routing role:
+
+**Active Routing Nodes (ROUTER, REPEATER, CLIENT, etc.):**
+All discovery mechanisms are used to maintain comprehensive network topology:
 
 1. **Direct Neighbor Detection**: When receiving packets directly with signal data (RSSI/SNR), immediate neighbor relationships are established with calculated ETX values
 
-2. **Topology Broadcasts**: Nodes periodically broadcast their complete neighbor list, allowing comprehensive topology learning from other nodes' perspectives
+2. **Topology Broadcasts**: Periodically broadcast their complete neighbor list for comprehensive topology learning from other nodes' perspectives
 
-3. **Mute Node Topology Sharing**: CLIENT_MUTE nodes broadcast their direct neighbor information to help active SignalRouting nodes discover network topology, even though mute nodes don't participate in packet relaying. Active nodes learn about mute node neighbors for discovery purposes but don't consider routing paths through mute nodes since they don't relay. CLIENT_MUTE nodes maintain their direct neighbor graph (add/remove expired connections) but use simplified topology tracking. Other inactive roles (TRACKER, SENSOR, TAK, etc.) do not participate in topology sharing.
+3. **Relayed Packet Inference**: When receiving relayed packets from Legacy (stock firmware) nodes, gateway relationships and direct connectivity are inferred between original sender and relay node
 
-4. **Relayed Packet Inference**: When receiving relayed packets from Legacy (stock firmware) nodes, both gateway relationships and direct connectivity between the original sender and relay node are inferred, even without direct signal measurements. SR-aware nodes broadcast their topology directly, so inference is not needed for them.
+4. **Placeholder System**: Unknown relay nodes are tracked as placeholders until their real identities are discovered through direct contact
 
-5. **Placeholder System**: Unknown relay nodes are tracked as placeholders until their real identities are discovered through direct contact or topology broadcasts
+5. **Gateway Relationship Tracking**: Downstream relationships learned when packets flow through relay nodes, enabling multi-hop route discovery
 
-6. **Gateway Relationship Tracking**: Downstream relationships are learned when packets flow through relay nodes, enabling multi-hop route discovery
+**Passive Routing Nodes (TRACKER, SENSOR, TAK, and nodes not configured for active routing):**
+Passive nodes maintain a simplified Level 1 topology containing ONLY directly-heard neighbors:
 
-This multi-modal discovery ensures robust topology awareness even in challenging network conditions. Mute nodes contribute to network intelligence by sharing their local connectivity knowledge without consuming relay bandwidth.
+1. **Direct Neighbor Detection**: Only neighbors heard directly (hopStart == hopLimit with signal data) are tracked with measured ETX values
+
+2. **SR Broadcast Reception**: Only process topology broadcasts from direct senders (hopStart == hopLimit), preventing ingestion of remote network topology
+
+3. **Packet Activity Tracking**: Only update node activity for direct packets; relayed packets are ignored
+
+4. **Placeholder System**: Limited to placeholders for direct relay nodes; upstream placeholder resolution skipped
+
+5. **No Gateway Inference**: Downstream relationships and multi-hop topology are not tracked
+
+**Mute Node Topology Sharing**: 
+CLIENT_MUTE nodes broadcast their direct neighbor information to help active SignalRouting nodes discover network topology, even though mute nodes don't participate in packet relaying. Active nodes learn about mute node neighbors for discovery purposes but don't consider routing paths through mute nodes since they don't relay. CLIENT_MUTE nodes maintain their direct neighbor graph (add/remove expired connections) but use simplified topology tracking.
+
+**Key Benefit of Passive Mode:**
+By limiting topology to Level 1 direct neighbors, passive nodes minimize memory usage and processing overhead while still participating in SR broadcasts with local network knowledge. They don't require complex multi-hop routing calculations and reduce bandwidth consumed by topology learning, making them ideal for resource-constrained devices while still contributing to network awareness.
 
 ## Unicast Routing
 

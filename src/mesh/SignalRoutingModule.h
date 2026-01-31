@@ -239,7 +239,7 @@ private:
     enum class CapabilityStatus : uint8_t {
         Unknown = 0,
         SRactive,    // sends SR broadcasts with signal_routing_active = true; considered as relay candidate
-        SRinactive,  // sends SR broadcasts with signal_routing_active = false; SR-aware but excluded from relay calculations
+        Passive,     // sends SR broadcasts with signal_routing_active = false; SR-aware but excluded from relay calculations
         Legacy       // stock firmware nodes that don't send SR broadcasts
     };
 
