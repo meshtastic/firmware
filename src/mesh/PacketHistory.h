@@ -31,6 +31,8 @@ class PacketHistory
 #if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
     // Open-addressing hash table for O(1) lookup in find(), replacing the O(N) linear scan.
     // Maps (sender, id) -> index into recentPackets[]. Uses linear probing with a load factor <= 0.5.
+    // The load factor invariant holds permanently: hashCapacity = 2 * nextPowerOf2(recentPacketsCapacity),
+    // and at most recentPacketsCapacity entries can ever be live (one per recentPackets[] slot).
     static constexpr uint16_t HASH_EMPTY = 0xFFFF;
     uint16_t *hashIndex = NULL;
     uint32_t hashCapacity = 0; // Always a power of 2
