@@ -16,6 +16,7 @@
 #endif
 #include "Default.h"
 #if ARCH_PORTDUINO
+#include "modules/Native/StoreForwardPlusPlus.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
@@ -365,6 +366,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
+#if ARCH_PORTDUINO
+        if (p_decoded->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP &&
+            (p->from == 0 || p->from == nodeDB->getNodeNum()) && storeForwardPlusPlusModule && portduino_config.sfpp_enabled) {
+            storeForwardPlusPlusModule->handleEncrypted(p_decoded, p);
+        }
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
@@ -745,6 +752,22 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+#if ARCH_PORTDUINO
+        if (portduino_config.whitelist_enabled) {
+            bool allowed = false;
+            for (const auto &port : portduino_config.whitelist_ports) {
+                if (port == p->decoded.portnum) {
+                    allowed = true;
+                    break;
+                }
+            }
+            if (!allowed) {
+                LOG_DEBUG("Dropping packet not on Portduino Whitelist");
+                cancelSending(p->from, p->id);
+                skipHandle = true;
+            }
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
