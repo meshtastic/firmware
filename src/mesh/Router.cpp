@@ -95,36 +95,14 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     }
 
     // For subsequent hops, check if previous relay is a favorite router
-    // Optimized search for favorite routers with matching last byte
-    // Check ordering optimized for IoT devices (cheapest checks first)
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node)
-            continue;
-
-        // Check 1: is_favorite (cheapest - single bool)
-        if (!node->is_favorite)
-            continue;
-
-        // Check 2: has_user (cheap - single bool)
-        if (!node->has_user)
-            continue;
-
-        // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            continue;
-        }
-
-        // Check 4: last byte extraction and comparison (most expensive)
-        if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
-            // Found a favorite router match
-            LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", node->num, p->relay_node);
-            return false; // Don't decrement hop_limit
+    const auto &favRouters = nodeDB->getFavoriteRouterLastBytes();
+    for (uint8_t lastByte : favRouters) {
+        if (lastByte == p->relay_node) {
+            LOG_DEBUG("Identified favorite relay router from last byte 0x%x", p->relay_node);
+            return false;
         }
     }
 
-    // No favorite router match found, decrement hop_limit
     return true;
 }
 
@@ -414,8 +392,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
+    meshtastic_NodeInfoLite *fromNode = nodeDB->getMeshNode(p->from);
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
+        (fromNode == NULL || !fromNode->has_user)) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
@@ -432,13 +411,13 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+    meshtastic_NodeInfoLite *toNode = nodeDB->getMeshNode(p->to);
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && fromNode != nullptr &&
+        fromNode->user.public_key.size > 0 && toNode != nullptr && toNode->user.public_key.size > 0 &&
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
+        if (crypto->decryptCurve25519(p->from, fromNode->user.public_key, p->id, rawSize, p->encrypted.bytes, bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
@@ -449,7 +428,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, fromNode->user.public_key.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded

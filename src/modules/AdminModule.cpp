@@ -111,7 +111,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
                     LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    remoteNode->is_favorite = true;
+                    nodeDB->set_favorite(true, mp.from);
                 }
             }
         } else {
@@ -363,24 +363,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
         LOG_INFO("Client received set_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
-        if (node != NULL) {
-            node->is_favorite = true;
-            saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen)
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
-        }
+        nodeDB->set_favorite(true, r->set_favorite_node);
+        if (screen)
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         break;
     }
     case meshtastic_AdminMessage_remove_favorite_node_tag: {
         LOG_INFO("Client received remove_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
-        if (node != NULL) {
-            node->is_favorite = false;
-            saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen)
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
-        }
+        nodeDB->set_favorite(false, r->remove_favorite_node);
+        if (screen)
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         break;
     }
     case meshtastic_AdminMessage_set_ignored_node_tag: {
