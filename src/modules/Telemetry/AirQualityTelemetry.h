@@ -63,6 +63,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
                                                                  meshtastic_AdminMessage *response) override;
     void i2cScanFinished(ScanI2C *i2cScanner);
 
+#if  !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
     /**
      * Database query helper methods (can be called from admin commands or WebUI)
      */
@@ -79,15 +80,16 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
      * @return Number of records recovered/sent
      */
     uint32_t recoverMQTTRecords();
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
   private:
     bool firstTime = true;
-    bool mqttRecoveryAttempted = false; // Flag to track if MQTT recovery has been attempted
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
 #if  !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
+    bool mqttRecoveryAttempted = false; // Flag to track if MQTT recovery has been attempted
     AirQualityDatabase telemetryDatabase; // Historical data storage
 #endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 };
