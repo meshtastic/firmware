@@ -425,7 +425,6 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     incrementStat(&stats.packets_inspected);
 
     const auto &cfg = moduleConfig.traffic_management;
-    const bool dryRun = cfg.dry_run;
     const uint32_t nowMs = millis();
 
     // -------------------------------------------------------------------------
@@ -438,10 +437,6 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         if (cfg.drop_unknown_enabled && cfg.unknown_packet_threshold > 0) {
             if (shouldDropUnknown(&mp, nowMs)) {
                 logAction("drop", &mp, "unknown");
-                if (dryRun) {
-                    incrementStat(&stats.dry_run_would_drop);
-                    return ProcessMessage::CONTINUE;
-                }
                 incrementStat(&stats.unknown_packet_drops);
                 ignoreRequest = true;
                 return ProcessMessage::STOP;
@@ -459,12 +454,8 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
 
     if (cfg.nodeinfo_direct_response && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && mp.decoded.want_response &&
         !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
-        if (shouldRespondToNodeInfo(&mp, !dryRun)) {
+        if (shouldRespondToNodeInfo(&mp, true)) {
             logAction("respond", &mp, "nodeinfo-cache");
-            if (dryRun) {
-                incrementStat(&stats.dry_run_would_drop);
-                return ProcessMessage::CONTINUE;
-            }
             incrementStat(&stats.nodeinfo_cache_hits);
             ignoreRequest = true;
             return ProcessMessage::STOP;
@@ -484,10 +475,6 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
                 if (shouldDropPosition(&mp, &pos, nowMs)) {
                     logAction("drop", &mp, "position-dedup");
-                    if (dryRun) {
-                        incrementStat(&stats.dry_run_would_drop);
-                        return ProcessMessage::CONTINUE;
-                    }
                     incrementStat(&stats.position_dedup_drops);
                     ignoreRequest = true;
                     return ProcessMessage::STOP;
@@ -505,10 +492,6 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             if (mp.decoded.portnum != meshtastic_PortNum_ROUTING_APP && mp.decoded.portnum != meshtastic_PortNum_ADMIN_APP) {
                 if (isRateLimited(mp.from, nowMs)) {
                     logAction("drop", &mp, "rate-limit");
-                    if (dryRun) {
-                        incrementStat(&stats.dry_run_would_drop);
-                        return ProcessMessage::CONTINUE;
-                    }
                     incrementStat(&stats.rate_limit_drops);
                     ignoreRequest = true;
                     return ProcessMessage::STOP;
@@ -552,12 +535,6 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
 
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;
-
-    if (cfg.dry_run) {
-        logAction("exhaust", &mp, "dry-run");
-        incrementStat(&stats.dry_run_would_drop);
-        return;
-    }
 
     if (mp.hop_limit > 0) {
         const char *reason = isTelemetry ? "zero-hop-telemetry" : "exhaust-hop-position";
