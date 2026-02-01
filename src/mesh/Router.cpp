@@ -627,15 +627,19 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
                                            strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
             // Check for valid keys and single node destination
-            config.security.private_key.size == 32 && !isBroadcast(p->to) && node != nullptr &&
-            // Check for a known public key for the destination
-            (node->user.public_key.size == 32) &&
+            config.security.private_key.size == 32 && !isBroadcast(p->to) &&
             // Some portnums either make no sense to send with PKC
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
+            // Check for a known public key for the destination
+            if (node == nullptr || node->user.public_key.size != 32) {
+                LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
+                         p->decoded.portnum);
+                return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+            }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,

@@ -51,13 +51,8 @@ extern "C" {
 #define PIN_WIRE_SDA (0 + 5) // P0.05
 #define PIN_WIRE_SCL (0 + 4) // P0.04
 
-#define PIN_LED1 (0 + 6)      // P0.06
-#define PIN_LED2 (PINS_COUNT) // P0.14
-
-#define LED_BUILTIN PIN_LED1
-
+#define PIN_LED1 (0 + 6) // P0.06
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
 
 #define LED_STATE_ON 0
 
