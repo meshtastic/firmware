@@ -42,6 +42,8 @@ static meshtastic_MeshPacket makePacket(uint32_t from, uint32_t to = NODENUM_BRO
 void setUp(void)
 {
     myNodeInfo.my_node_num = OUR_NODE_NUM;
+    meshtastic_Position emptyPos = meshtastic_Position_init_default;
+    nodeDB->updatePosition(OUR_NODE_NUM, emptyPos, RX_SRC_RADIO);
     nodeDB->resetNodes(false);
 }
 

@@ -1115,10 +1115,12 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
 void NodeDB::clearLocalPosition()
 {
     meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
-    node->position.latitude_i = 0;
-    node->position.longitude_i = 0;
-    node->position.altitude = 0;
-    node->position.time = 0;
+    if (node) {
+        node->position.latitude_i = 0;
+        node->position.longitude_i = 0;
+        node->position.altitude = 0;
+        node->position.time = 0;
+    }
     setLocalPosition(meshtastic_Position_init_default);
     localPositionUpdatedSinceBoot = false;
 }
