@@ -155,6 +155,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // Default system gain to 0 if not defined
+#ifndef NUM_PA_POINTS
+#define NUM_PA_POINTS 1
+#endif
+
 #ifndef TX_GAIN_LORA
 #define TX_GAIN_LORA 0
 #endif
@@ -478,6 +482,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
 #define MESHTASTIC_EXCLUDE_TEXTMESSAGE 1
+#define MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT 1
 #define MESHTASTIC_EXCLUDE_ATAK 1
 #define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1

@@ -513,7 +513,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             LOG_DEBUG("StoreAndForward_RequestResponse_ROUTER_BUSY");
             // retry in messages_saved * packetTimeMax ms
             retry_delay = millis() + getNumAvailablePackets(this->busyTo, this->last_time) * packetTimeMax *
-                                         (meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+                                         (p->rr == meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
         }
         break;
 

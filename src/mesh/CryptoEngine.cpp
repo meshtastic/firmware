@@ -61,11 +61,6 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     return true;
 }
 #endif
-void CryptoEngine::clearKeys()
-{
-    memset(public_key, 0, sizeof(public_key));
-    memset(private_key, 0, sizeof(private_key));
-}
 
 /**
  * Encrypt a packet's payload using a key generated with Curve25519 and SHA256
