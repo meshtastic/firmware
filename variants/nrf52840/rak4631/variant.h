@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -62,8 +59,6 @@ extern "C" {
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
 
 /*
  * Analog pins
@@ -253,8 +248,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define RV3028_RTC (uint8_t)0b1010010
 
 // RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
+#define PIN_BUZZER 21 // IO3 is PWM2
 // NEW: set this via protobuf instead!
+
+// RAK4631 custom ringtone
+#undef USERPREFS_RINGTONE_RTTTL
+#define USERPREFS_RINGTONE_RTTTL "Rak:d=32,o=5,b=200:b7,p,b7,4p,p"
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
@@ -280,8 +279,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // VDD=3.3V AIN3=11/16*VDD=2.26V VBAT=1.66*AIN3=3.76V
 // VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
-
-#define HAS_RTC 1
 
 #define HAS_ETHERNET 1
 
