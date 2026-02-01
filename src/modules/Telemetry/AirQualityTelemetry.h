@@ -9,7 +9,9 @@
 #endif
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 #include "Database/AirQualityDatabase.h"
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include "detect/ScanI2CConsumer.h"
@@ -85,7 +87,9 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
+#if  !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
     AirQualityDatabase telemetryDatabase; // Historical data storage
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 };
 
 #endif

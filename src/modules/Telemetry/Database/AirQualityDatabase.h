@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetryDatabase.h"
@@ -18,11 +18,11 @@
 class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics>
 {
   private:
-    static constexpr uint32_t MAX_RECORDS = 100; // Maximum records to store in memory
+    static constexpr uint32_t MAX_RECORDS = 10; // Maximum records to store in memory
     static constexpr const char *STORAGE_KEY = "/telemetry_db/air_quality";
 
     std::deque<DatabaseRecord> records;
-    concurrency::Lock *recordsLock;
+    // concurrency::Lock *recordsLock;
 
     /**
      * Convert DatabaseRecord to protobuf format

@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
 #include "AirQualityDatabase.h"
 #include "RTC.h"
@@ -42,20 +42,16 @@ DatabaseRecord AirQualityDatabase::recordFromProtobuf(const meshtastic_Telemetry
 
 AirQualityDatabase::AirQualityDatabase()
 {
-    // Initialize with empty records
 }
 
 bool AirQualityDatabase::init()
 {
-    concurrency::LockGuard g(recordsLock);
-    records.clear();
-    LOG_DEBUG("AirQualityDatabase: Initialized");
     return loadFromStorage();
 }
 
 bool AirQualityDatabase::addRecord(const DatabaseRecord &record)
 {
-    concurrency::LockGuard g(recordsLock);
+    // recordsLock->lock();
 
     // If at capacity, remove oldest record
     if (records.size() >= MAX_RECORDS) {
@@ -64,6 +60,7 @@ bool AirQualityDatabase::addRecord(const DatabaseRecord &record)
     }
 
     records.push_back(record);
+    // recordsLock->unlock();
     LOG_DEBUG("AirQualityDatabase: Added record (total: %d)", records.size());
 
     // Save to storage after each addition (with protobuf serialization)
@@ -72,7 +69,6 @@ bool AirQualityDatabase::addRecord(const DatabaseRecord &record)
 
 bool AirQualityDatabase::getRecord(uint32_t index, DatabaseRecord &record) const
 {
-    concurrency::LockGuard g(recordsLock);
 
     if (index >= records.size()) {
         return false;
@@ -84,31 +80,35 @@ bool AirQualityDatabase::getRecord(uint32_t index, DatabaseRecord &record) const
 
 std::vector<DatabaseRecord> AirQualityDatabase::getAllRecords() const
 {
-    concurrency::LockGuard g(recordsLock);
-
+    // TODO needs lock?
+    // recordsLock->lock();
     std::vector<DatabaseRecord> result(records.begin(), records.end());
+    // recordsLock->unlock();
     return result;
 }
 
 bool AirQualityDatabase::markDelivered(uint32_t index)
 {
-    concurrency::LockGuard g(recordsLock);
+    // recordsLock->lock();
 
     if (index >= records.size()) {
         return false;
     }
 
     records[index].delivered = true;
+    // recordsLock->unlock();
     return saveToStorage();
 }
 
 bool AirQualityDatabase::markAllDelivered()
 {
-    concurrency::LockGuard g(recordsLock);
+    // recordsLock->lock();
 
     for (auto &record : records) {
         record.delivered = true;
     }
+    // recordsLock->unlock();
+
     return saveToStorage();
 }
 
@@ -119,8 +119,10 @@ uint32_t AirQualityDatabase::getRecordCount() const
 
 bool AirQualityDatabase::clearAll()
 {
-    concurrency::LockGuard g(recordsLock);
+    // TODO - needs the lock?
+    // recordsLock->lock();
     records.clear();
+    // recordsLock->unlock();
     LOG_DEBUG("AirQualityDatabase: Cleared all records");
     return saveToStorage();
 }
@@ -128,7 +130,6 @@ bool AirQualityDatabase::clearAll()
 bool AirQualityDatabase::loadFromStorage()
 {
 #ifdef FSCom
-    concurrency::LockGuard g(recordsLock);
     spiLock->lock();
 
     // Try to open the database file
@@ -171,7 +172,7 @@ bool AirQualityDatabase::loadFromStorage()
 
     // Clear existing records and load from snapshot
     records.clear();
-    for (uint32_t i = 0; i < snapshot.record_count; i++) {
+    for (uint32_t i = 0; i < snapshot.records_count; i++) {
         DatabaseRecord record = recordFromProtobuf(snapshot.records[i]);
         records.push_back(record);
     }
@@ -187,21 +188,23 @@ bool AirQualityDatabase::loadFromStorage()
 bool AirQualityDatabase::saveToStorage()
 {
 #ifdef FSCom
-    concurrency::LockGuard g(recordsLock);
+    // recordsLock->lock();
     spiLock->lock();
 
     // Create snapshot from current records
     meshtastic_TelemetryDatabase snapshot = meshtastic_TelemetryDatabase_init_zero;
-    snapshot.record_count = records.size();
+
 
     // Check if we have too many records for fixed array
-    if (snapshot.record_count > 100) { // Sanity check
-        LOG_WARN("AirQualityDatabase: Too many records (%d), truncating to 100", snapshot.record_count);
-        snapshot.record_count = 100;
+    if (records.size() > MAX_RECORDS) { // Sanity check
+        LOG_WARN("AirQualityDatabase: Too many records (%d), truncating to %d", records.size(), MAX_RECORDS);
+        snapshot.records_count = MAX_RECORDS;
+    } else {
+        snapshot.records_count = records.size();
     }
 
     // Convert each record to protobuf format
-    for (uint32_t i = 0; i < snapshot.record_count; i++) {
+    for (uint32_t i = 0; i < snapshot.records_count; i++) {
         snapshot.records[i] = recordToProtobuf(records[i]);
     }
 
@@ -234,6 +237,7 @@ bool AirQualityDatabase::saveToStorage()
         return false;
     }
     spiLock->unlock();
+    // recordsLock->unlock();
     LOG_DEBUG("AirQualityDatabase: Saved %d records to storage (%zu bytes)", records.size(), encodedSize);
     return true;
 #else
@@ -244,14 +248,13 @@ bool AirQualityDatabase::saveToStorage()
 
 TelemetryDatabase<meshtastic_AirQualityMetrics>::Statistics AirQualityDatabase::getStatistics() const
 {
-    concurrency::LockGuard g(recordsLock);
     Statistics stats = {};
 
     if (records.empty()) {
         return stats;
     }
 
-    stats.record_count = records.size();
+    stats.records_count = records.size();
     stats.min_timestamp = records.front().telemetry.time;
     stats.max_timestamp = records.back().telemetry.time;
 
@@ -265,7 +268,6 @@ TelemetryDatabase<meshtastic_AirQualityMetrics>::Statistics AirQualityDatabase::
 
 std::vector<DatabaseRecord> AirQualityDatabase::getRecordsForRecovery() const
 {
-    concurrency::LockGuard g(recordsLock);
     std::vector<DatabaseRecord> recoveryRecords;
 
     for (const auto &record : records) {

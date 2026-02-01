@@ -28,7 +28,7 @@ template <typename TelemetryType> class TelemetryDatabase
      * Statistics about stored data
      */
     struct Statistics {
-        uint32_t record_count;  // Total number of records
+        uint32_t records_count;  // Total number of records
         uint32_t min_timestamp; // Oldest record timestamp
         uint32_t max_timestamp; // Newest record timestamp
         uint32_t delivered;     // Count delivered records

@@ -19,9 +19,9 @@
 #include "sleep.h"
 #include <Throttle.h>
 
-#if HAS_NETWORKING
+#if HAS_NETWORKING && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 #include "mqtt/MQTT.h"
-#endif
+#endif //HAS_NETWORKING && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
 // Sensors
 #include "Sensor/PMSA003ISensor.h"
@@ -66,21 +66,17 @@ int32_t AirQualityTelemetryModule::runOnce()
         return disable();
     }
 
-    // Check for MQTT connectivity and attempt recovery if connected
-    if (mqtt && mqtt->isConnectedDirectly() && !mqttRecoveryAttempted) {
-        LOG_INFO("MQTT is connected, attempting recovery of pending records");
-        mqttRecoveryAttempted = true;
-        recoverMQTTRecords();
-    }
-
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
         // Initialize the telemetry database
+        LOG_INFO("AirQualityDatabase: Initialize...");
         if (!telemetryDatabase.init()) {
             LOG_WARN("Failed to initialize air quality telemetry database");
         }
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
@@ -99,6 +95,16 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
             return disable();
         }
+
+#if HAS_NETWORKING && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
+        // Check for MQTT connectivity and attempt recovery if connected
+        LOG_INFO("DB recovery attempt");
+        if (mqtt && mqtt->isConnectedDirectly() && !mqttRecoveryAttempted) {
+            LOG_INFO("MQTT is connected, attempting recovery of pending records");
+            mqttRecoveryAttempted = true;
+            recoverMQTTRecords();
+        }
+#endif //HAS_NETWORKING && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
         // Wake up the sensors that need it
         LOG_INFO("Waking up sensors");
@@ -229,7 +235,7 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     }
     graphics::drawCommonFooter(display, x, y);
 }
-#endif
+#endif //HAS_SCREEN
 
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
@@ -312,6 +318,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.air_quality_metrics.pmsa003idata.pm100_standard, m.variant.air_quality_metrics.pmsa003idata.pm10_environmental,
                  m.variant.air_quality_metrics.pmsa003idata.pm25_environmental, m.variant.air_quality_metrics.pmsa003idata.pm100_environmental);
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
         if (m.time == 0) {
             LOG_WARN("AirQualityTelemetry: Invalid time, not sending telemetry");
         } else {
@@ -323,6 +330,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 LOG_DEBUG("Failed to add record to air quality database");
             }
         }
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
@@ -344,11 +352,13 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
             // Mark last record as delivered to mesh
             uint32_t recordCount = telemetryDatabase.getRecordCount();
             if (recordCount > 0) {
                 telemetryDatabase.markDelivered(recordCount - 1);
             }
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
@@ -369,6 +379,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     return false;
 }
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 uint32_t AirQualityTelemetryModule::recoverMQTTRecords()
 {
     // Get all records not yet delivered via MQTT
@@ -426,6 +437,7 @@ uint32_t AirQualityTelemetryModule::recoverMQTTRecords()
     LOG_INFO("AirQualityTelemetry: MQTT recovery completed - sent %d records", recovered);
     return recovered;
 }
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                                 meshtastic_AdminMessage *request,
@@ -433,6 +445,7 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
     // Handle manual recovery request
     if (request->which_payload_variant == meshtastic_Telemetry_Recovery_air_quality_recovery_tag) {
         recoverMQTTRecords();
@@ -440,6 +453,7 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
         result = AdminMessageHandleResult::HANDLED;
         return result;
     }
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
     for (TelemetrySensor *sensor : sensors) {
         result = sensor->handleAdminMessage(mp, request, response);
@@ -450,13 +464,14 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
     return result;
 }
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 /**
  * Helper function to get database statistics as a formatted string
  */
 void AirQualityTelemetryModule::getDatabaseStatsString(char *buffer, size_t bufferSize)
 {
     auto stats = telemetryDatabase.getStatistics();
-    snprintf(buffer, bufferSize, "Air Quality DB: %lu records, Mesh:%lu Age:%.1fh", stats.record_count, stats.delivered,
+    snprintf(buffer, bufferSize, "Air Quality DB: %lu records, Mesh:%lu Age:%.1fh", stats.records_count, stats.delivered,
              (getTime() - stats.min_timestamp) / 3600.0f);
 }
 
@@ -466,7 +481,7 @@ void AirQualityTelemetryModule::getDatabaseStatsString(char *buffer, size_t buff
 // float AirQualityTelemetryModule::getDatabaseMeanPM25()
 // {
 //     auto stats = telemetryDatabase.getStatistics();
-//     if (stats.record_count == 0)
+//     if (stats.records_count == 0)
 //         return 0.0f;
 
 //     auto records = telemetryDatabase.getAllRecords();
@@ -512,5 +527,6 @@ void AirQualityTelemetryModule::getDatabaseStatsString(char *buffer, size_t buff
 //     }
 //     return minVal;
 // }
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
 #endif
