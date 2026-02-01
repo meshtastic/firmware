@@ -2,10 +2,11 @@
 #if !MESHTASTIC_EXCLUDE_STATUS
 #include "SinglePortModule.h"
 #include "configuration.h"
+#include <string>
+#include <vector>
 
 class StatusMessageModule : public SinglePortModule, private concurrency::OSThread
 {
-
   public:
     /** Constructor
      * name is for debugging output
@@ -19,9 +20,19 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
             this->setInterval(1000 * 12 * 60 * 60);
         }
         // TODO: If we have a string, set the initial delay (15 minutes maybe)
+
+        // Keep vector from reallocating as we fill up to MAX_RECENT
+        recentReceived.reserve(MAX_RECENT);
     }
 
     virtual int32_t runOnce() override;
+
+    struct RecentStatus {
+        uint32_t fromNodeId;    // mp.from
+        std::string statusText; // incomingMessage.status
+    };
+
+    const std::vector<RecentStatus> &getRecentReceived() const { return recentReceived; }
 
   protected:
     /** Called to handle a particular incoming message
@@ -29,6 +40,8 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
   private:
+    static constexpr size_t MAX_RECENT = 5;
+    std::vector<RecentStatus> recentReceived;
 };
 
 extern StatusMessageModule *statusMessageModule;

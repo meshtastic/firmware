@@ -4,6 +4,9 @@
 #include "GPSStatus.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#if !MESHTASTIC_EXCLUDE_STATUS
+#include "modules/StatusMessageModule.h"
+#endif
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
@@ -340,6 +343,28 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         // Print node's long name (e.g. "Backpack Node")
         display->drawString(x, getTextPositions(display)[line++], usernameStr.c_str());
     }
+
+#if !MESHTASTIC_EXCLUDE_STATUS
+    // === Optional: Last received StatusMessage line for this node ===
+    // Display it directly under the username line (if we have one).
+    if (statusMessageModule) {
+        const auto &recent = statusMessageModule->getRecentReceived();
+        const StatusMessageModule::RecentStatus *found = nullptr;
+
+        // Search newest-to-oldest
+        for (auto it = recent.rbegin(); it != recent.rend(); ++it) {
+            if (it->fromNodeId == node->num && !it->statusText.empty()) {
+                found = &(*it);
+                break;
+            }
+        }
+
+        if (found) {
+            std::string statusLine = std::string(" Status: ") + found->statusText;
+            display->drawString(x, getTextPositions(display)[line++], statusLine.c_str());
+        }
+    }
+#endif
 
     // === 2. Signal and Hops (combined on one line, if available) ===
     // If both are present: "Sig: 97%  [2hops]"
