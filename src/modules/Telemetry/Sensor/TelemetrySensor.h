@@ -26,7 +26,6 @@ class TelemetrySensor
         this->status = 0;
     }
 
-    const char *sensorName;
     meshtastic_TelemetrySensorType sensorType = meshtastic_TelemetrySensorType_SENSOR_UNSET;
     unsigned status;
     bool initialized = false;
@@ -56,13 +55,18 @@ class TelemetrySensor
         return AdminMessageHandleResult::NOT_HANDLED;
     }
 
+    const char *sensorName;
     // TODO: delete after migration
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
+
     // Functions to sleep / wakeup sensors that support it
-    virtual void sleep(){};
+    // These functions can save power consumption in cases like AQ
+    virtual void sleep() {};
     virtual uint32_t wakeUp() { return 0; }
-    // Return active by default, override per sensor
-    virtual bool isActive() { return true; }
+    virtual bool isActive() { return true; }     // Return true by default, override per sensor
+    virtual bool canSleep() { return false; }    // Return false by default, override per sensor
+    virtual int32_t wakeUpTimeMs() { return 0; }
+    virtual int32_t pendingForReadyMs() { return 0; }
 
 #if WIRE_INTERFACES_COUNT > 1
     // Set to true if Implementation only works first I2C port (Wire)
