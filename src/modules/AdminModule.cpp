@@ -897,10 +897,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
+    bool shouldReboot = true;
     // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
     // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction &&
-        !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag)) {
+    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
+                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
         disableBluetooth();
     }
 
@@ -992,8 +993,14 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
+    case meshtastic_ModuleConfig_statusmessage_tag:
+        LOG_INFO("Set module config: StatusMessage");
+        moduleConfig.has_statusmessage = true;
+        moduleConfig.statusmessage = c.payload_variant.statusmessage;
+        shouldReboot = false;
+        break;
     }
-    saveChanges(SEGMENT_MODULECONFIG);
+    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
 }
 
@@ -1171,6 +1178,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_STATUSMESSAGE_CONFIG:
+            LOG_INFO("Get module config: StatusMessage");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
+            res.get_module_config_response.payload_variant.statusmessage = moduleConfig.statusmessage;
             break;
         }
 
