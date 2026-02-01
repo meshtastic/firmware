@@ -4,6 +4,7 @@
 #endif
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "RadioLibInterface.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
