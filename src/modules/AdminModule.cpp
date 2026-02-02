@@ -644,12 +644,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             accelerometerThread->start();
         }
 #endif
-#ifdef LED_PIN
-        // Turn LED off if heartbeat by config
-        if (c.payload_variant.device.led_heartbeat_disabled) {
-            digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
-        }
-#endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
             config.device.role == c.payload_variant.device.role &&

@@ -74,7 +74,9 @@ int32_t StatusLEDModule::runOnce()
     my_interval = 1000;
 
     if (power_state == charging) {
+#ifndef POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
         CHARGE_LED_state = !CHARGE_LED_state;
+#endif
     } else if (power_state == charged) {
         CHARGE_LED_state = LED_STATE_ON;
     } else if (power_state == critical) {
@@ -94,7 +96,15 @@ int32_t StatusLEDModule::runOnce()
         }
 
     } else {
-        CHARGE_LED_state = LED_STATE_OFF;
+        if (doing_fast_blink) {
+            CHARGE_LED_state = LED_STATE_OFF;
+            doing_fast_blink = false;
+            my_interval = 999;
+        } else {
+            CHARGE_LED_state = LED_STATE_ON;
+            doing_fast_blink = true;
+            my_interval = 1;
+        }
     }
 
     if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
@@ -112,6 +122,11 @@ int32_t StatusLEDModule::runOnce()
         PAIRING_LED_state = LED_STATE_ON;
     }
 
+    // Override if disabled in config
+    if (config.device.led_heartbeat_disabled) {
+        CHARGE_LED_state = LED_STATE_OFF;
+    }
+#ifdef Battery_LED_1
     bool chargeIndicatorLED1 = LED_STATE_OFF;
     bool chargeIndicatorLED2 = LED_STATE_OFF;
     bool chargeIndicatorLED3 = LED_STATE_OFF;
@@ -126,9 +141,23 @@ int32_t StatusLEDModule::runOnce()
         if (powerStatus && powerStatus->getBatteryChargePercent() >= 75)
             chargeIndicatorLED4 = LED_STATE_ON;
     }
+#endif
 
-#ifdef LED_CHARGE
-    digitalWrite(LED_CHARGE, CHARGE_LED_state);
+#if defined(HAS_PMU)
+    if (pmu_found && PMU) {
+        // blink the axp led
+        PMU->setChargingLedMode(CHARGE_LED_state ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+    }
+#endif
+
+#ifdef PCA_LED_POWER
+    io.digitalWrite(PCA_LED_POWER, CHARGE_LED_state);
+#endif
+#ifdef PCA_LED_ENABLE
+    io.digitalWrite(PCA_LED_ENABLE, CHARGE_LED_state);
+#endif
+#ifdef LED_POWER
+    digitalWrite(LED_POWER, CHARGE_LED_state);
 #endif
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
@@ -148,4 +177,44 @@ int32_t StatusLEDModule::runOnce()
 #endif
 
     return (my_interval);
+}
+
+void StatusLEDModule::setPowerLED(bool LEDon)
+{
+
+#if defined(HAS_PMU)
+    if (pmu_found && PMU) {
+        // blink the axp led
+        PMU->setChargingLedMode(LEDon ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+    }
+#endif
+    if (LEDon)
+        LEDon = LED_STATE_ON;
+    else
+        LEDon = LED_STATE_OFF;
+#ifdef PCA_LED_POWER
+    io.digitalWrite(PCA_LED_POWER, LEDon);
+#endif
+#ifdef PCA_LED_ENABLE
+    io.digitalWrite(PCA_LED_ENABLE, LEDon);
+#endif
+#ifdef LED_POWER
+    digitalWrite(LED_POWER, LEDon);
+#endif
+#ifdef LED_PAIRING
+    digitalWrite(LED_PAIRING, LEDon);
+#endif
+
+#ifdef Battery_LED_1
+    digitalWrite(Battery_LED_1, LEDon);
+#endif
+#ifdef Battery_LED_2
+    digitalWrite(Battery_LED_2, LEDon);
+#endif
+#ifdef Battery_LED_3
+    digitalWrite(Battery_LED_3, LEDon);
+#endif
+#ifdef Battery_LED_4
+    digitalWrite(Battery_LED_4, LEDon);
+#endif
 }

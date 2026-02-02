@@ -6,6 +6,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "input/InputBroker.h"
+#include "main.h"
 #include <Arduino.h>
 #include <functional>
 
@@ -19,6 +20,8 @@ class StatusLEDModule : private concurrency::OSThread
     int handleStatusUpdate(const meshtastic::Status *);
 
     int handleInputEvent(const InputEvent *arg);
+
+    void setPowerLED(bool);
 
   protected:
     unsigned int my_interval = 1000; // interval in millisconds
