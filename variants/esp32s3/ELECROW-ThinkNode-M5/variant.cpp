@@ -10,3 +10,8 @@ void earlyInitVariant()
     io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
     io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
 }
+
+void variantShutdown()
+{
+    io.digitalWrite(PCA_PIN_POWER_EN, LOW);
+}
