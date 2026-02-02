@@ -722,7 +722,7 @@ std::vector<RelayCandidate> Graph::findAllRelayCandidates(const std::unordered_s
                                                          uint32_t currentTime, uint32_t packetId) const {
     std::vector<RelayCandidate> relayCandidates;
 
-    LOG_DEBUG("Graph: Finding relay candidates from %zu potential nodes", candidates.size());
+    LOG_DEBUG("Graph: Finding relay candidates from %u potential nodes", (unsigned int)candidates.size());
 
     for (NodeNum candidate : candidates) {
         // Skip candidates that have already transmitted for this packet
@@ -746,7 +746,7 @@ std::vector<RelayCandidate> Graph::findAllRelayCandidates(const std::unordered_s
         float avgCost = totalCost / coverageCount;
 
         relayCandidates.emplace_back(candidate, coverageCount, avgCost, 0);  // Tier will be set later
-        LOG_DEBUG("Graph: Candidate %08x covers %zu nodes with avg cost %.2f", candidate, coverageCount, avgCost);
+        LOG_DEBUG("Graph: Candidate %08x covers %u nodes with avg cost %.2f", candidate, (unsigned int)coverageCount, avgCost);
     }
 
     // Sort candidates by coverage (descending) then cost (ascending)
@@ -766,11 +766,11 @@ std::vector<RelayCandidate> Graph::findAllRelayCandidates(const std::unordered_s
         }
         candidate.tier = currentTier;
         currentTierCoverage = candidate.coverageCount;
-        LOG_DEBUG("Graph: Candidate %08x assigned to tier %d (covers %zu nodes)",
+        LOG_DEBUG("Graph: Candidate %08x assigned to tier %d (covers %u nodes)",
                   candidate.nodeId, candidate.tier, candidate.coverageCount);
     }
 
-    LOG_DEBUG("Graph: Selected %zu relay candidates across %d tiers", relayCandidates.size(), currentTier + 1);
+    LOG_DEBUG("Graph: Selected %u relay candidates across %d tiers", (unsigned int)relayCandidates.size(), currentTier + 1);
     return relayCandidates;
 }
 
@@ -823,7 +823,7 @@ bool Graph::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const {
     auto gatewayNeighbors = getDirectNeighbors(nodeId);
     auto sourceNeighbors = getDirectNeighbors(sourceNode);
 
-    LOG_DEBUG("Graph: Checking if %08x is gateway for source %08x (%zu vs %zu neighbors)",
+    LOG_DEBUG("Graph: Checking if %08x is gateway for source %08x (%u vs %u neighbors)",
               nodeId, sourceNode, gatewayNeighbors.size(), sourceNeighbors.size());
 
     // Check if this node connects to any nodes that the source doesn't connect to
@@ -874,7 +874,7 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
         alreadyCovered.insert(n);
     }
 
-    LOG_DEBUG("Graph: Already covered by transmitting node %08x: %zu nodes", heardFrom, alreadyCovered.size());
+        LOG_DEBUG("Graph: Already covered by transmitting node %08x: %u nodes", heardFrom, (unsigned int)alreadyCovered.size());
 
     // Get all nodes that heard this transmission directly (only transmitting node's neighbors)
     std::unordered_set<NodeNum> candidates;
@@ -882,11 +882,11 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
         candidates.insert(n);
     }
 
-    LOG_DEBUG("Graph: Potential candidates: %zu nodes", candidates.size());
+    LOG_DEBUG("Graph: Potential candidates: %u nodes", (unsigned int)candidates.size());
 
     // Iterative loop: keep trying candidates until we decide to relay or run out of candidates
     while (!candidates.empty()) {
-        LOG_DEBUG("Graph: Evaluating candidates (remaining: %zu)", candidates.size());
+        LOG_DEBUG("Graph: Evaluating candidates (remaining: %u)", (unsigned int)candidates.size());
 
         // Find the best candidate from current candidate list
         RelayCandidate bestCandidate = findBestRelayCandidate(candidates, alreadyCovered, currentTime, packetId);
@@ -896,7 +896,7 @@ bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum hear
             break; // No more candidates, exit loop
         }
 
-        LOG_DEBUG("Graph: Best candidate from current list is %08x (coverage: %zu, cost: %.2f)",
+        LOG_DEBUG("Graph: Best candidate from current list is %08x (coverage: %u, cost: %.2f)",
                   bestCandidate.nodeId, bestCandidate.coverageCount, bestCandidate.avgCost);
 
         // If we're the best candidate, relay immediately
@@ -1008,7 +1008,7 @@ bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, 
         }
     }
 
-    LOG_DEBUG("Graph: Already covered: %zu nodes", alreadyCovered.size());
+    LOG_DEBUG("Graph: Already covered: %u nodes", (unsigned int)alreadyCovered.size());
 
     // Get all nodes that heard this packet (source's neighbors + relayer's neighbors)
     std::unordered_set<NodeNum> candidates;
@@ -1022,7 +1022,7 @@ bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, 
         }
     }
 
-    LOG_DEBUG("Graph: Potential candidates: %zu nodes", candidates.size());
+    LOG_DEBUG("Graph: Potential candidates: %u nodes", (unsigned int)candidates.size());
 
     // Get all relay candidates with their tiers
     auto relayCandidates = findAllRelayCandidates(alreadyCovered, candidates, currentTime, packetId);
@@ -1050,7 +1050,7 @@ bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, 
         }
     }
 
-    LOG_DEBUG("Graph: Found %zu primary relays", primaryRelays.size());
+    LOG_DEBUG("Graph: Found %u primary relays", (unsigned int)primaryRelays.size());
 
     // Check if we're a primary relay
     bool isPrimaryRelay = std::find(primaryRelays.begin(), primaryRelays.end(), myNode) != primaryRelays.end();
@@ -1103,10 +1103,10 @@ bool Graph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sourceNode, 
     // Final check: provide unique coverage that justifies relaying
     auto myCoverage = getCoverageIfRelays(myNode, alreadyCovered);
     if (!myCoverage.empty()) {
-        LOG_DEBUG("Graph: We can cover %zu additional nodes", myCoverage.size());
+        LOG_DEBUG("Graph: We can cover %u additional nodes", (unsigned int)myCoverage.size());
         // In conservative mode, require at least 2 unique nodes to justify relaying
         if (myCoverage.size() >= 2) {
-            LOG_DEBUG("Graph: We provide sufficient unique coverage (%zu nodes) - TRANSMITTING", myCoverage.size());
+            LOG_DEBUG("Graph: We provide sufficient unique coverage (%u nodes) - TRANSMITTING", (unsigned int)myCoverage.size());
             return true;
         }
     }
