@@ -88,9 +88,10 @@ jobs:
 
       # ─────────────────────────────────────────────────────────────────────────
       # Step 3: Auto-label PR type (bugfix/hardware-support/enhancement)
+      # Only skip for spam/ai-generated; still classify needs-review PRs
       # ─────────────────────────────────────────────────────────────────────────
       - name: Classify PR for labeling
-        if: steps.check-labels.outputs.skip_all != 'true' && steps.check-labels.outputs.has_type_label != 'true' && (steps.quality.outputs.response == 'ok' || steps.quality.outputs.response == '')
+        if: steps.check-labels.outputs.skip_all != 'true' && steps.check-labels.outputs.has_type_label != 'true' && steps.quality.outputs.response != 'spam' && steps.quality.outputs.response != 'ai-generated'
         uses: actions/ai-inference@v2
         id: classify
         continue-on-error: true
