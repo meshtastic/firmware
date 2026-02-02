@@ -10,8 +10,9 @@ struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
-    float dutyCycle;
-    float spacing;
+    float dutyCycle;    // modified by getEffectiveDutyCycle
+    float spacing;      // gaps between radio channels
+    float padding;      // padding at each side of the "operating channel"
     uint8_t powerLimit; // Or zero for not set
     bool audioPermitted;
     bool freqSwitching;
