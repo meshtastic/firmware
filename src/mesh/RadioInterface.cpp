@@ -153,12 +153,12 @@ const RegionInfo regions[] = {
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false, false, false, 0, 0, 0, 0, LONG_FAST, PRESETS_STD),
+    RDEF(IN, 865.0f, 867.0f, 100, 0, 0, 30, true, false, false, false, 0, 0, 0, 0, LONG_FAST, PRESETS_STD),
     /*
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 36, true, false, false, false, 0, 0, 0, 0, LONG_FAST, PRESETS_STD),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 0, 36, true, false, false, false, 0, 0, 0, 0, LONG_FAST, PRESETS_STD),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -830,83 +830,13 @@ struct ModemConfig {
     uint8_t cr;
 };
 
-ModemConfig settingsForPreset(bool wide, meshtastic_Config_LoRaConfig_ModemPreset preset)
-{ // Add throttle/dethrottles to each of these?
-    ModemConfig cfg = {0};
-    switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-        cfg.bw = wide ? 1625.0 : 500;
-        cfg.cr = 5;
-        cfg.sf = 7;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        cfg.bw = wide ? 812.5 : 250;
-        cfg.cr = 5;
-        cfg.sf = 7;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        cfg.bw = wide ? 812.5 : 250;
-        cfg.cr = 5;
-        cfg.sf = 8;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-        cfg.bw = wide ? 812.5 : 250;
-        cfg.cr = 5;
-        cfg.sf = 9;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        cfg.bw = wide ? 812.5 : 250;
-        cfg.cr = 5;
-        cfg.sf = 10;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
-        cfg.bw = wide ? 1625.0 : 500;
-        cfg.cr = 8;
-        cfg.sf = 11;
-        break;
-    default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
-        cfg.bw = wide ? 812.5 : 250;
-        cfg.cr = 5;
-        cfg.sf = 11;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        cfg.bw = wide ? 406.25 : 125;
-        cfg.cr = 8;
-        cfg.sf = 11;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        cfg.bw = wide ? 406.25 : 125;
-        cfg.cr = 8;
-        cfg.sf = 12;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST:
-        cfg.bw = 125;
-        cfg.cr = 5;
-        cfg.sf = 9;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW:
-        cfg.bw = 125;
-        cfg.cr = 5;
-        cfg.sf = 10;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST:
-        cfg.bw = 62.5;
-        cfg.cr = 6;
-        cfg.sf = 7;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
-        cfg.bw = 62.5;
-        cfg.cr = 6;
-        cfg.sf = 8;
-        break;
-    }
-    return cfg;
-}
-
 bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfig)
 {
     bool validConfig = true;
     char err_string[160];
+    float bw;
+    uint8_t sf;
+    uint8_t cr;
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     if (!newRegion) { // copilot said I had to check for null pointer
@@ -930,7 +860,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         return false;
     }
 
-    auto cfg = settingsForPreset(newRegion->wideLora, loraConfig.modem_preset);
+    modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, cr);
 
     // early check - if we use preset, make sure it's on available preset list
     if (loraConfig.use_preset) {
@@ -959,15 +889,10 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
             snprintf(cn->message, sizeof(cn->message), "%s", err_string);
             service->sendClientNotification(cn);
             return false;
+        } else {
+            bw = loraConfig.bandwidth;
         }
     } // end if use_preset
-
-    float bw;
-    if (loraConfig.use_preset) {
-        bw = cfg.bw;
-    } else {
-        bw = loraConfig.bandwidth;
-    }
 
     // this is probably wrong (?) as you can still select last channel in a band, set
     // wide bandwidth and transmit outside the band and the check will not catch it // phaseloop
@@ -1018,69 +943,22 @@ void RadioInterface::applyModemConfig()
         if (!validateModemConfig(loraConfig)) {
             loraConfig.modem_preset = newRegion->defaultPreset;
         }
-
-        auto settings = settingsForPreset(myRegion->wideLora, loraConfig.modem_preset);
-        sf = settings.sf;
-        bw = settings.bw;
+        uint8_t newcr;
+        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
-        if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < settings.cr) {
-            cr = settings.cr;
+        if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
+
             LOG_INFO("Default Coding Rate is higher than custom setting, using %u", cr);
         }
         // If the custom CR is higher than the preset, use it
-        else if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate > settings.cr) {
+        else if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate > newcr) {
             cr = loraConfig.coding_rate;
             LOG_INFO("Using custom Coding Rate %u", cr);
         } else {
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
-            bw = loraConfig.bandwidth;
-
-            if (bw == 31) // This parameter is not an integer
-                bw = 31.25;
-            if (bw == 62) // Fix for 62.5Khz bandwidth
-                bw = 62.5;
-            if (bw == 200)
-                bw = 203.125;
-            if (bw == 400)
-                bw = 406.25;
-            if (bw == 800)
-                bw = 812.5;
-            if (bw == 1600)
-                bw = 1625.0;
+            bw = bwCodeToKHz(loraConfig.bandwidth);
         }
-
-        if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-            const float regionSpanKHz = (myRegion->freqEnd - myRegion->freqStart) * 1000.0f;
-            const float requestedBwKHz = bw;
-            const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
-            const char *presetName =
-                DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-
-            char err_string[160];
-            if (isWideRequest) {
-                snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to LongFast.",
-                         myRegion->name, presetName);
-            } else {
-                snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to LongFast.",
-                         myRegion->name, regionSpanKHz, requestedBwKHz);
-            }
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            snprintf(cn->message, sizeof(cn->message), "%s", err_string);
-            service->sendClientNotification(cn);
-
-            // Set to default modem preset
-            loraConfig.use_preset = true;
-        }
-
-        auto settings = settingsForPreset(myRegion->wideLora, loraConfig.modem_preset);
-        sf = settings.sf;
-        cr = settings.cr;
-        bw = settings.bw;
     }
 
     power = loraConfig.tx_power;
@@ -1149,7 +1027,7 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
-}
+} // end of applyModemConfig
 
 /** Slottime is the time to detect a transmission has started, consisting of:
   - CAD duration;
@@ -1190,7 +1068,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     size_t num_pa_points = portduino_config.num_pa_points;
     const uint16_t *tx_gain = portduino_config.tx_gain_lora;
 #else
-    size_t num_pa_points = NUM_PA_POINTS;
+    int num_pa_points = NUM_PA_POINTS;
     const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
 #endif
 
