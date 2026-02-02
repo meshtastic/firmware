@@ -37,8 +37,8 @@ void initVariant()
     digitalWrite(KEY_POWER, HIGH);
     pinMode(RGB_POWER, OUTPUT);
     digitalWrite(RGB_POWER, HIGH);
-    pinMode(green_LED_PIN, OUTPUT);
-    digitalWrite(green_LED_PIN, LED_STATE_OFF);
+    pinMode(LED_GREEN, OUTPUT);
+    digitalWrite(LED_GREEN, LED_STATE_OFF);
     pinMode(LED_BLUE, OUTPUT);
     pinMode(PIN_POWER_USB, INPUT);
     pinMode(PIN_POWER_DONE, INPUT);
@@ -63,15 +63,26 @@ void initVariant()
 // called from main-nrf52.cpp during the cpuDeepSleep() function
 void variant_shutdown()
 {
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_GREEN, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+
+    digitalWrite(PIN_EN1, LOW);
+    digitalWrite(PIN_EN2, LOW);
     digitalWrite(EEPROM_POWER, LOW);
     digitalWrite(KEY_POWER, LOW);
+    digitalWrite(DHT_POWER, LOW);
+    digitalWrite(ACC_POWER, LOW);
+    digitalWrite(Battery_POWER, LOW);
+    digitalWrite(GPS_POWER, LOW);
 
+    // This sets the pin to OUTPUT and LOW for the pins *not* in the if block.
     for (int pin = 0; pin < 48; pin++) {
         if (pin == PIN_POWER_USB || pin == BUTTON_PIN || pin == PIN_EN1 || pin == PIN_EN2 || pin == DHT_POWER ||
             pin == ACC_POWER || pin == Battery_POWER || pin == GPS_POWER || pin == LR1110_SPI_MISO_PIN ||
             pin == LR1110_SPI_MOSI_PIN || pin == LR1110_SPI_SCK_PIN || pin == LR1110_SPI_NSS_PIN || pin == LR1110_BUSY_PIN ||
-            pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == green_LED_PIN ||
-            pin == red_LED_PIN || pin == LED_BLUE) {
+            pin == LR1110_NRESET_PIN || pin == LR1110_IRQ_PIN || pin == GPS_TX_PIN || pin == GPS_RX_PIN || pin == LED_GREEN ||
+            pin == LED_RED || pin == LED_BLUE) {
             continue;
         }
         pinMode(pin, OUTPUT);
