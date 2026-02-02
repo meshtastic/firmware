@@ -514,6 +514,8 @@ void RadioLibInterface::handleReceiveInterrupt()
 
 void RadioLibInterface::startReceive()
 {
+    // Note the updated timestamp, to avoid unneeded AGC resets
+    last_listen = millis();
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
