@@ -701,11 +701,6 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
 }
 bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_SignalRoutingInfo *p)
 {
-    // Inactive SR roles don't participate in routing decisions - skip processing topology broadcasts from others
-    if (!isActiveRoutingRole()) {
-        LOG_DEBUG("[SR] Inactive role: Skipping topology broadcast processing from %08x", mp.from);
-        return false;
-    }
     // Reject packets from invalid node IDs (0 is invalid)
     if (mp.from == 0) {
         LOG_INFO("[SR] Ignoring SR broadcast from invalid node ID 0 in handleReceivedProtobuf");
@@ -720,6 +715,7 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     getNodeDisplayName(mp.from, senderName, sizeof(senderName));
 
     // Mark sender based on their claimed SR capability
+    // ALL nodes (active and passive) should track capability status of other SR nodes
     CapabilityStatus newStatus = p->signal_routing_active ? CapabilityStatus::SRactive : CapabilityStatus::Passive;
     CapabilityStatus oldStatus = getCapabilityStatus(mp.from);
     trackNodeCapability(mp.from, newStatus);
@@ -727,6 +723,14 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
     if (oldStatus != newStatus) {
         LOG_INFO("[SR] Capability update: %s changed from %d to %d",
                 senderName, (int)oldStatus, (int)newStatus);
+    }
+
+    // Inactive SR roles don't participate in routing decisions - skip topology learning from broadcasts
+    // But they still tracked the sender's capability above
+    if (!isActiveRoutingRole()) {
+        LOG_DEBUG("[SR] Passive role: Tracking capability from %s but not processing topology (node count %d)",
+                  senderName, p->neighbors_count);
+        return false;
     }
 
     if (p->neighbors_count == 0) {
@@ -3498,13 +3502,34 @@ bool SignalRoutingModule::isActiveRoutingRole() const
 bool SignalRoutingModule::canSendTopology() const
 {
     // Returns true if this node can send topology broadcasts
-    // This includes active routing roles plus CLIENT_MUTE
-    return isActiveRoutingRole() || config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE;
+    // This includes:
+    // - Active routing roles (ROUTER, REPEATER, CLIENT, etc.)
+    // - Passive roles (CLIENT_MUTE, TRACKER, SENSOR, TAK, etc.) to announce themselves as SR-aware
+    switch (config.device.role) {
+    // Active routing roles
+    case meshtastic_Config_DeviceConfig_Role_ROUTER:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT:
+    case meshtastic_Config_DeviceConfig_Role_REPEATER:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
+    // Passive roles that participate in SR
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE:
+    case meshtastic_Config_DeviceConfig_Role_TRACKER:
+    case meshtastic_Config_DeviceConfig_Role_SENSOR:
+    case meshtastic_Config_DeviceConfig_Role_TAK:
+    case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN:
+        return true;
+    default:
+        return false;
+    }
 }
 
 SignalRoutingModule::CapabilityStatus SignalRoutingModule::capabilityFromRole(
     meshtastic_Config_DeviceConfig_Role role) const
 {
+    // Passive roles that participate in SR (can send topology broadcasts)
     switch (role) {
     case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE:
     case meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN:
@@ -3512,6 +3537,8 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::capabilityFromRole(
     case meshtastic_Config_DeviceConfig_Role_SENSOR:
     case meshtastic_Config_DeviceConfig_Role_TAK:
     case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+        return CapabilityStatus::Passive;
+    // Fully mute roles don't participate in SR
     case meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND:
         return CapabilityStatus::Legacy;
     default:
@@ -3738,10 +3765,10 @@ SignalRoutingModule::CapabilityStatus SignalRoutingModule::getCapabilityStatus(N
 
         if (isActiveRoutingRole()) {
             return CapabilityStatus::SRactive;  // Active routing roles are SR-active
-        } else if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
-            return CapabilityStatus::Passive;  // CLIENT_MUTE is SR-aware but doesn't relay
+        } else if (canSendTopology()) {
+            return CapabilityStatus::Passive;  // Can send topology (passive roles)
         } else {
-            return CapabilityStatus::Legacy;  // Fully mute roles don't participate in SR
+            return CapabilityStatus::Legacy;  // Can't send topology, doesn't participate in SR
         }
     }
 
