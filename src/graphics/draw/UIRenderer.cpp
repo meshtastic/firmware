@@ -290,7 +290,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 // * Favorite Node Info *
 // **********************
-void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawFavoriteNode(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     if (favoritedNodes.empty())
         return;
