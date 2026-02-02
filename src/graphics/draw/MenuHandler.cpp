@@ -59,17 +59,18 @@ BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOp
 } // namespace
 
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
+uint32_t menuHandler::pickedNodeNum = 0;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "LoRa Region"};
-    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, lora_picker = 3 };
+    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
+    enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, frequency_slot = 3, lora_picker = 4 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
@@ -77,6 +78,8 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::device_role_picker;
         } else if (selected == radio_preset_picker) {
             menuHandler::menuQueue = menuHandler::radio_preset_picker;
+        } else if (selected == frequency_slot) {
+            menuHandler::menuQueue = menuHandler::frequency_slot;
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
         }
@@ -247,6 +250,69 @@ void menuHandler::DeviceRolePicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::FrequencySlotPicker()
+{
+
+    enum ReplyOptions : int { Back = -1 };
+    constexpr int MAX_CHANNEL_OPTIONS = 202;
+    static const char *optionsArray[MAX_CHANNEL_OPTIONS];
+    static int optionsEnumArray[MAX_CHANNEL_OPTIONS];
+    static char channelText[MAX_CHANNEL_OPTIONS - 1][12];
+    int options = 0;
+    optionsArray[options] = "Back";
+    optionsEnumArray[options++] = Back;
+    optionsArray[options] = "Slot 0 (Auto)";
+    optionsEnumArray[options++] = 0;
+
+    // Calculate number of channels (copied from RadioInterface::applyModemConfig())
+    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+    double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
+                                      : bwCodeToKHz(loraConfig.bandwidth);
+
+    uint32_t numChannels = 0;
+    if (myRegion) {
+        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
+    } else {
+        LOG_WARN("Region not set, cannot calculate number of channels");
+        return;
+    }
+
+    if (numChannels > (uint32_t)(MAX_CHANNEL_OPTIONS - 2))
+        numChannels = (uint32_t)(MAX_CHANNEL_OPTIONS - 2);
+
+    for (uint32_t ch = 1; ch <= numChannels; ch++) {
+        snprintf(channelText[ch - 1], sizeof(channelText[ch - 1]), "Slot %lu", (unsigned long)ch);
+        optionsArray[options] = channelText[ch - 1];
+        optionsEnumArray[options++] = (int)ch;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Frequency Slot";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+
+    // Start highlight on current channel if possible, otherwise on "1"
+    int initial = (int)config.lora.channel_num + 1;
+    if (initial < 2 || initial > (int)numChannels + 1)
+        initial = 1;
+    bannerOptions.InitialSelected = initial;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::lora_Menu;
+            screen->runNow();
+            return;
+        }
+
+        config.lora.channel_num = selected;
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    };
+
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::RadioPresetPicker()
 {
     static const RadioPresetOption presetOptions[] = {
@@ -277,6 +343,8 @@ void menuHandler::RadioPresetPicker()
             }
 
             config.lora.modem_preset = option.value;
+            config.lora.channel_num = 0;        // Reset to default channel for the preset
+            config.lora.override_frequency = 0; // Clear any custom frequency
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
@@ -449,7 +517,7 @@ void menuHandler::clockMenu()
 }
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, ViewMode, DeleteAll, DeleteOldest, ReplyMenu, MuteChannel, Aloud, enumEnd };
+    enum optionsNumbers { Back = 0, ViewMode, DeleteMenu, ReplyMenu, MuteChannel, Aloud, enumEnd };
 
     static const char *optionsArray[enumEnd];
     static int optionsEnumArray[enumEnd];
@@ -479,7 +547,7 @@ void menuHandler::messageResponseMenu()
 
     // Delete submenu
     optionsArray[options] = "Delete";
-    optionsEnumArray[options++] = 900;
+    optionsEnumArray[options++] = DeleteMenu;
 
 #ifdef HAS_I2S
     optionsArray[options] = "Read Aloud";
@@ -520,33 +588,9 @@ void menuHandler::messageResponseMenu()
                 nodeDB->saveToDisk();
             }
 
-            // Delete submenu
-        } else if (selected == 900) {
+        } else if (selected == DeleteMenu) {
             menuHandler::menuQueue = menuHandler::delete_messages_menu;
             screen->runNow();
-
-            // Delete oldest FIRST (only change)
-        } else if (selected == DeleteOldest) {
-            auto mode = graphics::MessageRenderer::getThreadMode();
-            int ch = graphics::MessageRenderer::getThreadChannel();
-            uint32_t peer = graphics::MessageRenderer::getThreadPeer();
-
-            if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
-                // Global oldest
-                messageStore.deleteOldestMessage();
-            } else if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
-                // Oldest in current channel
-                messageStore.deleteOldestMessageInChannel(ch);
-            } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
-                // Oldest in current DM
-                messageStore.deleteOldestMessageWithPeer(peer);
-            }
-
-            // Delete all messages
-        } else if (selected == DeleteAll) {
-            messageStore.clearAllMessages();
-            graphics::MessageRenderer::clearThreadRegistries();
-            graphics::MessageRenderer::clearMessageCache();
 
 #ifdef HAS_I2S
         } else if (selected == Aloud) {
@@ -716,7 +760,6 @@ void menuHandler::deleteMessagesMenu()
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteOldestMessageWithPeer(peer);
             }
-
             return;
         }
 
@@ -729,7 +772,6 @@ void menuHandler::deleteMessagesMenu()
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 messageStore.deleteAllMessagesWithPeer(peer);
             }
-
             return;
         }
     };
@@ -1239,20 +1281,13 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    optionsArray[options] = "Add Favorite";
-    optionsEnumArray[options++] = Favorite;
-    optionsArray[options] = "Trace Route";
-    optionsEnumArray[options++] = TraceRoute;
-
-    if (currentResolution != ScreenResolution::UltraLow) {
-        optionsArray[options] = "Key Verification";
-        optionsEnumArray[options++] = Verify;
-    }
+    optionsArray[options] = "Node Actions / Settings";
+    optionsEnumArray[options++] = NodePicker;
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Show Long/Short Name";
@@ -1267,21 +1302,168 @@ void menuHandler::nodeListMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Favorite) {
-            menuQueue = add_favorite;
-            screen->runNow();
-        } else if (selected == Verify) {
-            menuQueue = key_verification_init;
+        if (selected == NodePicker) {
+            menuQueue = NodePicker_menu;
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
             screen->runNow();
-        } else if (selected == TraceRoute) {
-            menuQueue = trace_route_menu;
-            screen->runNow();
         } else if (selected == NodeNameLength) {
             menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::NodePicker()
+{
+    const char *NODE_PICKER_TITLE;
+    if (currentResolution == ScreenResolution::UltraLow) {
+        NODE_PICKER_TITLE = "Pick Node";
+    } else {
+        NODE_PICKER_TITLE = "Pick A Node";
+    }
+    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
+        LOG_INFO("Nodenum: %u", nodenum);
+        // Store the selection so the Manage Node menu knows which node to operate on
+        menuHandler::pickedNodeNum = nodenum;
+        // Keep UI favorite context in sync (used elsewhere for some node-based actions)
+        graphics::UIRenderer::currentFavoriteNodeNum = nodenum;
+        menuQueue = Manage_Node_menu;
+        screen->runNow();
+    });
+}
+
+void menuHandler::ManageNodeMenu()
+{
+    // If we don't have a node selected yet, go fast exit
+    auto node = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+    if (!node) {
+        return;
+    }
+    enum optionsNumbers { Back, Favorite, Mute, TraceRoute, KeyVerification, Ignore, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
+
+    if (node->is_favorite) {
+        optionsArray[options] = "Unfavorite";
+    } else {
+        optionsArray[options] = "Favorite";
+    }
+    optionsEnumArray[options++] = Favorite;
+
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    if (isMuted) {
+        optionsArray[options] = "Unmute Notifications";
+    } else {
+        optionsArray[options] = "Mute Notifications";
+    }
+    optionsEnumArray[options++] = Mute;
+
+    optionsArray[options] = "Trace Route";
+    optionsEnumArray[options++] = TraceRoute;
+
+    optionsArray[options] = "Key Verification";
+    optionsEnumArray[options++] = KeyVerification;
+
+    if (node->is_ignored) {
+        optionsArray[options] = "Unignore Node";
+    } else {
+        optionsArray[options] = "Ignore Node";
+    }
+    optionsEnumArray[options++] = Ignore;
+
+    BannerOverlayOptions bannerOptions;
+
+    std::string title = "";
+    if (node->has_user && node->user.long_name && node->user.long_name[0]) {
+        title += sanitizeString(node->user.long_name).substr(0, 15);
+    } else {
+        char buf[20];
+        snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
+        title += buf;
+    }
+    bannerOptions.message = title.c_str();
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuQueue = node_base_menu;
+            screen->runNow();
+            return;
+        }
+
+        if (selected == Favorite) {
+            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            if (!n) {
+                return;
+            }
+            if (n->is_favorite) {
+                LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
+                nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
+            } else {
+                LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
+                nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
+            }
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            return;
+        }
+
+        if (selected == Mute) {
+            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            if (!n) {
+                return;
+            }
+
+            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
+                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
+                LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
+            } else {
+                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
+                LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
+            }
+            nodeDB->notifyObservers(true);
+            nodeDB->saveToDisk();
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            return;
+        }
+
+        if (selected == TraceRoute) {
+            LOG_INFO("Starting traceroute to %08X", menuHandler::pickedNodeNum);
+            if (traceRouteModule) {
+                traceRouteModule->startTraceRoute(menuHandler::pickedNodeNum);
+            }
+            return;
+        }
+
+        if (selected == KeyVerification) {
+            LOG_INFO("Initiating key verification with %08X", menuHandler::pickedNodeNum);
+            if (keyVerificationModule) {
+                keyVerificationModule->sendInitialRequest(menuHandler::pickedNodeNum);
+            }
+            return;
+        }
+
+        if (selected == Ignore) {
+            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            if (!n) {
+                return;
+            }
+
+            if (n->is_ignored) {
+                n->is_ignored = false;
+                LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
+            } else {
+                n->is_ignored = true;
+                LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
+            }
+            nodeDB->notifyObservers(true);
+            nodeDB->saveToDisk();
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            return;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -1315,6 +1497,7 @@ void menuHandler::nodeNameLengthMenu()
                                                        }
 
                                                        config.display.use_long_node_name = option.value;
+                                                       saveUIConfig();
                                                        LOG_INFO("Setting names to %s", option.value ? "long" : "short");
                                                    });
 
@@ -1984,21 +2167,6 @@ void menuHandler::shutdownMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::addFavoriteMenu()
-{
-    const char *NODE_PICKER_TITLE;
-    if (currentResolution == ScreenResolution::UltraLow) {
-        NODE_PICKER_TITLE = "Node Favorite";
-    } else {
-        NODE_PICKER_TITLE = "Node To Favorite";
-    }
-    screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
-        LOG_WARN("Nodenum: %u", nodenum);
-        nodeDB->set_favorite(true, nodenum);
-        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-    });
-}
-
 void menuHandler::removeFavoriteMenu()
 {
 
@@ -2273,7 +2441,8 @@ void menuHandler::FrameToggles_menu()
         lora,
         clock,
         show_favorites,
-        show_telemetry,
+        show_env_telemetry,
+        show_aq_telemetry,
         show_power,
         enumEnd
     };
@@ -2318,8 +2487,11 @@ void menuHandler::FrameToggles_menu()
     optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
     optionsEnumArray[options++] = show_favorites;
 
-    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Telemetry" : "Show Telemetry";
-    optionsEnumArray[options++] = show_telemetry;
+    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Env. Telemetry" : "Show Env. Telemetry";
+    optionsEnumArray[options++] = show_env_telemetry;
+
+    optionsArray[options] = moduleConfig.telemetry.air_quality_screen_enabled ? "Hide AQ Telemetry" : "Show AQ Telemetry";
+    optionsEnumArray[options++] = show_aq_telemetry;
 
     optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
     optionsEnumArray[options++] = show_power;
@@ -2382,8 +2554,12 @@ void menuHandler::FrameToggles_menu()
             screen->toggleFrameVisibility("show_favorites");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
-        } else if (selected == show_telemetry) {
+        } else if (selected == show_env_telemetry) {
             moduleConfig.telemetry.environment_screen_enabled = !moduleConfig.telemetry.environment_screen_enabled;
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_aq_telemetry) {
+            moduleConfig.telemetry.air_quality_screen_enabled = !moduleConfig.telemetry.air_quality_screen_enabled;
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_power) {
@@ -2441,6 +2617,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case radio_preset_picker:
         RadioPresetPicker();
+        break;
+    case frequency_slot:
+        FrequencySlotPicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);
@@ -2510,8 +2689,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case shutdown_menu:
         shutdownMenu();
         break;
-    case add_favorite:
-        addFavoriteMenu();
+    case NodePicker_menu:
+        NodePicker();
+        break;
+    case Manage_Node_menu:
+        ManageNodeMenu();
         break;
     case remove_favorite:
         removeFavoriteMenu();

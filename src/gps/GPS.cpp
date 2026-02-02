@@ -896,18 +896,21 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-
-// Determine the new value for the pin
-// Normally: active HIGH for awake
-#ifdef PIN_GPS_STANDBY_INVERTED
-    bool val = standby;
-#else
-    bool val = !standby;
-#endif
+    bool val;
+    if (standby)
+        val = GPS_STANDBY_ACTIVE;
+    else
+        val = !GPS_STANDBY_ACTIVE;
 
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, val);
+
+    // Enter backup mode on PA1010D; TODO: may be applicable to other MTK GPS too
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_MTK_PA1010D)) {
+        _serial_gps->write("$PMTK225,4*2F\r\n");
+    }
+
 #ifdef GPS_DEBUG
     LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
