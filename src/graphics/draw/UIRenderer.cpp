@@ -361,6 +361,35 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, const OLEDDisplayUiState
 
         if (found) {
             std::string statusLine = std::string(" Status: ") + found->statusText;
+            {
+                const int screenW = display->getWidth();
+                const int ellipseW = display->getStringWidth("...");
+                int w = display->getStringWidth(statusLine.c_str());
+
+                // Only do work if it overflows
+                if (w > screenW) {
+                    bool truncated = false;
+                    if (ellipseW > screenW) {
+                        statusLine.clear();
+                    } else {
+                        while (!statusLine.empty()) {
+                            // remove one char (byte) at a time
+                            statusLine.pop_back();
+                            truncated = true;
+
+                            // Measure candidate with ellipsis appended
+                            std::string candidate = statusLine + "...";
+                            if (display->getStringWidth(candidate.c_str()) <= screenW) {
+                                statusLine = std::move(candidate);
+                                break;
+                            }
+                        }
+                        if (statusLine.empty() && ellipseW <= screenW) {
+                            statusLine = "...";
+                        }
+                    }
+                }
+            }
             display->drawString(x, getTextPositions(display)[line++], statusLine.c_str());
         }
     }
