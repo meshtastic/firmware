@@ -314,6 +314,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // Override variant or default ADC_MULTIPLIER if we have the override pref
         float operativeAdcMultiplier =
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
+
+        // Reset filter if multiplier changed (allows runtime calibration to take effect immediately)
+        if (last_adc_multiplier != operativeAdcMultiplier) {
+            initial_read_done = false;
+            last_adc_multiplier = operativeAdcMultiplier;
+        }
+
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
@@ -520,6 +527,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+    // Track last used ADC multiplier to reset filter when config changes at runtime
+    float last_adc_multiplier = 0;
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 
