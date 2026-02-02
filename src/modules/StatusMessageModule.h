@@ -21,8 +21,8 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
         }
         // TODO: If we have a string, set the initial delay (15 minutes maybe)
 
-        // Keep vector from reallocating as we fill up to MAX_RECENT
-        recentReceived.reserve(MAX_RECENT);
+        // Keep vector from reallocating as we fill up to MAX_RECENT_STATUSMESSAGES
+        recentReceived.reserve(MAX_RECENT_STATUSMESSAGES);
     }
 
     virtual int32_t runOnce() override;
@@ -40,7 +40,7 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
   private:
-    static constexpr size_t MAX_RECENT = 5;
+    static constexpr size_t MAX_RECENT_STATUSMESSAGES = 20;
     std::vector<RecentStatus> recentReceived;
 };
 

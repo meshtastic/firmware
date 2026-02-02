@@ -3,6 +3,9 @@
 #include "CompassRenderer.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#if !MESHTASTIC_EXCLUDE_STATUS
+#include "modules/StatusMessageModule.h"
+#endif
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
@@ -90,8 +93,41 @@ const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
 
     // 1) Choose target candidate (long vs short) only if present
     const char *raw = nullptr;
-    if (node && node->has_user) {
-        raw = config.display.use_long_node_name ? node->user.long_name : node->user.short_name;
+
+#if !MESHTASTIC_EXCLUDE_STATUS
+    // If long-name mode is enabled, and we have a recent status for this node,
+    // prefer "(short_name) statusText" as the raw candidate.
+    std::string composedFromStatus;
+    if (config.display.use_long_node_name && node && node->has_user && statusMessageModule) {
+        const auto &recent = statusMessageModule->getRecentReceived();
+        const StatusMessageModule::RecentStatus *found = nullptr;
+        for (auto it = recent.rbegin(); it != recent.rend(); ++it) {
+            if (it->fromNodeId == node->num && !it->statusText.empty()) {
+                found = &(*it);
+                break;
+            }
+        }
+
+        if (found) {
+            const char *shortName = node->user.short_name;
+            composedFromStatus.reserve(4 + (shortName ? std::strlen(shortName) : 0) + 1 + found->statusText.size());
+            composedFromStatus += "(";
+            if (shortName && *shortName) {
+                composedFromStatus += shortName;
+            }
+            composedFromStatus += ") ";
+            composedFromStatus += found->statusText;
+
+            raw = composedFromStatus.c_str(); // safe for now; we'll sanitize immediately into std::string
+        }
+    }
+#endif
+
+    // If we didn't compose from status, use normal long/short selection
+    if (!raw) {
+        if (node && node->has_user) {
+            raw = config.display.use_long_node_name ? node->user.long_name : node->user.short_name;
+        }
     }
 
     // 2) Sanitize (empty if raw is null/empty)

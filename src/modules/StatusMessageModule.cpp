@@ -42,8 +42,8 @@ ProcessMessage StatusMessageModule::handleReceived(const meshtastic_MeshPacket &
 
             recentReceived.push_back(std::move(entry));
 
-            // Keep only last MAX_RECENT
-            if (recentReceived.size() > MAX_RECENT) {
+            // Keep only last MAX_RECENT_STATUSMESSAGES
+            if (recentReceived.size() > MAX_RECENT_STATUSMESSAGES) {
                 recentReceived.erase(recentReceived.begin()); // drop oldest
             }
         }
