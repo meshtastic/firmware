@@ -34,31 +34,6 @@ template <typename TelemetryType> class TelemetryDatabase
         uint32_t delivered;     // Count delivered records
     };
 
-    /**
-     * Helper to serialize database to protobuf snapshot
-     * @param records The records to serialize
-     * @return Serialized protobuf snapshot
-     */
-    static meshtastic_TelemetryDatabase serializeToProtobuf(const std::vector<DatabaseRecord> &records)
-    {
-        meshtastic_TelemetryDatabase snapshot = {};
-
-        // Note: Actual implementation in derived classes
-        return snapshot;
-    }
-
-    /**
-     * Helper to deserialize protobuf snapshot to database records
-     * @param snapshot The protobuf snapshot
-     * @return Vector of deserialized records
-     */
-    static std::vector<DatabaseRecord> deserializeFromProtobuf(const meshtastic_TelemetryDatabase &snapshot)
-    {
-        std::vector<DatabaseRecord> records;
-        // Note: Actual implementation in derived classes
-        return records;
-    }
-
     virtual ~TelemetryDatabase() = default;
 
     /**

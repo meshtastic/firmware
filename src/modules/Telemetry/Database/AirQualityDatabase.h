@@ -19,7 +19,8 @@ class AirQualityDatabase : public TelemetryDatabase<meshtastic_AirQualityMetrics
 {
   private:
     static constexpr uint32_t MAX_RECORDS = 10; // Maximum records to store in memory
-    static constexpr const char *STORAGE_KEY = "/telemetry_db/air_quality";
+    const char *STORAGE_KEY = "/telemetry_db/air_quality";
+    meshtastic_TelemetryDatabase meshtastic_telemetryDB = meshtastic_TelemetryDatabase_init_zero;
 
     std::deque<DatabaseRecord> records;
     // concurrency::Lock *recordsLock;

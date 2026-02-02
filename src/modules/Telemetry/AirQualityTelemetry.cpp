@@ -98,9 +98,8 @@ int32_t AirQualityTelemetryModule::runOnce()
 
 #if HAS_NETWORKING && !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
         // Check for MQTT connectivity and attempt recovery if connected
-        LOG_INFO("DB recovery attempt");
         if (mqtt && mqtt->isConnectedDirectly() && !mqttRecoveryAttempted) {
-            LOG_INFO("MQTT is connected, attempting recovery of pending records");
+            LOG_INFO("AirQualityTelemetry: database recovery attempt");
             mqttRecoveryAttempted = true;
             recoverMQTTRecords();
         }
@@ -320,7 +319,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
         if (m.time == 0) {
-            LOG_WARN("AirQualityTelemetry: Invalid time, not sending telemetry");
+            LOG_WARN("AirQualityTelemetry: Invalid time, not storing aq telemetry db");
         } else {
             // Record to database
             DatabaseRecord dbRecord;
@@ -355,8 +354,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
             // Mark last record as delivered to mesh
             uint32_t recordCount = telemetryDatabase.getRecordCount();
+            LOG_INFO("AirQualityDatabase: current record count %u", recordCount);
             if (recordCount > 0) {
                 telemetryDatabase.markDelivered(recordCount - 1);
+                LOG_INFO("AirQualityDatabase: marking last as delivered");
             }
 #endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
@@ -475,58 +476,61 @@ void AirQualityTelemetryModule::getDatabaseStatsString(char *buffer, size_t buff
              (getTime() - stats.min_timestamp) / 3600.0f);
 }
 
-// /**
-//  * Get mean PM2.5 value from database records
-//  */
-// float AirQualityTelemetryModule::getDatabaseMeanPM25()
-// {
-//     auto stats = telemetryDatabase.getStatistics();
-//     if (stats.records_count == 0)
-//         return 0.0f;
+/**
+ * Get mean PM2.5 value from database records
+ */
+float AirQualityTelemetryModule::getDatabaseMeanPM25 ()
+{
+    auto stats = telemetryDatabase.getStatistics();
+    if (stats.records_count == 0)
+        return 0.0f;
 
-//     auto records = telemetryDatabase.getAllRecords();
-//     uint64_t sum = 0;
-//     for (const auto &record : records) {
-//         sum += record.telemetry.pmsa003idata.pm25_standard;
-//     }
-//     return static_cast<float>(sum) / records.size();
-// }
+    auto records = telemetryDatabase.getAllRecords();
+    uint64_t sum = 0;
 
-// /**
-//  * Get max PM2.5 value from database records
-//  */
-// uint32_t AirQualityTelemetryModule::getDatabaseMaxPM25()
-// {
-//     auto records = telemetryDatabase.getAllRecords();
-//     if (records.empty())
-//         return 0;
+    for (const auto &record : records) {
+        sum += record.telemetry.variant.air_quality_metrics.pmsa003idata.pm25_standard;
+    }
+    return static_cast<float>(sum) / records.size();
+}
 
-//     uint32_t maxVal = 0;
-//     for (const auto &record : records) {
-//         if (record.telemetry.pmsa003idata.pm25_standard > maxVal) {
-//             maxVal = record.telemetry.pmsa003idata.pm25_standard;
-//         }
-//     }
-//     return maxVal;
-// }
+/**
+ * Get max PM2.5 value from database records
+ */
+uint32_t AirQualityTelemetryModule::getDatabaseMaxPM25()
+{
+    auto records = telemetryDatabase.getAllRecords();
+    if (records.empty())
+        return 0;
 
-// /**
-//  * Get min PM2.5 value from database records
-//  */
-// uint32_t AirQualityTelemetryModule::getDatabaseMinPM25()
-// {
-//     auto records = telemetryDatabase.getAllRecords();
-//     if (records.empty())
-//         return 0;
+    uint32_t maxVal = 0;
+    for (const auto &record : records) {
+        uint32_t val = record.telemetry.variant.air_quality_metrics.pmsa003idata.pm25_standard;
+        if (val > maxVal) {
+            maxVal = val;
+        }
+    }
+    return maxVal;
+}
 
-//     uint32_t minVal = records[0].telemetry.pmsa003idata.pm25_standard;
-//     for (const auto &record : records) {
-//         if (record.telemetry.pmsa003idata.pm25_standard < minVal) {
-//             minVal = record.telemetry.pmsa003idata.pm25_standard;
-//         }
-//     }
-//     return minVal;
-// }
+/**
+ * Get min PM2.5 value from database records
+ */
+uint32_t AirQualityTelemetryModule::getDatabaseMinPM25()
+{
+    auto records = telemetryDatabase.getAllRecords();
+    if (records.empty())
+        return 0;
+
+    uint32_t minVal = records[0].telemetry.variant.air_quality_metrics.pmsa003idata.pm25_standard;
+    for (const auto &record : records) {
+        uint32_t val = record.telemetry.variant.air_quality_metrics.pmsa003idata.pm25_standard;
+        if (val < minVal) {
+            minVal = val;
+        }
+    }
+    return minVal;
+}
 #endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 
 #endif
