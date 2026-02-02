@@ -1173,7 +1173,6 @@ void loop()
         !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
         RadioLibInterface::instance->startReceive();
         LOG_DEBUG("attempting AGC reset");
-        last_listen = millis();
     }
 
 #ifdef DEBUG_STACK
