@@ -1169,7 +1169,7 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
-    if (RadioLibInterface::instance != nullptr && last_listen + 1000 * 60 < millis() &&
+    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
         !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
         RadioLibInterface::instance->startReceive();
         LOG_DEBUG("attempting AGC reset");
