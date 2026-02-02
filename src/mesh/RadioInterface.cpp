@@ -237,15 +237,15 @@ const RegionInfo regions[] = {
 
     /*
         EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
-        Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 475 kHz gap between channels, 27 dBm, duty cycle 2.5% (mobile) or 10%
-       (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
+        Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 400 kHz gap plus 37.5 kHz padding between channels, 27 dBm,
+        duty cycle 2.5% (mobile) or 10% (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
     */
     RDEF(EU_866, 865.6f, 867.6f, 2.5, 0.4, 0.0375f, 27, false, false, false, false, 0, 99, 99, 0, LITE_FAST, PRESETS_LITE),
 
     /*
-        EU 868MHz band: 3 channels at 869.415/869.4925/869.570 MHz
-        Channel centres at 869.442/869.524/869.606 MHz,
-        10 kHz padding on channels, 27 dBm, duty cycle 10%
+        EU 868MHz band: 3 channels at 869.410/869.4625/869.577 MHz
+        Channel centres at 869.442/869.525/869.608 MHz,
+        10.4 kHz padding on channels, 27 dBm, duty cycle 10%
     */
     RDEF(NARROW_868, 869.4f, 869.65f, 10, 0, 0.0104f, 27, false, false, false, false, 0, 0, 0, 1, NARROW_FAST, PRESETS_NARROW),
 
