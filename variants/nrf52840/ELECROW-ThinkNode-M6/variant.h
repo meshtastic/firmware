@@ -40,11 +40,10 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define LED_BUILTIN -1
 #define LED_BLUE -1
 #define LED_CHARGE (12)
 #define LED_PAIRING (7)
-#define PIN_LED2 LED_PAIRING
+#define LED_NOTIFICATION LED_PAIRING
 
 #define LED_STATE_ON HIGH
 #define LED_STATE_OFF LOW
@@ -121,8 +120,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL2_TX (24)
 
 // PCF8563 RTC Module
-// REVISIT https://github.com/meshtastic/firmware/pull/9084
-// #define PCF8563_RTC 0x51
+#define PCF8563_RTC 0x51
+#define HAS_RTC 1
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
