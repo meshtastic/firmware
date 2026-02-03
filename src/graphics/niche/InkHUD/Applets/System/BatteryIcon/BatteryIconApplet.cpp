@@ -68,33 +68,44 @@ void InkHUD::BatteryIconApplet::onRender(bool full)
     // =====================
 
     // Positive terminal "bump"
-    const int16_t &bumpL = l;
+    constexpr uint16_t bumpW = 2;
+    const int16_t &bumpL =
+        l +
+        (settings->optionalFeatures.batteryIconMirrored ? w - bumpW : 0); // If mirrored, draw bump at the right. else draw left
     const uint16_t bumpH = h / 2;
     const int16_t bumpT = m - (bumpH / 2);
-    constexpr uint16_t bumpW = 2;
     fillRect(bumpL, bumpT, bumpW, bumpH, BLACK);
 
     // Main body of battery
-    const int16_t bodyL = bumpL + bumpW;
+    const int16_t bodyL =
+        l + (settings->optionalFeatures.batteryIconMirrored ? 0 : bumpW); // If mirrored, draw battery at left. else draw offset
     const int16_t &bodyT = t;
     const int16_t &bodyH = h;
     const int16_t bodyW = w - bumpW;
     drawRect(bodyL, bodyT, bodyW, bodyH, BLACK);
 
     // Erase join between bump and body
-    drawLine(bodyL, bumpT, bodyL, bumpT + bumpH - 1, WHITE);
+    if (settings->optionalFeatures.batteryIconMirrored == false) { // Draw normally if not mirrored, else draw line at body end
+        drawLine(bodyL, bumpT, bodyL, bumpT + bumpH - 1, WHITE);
+    } else {
+        drawLine(bodyL + bodyW - 1, bumpT, bodyL + bodyW - 1, bumpT + bumpH - 1, WHITE);
+    }
 
     // ===================
     // Draw battery level
     // ===================
 
     constexpr int16_t slicePad = 2;
-    const int16_t sliceL = bodyL + slicePad;
+    int16_t sliceL = bodyL + slicePad;
     const int16_t sliceT = bodyT + slicePad;
     const uint16_t sliceH = bodyH - (slicePad * 2);
     uint16_t sliceW = bodyW - (slicePad * 2);
 
     sliceW = (sliceW * socRounded) / 100; // Apply percentage
+
+    if (settings->optionalFeatures.batteryIconMirrored ==
+        false) // If battery icon is not mirrored, offset it to drain from button to bottom
+        sliceL += ((bodyW - (slicePad * 2)) - sliceW);
 
     hatchRegion(sliceL, sliceT, sliceW, sliceH, 2, BLACK);
     drawRect(sliceL, sliceT, sliceW, sliceH, BLACK);

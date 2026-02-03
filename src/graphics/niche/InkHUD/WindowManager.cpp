@@ -298,6 +298,13 @@ void InkHUD::WindowManager::toggleBatteryIcon()
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
+// Should the bump be on left (unmirrored) or right (mirrored)
+void InkHUD::WindowManager::mirrorBatteryIcon()
+{
+    settings->optionalFeatures.batteryIconMirrored = !settings->optionalFeatures.batteryIconMirrored;
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+}
+
 // Perform necessary reconfiguration when user changes number of tiles (or rotation) at run-time
 // Call after changing settings.tiles.count
 void InkHUD::WindowManager::changeLayout()

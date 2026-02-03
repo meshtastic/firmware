@@ -83,6 +83,7 @@ class InkHUD
     void rotate();
     void rotateJoystick(uint8_t angle = 1); // rotate 90 deg by default
     void toggleBatteryIcon();
+    void mirrorBatteryIcon();
 
     // Used by TipsApplet to force menu to start on Region selection
     bool forceRegionMenu = false;

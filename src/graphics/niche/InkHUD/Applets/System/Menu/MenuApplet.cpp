@@ -437,6 +437,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->toggleBatteryIcon();
         break;
 
+    case MIRROR_BATTERY_ICON:
+        inkhud->mirrorBatteryIcon();
+        break;
+
     case TOGGLE_BACKLIGHT:
         // Note: backlight is already on in this situation
         // We're marking that it should *remain* on once menu closes
@@ -928,6 +932,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
+        items.push_back(MenuItem("Mirror Battery", MenuAction::MIRROR_BATTERY_ICON, MenuPage::OPTIONS,
+                                 &settings->optionalFeatures.batteryIconMirrored));
         invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
         items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));

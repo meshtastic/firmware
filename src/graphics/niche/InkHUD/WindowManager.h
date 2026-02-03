@@ -37,6 +37,7 @@ class WindowManager
     void prevApplet();
     void rotate();
     void toggleBatteryIcon();
+    void mirrorBatteryIcon();
 
     // - call these to manifest changes already made to the relevant Persistence::Settings values
 

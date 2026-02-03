@@ -268,6 +268,12 @@ void InkHUD::InkHUD::toggleBatteryIcon()
     windowManager->toggleBatteryIcon();
 }
 
+// Mirror the battery indicator in top-right
+void InkHUD::InkHUD::mirrorBatteryIcon()
+{
+    windowManager->mirrorBatteryIcon();
+}
+
 // An applet asking for the display to be updated
 // This does not occur immediately
 // Instead, rendering is scheduled ASAP, for the next Renderer::runOnce call
