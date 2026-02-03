@@ -64,7 +64,7 @@ DACDB getDACandDB(uint8_t dbm)
     const int numValues = sizeof(dbmToDACDB) / sizeof(dbmToDACDB[0]);
 
     // Find the interval dbm falls within and interpolate
-    for (int i = 0; i < numValues - 1; i++) {
+    for (int i = 0; i < numValues - 2; i++) {
         if (dbm >= dbmToDACDB[i].dbm && dbm <= dbmToDACDB[i + 1].dbm) {
             return interpolate(dbm, dbmToDACDB[i].dbm, dbmToDACDB[i + 1].dbm, dbmToDACDB[i].values, dbmToDACDB[i + 1].values);
         }
