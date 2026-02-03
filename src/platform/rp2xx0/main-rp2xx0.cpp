@@ -100,8 +100,10 @@ void getMacAddr(uint8_t *dmac)
 void rp2040Setup()
 {
     /* Sets a random seed to make sure we get different random numbers on each boot. */
-    uint32_t seed = rp2040.hwrand32();
-    HardwareRNG::seed(seed);
+    uint32_t seed = 0;
+    if (!HardwareRNG::seed(seed)) {
+        seed = rp2040.hwrand32();
+    }
     randomSeed(seed);
 
 #ifdef RP2040_SLOW_CLOCK
