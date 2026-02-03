@@ -30,6 +30,9 @@
 #define I2C_SCL 1
 #define I2C_SDA 2
 
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
+
 // GPS pins
 #define GPS_SWITH 10
 #define HAS_GPS 1
