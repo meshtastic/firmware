@@ -235,22 +235,46 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_ota_request_tag: {
 #if defined(ARCH_ESP32)
+        LOG_INFO("OTA Requested");
+
         if (r->ota_request.ota_hash.size != 32) {
             suppressRebootBanner = true;
-            LOG_INFO("OTA Failed: Invalid `ota_hash` provided");
+            sendWarningAndLog("Cannot start OTA: Invalid `ota_hash` provided.");
             break;
         }
 
         meshtastic_OTAMode mode = r->ota_request.reboot_ota_mode;
+        const char *mode_name = (mode == METHOD_OTA_BLE ? "BLE" : "WiFi");
+
+        // Check that we have an OTA partition
+        const esp_partition_t *part = MeshtasticOTA::getAppPartition();
+        if (part == NULL) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("Cannot start OTA: Cannot find OTA Loader partition.");
+            break;
+        }
+
+        static esp_app_desc_t app_desc;
+        if (!MeshtasticOTA::getAppDesc(part, &app_desc)) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("Cannot start OTA: Device does have a valid OTA Loader.");
+            break;
+        }
+
+        if (!MeshtasticOTA::checkOTACapability(&app_desc, mode)) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("OTA Loader does not support %s", mode_name);
+            break;
+        }
+
         if (MeshtasticOTA::trySwitchToOTA()) {
-            LOG_INFO("OTA Requested");
             suppressRebootBanner = true;
             if (screen)
                 screen->startFirmwareUpdateScreen();
             MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
-            LOG_INFO("Rebooting to WiFi OTA");
+            sendWarningAndLog("Rebooting to %s OTA", mode_name);
         } else {
-            LOG_INFO("WIFI OTA Failed");
+            sendWarningAndLog("Unable to switch to the OTA partition.");
         }
 #endif
         int s = 1; // Reboot in 1 second, hard coded
@@ -881,10 +905,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
+    bool shouldReboot = true;
     // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
     // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction &&
-        !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag)) {
+    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
+                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
         disableBluetooth();
     }
 
@@ -976,8 +1001,14 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
+    case meshtastic_ModuleConfig_statusmessage_tag:
+        LOG_INFO("Set module config: StatusMessage");
+        moduleConfig.has_statusmessage = true;
+        moduleConfig.statusmessage = c.payload_variant.statusmessage;
+        shouldReboot = false;
+        break;
     }
-    saveChanges(SEGMENT_MODULECONFIG);
+    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
 }
 
@@ -1155,6 +1186,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_STATUSMESSAGE_CONFIG:
+            LOG_INFO("Get module config: StatusMessage");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
+            res.get_module_config_response.payload_variant.statusmessage = moduleConfig.statusmessage;
             break;
         }
 
@@ -1472,13 +1508,41 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 #endif
 }
 
-void AdminModule::sendWarning(const char *message)
+void AdminModule::sendWarning(const char *format, ...)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+
     cn->level = meshtastic_LogRecord_Level_WARNING;
     cn->time = getValidTime(RTCQualityFromNet);
-    strncpy(cn->message, message, sizeof(cn->message));
+
+    va_list args;
+    va_start(args, format);
+    // Format the arguments directly into the notification object
+    vsnprintf(cn->message, sizeof(cn->message), format, args);
+    va_end(args);
+
     service->sendClientNotification(cn);
+}
+
+void AdminModule::sendWarningAndLog(const char *format, ...)
+{
+    // We need a temporary buffer to hold the formatted text so we can log it
+    // Using 250 bytes as a safe upper limit for typical text notifications
+    char buf[250];
+
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+
+    LOG_WARN(buf);
+    // 2. Call sendWarning
+    // SECURITY NOTE: We pass "%s", buf instead of just 'buf'.
+    // If 'buf' contained a % symbol (e.g. "Battery 50%"), passing it directly
+    // would crash sendWarning. "%s" treats it purely as text.
+    sendWarning("%s", buf);
 }
 
 void disableBluetooth()
