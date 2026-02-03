@@ -40,7 +40,7 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
   private:
-    static constexpr size_t MAX_RECENT_STATUSMESSAGES = 20;
+    static constexpr size_t MAX_RECENT_STATUSMESSAGES = 5;
     std::vector<RecentStatus> recentReceived;
 };
 
