@@ -877,15 +877,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // Send Message (Right side)
                 display->drawRect(x1 + 2 - bubbleW, y1 - bubbleH, bubbleW, bubbleH);
                 // Top Right Corner
-                display->drawRect(x1, topY, 2, 1);
+                display->drawRect(x1 - 1, topY, 2, 1);
                 display->drawRect(x1, topY, 1, 2);
                 // Bottom Right Corner
                 display->drawRect(x1 - 1, bottomY - 2, 2, 1);
                 display->drawRect(x1, bottomY - 3, 1, 2);
                 // Knock the corners off to make a bubble
                 display->setColor(BLACK);
-                display->drawRect(x1 - bubbleW, topY - 1, 1, 1);
-                display->drawRect(x1 - bubbleW, bottomY - 1, 1, 1);
+                display->drawRect(x1 - bubbleW + 2, topY - 1, 1, 1);
+                display->drawRect(x1 - bubbleW + 2, bottomY - 1, 1, 1);
                 display->setColor(WHITE);
             } else {
                 // Received Message (Left Side)
