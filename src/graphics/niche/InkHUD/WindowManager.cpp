@@ -510,8 +510,8 @@ void InkHUD::WindowManager::placeSystemTiles()
     const uint16_t batteryIconWidth = batteryIconHeight * 1.8;
     inkhud->getSystemApplet("BatteryIcon")
         ->getTile()
-        ->setRegion(inkhud->width() - batteryIconWidth-1, // x
-                    1,                                  // y
+        ->setRegion(inkhud->width() - batteryIconWidth - 1, // x
+                    1,                                      // y
                     batteryIconWidth + 1,                   // width
                     batteryIconHeight + 2);                 // height
 

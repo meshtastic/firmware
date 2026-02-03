@@ -56,8 +56,8 @@ void InkHUD::BatteryIconApplet::onRender(bool full)
     // Make icon render with a 1px border on all but the right side
     int16_t l = 1;
     int16_t t = 1;
-    uint16_t w = width()-1; // Handle 1px left pad
-    int16_t h = height()-2; // Handle top/bottom padding
+    uint16_t w = width() - 1; // Handle 1px left pad
+    int16_t h = height() - 2; // Handle top/bottom padding
 
     // Vertical centerline
     const int16_t m = t + (h / 2);
@@ -93,7 +93,7 @@ void InkHUD::BatteryIconApplet::onRender(bool full)
     const uint16_t sliceH = bodyH - (slicePad * 2);
     uint16_t sliceW = bodyW - (slicePad * 2);
 
-    sliceW = (sliceW * socRounded) / 100; // Apply percentage
+    sliceW = (sliceW * socRounded) / 100;          // Apply percentage
     sliceL += ((bodyW - (slicePad * 2)) - sliceW); // Shift slice to the battery's negative terminal, correcting drain direction
 
     hatchRegion(sliceL, sliceT, sliceW, sliceH, 2, BLACK);

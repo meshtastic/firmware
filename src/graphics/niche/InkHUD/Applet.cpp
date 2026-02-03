@@ -791,11 +791,11 @@ void InkHUD::Applet::drawHeader(std::string text)
     // Dither near battery
     if (settings->optionalFeatures.batteryIcon) {
         constexpr uint16_t ditherSizePx = 4;
-        Tile *batteryTile = ((Applet*)inkhud->getSystemApplet("BatteryIcon"))->getTile();
+        Tile *batteryTile = ((Applet *)inkhud->getSystemApplet("BatteryIcon"))->getTile();
         const uint16_t batteryTileLeft = batteryTile->getLeft();
         const uint16_t batteryTileTop = batteryTile->getTop();
         const uint16_t batteryTileHeight = batteryTile->getHeight();
-        hatchRegion(batteryTileLeft-ditherSizePx, batteryTileTop, ditherSizePx, batteryTileHeight, 2, WHITE);
+        hatchRegion(batteryTileLeft - ditherSizePx, batteryTileTop, ditherSizePx, batteryTileHeight, 2, WHITE);
     }
 }
 
