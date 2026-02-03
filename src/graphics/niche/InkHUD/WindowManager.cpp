@@ -273,6 +273,12 @@ void InkHUD::WindowManager::prevApplet()
     inkhud->forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
 }
 
+// Returns active applet
+NicheGraphics::InkHUD::Applet *InkHUD::WindowManager::getActiveApplet()
+{
+    return userTiles.at(settings->userTiles.focused)->getAssignedApplet();
+}
+
 // Rotate the display image by 90 degrees
 void InkHUD::WindowManager::rotate()
 {
