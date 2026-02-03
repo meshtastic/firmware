@@ -69,27 +69,20 @@ void InkHUD::BatteryIconApplet::onRender(bool full)
 
     // Positive terminal "bump"
     constexpr uint16_t bumpW = 2;
-    const int16_t &bumpL =
-        l +
-        (settings->optionalFeatures.batteryIconMirrored ? w - bumpW : 0); // If mirrored, draw bump at the right. else draw left
+    const int16_t &bumpL = l;
     const uint16_t bumpH = h / 2;
     const int16_t bumpT = m - (bumpH / 2);
     fillRect(bumpL, bumpT, bumpW, bumpH, BLACK);
 
     // Main body of battery
-    const int16_t bodyL =
-        l + (settings->optionalFeatures.batteryIconMirrored ? 0 : bumpW); // If mirrored, draw battery at left. else draw offset
+    const int16_t bodyL = l + bumpW;
     const int16_t &bodyT = t;
     const int16_t &bodyH = h;
     const int16_t bodyW = w - bumpW;
     drawRect(bodyL, bodyT, bodyW, bodyH, BLACK);
 
     // Erase join between bump and body
-    if (settings->optionalFeatures.batteryIconMirrored == false) { // Draw normally if not mirrored, else draw line at body end
-        drawLine(bodyL, bumpT, bodyL, bumpT + bumpH - 1, WHITE);
-    } else {
-        drawLine(bodyL + bodyW - 1, bumpT, bodyL + bodyW - 1, bumpT + bumpH - 1, WHITE);
-    }
+    drawLine(bodyL, bumpT, bodyL, bumpT + bumpH - 1, WHITE);
 
     // ===================
     // Draw battery level
@@ -102,10 +95,7 @@ void InkHUD::BatteryIconApplet::onRender(bool full)
     uint16_t sliceW = bodyW - (slicePad * 2);
 
     sliceW = (sliceW * socRounded) / 100; // Apply percentage
-
-    if (settings->optionalFeatures.batteryIconMirrored ==
-        false) // If battery icon is not mirrored, offset it to drain from button to bottom
-        sliceL += ((bodyW - (slicePad * 2)) - sliceW);
+    sliceL += ((bodyW - (slicePad * 2)) - sliceW); // Shift slice to the battery's negative terminal, correcting drain direction
 
     hatchRegion(sliceL, sliceT, sliceW, sliceH, 2, BLACK);
     drawRect(sliceL, sliceT, sliceW, sliceH, BLACK);
