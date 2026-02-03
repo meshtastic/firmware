@@ -25,19 +25,6 @@ bool AirQualityDatabase::init()
 }
 
 /**
- * Convert DatabaseRecord to protobuf TelemetryDatabaseRecord
- */
-meshtastic_TelemetryDatabaseRecord AirQualityDatabase::recordToProtobuf(const DatabaseRecord &record) const
-{
-    meshtastic_TelemetryDatabaseRecord pb = {};
-
-    pb.delivered = record.delivered;
-    pb.telemetry = record.telemetry;
-
-    return pb;
-}
-
-/**
  * Convert protobuf TelemetryDatabaseRecord to DatabaseRecord
  */
 DatabaseRecord AirQualityDatabase::recordFromProtobuf(const meshtastic_TelemetryDatabaseRecord &pb) const
@@ -89,21 +76,15 @@ bool AirQualityDatabase::markDelivered(uint32_t index)
     if (index >= records.size()) {
         return false;
     }
-
-    // recordsLock->lock();
     records[index].delivered = true;
-    // recordsLock->unlock();
     return saveToStorage();
 }
 
 bool AirQualityDatabase::markAllDelivered()
 {
-    // recordsLock->lock();
     for (auto &record : records) {
         record.delivered = true;
     }
-    // recordsLock->unlock();
-
     return saveToStorage();
 }
 
@@ -126,7 +107,7 @@ bool AirQualityDatabase::loadFromStorage()
 {
 #ifdef FSCom
     spiLock->lock();
-
+    meshtastic_TelemetryDatabase meshtastic_telemetry_database = meshtastic_TelemetryDatabase_init_zero;
     // Try to open the database file
     auto file = FSCom.open(STORAGE_KEY, FILE_O_READ);
     if (!file) {
@@ -161,7 +142,7 @@ bool AirQualityDatabase::loadFromStorage()
     pb_istream_t stream = pb_istream_from_buffer(buffer.data(), fileSize);
 
     // Decode the protobuf message
-    if (!pb_decode(&stream, meshtastic_TelemetryDatabase_fields, &meshtastic_telemetryDB)) {
+    if (!pb_decode(&stream, meshtastic_TelemetryDatabase_fields, &meshtastic_telemetry_database)) {
         LOG_ERROR("AirQualityDatabase: Failed to decode snapshot: %s", PB_GET_ERROR(&stream));
         spiLock->unlock();
         return false;
@@ -169,8 +150,8 @@ bool AirQualityDatabase::loadFromStorage()
 
     // Clear existing records and load from snapshot
     records.clear();
-    for (uint32_t i = 0; i < meshtastic_telemetryDB.records_count; i++) {
-        DatabaseRecord record = recordFromProtobuf(meshtastic_telemetryDB.records[i]);
+    for (uint32_t i = 0; i < meshtastic_telemetry_database.records_count; i++) {
+        DatabaseRecord record = recordFromProtobuf(meshtastic_telemetry_database.records[i]);
         records.push_back(record);
     }
     LOG_DEBUG("AirQualityDatabase: Loaded %d records from storage", records.size());
@@ -188,36 +169,52 @@ bool AirQualityDatabase::saveToStorage()
     LOG_DEBUG("AirQualityDatabase: Attempting save to storage");
     bool okay = false;
     auto file = SafeFile(STORAGE_KEY);
+    size_t encodedSize = 0;
+    meshtastic_TelemetryDatabase meshtastic_telemetry_database = meshtastic_TelemetryDatabase_init_zero;
 
     // Check if we have too many records for fixed array
     if (records.size() > MAX_RECORDS) { // Sanity check
         LOG_WARN("AirQualityDatabase: Too many records (%d), truncating to %d", records.size(), MAX_RECORDS);
-        meshtastic_telemetryDB.records_count = MAX_RECORDS;
+        meshtastic_telemetry_database.records_count = MAX_RECORDS;
     } else {
-        meshtastic_telemetryDB.records_count = records.size();
+        meshtastic_telemetry_database.records_count = records.size();
     }
 
     LOG_DEBUG("AirQualityDatabase: Converting record to protobuf");
     // Convert each record to protobuf format
-    for (uint32_t i = 0; i < meshtastic_telemetryDB.records_count; i++) {
-        meshtastic_telemetryDB.records[i] = recordToProtobuf(records[i]);
+    for (uint32_t i = 0; i < meshtastic_telemetry_database.records_count; i++) {
+        meshtastic_TelemetryDatabaseRecord pb = meshtastic_TelemetryDatabaseRecord_init_zero;
+
+        pb.delivered = records[i].delivered;
+        pb.telemetry = records[i].telemetry;
+        meshtastic_telemetry_database.records[i] = pb;
     }
 
-    // Write to LittleFS file
-    LOG_DEBUG("AirQualityDatabase: Converting record to stream in %s", STORAGE_KEY);
+    // Encode into a memory buffer first, then write the buffer to the file under spiLock.
+    LOG_DEBUG("AirQualityDatabase: Encoding records to memory buffer before writing %s", STORAGE_KEY);
+
+    // std::vector<uint8_t> buffer(meshtastic_TelemetryDatabase_size);
+    // pb_ostream_t stream = pb_ostream_from_buffer(buffer.data(), buffer.size());
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_TelemetryDatabase_size};
 
-    if (!pb_encode(&stream, meshtastic_TelemetryDatabase_fields, &meshtastic_telemetryDB)) {
+    if (!pb_encode(&stream, meshtastic_TelemetryDatabase_fields, &meshtastic_telemetry_database)) {
         LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
     } else {
-        okay = true;
+        encodedSize = stream.bytes_written;
+        // size_t written = file.write(buffer.data(), encodedSize);
+
+        if (!encodedSize) {
+            // LOG_ERROR("AirQualityDatabase: Failed to write encoded data to file (wrote %u of %u)", written, encodedSize);
+            LOG_ERROR("AirQualityDatabase: Failed to write encoded data to file (wrote  %u)", encodedSize);
+        } else {
+            okay = true;
+        }
     }
 
     okay &= file.close();
-    size_t encodedSize = stream.bytes_written;
 
     if (okay) {
-        LOG_DEBUG("AirQualityDatabase: Saved %d records to storage (%zu bytes)", records.size(), encodedSize);
+        LOG_DEBUG("AirQualityDatabase: Saved %d records to storage (%u bytes)", records.size(), encodedSize);
     }
 
     return okay;
