@@ -11,7 +11,7 @@ void earlyInitVariant()
     io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
 }
 
-void variantShutdown()
+void variant_shutdown()
 {
     io.digitalWrite(PCA_PIN_POWER_EN, LOW);
 }
