@@ -1,3 +1,5 @@
+#include "graphics/niche/InkHUD/Tile.h"
+#include <cstdint>
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./Applet.h"
@@ -784,6 +786,16 @@ void InkHUD::Applet::drawHeader(std::string text)
     for (int16_t x = 0; x < width(); x += 2) {
         drawPixel(x, 0, BLACK);
         drawPixel(x, headerDivY, BLACK); // Dotted 50%
+    }
+
+    // Dither near battery
+    if (settings->optionalFeatures.batteryIcon) {
+        constexpr uint16_t ditherSizePx = 4;
+        Tile *batteryTile = ((Applet*)inkhud->getSystemApplet("BatteryIcon"))->getTile();
+        const uint16_t batteryTileLeft = batteryTile->getLeft();
+        const uint16_t batteryTileTop = batteryTile->getTop();
+        const uint16_t batteryTileHeight = batteryTile->getHeight();
+        hatchRegion(batteryTileLeft-ditherSizePx, batteryTileTop, ditherSizePx, batteryTileHeight, 2, WHITE);
     }
 }
 

@@ -48,17 +48,16 @@ int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *sta
 
 void InkHUD::BatteryIconApplet::onRender(bool full)
 {
-    // Fill entire tile
-    // - size of icon controlled by size of tile
-    int16_t l = 0;
-    int16_t t = 0;
-    uint16_t w = width();
-    int16_t h = height();
-
-    // Clear the region beneath the tile
+    // Clear the region beneath the tile, including the border
     // Most applets are drawing onto an empty frame buffer and don't need to do this
     // We do need to do this with the battery though, as it is an "overlay"
-    fillRect(l, t, w, h, WHITE);
+    fillRect(0, 0, width(), height(), WHITE);
+
+    // Make icon render with a 1px border on all but the right side
+    int16_t l = 1;
+    int16_t t = 1;
+    uint16_t w = width()-1; // Handle 1px left pad
+    int16_t h = height()-2; // Handle top/bottom padding
 
     // Vertical centerline
     const int16_t m = t + (h / 2);
