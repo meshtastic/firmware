@@ -243,7 +243,6 @@ const char *getDeviceName()
 
 uint32_t timeLastPowered = 0;
 
-static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
 

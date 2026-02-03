@@ -13,8 +13,10 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 {
     bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
     powerStatusObserver.observe(&powerStatus->onNewStatus);
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputObserver.observe(inputBroker);
+#endif
 }
 
 int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
@@ -62,12 +64,13 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
     }
     return 0;
 };
-
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
 int StatusLEDModule::handleInputEvent(const InputEvent *event)
 {
     lastUserbuttonTime = millis();
     return 0;
 }
+#endif
 
 int32_t StatusLEDModule::runOnce()
 {
