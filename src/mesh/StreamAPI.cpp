@@ -16,6 +16,95 @@ int32_t StreamAPI::runOncePart()
     return result;
 }
 
+int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
+{
+    auto result = readStream(buf, bufLen);
+    writeStream();
+    checkConnectionTimeout();
+    return result;
+}
+
+/**
+ * Read any rx chars from the link and call handleRecStream
+ */
+int32_t StreamAPI::readStream(char *buf, uint16_t bufLen)
+{
+    if (bufLen < 1) {
+        // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
+        bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
+        return recentRx ? 5 : 250;
+    } else {
+        handleRecStream(buf, bufLen);
+        // we had bytes available this time, so assume we might have them next time also
+        lastRxMsec = millis();
+        return 0;
+    }
+}
+
+/**
+ * call getFromRadio() and deliver encapsulated packets to the Stream
+ */
+void StreamAPI::writeStream()
+{
+    if (canWrite) {
+        uint32_t len;
+        do {
+            // Send every packet we can
+            len = getFromRadio(txBuf + HEADER_LEN);
+            emitTxBuffer(len);
+        } while (len);
+    }
+}
+
+int32_t StreamAPI::handleRecStream(char *buf, uint16_t bufLen)
+{
+    uint16_t index = 0;
+    while (bufLen > index) { // Currently we never want to block
+        int cInt = buf[index++];
+        if (cInt < 0)
+            break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit
+                   // arduino
+
+        uint8_t c = (uint8_t)cInt;
+
+        // Use the read pointer for a little state machine, first look for framing, then length bytes, then payload
+        size_t ptr = rxPtr;
+
+        rxPtr++;        // assume we will probably advance the rxPtr
+        rxBuf[ptr] = c; // store all bytes (including framing)
+
+        // console->printf("rxPtr %d ptr=%d c=0x%x\n", rxPtr, ptr, c);
+
+        if (ptr == 0) { // looking for START1
+            if (c != START1)
+                rxPtr = 0;     // failed to find framing
+        } else if (ptr == 1) { // looking for START2
+            if (c != START2)
+                rxPtr = 0;                             // failed to find framing
+        } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
+            uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
+
+            // console->printf("len %d\n", len);
+
+            if (ptr == HEADER_LEN - 1) {
+                // we _just_ finished our 4 byte header, validate length now (note: a length of zero is a valid
+                // protobuf also)
+                if (len > MAX_TO_FROM_RADIO_SIZE)
+                    rxPtr = 0; // length is bogus, restart search for framing
+            }
+
+            if (rxPtr != 0)                        // Is packet still considered 'good'?
+                if (ptr + 1 >= len + HEADER_LEN) { // have we received all of the payload?
+                    rxPtr = 0;                     // start over again on the next packet
+
+                    // If we didn't just fail the packet and we now have the right # of bytes, parse it
+                    handleToRadio(rxBuf + HEADER_LEN, len);
+                }
+        }
+    }
+    return 0;
+}
+
 /**
  * Read any rx chars from the link and call handleToRadio
  */
@@ -73,21 +162,6 @@ int32_t StreamAPI::readStream()
         // we had bytes available this time, so assume we might have them next time also
         lastRxMsec = millis();
         return 0;
-    }
-}
-
-/**
- * call getFromRadio() and deliver encapsulated packets to the Stream
- */
-void StreamAPI::writeStream()
-{
-    if (canWrite) {
-        uint32_t len;
-        do {
-            // Send every packet we can
-            len = getFromRadio(txBuf + HEADER_LEN);
-            emitTxBuffer(len);
-        } while (len);
     }
 }
 

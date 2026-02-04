@@ -279,6 +279,8 @@ struct PubSubConfig {
 
     // Defaults
     static constexpr uint16_t defaultPort = 1883;
+    static constexpr uint16_t defaultPortTls = 8883;
+
     uint16_t serverPort = defaultPort;
     String serverAddr = default_mqtt_address;
     const char *mqttUsername = default_mqtt_username;
@@ -641,7 +643,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
-    if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
+    if (defaultServer && !IS_ONE_OF(parsed.serverPort, PubSubConfig::defaultPort, PubSubConfig::defaultPortTls)) {
         const char *warning = "Invalid MQTT config: default server address must not have a port specified";
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS

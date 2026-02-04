@@ -323,7 +323,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 #endif
 
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_MESH_SOLAR)
     nrf_gpio_cfg_default(PIN_GPS_PPS);
     detachInterrupt(PIN_GPS_PPS);
     detachInterrupt(PIN_BUTTON1);

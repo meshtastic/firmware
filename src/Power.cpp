@@ -681,6 +681,8 @@ bool Power::setup()
         found = true;
     } else if (lipoChargerInit()) {
         found = true;
+    }  else if (meshSolarInit()) {
+        found = true;
     } else if (analogInit()) {
         found = true;
     }
@@ -1446,6 +1448,78 @@ bool Power::lipoChargerInit()
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
 bool Power::lipoChargerInit()
+{
+    return false;
+}
+#endif
+
+
+
+#ifdef HELTEC_MESH_SOLAR
+#include "meshSolarApp.h"
+
+/**
+ * meshSolar class for an SMBUS battery sensor.
+ */
+class meshSolarBatteryLevel : public HasBatteryLevel
+{
+
+  public:
+    /**
+     * Init the I2C meshSolar battery level sensor
+     */
+    bool runOnce()
+    {
+        meshSolarStart();
+        return true;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return meshSolarGetBatteryPercent(); }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return meshSolarGetBattVoltage(); }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return meshSolarIsBatteryConnect(); }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return meshSolarIsVbusIn();}
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override { return meshSolarIsCharging(); }
+};
+
+meshSolarBatteryLevel meshSolarLevel;
+
+/**
+ * Init the meshSolar battery level sensor
+ */
+bool Power::meshSolarInit()
+{
+    bool result = meshSolarLevel.runOnce();
+    LOG_DEBUG("Power::meshSolarInit mesh solar sensor is %s", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &meshSolarLevel;
+    return true;
+}
+
+#else
+/**
+ * The meshSolar battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::meshSolarInit()
 {
     return false;
 }

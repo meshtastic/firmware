@@ -192,6 +192,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
+#elif defined(T_LORA_PAGER)
+#define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
 #endif
 
 // -----------------------------------------------------------------------------

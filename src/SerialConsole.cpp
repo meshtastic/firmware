@@ -64,6 +64,14 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 
 int32_t SerialConsole::runOnce()
 {
+#ifdef HELTEC_MESH_SOLAR
+    //After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
+    if(moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port
+        && moduleConfig.serial.mode==meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)
+    {
+        return 250;
+    }
+#endif
     return runOncePart();
 }
 

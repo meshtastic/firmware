@@ -192,12 +192,6 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
-    if (!available()) {
-        return 0;
-    }
-    // In case we send a FromRadio packet
-    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-
     // Respond to heartbeat by sending queue status
     if (heartbeatReceived) {
         memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
@@ -208,6 +202,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
         return numbytes;
     }
+
+    if (!available()) {
+        return 0;
+    }
+    // In case we send a FromRadio packet
+    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
     // Advance states as needed
     switch (state) {
