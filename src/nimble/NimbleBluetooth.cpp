@@ -313,11 +313,11 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
+#ifdef DEBUG_NIMBLE_NOTIFY
+
         int currentNotifyCount = notifyCount.fetch_add(1);
 
         uint8_t cc = bleServer->getConnectedCount();
-
-#ifdef DEBUG_NIMBLE_NOTIFY
         // This logging slows things down when there are lots of packets going to the phone, like initial connection:
         LOG_DEBUG("BLE notify(%d) fromNum: %d connections: %d", currentNotifyCount, fromRadioNum, cc);
 #endif
@@ -685,6 +685,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
+            return;
+#else
+        if (nimbleBluetooth && nimbleBluetooth->isDeInit)
             return;
 #endif
 

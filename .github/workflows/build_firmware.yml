@@ -21,30 +21,13 @@ jobs:
     # Use 'arctastic' self-hosted runner pool when building in the main repo
     runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
     outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-id: ${{ steps.upload-firmware.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
-
-      - name: Set OTA firmware source and target
-        if: startsWith(inputs.platform, 'esp32')
-        id: ota_dir
-        env:
-          PIO_PLATFORM: ${{ inputs.platform }}
-        run: |
-          if [ "$PIO_PLATFORM" = "esp32s3" ]; then
-            echo "src=firmware-s3.bin" >> $GITHUB_OUTPUT
-            echo "tgt=release/bleota-s3.bin" >> $GITHUB_OUTPUT
-          elif [ "$PIO_PLATFORM" = "esp32c3" ] || [ "$PIO_PLATFORM" = "esp32c6" ]; then
-            echo "src=firmware-c3.bin" >> $GITHUB_OUTPUT
-            echo "tgt=release/bleota-c3.bin" >> $GITHUB_OUTPUT
-          elif [ "$PIO_PLATFORM" = "esp32" ]; then
-            echo "src=firmware.bin" >> $GITHUB_OUTPUT
-            echo "tgt=release/bleota.bin" >> $GITHUB_OUTPUT
-          fi
 
       - name: Build ${{ inputs.platform }}
         id: build
@@ -53,8 +36,66 @@ jobs:
           pio_platform: ${{ inputs.platform }}
           pio_env: ${{ inputs.pio_env }}
           pio_target: build
-          ota_firmware_source: ${{ steps.ota_dir.outputs.src || '' }}
-          ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
+
+      - name: ESP32 - Download Unified OTA firmware
+        # Currently only esp32 and esp32s3 use the unified ota
+        if: inputs.platform == 'esp32' || inputs.platform == 'esp32s3'
+        id: dl-ota-unified
+        env:
+          PIO_PLATFORM: ${{ inputs.platform }}
+          PIO_ENV: ${{ inputs.pio_env }}
+          OTA_URL: https://github.com/meshtastic/esp32-unified-ota/releases/latest/download/mt-${{ inputs.platform }}-ota.bin
+        working-directory: release
+        run: |
+          curl -L -o "mt-$PIO_PLATFORM-ota.bin" $OTA_URL
+
+      - name: ESP32-C* - Download BLE-Only OTA firmware
+        if: inputs.platform == 'esp32c3' || inputs.platform == 'esp32c6'
+        id: dl-ota-ble
+        env:
+          PIO_ENV: ${{ inputs.pio_env }}
+          OTA_URL: https://github.com/meshtastic/firmware-ota/releases/latest/download/firmware-c3.bin
+        working-directory: release
+        run: |
+          curl -L -o bleota-c3.bin $OTA_URL
+
+      - name: Update manifest with OTA file
+        if: inputs.platform == 'esp32' || inputs.platform == 'esp32s3' || inputs.platform == 'esp32c3' || inputs.platform == 'esp32c6'
+        working-directory: release
+        env:
+          PIO_PLATFORM: ${{ inputs.platform }}
+        run: |
+          # Determine OTA filename based on platform
+          if [[ "$PIO_PLATFORM" == "esp32" || "$PIO_PLATFORM" == "esp32s3" ]]; then
+            OTA_FILE="mt-${PIO_PLATFORM}-ota.bin"
+          else
+            OTA_FILE="bleota-c3.bin"
+          fi
+
+          # Check if OTA file exists
+          if [[ ! -f "$OTA_FILE" ]]; then
+            echo "OTA file $OTA_FILE not found, skipping manifest update"
+            exit 0
+          fi
+
+          # Calculate MD5 and size
+          if command -v md5sum &> /dev/null; then
+            OTA_MD5=$(md5sum "$OTA_FILE" | cut -d' ' -f1)
+          else
+            OTA_MD5=$(md5 -q "$OTA_FILE")
+          fi
+          OTA_SIZE=$(stat -f%z "$OTA_FILE" 2>/dev/null || stat -c%s "$OTA_FILE")
+
+          # Find and update manifest file
+          for manifest in firmware-*.mt.json; do
+            if [[ -f "$manifest" ]]; then
+              echo "Updating $manifest with $OTA_FILE (md5: $OTA_MD5, size: $OTA_SIZE)"
+              # Add OTA entry to files array if not already present
+              jq --arg name "$OTA_FILE" --arg md5 "$OTA_MD5" --argjson bytes "$OTA_SIZE" --arg part "app1" \
+                'if .files | map(select(.name == $name)) | length == 0 then .files += [{"name": $name, "md5": $md5, "bytes": $bytes, "part_name": $part}] else . end' \
+                "$manifest" > "${manifest}.tmp" && mv "${manifest}.tmp" "$manifest"
+            fi
+          done
 
       - name: Job summary
         env:
@@ -71,7 +112,7 @@ jobs:
 
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v6
-        id: upload
+        id: upload-firmware
         with:
           name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
           overwrite: true
@@ -84,3 +125,12 @@ jobs:
             release/*.zip
             release/device-*.sh
             release/device-*.bat
+
+      - name: Store manifests as an artifact
+        uses: actions/upload-artifact@v6
+        id: upload-manifest
+        with:
+          name: manifest-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
+          overwrite: true
+          path: |
+            release/*.mt.json

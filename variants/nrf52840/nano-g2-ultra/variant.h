@@ -41,18 +41,6 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-// LEDs
-#define PIN_LED1 (-1)
-#define PIN_LED2 (-1)
-#define PIN_LED3 (-1)
-
-#define LED_RED PIN_LED3
-#define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
-
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN PIN_GREEN
-
 #define LED_STATE_ON 0 // State when LED is lit
 
 /*
@@ -86,8 +74,6 @@ static const uint8_t A4 = PIN_A4;
 
 #define PIN_WIRE_SDA (0 + 17)
 #define PIN_WIRE_SCL (0 + 15)
-
-#define PIN_RTC_INT (0 + 14) // Interrupt from the PCF8563 RTC
 
 /*
 External serial flash W25Q16JV_IQ
@@ -141,6 +127,7 @@ External serial flash W25Q16JV_IQ
 #define PIN_SERIAL1_RX GPS_RX_PIN
 
 // PCF8563 RTC Module
+#define PIN_RTC_INT (0 + 14) // Interrupt from the PCF8563 RTC
 #define PCF8563_RTC 0x51
 
 /*
@@ -152,8 +139,6 @@ External serial flash W25Q16JV_IQ
 #define PIN_SPI_MISO (32 + 9)
 #define PIN_SPI_MOSI (0 + 11)
 #define PIN_SPI_SCK (0 + 12)
-
-// #define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
@@ -168,8 +153,6 @@ External serial flash W25Q16JV_IQ
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
-
-#define HAS_RTC 1
 
 /**
     OLED Screen Model

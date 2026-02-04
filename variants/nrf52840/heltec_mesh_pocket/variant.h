@@ -26,8 +26,6 @@ extern "C" {
 #define LED_RED PIN_LED1
 #define LED_BLUE PIN_LED1
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN LED_BLUE
 #define LED_STATE_ON 0 // State when LED is lit
 
 /*
@@ -100,8 +98,6 @@ No longer populated on PCB
 #define PIN_SPI_MOSI (0 + 5)
 #define PIN_SPI_SCK (0 + 4)
 
-// #define PIN_PWR_EN (0 + 6)
-
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
 
@@ -130,7 +126,6 @@ No longer populated on PCB
 
 #undef HAS_GPS
 #define HAS_GPS 0
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif

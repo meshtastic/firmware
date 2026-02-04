@@ -4,6 +4,8 @@
 #define UART_TX 43
 #define UART_RX 44
 
+#define HAS_PCA9557
+
 // LED
 // Both of these are on the GPIO expander
 #define PCA_LED_USER 1  // the Blue LED
@@ -28,6 +30,9 @@
 #define I2C_SCL 1
 #define I2C_SDA 2
 
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
+
 // GPS pins
 #define GPS_SWITH 10
 #define HAS_GPS 1
@@ -43,9 +48,6 @@
 
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
-
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
 
 #define SX126X_CS 17
 #define LORA_SCK 16
@@ -82,4 +84,6 @@
 
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
+
+#define SERIAL_PRINT_PORT 0
 #endif
