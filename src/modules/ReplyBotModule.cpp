@@ -1,3 +1,4 @@
+#include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
 /*
  * ReplyBotModule.cpp
@@ -12,11 +13,10 @@
  * entirely.  See the official firmware documentation for guidance on adding modules.
  */
 
-#include "ReplyBotModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "configuration.h"
+#include "ReplyBotModule.h"
 #include "mesh/MeshTypes.h"
 
 #include <Arduino.h>
