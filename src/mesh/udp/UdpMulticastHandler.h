@@ -50,7 +50,9 @@ class UdpMulticastHandler final
             return;
         }
         LOG_DEBUG("Stopping UDP multicast");
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
         udp.close();
+#endif
         isRunning = false;
     }
 
