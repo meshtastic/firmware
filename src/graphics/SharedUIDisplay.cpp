@@ -221,7 +221,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     if (rtc_sec > 0) {
         // === Build Time String ===
-        long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
         int hour, minute, second;
         graphics::decomposeTime(rtc_sec, hour, minute, second);
         snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
