@@ -11,7 +11,7 @@
 
 // Particular boards might define a different max power based on what their hardware can do
 #if ARCH_PORTDUINO
-#define SX128X_MAX_POWER settingsMap[sx128x_max_power]
+#define SX128X_MAX_POWER portduino_config.sx128x_max_power
 #endif
 #ifndef SX128X_MAX_POWER
 #define SX128X_MAX_POWER 13
@@ -41,13 +41,13 @@ template <typename T> bool SX128xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    if (settingsMap[rxen_pin] != RADIOLIB_NC) {
-        pinMode(settingsMap[rxen_pin], OUTPUT);
-        digitalWrite(settingsMap[rxen_pin], LOW); // Set low before becoming an output
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_rxen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW); // Set low before becoming an output
     }
-    if (settingsMap[txen_pin] != RADIOLIB_NC) {
-        pinMode(settingsMap[txen_pin], OUTPUT);
-        digitalWrite(settingsMap[txen_pin], LOW); // Set low before becoming an output
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW); // Set low before becoming an output
     }
 #else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
@@ -69,6 +69,8 @@ template <typename T> bool SX128xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_INFO("SX128x init result %d", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+        return false;
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
@@ -93,8 +95,9 @@ template <typename T> bool SX128xInterface<T>::init()
         lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
     }
 #elif ARCH_PORTDUINO
-    if (res == RADIOLIB_ERR_NONE && settingsMap[rxen_pin] != RADIOLIB_NC && settingsMap[txen_pin] != RADIOLIB_NC) {
-        lora.setRfSwitchPins(settingsMap[rxen_pin], settingsMap[txen_pin]);
+    if (res == RADIOLIB_ERR_NONE && portduino_config.lora_rxen_pin.pin != RADIOLIB_NC &&
+        portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #endif
 
@@ -123,7 +126,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setCodingRate(cr);
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -154,7 +157,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR SX128xInterface<T>::disableInterrupt()
+template <typename T> void SX128xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();
 }
@@ -174,11 +177,11 @@ template <typename T> void SX128xInterface<T>::setStandby()
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
-    if (settingsMap[rxen_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen_pin], LOW);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
     }
-    if (settingsMap[txen_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen_pin], LOW);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW);
     }
 #else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
@@ -203,6 +206,7 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -210,11 +214,11 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
 template <typename T> void SX128xInterface<T>::configHardwareForSend()
 {
 #if ARCH_PORTDUINO
-    if (settingsMap[txen_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen_pin], HIGH);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, HIGH);
     }
-    if (settingsMap[rxen_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen_pin], LOW);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
     }
 
 #else
@@ -241,11 +245,11 @@ template <typename T> void SX128xInterface<T>::startReceive()
     setStandby();
 
 #if ARCH_PORTDUINO
-    if (settingsMap[rxen_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen_pin], HIGH);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, HIGH);
     }
-    if (settingsMap[txen_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen_pin], LOW);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW);
     }
 
 #else

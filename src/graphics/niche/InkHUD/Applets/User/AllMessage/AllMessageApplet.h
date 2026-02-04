@@ -30,7 +30,7 @@ class Applet;
 class AllMessageApplet : public Applet
 {
   public:
-    void onRender() override;
+    void onRender(bool full) override;
 
     void onActivate() override;
     void onDeactivate() override;
