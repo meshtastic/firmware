@@ -52,9 +52,6 @@ extern "C" {
 
 #define LED_BLUE PIN_LED1
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED3
-
 #define LED_STATE_ON 0 // State when LED is lit
 
 /*
@@ -103,7 +100,7 @@ static const uint8_t A0 = PIN_A0;
 #define EXTERNAL_FLASH_USE_QSPI
 
 // Add a delay on startup to allow LoRa and GPS to power up
-#define PIN_PWR_DELAY_MS 100
+#define PERIPHERAL_WARMUP_MS 100
 
 /*
  * Lora radio
@@ -169,6 +166,8 @@ static const uint8_t A0 = PIN_A0;
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
+
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }
