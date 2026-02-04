@@ -4,6 +4,9 @@
 #include "modules/StatusLEDModule.h"
 #include "modules/SystemCommandsModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_REPLYBOT
+#include "ReplyBotModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #endif
@@ -115,7 +118,9 @@ void setupModules()
 #if defined(LED_CHARGE) || defined(LED_PAIRING)
     statusLEDModule = new StatusLEDModule();
 #endif
-
+#if !MESHTASTIC_EXCLUDE_REPLYBOT
+    new ReplyBotModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif
