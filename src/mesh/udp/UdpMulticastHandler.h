@@ -50,14 +50,15 @@ class UdpMulticastHandler final
             return;
         }
         LOG_DEBUG("Stopping UDP multicast");
-#if !defined(ARCH_NRF52)
         udp.close();
-#endif
         isRunning = false;
     }
 
     void onReceive(AsyncUDPPacket packet)
     {
+        if (!isRunning) {
+            return;
+        }
         size_t packetLength = packet.length();
 #if defined(ARCH_NRF52)
         IPAddress ip = packet.remoteIP();
@@ -84,7 +85,7 @@ class UdpMulticastHandler final
 
     bool onSend(const meshtastic_MeshPacket *mp)
     {
-        if (!mp || !udp) {
+        if (!isRunning || !mp || !udp) {
             return false;
         }
 #if defined(ARCH_NRF52)
