@@ -145,7 +145,7 @@ void InkHUD::Applet::resetDrawingSpace()
 }
 
 // Sets one or more inputs to enabled/disabled for this applet and if they should be sent to it
-void InkHUD::Applet::setInput(uint8_t input, bool captured)
+void InkHUD::Applet::setInputsSubscribed(uint8_t input, bool captured)
 {
     if (captured)
         subscribedInputs |= input;
@@ -154,7 +154,7 @@ void InkHUD::Applet::setInput(uint8_t input, bool captured)
 }
 
 // Checks if a specific input is enabled for this applet and should be sent to it
-bool InkHUD::Applet::isInputEnabled(InputMask input)
+bool InkHUD::Applet::isInputSubscribed(InputMask input)
 {
     return (subscribedInputs & input) == input;
 }
