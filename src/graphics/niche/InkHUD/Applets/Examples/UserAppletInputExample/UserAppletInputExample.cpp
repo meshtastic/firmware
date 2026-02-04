@@ -1,8 +1,4 @@
-#include "graphics/niche/InkHUD/Applet.h"
-#include "graphics/niche/InkHUD/WindowManager.h"
-#include <cstdint>
 #ifdef MESHTASTIC_INCLUDE_INKHUD
-
 #include "./UserAppletInputExample.h"
 
 using namespace NicheGraphics;
