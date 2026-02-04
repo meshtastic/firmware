@@ -29,9 +29,9 @@ void InkHUD::UserAppletInputExampleApplet::onRender(bool full)
 void InkHUD::UserAppletInputExampleApplet::setGrabbed(bool grabbed)
 {
     isGrabbed = grabbed;
-    setInput(BUTTON_SHORT | EXIT_SHORT | EXIT_LONG | NAV_UP | NAV_DOWN | NAV_LEFT | NAV_RIGHT,
-             grabbed);           // Enables/disables grabbing all inputs
-    setInput(BUTTON_LONG, true); // Always grab this input
+    setInputsSubscribed(BUTTON_SHORT | EXIT_SHORT | EXIT_LONG | NAV_UP | NAV_DOWN | NAV_LEFT | NAV_RIGHT,
+                        grabbed);           // Enables/disables grabbing all inputs
+    setInputsSubscribed(BUTTON_LONG, true); // Always grab this input
 }
 
 void InkHUD::UserAppletInputExampleApplet::onButtonShortPress()

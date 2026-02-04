@@ -103,6 +103,7 @@ class Applet : public GFX
     virtual void onFreeText(char c) {}
     virtual void onFreeTextDone() {}
     virtual void onFreeTextCancel() {}
+    // List of inputs which can be subscribed to
     enum InputMask {      // | No Joystick  |     With Joystick     |
         BUTTON_SHORT = 1, // | Button Click | Joystick Center Click |
         BUTTON_LONG = 2,  // | Button Hold  | Joystick Center Hold  |
@@ -113,7 +114,7 @@ class Applet : public GFX
         NAV_LEFT = 64,    // | no-op        | Joystick Left         |
         NAV_RIGHT = 128   // | no-op        | Joystick Right        |
     };
-    bool isInputEnabled(InputMask input); // Check if input should be handled by applet, this should not be overloaded.
+    bool isInputSubscribed(InputMask input); // Check if input should be handled by applet, this should not be overloaded.
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 
@@ -137,9 +138,10 @@ class Applet : public GFX
 
     // User Input Handling
 
-    uint8_t subscribedInputs = 0b00000000;       // Maybe uint16_t for futureproofing? other devices may need more inputs
-    void setInput(uint8_t input, bool captured); // Set if an input should be handled by applet or not, this should not be
-                                                 // overloaded. Can take multiple inputs at once if you OR/`|` them together
+    uint8_t subscribedInputs = 0b00000000; // Maybe uint16_t for futureproofing? other devices may need more inputs
+    void setInputsSubscribed(uint8_t input,
+                             bool captured); // Set if an input should be handled by applet or not, this should not be
+                                             // overloaded. Can take multiple inputs at once if you OR/`|` them together
 
     // Text
 
