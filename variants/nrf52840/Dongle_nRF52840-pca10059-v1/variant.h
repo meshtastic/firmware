@@ -50,9 +50,6 @@ extern "C" {
 #define RGBLED_BLUE (0 + 12)  // Blue of RGB   P0.12
 #define RGBLED_CA             // comment out this line if you have a common cathode type, as defined use common anode logic
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
 

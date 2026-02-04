@@ -18,8 +18,9 @@ def readProps(prefsLoc):
 
     # Try to find current build SHA if if the workspace is clean.  This could fail if git is not installed
     try:
+        # Pin abbreviation length to keep local builds and CI matching (avoid auto-shortening)
         sha = (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            subprocess.check_output(["git", "rev-parse", "--short=7", "HEAD"])
             .decode("utf-8")
             .strip()
         )

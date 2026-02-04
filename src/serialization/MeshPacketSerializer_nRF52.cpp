@@ -353,13 +353,14 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     jsonObj["from"] = (unsigned int)mp->from;
     jsonObj["channel"] = (unsigned int)mp->channel;
     jsonObj["type"] = msgType.c_str();
-    jsonObj["sender"] = owner.id;
+    jsonObj["sender"] = nodeDB->getNodeId().c_str();
     if (mp->rx_rssi != 0)
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)
         jsonObj["snr"] = (float)mp->rx_snr;
-    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
-        jsonObj["hops_away"] = (unsigned int)(mp->hop_start - mp->hop_limit);
+    const int8_t hopsAway = getHopsAway(*mp);
+    if (hopsAway >= 0) {
+        jsonObj["hops_away"] = (unsigned int)(hopsAway);
         jsonObj["hop_start"] = (unsigned int)(mp->hop_start);
     }
 
@@ -393,8 +394,9 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)
         jsonObj["snr"] = (float)mp->rx_snr;
-    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
-        jsonObj["hops_away"] = (unsigned int)(mp->hop_start - mp->hop_limit);
+    const int8_t hopsAway = getHopsAway(*mp);
+    if (hopsAway >= 0) {
+        jsonObj["hops_away"] = (unsigned int)(hopsAway);
         jsonObj["hop_start"] = (unsigned int)(mp->hop_start);
     }
     jsonObj["size"] = (unsigned int)mp->encrypted.size;

@@ -35,7 +35,7 @@ ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_Mesh
 // We can trigger a render by calling requestUpdate()
 // Render might be called by some external source
 // We should always be ready to draw
-void InkHUD::NewMsgExampleApplet::onRender()
+void InkHUD::NewMsgExampleApplet::onRender(bool full)
 {
     printAt(0, 0, "Example: NewMsg", LEFT, TOP); // Print top-left corner of text at (0,0)
 

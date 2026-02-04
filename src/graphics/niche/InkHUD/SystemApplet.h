@@ -22,11 +22,14 @@ class SystemApplet : public Applet
   public:
     // System applets have the right to:
 
-    bool handleInput = false;   // - respond to input from the user button
-    bool lockRendering = false; // - prevent other applets from being rendered during an update
-    bool lockRequests = false;  // - prevent other applets from triggering display updates
+    bool handleInput = false;    // - respond to input from the user button
+    bool handleFreeText = false; // - respond to free text input
+    bool lockRendering = false;  // - prevent other applets from being rendered during an update
+    bool lockRequests = false;   // - prevent other applets from triggering display updates
+    bool alwaysRender = false;   // - render every time the screen is updated
 
     virtual void onReboot() { onShutdown(); } // - handle reboot specially
+    virtual void onApplyingChanges() {}
 
     // Other system applets may take precedence over our own system applet though
     // The order an applet is passed to WindowManager::addSystemApplet determines this hierarchy (added earlier = higher rank)

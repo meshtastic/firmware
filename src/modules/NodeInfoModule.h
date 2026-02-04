@@ -1,5 +1,6 @@
 #pragma once
 #include "ProtobufModule.h"
+#include <map>
 
 /**
  * NodeInfo module for sending/receiving NodeInfos into the mesh
@@ -30,6 +31,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *p) override;
 
+    /** Called to alter received User protobuf */
+    virtual void alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_User *p) override;
+
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  */
     virtual meshtastic_MeshPacket *allocReply() override;
@@ -40,6 +44,10 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
   private:
     uint32_t lastSentToMesh = 0; // Last time we sent our NodeInfo to the mesh
     bool shorterTimeout = false;
+    bool suppressReplyForCurrentRequest = false;
+    std::map<NodeNum, uint32_t> lastNodeInfoSeen;
+
+    void pruneLastNodeInfoCache();
 };
 
 extern NodeInfoModule *nodeInfoModule;

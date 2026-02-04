@@ -13,15 +13,14 @@ class NAU7802Sensor : public TelemetrySensor
     NAU7802 nau7802;
 
   protected:
-    virtual void setup() override;
     const char *nau7802ConfigFileName = "/prefs/nau7802.dat";
     bool saveCalibrationData();
     bool loadCalibrationData();
 
   public:
     NAU7802Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     void tare();
     void calibrate(float weight);
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,

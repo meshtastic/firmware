@@ -49,7 +49,7 @@ bool SeesawRotary::init()
 
 int32_t SeesawRotary::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     bool currentlyPressed = !ss.digitalRead(SS_SWITCH);
 

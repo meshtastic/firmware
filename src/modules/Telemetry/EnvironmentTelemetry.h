@@ -11,10 +11,13 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include "detect/ScanI2CConsumer.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class EnvironmentTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
+class EnvironmentTelemetryModule : private concurrency::OSThread,
+                                   public ScanI2CConsumer,
+                                   public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *>(this,
@@ -22,7 +25,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
 
   public:
     EnvironmentTelemetryModule()
-        : concurrency::OSThread("EnvironmentTelemetry"),
+        : concurrency::OSThread("EnvironmentTelemetry"), ScanI2CConsumer(),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
@@ -56,13 +59,14 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
 
+    void i2cScanFinished(ScanI2C *i2cScanner);
+
   private:
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
-    uint32_t sensor_read_error_count = 0;
 };
 
 #endif

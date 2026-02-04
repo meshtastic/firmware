@@ -55,5 +55,6 @@
 #define SX126X_RESET 14
 #define SX126X_RXEN 47
 #define SX126X_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 #endif

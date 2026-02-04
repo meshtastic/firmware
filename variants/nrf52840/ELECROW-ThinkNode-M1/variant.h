@@ -41,38 +41,25 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_LED2 -1
-#define PIN_LED3 -1
-
 // LED
 #define PIN_LED1 (32 + 6) // red
 #define LED_POWER (32 + 4)
-#define USER_LED (0 + 13) // green
+#define LED_NOTIFICATION (0 + 13) // green
 // USB_CHECK
 #define EXT_PWR_DETECT (32 + 3)
 #define ADC_V (0 + 8)
 
-#define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN PIN_GREEN
 #define LED_STATE_ON 0 // State when LED is lit  // LED灯亮时的状态
 #define PIN_BUZZER (0 + 6)
 /*
  * Buttons
  */
-#define PIN_BUTTON2 (32 + 10)
+#define PIN_BUTTON1 (32 + 10)
+#define PIN_BUTTON2 (32 + 7)
 #define ALT_BUTTON_PIN PIN_BUTTON2
 #define ALT_BUTTON_ACTIVE_LOW true
 #define ALT_BUTTON_ACTIVE_PULLUP true
-#define PIN_BUTTON1 (32 + 7)
-
-// #define PIN_BUTTON1 (0 + 11)
-// #define PIN_BUTTON1 (32 + 7)
-
-// #define BUTTON_CLICK_MS 400
-// #define BUTTON_TOUCH_MS 200
 
 /*
  * Analog pins
@@ -98,8 +85,6 @@ static const uint8_t A0 = PIN_A0;
 /* touch sensor, active high */
 
 #define TP_SER_IO (0 + 11)
-
-#define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
 
 /*
 External serial flash WP25R1635FZUIL0
@@ -157,18 +142,17 @@ External serial flash WP25R1635FZUIL0
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 9) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 8) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (32 + 8) // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (32 + 9) // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
 #define PIN_GPS_SWITCH (32 + 1) // GPS开关判断
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
+#define SERIAL_PRINT_PORT 0
 
 /*
  * SPI Interfaces
@@ -179,8 +163,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
-
-#define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
@@ -196,7 +178,6 @@ External serial flash WP25R1635FZUIL0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.02F)
 
-// #define HAS_RTC 0
 // #define HAS_SCREEN 0
 
 #ifdef __cplusplus

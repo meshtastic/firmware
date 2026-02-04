@@ -19,6 +19,7 @@ PacketAPI *PacketAPI::create(PacketServer *_server)
 PacketAPI::PacketAPI(PacketServer *_server)
     : concurrency::OSThread("PacketAPI"), isConnected(false), programmingMode(false), server(_server)
 {
+    api_type = TYPE_PACKET;
 }
 
 int32_t PacketAPI::runOnce()

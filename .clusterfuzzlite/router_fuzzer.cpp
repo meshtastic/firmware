@@ -76,7 +76,7 @@ bool loopCanSleep()
 // Called just prior to starting Meshtastic. Allows for setting config values before startup.
 void lateInitVariant()
 {
-    settingsMap[logoutputlevel] = level_error;
+    portduino_config.logoutputlevel = level_error;
     channelFile.channels[0] = meshtastic_Channel{
         .has_settings = true,
         .settings =
@@ -132,7 +132,7 @@ int portduino_main(int argc, char **argv); // Renamed "main" function from Mesht
 // Start Meshtastic in a thread and wait till it has reached the ON state.
 int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
-    settingsMap[maxtophone] = 5;
+    portduino_config.maxtophone = 5;
 
     meshtasticThread = std::thread([program = *argv[0]]() {
         char nodeIdStr[12];

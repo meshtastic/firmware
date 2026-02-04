@@ -115,7 +115,13 @@ int32_t BMX160Sensor::runOnce()
 void BMX160Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+    sBmx160SensorData_t magAccel;
+    sBmx160SensorData_t gAccel;
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
+    sensor.getAllData(&magAccel, NULL, &gAccel);
+    highestX = magAccel.x, lowestX = magAccel.x;
+    highestY = magAccel.y, lowestY = magAccel.y;
+    highestZ = magAccel.z, lowestZ = magAccel.z;
 
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided

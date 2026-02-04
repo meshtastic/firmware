@@ -6,9 +6,6 @@
 #define USB_VID 0x16D0
 #define USB_PID 0x1178
 
-#define LED_BUILTIN 13
-#define BUILTIN_LED LED_BUILTIN // backward compatibility
-
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 

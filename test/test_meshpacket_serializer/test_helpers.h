@@ -11,7 +11,8 @@
 #include <unity.h>
 
 // Helper function to create a test packet with the given port and payload
-static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size)
+static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size,
+                                                int payload_variant = meshtastic_MeshPacket_decoded_tag)
 {
     meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
 
@@ -29,8 +30,12 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.delayed = meshtastic_MeshPacket_Delayed_NO_DELAY;
 
     // Set decoded variant
-    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.which_payload_variant = payload_variant;
     packet.decoded.portnum = port;
+    if (payload_variant == meshtastic_MeshPacket_encrypted_tag && payload) {
+        packet.encrypted.size = payload_size;
+        memcpy(packet.encrypted.bytes, payload, packet.encrypted.size);
+    }
     memcpy(packet.decoded.payload.bytes, payload, payload_size);
     packet.decoded.payload.size = payload_size;
     packet.decoded.want_response = false;

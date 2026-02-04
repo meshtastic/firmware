@@ -12,7 +12,7 @@
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
 #if ARCH_PORTDUINO
-#define SX126X_MAX_POWER settingsMap[sx126x_max_power]
+#define SX126X_MAX_POWER portduino_config.sx126x_max_power
 #endif
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
@@ -52,26 +52,59 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
+#if defined(USE_GC1109_PA)
+    // GC1109 FEM chip initialization
+    // See variant.h for full pin mapping and control logic documentation
+
+    // VFEM_Ctrl (LORA_PA_POWER): Power enable for GC1109 LDO (always on)
+    pinMode(LORA_PA_POWER, OUTPUT);
+    digitalWrite(LORA_PA_POWER, HIGH);
+
+    // CSD (LORA_PA_EN): Chip enable - must be HIGH to enable GC1109 for both RX and TX
+    pinMode(LORA_PA_EN, OUTPUT);
+    digitalWrite(LORA_PA_EN, HIGH);
+
+    // CPS (LORA_PA_TX_EN): PA mode select - HIGH enables full PA during TX, LOW for RX (don't care)
+    // Note: TX/RX path switching (CTX) is handled by DIO2 via SX126X_DIO2_AS_RF_SWITCH
+    pinMode(LORA_PA_TX_EN, OUTPUT);
+    digitalWrite(LORA_PA_TX_EN, LOW); // Start in RX-ready state
+#endif
+
+#ifdef RF95_FAN_EN
+    digitalWrite(RF95_FAN_EN, HIGH);
+    pinMode(RF95_FAN_EN, OUTPUT);
+#endif
+
 #if ARCH_PORTDUINO
-    tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
-    if (settingsMap[sx126x_ant_sw_pin] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[sx126x_ant_sw_pin], HIGH);
-        pinMode(settingsMap[sx126x_ant_sw_pin], OUTPUT);
+    tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
+        pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
     }
 #endif
     if (tcxoVoltage == 0.0)
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
     else
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", tcxoVoltage);
-
+    setTransmitEnable(false);
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     RadioLibInterface::init();
 
     limitPower(SX126X_MAX_POWER);
+    // Make sure we reach the minimum power supported to turn the chip on (-9dBm)
+    if (power < -9)
+        power = -9;
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+
+#ifdef SX126X_PA_RAMP_US
+    // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
+    if (res == RADIOLIB_ERR_NONE) {
+        lora.setPaRampTime(SX126X_PA_RAMP_US);
+    }
+#endif
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
@@ -98,7 +131,7 @@ template <typename T> bool SX126xInterface<T>::init()
         bool dio2AsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
         bool dio2AsRfSwitch = false;
-        if (settingsMap[dio2_as_rf_switch]) {
+        if (portduino_config.dio2_as_rf_switch) {
             dio2AsRfSwitch = true;
         }
 #else
@@ -108,13 +141,13 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
     }
 
-    // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
-    // no effect
+// If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
+// no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen_pin],
-                  settingsMap[txen_pin]);
-        lora.setRfSwitchPins(settingsMap[rxen_pin], settingsMap[txen_pin]);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", portduino_config.lora_rxen_pin.pin,
+                  portduino_config.lora_txen_pin.pin);
+        lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN
@@ -223,7 +256,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR SX126xInterface<T>::disableInterrupt()
+template <typename T> void SX126xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();
 }
@@ -236,8 +269,12 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
+#ifdef ARCH_PORTDUINO
+    if (err != RADIOLIB_ERR_NONE)
+        portduino_status.LoRa_in_error = true;
+#else
     assert(err == RADIOLIB_ERR_NONE);
-
+#endif
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
@@ -253,12 +290,14 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
+    setTransmitEnable(true);
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -271,13 +310,19 @@ template <typename T> void SX126xInterface<T>::startReceive()
     sleep();
 #else
 
+    setTransmitEnable(false);
     setStandby();
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d", radioLibErr, err);
+#ifdef ARCH_PORTDUINO
+    if (err != RADIOLIB_ERR_NONE)
+        portduino_status.LoRa_in_error = true;
+#else
     assert(err == RADIOLIB_ERR_NONE);
+#endif
 
     RadioLibInterface::startReceive();
 
@@ -298,14 +343,19 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
-
+    setTransmitEnable(false);
     setStandby();
     result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
     if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
+#ifdef ARCH_PORTDUINO
+    if (result == RADIOLIB_ERR_WRONG_MODEM)
+        portduino_status.LoRa_in_error = true;
+#else
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
+#endif
 
     return false;
 }
@@ -337,6 +387,26 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(SX126X_POWER_EN, LOW);
 #endif
 
+#if defined(USE_GC1109_PA)
+    /*
+     * Do not switch the power on and off frequently.
+     * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
+     *  // digitalWrite(LORA_PA_POWER, LOW);
+     */
+    digitalWrite(LORA_PA_EN, LOW);
+    digitalWrite(LORA_PA_TX_EN, LOW);
+#endif
     return true;
 }
+
+/** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
+template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
+{
+#if defined(USE_GC1109_PA)
+    digitalWrite(LORA_PA_POWER, HIGH);         // Ensure LDO is on
+    digitalWrite(LORA_PA_EN, HIGH);            // CSD=1: Chip enabled
+    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0); // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
+#endif
+}
+
 #endif

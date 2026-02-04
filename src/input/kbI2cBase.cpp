@@ -7,6 +7,8 @@
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
+#elif defined(HACKADAY_COMMUNICATOR)
+#include "HackadayCommunicatorKeyboard.h"
 #else
 #include "TCA8418Keyboard.h"
 #endif
@@ -20,6 +22,8 @@ KbI2cBase::KbI2cBase(const char *name)
       TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(*(new TLoraPagerKeyboard()))
+#elif defined(HACKADAY_COMMUNICATOR)
+      TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
 #else
       TCAKeyboard(*(new TCA8418Keyboard()))
 #endif
@@ -90,7 +94,7 @@ int32_t KbI2cBase::runOnce()
         while (keyCount--) {
             const BBQ10Keyboard::KeyEvent key = Q10keyboard.keyEvent();
             if ((key.key != 0x00) && (key.state == BBQ10Keyboard::StateRelease)) {
-                InputEvent e;
+                InputEvent e = {};
                 e.inputEvent = INPUT_BROKER_NONE;
                 e.source = this->_originName;
                 switch (key.key) {
@@ -187,7 +191,7 @@ int32_t KbI2cBase::runOnce()
     }
     case 0x37: { // MPR121
         MPRkeyboard.trigger();
-        InputEvent e;
+        InputEvent e = {};
 
         while (MPRkeyboard.hasEvent()) {
             char nextEvent = MPRkeyboard.dequeueEvent();
@@ -250,7 +254,7 @@ int32_t KbI2cBase::runOnce()
     }
     case 0x84: { // Adafruit TCA8418
         TCAKeyboard.trigger();
-        InputEvent e;
+        InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
             char nextEvent = TCAKeyboard.dequeueEvent();
             e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -317,6 +321,26 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
+            case TCA8418KeyboardBase::FUNCTION_F1:
+                e.inputEvent = INPUT_BROKER_FN_F1;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F2:
+                e.inputEvent = INPUT_BROKER_FN_F2;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F3:
+                e.inputEvent = INPUT_BROKER_FN_F3;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F4:
+                e.inputEvent = INPUT_BROKER_FN_F4;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F5:
+                e.inputEvent = INPUT_BROKER_FN_F5;
+                e.kbchar = 0x00;
+                break;
             default:
                 if (nextEvent > 127) {
                     e.inputEvent = INPUT_BROKER_NONE;
@@ -328,11 +352,12 @@ int32_t KbI2cBase::runOnce()
                 break;
             }
             if (e.inputEvent != INPUT_BROKER_NONE) {
-                LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
+                // LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
             TCAKeyboard.trigger();
         }
+        TCAKeyboard.clearInt();
         break;
     }
     case 0x02: {
@@ -350,7 +375,7 @@ int32_t KbI2cBase::runOnce()
         }
         if (PrintDataBuf != 0) {
             LOG_DEBUG("RAK14004 key 0x%x pressed", PrintDataBuf);
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_MATRIXKEY;
             e.source = this->_originName;
             e.kbchar = PrintDataBuf;
@@ -365,7 +390,7 @@ int32_t KbI2cBase::runOnce()
 
         if (i2cBus->available()) {
             char c = i2cBus->read();
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             switch (c) {
@@ -484,8 +509,6 @@ int32_t KbI2cBase::runOnce()
             case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
             case 0x91: // fn+t
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
-
-            case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
             case 0xAA: // fn+b      INPUT_BROKER_MSG_BLUETOOTH_TOGGLE
             case 0x8F: // fn+e      INPUT_BROKER_MSG_EMOTE_LIST
                 // just pass those unmodified
@@ -519,4 +542,11 @@ int32_t KbI2cBase::runOnce()
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
     return 300;
+}
+
+void KbI2cBase::toggleBacklight(bool on)
+{
+#if defined(T_LORA_PAGER)
+    TCAKeyboard.setBacklight(on);
+#endif
 }

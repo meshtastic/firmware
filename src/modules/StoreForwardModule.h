@@ -21,6 +21,10 @@ struct PacketHistoryStruct {
     pb_size_t payload_size;
     int32_t rx_rssi;
     float rx_snr;
+    uint8_t hop_start;
+    uint8_t hop_limit;
+    bool via_mqtt;
+    uint8_t transport_mechanism;
 };
 
 class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>

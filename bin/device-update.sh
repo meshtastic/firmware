@@ -1,7 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
 CHANGE_MODE=false
+
+# Constants
+FLASH_BAUD=115200
+RESET_BAUD=1200
+UPDATE_OFFSET=0x10000
 
 # Determine the correct esptool command to use
 if "$PYTHON" -m esptool version >/dev/null 2>&1; then
@@ -15,6 +20,17 @@ else
     exit 1
 fi
 
+# esptool v5 supports commands with dashes and deprecates commands with
+# underscores. Prior versions only support commands with underscores
+if ${ESPTOOL_CMD} | grep --quiet write-flash
+then
+    ESPTOOL_WRITE_FLASH=write-flash
+    ESPTOOL_READ_FLASH_STATUS=read-flash-status
+else
+    ESPTOOL_WRITE_FLASH=write_flash
+    ESPTOOL_READ_FLASH_STATUS=read_flash_status
+fi
+
 # Usage info
 show_help() {
 cat << EOF
@@ -24,7 +40,7 @@ Flash image file to device, leave existing system intact."
     -h               Display this help and exit
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
-    -f FILENAME      The *update.bin file to flash.  Custom to your device type.
+    -f FILENAME      The *.bin file to flash.  Custom to your device type.
     --change-mode    Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
@@ -64,7 +80,7 @@ done
 shift "$((OPTIND-1))"
 
 if [ "$CHANGE_MODE" = true ]; then
-	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+    $ESPTOOL_CMD --baud $RESET_BAUD --after no_reset ${ESPTOOL_READ_FLASH_STATUS}
     exit 0
 fi
 
@@ -73,9 +89,9 @@ fi
     shift
 }
 
-if [ -f "${FILENAME}" ] && [ -z "${FILENAME##*"update"*}" ]; then
+if [[ -f "$FILENAME" && "$FILENAME" != *.factory.bin ]]; then
     echo "Trying to flash update ${FILENAME}"
-    $ESPTOOL_CMD --baud 115200 write_flash 0x10000 "${FILENAME}"
+    $ESPTOOL_CMD --baud $FLASH_BAUD ${ESPTOOL_WRITE_FLASH} $UPDATE_OFFSET "${FILENAME}"
 else
     show_help
     echo "Invalid file: ${FILENAME}"

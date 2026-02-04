@@ -75,7 +75,7 @@ TOOLS = {
 }
 
 BACKTRACE_REGEX = re.compile(
-    r"(?:\s+(0x40[0-2](?:\d|[a-f]|[A-F]){5}):0x(?:\d|[a-f]|[A-F]){8})\b"
+    r"\b(0x4[0-9a-fA-F]{7,8}):0x[0-9a-fA-F]{8}\b"
 )
 EXCEPTION_REGEX = re.compile("^Exception \\((?P<exc>[0-9]*)\\):$")
 COUNTER_REGEX = re.compile(
@@ -89,7 +89,7 @@ POINTER_REGEX = re.compile(
 STACK_BEGIN = ">>>stack>>>"
 STACK_END = "<<<stack<<<"
 STACK_REGEX = re.compile(
-    "^(?P<off>[0-9a-f]+):\W+(?P<c1>[0-9a-f]+) (?P<c2>[0-9a-f]+) (?P<c3>[0-9a-f]+) (?P<c4>[0-9a-f]+)(\W.*)?$"
+    r"^(?P<off>[0-9a-f]+):\W+(?P<c1>[0-9a-f]+) (?P<c2>[0-9a-f]+) (?P<c3>[0-9a-f]+) (?P<c4>[0-9a-f]+)(\W.*)?$"
 )
 
 StackLine = namedtuple("StackLine", ["offset", "content"])
@@ -223,7 +223,7 @@ class AddressResolver(object):
             if match is None:
                 if last is not None and line.startswith("(inlined by)"):
                     line = line[12:].strip()
-                    self._address_map[last] += "\n  \-> inlined by: " + line
+                    self._address_map[last] += "\n  \\-> inlined by: " + line
                 continue
 
             if match.group("result") == "?? ??:0":

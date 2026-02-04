@@ -51,7 +51,7 @@ for f in .clusterfuzzlite/*_fuzzer.cpp; do
 	fuzzer=$(basename "$f" .cpp)
 	cp -f "$f" src/fuzzer.cpp
 	pio run -vvv --environment "$PIO_ENV"
-	program="$PLATFORMIO_WORKSPACE_DIR/build/$PIO_ENV/program"
+	program="$PLATFORMIO_WORKSPACE_DIR/build/$PIO_ENV/meshtasticd"
 	cp "$program" "$OUT/$fuzzer"
 
 	# Copy shared libraries used by the fuzzer.

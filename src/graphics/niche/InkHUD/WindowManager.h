@@ -28,8 +28,13 @@ class WindowManager
     // - call these to make stuff change
 
     void nextTile();
+    void prevTile();
     void openMenu();
+    void openAlignStick();
+    void openKeyboard();
+    void closeKeyboard();
     void nextApplet();
+    void prevApplet();
     void rotate();
     void toggleBatteryIcon();
 
@@ -61,6 +66,7 @@ class WindowManager
     void findOrphanApplets(); // Find any applets left-behind when layout changes
 
     std::vector<Tile *> userTiles; // Tiles which can host user applets
+    bool keyboardOpen = false;
 
     // For convenience
     InkHUD *inkhud = nullptr;

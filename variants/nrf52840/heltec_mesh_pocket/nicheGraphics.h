@@ -50,9 +50,9 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(10, 1.5);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1253;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1253;
+    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1253;
 
     // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?

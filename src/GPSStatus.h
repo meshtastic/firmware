@@ -22,6 +22,9 @@ class GPSStatus : public Status
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
+    /// Time of last valid GPS fix (millis since boot)
+    uint32_t lastFixMillis = 0;
+
   public:
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
@@ -83,6 +86,9 @@ class GPSStatus : public Status
 
     uint32_t getNumSatellites() const { return p.sats_in_view; }
 
+    /// Return millis() when the last GPS fix occurred (0 = never)
+    uint32_t getLastFixMillis() const { return lastFixMillis; }
+
     bool matches(const GPSStatus *newStatus) const
     {
 #ifdef GPS_DEBUG
@@ -114,6 +120,9 @@ class GPSStatus : public Status
 
         if (isDirty) {
             if (hasLock) {
+                // Record time of last valid GPS fix
+                lastFixMillis = millis();
+
                 // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
                 LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d", p.timestamp,
                           p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,

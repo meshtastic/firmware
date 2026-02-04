@@ -6,7 +6,7 @@
 // set HW_VENDOR
 //
 
-#define HW_VENDOR meshtastic_HardwareModel_PORTDUINO
+#define HW_VENDOR portduino_status.hardwareModel
 
 #ifndef HAS_BUTTON
 #define HAS_BUTTON 1
@@ -17,9 +17,6 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 1
-#endif
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 1
 #endif
@@ -28,9 +25,9 @@
 #endif
 #ifndef HAS_TRACKBALL
 #define HAS_TRACKBALL 1
-#define TB_DOWN (uint8_t) settingsMap[tbDownPin]
-#define TB_UP (uint8_t) settingsMap[tbUpPin]
-#define TB_LEFT (uint8_t) settingsMap[tbLeftPin]
-#define TB_RIGHT (uint8_t) settingsMap[tbRightPin]
-#define TB_PRESS (uint8_t) settingsMap[tbPressPin]
+#define TB_DOWN (uint8_t) portduino_config.tbDownPin.pin
+#define TB_UP (uint8_t) portduino_config.tbUpPin.pin
+#define TB_LEFT (uint8_t) portduino_config.tbLeftPin.pin
+#define TB_RIGHT (uint8_t) portduino_config.tbRightPin.pin
+#define TB_PRESS (uint8_t) portduino_config.tbPressPin.pin
 #endif

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <pb_encode.h>
+#include <string>
 #include <vector>
 
 #include "MeshTypes.h"
@@ -109,6 +110,10 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
+/// Given a packet, return the number of hops used to reach this node.
+/// Returns defaultIfUnknown if the number of hops couldn't be determined.
+int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown = -1);
+
 enum LoadFileResult {
     // Successfully opened the file
     LOAD_SUCCESS = 1,
@@ -185,6 +190,16 @@ class NodeDB
      */
     void set_favorite(bool is_favorite, uint32_t nodeId);
 
+    /*
+     * Returns true if the node is in the NodeDB and marked as favorite
+     */
+    bool isFavorite(uint32_t nodeId);
+
+    /*
+     * Returns true if p->from or p->to is a favorited node
+     */
+    bool isFromOrToFavoritedNode(const meshtastic_MeshPacket &p);
+
     /**
      * Other functions like the node picker can request a pause in the node sorting
      */
@@ -192,6 +207,9 @@ class NodeDB
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
+
+    /// @return our node ID as a string in the format "!xxxxxxxx"
+    std::string getNodeId() const;
 
     // @return last byte of a NodeNum, 0xFF if it ended at 0x00
     uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }
@@ -215,7 +233,8 @@ class NodeDB
      */
     size_t getNumOnlineMeshNodes(bool localOnly = false);
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
+        removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
 
@@ -264,11 +283,17 @@ class NodeDB
         LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
                   position.time, position.timestamp);
         localPosition = position;
+        if (position.latitude_i != 0 || position.longitude_i != 0) {
+            localPositionUpdatedSinceBoot = true;
+        }
     }
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+    bool hasLocalPositionSinceBoot() const { return localPositionUpdatedSinceBoot; }
 
+#if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+#endif
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
@@ -284,6 +309,7 @@ class NodeDB
 
   private:
     bool duplicateWarned = false;
+    bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
@@ -352,6 +378,8 @@ extern meshtastic_CriticalErrorCode error_code;
 extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
+#define NODEINFO_BITFIELD_IS_MUTED_SHIFT 1
+#define NODEINFO_BITFIELD_IS_MUTED_MASK (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT)
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

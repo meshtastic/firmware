@@ -26,4 +26,5 @@ class TLoraPagerKeyboard : public TCA8418KeyboardBase
     uint32_t last_tap;
     uint8_t char_idx;
     int32_t tap_interval;
+    uint32_t brightness = 0;
 };
