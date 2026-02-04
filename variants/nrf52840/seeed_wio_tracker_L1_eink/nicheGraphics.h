@@ -9,6 +9,7 @@
 #include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
+#include "graphics/niche/InkHUD/Applets/Examples/UserAppletInputExample/UserAppletInputExample.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -75,6 +76,8 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
+    inkhud->addApplet("UserControls", new InkHUD::UserAppletInputExampleApplet, true, false,
+                      0); // Activated, no autoshow, default on tile 0
 
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // -
     //  Start running InkHUD
