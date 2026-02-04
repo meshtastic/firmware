@@ -53,31 +53,22 @@ void InkHUD::BatteryIconApplet::onRender(bool full)
     // We do need to do this with the battery though, as it is an "overlay"
     fillRect(0, 0, width(), height(), WHITE);
 
-    // Make icon render with a 1px border on all but the right side
-    int16_t l = 1;
-    int16_t t = 1;
-    uint16_t w = width() - 1; // Handle 1px left pad
-    int16_t h = height() - 2; // Handle top/bottom padding
-
-    // Vertical centerline
-    const int16_t m = t + (h / 2);
-
     // =====================
     // Draw battery outline
     // =====================
 
     // Positive terminal "bump"
     constexpr uint16_t bumpW = 2;
-    const int16_t &bumpL = l;
-    const uint16_t bumpH = h / 2;
-    const int16_t bumpT = m - (bumpH / 2);
+    const int16_t &bumpL = 1;
+    const uint16_t bumpH = (height() - 2) / 2;
+    const int16_t bumpT = (1 + ((height() - 2) / 2)) - (bumpH / 2);
     fillRect(bumpL, bumpT, bumpW, bumpH, BLACK);
 
     // Main body of battery
-    const int16_t bodyL = l + bumpW;
-    const int16_t &bodyT = t;
-    const int16_t &bodyH = h;
-    const int16_t bodyW = w - bumpW;
+    const int16_t bodyL = 1 + bumpW;
+    const int16_t &bodyT = 1;
+    const int16_t &bodyH = height() - 2;         // Handle top/bottom padding
+    const int16_t bodyW = (width() - 1) - bumpW; // Handle 1px left pad
     drawRect(bodyL, bodyT, bodyW, bodyH, BLACK);
 
     // Erase join between bump and body
