@@ -113,7 +113,6 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
-#endif
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif
