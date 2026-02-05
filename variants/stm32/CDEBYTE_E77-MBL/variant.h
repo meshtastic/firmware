@@ -14,6 +14,11 @@ Do not expect a working Meshtastic device with this target.
 #define _VARIANT_EBYTE_E77_
 
 #define USE_STM32WLx
+/*
+Unfortunately, E77-MBL are shipped with and without TCXO; If LoRa fails to
+initialize with "STM32WLx init result -707", try removing this definition.
+*/
+#define STM32WLx_TCXO_VOLTAGE 1.7
 
 #define LED_POWER PB4 // LED1
 // #define LED_POWER PB3 // LED2
