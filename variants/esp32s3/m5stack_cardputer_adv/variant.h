@@ -86,3 +86,6 @@
 #define ADC_CHANNEL ADC1_GPIO10_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
+
+// BMI270 6-axis IMU on internal I2C bus
+#define HAS_BMI270
