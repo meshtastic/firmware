@@ -6,6 +6,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <Wire.h>
+#include <cmath>
 
 // SHT21 I2C address and commands (use no-hold commands to avoid clock-stretch issues)
 static const uint8_t CMD_TEMP_NOHOLD = 0xF3;
@@ -74,8 +75,9 @@ bool SHT21Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float temp = -46.85f + 175.72f * ((float)raw_t / 65536.0f);
     float rh = -6.0f + 125.0f * ((float)raw_h / 65536.0f);
 
-    measurement->variant.environment_metrics.temperature = temp;
-    measurement->variant.environment_metrics.relative_humidity = rh;
+    // Round to 2 decimal places for telemetry
+    measurement->variant.environment_metrics.temperature = roundf(temp * 100.0f) / 100.0f;
+    measurement->variant.environment_metrics.relative_humidity = roundf(rh * 100.0f) / 100.0f;
 
     return true;
 }
