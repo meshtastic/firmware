@@ -72,6 +72,9 @@
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "modules/esp32/AudioModule.h"
 #endif
+#if defined(USERPREFS_OBDII_ENABLED)
+#include "modules/ObdiiTelemetryModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
 #include "modules/esp32/PaxcounterModule.h"
 #endif
@@ -223,6 +226,9 @@ void setupModules()
     // Only run on an esp32 based device.
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
     audioModule = new AudioModule();
+#endif
+#if defined(USERPREFS_OBDII_ENABLED)
+    new ObdiiTelemetryModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
     if (moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled) {
