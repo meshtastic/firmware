@@ -166,6 +166,7 @@ template <typename T> bool SX126xInterface<T>::init()
              lora.setRfSwitchPins(NULL, SX126X_TXEN);
         #else
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+        #endif
     }
 #endif
     if (config.lora.sx126x_rx_boosted_gain) {
