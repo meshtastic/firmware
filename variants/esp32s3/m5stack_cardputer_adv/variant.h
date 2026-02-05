@@ -47,7 +47,7 @@
 #define LORA_RST 3
 #define LORA_DIO1 4
 #define LORA_DIO2 6
-#define LORA_DIO3 // Not connected on PCB, but internally on the SX1262, if DIO3 is high the TCXO is enabled
+#define LORA_DIO3 RADIOLIB_NC
 
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
