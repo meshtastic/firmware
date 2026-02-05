@@ -202,6 +202,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#elif defined(T_WATCH_ULTRA)
+#define HW_VENDOR meshtastic_HardwareModel_T_WATCH_ULTRA
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
