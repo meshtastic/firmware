@@ -9,6 +9,8 @@
 #include "TLoraPagerKeyboard.h"
 #elif defined(HACKADAY_COMMUNICATOR)
 #include "HackadayCommunicatorKeyboard.h"
+#elif defined(M5STACK_CARDPUTER_ADV)
+#include "CardputerAdvKeyboard.h"
 #else
 #include "TCA8418Keyboard.h"
 #endif
@@ -24,6 +26,8 @@ KbI2cBase::KbI2cBase(const char *name)
       TCAKeyboard(*(new TLoraPagerKeyboard()))
 #elif defined(HACKADAY_COMMUNICATOR)
       TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
+#elif defined(M5STACK_CARDPUTER_ADV)
+      TCAKeyboard(*(new CardputerAdvKeyboard()))
 #else
       TCAKeyboard(*(new TCA8418Keyboard()))
 #endif
@@ -321,26 +325,28 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
-            case TCA8418KeyboardBase::FUNCTION_F1:
-                e.inputEvent = INPUT_BROKER_FN_F1;
-                e.kbchar = 0x00;
+#ifndef M5STACK_CARDPUTER_ADV                
+            case TCA8418KeyboardBase::FUNCTION_F1: 		
+                e.inputEvent = INPUT_BROKER_FN_F1; 		
+                e.kbchar = 0x00; 		
+                break; 		
+            case TCA8418KeyboardBase::FUNCTION_F2: 		
+                e.inputEvent = INPUT_BROKER_FN_F2; 		
+                e.kbchar = 0x00; 		
+                break; 		
+            case TCA8418KeyboardBase::FUNCTION_F3: 		
+                e.inputEvent = INPUT_BROKER_FN_F3; 		
+                e.kbchar = 0x00; 		
+                break; 		
+            case TCA8418KeyboardBase::FUNCTION_F4: 		
+                e.inputEvent = INPUT_BROKER_FN_F4; 		
+                e.kbchar = 0x00; 		
+                break; 		
+            case TCA8418KeyboardBase::FUNCTION_F5: 		
+                e.inputEvent = INPUT_BROKER_FN_F5; 		
+                e.kbchar = 0x00; 		
                 break;
-            case TCA8418KeyboardBase::FUNCTION_F2:
-                e.inputEvent = INPUT_BROKER_FN_F2;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::FUNCTION_F3:
-                e.inputEvent = INPUT_BROKER_FN_F3;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::FUNCTION_F4:
-                e.inputEvent = INPUT_BROKER_FN_F4;
-                e.kbchar = 0x00;
-                break;
-            case TCA8418KeyboardBase::FUNCTION_F5:
-                e.inputEvent = INPUT_BROKER_FN_F5;
-                e.kbchar = 0x00;
-                break;
+#endif
             default:
                 if (nextEvent > 127) {
                     e.inputEvent = INPUT_BROKER_NONE;
