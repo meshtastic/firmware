@@ -761,7 +761,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             validatedLora.coding_rate = 5;
         }
 
-        if (validatedLora.spread_factor < 7 || validatedLora.spread_factor > 12) {
+        if (validatedLora.spread_factor < 5 || validatedLora.spread_factor > 12) {
             LOG_WARN("Invalid spread_factor %d, setting to 11", validatedLora.spread_factor);
             validatedLora.spread_factor = 11;
         }
