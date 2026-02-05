@@ -488,10 +488,8 @@ bool BMI270Sensor::readRegisters(uint8_t reg, uint8_t *data, size_t len)
 
 bool BMI270Sensor::uploadConfigFile()
 {
-    if (!writeRegister(BMI270_REG_INIT_CTRL, 0x00)) {
-        LOG_WARN("BMI270: Failed to prepare for config load");
+    if (!writeRegister(BMI270_REG_INIT_CTRL, 0x00))
         return false;
-    }
 
     const size_t chunkSize = 32;
     size_t bytesWritten = 0;
@@ -500,96 +498,61 @@ bool BMI270Sensor::uploadConfigFile()
         size_t remaining = BMI270_CONFIG_FILE_SIZE - bytesWritten;
         size_t toWrite = (remaining < chunkSize) ? remaining : chunkSize;
 
+        // Set address in word units before each chunk
         uint16_t wordAddr = bytesWritten / 2;
-        if (!writeRegister(BMI270_REG_INIT_ADDR_0, (uint8_t)(wordAddr & 0x0F))) {
-            LOG_WARN("BMI270: Failed to set init addr low at offset %d", bytesWritten);
+        if (!writeRegister(BMI270_REG_INIT_ADDR_0, (uint8_t)(wordAddr & 0x0F)))
             return false;
-        }
-        if (!writeRegister(BMI270_REG_INIT_ADDR_1, (uint8_t)(wordAddr >> 4))) {
-            LOG_WARN("BMI270: Failed to set init addr high at offset %d", bytesWritten);
+        if (!writeRegister(BMI270_REG_INIT_ADDR_1, (uint8_t)(wordAddr >> 4)))
             return false;
-        }
 
         wire->beginTransmission(deviceAddress());
         wire->write(BMI270_REG_INIT_DATA);
         for (size_t i = 0; i < toWrite; i++) {
             wire->write(pgm_read_byte(&bmi270_config_file[bytesWritten + i]));
         }
-        if (wire->endTransmission() != 0) {
-            LOG_WARN("BMI270: Failed to write config at offset %d", bytesWritten);
+        if (wire->endTransmission() != 0)
             return false;
-        }
 
         bytesWritten += toWrite;
     }
 
-    if (!writeRegister(BMI270_REG_INIT_CTRL, 0x01)) {
-        LOG_WARN("BMI270: Failed to start init");
+    if (!writeRegister(BMI270_REG_INIT_CTRL, 0x01))
         return false;
-    }
 
     delay(50);
 
     for (int i = 0; i < 10; i++) {
         uint8_t status = readRegister(BMI270_REG_INTERNAL_STATUS);
-        if ((status & 0x0F) == BMI270_INIT_OK) {
-            LOG_DEBUG("BMI270: Config upload complete, status=0x%02X", status);
+        if ((status & 0x0F) == BMI270_INIT_OK)
             return true;
-        }
         delay(20);
     }
 
-    uint8_t status = readRegister(BMI270_REG_INTERNAL_STATUS);
-    LOG_WARN("BMI270: Init failed, status=0x%02X", status);
+    LOG_WARN("BMI270 status=0x%02X", readRegister(BMI270_REG_INTERNAL_STATUS));
     return false;
 }
 
 bool BMI270Sensor::init()
 {
-    LOG_DEBUG("BMI270 init on addr 0x%02X", deviceAddress());
-
     delay(10);
     writeRegister(BMI270_REG_CMD, BMI270_CMD_SOFTRESET);
     delay(50);
 
-    // Disable advanced power save mode to allow config upload
-    if (!writeRegister(BMI270_REG_PWR_CONF, BMI270_PWR_CONF_ADV_POWER_SAVE_DISABLED)) {
-        LOG_WARN("BMI270: Failed to disable power save");
-        initialized = false;
+    if (!writeRegister(BMI270_REG_PWR_CONF, BMI270_PWR_CONF_ADV_POWER_SAVE_DISABLED))
         return false;
-    }
     delay(2);
 
     if (!uploadConfigFile()) {
-        LOG_WARN("BMI270: Config upload failed");
-        initialized = false;
+        LOG_WARN("BMI270 config failed");
         return false;
     }
 
-    // Configure accelerometer: 50Hz ODR, normal mode, performance filter
     uint8_t accConf = BMI270_ACC_ODR_50HZ | BMI270_ACC_BWP_NORMAL | BMI270_ACC_FILTER_PERF;
-    if (!writeRegister(BMI270_REG_ACC_CONF, accConf)) {
-        LOG_WARN("BMI270: Failed to configure accelerometer");
-        initialized = false;
+    if (!writeRegister(BMI270_REG_ACC_CONF, accConf) || !writeRegister(BMI270_REG_ACC_RANGE, BMI270_ACC_RANGE_2G) ||
+        !writeRegister(BMI270_REG_PWR_CTRL, BMI270_PWR_CTRL_ACC_EN))
         return false;
-    }
-
-    // Set accelerometer range to +/-2g
-    if (!writeRegister(BMI270_REG_ACC_RANGE, BMI270_ACC_RANGE_2G)) {
-        LOG_WARN("BMI270: Failed to set accelerometer range");
-        initialized = false;
-        return false;
-    }
-
-    if (!writeRegister(BMI270_REG_PWR_CTRL, BMI270_PWR_CTRL_ACC_EN)) {
-        LOG_WARN("BMI270: Failed to enable accelerometer");
-        initialized = false;
-        return false;
-    }
 
     delay(50);
-
-    LOG_DEBUG("BMI270 init ok");
     initialized = true;
     return true;
 }
