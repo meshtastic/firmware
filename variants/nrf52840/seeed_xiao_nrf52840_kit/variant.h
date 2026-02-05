@@ -96,7 +96,7 @@ static const uint8_t A5 = PIN_A5;
 #define LED_GREEN (13)
 #define LED_BLUE (12)
 
-#define PIN_LED1 LED_GREEN // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_PIN
+#define PIN_LED1 LED_GREEN // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_POWER
 #define PIN_LED2 LED_BLUE
 #define PIN_LED3 LED_RED
 

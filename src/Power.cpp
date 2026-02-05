@@ -459,6 +459,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
         // if it's not HIGH - check the battery
 #endif
+        // If we have an EXT_PWR_DETECT pin and it indicates no external power, believe it.
+        return false;
 
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if

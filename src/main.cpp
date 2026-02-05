@@ -7,13 +7,13 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
 
 #include "FSCommon.h"
-#include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -193,6 +193,8 @@ bool kb_found = false;
 // global bool to record that on-screen keyboard (OSK) is present
 bool osk_found = false;
 
+unsigned long last_listen = 0;
+
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
@@ -242,26 +244,8 @@ const char *getDeviceName()
     return name;
 }
 
-// TODO remove from main.cpp
-static int32_t ledBlinker()
-{
-    // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
-    // config.device.led_heartbeat_disabled is changed
-    if (config.device.led_heartbeat_disabled)
-        return 1000;
-
-    static bool ledOn;
-    ledOn ^= 1;
-
-    ledBlink.set(ledOn);
-
-    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
-}
-
 uint32_t timeLastPowered = 0;
 
-static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
 
@@ -299,21 +283,16 @@ void earlyInitVariant() {}
 // blink user led in 3 flashes sequence to indicate what is happening
 void waitUntilPowerLevelSafe()
 {
-
-#ifdef LED_PIN
-    pinMode(LED_PIN, OUTPUT);
-#endif
-
     while (powerHAL_isPowerLevelSafe() == false) {
 
-#ifdef LED_PIN
+#ifdef LED_POWER
 
         // 3x: blink for 300 ms, pause for 300 ms
 
         for (int i = 0; i < 3; i++) {
-            digitalWrite(LED_PIN, LED_STATE_ON);
+            digitalWrite(LED_POWER, LED_STATE_ON);
             delay(300);
-            digitalWrite(LED_PIN, LED_STATE_OFF);
+            digitalWrite(LED_POWER, LED_STATE_OFF);
             delay(300);
         }
 #endif
@@ -337,6 +316,11 @@ void setup()
     // initialize power HAL layer as early as possible
     powerHAL_init();
 
+#ifdef LED_POWER
+    pinMode(LED_POWER, OUTPUT);
+    digitalWrite(LED_POWER, LED_STATE_ON);
+#endif
+
     // prevent booting if device is in power failure mode
     // boot sequence will follow when battery level raises to safe mode
     waitUntilPowerLevelSafe();
@@ -347,11 +331,6 @@ void setup()
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-#endif
-
-#ifdef LED_POWER
-    pinMode(LED_POWER, OUTPUT);
-    digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
 #ifdef LED_NOTIFICATION
@@ -483,16 +462,6 @@ void setup()
     initSPI();
 
     OSThread::setup();
-
-    // TODO make this ifdef based on defined pins and move from main.cpp
-#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-    // The ThinkNodes have their own blink logic
-    // ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
-#else
-
-    ledPeriodic = new Periodic("Blink", ledBlinker);
-
-#endif
 
     fsInit();
 
@@ -716,13 +685,6 @@ void setup()
 
 #ifdef HAS_SDCARD
     setupSDCard();
-#endif
-
-    // LED init
-
-#ifdef LED_PIN
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LED_STATE_ON); // turn on for now
 #endif
 
     // Hello
@@ -958,12 +920,6 @@ void setup()
     setupNicheGraphics();
 #endif
 
-#ifdef LED_PIN
-    // Turn LED off after boot, if heartbeat by config
-    if (config.device.led_heartbeat_disabled)
-        digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
-#endif
-
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
@@ -1165,6 +1121,12 @@ void loop()
     nrf52Loop();
 #endif
     power->powerCommandsCheck();
+
+    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
+        !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
+        RadioLibInterface::instance->startReceive();
+        LOG_DEBUG("attempting AGC reset");
+    }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;

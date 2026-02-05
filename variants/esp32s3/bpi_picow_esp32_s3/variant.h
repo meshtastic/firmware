@@ -11,7 +11,7 @@
 #define I2C_SDA 12
 #define I2C_SCL 14
 
-#define LED_PIN 46
+#define LED_POWER 46
 #define LED_STATE_ON 0 // State when LED is litted
 
 // #define BUTTON_PIN 15 // Pico OLED 1.3 User key 0 - removed User key 1 (17)
