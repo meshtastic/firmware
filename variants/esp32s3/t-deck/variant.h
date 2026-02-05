@@ -23,6 +23,7 @@
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 #define USE_TFTDISPLAY 1
+#define HAS_PHYSICAL_KEYBOARD 1
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
@@ -60,7 +61,6 @@
 #define KB_POWERON 10                  // must be set to HIGH
 #define KB_SLAVE_ADDRESS TDECK_KB_ADDR // 0x55
 #define KB_BL_PIN 46                   // not used for now
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 // trackball
 #define HAS_TRACKBALL 1
@@ -70,6 +70,7 @@
 #define TB_RIGHT 2
 #define TB_PRESS 0 // BUTTON_PIN
 #define TB_DIRECTION FALLING
+#define TB_THRESHOLD 3
 
 // microphone
 #define ES7210_SCK 47

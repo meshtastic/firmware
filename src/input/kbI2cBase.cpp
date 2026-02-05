@@ -430,6 +430,26 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
+            case TCA8418KeyboardBase::FUNCTION_F1:
+                e.inputEvent = INPUT_BROKER_FN_F1;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F2:
+                e.inputEvent = INPUT_BROKER_FN_F2;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F3:
+                e.inputEvent = INPUT_BROKER_FN_F3;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F4:
+                e.inputEvent = INPUT_BROKER_FN_F4;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F5:
+                e.inputEvent = INPUT_BROKER_FN_F5;
+                e.kbchar = 0x00;
+                break;
             default:
                 if (nextEvent > 127) {
                     e.inputEvent = INPUT_BROKER_NONE;
@@ -597,8 +617,6 @@ int32_t KbI2cBase::runOnce()
             case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
             case 0x91: // fn+t
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
-
-            case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
             case 0xAA: // fn+b      INPUT_BROKER_MSG_BLUETOOTH_TOGGLE
             case 0x8F: // fn+e      INPUT_BROKER_MSG_EMOTE_LIST
                 // just pass those unmodified

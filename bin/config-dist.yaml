@@ -105,6 +105,8 @@ Lora:
 
 GPS:
 #  SerialPath: /dev/ttyS0
+#  ExtraPins:
+#    - 22
 
 ### Specify I2C device, or leave blank for none
 
