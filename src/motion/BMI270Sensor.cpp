@@ -513,7 +513,15 @@ bool BMI270Sensor::readRegisters(uint8_t reg, uint8_t *data, size_t len)
     wire->beginTransmission(deviceAddress());
     wire->write(reg);
     wire->endTransmission(false);
-    wire->requestFrom(deviceAddress(), (uint8_t)len);
+    size_t bytesRead = wire->requestFrom(deviceAddress(), (uint8_t)len);
+    if (bytesRead != len) {
+        // Read any available bytes to keep the bus state clean, but report failure.
+        for (size_t i = 0; i < bytesRead && wire->available(); i++) {
+            data[i] = wire->read();
+        }
+        return false;
+    }
+
     for (size_t i = 0; i < len && wire->available(); i++) {
         data[i] = wire->read();
     }
