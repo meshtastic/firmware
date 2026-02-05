@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
@@ -192,6 +193,8 @@ uint8_t kb_model;
 bool kb_found = false;
 // global bool to record that on-screen keyboard (OSK) is present
 bool osk_found = false;
+
+unsigned long last_listen = 0;
 
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
@@ -1165,6 +1168,12 @@ void loop()
     nrf52Loop();
 #endif
     power->powerCommandsCheck();
+
+    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
+        !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
+        RadioLibInterface::instance->startReceive();
+        LOG_DEBUG("attempting AGC reset");
+    }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
