@@ -9,7 +9,7 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-#define LED_PIN 27
+#define LED_POWER 27
 
 #define USE_SX1262
 
