@@ -510,10 +510,10 @@ void InkHUD::WindowManager::placeSystemTiles()
     const uint16_t batteryIconWidth = batteryIconHeight * 1.8;
     inkhud->getSystemApplet("BatteryIcon")
         ->getTile()
-        ->setRegion(inkhud->width() - batteryIconWidth, // x
-                    2,                                  // y
-                    batteryIconWidth,                   // width
-                    batteryIconHeight);                 // height
+        ->setRegion(inkhud->width() - batteryIconWidth - 1, // x
+                    1,                                      // y
+                    batteryIconWidth + 1,                   // width
+                    batteryIconHeight + 2);                 // height
 
     // Note: the tiles of placeholder and menu applets are manipulated specially
     // - menuApplet borrows user tiles
