@@ -160,6 +160,11 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
     if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", SX126X_RXEN, SX126X_TXEN);
+        #ifdef SX126X_ME
+             digitalWrite(SX126X_ME, HIGH);
+             pinMode(SX126X_ME, OUTPUT);
+             lora.setRfSwitchPins(NULL, SX126X_TXEN);
+        #else
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
