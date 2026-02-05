@@ -41,7 +41,7 @@ extern "C" {
 
 // LEDs
 #define LED_BLUE -1
-#define LED_CHARGE (12)
+#define LED_POWER (12)
 #define LED_PAIRING (7)
 #define LED_NOTIFICATION LED_PAIRING
 
