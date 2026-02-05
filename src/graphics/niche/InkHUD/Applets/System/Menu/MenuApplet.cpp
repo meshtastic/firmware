@@ -1576,7 +1576,7 @@ void InkHUD::MenuApplet::onNavUp()
 
         if (!cursorShown) {
             cursorShown = true;
-            cursor = 0;
+            cursor = items.size() - 1;
         } else {
             do {
                 if (cursor == 0)
