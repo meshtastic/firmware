@@ -32,7 +32,7 @@
 #define SX126X_BUSY 32  // EBYTE module's BUSY pin
 #define SX126X_DIO1 33  // EBYTE module's DIO1 pin
 
-#define SX126X_ME 14 // E22P Module Enable
+#define SX126X_ME 14 // E22P Module Enable - if defined, captures the SX126X_RXEN pin and sets the state to always ON
 
 #define SX126X_TXEN 13 // Schematic connects EBYTE module's TXEN pin to MCU
 #define SX126X_RXEN 14 // Schematic connects EBYTE module's RXEN pin to MCU
