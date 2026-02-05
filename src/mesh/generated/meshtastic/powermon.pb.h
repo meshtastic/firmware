@@ -11,7 +11,7 @@
 
 /* Enum definitions */
 /* Any significant power changing event in meshtastic should be tagged with a powermon state transition.
-If you are making new meshtastic features feel free to add new entries at the end of this definition. */
+ If you are making new meshtastic features feel free to add new entries at the end of this definition. */
 typedef enum _meshtastic_PowerMon_State {
     meshtastic_PowerMon_State_None = 0,
     meshtastic_PowerMon_State_CPU_DeepSleep = 1,
@@ -34,13 +34,13 @@ something like "S:PM:C,0x00001234,REASON" where the hex number is the bitmask of
     meshtastic_PowerMon_State_Screen_Drawing = 512,
     meshtastic_PowerMon_State_Wifi_On = 1024,
     /* GPS is actively trying to find our location
-See GPSPowerState for more details */
+ See GPSPowerState for more details */
     meshtastic_PowerMon_State_GPS_Active = 2048
 } meshtastic_PowerMon_State;
 
 /* What operation would we like the UUT to perform.
-note: senders should probably set want_response in their request packets, so that they can know when the state
-machine has started processing their request */
+ note: senders should probably set want_response in their request packets, so that they can know when the state
+ machine has started processing their request */
 typedef enum _meshtastic_PowerStressMessage_Opcode {
     /* Unset/unused */
     meshtastic_PowerStressMessage_Opcode_UNSET = 0,
@@ -67,7 +67,7 @@ typedef enum _meshtastic_PowerStressMessage_Opcode {
 
 /* Struct definitions */
 /* Note: There are no 'PowerMon' messages normally in use (PowerMons are sent only as structured logs - slogs).
-But we wrap our State enum in this message to effectively nest a namespace (without our linter yelling at us) */
+ But we wrap our State enum in this message to effectively nest a namespace (without our linter yelling at us) */
 typedef struct _meshtastic_PowerMon {
     char dummy_field;
 } meshtastic_PowerMon;

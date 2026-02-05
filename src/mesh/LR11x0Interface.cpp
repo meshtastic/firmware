@@ -6,6 +6,10 @@
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#elif ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#define rfswitch_dio_pins portduino_config.rfswitch_dio_pins
+#define rfswitch_table portduino_config.rfswitch_table
 #else
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t rfswitch_table[] = {
@@ -14,18 +18,20 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 };
 #endif
 
-#ifdef ARCH_PORTDUINO
-#include "PortduinoGlue.h"
-#endif
-
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and LR11x0 power config forgotten)
+#if ARCH_PORTDUINO
+#define LR1110_MAX_POWER portduino_config.lr1110_max_power
+#endif
 #ifndef LR1110_MAX_POWER
 #define LR1110_MAX_POWER 22
 #endif
 
 // the 2.4G part maxes at 13dBm
 
+#if ARCH_PORTDUINO
+#define LR1120_MAX_POWER portduino_config.lr1120_max_power
+#endif
 #ifndef LR1120_MAX_POWER
 #define LR1120_MAX_POWER 13
 #endif
@@ -49,7 +55,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
+    float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
 #elif !defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
@@ -65,16 +71,13 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    if (power > LR1110_MAX_POWER) // Clamp power to maximum defined level
-        power = LR1110_MAX_POWER;
+    limitPower(LR1110_MAX_POWER);
 
     if ((power > LR1120_MAX_POWER) &&
         (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) { // clamp again if wide freq range
         power = LR1120_MAX_POWER;
         preambleLength = 12; // 12 is the default for operation above 2GHz
     }
-
-    limitPower();
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
@@ -88,10 +91,21 @@ template <typename T> bool LR11x0Interface<T>::init()
     LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
+    // Allow extra time for TCXO to stabilize after power-on
+    delay(10);
+
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+
+    // Retry if we get SPI command failed - some units need extra TCXO stabilization time
+    if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
+        LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
+        delay(100);
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+    }
+
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
     LR11x0VersionInfo_t version;
@@ -114,17 +128,14 @@ template <typename T> bool LR11x0Interface<T>::init()
 #ifdef LR11X0_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
-    bool dioAsRfSwitch = false;
-    if (settingsMap[dio2_as_rf_switch]) {
-        dioAsRfSwitch = true;
-    }
+    bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
 #else
     bool dioAsRfSwitch = false;
 #endif
 
     if (dioAsRfSwitch) {
         lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-        LOG_DEBUG("Set DIO RF switch", res);
+        LOG_DEBUG("Set DIO RF switch");
     }
 
     if (res == RADIOLIB_ERR_NONE) {
@@ -155,11 +166,11 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setBandwidth(bw);
+    err = lora.setBandwidth(bw, wideLora() && (getFreq() > 1000.0f));
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setCodingRate(cr);
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -186,7 +197,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR LR11x0Interface<T>::disableInterrupt()
+template <typename T> void LR11x0Interface<T>::disableInterrupt()
 {
     lora.clearIrqAction();
 }
@@ -218,6 +229,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -241,8 +253,10 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
-    // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    int err =
+        lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    if (err)
+        LOG_ERROR("StartReceive error: %d", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();
@@ -256,10 +270,17 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
+    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+                                       .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .timeout = 0,
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
 
     setStandby();
-    result = lora.scanChannel();
+    result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
 

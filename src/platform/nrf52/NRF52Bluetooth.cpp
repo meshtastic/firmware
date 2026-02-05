@@ -28,6 +28,9 @@ static BLEDfuSecure bledfusecure;                                             //
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
+// Last ToRadio value received from the phone
+static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+
 static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
@@ -44,11 +47,10 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override
-    {
-        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
-        return connection->connected();
-    }
+    virtual bool checkIsConnected() override { return Bluefruit.connected(connectionHandle); }
+
+  public:
+    BluetoothPhoneAPI() { api_type = TYPE_BLE; }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -61,6 +63,10 @@ void onConnect(uint16_t conn_handle)
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
+
+    // Notify UI (or any other interested firmware components)
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 /**
  * Callback invoked when a connection is dropped
@@ -73,6 +79,13 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
     if (bluetoothPhoneAPI) {
         bluetoothPhoneAPI->close();
     }
+
+    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
+    // Notify UI (or any other interested firmware components)
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -106,7 +119,7 @@ void startAdv(void)
     Bluefruit.Advertising.addService(meshBleService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
-     * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
+     * - Interval:  fast mode = 20 ms, slow mode = 417,5 ms
      * - Timeout for fast mode is 30 seconds
      * - Start(timeout) with timeout = 0 will advertise forever (until connected)
      *
@@ -114,7 +127,7 @@ void startAdv(void)
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
@@ -141,8 +154,6 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     }
     authorizeRead(conn_hdl);
 }
-// Last ToRadio value received from the phone
-static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
@@ -208,14 +219,8 @@ void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
-    uint8_t connection_num = Bluefruit.connected();
-    if (connection_num) {
-        for (uint8_t i = 0; i < connection_num; i++) {
-            LOG_INFO("NRF52 bluetooth disconnecting handle %d", i);
-            Bluefruit.disconnect(i);
-        }
-        delay(100); // wait for ondisconnect;
-    }
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
+    disconnect();
     Bluefruit.Advertising.stop();
 }
 void NRF52Bluetooth::startDisabled()
@@ -235,6 +240,12 @@ int NRF52Bluetooth::getRssi()
 {
     return 0; // FIXME figure out where to source this
 }
+
+// Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".
+// See https://docs.nordicsemi.com/bundle/ps_nrf52840/page/keyfeatures_html5.html
+#define VALID_BLE_TX_POWER(x)                                                                                                    \
+    ((x) == -20 || (x) == -16 || (x) == -12 || (x) == -8 || (x) == -4 || (x) == 0 || (x) == 4 || (x) == 8)
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -246,6 +257,9 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
+#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
+    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
+#endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
                                 ? config.bluetooth.fixed_pin
@@ -267,6 +281,29 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+
+    // Do not change Slave Latency to value other than 0 !!!
+    // There is probably a bug in SoftDevice + certain Apple iOS versions being
+    // brain damaged causing connectivity problems.
+
+    // On one side it seems SoftDevice is using SlaveLatency value even
+    // if connection parameter negotation failed and phone sees it as connectivity errors.
+
+    // On the other hand Apple can randomly refuse any parameter negotiation and shutdown connection
+    // even if you meet Apple Developer Guidelines for BLE devices. Because f* you, that's why.
+
+    // While this API call sets preferred connection parameters (PPCP) - many phones ignore it (yeah) and it seems SoftDevice
+    // will try to renegotiate connection parameters based on those values after phone connection.
+    // So those are relatively safe values so Apple braindead firmware won't get angry and at least we may try
+    // to negotiate some longer connection interval to save battery.
+
+    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not
+    // worth dying on a hill here.
+
+    Bluefruit.Periph.setConnSlaveLatency(0);
+    // 1.25 ms units - so min, max is 15, 100 ms range.
+    Bluefruit.Periph.setConnInterval(12, 80);
+
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
@@ -295,7 +332,7 @@ void NRF52Bluetooth::setup()
 void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }
@@ -318,34 +355,50 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    LOG_INFO("BLE pair process started with passkey %.3s %.3s", passkey, passkey + 3);
+    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
+    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
+    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        char btPIN[16] = "888888";
-        snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
-        int x_offset = display->width() / 2;
-        int y_offset = display->height() <= 80 ? 0 : 32;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
-        display->setFont(FONT_SMALL);
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-        display->drawString(x_offset + x, y_offset + y, "Enter this code");
+    // Get passkey as string
+    // Note: possible leading zeros
+    std::string textkey;
+    for (uint8_t i = 0; i < 6; i++)
+        textkey += (char)passkey[i];
 
-        display->setFont(FONT_LARGE);
-        String displayPin(btPIN);
-        String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-        display->drawString(x_offset + x, y_offset + y, pin);
+    // Notify UI (or other components) of pairing event and passkey
+    meshtastic::BluetoothStatus newStatus(textkey);
+    bluetoothStatus->updateStatus(&newStatus);
 
-        display->setFont(FONT_SMALL);
-        String deviceName = "Name: ";
-        deviceName.concat(getDeviceName());
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-        display->drawString(x_offset + x, y_offset + y, deviceName);
-    });
+#if HAS_SCREEN &&                                                                                                                \
+    !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    if (screen) {
+        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            char btPIN[16] = "888888";
+            snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
+            int x_offset = display->width() / 2;
+            int y_offset = display->height() <= 80 ? 0 : 12;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+
+            display->setFont(FONT_SMALL);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+            display->drawString(x_offset + x, y_offset + y, "Enter this code");
+
+            display->setFont(FONT_LARGE);
+            String displayPin(btPIN);
+            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+            display->drawString(x_offset + x, y_offset + y, pin);
+
+            display->setFont(FONT_SMALL);
+            String deviceName = "Name: ";
+            deviceName.concat(getDeviceName());
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+            display->drawString(x_offset + x, y_offset + y, deviceName);
+        });
+    }
 #endif
     if (match_request) {
         uint32_t start_time = millis();
@@ -357,13 +410,50 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
+
+// Actively refuse new BLE pairings
+// After clearing bonds (at factory reset), clients seem initially able to attempt to re-pair, even with advertising disabled.
+// On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
+bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
+{
+    NRF52Bluetooth::disconnect();
+    return false;
+}
+
+// Disconnect any BLE connections
+void NRF52Bluetooth::disconnect()
+{
+    uint8_t connection_num = Bluefruit.connected();
+    if (connection_num) {
+        // Close all connections. We're only expecting one.
+        for (uint8_t i = 0; i < connection_num; i++)
+            Bluefruit.disconnect(i);
+
+        // Wait for disconnection
+        while (Bluefruit.connected())
+            yield();
+
+        LOG_INFO("Ended BLE connection");
+    }
+}
+
 void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
-    if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
+    if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         LOG_INFO("BLE pair success");
-    else
+        meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+        bluetoothStatus->updateStatus(&newConnectedStatus);
+    } else {
         LOG_INFO("BLE pair failed");
-    screen->endAlert();
+        // Notify UI (or any other interested firmware components)
+        meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+        bluetoothStatus->updateStatus(&newDisconnectedStatus);
+    }
+
+    // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    if (screen) {
+        screen->endAlert();
+    }
 }
 
 void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)

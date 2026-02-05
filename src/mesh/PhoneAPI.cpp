@@ -12,8 +12,10 @@
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
+#include "concurrency/LockGuard.h"
 #include "main.h"
 #include "xmodem.h"
 
@@ -29,6 +31,9 @@
 #endif
 #include "Throttle.h"
 #include <RTC.h>
+
+// Flag to indicate a heartbeat was received and we should send queue status
+bool heartbeatReceived = false;
 
 PhoneAPI::PhoneAPI()
 {
@@ -52,22 +57,48 @@ void PhoneAPI::handleStartConfig()
 #endif
     }
 
+    // Allow subclasses to prepare for high-throughput config traffic
+    onConfigStart();
+
     // even if we were already connected - restart our state machine
-    state = STATE_SEND_MY_INFO;
+    if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+        // If client only wants node info, jump directly to sending nodes
+        state = STATE_SEND_OWN_NODEINFO;
+        LOG_INFO("Client only wants node info, skipping other config");
+    } else {
+        state = STATE_SEND_MY_INFO;
+    }
     pauseBluetoothLogging = true;
     spiLock->lock();
     filesManifest = getFiles("/", 10);
     spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
-    LOG_INFO("Start API client config");
-    nodeInfoForPhone.num = 0; // Don't keep returning old nodeinfos
+    LOG_INFO("Start API client config millis=%u", millis());
+    // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
+    {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        nodeInfoForPhone = {};
+        nodeInfoQueue.clear();
+    }
     resetReadIndex();
 }
 
 void PhoneAPI::close()
 {
     LOG_DEBUG("PhoneAPI::close()");
+    if (service->api_state == service->STATE_BLE && api_type == TYPE_BLE)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_WIFI && api_type == TYPE_WIFI)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_SERIAL && api_type == TYPE_SERIAL)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_PACKET && api_type == TYPE_PACKET)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_HTTP && api_type == TYPE_HTTP)
+        service->api_state = service->STATE_DISCONNECTED;
+    else if (service->api_state == service->STATE_ETH && api_type == TYPE_ETH)
+        service->api_state = service->STATE_DISCONNECTED;
 
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
@@ -83,13 +114,19 @@ void PhoneAPI::close()
         onConnectionChanged(false);
         fromRadioScratch = {};
         toRadioScratch = {};
-        nodeInfoForPhone = {};
+        // Clear cached node info under lock because NimBLE callbacks can still be draining it.
+        {
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            nodeInfoForPhone = {};
+            nodeInfoQueue.clear();
+        }
         packetForPhone = NULL;
         filesManifest.clear();
         fromRadioNum = 0;
         config_nonce = 0;
         config_state = 0;
         pauseBluetoothLogging = false;
+        heartbeatReceived = false;
     }
 }
 
@@ -137,6 +174,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #if !MESHTASTIC_EXCLUDE_MQTT
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_DEBUG("Got MqttClientProxy message");
+            if (state != STATE_SEND_PACKETS) {
+                LOG_WARN("Ignore MqttClientProxy message while completing config handshake");
+                break;
+            }
             if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
                 (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
@@ -148,6 +189,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #endif
         case meshtastic_ToRadio_heartbeat_tag:
             LOG_DEBUG("Got client heartbeat");
+            heartbeatReceived = true;
             break;
         default:
             // Ignore nop messages
@@ -181,6 +223,17 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
+    // Respond to heartbeat by sending queue status
+    if (heartbeatReceived) {
+        memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
+        fromRadioScratch.queueStatus = router->getQueueStatus();
+        heartbeatReceived = false;
+        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
+        return numbytes;
+    }
+
     if (!available()) {
         return 0;
     }
@@ -198,6 +251,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+        myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_UIDATA;
 
@@ -215,15 +269,28 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_DEBUG("Send My NodeInfo");
         auto us = nodeDB->readNextMeshNode(readIndex);
         if (us) {
-            nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(us);
-            nodeInfoForPhone.has_hops_away = false;
-            nodeInfoForPhone.is_favorite = true;
+            auto info = TypeConversions::ConvertToNodeInfo(us);
+            info.has_hops_away = false;
+            info.is_favorite = true;
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                nodeInfoForPhone = info;
+            }
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
-            fromRadioScratch.node_info = nodeInfoForPhone;
+            fromRadioScratch.node_info = info;
             // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS
-            nodeInfoForPhone.num = 0;
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                nodeInfoForPhone.num = 0;
+            }
         }
-        state = STATE_SEND_METADATA;
+        if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+            // If client only wants node info, jump directly to sending nodes
+            state = STATE_SEND_OTHER_NODEINFOS;
+            onNowHasData(0);
+        } else {
+            state = STATE_SEND_METADATA;
+        }
         break;
     }
 
@@ -387,23 +454,58 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            // Clients sending special nonce don't want to see other nodeinfos
-            state = config_nonce == SPECIAL_NONCE ? STATE_SEND_FILEMANIFEST : STATE_SEND_OTHER_NODEINFOS;
+            // Handle special nonce behaviors:
+            // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
+            // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
+            if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
+                state = STATE_SEND_FILEMANIFEST;
+            } else {
+                state = STATE_SEND_OTHER_NODEINFOS;
+                onNowHasData(0);
+            }
             config_state = 0;
         }
         break;
 
     case STATE_SEND_OTHER_NODEINFOS: {
-        LOG_DEBUG("Send known nodes");
-        if (nodeInfoForPhone.num != 0) {
-            LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
-                     nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
+        if (readIndex == 2) { //  readIndex==2 will be true for the first non-us node
+            LOG_INFO("Start sending nodeinfos millis=%u", millis());
+        }
+
+        meshtastic_NodeInfo infoToSend = {};
+        {
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            if (nodeInfoForPhone.num == 0 && !nodeInfoQueue.empty()) {
+                // Serve the next cached node without re-reading from the DB iterator.
+                nodeInfoForPhone = nodeInfoQueue.front();
+                nodeInfoQueue.pop_front();
+            }
+            infoToSend = nodeInfoForPhone;
+            if (infoToSend.num != 0)
+                nodeInfoForPhone = {};
+        }
+
+        if (infoToSend.num != 0) {
+            // Just in case we stored a different user.id in the past, but should never happen going forward
+            sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
+
+            // Logging this really slows down sending nodes on initial connection because the serial console is so slow, so only
+            // uncomment if you really need to:
+            // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
+            // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
+
+            // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
+            if (readIndex == 2 || readIndex % 20 == 0) {
+                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
+            }
+
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
-            fromRadioScratch.node_info = nodeInfoForPhone;
-            // Stay in current state until done sending nodeinfos
-            nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
+            fromRadioScratch.node_info = infoToSend;
+            prefetchNodeInfos();
         } else {
-            LOG_DEBUG("Done sending nodeinfo");
+            LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            nodeInfoQueue.clear();
             state = STATE_SEND_FILEMANIFEST;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
@@ -414,7 +516,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_FILEMANIFEST: {
         LOG_DEBUG("FromRadio=STATE_SEND_FILEMANIFEST");
         // last element
-        if (config_state == filesManifest.size()) { // also handles an empty filesManifest
+        if (config_state == filesManifest.size() ||
+            config_nonce == SPECIAL_NONCE_ONLY_NODES) { // also handles an empty filesManifest
             config_state = 0;
             filesManifest.clear();
             // Skip to complete packet
@@ -482,11 +585,28 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
 void PhoneAPI::sendConfigComplete()
 {
-    LOG_INFO("Config Send Complete");
+    LOG_INFO("Config Send Complete millis=%u", millis());
     fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
     fromRadioScratch.config_complete_id = config_nonce;
     config_nonce = 0;
     state = STATE_SEND_PACKETS;
+    if (api_type == TYPE_BLE) {
+        service->api_state = service->STATE_BLE;
+    } else if (api_type == TYPE_WIFI) {
+        service->api_state = service->STATE_WIFI;
+    } else if (api_type == TYPE_SERIAL) {
+        service->api_state = service->STATE_SERIAL;
+    } else if (api_type == TYPE_PACKET) {
+        service->api_state = service->STATE_PACKET;
+    } else if (api_type == TYPE_HTTP) {
+        service->api_state = service->STATE_HTTP;
+    } else if (api_type == TYPE_ETH) {
+        service->api_state = service->STATE_ETH;
+    }
+
+    // Allow subclasses to know we've entered steady-state so they can lower power consumption
+    onConfigComplete();
+
     pauseBluetoothLogging = false;
 }
 
@@ -504,6 +624,33 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
         service->releaseQueueStatusToPool(queueStatusPacketForPhone);
         queueStatusPacketForPhone = NULL;
     }
+}
+
+void PhoneAPI::prefetchNodeInfos()
+{
+    bool added = false;
+    // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
+    {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        while (nodeInfoQueue.size() < kNodePrefetchDepth) {
+            auto nextNode = nodeDB->readNextMeshNode(readIndex);
+            if (!nextNode)
+                break;
+
+            auto info = TypeConversions::ConvertToNodeInfo(nextNode);
+            bool isUs = info.num == nodeDB->getNodeNum();
+            info.hops_away = isUs ? 0 : info.hops_away;
+            info.last_heard = isUs ? getValidTime(RTCQualityFromNet) : info.last_heard;
+            info.snr = isUs ? 0 : info.snr;
+            info.via_mqtt = isUs ? false : info.via_mqtt;
+            info.is_favorite = info.is_favorite || isUs;
+            nodeInfoQueue.push_back(info);
+            added = true;
+        }
+    }
+
+    if (added)
+        onNowHasData(0);
 }
 
 void PhoneAPI::releaseMqttClientProxyPhonePacket()
@@ -541,17 +688,17 @@ bool PhoneAPI::available()
     case STATE_SEND_COMPLETE_ID:
         return true;
 
-    case STATE_SEND_OTHER_NODEINFOS:
-        if (nodeInfoForPhone.num == 0) {
-            auto nextNode = nodeDB->readNextMeshNode(readIndex);
-            if (nextNode) {
-                nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
-                nodeInfoForPhone.hops_away = nodeInfoForPhone.num == nodeDB->getNodeNum() ? 0 : nodeInfoForPhone.hops_away;
-                nodeInfoForPhone.is_favorite =
-                    nodeInfoForPhone.is_favorite || nodeInfoForPhone.num == nodeDB->getNodeNum(); // Our node is always a favorite
-            }
+    case STATE_SEND_OTHER_NODEINFOS: {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        if (nodeInfoQueue.empty()) {
+            // Drop the lock before prefetching; prefetchNodeInfos() will re-acquire it.
+            goto PREFETCH_NODEINFO;
         }
+    }
         return true; // Always say we have something, because we might need to advance our state machine
+    PREFETCH_NODEINFO:
+        prefetchNodeInfos();
+        return true;
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
@@ -643,15 +790,38 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;
-    } else if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && lastPortNumToRadio[p.decoded.portnum] &&
-               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) {
+    } else if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && isBroadcast(p.to) && p.hop_limit > 0) {
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        return false;
+    } else if (IS_ONE_OF(p.decoded.portnum, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_WAYPOINT_APP,
+                         meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_TELEMETRY_APP) &&
+               lastPortNumToRadio[p.decoded.portnum] &&
+               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], TEN_SECONDS_MS)) {
+        // TODO: [Issue #6700] Make this rate limit throttling scale up / down with the preset
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         // FIXME: Figure out why this continues to happen
         // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
         return false;
+    } else if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && lastPortNumToRadio[p.decoded.portnum] &&
+               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], TWO_SECONDS_MS)) {
+        LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
+        // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
+        return false;
     }
+
+    // Upgrade traceroute requests from phone to use reliable delivery, matching TraceRouteModule
+    if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && !isBroadcast(p.to)) {
+        // Use reliable delivery for traceroute requests (which will be copied to traceroute responses by setReplyTo)
+        p.want_ack = true;
+    }
+
     lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;
@@ -667,7 +837,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
         LOG_INFO("Tell client we have new packets %u", newValue);
         onNowHasData(newValue);
     } else {
-        LOG_DEBUG("(Client not yet interested in packets)");
+        LOG_DEBUG("Client not yet interested in packets (state=%d)", state);
     }
 
     return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one

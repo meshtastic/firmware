@@ -24,10 +24,16 @@ PB_BIND(meshtastic_LocalStats, meshtastic_LocalStats, AUTO)
 PB_BIND(meshtastic_HealthMetrics, meshtastic_HealthMetrics, AUTO)
 
 
-PB_BIND(meshtastic_Telemetry, meshtastic_Telemetry, AUTO)
+PB_BIND(meshtastic_HostMetrics, meshtastic_HostMetrics, 2)
+
+
+PB_BIND(meshtastic_Telemetry, meshtastic_Telemetry, 2)
 
 
 PB_BIND(meshtastic_Nau7802Config, meshtastic_Nau7802Config, AUTO)
+
+
+PB_BIND(meshtastic_SEN5XState, meshtastic_SEN5XState, AUTO)
 
 
 

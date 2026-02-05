@@ -9,6 +9,9 @@
 #include "PortduinoGlue.h"
 #endif
 
+#if ARCH_PORTDUINO
+#define RF95_MAX_POWER portduino_config.rf95_max_power
+#endif
 #ifndef RF95_MAX_POWER
 #define RF95_MAX_POWER 20
 #endif
@@ -91,16 +94,16 @@ void RF95Interface::setTransmitEnable(bool txon)
 #ifdef RF95_TXEN
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
 #elif ARCH_PORTDUINO
-    if (settingsMap[txen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen], txon ? 1 : 0);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, txon ? 1 : 0);
     }
 #endif
 
 #ifdef RF95_RXEN
     digitalWrite(RF95_RXEN, txon ? 0 : 1);
 #elif ARCH_PORTDUINO
-    if (settingsMap[rxen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen], txon ? 0 : 1);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, txon ? 0 : 1);
     }
 #endif
 }
@@ -119,10 +122,7 @@ bool RF95Interface::init()
     power = dacDbValues.db;
 #endif
 
-    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
-        power = RF95_MAX_POWER;
-
-    limitPower();
+    limitPower(RF95_MAX_POWER);
 
     iface = lora = new RadioLibRF95(&module);
 
@@ -164,19 +164,22 @@ bool RF95Interface::init()
     digitalWrite(RF95_RXEN, 1);
 #endif
 #if ARCH_PORTDUINO
-    if (settingsMap[txen] != RADIOLIB_NC) {
-        pinMode(settingsMap[txen], OUTPUT);
-        digitalWrite(settingsMap[txen], 0);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_txen_pin.pin, 0);
     }
-    if (settingsMap[rxen] != RADIOLIB_NC) {
-        pinMode(settingsMap[rxen], OUTPUT);
-        digitalWrite(settingsMap[rxen], 0);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_rxen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_rxen_pin.pin, 0);
     }
 #endif
     setTransmitEnable(false);
 
     int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     LOG_INFO("RF95 init result %d", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+        return false;
+
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
@@ -193,7 +196,7 @@ bool RF95Interface::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
-void INTERRUPT_ATTR RF95Interface::disableInterrupt()
+void RF95Interface::disableInterrupt()
 {
     lora->clearDio0Action();
 }
@@ -260,6 +263,7 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
 void RF95Interface::setStandby()

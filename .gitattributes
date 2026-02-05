@@ -1,4 +1,5 @@
 * text=auto eol=lf
-*.{cmd,[cC][mM][dD]} text eol=crlf
-*.{bat,[bB][aA][tT]} text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
 *.{sh,[sS][hH]} text eol=lf

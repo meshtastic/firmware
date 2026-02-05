@@ -92,6 +92,12 @@ class Channels
     // Returns true if any of our channels have enabled MQTT uplink or downlink
     bool anyMqttEnabled();
 
+    bool ensureLicensedOperation();
+
+    bool setDefaultPresetCryptoForHash(ChannelHash channelHash);
+
+    int16_t getHash(ChannelIndex i) { return hashes[i]; }
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
@@ -108,8 +114,6 @@ class Channels
      * called by fixupChannel when a new channel is set
      */
     int16_t generateHash(ChannelIndex channelNum);
-
-    int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
     /**
      * Validate a channel, fixing any errors as needed

@@ -5,7 +5,7 @@
     },
     "core": "stm32",
     "cpu": "cortex-m4",
-    "extra_flags": "-DSTM32WLxx -DSTM32WLE5xx -DARDUINO_GENERIC_WLE5CCUX",
+    "extra_flags": "-DSTM32WLxx -DSTM32WLE5xx -DARDUINO_RAK3172_MODULE",
     "f_cpu": "48000000L",
     "mcu": "stm32wle5ccu",
     "variant": "STM32WLxx/WL54CCU_WL55CCU_WLE4C(8-B-C)U_WLE5C(8-B-C)U",

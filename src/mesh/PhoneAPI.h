@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <deque>
 #include <iterator>
 #include <string>
 #include <unordered_map>
@@ -18,7 +20,8 @@
 #error "meshtastic_ToRadio_size is too large for our BLE packets"
 #endif
 
-#define SPECIAL_NONCE 69420
+#define SPECIAL_NONCE_ONLY_CONFIG 69420
+#define SPECIAL_NONCE_ONLY_NODES 69421 // ( ͡° ͜ʖ ͡°)
 
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
@@ -78,6 +81,12 @@ class PhoneAPI
 
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
+    // Prefetched node info entries ready for immediate transmission to the phone.
+    std::deque<meshtastic_NodeInfo> nodeInfoQueue;
+    // Tunable size of the node info cache so we can keep BLE reads non-blocking.
+    static constexpr size_t kNodePrefetchDepth = 4;
+    // Protect nodeInfoForPhone + nodeInfoQueue because NimBLE callbacks run in a separate FreeRTOS task.
+    concurrency::Lock nodeInfoMutex;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -127,6 +136,7 @@ class PhoneAPI
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
+    bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
   protected:
     /// Our fromradio packet while it is being assembled
@@ -149,13 +159,32 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
+    /// Subclasses can use these lifecycle hooks for transport-specific behavior around config/steady-state
+    /// (i.e. BLE connection params)
+    virtual void onConfigStart() {}
+    virtual void onConfigComplete() {}
+
     /// begin a new connection
     void handleStartConfig();
+
+    enum APIType {
+        TYPE_NONE, // Initial state, don't send anything until the client starts asking for config
+        TYPE_BLE,
+        TYPE_WIFI,
+        TYPE_SERIAL,
+        TYPE_PACKET,
+        TYPE_HTTP,
+        TYPE_ETH
+    };
+
+    APIType api_type = TYPE_NONE;
 
   private:
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
+
+    void prefetchNodeInfos();
 
     void releaseMqttClientProxyPhonePacket();
 

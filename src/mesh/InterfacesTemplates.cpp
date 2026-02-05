@@ -25,7 +25,7 @@ template class LR11x0Interface<LR1121>;
 template class SX126xInterface<STM32WLx>;
 #endif
 
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include "api/ethServerAPI.h"
 template class ServerAPI<EthernetClient>;
 template class APIServerPort<ethServerAPI, EthernetServer>;

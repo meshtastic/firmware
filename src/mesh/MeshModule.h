@@ -9,6 +9,9 @@
 #include <OLEDDisplayUi.h>
 #endif
 
+#define MESHMODULE_MIN_BROADCAST_DELAY_MS 30 * 1000 // Min. delay after boot before sending first broadcast by any module
+#define MESHMODULE_BROADCAST_SPACING_MS 15 * 1000   // Initial spacing between broadcasts of different modules
+
 /** handleReceived return enumeration
  *
  * Use ProcessMessage::CONTINUE to allows other modules to process a message.
@@ -41,6 +44,7 @@ struct UIFrameEvent {
         REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
         REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
         REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, Attempt to remain on the same frame throughout
+        SWITCH_TO_TEXTMESSAGE           // Jump directly to the Text Message screen
     } action = REDRAW_ONLY;
 
     // We might want to pass additional data inside this struct at some point
@@ -72,7 +76,7 @@ class MeshModule
      */
     static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
-    static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
+    static std::vector<MeshModule *> GetMeshModulesWithUIFrames(int startIndex);
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
     static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
@@ -118,6 +122,12 @@ class MeshModule
      * plumodulegin at a time.
      */
     static const meshtastic_MeshPacket *currentRequest;
+
+    // We keep track of the number of modules that send a periodic broadcast to schedule them spaced out over time
+    static uint8_t numPeriodicModules;
+
+    // Set the start delay for module that broadcasts periodically
+    int32_t setStartDelay();
 
     /**
      * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response handling.

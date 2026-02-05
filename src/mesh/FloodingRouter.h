@@ -1,6 +1,5 @@
 #pragma once
 
-#include "PacketHistory.h"
 #include "Router.h"
 
 /**
@@ -26,15 +25,8 @@
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router, protected PacketHistory
+class FloodingRouter : public Router
 {
-  private:
-    bool isRebroadcaster();
-
-    /** Check if we should rebroadcast this packet, and do so if needed
-     * @return true if rebroadcasted */
-    bool perhapsRebroadcast(const meshtastic_MeshPacket *p);
-
   public:
     /**
      * Constructor
@@ -62,4 +54,25 @@ class FloodingRouter : public Router, protected PacketHistory
      * Look for broadcasts we need to rebroadcast
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
+
+    /* Check if we should rebroadcast this packet, and do so if needed */
+    virtual bool perhapsRebroadcast(const meshtastic_MeshPacket *p) = 0;
+
+    /* Check if we should handle an upgraded packet (with higher hop_limit)
+     * @return true if we handled it (so stop processing)
+     */
+    bool perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p);
+
+    /* Call when we receive a packet that needs some reprocessing, but afterwards should be filtered */
+    void reprocessPacket(const meshtastic_MeshPacket *p);
+
+    // Return false for roles like ROUTER which should always rebroadcast even when we've heard another rebroadcast of
+    // the same packet
+    bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
+
+    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
+    void perhapsCancelDupe(const meshtastic_MeshPacket *p);
+
+    // Return true if we are a rebroadcaster
+    bool isRebroadcaster();
 };

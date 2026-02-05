@@ -11,6 +11,15 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
     return (v < lo) ? lo : (hi < v) ? hi : v;
 }
 
+#if HAS_SCREEN
+#define IF_SCREEN(X)                                                                                                             \
+    if (screen) {                                                                                                                \
+        X;                                                                                                                       \
+    }
+#else
+#define IF_SCREEN(...)
+#endif
+
 #if (defined(ARCH_PORTDUINO) && !defined(STRNSTR))
 #define STRNSTR
 #include <string.h>

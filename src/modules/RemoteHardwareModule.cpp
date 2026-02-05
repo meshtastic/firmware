@@ -83,9 +83,6 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
 
         switch (p.type) {
         case meshtastic_HardwareMessage_Type_WRITE_GPIOS: {
-            // Print notification to LCD screen
-            screen->print("Write GPIOs\n");
-
             pinModes(p.gpio_mask, OUTPUT, availablePins);
             for (uint8_t i = 0; i < NUM_GPIOS; i++) {
                 uint64_t mask = 1ULL << i;
@@ -98,10 +95,6 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
         }
 
         case meshtastic_HardwareMessage_Type_READ_GPIOS: {
-            // Print notification to LCD screen
-            if (screen)
-                screen->print("Read GPIOs\n");
-
             uint64_t res = digitalReads(p.gpio_mask, availablePins);
 
             // Send the reply

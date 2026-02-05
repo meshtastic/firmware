@@ -65,11 +65,22 @@ void fixPriority(meshtastic_MeshPacket *p)
 }
 
 /** enqueue a packet, return false if full */
-bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
+bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p, bool *dropped)
 {
     // no space - try to replace a lower priority packet in the queue
     if (queue.size() >= maxLen) {
-        return replaceLowerPriorityPacket(p);
+        bool replaced = replaceLowerPriorityPacket(p);
+        if (!replaced) {
+            LOG_WARN("TX queue is full, and there is no lower-priority packet available to evict in favour of 0x%08x", p->id);
+        }
+        if (dropped) {
+            *dropped = true;
+        }
+        return replaced;
+    }
+
+    if (dropped) {
+        *dropped = false;
     }
 
     // Find the correct position using upper_bound to maintain a stable order
@@ -99,12 +110,26 @@ meshtastic_MeshPacket *MeshPacketQueue::getFront()
     return p;
 }
 
-/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
-meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late)
+/** Get a packet from this queue. Returns a pointer to the packet, or NULL if not found. */
+meshtastic_MeshPacket *MeshPacketQueue::getPacketFromQueue(NodeNum from, PacketId id)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
-        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after))) {
+        if (getFrom(p) == from && p->id == id) {
+            return p;
+        }
+    }
+
+    return NULL;
+}
+
+/** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
+meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late, uint8_t hop_limit_lt)
+{
+    for (auto it = queue.begin(); it != queue.end(); it++) {
+        auto p = (*it);
+        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after)) &&
+            (!hop_limit_lt || p->hop_limit < hop_limit_lt)) {
             queue.erase(it);
             return p;
         }
@@ -113,7 +138,16 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
     return NULL;
 }
 
-/** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
+/* Attempt to find a packet from this queue. Return true if it was found. */
+bool MeshPacketQueue::find(const NodeNum from, const PacketId id)
+{
+    return getPacketFromQueue(from, id) != NULL;
+}
+
+/**
+ * Attempt to find a lower-priority packet in the queue and replace it with the provided one.
+ * @return True if the replacement succeeded, false otherwise
+ */
 bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 {
 
@@ -122,11 +156,12 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
     }
 
     // Check if the packet at the back has a lower priority than the new packet
-    auto &backPacket = queue.back();
+    auto *backPacket = queue.back();
     if (!backPacket->tx_after && backPacket->priority < p->priority) {
+        LOG_WARN("Dropping packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x", backPacket->id, p->id);
         // Remove the back packet
-        packetPool.release(backPacket);
         queue.pop_back();
+        packetPool.release(backPacket);
         // Insert the new packet in the correct order
         enqueue(p);
         return true;
@@ -139,8 +174,12 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
         for (; refPacket->tx_after && it != queue.begin(); refPacket = *--it)
             ;
         if (!refPacket->tx_after && refPacket->priority < p->priority) {
+            LOG_WARN("Dropping non-late packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x",
+                     refPacket->id, p->id);
+            queue.erase(it);
             packetPool.release(refPacket);
-            enqueue(refPacket);
+            // Insert the new packet in the correct order
+            enqueue(p);
             return true;
         }
     }

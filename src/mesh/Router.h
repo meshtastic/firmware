@@ -4,6 +4,7 @@
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#include "PacketHistory.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
@@ -11,7 +12,7 @@
 /**
  * A mesh aware router that supports multiple interfaces.
  */
-class Router : protected concurrency::OSThread
+class Router : protected concurrency::OSThread, protected PacketHistory
 {
   private:
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
@@ -50,6 +51,9 @@ class Router : protected concurrency::OSThread
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     bool cancelSending(NodeNum from, PacketId id);
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    bool findInTxQueue(NodeNum from, PacketId id);
+
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
@@ -81,10 +85,14 @@ class Router : protected concurrency::OSThread
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
+    virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
+
+    // pointer to the encrypted packet
+    meshtastic_MeshPacket *p_encrypted = nullptr;
 
   protected:
     friend class RoutingModule;
@@ -100,6 +108,18 @@ class Router : protected concurrency::OSThread
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
     /**
+     * Determine if hop_limit should be decremented for a relay operation.
+     * Returns false (preserve hop_limit) only if all conditions are met:
+     * - It's NOT the first hop (first hop must always decrement)
+     * - Local device is a ROUTER, ROUTER_LATE, or CLIENT_BASE
+     * - Previous relay is a favorite ROUTER, ROUTER_LATE, or CLIENT_BASE
+     *
+     * @param p The packet being relayed
+     * @return true if hop_limit should be decremented, false to preserve it
+     */
+    bool shouldDecrementHopLimit(const meshtastic_MeshPacket *p);
+
+    /**
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
@@ -108,7 +128,8 @@ class Router : protected concurrency::OSThread
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false);
 
   private:
     /**
@@ -135,12 +156,14 @@ class Router : protected concurrency::OSThread
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
+enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
+
 /** FIXME - move this into a mesh packet class
  * Remove any encryption and decode the protobufs inside this packet (if necessary).
  *
  * @return true for success, false for corrupt packet.
  */
-bool perhapsDecode(meshtastic_MeshPacket *p);
+DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
 /** Return 0 for success or a Routing_Error code for failure
  */

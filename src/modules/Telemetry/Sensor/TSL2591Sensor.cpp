@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_TSL2591.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TSL2591Sensor.h"
@@ -10,21 +10,18 @@
 
 TSL2591Sensor::TSL2591Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_TSL25911FN, "TSL2591") {}
 
-int32_t TSL2591Sensor::runOnce()
+bool TSL2591Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    status = tsl.begin(bus);
+    if (!status) {
+        return status;
     }
-    status = tsl.begin(nodeTelemetrySensorsMap[sensorType].second);
+    tsl.setGain(TSL2591_GAIN_LOW); // 1x gain
+    tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
 
-    return initI2CSensor();
-}
-
-void TSL2591Sensor::setup()
-{
-    tsl.setGain(TSL2591_GAIN_MED); // 25x gain
-    tsl.setTiming(TSL2591_INTEGRATIONTIME_300MS);
+    initI2CSensor();
+    return status;
 }
 
 bool TSL2591Sensor::getMetrics(meshtastic_Telemetry *measurement)

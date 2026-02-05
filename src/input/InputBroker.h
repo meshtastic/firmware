@@ -1,32 +1,68 @@
 #pragma once
-#include "Observer.h"
 
-#define ANYKEY 0xFF
-#define MATRIXKEY 0xFE
+#include "Observer.h"
+#include "concurrency/OSThread.h"
+#include "freertosinc.h"
+
+#ifdef InputBrokerDebug
+#define LOG_INPUT(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_INPUT(...)
+#endif
+
+enum input_broker_event {
+    INPUT_BROKER_NONE = 0,
+    INPUT_BROKER_SELECT = 10,
+    INPUT_BROKER_SELECT_LONG = 11,
+    INPUT_BROKER_UP_LONG = 12,
+    INPUT_BROKER_DOWN_LONG = 13,
+    INPUT_BROKER_UP = 17,
+    INPUT_BROKER_DOWN = 18,
+    INPUT_BROKER_LEFT = 19,
+    INPUT_BROKER_RIGHT = 20,
+    INPUT_BROKER_CANCEL = 24,
+    INPUT_BROKER_BACK = 27,
+    INPUT_BROKER_USER_PRESS,
+    INPUT_BROKER_ALT_PRESS,
+    INPUT_BROKER_ALT_LONG,
+    INPUT_BROKER_SHUTDOWN = 0x9b,
+    INPUT_BROKER_GPS_TOGGLE = 0x9e,
+    INPUT_BROKER_SEND_PING = 0xaf,
+    INPUT_BROKER_FN_F1 = 0xf1,
+    INPUT_BROKER_FN_F2 = 0xf2,
+    INPUT_BROKER_FN_F3 = 0xf3,
+    INPUT_BROKER_FN_F4 = 0xf4,
+    INPUT_BROKER_FN_F5 = 0xf5,
+    INPUT_BROKER_MATRIXKEY = 0xFE,
+    INPUT_BROKER_ANYKEY = 0xff
+
+};
 
 #define INPUT_BROKER_MSG_BRIGHTNESS_UP 0x11
 #define INPUT_BROKER_MSG_BRIGHTNESS_DOWN 0x12
 #define INPUT_BROKER_MSG_REBOOT 0x90
-#define INPUT_BROKER_MSG_SHUTDOWN 0x9b
-#define INPUT_BROKER_MSG_GPS_TOGGLE 0x9e
 #define INPUT_BROKER_MSG_MUTE_TOGGLE 0xac
-#define INPUT_BROKER_MSG_SEND_PING 0xaf
-#define INPUT_BROKER_MSG_DISMISS_FRAME 0x8b
-#define INPUT_BROKER_MSG_LEFT 0xb4
-#define INPUT_BROKER_MSG_UP 0xb5
-#define INPUT_BROKER_MSG_DOWN 0xb6
-#define INPUT_BROKER_MSG_RIGHT 0xb7
 #define INPUT_BROKER_MSG_FN_SYMBOL_ON 0xf1
 #define INPUT_BROKER_MSG_FN_SYMBOL_OFF 0xf2
 #define INPUT_BROKER_MSG_BLUETOOTH_TOGGLE 0xAA
+#define INPUT_BROKER_MSG_TAB 0x09
+#define INPUT_BROKER_MSG_EMOTE_LIST 0x8F
 
 typedef struct _InputEvent {
     const char *source;
-    char inputEvent;
-    char kbchar;
+    input_broker_event inputEvent;
+    unsigned char kbchar;
     uint16_t touchX;
     uint16_t touchY;
 } InputEvent;
+
+class InputPollable
+{
+  public:
+    virtual ~InputPollable() = default;
+    virtual void pollOnce() = 0;
+};
+
 class InputBroker : public Observable<const InputEvent *>
 {
     CallbackObserver<InputBroker, const InputEvent *> inputEventObserver =
@@ -35,9 +71,25 @@ class InputBroker : public Observable<const InputEvent *>
   public:
     InputBroker();
     void registerSource(Observable<const InputEvent *> *source);
+    void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
+    void requestPollSoon(InputPollable *pollable);
+    void queueInputEvent(const InputEvent *event);
+    void processInputEventQueue();
+#endif
+    void Init();
 
   protected:
     int handleInputEvent(const InputEvent *event);
+
+  private:
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
+    QueueHandle_t inputEventQueue;
+    QueueHandle_t pollSoonQueue;
+    TaskHandle_t pollSoonTask;
+    static void pollSoonWorker(void *p);
+#endif
 };
 
 extern InputBroker *inputBroker;
+extern bool runASAP;

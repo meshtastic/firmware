@@ -1,0 +1,9 @@
+Lora:
+  Module: sx1262  # BananaPi-BPI-R4 SPI via 26p GPIO Header
+##  CS: 28
+  IRQ: 50
+  Busy: 62
+  Reset: 51
+  spidev: spidev1.0
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true

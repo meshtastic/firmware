@@ -1,7 +1,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 
 #include "ethServerAPI.h"
 
@@ -20,6 +20,7 @@ void initApiServer(int port)
 ethServerAPI::ethServerAPI(EthernetClient &_client) : ServerAPI(_client)
 {
     LOG_INFO("Incoming ethernet connection");
+    api_type = TYPE_ETH;
 }
 
 ethServerPort::ethServerPort(int port) : APIServerPort(port) {}

@@ -5,9 +5,6 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "target_specific.h"
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
@@ -24,7 +21,7 @@ uint32_t ntp_renew = 0;
 #endif
 
 EthernetUDP syslogClient;
-Syslog syslog(syslogClient);
+meshtastic::Syslog syslog(syslogClient);
 
 bool ethStartupComplete = 0;
 
@@ -67,17 +64,18 @@ static int32_t reconnectETH()
             }
 
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-            initApiServer();
+            if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+                initApiServer();
+            }
+#endif
+#if HAS_UDP_MULTICAST
+            if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+                udpHandler->start();
+            }
 #endif
 
             ethStartupComplete = true;
         }
-#if !MESHTASTIC_EXCLUDE_MQTT
-        // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-        if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
-            mqtt->reconnect();
-        }
-#endif
     }
 
 #ifndef DISABLE_NTP

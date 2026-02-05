@@ -9,17 +9,23 @@ namespace concurrency
 Lock::Lock() : handle(xSemaphoreCreateBinary())
 {
     assert(handle);
-    assert(xSemaphoreGive(handle));
+    if (xSemaphoreGive(handle) == false) {
+        abort();
+    }
 }
 
 void Lock::lock()
 {
-    assert(xSemaphoreTake(handle, portMAX_DELAY));
+    if (xSemaphoreTake(handle, portMAX_DELAY) == false) {
+        abort();
+    }
 }
 
 void Lock::unlock()
 {
-    assert(xSemaphoreGive(handle));
+    if (xSemaphoreGive(handle) == false) {
+        abort();
+    }
 }
 #else
 Lock::Lock() {}

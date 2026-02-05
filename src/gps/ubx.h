@@ -224,7 +224,7 @@ static const uint8_t _message_GSA[] = {
     0x00,       // Rate for DDC
     0x00,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x00,       // Rate for USB usefull for native linux
+    0x00,       // Rate for USB useful for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -258,7 +258,7 @@ static const uint8_t _message_RMC[] = {
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x01,       // Rate for USB usefull for native linux
+    0x01,       // Rate for USB useful for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -269,7 +269,7 @@ static const uint8_t _message_GGA[] = {
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x01,       // Rate for USB, usefull for native linux
+    0x01,       // Rate for USB, useful for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };

@@ -4,8 +4,8 @@
 
 | Firmware Version | Supported          |
 | ---------------- | ------------------ |
-| 2.5.x            | :white_check_mark: |
-| <= 2.4.x         | :x:                |
+| 2.7.x            | :white_check_mark: |
+| <= 2.6.x         | :x:                |
 
 ## Reporting a Vulnerability
 

@@ -26,7 +26,8 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT = 3,
     /* Description: Infrastructure node for extending network coverage by relaying messages with minimal overhead. Not visible in Nodes list.
  Technical Details: Mesh packets will simply be rebroadcasted over this node. Nodes configured with this role will not originate NodeInfo, Position, Telemetry
-   or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factor, and coding rate. */
+   or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factor, and coding rate.
+ Deprecated in v2.7.11 because it creates "holes" in the mesh rebroadcast chain. */
     meshtastic_Config_DeviceConfig_Role_REPEATER = 4,
     /* Description: Broadcasts GPS position packets as priority.
  Technical Details: Position Mesh packets will be prioritized higher and sent more frequently by default.
@@ -64,7 +65,12 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     in areas not already covered by other routers, or to bridge around problematic terrain,
     but should not be given priority over other routers in order to avoid unnecessaraily
     consuming hops. */
-    meshtastic_Config_DeviceConfig_Role_ROUTER_LATE = 11
+    meshtastic_Config_DeviceConfig_Role_ROUTER_LATE = 11,
+    /* Description: Treats packets from or to favorited nodes as ROUTER_LATE, and all other packets as CLIENT.
+ Technical Details: Used for stronger attic/roof nodes to distribute messages more widely
+    from weaker, indoor, or less-well-positioned nodes. Recommended for users with multiple nodes
+    where one CLIENT_BASE acts as a more powerful base station, such as an attic/roof node. */
+    meshtastic_Config_DeviceConfig_Role_CLIENT_BASE = 12
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Defines the device's behavior for how messages are rebroadcast */
@@ -87,6 +93,27 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
  Only rebroadcasts packets with standard portnums: NodeInfo, Text, Position, Telemetry, and Routing. */
     meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY = 5
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
+
+/* Defines buzzer behavior for audio feedback */
+typedef enum _meshtastic_Config_DeviceConfig_BuzzerMode {
+    /* Default behavior.
+ Buzzer is enabled for all audio feedback including button presses and alerts. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED = 0,
+    /* Disabled.
+ All buzzer audio feedback is disabled. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED = 1,
+    /* Notifications Only.
+ Buzzer is enabled only for notifications and alerts, but not for button presses.
+ External notification config determines the specifics of the notification behavior. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY = 2,
+    /* Non-notification system buzzer tones only.
+ Buzzer is enabled only for non-notification tones such as button presses, startup, shutdown, but not for alerts. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY = 3,
+    /* Direct Message notifications only.
+ Buzzer is enabled only for direct messages and alerts, but not for button presses.
+ External notification config determines the specifics of the notification behavior. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY = 4
+} meshtastic_Config_DeviceConfig_BuzzerMode;
 
 /* Bit field of boolean configuration options, indicating which optional
  fields to include when assembling POSITION messages.
@@ -147,28 +174,10 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
-/* How the GPS coordinates are displayed on the OLED screen. */
-typedef enum _meshtastic_Config_DisplayConfig_GpsCoordinateFormat {
-    /* GPS coordinates are displayed in the normal decimal degrees format:
- DD.DDDDDD DDD.DDDDDD */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC = 0,
-    /* GPS coordinates are displayed in the degrees minutes seconds format:
- DD°MM'SS"C DDD°MM'SS"C, where C is the compass point representing the locations quadrant */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS = 1,
-    /* Universal Transverse Mercator format:
- ZZB EEEEEE NNNNNNN, where Z is zone, B is band, E is easting, N is northing */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM = 2,
-    /* Military Grid Reference System format:
- ZZB CD EEEEE NNNNN, where Z is zone, B is band, C is the east 100k square, D is the north 100k square,
- E is easting, N is northing */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS = 3,
-    /* Open Location Code (aka Plus Codes). */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC = 4,
-    /* Ordnance Survey Grid Reference (the National Grid System of the UK).
- Format: AB EEEEE NNNNN, where A is the east 100k square, B is the north 100k square,
- E is the easting, N is the northing */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR = 5
-} meshtastic_Config_DisplayConfig_GpsCoordinateFormat;
+/* Deprecated in 2.7.4: Unused */
+typedef enum _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat {
+    meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED = 0
+} meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat;
 
 /* Unit display preference */
 typedef enum _meshtastic_Config_DisplayConfig_DisplayUnits {
@@ -180,14 +189,16 @@ typedef enum _meshtastic_Config_DisplayConfig_DisplayUnits {
 
 /* Override OLED outo detect with this if it fails. */
 typedef enum _meshtastic_Config_DisplayConfig_OledType {
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_AUTO = 0,
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306 = 1,
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_SH1106 = 2,
+    /* Can not be auto detected but set by proto. Used for 128x64 screens */
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3,
     /* Can not be auto detected but set by proto. Used for 128x128 screens */
-    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128 = 4
 } meshtastic_Config_DisplayConfig_OledType;
 
 typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
@@ -264,7 +275,17 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Philippines 868mhz */
     meshtastic_Config_LoRaConfig_RegionCode_PH_868 = 20,
     /* Philippines 915mhz */
-    meshtastic_Config_LoRaConfig_RegionCode_PH_915 = 21
+    meshtastic_Config_LoRaConfig_RegionCode_PH_915 = 21,
+    /* Australia / New Zealand 433MHz */
+    meshtastic_Config_LoRaConfig_RegionCode_ANZ_433 = 22,
+    /* Kazakhstan 433MHz */
+    meshtastic_Config_LoRaConfig_RegionCode_KZ_433 = 23,
+    /* Kazakhstan 863MHz */
+    meshtastic_Config_LoRaConfig_RegionCode_KZ_863 = 24,
+    /* Nepal 865MHz */
+    meshtastic_Config_LoRaConfig_RegionCode_NP_865 = 25,
+    /* Brazil 902MHz */
+    meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -272,7 +293,8 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
 typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Long Range - Fast */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST = 0,
-    /* Long Range - Slow */
+    /* Long Range - Slow
+ Deprecated in 2.7: Unpopular slow preset. */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW = 1,
     /* Very Long Range - Slow
  Deprecated in 2.5: Works only with txco and is unusably slow */
@@ -290,7 +312,10 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Short Range - Turbo
  This is the fastest preset and the only one with 500kHz bandwidth.
  It is not legal to use in all regions due to this wider bandwidth. */
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO = 8
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO = 8,
+    /* Long Range - Turbo
+ This preset performs similarly to LongFast, but with 500Khz bandwidth. */
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO = 9
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -333,6 +358,9 @@ typedef struct _meshtastic_Config_DeviceConfig {
     char tzdef[65];
     /* If true, disable the default blinking LED (LED_PIN) behavior on the device */
     bool led_heartbeat_disabled;
+    /* Controls buzzer behavior for audio feedback
+ Defaults to ENABLED */
+    meshtastic_Config_DeviceConfig_BuzzerMode buzzer_mode;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -374,7 +402,7 @@ typedef struct _meshtastic_Config_PositionConfig {
 /* Power Config\
  See [Power Config](/docs/settings/config/power) for additional power config details. */
 typedef struct _meshtastic_Config_PowerConfig {
-    /* Description: Will sleep everything as much as possible, for the tracker and sensor role this will also include the lora radio. 
+    /* Description: Will sleep everything as much as possible, for the tracker and sensor role this will also include the lora radio.
  Don't use this setting if you want to use your device with the phone apps or are using a device without a user button.
  Technical Details: Works for ESP32 devices and NRF52 devices in the Sensor or Tracker roles */
     bool is_power_saving;
@@ -426,7 +454,7 @@ typedef struct _meshtastic_Config_NetworkConfig {
     char wifi_ssid[33];
     /* If set, will be use to authenticate to the named wifi */
     char wifi_psk[65];
-    /* NTP server to use if WiFi is conneced, defaults to `0.pool.ntp.org` */
+    /* NTP server to use if WiFi is conneced, defaults to `meshtastic.pool.ntp.org` */
     char ntp_server[33];
     /* Enable Ethernet */
     bool eth_enabled;
@@ -439,6 +467,8 @@ typedef struct _meshtastic_Config_NetworkConfig {
     char rsyslog_server[33];
     /* Flags for enabling/disabling network protocols */
     uint32_t enabled_protocols;
+    /* Enable/Disable ipv6 support */
+    bool ipv6_enabled;
 } meshtastic_Config_NetworkConfig;
 
 /* Display Config */
@@ -446,8 +476,9 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* Number of seconds the screen stays on after pressing the user button or receiving a message
  0 for default of one minute MAXUINT for always on */
     uint32_t screen_on_secs;
-    /* How the GPS coordinates are formatted on the OLED screen. */
-    meshtastic_Config_DisplayConfig_GpsCoordinateFormat gps_format;
+    /* Deprecated in 2.7.4: Unused
+ How the GPS coordinates are formatted on the OLED screen. */
+    meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat gps_format;
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
     uint32_t auto_screen_carousel_secs;
@@ -468,6 +499,12 @@ typedef struct _meshtastic_Config_DisplayConfig {
     bool wake_on_tap_or_motion;
     /* Indicates how to rotate or invert the compass output to accurate display on the display. */
     meshtastic_Config_DisplayConfig_CompassOrientation compass_orientation;
+    /* If false (default), the device will display the time in 24-hour format on screen.
+ If true, the device will display the time in 12-hour format on screen. */
+    bool use_12h_clock;
+    /* If false (default), the device will use short names for various display screens.
+ If true, node names will show in long format */
+    bool use_long_node_name;
 } meshtastic_Config_DisplayConfig;
 
 /* Lora Config */
@@ -604,12 +641,16 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_ROUTER_LATE
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_ROUTER_LATE+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_CLIENT_BASE
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY+1))
+
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_MIN meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_MAX meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_BuzzerMode)(meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY+1))
 
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
@@ -627,17 +668,17 @@ extern "C" {
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST+1))
 
-#define _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC
-#define _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR
-#define _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_ARRAYSIZE ((meshtastic_Config_DisplayConfig_GpsCoordinateFormat)(meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR+1))
+#define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
+#define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
+#define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat)(meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_MIN meshtastic_Config_DisplayConfig_DisplayUnits_METRIC
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_MAX meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayUnits)(meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _meshtastic_Config_DisplayConfig_OledType_MIN meshtastic_Config_DisplayConfig_OledType_OLED_AUTO
-#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107
-#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107+1))
+#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128
+#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MIN meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MAX meshtastic_Config_DisplayConfig_DisplayMode_COLOR
@@ -648,12 +689,12 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_PH_915
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_PH_915+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_BR_902
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_BR_902+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN
@@ -662,6 +703,7 @@ extern "C" {
 
 #define meshtastic_Config_DeviceConfig_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_ENUMTYPE meshtastic_Config_DeviceConfig_RebroadcastMode
+#define meshtastic_Config_DeviceConfig_buzzer_mode_ENUMTYPE meshtastic_Config_DeviceConfig_BuzzerMode
 
 #define meshtastic_Config_PositionConfig_gps_mode_ENUMTYPE meshtastic_Config_PositionConfig_GpsMode
 
@@ -669,7 +711,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_address_mode_ENUMTYPE meshtastic_Config_NetworkConfig_AddressMode
 
 
-#define meshtastic_Config_DisplayConfig_gps_format_ENUMTYPE meshtastic_Config_DisplayConfig_GpsCoordinateFormat
+#define meshtastic_Config_DisplayConfig_gps_format_ENUMTYPE meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat
 #define meshtastic_Config_DisplayConfig_units_ENUMTYPE meshtastic_Config_DisplayConfig_DisplayUnits
 #define meshtastic_Config_DisplayConfig_oled_ENUMTYPE meshtastic_Config_DisplayConfig_OledType
 #define meshtastic_Config_DisplayConfig_displaymode_ENUMTYPE meshtastic_Config_DisplayConfig_DisplayMode
@@ -685,23 +727,23 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0}
+#define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
+#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0}
+#define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
+#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
@@ -719,6 +761,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_disable_triple_click_tag 10
 #define meshtastic_Config_DeviceConfig_tzdef_tag 11
 #define meshtastic_Config_DeviceConfig_led_heartbeat_disabled_tag 12
+#define meshtastic_Config_DeviceConfig_buzzer_mode_tag 13
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -754,6 +797,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_ipv4_config_tag 8
 #define meshtastic_Config_NetworkConfig_rsyslog_server_tag 9
 #define meshtastic_Config_NetworkConfig_enabled_protocols_tag 10
+#define meshtastic_Config_NetworkConfig_ipv6_enabled_tag 11
 #define meshtastic_Config_DisplayConfig_screen_on_secs_tag 1
 #define meshtastic_Config_DisplayConfig_gps_format_tag 2
 #define meshtastic_Config_DisplayConfig_auto_screen_carousel_secs_tag 3
@@ -765,6 +809,8 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_heading_bold_tag 9
 #define meshtastic_Config_DisplayConfig_wake_on_tap_or_motion_tag 10
 #define meshtastic_Config_DisplayConfig_compass_orientation_tag 11
+#define meshtastic_Config_DisplayConfig_use_12h_clock_tag 12
+#define meshtastic_Config_DisplayConfig_use_long_node_name_tag 13
 #define meshtastic_Config_LoRaConfig_use_preset_tag 1
 #define meshtastic_Config_LoRaConfig_modem_preset_tag 2
 #define meshtastic_Config_LoRaConfig_bandwidth_tag 3
@@ -840,7 +886,8 @@ X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9) \
 X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10) \
 X(a, STATIC,   SINGULAR, STRING,   tzdef,            11) \
-X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12)
+X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12) \
+X(a, STATIC,   SINGULAR, UENUM,    buzzer_mode,      13)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -883,7 +930,8 @@ X(a, STATIC,   SINGULAR, BOOL,     eth_enabled,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    address_mode,      7) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8) \
 X(a, STATIC,   SINGULAR, STRING,   rsyslog_server,    9) \
-X(a, STATIC,   SINGULAR, UINT32,   enabled_protocols,  10)
+X(a, STATIC,   SINGULAR, UINT32,   enabled_protocols,  10) \
+X(a, STATIC,   SINGULAR, BOOL,     ipv6_enabled,     11)
 #define meshtastic_Config_NetworkConfig_CALLBACK NULL
 #define meshtastic_Config_NetworkConfig_DEFAULT NULL
 #define meshtastic_Config_NetworkConfig_ipv4_config_MSGTYPE meshtastic_Config_NetworkConfig_IpV4Config
@@ -907,7 +955,9 @@ X(a, STATIC,   SINGULAR, UENUM,    oled,              7) \
 X(a, STATIC,   SINGULAR, UENUM,    displaymode,       8) \
 X(a, STATIC,   SINGULAR, BOOL,     heading_bold,      9) \
 X(a, STATIC,   SINGULAR, BOOL,     wake_on_tap_or_motion,  10) \
-X(a, STATIC,   SINGULAR, UENUM,    compass_orientation,  11)
+X(a, STATIC,   SINGULAR, UENUM,    compass_orientation,  11) \
+X(a, STATIC,   SINGULAR, BOOL,     use_12h_clock,    12) \
+X(a, STATIC,   SINGULAR, BOOL,     use_long_node_name,  13)
 #define meshtastic_Config_DisplayConfig_CALLBACK NULL
 #define meshtastic_Config_DisplayConfig_DEFAULT NULL
 
@@ -984,16 +1034,16 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      98
-#define meshtastic_Config_DisplayConfig_size     30
+#define meshtastic_Config_DeviceConfig_size      100
+#define meshtastic_Config_DisplayConfig_size     34
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
-#define meshtastic_Config_NetworkConfig_size     202
+#define meshtastic_Config_NetworkConfig_size     204
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
 #define meshtastic_Config_SecurityConfig_size    178
 #define meshtastic_Config_SessionkeyConfig_size  0
-#define meshtastic_Config_size                   205
+#define meshtastic_Config_size                   207
 
 #ifdef __cplusplus
 } /* extern "C" */

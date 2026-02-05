@@ -65,6 +65,9 @@ mail:   marchammermann@googlemail.com
 #define DEFAULT_REALM "default_realm"
 #define PREFIX ""
 
+#define KEY_PATH portduino_config.webserver_ssl_key_path.c_str()
+#define CERT_PATH portduino_config.webserver_ssl_cert_path.c_str()
+
 struct _file_config configWeb;
 
 // We need to specify some content-type mapping, so the resources get delivered with the
@@ -384,13 +387,13 @@ char *read_file_into_string(const char *filename)
 int PiWebServerThread::CheckSSLandLoad()
 {
     // read certificate
-    cert_pem = read_file_into_string("certificate.pem");
+    cert_pem = read_file_into_string(CERT_PATH);
     if (cert_pem == NULL) {
         LOG_ERROR("ERROR SSL Certificate File can't be loaded or is missing");
         return 1;
     }
     // read private key
-    key_pem = read_file_into_string("private_key.pem");
+    key_pem = read_file_into_string(KEY_PATH);
     if (key_pem == NULL) {
         LOG_ERROR("ERROR file private_key can't be loaded or is missing");
         return 2;
@@ -415,8 +418,8 @@ int PiWebServerThread::CreateSSLCertificate()
         return 2;
     }
 
-    // Ope file to write private key file
-    FILE *pkey_file = fopen("private_key.pem", "wb");
+    // Open file to write private key file
+    FILE *pkey_file = fopen(KEY_PATH, "wb");
     if (!pkey_file) {
         LOG_ERROR("Error opening private key file");
         return 3;
@@ -426,18 +429,19 @@ int PiWebServerThread::CreateSSLCertificate()
     fclose(pkey_file);
 
     // open Certificate file
-    FILE *x509_file = fopen("certificate.pem", "wb");
+    FILE *x509_file = fopen(CERT_PATH, "wb");
     if (!x509_file) {
         LOG_ERROR("Error opening cert");
         return 4;
     }
-    // write cirtificate
+    // write certificate
     PEM_write_X509(x509_file, x509);
     fclose(x509_file);
 
     EVP_PKEY_free(pkey);
+    LOG_INFO("Create SSL Key %s successful", KEY_PATH);
     X509_free(x509);
-    LOG_INFO("Create SSL Cert -certificate.pem- succesfull ");
+    LOG_INFO("Create SSL Cert %s successful", CERT_PATH);
     return 0;
 }
 
@@ -454,12 +458,12 @@ PiWebServerThread::PiWebServerThread()
         }
     }
 
-    if (settingsMap[webserverport] != 0) {
-        webservport = settingsMap[webserverport];
+    if (portduino_config.webserverport != 0) {
+        webservport = portduino_config.webserverport;
         LOG_INFO("Use webserver port from yaml config %i ", webservport);
     } else {
-        LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 443");
-        webservport = 443;
+        LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 9443");
+        webservport = 9443;
     }
 
     // Web Content Service Instance
@@ -486,7 +490,7 @@ PiWebServerThread::PiWebServerThread()
         u_map_put(&configWeb.mime_types, ".ico", "image/x-icon");
         u_map_put(&configWeb.mime_types, ".svg", "image/svg+xml");
 
-        webrootpath = settingsStrings[webserverrootpath];
+        webrootpath = portduino_config.webserver_root_path;
 
         configWeb.files_path = (char *)webrootpath.c_str();
         configWeb.url_prefix = "";

@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_BMP3XX.h>)
 
 #ifndef _BMP3XX_SENSOR_H
 #define _BMP3XX_SENSOR_H
@@ -43,12 +43,11 @@ class BMP3XXSensor : public TelemetrySensor
 {
   protected:
     BMP3XXSingleton *bmp3xx = nullptr;
-    virtual void setup() override;
 
   public:
     BMP3XXSensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

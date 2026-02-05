@@ -7,15 +7,18 @@
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "TypeConversions.h"
+#include "graphics/draw/MessageRenderer.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
+#include "modules/RoutingModule.h"
 #include "power.h"
 #include <assert.h>
 #include <string>
@@ -45,11 +48,14 @@ the new node can build its node db)
 
 MeshService *service;
 
-static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
+#define MAX_MQTT_PROXY_MESSAGES 16
+static MemoryPool<meshtastic_MqttClientProxyMessage, MAX_MQTT_PROXY_MESSAGES> staticMqttClientProxyMessagePool;
 
-static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+#define MAX_QUEUE_STATUS 4
+static MemoryPool<meshtastic_QueueStatus, MAX_QUEUE_STATUS> staticQueueStatusPool;
 
-static MemoryDynamic<meshtastic_ClientNotification> staticClientNotificationPool;
+#define MAX_CLIENT_NOTIFICATIONS 4
+static MemoryPool<meshtastic_ClientNotification, MAX_CLIENT_NOTIFICATIONS> staticClientNotificationPool;
 
 Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
@@ -60,8 +66,10 @@ Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 #include "Router.h"
 
 MeshService::MeshService()
-    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE),
-      toPhoneClientNotificationQueue(MAX_RX_TOPHONE / 2)
+#ifdef ARCH_PORTDUINO
+    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_QUEUESTATUS_TOPHONE),
+      toPhoneMqttProxyQueue(MAX_RX_MQTTPROXY_TOPHONE), toPhoneClientNotificationQueue(MAX_RX_NOTIFICATION_TOPHONE)
+#endif
 {
     lastQueueStatus = {0, 0, 16, 0};
 }
@@ -79,17 +87,21 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
-    bool isPreferredRebroadcaster =
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_REPEATER);
+    bool isPreferredRebroadcaster = config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER;
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo"); //  because this potentially a Repeater which will
-                                                                             //  ignore our request for its NodeInfo
+        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
+        //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
-            nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
+            if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
+                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+            } else {
+                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            }
         } else {
             LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
         }
@@ -117,17 +129,15 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-bool MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat)
 {
     // If we can successfully set this radio to these settings, save them to disk
 
     // This will also update the region as needed
-    bool didReset = nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
     nodeDB->saveToDisk(saveWhat);
-
-    return didReset;
 }
 
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
@@ -173,17 +183,27 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
         return;
     }
 #endif
-    p.from = 0; // We don't let phones assign nodenums to their sent messages
+    p.from = 0;                          // We don't let clients assign nodenums to their sent messages
+    p.next_hop = NO_NEXT_HOP_PREFERENCE; // We don't let clients assign next_hop to their sent messages
+    p.relay_node = NO_RELAY_NODE;        // We don't let clients assign relay_node to their sent messages
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
     p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
-                                                 // (so we update our nodedb for the local node)
 
+    IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
+                  p.to != NODENUM_BROADCAST && p.to != 0) // DM only
+              {
+                  perhapsDecode(&p);
+                  const StoredMessage &sm = messageStore.addFromPacket(p);
+                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+              })
     // Send the packet into the mesh
-
-    sendToMesh(packetPool.allocCopy(p), RX_SRC_USER);
+    DEBUG_HEAP_BEFORE;
+    auto a = packetPool.allocCopy(p);
+    DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
+    sendToMesh(a, RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
     if (loopback) {
@@ -239,7 +259,11 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
-        sendToPhone(packetPool.allocCopy(*p));
+        DEBUG_HEAP_BEFORE;
+        auto a = packetPool.allocCopy(*p);
+        DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
+
+        sendToPhone(a);
     }
 
     // Router may ask us to release the packet if it wasn't sent
@@ -257,6 +281,10 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
     if (nodeDB->hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
         if (positionModule) {
+            if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+                LOG_DEBUG("Skip position ping; no fresh position since boot");
+                return false;
+            }
             LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
             return true;
@@ -301,7 +329,10 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         }
     }
 
-    assert(toPhoneQueue.enqueue(p, 0));
+    if (toPhoneQueue.enqueue(p, 0) == false) {
+        LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
+        abort();
+    }
     fromNum++;
 }
 
@@ -315,8 +346,26 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
             releaseMqttClientProxyMessageToPool(d);
     }
 
-    assert(toPhoneMqttProxyQueue.enqueue(m, 0));
+    if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
+        LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
+        abort();
+    }
     fromNum++;
+}
+
+void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp)
+{
+    if (!mp) {
+        LOG_WARN("Cannot send routing error response: null packet");
+        return;
+    }
+
+    // Use the routing module to send the error response
+    if (routingModule) {
+        routingModule->sendAckNak(error, mp->from, mp->id, mp->channel);
+    } else {
+        LOG_ERROR("Cannot send routing error response: no routing module");
+    }
 }
 
 void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
@@ -329,7 +378,10 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
             releaseClientNotificationToPool(d);
     }
 
-    assert(toPhoneClientNotificationQueue.enqueue(n, 0));
+    if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
+        LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
+        abort();
+    }
     fromNum++;
 }
 

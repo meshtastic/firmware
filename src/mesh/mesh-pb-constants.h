@@ -15,15 +15,56 @@
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
+#if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#define MAX_RX_TOPHONE 8
+#else
 #define MAX_RX_TOPHONE 32
 #endif
-
-/// max number of nodes allowed in the mesh
-#ifndef MAX_NUM_NODES
-#define MAX_NUM_NODES 100
 #endif
 
-#define MAX_NUM_NODES_FS 100
+/// max number of QueueStatus packets which can be waiting for delivery to phone
+#ifndef MAX_RX_QUEUESTATUS_TOPHONE
+#define MAX_RX_QUEUESTATUS_TOPHONE 2
+#endif
+
+/// max number of MqttClientProxyMessage packets which can be waiting for delivery to phone
+#ifndef MAX_RX_MQTTPROXY_TOPHONE
+#define MAX_RX_MQTTPROXY_TOPHONE 8
+#endif
+
+/// max number of ClientNotification packets which can be waiting for delivery to phone
+#ifndef MAX_RX_NOTIFICATION_TOPHONE
+#define MAX_RX_NOTIFICATION_TOPHONE 2
+#endif
+
+/// Verify baseline assumption of node size. If it increases, we need to reevaluate
+/// the impact of its memory footprint, notably on MAX_NUM_NODES.
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+
+/// max number of nodes allowed in the nodeDB
+#ifndef MAX_NUM_NODES
+#if defined(ARCH_STM32WL)
+#define MAX_NUM_NODES 10
+#elif defined(ARCH_NRF52)
+#define MAX_NUM_NODES 80
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "Esp.h"
+static inline int get_max_num_nodes()
+{
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
+    if (flash_size >= 15) {
+        return 250;
+    } else if (flash_size >= 7) {
+        return 200;
+    } else {
+        return 100;
+    }
+}
+#define MAX_NUM_NODES get_max_num_nodes()
+#else
+#define MAX_NUM_NODES 100
+#endif
+#endif
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))

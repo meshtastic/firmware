@@ -4,7 +4,7 @@
 #define _MT_DFROBOTLARKSENSOR_H
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<DFRobot_LarkWeatherStation.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -16,13 +16,10 @@ class DFRobotLarkSensor : public TelemetrySensor
   private:
     DFRobot_LarkWeatherStation_I2C lark = DFRobot_LarkWeatherStation_I2C();
 
-  protected:
-    virtual void setup() override;
-
   public:
     DFRobotLarkSensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

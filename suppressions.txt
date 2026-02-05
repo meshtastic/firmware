@@ -54,3 +54,7 @@ uninitMemberVar:*/AudioThread.h
 // False positive
 constVariableReference:*/Channels.cpp
 constParameterPointer:*/unishox2.c
+
+useStlAlgorithm
+
+variableScope

@@ -5,8 +5,11 @@
 #include "platform/portduino/PortduinoGlue.h"
 #include <RadioLib.h>
 #include <csignal>
+#include <iostream>
 #include <libpinedio-usb.h>
 #include <unistd.h>
+
+extern uint32_t rebootAtMsec;
 
 // include the library for Raspberry GPIO pins
 
@@ -26,60 +29,103 @@ class Ch341Hal : public RadioLibHal
 {
   public:
     // default constructor - initializes the base HAL and any needed private members
-    explicit Ch341Hal(uint8_t spiChannel, uint32_t spiSpeed = 2000000, uint8_t spiDevice = 0, uint8_t gpioDevice = 0)
+    explicit Ch341Hal(uint8_t spiChannel, std::string serial = "", uint32_t vid = 0x1A86, uint32_t pid = 0x5512,
+                      uint32_t spiSpeed = 2000000, uint8_t spiDevice = 0, uint8_t gpioDevice = 0)
         : RadioLibHal(PI_INPUT, PI_OUTPUT, PI_LOW, PI_HIGH, PI_RISING, PI_FALLING)
     {
+        if (serial != "") {
+            strncpy(pinedio.serial_number, serial.c_str(), 8);
+            pinedio_set_option(&pinedio, PINEDIO_OPTION_SEARCH_SERIAL, 1);
+        }
+        // LOG_INFO("USB Serial: %s", pinedio.serial_number);
+
+        // There is no vendor with 0x0 -> so check
+        if (vid != 0x0) {
+            pinedio_set_option(&pinedio, PINEDIO_OPTION_VID, vid);
+            pinedio_set_option(&pinedio, PINEDIO_OPTION_PID, pid);
+        }
+        int32_t ret = pinedio_init(&pinedio, NULL);
+        if (ret != 0) {
+            std::string s = "Could not open SPI: ";
+            throw std::runtime_error(s + std::to_string(ret));
+        }
+
+        pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
+        pinedio_set_pin_mode(&pinedio, 3, true);
+        pinedio_set_pin_mode(&pinedio, 5, true);
     }
+
+    ~Ch341Hal() { pinedio_deinit(&pinedio); }
 
     void getSerialString(char *_serial, size_t len)
     {
-        if (!pinedio_is_init) {
-            return;
-        }
+        len = len > 8 ? 8 : len;
         strncpy(_serial, pinedio.serial_number, len);
     }
 
-    void init() override
+    void getProductString(char *_product_string, size_t len)
     {
-        // now the SPI
-        spiBegin();
+        len = len > 95 ? 95 : len;
+        memcpy(_product_string, pinedio.product_string, len);
     }
 
-    void term() override
-    {
-        // stop the SPI
-        spiEnd();
-    }
+    void init() override {}
+    void term() override {}
 
     // GPIO-related methods (pinMode, digitalWrite etc.) should check
     // RADIOLIB_NC as an alias for non-connected pins
     void pinMode(uint32_t pin, uint32_t mode) override
     {
+        if (checkError()) {
+            return;
+        }
         if (pin == RADIOLIB_NC) {
             return;
         }
-        pinedio_set_pin_mode(&pinedio, pin, mode);
+        auto res = pinedio_set_pin_mode(&pinedio, pin, mode);
+        if (res < 0 && rebootAtMsec == 0) {
+            LOG_ERROR("USBHal pinMode: Could not set pin %u mode to %u: %d", pin, mode, res);
+        }
     }
 
     void digitalWrite(uint32_t pin, uint32_t value) override
     {
+        if (checkError()) {
+            return;
+        }
         if (pin == RADIOLIB_NC) {
             return;
         }
-        pinedio_digital_write(&pinedio, pin, value);
+        auto res = pinedio_digital_write(&pinedio, pin, value);
+        if (res < 0 && rebootAtMsec == 0) {
+            LOG_ERROR("USBHal digitalWrite: Could not write pin %u: %d", pin, res);
+            portduino_status.LoRa_in_error = true;
+        }
     }
 
     uint32_t digitalRead(uint32_t pin) override
     {
+        if (checkError()) {
+            return 0;
+        }
         if (pin == RADIOLIB_NC) {
             return 0;
         }
-        return pinedio_digital_read(&pinedio, pin);
+        auto res = pinedio_digital_read(&pinedio, pin);
+        if (res < 0 && rebootAtMsec == 0) {
+            LOG_ERROR("USBHal digitalRead: Could not read pin %u: %d", pin, res);
+            portduino_status.LoRa_in_error = true;
+            return 0;
+        }
+        return res;
     }
 
     void attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void), uint32_t mode) override
     {
-        if ((interruptNum == RADIOLIB_NC)) {
+        if (checkError()) {
+            return;
+        }
+        if (interruptNum == RADIOLIB_NC) {
             return;
         }
         // LOG_DEBUG("Attach interrupt to pin %d", interruptNum);
@@ -88,23 +134,17 @@ class Ch341Hal : public RadioLibHal
 
     void detachInterrupt(uint32_t interruptNum) override
     {
-        if ((interruptNum == RADIOLIB_NC)) {
+        if (checkError()) {
+            return;
+        }
+        if (interruptNum == RADIOLIB_NC) {
             return;
         }
         // LOG_DEBUG("Detach interrupt from pin %d", interruptNum);
-
         pinedio_deattach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum);
     }
 
-    void delay(unsigned long ms) override
-    {
-        if (ms == 0) {
-            sched_yield();
-            return;
-        }
-
-        usleep(ms * 1000);
-    }
+    void delay(unsigned long ms) override { delayMicroseconds(ms * 1000); }
 
     void delayMicroseconds(unsigned long us) override
     {
@@ -133,62 +173,42 @@ class Ch341Hal : public RadioLibHal
 
     long pulseIn(uint32_t pin, uint32_t state, unsigned long timeout) override
     {
-        fprintf(stderr, "pulseIn for pin %u is not supported!\n", pin);
+        std::cerr << "pulseIn for pin " << pin << "is not supported!" << std::endl;
         return 0;
     }
 
-    void spiBegin()
-    {
-        if (!pinedio_is_init) {
-            if (serial != "") {
-                strncpy(pinedio.serial_number, serial.c_str(), 8);
-                pinedio_set_option(&pinedio, PINEDIO_OPTION_SEARCH_SERIAL, 1);
-            }
-            pinedio_set_option(&pinedio, PINEDIO_OPTION_PID, pid);
-            pinedio_set_option(&pinedio, PINEDIO_OPTION_VID, vid);
-            int32_t ret = pinedio_init(&pinedio, NULL);
-            if (ret != 0) {
-                fprintf(stderr, "Could not open SPI: %d\n", ret);
-            } else {
-                pinedio_is_init = true;
-                // LOG_INFO("USB Serial: %s", pinedio.serial_number);
-                pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
-                pinedio_set_pin_mode(&pinedio, 3, true);
-                pinedio_set_pin_mode(&pinedio, 5, true);
-            }
-        }
-    }
-
+    void spiBegin() {}
     void spiBeginTransaction() {}
 
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in)
     {
-        int32_t result = pinedio_transceive(&this->pinedio, out, in, len);
-        if (result < 0) {
-            fprintf(stderr, "Could not perform SPI transfer: %d\n", result);
+        if (checkError()) {
+            return;
+        }
+        int32_t ret = pinedio_transceive(&this->pinedio, out, in, len);
+        if (ret < 0) {
+            std::cerr << "Could not perform SPI transfer: " << ret << std::endl;
         }
     }
 
     void spiEndTransaction() {}
-
-    void spiEnd()
+    void spiEnd() {}
+    bool checkError()
     {
-        if (pinedio_is_init) {
-            pinedio_deinit(&pinedio);
-            pinedio_is_init = false;
+        if (pinedio.in_error) {
+            if (!has_warned)
+                LOG_ERROR("USBHal: libch341 in_error detected");
+            portduino_status.LoRa_in_error = true;
+            has_warned = true;
+            return true;
         }
+        has_warned = false;
+        return false;
     }
 
-    bool isInit() { return pinedio_is_init; }
-
-    std::string serial = "";
-    uint32_t pid = 0x5512;
-    uint32_t vid = 0x1A86;
-
   private:
-    // the HAL can contain any additional private members
     pinedio_inst pinedio = {0};
-    bool pinedio_is_init = false;
+    bool has_warned = false;
 };
 
 #endif

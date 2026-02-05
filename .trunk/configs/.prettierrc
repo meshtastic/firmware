@@ -1,0 +1,10 @@
+{
+  "overrides": [
+    {
+      "files": "userPrefs.jsonc",
+      "options": {
+        "trailingComma": "none"
+      }
+    }
+  ]
+}

@@ -28,8 +28,9 @@ PositionModule::PositionModule()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
-        setIntervalFromNow(60 * 1000);
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        setIntervalFromNow(setStartDelay());
+    }
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
@@ -44,8 +45,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
-    // If inbound message is a replay (or spoof!) of our own messages, we shouldn't process
-    // (why use second-hand sources for our own data?)
+    const auto transport = mp.transport_mechanism;
+    if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
+                                    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API)) {
+        LOG_WARN("Ignoring packet supposedly from us over external transport");
+        return true;
+    }
 
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
@@ -160,7 +165,8 @@ bool PositionModule::hasGPS()
 #endif
 }
 
-meshtastic_MeshPacket *PositionModule::allocReply()
+// Allocate a packet with our position data if we have one
+meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 {
     if (precision == 0) {
         LOG_DEBUG("Skip location send because precision is set to 0!");
@@ -262,13 +268,31 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.has_ground_speed = true;
     }
 
-    LOG_INFO("Position reply: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position packet: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
 
+#ifndef MESHTASTIC_EXCLUDE_ATAK
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         return allocAtakPli();
+#endif
 
     return allocDataProtobuf(p);
+}
+
+meshtastic_MeshPacket *PositionModule::allocReply()
+{
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
+        Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
+        LOG_DEBUG("Skip Position reply since we sent a reply <3min ago");
+        ignoreRequest = true; // Mark it as ignored for MeshModule
+        return nullptr;
+    }
+
+    meshtastic_MeshPacket *reply = allocPositionPacket();
+    if (reply) {
+        lastSentReply = millis(); // Track when we sent this reply
+    }
+    return reply;
 }
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
@@ -314,11 +338,22 @@ void PositionModule::sendOurPosition()
 
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-    sendOurPosition(NODENUM_BROADCAST, requestReplies);
+    for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
+        if (channels.getByIndex(channelNum).settings.has_module_settings &&
+            channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
+            sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
+            return;
+        }
+    }
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
 {
+    if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+        LOG_DEBUG("Skip position send; no fresh position since boot");
+        return;
+    }
+
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
@@ -326,16 +361,11 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     // Set's the class precision value for this particular packet
     if (channels.getByIndex(channel).settings.has_module_settings) {
         precision = channels.getByIndex(channel).settings.module_settings.position_precision;
-    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
-        // backwards compatibility for Primary channels created before position_precision was set by default
-        precision = 13;
-    } else {
-        precision = 0;
     }
 
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocPositionPacket();
     if (p == nullptr) {
-        LOG_DEBUG("allocReply returned a nullptr");
+        LOG_DEBUG("allocPositionPacket returned a nullptr");
         return;
     }
 
@@ -356,9 +386,16 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Start next execution in 5s, then sleep");
+        meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+        notification->level = meshtastic_LogRecord_Level_INFO;
+        notification->time = getValidTime(RTCQualityFromNet);
+        sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
+                Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
+                    1000U);
+        service->sendClientNotification(notification);
         sleepOnNextExecution = true;
-        setIntervalFromNow(5000);
+        LOG_DEBUG("Start next execution in 5s, then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
     }
 }
 
@@ -388,8 +425,14 @@ int32_t PositionModule::runOnce()
         return RUNONCE_INTERVAL;
     }
 
+    bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
+
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-        if (nodeDB->hasValidPosition(node)) {
+        if (waitingForFreshPosition) {
+#ifdef GPS_DEBUG
+            LOG_DEBUG("Skip initial position send; no fresh position since boot");
+#endif
+        } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
             lastGpsLatitude = node->position.latitude_i;
@@ -444,19 +487,53 @@ void PositionModule::sendLostAndFoundText()
     delete[] message;
 }
 
+// Helper: return imprecise (truncated + centered) lat/lon as int32 using current precision
+static inline void computeImpreciseLatLon(int32_t inLat, int32_t inLon, uint8_t precisionBits, int32_t &outLat, int32_t &outLon)
+{
+    if (precisionBits > 0 && precisionBits < 32) {
+        // Build mask for top 'precisionBits' bits of a 32-bit unsigned field
+        const uint32_t mask = (precisionBits == 32) ? UINT32_MAX : (UINT32_MAX << (32 - precisionBits));
+        // Note: latitude_i/longitude_i are stored as signed 32-bit in meshtastic code but
+        // the bitmask logic used previously operated as unsigned—preserve that behavior by
+        // casting to uint32_t for masking, then back to int32_t.
+        uint32_t lat_u = static_cast<uint32_t>(inLat) & mask;
+        uint32_t lon_u = static_cast<uint32_t>(inLon) & mask;
+
+        // Add the "center of cell" offset used elsewhere:
+        // The code previously added (1 << (31 - precision)) to produce the middle of the possible location.
+        uint32_t center_offset = (1u << (31 - precisionBits));
+        lat_u += center_offset;
+        lon_u += center_offset;
+
+        outLat = static_cast<int32_t>(lat_u);
+        outLon = static_cast<int32_t>(lon_u);
+    } else {
+        // full precision: return input unchanged
+        outLat = inLat;
+        outLon = inLon;
+    }
+}
+
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
 {
-    // The minimum distance to travel before we are able to send a new position packet.
     const uint32_t distanceTravelThreshold =
         Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
 
-    // Determine the distance in meters between two points on the globe
-    float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
-        lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
+    int32_t lastLatImprecise, lastLonImprecise;
+    int32_t currentLatImprecise, currentLonImprecise;
 
-    return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
+    computeImpreciseLatLon(lastGpsLatitude, lastGpsLongitude, precision, lastLatImprecise, lastLonImprecise);
+    computeImpreciseLatLon(currentPosition.latitude_i, currentPosition.longitude_i, precision, currentLatImprecise,
+                           currentLonImprecise);
+
+    float distMeters = GeoCoord::latLongToMeter(lastLatImprecise * 1e-7, lastLonImprecise * 1e-7, currentLatImprecise * 1e-7,
+                                                currentLonImprecise * 1e-7);
+
+    float distanceTraveled = fabsf(distMeters);
+
+    return SmartPosition{.distanceTraveled = distanceTraveled,
                          .distanceThreshold = distanceTravelThreshold,
-                         .hasTraveledOverThreshold = abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold};
+                         .hasTraveledOverThreshold = distanceTraveled >= distanceTravelThreshold};
 }
 
 void PositionModule::handleNewPosition()

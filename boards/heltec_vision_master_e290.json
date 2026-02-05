@@ -2,7 +2,8 @@
   "build": {
     "arduino": {
       "ldscript": "esp32s3_out.ld",
-      "partitions": "default_8MB.csv"
+      "partitions": "default_8MB.csv",
+      "memory_type": "qio_opi"
     },
     "core": "esp32",
     "extra_flags": [
@@ -15,6 +16,7 @@
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
+    "psram_type": "opi",
     "hwids": [
       ["0x303A", "0x1001"],
       ["0x303A", "0x0002"]

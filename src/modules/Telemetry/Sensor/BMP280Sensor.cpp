@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_BMP280.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BMP280Sensor.h"
@@ -10,24 +10,24 @@
 
 BMP280Sensor::BMP280Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BMP280, "BMP280") {}
 
-int32_t BMP280Sensor::runOnce()
+bool BMP280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+
+    bmp280 = Adafruit_BMP280(bus);
+    status = bmp280.begin(dev->address.address);
+    if (!status) {
+        return status;
     }
-    bmp280 = Adafruit_BMP280(nodeTelemetrySensorsMap[sensorType].second);
-    status = bmp280.begin(nodeTelemetrySensorsMap[sensorType].first);
 
     bmp280.setSampling(Adafruit_BMP280::MODE_FORCED,
                        Adafruit_BMP280::SAMPLING_X1, // Temp. oversampling
                        Adafruit_BMP280::SAMPLING_X1, // Pressure oversampling
                        Adafruit_BMP280::FILTER_OFF, Adafruit_BMP280::STANDBY_MS_1000);
 
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void BMP280Sensor::setup() {}
 
 bool BMP280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {

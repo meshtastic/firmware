@@ -74,6 +74,8 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_DETECTION_SENSOR_APP = 10,
     /* Same as Text Message but used for critical alerts. */
     meshtastic_PortNum_ALERT_APP = 11,
+    /* Module/port for handling key verification requests. */
+    meshtastic_PortNum_KEY_VERIFICATION_APP = 12,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module.
  ENCODING: ASCII Plaintext */
@@ -84,6 +86,16 @@ typedef enum _meshtastic_PortNum {
     /* Paxcounter lib included in the firmware
  ENCODING: protobuf */
     meshtastic_PortNum_PAXCOUNTER_APP = 34,
+    /* Store and Forward++ module included in the firmware
+ ENCODING: protobuf
+ This module is specifically for Native Linux nodes, and provides a Git-style
+ chain of messages. */
+    meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP = 35,
+    /* Node Status module
+ ENCODING: protobuf
+ This module allows setting an extra string of status for a node.
+ Broadcasts on change and on a timer, possibly once a day. */
+    meshtastic_PortNum_NODE_STATUS_APP = 36,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
@@ -128,6 +140,13 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_MAP_REPORT_APP = 73,
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
+    /* Reticulum Network Stack Tunnel App
+ ENCODING: Fragmented RNS Packet. Handled by Meshtastic RNS interface */
+    meshtastic_PortNum_RETICULUM_TUNNEL_APP = 76,
+    /* App for transporting Cayenne Low Power Payload, popular for LoRaWAN sensor nodes. Offers ability to send
+ arbitrary telemetry over meshtastic that is not covered by telemetry.proto
+ ENCODING: CayenneLLP */
+    meshtastic_PortNum_CAYENNE_APP = 77,
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
