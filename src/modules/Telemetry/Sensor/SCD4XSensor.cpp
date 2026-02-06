@@ -707,7 +707,7 @@ uint32_t SCD4XSensor::wakeUp() {
     reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
 #else
     LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
+    return 0;
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -738,7 +738,7 @@ void SCD4XSensor::sleep() {
     reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
 #else
     LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
+    return;
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
