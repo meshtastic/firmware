@@ -151,8 +151,6 @@ class SEN5XSensor : public TelemetrySensor
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;
 
-    // TODO - Add a way to take averages of samples
-    // This value represents the time needed for pending data
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request, meshtastic_AdminMessage *response) override;
 };
 
