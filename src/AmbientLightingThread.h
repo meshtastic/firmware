@@ -7,13 +7,13 @@
 #include "sleep.h"
 
 #ifdef HAS_NCP5623
-#include <graphics/RAKled.h>
-NCP5623 rgb;
+#include <NCP5623.h>
+static NCP5623 rgb;
 #endif
 
 #ifdef HAS_LP5562
 #include <graphics/NomadStarLED.h>
-LP5562 rgbw;
+static LP5562 rgbw;
 #endif
 
 #ifdef HAS_NEOPIXEL

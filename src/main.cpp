@@ -29,7 +29,6 @@
 #include <Wire.h>
 #endif
 #include "detect/einkScan.h"
-#include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
