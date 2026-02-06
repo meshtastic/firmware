@@ -13,8 +13,7 @@ SCD4XSensor::SCD4XSensor()
 {
 }
 
-bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
-{
+bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) {
     LOG_INFO("Init sensor: %s", sensorName);
 
     _bus = bus;
@@ -38,6 +37,9 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     // Stop periodic measurement
     if (!stopMeasurement()) {
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
 
@@ -48,18 +50,27 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("%s: Found SCD41", sensorName);
         if (!powerUp()) {
             LOG_ERROR("%s: Error trying to execute powerUp()", sensorName);
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+            reClockI2C(currentClock, _bus, false);
+#endif
             return false;
         }
     }
 
     if (!getASC(ascActive)){
         LOG_ERROR("%s: Unable to check if ASC is enabled", sensorName);
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
 
     // Start measurement in selected power mode (low power by default)
     if (!startMeasurement()){
         LOG_ERROR("%s: Couldn't start measurement", sensorName);
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
 
@@ -78,8 +89,7 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     return true;
 }
 
-bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
-{
+bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement) {
 
     if (state != SCD4X_MEASUREMENT) {
         LOG_ERROR("%s: Not in measurement mode", sensorName);
@@ -103,6 +113,9 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     bool dataReady;
     error = scd4x.getDataReadyStatus(dataReady);
     if (!dataReady) {
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         LOG_ERROR("SCD4X: Data is not ready");
         return false;
     }
@@ -131,9 +144,6 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 }
 
-// TODO
-// Make all functions change I2C clock
-
 /**
 * @brief Perform a forced recalibration (FRC) of the CO₂ concentration.
 *
@@ -145,6 +155,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 * must be operated at the voltage desired for the application when
 * performing the FRC sequence. 2. Issue the stop_periodic_measurement
 * command. 3. Issue the perform_forced_recalibration command.
+* @note This function should not change the clock
 */
 bool SCD4XSensor::performFRC(uint32_t targetCO2) {
     uint16_t error, frcCorr;
@@ -176,6 +187,10 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2) {
     return true;
 }
 
+/**
+* @brief Start measurement mode
+* @note This function should not change the clock
+*/
 bool SCD4XSensor::startMeasurement() {
     uint16_t error;
 
@@ -206,7 +221,11 @@ bool SCD4XSensor::startMeasurement() {
     }
 }
 
-bool SCD4XSensor::stopMeasurement(){
+/**
+* @brief Stop measurement mode
+* @note This function should not change the clock
+*/
+bool SCD4XSensor::stopMeasurement() {
     uint16_t error;
 
     error = scd4x.stopPeriodicMeasurement();
@@ -220,6 +239,11 @@ bool SCD4XSensor::stopMeasurement(){
     return true;
 }
 
+/**
+* @brief Set power mode
+* Pass true to set low power mode
+* @note This function should not change the clock
+*/
 bool SCD4XSensor::setPowerMode(bool _lowPower) {
     lowPower = _lowPower;
 
@@ -238,8 +262,8 @@ bool SCD4XSensor::setPowerMode(bool _lowPower) {
 
 /**
 * @brief Check the current mode (ASC or FRC)
-
 * From Sensirion SCD4X I2C Library
+* @note This function should not change the clock
 */
 bool SCD4XSensor::getASC(uint16_t &_ascActive) {
     uint16_t error;
@@ -271,8 +295,9 @@ bool SCD4XSensor::getASC(uint16_t &_ascActive) {
 *
 * Sets the current state (enabled / disabled) of the ASC. By default, ASC
 * is enabled.
+* @note This function should not change the clock
 */
-bool SCD4XSensor::setASC(bool ascEnabled){
+bool SCD4XSensor::setASC(bool ascEnabled) {
     uint16_t error;
 
     if (ascEnabled){
@@ -323,8 +348,9 @@ bool SCD4XSensor::setASC(bool ascEnabled){
 * operation. To save the setting to the EEPROM, the persist_settings
 * command must be issued subsequently. The factory default value is 400
 * ppm.
+* @note This function should not change the clock
 */
-bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
+bool SCD4XSensor::setASCBaseline(uint32_t targetCO2) {
     // TODO - Remove?
     //  Available in library, but not described in datasheet.
     uint16_t error;
@@ -358,7 +384,6 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
     return true;
 }
 
-
 /**
 * @brief Set the temperature compensation reference.
 *
@@ -378,8 +403,9 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
 *
 * Recommended temperature offset values are between 0 °C and 20 °C. The
 * temperature offset does not impact the accuracy of the CO2 output.
+* @note This function should not change the clock
 */
-bool SCD4XSensor::setTemperature(float tempReference){
+bool SCD4XSensor::setTemperature(float tempReference) {
     uint16_t error;
     float prevTempOffset;
     float updatedTempOffset;
@@ -445,8 +471,9 @@ bool SCD4XSensor::setTemperature(float tempReference){
 *
 * Altitude in meters above sea level can be set after device installation.
 * Valid value between 0 and 3000m. This overrides pressure offset.
+* @note This function should not change the clock
 */
-bool SCD4XSensor::getAltitude(uint16_t &altitude){
+bool SCD4XSensor::getAltitude(uint16_t &altitude) {
     uint16_t error;
     LOG_INFO("%s: Requesting sensor altitude", sensorName);
 
@@ -471,8 +498,9 @@ bool SCD4XSensor::getAltitude(uint16_t &altitude){
 * From Sensirion SCD4X I2C Library.
 *
 * Gets the ambient pressure in Pa.
+* @note This function should not change the clock
 */
-bool SCD4XSensor::getAmbientPressure(uint32_t &ambientPressure){
+bool SCD4XSensor::getAmbientPressure(uint32_t &ambientPressure) {
     uint16_t error;
     LOG_INFO("%s: Requesting sensor ambient pressure", sensorName);
 
@@ -494,8 +522,9 @@ bool SCD4XSensor::getAmbientPressure(uint32_t &ambientPressure){
 *
 * Altitude in meters above sea level can be set after device installation.
 * Valid value between 0 and 3000m. This overrides pressure offset.
+* @note This function should not change the clock
 */
-bool SCD4XSensor::setAltitude(uint32_t altitude){
+bool SCD4XSensor::setAltitude(uint32_t altitude) {
     uint16_t error;
 
     if (!stopMeasurement()) {
@@ -530,6 +559,7 @@ bool SCD4XSensor::setAltitude(uint32_t altitude){
 * applications experiencing significant ambient pressure changes to ensure
 * sensor accuracy. Valid input values are between 70000 - 120000 Pa. The
 * default value is 101300 Pa.
+* @note This function should not change the clock
 */
 bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure) {
     uint16_t error;
@@ -558,6 +588,7 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure) {
 *
 * The perform_factory_reset command resets all configuration settings
 * stored in the EEPROM and erases the FRC and ASC algorithm history.
+* @note This function should not change the clock
 */
 bool SCD4XSensor::factoryReset() {
     uint16_t error;
@@ -588,7 +619,6 @@ bool SCD4XSensor::factoryReset() {
 * Put the sensor from idle to sleep to reduce power consumption. Can be
 * used to power down when operating the sensor in power-cycled single shot
 * mode.
-*
 * @note This command is only available in idle mode. Only for SCD41.
 */
 bool SCD4XSensor::powerDown() {
@@ -599,14 +629,36 @@ bool SCD4XSensor::powerDown() {
         return true;
     }
 
+#ifdef SCD4X_I2C_CLOCK_SPEED
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
+#elif !HAS_SCREEN
+    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SCD4X_I2C_CLOCK_SPEED */
+
     if (!stopMeasurement()) {
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
 
     if (scd4x.powerDown() != SCD4X_NO_ERROR) {
         LOG_ERROR("%s: Error trying to execute sleep()", sensorName);
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
+
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
+#endif
+
     state = SCD4X_OFF;
     return true;
 }
@@ -619,17 +671,19 @@ bool SCD4XSensor::powerDown() {
 * Wake up the sensor from sleep mode into idle mode. Note that the SCD4x
 * does not acknowledge the wake_up command. The sensor's idle state after
 * wake up can be verified by reading out the serial number.
-*
 * @note This command is only available for SCD41.
+* @note This function can't change clock (used in init)
 */
-bool SCD4XSensor::powerUp(){
+bool SCD4XSensor::powerUp() {
     LOG_INFO("%s: Waking up", sensorName);
 
     if (scd4x.wakeUp() != SCD4X_NO_ERROR) {
         LOG_ERROR("%s: Error trying to execute wakeUp()", sensorName);
         return false;
     }
+
     state = SCD4X_IDLE;
+
     return true;
 }
 
@@ -642,20 +696,57 @@ bool SCD4XSensor::isActive(){
 
 /**
 * @brief Start measurement mode
+* @note Not used in admin comands, getMetrics or init, can change clock.
 */
-uint32_t SCD4XSensor::wakeUp(){
+uint32_t SCD4XSensor::wakeUp() {
+
+#ifdef SCD4X_I2C_CLOCK_SPEED
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
+#elif !HAS_SCREEN
+    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SCD4X_I2C_CLOCK_SPEED */
+
     if (startMeasurement()) {
         co2MeasureStarted = getTime();
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return SCD4X_WARMUP_MS;
     }
+
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
+#endif
+
     return 0;
 }
 
 /**
 * @brief Stop measurement mode
+* @note Not used in admin comands, getMetrics or init, can change clock.
 */
-void SCD4XSensor::sleep(){
+void SCD4XSensor::sleep() {
+#ifdef SCD4X_I2C_CLOCK_SPEED
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
+#elif !HAS_SCREEN
+    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SCD4X_I2C_CLOCK_SPEED */
+
     stopMeasurement();
+
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
+#endif
 }
 
 /**
@@ -665,16 +756,15 @@ void SCD4XSensor::sleep(){
 * you still want to override this behaviour. Otherwise, sleep is disabled
 * routinely in low power mode
 */
-bool SCD4XSensor::canSleep(){
+bool SCD4XSensor::canSleep() {
     return lowPower ? false : true;
 }
 
-int32_t SCD4XSensor::wakeUpTimeMs(){
+int32_t SCD4XSensor::wakeUpTimeMs() {
     return SCD4X_WARMUP_MS;
 }
 
-int32_t SCD4XSensor::pendingForReadyMs()
-{
+int32_t SCD4XSensor::pendingForReadyMs() {
     uint32_t now;
     now = getTime();
     uint32_t sinceCO2MeasureStarted = (now - co2MeasureStarted)*1000;
@@ -692,8 +782,18 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
 {
     AdminMessageHandleResult result;
 
-    // TODO: potentially add selftest command?
+#ifdef SCD4X_I2C_CLOCK_SPEED
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
+#elif !HAS_SCREEN
+    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return AdminMessageHandleResult::NOT_HANDLED;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 
+    // TODO: potentially add selftest command?
     switch (request->which_payload_variant) {
         case meshtastic_AdminMessage_sensor_config_tag:
             // Check for ASC-FRC request first
@@ -751,7 +851,6 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
                 if (request->sensor_config.scd4x_config.has_set_power_mode) {
                     this->setPowerMode(request->sensor_config.scd4x_config.set_power_mode);
                 }
-
             }
 
             // Start measurement mode
@@ -763,6 +862,10 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
         default:
             result = AdminMessageHandleResult::NOT_HANDLED;
     }
+
+#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
+#endif
 
     return result;
 }
