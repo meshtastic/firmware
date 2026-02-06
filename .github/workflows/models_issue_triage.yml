@@ -100,7 +100,12 @@ jobs:
           prompt: |
             Analyze this GitHub issue for completeness and determine if it needs labels.
 
-            If this looks like a bug on the device/firmware (crash, reboot, lockup, radio issues, GPS issues, display issues, power/sleep issues), request device logs and explain how to get them:
+            IMPORTANT: Distinguish between:
+            - Device/firmware bugs (crashes, reboots, lockups, radio/GPS/display/power issues) - these need device logs
+            - Build/release/packaging issues (missing files, CI failures, download problems) - these do NOT need device logs
+            - Documentation or website issues - these do NOT need device logs
+
+            If this is a device/firmware bug, request device logs and explain how to get them:
 
             Web Flasher logs:
             - Go to https://flasher.meshtastic.org
@@ -113,20 +118,18 @@ jobs:
 
             Also request key context if missing: device model/variant, firmware version, region, steps to reproduce, expected vs actual.
 
-            Respond ONLY with JSON:
-            {
-              "complete": true|false,
-              "comment": "Your helpful comment requesting missing info, or empty string if complete",
-              "label": "needs-logs" | "needs-info" | "none"
-            }
+            Respond ONLY with valid JSON (no markdown, no code fences):
+            {"complete": true, "comment": "", "label": "none"}
+            OR
+            {"complete": false, "comment": "Your helpful comment", "label": "needs-logs"}
 
-            Use "needs-logs" if this is a device bug AND no logs are attached.
+            Use "needs-logs" ONLY if this is a device/firmware bug AND no logs are attached.
             Use "needs-info" if basic info like firmware version or steps to reproduce are missing.
-            Use "none" if the issue is complete or is a feature request.
+            Use "none" if the issue is complete, is a feature request, or is a build/CI/packaging issue.
 
             Title: ${{ github.event.issue.title }}
             Body: ${{ github.event.issue.body }}
-          system-prompt: You are a helpful assistant that triages GitHub issues. Be conservative with labels.
+          system-prompt: You are a helpful assistant that triages GitHub issues. Be conservative with labels. Only request device logs for actual device/firmware bugs, not for build/release/CI issues.
           model: openai/gpt-4o-mini
 
       - name: Process analysis result
@@ -137,9 +140,12 @@ jobs:
           AI_RESPONSE: ${{ steps.analysis.outputs.response }}
         with:
           script: |
-            const raw = (process.env.AI_RESPONSE || '').trim();
+            let raw = (process.env.AI_RESPONSE || '').trim();
 
-            let complete = false;
+            // Strip markdown code fences if present
+            raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+            let complete = true;
             let comment = '';
             let label = 'none';
 
@@ -149,9 +155,10 @@ jobs:
               comment = (parsed.comment ?? '').toString().trim();
               label = (parsed.label ?? 'none').toString().trim().toLowerCase();
             } catch {
-              // If JSON parse fails, treat as incomplete with raw response as comment
-              complete = false;
-              comment = raw;
+              // If JSON parse fails, log warning and don't comment (avoid posting raw JSON)
+              console.log('Failed to parse AI response as JSON:', raw);
+              complete = true;
+              comment = '';
               label = 'none';
             }
 
@@ -159,7 +166,9 @@ jobs:
             const allowedLabels = new Set(['needs-logs', 'needs-info', 'none']);
             if (!allowedLabels.has(label)) label = 'none';
 
-            core.setOutput('should_comment', (!complete && comment.length > 0) ? 'true' : 'false');
+            // Only comment if we have a valid parsed comment (not raw JSON)
+            const shouldComment = !complete && comment.length > 0 && !comment.startsWith('{');
+            core.setOutput('should_comment', shouldComment ? 'true' : 'false');
             core.setOutput('comment_body', comment);
             core.setOutput('label', label);
 

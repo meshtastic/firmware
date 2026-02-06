@@ -6,7 +6,7 @@
 // I/O
 #define LED_STATE_ON 1
 #define PIN_LED1 PA0 // Green LED
-#define LED_PIN PIN_LED1
+#define LED_POWER PIN_LED1
 #define PIN_LED2 PA0 // Red LED
 #define USER_LED PIN_LED2
 #define BUTTON_PIN PC13

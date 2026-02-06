@@ -390,9 +390,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_RADIO
 #define HAS_RADIO 0
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 0
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 0
 #endif
