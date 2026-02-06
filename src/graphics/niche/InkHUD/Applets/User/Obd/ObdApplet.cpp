@@ -22,7 +22,7 @@ void InkHUD::ObdApplet::onRender(bool full)
     std::string timeStr = getTimeString();
     printAt(X(0.02f), y, "Time:", LEFT, TOP);
     printAt(X(0.35f), y, timeStr, LEFT, TOP);
-    y += fontSmall.getLineHeight() + 2;
+    y += fontSmall.lineHeight + 2;
 
     // GPS
     std::string gpsLine = "GPS: no fix";
@@ -34,7 +34,7 @@ void InkHUD::ObdApplet::onRender(bool full)
         gpsLine = buf;
     }
     printAt(X(0.02f), y, gpsLine, LEFT, TOP);
-    y += fontSmall.getLineHeight() + 2;
+    y += fontSmall.lineHeight + 2;
 
     // OBD metrics
     int rpm = -1;
@@ -56,7 +56,7 @@ void InkHUD::ObdApplet::onRender(bool full)
     else
         snprintf(rpmBuf, sizeof(rpmBuf), "RPM: --");
     printAt(X(0.02f), y, rpmBuf, LEFT, TOP);
-    y += fontSmall.getLineHeight() + 2;
+    y += fontSmall.lineHeight + 2;
 
     char voltBuf[32];
     if (mv >= 0)
@@ -64,7 +64,7 @@ void InkHUD::ObdApplet::onRender(bool full)
     else
         snprintf(voltBuf, sizeof(voltBuf), "V: --");
     printAt(X(0.02f), y, voltBuf, LEFT, TOP);
-    y += fontSmall.getLineHeight() + 2;
+    y += fontSmall.lineHeight + 2;
 
     char statusBuf[48];
     if (lastMs > 0) {
@@ -79,7 +79,7 @@ void InkHUD::ObdApplet::onRender(bool full)
 int32_t InkHUD::ObdApplet::runOnce()
 {
     if (isActive()) {
-        requestUpdate(Drivers::EInk::UpdateTypes::RESPONSIVE);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
     return 2000;
 }
