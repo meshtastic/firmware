@@ -15,7 +15,7 @@
 #undef GPS_TX_PIN
 
 // Green / Lora = PIN 22 / GPIO2, Yellow / Wifi = PIN 23 / GPIO0, Blue / BLE = PIN 25 / GPIO16
-#define LED_PIN 22
+#define LED_POWER 22
 #define WIFI_LED 23
 #define BLE_LED 25
 
