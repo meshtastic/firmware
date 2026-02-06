@@ -1524,7 +1524,14 @@ void InkHUD::MenuApplet::onButtonShortPress()
         if (!settings->joystick.enabled) {
             if (!cursorShown) {
                 cursorShown = true;
+                // Select the first item that isn't a header
                 cursor = 0;
+                while (cursor < items.size() && items.at(cursor).isHeader)
+                    cursor++;
+                if (cursor >= items.size()) {
+                    cursorShown = false;
+                    cursor = 0;
+                }
             } else {
                 do {
                     cursor = (cursor + 1) % items.size();
