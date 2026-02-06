@@ -166,6 +166,14 @@ int32_t StatusLEDModule::runOnce()
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
 
+#ifdef RGB_LED_POWER
+    if (CHARGE_LED_state == LED_STATE_ON) {
+        ambientLightingThread.setLighting(10, 255, 0, 0);
+    } else {
+        ambientLightingThread.setLighting(0, 0, 0, 0);
+    }
+#endif
+
 #ifdef Battery_LED_1
     digitalWrite(Battery_LED_1, chargeIndicatorLED1);
 #endif

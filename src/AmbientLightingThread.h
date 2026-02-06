@@ -1,5 +1,10 @@
+#ifndef AMBIENTLIGHTINGTHREAD_H
+#define AMBIENTLIGHTINGTHREAD_H
+
 #include "Observer.h"
 #include "configuration.h"
+#include "detect/ScanI2C.h"
+#include "sleep.h"
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
@@ -12,8 +17,8 @@ LP5562 rgbw;
 #endif
 
 #ifdef HAS_NEOPIXEL
-#include <graphics/NeoPixel.h>
-Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_DATA, NEOPIXEL_TYPE);
+#include <Adafruit_NeoPixel.h>
+static Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_DATA, NEOPIXEL_TYPE);
 #endif
 
 #ifdef UNPHONE
@@ -21,10 +26,10 @@ Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_DATA, NEOPIXEL_TYPE);
 extern unPhone unphone;
 #endif
 
-namespace concurrency
-{
 class AmbientLightingThread : public concurrency::OSThread
 {
+    friend class StatusLEDModule; // Let the LEDStatusModule trigger the ambient lighting for notifications and battery status.
+    friend class ExternalNotificationModule; // Let the ExternalNotificationModule trigger the ambient lighting for notifications.
   public:
     explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLighting")
     {
@@ -36,14 +41,15 @@ class AmbientLightingThread : public concurrency::OSThread
         moduleConfig.ambient_lighting.led_state = true;
 #endif
 #endif
-        // Uncomment to test module
-        // moduleConfig.ambient_lighting.led_state = true;
-        // moduleConfig.ambient_lighting.current = 10;
+#if AMBIENT_LIGHTING_TEST
+        // define to enable test
+        moduleConfig.ambient_lighting.led_state = true;
+        moduleConfig.ambient_lighting.current = 10;
         // Default to a color based on our node number
-        // moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
-        // moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
-        // moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
-
+        moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
+        moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
+        moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
+#endif
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
         _type = type;
         if (_type == ScanI2C::DeviceType::NONE) {
@@ -53,11 +59,6 @@ class AmbientLightingThread : public concurrency::OSThread
         }
 #endif
 #ifdef HAS_RGB_LED
-        if (!moduleConfig.ambient_lighting.led_state) {
-            LOG_DEBUG("AmbientLighting Disable due to moduleConfig.ambient_lighting.led_state OFF");
-            disable();
-            return;
-        }
         LOG_DEBUG("AmbientLighting init");
 #ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623) {
@@ -77,7 +78,13 @@ class AmbientLightingThread : public concurrency::OSThread
                 pixels.clear(); // Set all pixel colors to 'off'
                 pixels.setBrightness(moduleConfig.ambient_lighting.current);
 #endif
-                setLighting();
+                if (!moduleConfig.ambient_lighting.led_state) {
+                    LOG_DEBUG("AmbientLighting Disable due to moduleConfig.ambient_lighting.led_state OFF");
+                    disable();
+                    return;
+                }
+                setLighting(moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
+                            moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             }
@@ -91,7 +98,8 @@ class AmbientLightingThread : public concurrency::OSThread
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             if ((_type == ScanI2C::NCP5623 || _type == ScanI2C::LP5562) && moduleConfig.ambient_lighting.led_state) {
 #endif
-                setLighting();
+                setLighting(moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
+                            moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
                 return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             }
@@ -148,65 +156,53 @@ class AmbientLightingThread : public concurrency::OSThread
             return 0;
         }
 
-        void setLighting()
+      protected:
+        void setLighting(float current, uint8_t red, uint8_t green, uint8_t blue)
         {
 #ifdef HAS_NCP5623
-            rgb.setCurrent(moduleConfig.ambient_lighting.current);
-            rgb.setRed(moduleConfig.ambient_lighting.red);
-            rgb.setGreen(moduleConfig.ambient_lighting.green);
-            rgb.setBlue(moduleConfig.ambient_lighting.blue);
-            LOG_DEBUG("Init NCP5623 Ambient light w/ current=%d, red=%d, green=%d, blue=%d",
-                      moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
-                      moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+            rgb.setCurrent(current);
+            rgb.setRed(red);
+            rgb.setGreen(green);
+            rgb.setBlue(blue);
+            LOG_DEBUG("Init NCP5623 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", current, red, green, blue);
 #endif
 #ifdef HAS_LP5562
-            rgbw.setCurrent(moduleConfig.ambient_lighting.current);
-            rgbw.setRed(moduleConfig.ambient_lighting.red);
-            rgbw.setGreen(moduleConfig.ambient_lighting.green);
-            rgbw.setBlue(moduleConfig.ambient_lighting.blue);
-            LOG_DEBUG("Init LP5562 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.current,
-                      moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+            rgbw.setCurrent(current);
+            rgbw.setRed(red);
+            rgbw.setGreen(green);
+            rgbw.setBlue(blue);
+            LOG_DEBUG("Init LP5562 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", current, red, green, blue);
 #endif
 #ifdef HAS_NEOPIXEL
-            pixels.fill(pixels.Color(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
-                                     moduleConfig.ambient_lighting.blue),
-                        0, NEOPIXEL_COUNT);
+            pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
 
 // RadioMaster Bandit has addressable LED at the two buttons
 // this allow us to set different lighting for them in variant.h file.
-#ifdef RADIOMASTER_900_BANDIT
 #if defined(BUTTON1_COLOR) && defined(BUTTON1_COLOR_INDEX)
             pixels.fill(BUTTON1_COLOR, BUTTON1_COLOR_INDEX, 1);
 #endif
 #if defined(BUTTON2_COLOR) && defined(BUTTON2_COLOR_INDEX)
             pixels.fill(BUTTON2_COLOR, BUTTON2_COLOR_INDEX, 1);
 #endif
-#endif
             pixels.show();
             // LOG_DEBUG("Init NeoPixel Ambient light w/ brightness(current)=%d, red=%d, green=%d, blue=%d",
-            //        moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
-            //        moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+            //        current, red, green, blue);
 #endif
 #ifdef RGBLED_CA
-            analogWrite(RGBLED_RED, 255 - moduleConfig.ambient_lighting.red);
-            analogWrite(RGBLED_GREEN, 255 - moduleConfig.ambient_lighting.green);
-            analogWrite(RGBLED_BLUE, 255 - moduleConfig.ambient_lighting.blue);
-            LOG_DEBUG("Init Ambient light RGB Common Anode w/ red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.red,
-                      moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+            analogWrite(RGBLED_RED, 255 - red);
+            analogWrite(RGBLED_GREEN, 255 - green);
+            analogWrite(RGBLED_BLUE, 255 - blue);
+            LOG_DEBUG("Init Ambient light RGB Common Anode w/ red=%d, green=%d, blue=%d", red, green, blue);
 #elif defined(RGBLED_RED)
-        analogWrite(RGBLED_RED, moduleConfig.ambient_lighting.red);
-        analogWrite(RGBLED_GREEN, moduleConfig.ambient_lighting.green);
-        analogWrite(RGBLED_BLUE, moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Init Ambient light RGB Common Cathode w/ red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.red,
-                  moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+        analogWrite(RGBLED_RED, red);
+        analogWrite(RGBLED_GREEN, green);
+        analogWrite(RGBLED_BLUE, blue);
+        LOG_DEBUG("Init Ambient light RGB Common Cathode w/ red=%d, green=%d, blue=%d", red, green, blue);
 #endif
 #ifdef UNPHONE
-            unphone.rgb(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
-                        moduleConfig.ambient_lighting.blue);
-            LOG_DEBUG("Init unPhone Ambient light w/ red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.red,
-                      moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+            unphone.rgb(red, green, blue);
+            LOG_DEBUG("Init unPhone Ambient light w/ red=%d, green=%d, blue=%d", red, green, blue);
 #endif
         }
     };
-
-} // namespace concurrency
+#endif // AMBIENTLIGHTINGTHREAD_H

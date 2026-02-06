@@ -5,6 +5,11 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 
+#ifdef RGB_LED_POWER
+#include "AmbientLightingThread.h"
+extern AmbientLightingThread ambientLightingThread;
+#endif
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <NonBlockingRtttl.h>
 #else
