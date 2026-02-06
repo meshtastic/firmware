@@ -2,25 +2,22 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "SEN5XSensor.h"
-#include "TelemetrySensor.h"
 #include "../detect/reClockI2C.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
+#include "SEN5XSensor.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "TelemetrySensor.h"
+#include <float.h> // FLT_MAX
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include <float.h> // FLT_MAX
 
-SEN5XSensor::SEN5XSensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X")
-{
-}
+SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X") {}
 
 bool SEN5XSensor::getVersion()
 {
-    if (!sendCommand(SEN5X_GET_FIRMWARE_VERSION)){
+    if (!sendCommand(SEN5X_GET_FIRMWARE_VERSION)) {
         LOG_ERROR("SEN5X: Error sending version command");
         return false;
     }
@@ -61,20 +58,19 @@ bool SEN5XSensor::findModel()
     }
 
     // We only check the last character that defines the model SEN5X
-    switch(name[4])
-    {
-        case 48:
-            model = SEN50;
-            LOG_INFO("SEN5X: found sensor model SEN50");
-            break;
-        case 52:
-            model = SEN54;
-            LOG_INFO("SEN5X: found sensor model SEN54");
-            break;
-        case 53:
-            model = SEN55;
-            LOG_INFO("SEN5X: found sensor model SEN55");
-            break;
+    switch (name[4]) {
+    case 48:
+        model = SEN50;
+        LOG_INFO("SEN5X: found sensor model SEN50");
+        break;
+    case 52:
+        model = SEN54;
+        LOG_INFO("SEN5X: found sensor model SEN54");
+        break;
+    case 53:
+        model = SEN55;
+        LOG_INFO("SEN5X: found sensor model SEN55");
+        break;
     }
 
     return true;
@@ -86,13 +82,14 @@ bool SEN5XSensor::sendCommand(uint16_t command)
     return sendCommand(command, &nothing, 0);
 }
 
-bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNumber)
+bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNumber)
 {
     // At least we need two bytes for the command
     uint8_t bufferSize = 2;
 
     // Add space for CRC bytes (one every two bytes)
-    if (byteNumber > 0) bufferSize += byteNumber + (byteNumber / 2);
+    if (byteNumber > 0)
+        bufferSize += byteNumber + (byteNumber / 2);
 
     uint8_t toSend[bufferSize];
     uint8_t i = 0;
@@ -121,7 +118,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
-
     // Transmit the data
     // LOG_DEBUG("Beginning connection to SEN5X: 0x%x. Size: %u", address, bufferSize);
     // Note: this delay is necessary to allow for long-buffers
@@ -146,7 +142,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
     return true;
 }
 
-uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
+uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
 #ifdef SEN5X_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
@@ -176,7 +172,7 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
             LOG_ERROR("SEN5X: Checksum error while receiving msg");
             return 0;
         }
-        readBytes -=3;
+        readBytes -= 3;
         receivedBytes += 2;
     }
 #if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
@@ -186,16 +182,17 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
     return receivedBytes;
 }
 
-uint8_t SEN5XSensor::sen5xCRC(uint8_t* buffer)
+uint8_t SEN5XSensor::sen5xCRC(uint8_t *buffer)
 {
-    // This code is based on Sensirion's own implementation https://github.com/Sensirion/arduino-core/blob/41fd02cacf307ec4945955c58ae495e56809b96c/src/SensirionCrc.cpp
+    // This code is based on Sensirion's own implementation
+    // https://github.com/Sensirion/arduino-core/blob/41fd02cacf307ec4945955c58ae495e56809b96c/src/SensirionCrc.cpp
     uint8_t crc = 0xff;
 
-    for (uint8_t i=0; i<2; i++){
+    for (uint8_t i = 0; i < 2; i++) {
 
         crc ^= buffer[i];
 
-        for (uint8_t bit=8; bit>0; bit--) {
+        for (uint8_t bit = 8; bit > 0; bit--) {
             if (crc & 0x80)
                 crc = (crc << 1) ^ 0x31;
             else
@@ -206,7 +203,8 @@ uint8_t SEN5XSensor::sen5xCRC(uint8_t* buffer)
     return crc;
 }
 
-void SEN5XSensor::sleep(){
+void SEN5XSensor::sleep()
+{
     // TODO Check this works
     idle(true);
 }
@@ -230,7 +228,7 @@ bool SEN5XSensor::idle(bool checkState)
             if (vocStateFromSensor()) {
                 vocValid = vocStateValid();
                 // Check if we have time, and store it
-                uint32_t now;  // If time is RTCQualityNone, it will return zero
+                uint32_t now; // If time is RTCQualityNone, it will return zero
                 now = getValidTime(RTCQuality::RTCQualityDevice);
                 if (now) {
                     // Check if state is valid (non-zero)
@@ -274,9 +272,10 @@ bool SEN5XSensor::idle(bool checkState)
     return true;
 }
 
-bool SEN5XSensor::vocStateRecent(uint32_t now){
+bool SEN5XSensor::vocStateRecent(uint32_t now)
+{
     if (now) {
-        uint32_t passed = now - vocTime; //in seconds
+        uint32_t passed = now - vocTime; // in seconds
 
         // Check if state is recent, less than 10 minutes (600 seconds)
         if (passed < SEN5X_VOC_VALID_TIME && (now > SEN5X_VOC_VALID_DATE)) {
@@ -286,9 +285,10 @@ bool SEN5XSensor::vocStateRecent(uint32_t now){
     return false;
 }
 
-bool SEN5XSensor::vocStateValid() {
-    if (!vocState[0] && !vocState[1] && !vocState[2] && !vocState[3] &&
-    !vocState[4] && !vocState[5] && !vocState[6] && !vocState[7]) {
+bool SEN5XSensor::vocStateValid()
+{
+    if (!vocState[0] && !vocState[1] && !vocState[2] && !vocState[3] && !vocState[4] && !vocState[5] && !vocState[6] &&
+        !vocState[7]) {
         LOG_DEBUG("SEN5X: VOC state is all 0, invalid");
         return false;
     } else {
@@ -299,7 +299,7 @@ bool SEN5XSensor::vocStateValid() {
 
 bool SEN5XSensor::vocStateToSensor()
 {
-    if (model == SEN50){
+    if (model == SEN50) {
         return true;
     }
 
@@ -315,13 +315,12 @@ bool SEN5XSensor::vocStateToSensor()
     delay(200); // From Sensirion Datasheet
 
     LOG_DEBUG("SEN5X: Sending VOC state to sensor");
-    LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]",
-        vocState[0],vocState[1], vocState[2], vocState[3],
-        vocState[4],vocState[5], vocState[6], vocState[7]);
+    LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]", vocState[0], vocState[1], vocState[2], vocState[3], vocState[4], vocState[5],
+              vocState[6], vocState[7]);
 
     // Note: send command already takes into account the CRC
     // buffer size increment needed
-    if (!sendCommand(SEN5X_RW_VOCS_STATE, vocState, SEN5X_VOC_STATE_BUFFER_SIZE)){
+    if (!sendCommand(SEN5X_RW_VOCS_STATE, vocState, SEN5X_VOC_STATE_BUFFER_SIZE)) {
         LOG_ERROR("SEN5X: Error sending VOC's state command'");
         return false;
     }
@@ -331,13 +330,13 @@ bool SEN5XSensor::vocStateToSensor()
 
 bool SEN5XSensor::vocStateFromSensor()
 {
-    if (model == SEN50){
+    if (model == SEN50) {
         return true;
     }
 
     LOG_INFO("SEN5X: Getting VOC state from sensor");
     //  Ask VOCs state from the sensor
-    if (!sendCommand(SEN5X_RW_VOCS_STATE)){
+    if (!sendCommand(SEN5X_RW_VOCS_STATE)) {
         LOG_ERROR("SEN5X: Error sending VOC's state command'");
         return false;
     }
@@ -355,9 +354,8 @@ bool SEN5XSensor::vocStateFromSensor()
     }
 
     // Print the state (if debug is on)
-    LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]",
-        vocState[0],vocState[1], vocState[2], vocState[3],
-        vocState[4],vocState[5], vocState[6], vocState[7]);
+    LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", vocState[0], vocState[1], vocState[2],
+              vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
 
     return true;
 }
@@ -390,7 +388,7 @@ bool SEN5XSensor::loadState()
                 vocState[3] = (uint8_t)(sen5xstate.voc_state_array >> 24);
                 vocState[2] = (uint8_t)(sen5xstate.voc_state_array >> 16);
                 vocState[1] = (uint8_t)(sen5xstate.voc_state_array >> 8);
-                vocState[0] = (uint8_t) sen5xstate.voc_state_array;
+                vocState[0] = (uint8_t)sen5xstate.voc_state_array;
             }
 
             // LOG_DEBUG("Loaded lastCleaning %u", lastCleaning);
@@ -431,14 +429,10 @@ bool SEN5XSensor::saveState()
         sen5xstate.voc_state_time = vocTime;
         sen5xstate.voc_state_valid = vocValid;
         // Unpack state (8 bytes)
-        sen5xstate.voc_state_array = (((uint64_t) vocState[7]) << 56) |
-            ((uint64_t) vocState[6] << 48) |
-            ((uint64_t) vocState[5] << 40) |
-            ((uint64_t) vocState[4] << 32) |
-            ((uint64_t) vocState[3] << 24) |
-            ((uint64_t) vocState[2] << 16) |
-            ((uint64_t) vocState[1] << 8) |
-            ((uint64_t) vocState[0]);
+        sen5xstate.voc_state_array = (((uint64_t)vocState[7]) << 56) | ((uint64_t)vocState[6] << 48) |
+                                     ((uint64_t)vocState[5] << 40) | ((uint64_t)vocState[4] << 32) |
+                                     ((uint64_t)vocState[3] << 24) | ((uint64_t)vocState[2] << 16) |
+                                     ((uint64_t)vocState[1] << 8) | ((uint64_t)vocState[0]);
     }
 
     bool okay = false;
@@ -463,11 +457,13 @@ bool SEN5XSensor::saveState()
 #endif
 }
 
-bool SEN5XSensor::isActive(){
+bool SEN5XSensor::isActive()
+{
     return state == SEN5X_MEASUREMENT || state == SEN5X_MEASUREMENT_2;
 }
 
-uint32_t SEN5XSensor::wakeUp(){
+uint32_t SEN5XSensor::wakeUp()
+{
 
     LOG_DEBUG("SEN5X: Waking up sensor");
 
@@ -559,7 +555,8 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     }
 
     // Check the firmware version
-    if (!getVersion()) return false;
+    if (!getVersion())
+        return false;
     if (firmwareVer < 2) {
         LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
         return false;
@@ -586,7 +583,8 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
             if (passed > ONE_WEEK_IN_SECONDS && (now > SEN5X_VOC_VALID_DATE)) {
                 // If current date greater than 01/01/2018 (validity check)
-                LOG_INFO("SEN5X: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", passed, lastCleaning);
+                LOG_INFO("SEN5X: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", passed,
+                         lastCleaning);
                 startCleaning();
             } else {
                 LOG_INFO("SEN5X: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", passed, lastCleaning);
@@ -632,7 +630,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool SEN5XSensor::readValues()
 {
-    if (!sendCommand(SEN5X_READ_VALUES)){
+    if (!sendCommand(SEN5X_READ_VALUES)) {
         LOG_ERROR("SEN5X: Error sending read command");
         return false;
     }
@@ -647,39 +645,36 @@ bool SEN5XSensor::readValues()
     }
 
     // Get the integers
-    uint16_t uint_pM1p0        = static_cast<uint16_t>((dataBuffer[0]  << 8) | dataBuffer[1]);
-    uint16_t uint_pM2p5        = static_cast<uint16_t>((dataBuffer[2]  << 8) | dataBuffer[3]);
-    uint16_t uint_pM4p0        = static_cast<uint16_t>((dataBuffer[4]  << 8) | dataBuffer[5]);
-    uint16_t uint_pM10p0       = static_cast<uint16_t>((dataBuffer[6]  << 8) | dataBuffer[7]);
+    uint16_t uint_pM1p0 = static_cast<uint16_t>((dataBuffer[0] << 8) | dataBuffer[1]);
+    uint16_t uint_pM2p5 = static_cast<uint16_t>((dataBuffer[2] << 8) | dataBuffer[3]);
+    uint16_t uint_pM4p0 = static_cast<uint16_t>((dataBuffer[4] << 8) | dataBuffer[5]);
+    uint16_t uint_pM10p0 = static_cast<uint16_t>((dataBuffer[6] << 8) | dataBuffer[7]);
 
-    int16_t  int_humidity      = static_cast<int16_t>((dataBuffer[8]   << 8) | dataBuffer[9]);
-    int16_t  int_temperature   = static_cast<int16_t>((dataBuffer[10]  << 8) | dataBuffer[11]);
-    int16_t  int_vocIndex      = static_cast<int16_t>((dataBuffer[12]  << 8) | dataBuffer[13]);
-    int16_t  int_noxIndex      = static_cast<int16_t>((dataBuffer[14]  << 8) | dataBuffer[15]);
+    int16_t int_humidity = static_cast<int16_t>((dataBuffer[8] << 8) | dataBuffer[9]);
+    int16_t int_temperature = static_cast<int16_t>((dataBuffer[10] << 8) | dataBuffer[11]);
+    int16_t int_vocIndex = static_cast<int16_t>((dataBuffer[12] << 8) | dataBuffer[13]);
+    int16_t int_noxIndex = static_cast<int16_t>((dataBuffer[14] << 8) | dataBuffer[15]);
 
     // Convert values based on Sensirion Arduino lib
-    sen5xmeasurement.pM1p0          = !isnan(uint_pM1p0) ? uint_pM1p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM2p5          = !isnan(uint_pM2p5) ? uint_pM2p5 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM4p0          = !isnan(uint_pM4p0) ? uint_pM4p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM10p0         = !isnan(uint_pM10p0) ? uint_pM10p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.humidity       = !isnan(int_humidity) ? int_humidity / 100.0f : FLT_MAX;
-    sen5xmeasurement.temperature    = !isnan(int_temperature) ? int_temperature / 200.0f : FLT_MAX;
-    sen5xmeasurement.vocIndex       = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
-    sen5xmeasurement.noxIndex       = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
+    sen5xmeasurement.pM1p0 = !isnan(uint_pM1p0) ? uint_pM1p0 / 10 : UINT16_MAX;
+    sen5xmeasurement.pM2p5 = !isnan(uint_pM2p5) ? uint_pM2p5 / 10 : UINT16_MAX;
+    sen5xmeasurement.pM4p0 = !isnan(uint_pM4p0) ? uint_pM4p0 / 10 : UINT16_MAX;
+    sen5xmeasurement.pM10p0 = !isnan(uint_pM10p0) ? uint_pM10p0 / 10 : UINT16_MAX;
+    sen5xmeasurement.humidity = !isnan(int_humidity) ? int_humidity / 100.0f : FLT_MAX;
+    sen5xmeasurement.temperature = !isnan(int_temperature) ? int_temperature / 200.0f : FLT_MAX;
+    sen5xmeasurement.vocIndex = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
+    sen5xmeasurement.noxIndex = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
 
-    LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u",
-                sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
-                sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
+    LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
+              sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
     if (model != SEN50) {
-        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, vocIndex=%.2f",
-                    sen5xmeasurement.humidity, sen5xmeasurement.temperature,
-                    sen5xmeasurement.vocIndex);
+        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sen5xmeasurement.humidity, sen5xmeasurement.temperature,
+                  sen5xmeasurement.vocIndex);
     }
 
     if (model == SEN55) {
-        LOG_DEBUG("Got: noxIndex=%.2f",
-            sen5xmeasurement.noxIndex);
+        LOG_DEBUG("Got: noxIndex=%.2f", sen5xmeasurement.noxIndex);
     }
 
     return true;
@@ -687,7 +682,7 @@ bool SEN5XSensor::readValues()
 
 bool SEN5XSensor::readPNValues(bool cumulative)
 {
-    if (!sendCommand(SEN5X_READ_PM_VALUES)){
+    if (!sendCommand(SEN5X_READ_PM_VALUES)) {
         LOG_ERROR("SEN5X: Error sending read command");
         return false;
     }
@@ -707,21 +702,21 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     // uint16_t uint_pM2p5   = static_cast<uint16_t>((dataBuffer[2]   << 8) | dataBuffer[3]);
     // uint16_t uint_pM4p0   = static_cast<uint16_t>((dataBuffer[4]   << 8) | dataBuffer[5]);
     // uint16_t uint_pM10p0  = static_cast<uint16_t>((dataBuffer[6]   << 8) | dataBuffer[7]);
-    uint16_t uint_pN0p5   = static_cast<uint16_t>((dataBuffer[8]   << 8) | dataBuffer[9]);
-    uint16_t uint_pN1p0   = static_cast<uint16_t>((dataBuffer[10]  << 8) | dataBuffer[11]);
-    uint16_t uint_pN2p5   = static_cast<uint16_t>((dataBuffer[12]  << 8) | dataBuffer[13]);
-    uint16_t uint_pN4p0   = static_cast<uint16_t>((dataBuffer[14]  << 8) | dataBuffer[15]);
-    uint16_t uint_pN10p0  = static_cast<uint16_t>((dataBuffer[16]  << 8) | dataBuffer[17]);
-    uint16_t uint_tSize   = static_cast<uint16_t>((dataBuffer[18]  << 8) | dataBuffer[19]);
+    uint16_t uint_pN0p5 = static_cast<uint16_t>((dataBuffer[8] << 8) | dataBuffer[9]);
+    uint16_t uint_pN1p0 = static_cast<uint16_t>((dataBuffer[10] << 8) | dataBuffer[11]);
+    uint16_t uint_pN2p5 = static_cast<uint16_t>((dataBuffer[12] << 8) | dataBuffer[13]);
+    uint16_t uint_pN4p0 = static_cast<uint16_t>((dataBuffer[14] << 8) | dataBuffer[15]);
+    uint16_t uint_pN10p0 = static_cast<uint16_t>((dataBuffer[16] << 8) | dataBuffer[17]);
+    uint16_t uint_tSize = static_cast<uint16_t>((dataBuffer[18] << 8) | dataBuffer[19]);
 
     // Convert values based on Sensirion Arduino lib
     // Multiply by 100 for converting from #/cm3 to #/0.1l for PN values
-    sen5xmeasurement.pN0p5   = !isnan(uint_pN0p5) ? uint_pN0p5  / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN1p0   = !isnan(uint_pN1p0) ? uint_pN1p0  / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN2p5   = !isnan(uint_pN2p5) ? uint_pN2p5  / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN4p0   = !isnan(uint_pN4p0) ? uint_pN4p0  / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN10p0  = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.tSize   = !isnan(uint_tSize) ? uint_tSize  / 1000.0f : FLT_MAX;
+    sen5xmeasurement.pN0p5 = !isnan(uint_pN0p5) ? uint_pN0p5 / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN1p0 = !isnan(uint_pN1p0) ? uint_pN1p0 / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN2p5 = !isnan(uint_pN2p5) ? uint_pN2p5 / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN4p0 = !isnan(uint_pN4p0) ? uint_pN4p0 / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.pN10p0 = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100 : UINT32_MAX;
+    sen5xmeasurement.tSize = !isnan(uint_tSize) ? uint_tSize / 1000.0f : FLT_MAX;
 
     // Remove accumuluative values:
     // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
@@ -732,11 +727,9 @@ bool SEN5XSensor::readPNValues(bool cumulative)
         sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
     }
 
-    LOG_DEBUG("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f",
-                sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0,
-                sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
-                sen5xmeasurement.pN10p0, sen5xmeasurement.tSize
-                );
+    LOG_DEBUG("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sen5xmeasurement.pN0p5,
+              sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0, sen5xmeasurement.pN10p0,
+              sen5xmeasurement.tSize);
 
     return true;
 }
@@ -744,7 +737,7 @@ bool SEN5XSensor::readPNValues(bool cumulative)
 uint8_t SEN5XSensor::getMeasurements()
 {
     // Try to get new data
-    if (!sendCommand(SEN5X_READ_DATA_READY)){
+    if (!sendCommand(SEN5X_READ_DATA_READY)) {
         LOG_ERROR("SEN5X: Error sending command data ready flag");
         return 2;
     }
@@ -764,12 +757,12 @@ uint8_t SEN5XSensor::getMeasurements()
         return 1;
     }
 
-    if(!readValues()) {
+    if (!readValues()) {
         LOG_ERROR("SEN5X: Error getting readings");
         return 2;
     }
 
-    if(!readPNValues(false)) {
+    if (!readPNValues(false)) {
         LOG_ERROR("SEN5X: Error getting PN readings");
         return 2;
     }
@@ -782,53 +775,54 @@ int32_t SEN5XSensor::wakeUpTimeMs()
     return SEN5X_WARMUP_MS_2;
 }
 
-int32_t SEN5XSensor::pendingForReadyMs(){
+int32_t SEN5XSensor::pendingForReadyMs()
+{
     uint32_t now;
     now = getTime();
-    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted)*1000;
+    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
     LOG_DEBUG("SEN5X: Since measure started: %ums", sincePmMeasureStarted);
 
     switch (state) {
-        case SEN5X_MEASUREMENT: {
+    case SEN5X_MEASUREMENT: {
 
-            if (sincePmMeasureStarted < SEN5X_WARMUP_MS_1) {
-                LOG_INFO("SEN5X: not enough time passed since starting measurement");
-                return SEN5X_WARMUP_MS_1 - sincePmMeasureStarted;
-            }
-
-            if (!pmMeasureStarted) {
-                pmMeasureStarted = now;
-            }
-
-            // Get PN values to check if we are above or below threshold
-            readPNValues(true);
-
-            // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
-            if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
-                LOG_INFO("SEN5X: Concentration is low, we will ask again in the second warm up period");
-                state = SEN5X_MEASUREMENT_2;
-                // Report how many seconds are pending to cover the first warm up period
-                return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
-            }
-            return 0;
+        if (sincePmMeasureStarted < SEN5X_WARMUP_MS_1) {
+            LOG_INFO("SEN5X: not enough time passed since starting measurement");
+            return SEN5X_WARMUP_MS_1 - sincePmMeasureStarted;
         }
-        case SEN5X_MEASUREMENT_2: {
-            if (sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
-                // Report how many seconds are pending to cover the first warm up period
-                return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
-            }
-            return 0;
+
+        if (!pmMeasureStarted) {
+            pmMeasureStarted = now;
         }
-        default: {
-            return -1;
+
+        // Get PN values to check if we are above or below threshold
+        readPNValues(true);
+
+        // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
+        if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
+            LOG_INFO("SEN5X: Concentration is low, we will ask again in the second warm up period");
+            state = SEN5X_MEASUREMENT_2;
+            // Report how many seconds are pending to cover the first warm up period
+            return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
         }
+        return 0;
+    }
+    case SEN5X_MEASUREMENT_2: {
+        if (sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
+            // Report how many seconds are pending to cover the first warm up period
+            return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
+        }
+        return 0;
+    }
+    default: {
+        return -1;
+    }
     }
 }
 
 bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_INFO("SEN5X: Attempting to get metrics");
-    if (!isActive()){
+    if (!isActive()) {
         LOG_INFO("SEN5X: not in measurement mode");
         return false;
     }
@@ -879,27 +873,26 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
         }
 
         if (model != SEN50) {
-            if (sen5xmeasurement.humidity!= FLT_MAX) {
+            if (sen5xmeasurement.humidity != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_humidity = true;
                 measurement->variant.air_quality_metrics.pm_humidity = sen5xmeasurement.humidity;
             }
-            if (sen5xmeasurement.temperature!= FLT_MAX) {
+            if (sen5xmeasurement.temperature != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_temperature = true;
                 measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
             }
-            if (sen5xmeasurement.noxIndex!= FLT_MAX) {
+            if (sen5xmeasurement.noxIndex != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
                 measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
             }
         }
 
         if (model == SEN55) {
-            if (sen5xmeasurement.noxIndex!= FLT_MAX) {
+            if (sen5xmeasurement.noxIndex != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
                 measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
             }
         }
-
 
         return true;
     } else if (response == 1) {
@@ -916,40 +909,40 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
     return true;
 }
 
-void SEN5XSensor::setMode(bool setOneShot) {
+void SEN5XSensor::setMode(bool setOneShot)
+{
     oneShotMode = setOneShot;
 }
 
 AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
-                                                           meshtastic_AdminMessage *response)
+                                                         meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;
     result = AdminMessageHandleResult::NOT_HANDLED;
 
-
     switch (request->which_payload_variant) {
-        case meshtastic_AdminMessage_sensor_config_tag:
-            if (!request->sensor_config.has_sen5x_config) {
-                result = AdminMessageHandleResult::NOT_HANDLED;
-                break;
-            }
-
-            // TODO - Add admin command to set temperature offset
-            // Check for temperature offset
-            // if (request->sensor_config.sen5x_config.has_set_temperature) {
-            //     this->setTemperature(request->sensor_config.sen5x_config.set_temperature);
-            // }
-
-            // Check for one-shot/continuous mode request
-            if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
-                this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
-            }
-
-            result = AdminMessageHandleResult::HANDLED;
-            break;
-
-        default:
+    case meshtastic_AdminMessage_sensor_config_tag:
+        if (!request->sensor_config.has_sen5x_config) {
             result = AdminMessageHandleResult::NOT_HANDLED;
+            break;
+        }
+
+        // TODO - Add admin command to set temperature offset
+        // Check for temperature offset
+        // if (request->sensor_config.sen5x_config.has_set_temperature) {
+        //     this->setTemperature(request->sensor_config.sen5x_config.set_temperature);
+        // }
+
+        // Check for one-shot/continuous mode request
+        if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
+            this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
+        }
+
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
     }
 
     return result;

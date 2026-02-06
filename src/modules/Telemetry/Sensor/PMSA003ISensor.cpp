@@ -2,17 +2,14 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
+#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
 #include "TelemetrySensor.h"
-#include "../detect/reClockI2C.h"
 
 #include <Wire.h>
 
-PMSA003ISensor::PMSA003ISensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_PMSA003I, "PMSA003I")
-{
-}
+PMSA003ISensor::PMSA003ISensor() : TelemetrySensor(meshtastic_TelemetrySensorType_PMSA003I, "PMSA003I") {}
 
 bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
@@ -54,7 +51,7 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    if(!isActive()){
+    if (!isActive()) {
         LOG_WARN("Can't get metrics. %s is not active", sensorName);
         return false;
     }
@@ -89,9 +86,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    auto read16 = [](uint8_t *data, uint8_t idx) -> uint16_t {
-        return (data[idx] << 8) | data[idx + 1];
-    };
+    auto read16 = [](uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
 
     computedChecksum = 0;
 
@@ -165,7 +160,7 @@ int32_t PMSA003ISensor::pendingForReadyMs()
 
     uint32_t now;
     now = getTime();
-    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted)*1000;
+    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
 
     if (sincePmMeasureStarted < PMSA003I_WARMUP_MS) {
@@ -178,8 +173,8 @@ int32_t PMSA003ISensor::pendingForReadyMs()
     return 0;
 }
 
-
-bool PMSA003ISensor::canSleep() {
+bool PMSA003ISensor::canSleep()
+{
 #ifdef PMSA003I_ENABLE_PIN
     return true;
 #endif

@@ -1,10 +1,10 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
-#include <forward_list>
 #include "TelemetrySensor.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
 #include <Wire.h>
+#include <forward_list>
 
 static std::forward_list<TelemetrySensor *> sensors;
 

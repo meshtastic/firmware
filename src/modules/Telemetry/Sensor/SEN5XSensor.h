@@ -3,9 +3,9 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RTC.h"
 #include "TelemetrySensor.h"
 #include "Wire.h"
-#include "RTC.h"
 
 // Warm up times for SEN5X from the datasheet
 #ifndef SEN5X_WARMUP_MS_1
@@ -56,7 +56,7 @@ struct _SEN5XMeasurements {
 class SEN5XSensor : public TelemetrySensor
 {
   private:
-    TwoWire * _bus{};
+    TwoWire *_bus{};
     uint8_t _address{};
 
     bool getVersion();
@@ -65,44 +65,52 @@ class SEN5XSensor : public TelemetrySensor
     float protocolVer = -1;
     bool findModel();
 
-    // Commands
-    #define SEN5X_RESET                        0xD304
-    #define SEN5X_GET_PRODUCT_NAME             0xD014
-    #define SEN5X_GET_FIRMWARE_VERSION         0xD100
-    #define SEN5X_START_MEASUREMENT            0x0021
-    #define SEN5X_START_MEASUREMENT_RHT_GAS    0x0037
-    #define SEN5X_STOP_MEASUREMENT             0x0104
-    #define SEN5X_READ_DATA_READY              0x0202
-    #define SEN5X_START_FAN_CLEANING           0x5607
-    #define SEN5X_RW_VOCS_STATE                0x6181
+// Commands
+#define SEN5X_RESET 0xD304
+#define SEN5X_GET_PRODUCT_NAME 0xD014
+#define SEN5X_GET_FIRMWARE_VERSION 0xD100
+#define SEN5X_START_MEASUREMENT 0x0021
+#define SEN5X_START_MEASUREMENT_RHT_GAS 0x0037
+#define SEN5X_STOP_MEASUREMENT 0x0104
+#define SEN5X_READ_DATA_READY 0x0202
+#define SEN5X_START_FAN_CLEANING 0x5607
+#define SEN5X_RW_VOCS_STATE 0x6181
 
-    #define SEN5X_READ_VALUES                  0x03C4
-    #define SEN5X_READ_RAW_VALUES              0x03D2
-    #define SEN5X_READ_PM_VALUES               0x0413
+#define SEN5X_READ_VALUES 0x03C4
+#define SEN5X_READ_RAW_VALUES 0x03D2
+#define SEN5X_READ_PM_VALUES 0x0413
 
-    #define SEN5X_VOC_VALID_TIME               600
-    #define SEN5X_VOC_VALID_DATE               1514764800
+#define SEN5X_VOC_VALID_TIME 600
+#define SEN5X_VOC_VALID_DATE 1514764800
 
     enum SEN5Xmodel { SEN5X_UNKNOWN = 0, SEN50 = 0b001, SEN54 = 0b010, SEN55 = 0b100 };
     SEN5Xmodel model = SEN5X_UNKNOWN;
 
-    enum SEN5XState { SEN5X_OFF, SEN5X_IDLE, SEN5X_RHTGAS_ONLY, SEN5X_MEASUREMENT, SEN5X_MEASUREMENT_2, SEN5X_CLEANING, SEN5X_NOT_DETECTED };
+    enum SEN5XState {
+        SEN5X_OFF,
+        SEN5X_IDLE,
+        SEN5X_RHTGAS_ONLY,
+        SEN5X_MEASUREMENT,
+        SEN5X_MEASUREMENT_2,
+        SEN5X_CLEANING,
+        SEN5X_NOT_DETECTED
+    };
     SEN5XState state = SEN5X_OFF;
     // Flag to work on one-shot (read and sleep), or continuous mode
     bool oneShotMode = true;
     void setMode(bool setOneShot);
     bool vocStateValid();
-    /* Sensirion recommends taking a reading after 15 seconds,
-    if the Particle number reading is over 100#/cm3 the reading is OK,
-    but if it is lower wait until 30 seconds and take it again.
-    See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
-    */
-    #define SEN5X_PN4P0_CONC_THD 100
+/* Sensirion recommends taking a reading after 15 seconds,
+if the Particle number reading is over 100#/cm3 the reading is OK,
+but if it is lower wait until 30 seconds and take it again.
+See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
+*/
+#define SEN5X_PN4P0_CONC_THD 100
 
     bool sendCommand(uint16_t command);
-    bool sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNumber=0);
-    uint8_t readBuffer(uint8_t* buffer, uint8_t byteNumber); // Return number of bytes received
-    uint8_t sen5xCRC(uint8_t* buffer);
+    bool sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNumber = 0);
+    uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber); // Return number of bytes received
+    uint8_t sen5xCRC(uint8_t *buffer);
     bool startCleaning();
     uint8_t getMeasurements();
     // bool readRawValues();
@@ -111,9 +119,9 @@ class SEN5XSensor : public TelemetrySensor
 
     uint32_t pmMeasureStarted = 0;
     uint32_t rhtGasMeasureStarted = 0;
-    _SEN5XMeasurements sen5xmeasurement {};
+    _SEN5XMeasurements sen5xmeasurement{};
 
-    bool idle(bool checkState=true);
+    bool idle(bool checkState = true);
 
   protected:
     // Store status of the sensor in this file
@@ -127,9 +135,9 @@ class SEN5XSensor : public TelemetrySensor
     uint32_t lastCleaning = 0;
     bool lastCleaningValid = false;
 
-    // VOC State
-    #define SEN5X_VOC_STATE_BUFFER_SIZE 8
-    uint8_t vocState[SEN5X_VOC_STATE_BUFFER_SIZE] {};
+// VOC State
+#define SEN5X_VOC_STATE_BUFFER_SIZE 8
+    uint8_t vocState[SEN5X_VOC_STATE_BUFFER_SIZE]{};
     uint32_t vocTime = 0;
     bool vocValid = false;
 
@@ -139,7 +147,6 @@ class SEN5XSensor : public TelemetrySensor
     bool vocStateRecent(uint32_t now);
 
   public:
-
     SEN5XSensor();
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
@@ -151,9 +158,8 @@ class SEN5XSensor : public TelemetrySensor
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;
 
-    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request, meshtastic_AdminMessage *response) override;
+    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                meshtastic_AdminMessage *response) override;
 };
-
-
 
 #endif
