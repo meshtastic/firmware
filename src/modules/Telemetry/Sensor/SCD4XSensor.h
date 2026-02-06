@@ -3,9 +3,9 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cScd4x.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RTC.h"
 #include "TelemetrySensor.h"
 #include <SensirionI2cScd4x.h>
-#include "RTC.h"
 
 // Max speed 400kHz
 #define SCD4X_I2C_CLOCK_SPEED 100000
@@ -15,7 +15,7 @@ class SCD4XSensor : public TelemetrySensor
 {
   private:
     SensirionI2cScd4x scd4x;
-    TwoWire * _bus{};
+    TwoWire *_bus{};
     uint8_t _address{};
 
     bool performFRC(uint32_t targetCO2);
@@ -33,8 +33,8 @@ class SCD4XSensor : public TelemetrySensor
     bool stopMeasurement();
 
     uint16_t ascActive = 1;
-   // low power measurement mode (on sensirion side). Disables sleep mode
-   // Improvement and testing needed for timings
+    // low power measurement mode (on sensirion side). Disables sleep mode
+    // Improvement and testing needed for timings
     bool lowPower = true;
     uint32_t co2MeasureStarted = 0;
 
@@ -49,10 +49,10 @@ class SCD4XSensor : public TelemetrySensor
 
     virtual bool isActive() override;
 
-    virtual void sleep() override; // Stops measurement (measurement -> idle)
+    virtual void sleep() override;      // Stops measurement (measurement -> idle)
     virtual uint32_t wakeUp() override; // Starts measurement (idle -> measurement)
-    bool powerDown(); // Powers down sensor (idle -> power-off)
-    bool powerUp(); // Powers the sensor (power-off -> idle)
+    bool powerDown();                   // Powers down sensor (idle -> power-off)
+    bool powerUp();                     // Powers the sensor (power-off -> idle)
     virtual bool canSleep() override;
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;

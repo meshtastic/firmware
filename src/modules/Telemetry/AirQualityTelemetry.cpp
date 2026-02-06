@@ -222,7 +222,6 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     if (m.has_co2)
         entries.push_back("CO2: " + String(m.co2) + "ppm");
 
-
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
         String valueStr = entries.front();
@@ -266,9 +265,8 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
         //          t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
         //          t->variant.air_quality_metrics.pm100_environmental);
 
-        LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f",
-                 t->variant.air_quality_metrics.co2, t->variant.air_quality_metrics.co2_temperature,
-                 t->variant.air_quality_metrics.co2_humidity);
+        LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f", t->variant.air_quality_metrics.co2,
+                 t->variant.air_quality_metrics.co2_temperature, t->variant.air_quality_metrics.co2_humidity);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -338,25 +336,26 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     if (getAirQualityTelemetry(&m)) {
 
-        bool hasAnyPM = m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard || m.variant.air_quality_metrics.has_pm100_standard  || m.variant.air_quality_metrics.has_pm10_environmental || m.variant.air_quality_metrics.has_pm25_environmental ||
-                    m.variant.air_quality_metrics.has_pm100_environmental;
+        bool hasAnyPM =
+            m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard ||
+            m.variant.air_quality_metrics.has_pm100_standard || m.variant.air_quality_metrics.has_pm10_environmental ||
+            m.variant.air_quality_metrics.has_pm25_environmental || m.variant.air_quality_metrics.has_pm100_environmental;
 
         if (hasAnyPM) {
-            LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", \
-                    m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard, \
-                    m.variant.air_quality_metrics.pm100_standard);
+            LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", m.variant.air_quality_metrics.pm10_standard,
+                     m.variant.air_quality_metrics.pm25_standard, m.variant.air_quality_metrics.pm100_standard);
             if (m.variant.air_quality_metrics.has_pm10_environmental)
                 LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
-                    m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
-                    m.variant.air_quality_metrics.pm100_environmental);
+                         m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
+                         m.variant.air_quality_metrics.pm100_environmental);
         }
 
-        bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature || m.variant.air_quality_metrics.has_co2_humidity;
+        bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature ||
+                         m.variant.air_quality_metrics.has_co2_humidity;
 
         if (hasAnyCO2) {
-            LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f",
-                    m.variant.air_quality_metrics.co2, m.variant.air_quality_metrics.co2_temperature,
-                    m.variant.air_quality_metrics.co2_humidity);
+            LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f", m.variant.air_quality_metrics.co2,
+                     m.variant.air_quality_metrics.co2_temperature, m.variant.air_quality_metrics.co2_humidity);
         }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
