@@ -54,7 +54,7 @@ jobs:
         id: dl-ota-ble
         env:
           PIO_ENV: ${{ inputs.pio_env }}
-          OTA_URL: https://github.com/meshtastic/firmware-ota/releases/latest/download/firmware-c3.bin
+          OTA_URL: https://github.com/wjkennedy/meshtasticfirmware-ota/releases/latest/download/firmware-c3.bin
         working-directory: release
         run: |
           curl -L -o bleota-c3.bin $OTA_URL

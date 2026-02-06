@@ -25,7 +25,7 @@ jobs:
             to get logs is the "Open Serial Monitor" button on the [Web Flasher](https://flasher.meshtastic.org).
 
             If you have ideas for features, note that we often debate big ideas
-            in the [discussions tab](https://github.com/meshtastic/firmware/discussions/categories/ideas)
+            in the [discussions tab](https://github.com/wjkennedy/meshtasticfirmware/discussions/categories/ideas)
             first. This tracker tends to be for ideas that have community
             consensus and a clear implementation.
 
@@ -42,6 +42,6 @@ jobs:
 
             We discuss work as a team in discord, please join us in the [#firmware channel](https://discord.com/invite/meshtastic).
             There's a big backlog of patches at the moment. If you have time,
-            please help us with some code review and testing of [other PRs](https://github.com/meshtastic/firmware/pulls)!
+            please help us with some code review and testing of [other PRs](https://github.com/wjkennedy/meshtasticfirmware/pulls)!
 
             Welcome to the team :smile:

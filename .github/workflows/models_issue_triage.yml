@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   triage:
-    if: ${{ github.repository == 'meshtastic/firmware' && github.event.issue.user.type != 'Bot' }}
+    if: ${{ github.repository == 'wjkennedy/meshtasticfirmware' && github.event.issue.user.type != 'Bot' }}
     runs-on: ubuntu-latest
     steps:
       # ─────────────────────────────────────────────────────────────────────────
