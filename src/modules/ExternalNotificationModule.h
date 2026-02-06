@@ -5,7 +5,7 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 
-#ifdef RGB_LED_POWER
+#ifdef HAS_RGB_LED
 #include "AmbientLightingThread.h"
 extern AmbientLightingThread ambientLightingThread;
 #endif
