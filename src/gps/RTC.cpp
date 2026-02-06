@@ -72,11 +72,13 @@ RTCSetResult readFromRTC()
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
+        SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
     if (rtc_found.address == PCF85063_RTC) {
+        SensorPCF85063 rtc;
+
 #endif
         uint32_t now = millis();
-        SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -240,10 +242,12 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
         if (rtc_found.address == PCF8563_RTC) {
+            SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
         if (rtc_found.address == PCF85063_RTC) {
+            SensorPCF85063 rtc;
+
 #endif
-            SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
             rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -276,11 +280,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         settimeofday(tv, NULL);
 #endif
 
-        // nrf52 doesn't have a readable RTC (yet - software not written)
-#if HAS_RTC
         readFromRTC();
-#endif
-
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time

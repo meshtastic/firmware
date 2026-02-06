@@ -122,7 +122,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
 
     // Transmit the data
     // LOG_DEBUG("Beginning connection to SEN5X: 0x%x. Size: %u", address, bufferSize);
-    // Note: this is necessary to allow for long-buffers
+    // Note: this delay is necessary to allow for long-buffers
     delay(20);
     _bus->beginTransmission(_address);
     size_t writtenBytes = _bus->write(toSend, bufferSize);
@@ -344,7 +344,6 @@ bool SEN5XSensor::vocStateFromSensor()
 
     // Retrieve the data
     // Allocate buffer to account for CRC
-    // uint8_t vocBuffer[SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2)];
     size_t receivedNumber = readBuffer(&vocState[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
     delay(20); // From Sensirion Datasheet
 
@@ -352,15 +351,6 @@ bool SEN5XSensor::vocStateFromSensor()
         LOG_DEBUG("SEN5X: Error getting VOC's state");
         return false;
     }
-
-    // vocState[0] = vocBuffer[0];
-    // vocState[1] = vocBuffer[1];
-    // vocState[2] = vocBuffer[3];
-    // vocState[3] = vocBuffer[4];
-    // vocState[4] = vocBuffer[6];
-    // vocState[5] = vocBuffer[7];
-    // vocState[6] = vocBuffer[9];
-    // vocState[7] = vocBuffer[10];
 
     // Print the state (if debug is on)
     LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]",
@@ -424,8 +414,6 @@ bool SEN5XSensor::loadState()
 
 bool SEN5XSensor::saveState()
 {
-    // TODO - This should be called before a reboot for VOC index storage
-    // is there a way to get notified?
 #ifdef FSCom
     auto file = SafeFile(sen5XStateFileName);
 
@@ -478,23 +466,12 @@ bool SEN5XSensor::isActive(){
 }
 
 uint32_t SEN5XSensor::wakeUp(){
-    // uint32_t now;
-    // now = getValidTime(RTCQuality::RTCQualityDevice);
-    LOG_DEBUG("SEN5X: Waking up sensor");
 
-    // NOTE - No need to send it everytime if we switch to RHT/gas only mode
-    // // Check if state is recent, less than 10 minutes (600 seconds)
-    // if (vocStateRecent(now) && vocStateValid()) {
-    //     if (!vocStateToSensor()){
-    //         LOG_ERROR("SEN5X: Sending VOC state to sensor failed");
-    //     }
-    // } else {
-    //     LOG_DEBUG("SEN5X: No valid VOC state found. Ignoring");
-    // }
+    LOG_DEBUG("SEN5X: Waking up sensor");
 
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_ERROR("SEN5X: Error starting measurement");
-        // TODO - what should this return?? Something actually on the default interval
+        // TODO - what should this return?? Something actually on the default interval?
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     delay(50); // From Sensirion Datasheet
@@ -542,7 +519,6 @@ bool SEN5XSensor::startCleaning()
 
     uint16_t started = millis();
     while (millis() - started < 10500) {
-        // Serial.print(".");
         delay(500);
     }
     LOG_INFO("SEN5X: Cleaning done!!");
@@ -763,31 +739,6 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     return true;
 }
 
-// TODO - Decide if we want to have this here or not
-// bool SEN5XSensor::readRawValues()
-// {
-//     if (!sendCommand(SEN5X_READ_RAW_VALUES)){
-//         LOG_ERROR("SEN5X: Error sending read command");
-//         return false;
-//     }
-//     delay(20); // From Sensirion Datasheet
-
-//     uint8_t dataBuffer[8];
-//     size_t receivedNumber = readBuffer(&dataBuffer[0], 12);
-//     if (receivedNumber == 0) {
-//         LOG_ERROR("SEN5X: Error getting Raw values");
-//         return false;
-//     }
-
-//     // Get values
-//     rawHumidity     = static_cast<int16_t>((dataBuffer[0]   << 8) | dataBuffer[1]);
-//     rawTemperature  = static_cast<int16_t>((dataBuffer[2]   << 8) | dataBuffer[3]);
-//     rawVoc          = static_cast<uint16_t>((dataBuffer[4]  << 8) | dataBuffer[5]);
-//     rawNox          = static_cast<uint16_t>((dataBuffer[6]  << 8) | dataBuffer[7]);
-
-//     return true;
-// }
-
 uint8_t SEN5XSensor::getMeasurements()
 {
     // Try to get new data
@@ -820,11 +771,6 @@ uint8_t SEN5XSensor::getMeasurements()
         LOG_ERROR("SEN5X: Error getting PN readings");
         return 2;
     }
-
-    // if(!readRawValues()) {
-    //     LOG_ERROR("SEN5X: Error getting Raw readings");
-    //     return 2;
-    // }
 
     return 0;
 }
@@ -1006,5 +952,4 @@ AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPa
 
     return result;
 }
-
 #endif
