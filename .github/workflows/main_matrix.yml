@@ -29,37 +29,11 @@ on:
 
   workflow_dispatch:
 
-jobs:
-  setup:
-    strategy:
-      fail-fast: true
-      matrix:
-        arch:
-          - all
-          - check
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: 3.x
-          cache: pip
-      - run: pip install -U platformio
-      - name: Generate matrix
-        id: jsonStep
-        run: |
-          if [[ "$GITHUB_HEAD_REF" == "" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          else  
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr)
-          fi
-          echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
-          echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
-          echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
-    outputs:
-      all: ${{ steps.jsonStep.outputs.all }}
-      check: ${{ steps.jsonStep.outputs.check }}
+env:
+  TARGETS_JSON: >-
+    [{"board":"tlora-v2-1-1_6","platform":"esp32"}]
 
+jobs:
   version:
     runs-on: ubuntu-latest
     steps:
@@ -76,83 +50,45 @@ jobs:
       deb: ${{ steps.version.outputs.deb }}
 
   check:
-    needs: setup
     strategy:
       fail-fast: false
       matrix:
-        check: ${{ fromJson(needs.setup.outputs.check) }}
+        include: ${{ fromJson(env.TARGETS_JSON) }}
     # Use 'arctastic' self-hosted runner pool when checking in the main repo
     runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
-    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'wjkennedy/meshtasticfirmware' }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
-      - name: Check ${{ matrix.check.board }}
+      - name: Check ${{ matrix.board }}
         uses: meshtastic/gh-action-firmware@main
         with:
-          pio_platform: ${{ matrix.check.platform }}
-          pio_env: ${{ matrix.check.board }}
+          pio_platform: ${{ matrix.platform }}
+          pio_env: ${{ matrix.board }}
           pio_target: check
 
   build:
-    needs: [setup, version]
+    needs: [version]
     strategy:
       fail-fast: false
       matrix:
-        build: ${{ fromJson(needs.setup.outputs.all) }}
+        include: ${{ fromJson(env.TARGETS_JSON) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
       version: ${{ needs.version.outputs.long }}
-      pio_env: ${{ matrix.build.board }}
-      platform: ${{ matrix.build.platform }}
-
-  build-debian-src:
-    if: github.repository == 'meshtastic/firmware'
-    uses: ./.github/workflows/build_debian_src.yml
-    with:
-      series: UNRELEASED
-      build_location: local
-    secrets: inherit
-
-  package-pio-deps-native-tft:
-    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/package_pio_deps.yml
-    with:
-      pio_env: native-tft
-    secrets: inherit
+      pio_env: ${{ matrix.board }}
+      platform: ${{ matrix.platform }}
 
   test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'wjkennedy/meshtasticfirmware' }}
     uses: ./.github/workflows/test_native.yml
-
-  docker:
-    strategy:
-      fail-fast: false
-      matrix:
-        distro: [debian, alpine]
-        platform: [linux/amd64, linux/arm64, linux/arm/v7]
-        pio_env: [native, native-tft]
-        exclude:
-          - distro: alpine
-            platform: linux/arm/v7
-          - pio_env: native-tft
-            platform: linux/arm64
-          - pio_env: native-tft
-            platform: linux/arm/v7
-    uses: ./.github/workflows/docker_build.yml
-    with:
-      distro: ${{ matrix.distro }}
-      platform: ${{ matrix.platform }}
-      runs-on: ${{ contains(matrix.platform, 'arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
-      pio_env: ${{ matrix.pio_env }}
-      push: false
 
   gather-artifacts:
     # trunk-ignore(checkov/CKV2_GHA_1)
-    if: github.repository == 'meshtastic/firmware'
+    if: github.repository == 'wjkennedy/meshtasticfirmware'
     permissions:
       contents: write
       pull-requests: write
@@ -161,13 +97,6 @@ jobs:
       matrix:
         arch:
           - esp32
-          - esp32s3
-          - esp32c3
-          - esp32c6
-          - nrf52840
-          - rp2040
-          - rp2350
-          - stm32
     runs-on: ubuntu-latest
     needs: [version, build]
     steps:
@@ -238,59 +167,14 @@ jobs:
           description: "Download firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-  shame:
-    if: github.repository == 'meshtastic/firmware'
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    needs: [build]
-    steps:
-      - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request_target'
-        with:
-          filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
-          fetch-depth: 0
-      - name: Download the current manifests
-        uses: actions/download-artifact@v7
-        with:
-          path: ./manifests-new/
-          pattern: manifest-*
-          merge-multiple: true
-      - name: Upload combined manifests for later commit and global stats crunching.
-        uses: actions/upload-artifact@v6
-        id: upload-manifest
-        with:
-          name: manifests-${{ github.sha }}
-          overwrite: true
-          path: manifests-new/*.mt.json
-      - name: Find the merge base
-        if: github.event_name == 'pull_request_target'
-        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
-        env:
-          base: ${{ github.base_ref }}
-          head: ${{ github.sha }}
-      # Currently broken (for-loop through EVERY artifact -- rate limiting)
-      # - name: Download the old manifests
-      #   if: github.event_name == 'pull_request_target'
-      #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
-      #   env:
-      #     GH_TOKEN: ${{ github.token }}
-      #     merge_base: ${{ env.MERGE_BASE }}
-      #     repo: ${{ github.repository }}
-      # - name: Do scan and post comment
-      #   if: github.event_name == 'pull_request_target'
-      #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
-
   release-artifacts:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'wjkennedy/meshtasticfirmware' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
-      - setup
       - version
       - gather-artifacts
-      - build-debian-src
-      - package-pio-deps-native-tft
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -324,32 +208,11 @@ jobs:
           body: ${{ steps.release_notes.outputs.notes }}
 
       - name: Download source deb
-        uses: actions/download-artifact@v7
-        with:
-          pattern: firmware-debian-${{ needs.version.outputs.deb }}~UNRELEASED-src
-          merge-multiple: true
-          path: ./output/debian-src
-
-      - name: Download `native-tft` pio deps
-        uses: actions/download-artifact@v7
-        with:
-          pattern: platformio-deps-native-tft-${{ needs.version.outputs.long }}
-          merge-multiple: true
-          path: ./output/pio-deps-native-tft
-
-      - name: Zip Linux sources
-        working-directory: output
-        run: |
-          zip -j -9 -r ./meshtasticd-${{ needs.version.outputs.deb }}-src.zip ./debian-src
-          zip -9 -r ./platformio-deps-native-tft-${{ needs.version.outputs.long }}.zip ./pio-deps-native-tft
-
-      # For diagnostics
-      - name: Display structure of downloaded files
-        run: ls -lR
+        run: echo "Skipping debian source and pio deps packaging for trimmed CI"
 
       - name: Generate Release manifest
         run: |
-          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets ${{ toJson(needs.setup.outputs.all) }} '{
+          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets '${{ env.TARGETS_JSON }}' '{
             "version": $ver,
             "targets": $targets
           }' > firmware-${{ needs.version.outputs.long }}.json
@@ -366,8 +229,6 @@ jobs:
         if: ${{ github.ref_name == 'master' }}
         run: |
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
-          gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
-          gh release upload v${{ needs.version.outputs.long }} ./output/platformio-deps-native-tft-${{ needs.version.outputs.long }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -377,15 +238,8 @@ jobs:
       matrix:
         arch:
           - esp32
-          - esp32s3
-          - esp32c3
-          - esp32c6
-          - nrf52840
-          - rp2040
-          - rp2350
-          - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'wjkennedy/meshtasticfirmware'}}
     needs: [release-artifacts, version]
     steps:
       - name: Checkout
@@ -441,7 +295,7 @@ jobs:
     needs: [release-firmware, version]
     env:
       targets: |-
-        esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
+        esp32
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -456,7 +310,7 @@ jobs:
       - name: Get firmware artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
+          pattern: firmware-esp32-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./publish
 
