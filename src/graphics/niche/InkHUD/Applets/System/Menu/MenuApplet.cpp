@@ -13,6 +13,9 @@
 #include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
+#if defined(ARCH_ESP32) && defined(USERPREFS_OBDII_ENABLED)
+#include "modules/ObdiiTelemetryModule.h"
+#endif
 #if defined(ARCH_ESP32) && HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
@@ -569,6 +572,15 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_BLUETOOTH_PAIR_MODE:
         config.bluetooth.fixed_pin = !config.bluetooth.fixed_pin;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case OBD_RESCAN:
+#if defined(ARCH_ESP32) && defined(USERPREFS_OBDII_ENABLED)
+        if (obdiiTelemetryModule) {
+            obdiiTelemetryModule->requestRescan();
+            inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FAST);
+        }
+#endif
         break;
 
     // Regions
@@ -1143,6 +1155,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         const char *pairLabel = config.bluetooth.fixed_pin ? "Pair Mode: Fixed" : "Pair Mode: Random";
         items.push_back(MenuItem(pairLabel, MenuAction::TOGGLE_BLUETOOTH_PAIR_MODE, MenuPage::NODE_CONFIG_BLUETOOTH));
+
+#if defined(ARCH_ESP32) && defined(USERPREFS_OBDII_ENABLED)
+        items.push_back(MenuItem("OBD Rescan", MenuAction::OBD_RESCAN, MenuPage::NODE_CONFIG_BLUETOOTH));
+#endif
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;

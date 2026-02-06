@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - board: tlora-t3s3-v1
+          - board: tlora-t3s3-epaper-inkhud
             platform: esp32s3
     # Use 'arctastic' self-hosted runner pool when checking in the main repo
     runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
@@ -74,7 +74,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - board: tlora-t3s3-v1
+          - board: tlora-t3s3-epaper-inkhud
             platform: esp32s3
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -212,7 +212,7 @@ jobs:
 
       - name: Generate Release manifest
         run: |
-          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets '[{"board":"tlora-t3s3-v1","platform":"esp32s3"}]' '{
+          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets '[{"board":"tlora-t3s3-epaper-inkhud","platform":"esp32s3"}]' '{
             "version": $ver,
             "targets": $targets
           }' > firmware-${{ needs.version.outputs.long }}.json

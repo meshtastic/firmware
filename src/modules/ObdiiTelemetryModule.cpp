@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "Router.h"
 #include <Arduino.h>
+#include <algorithm>
 #include <cctype>
 
 ObdiiTelemetryModule *obdiiTelemetryModule;
@@ -131,8 +132,40 @@ void ObdiiTelemetryModule::resetConnectionState()
     responseReady = false;
     inited = false;
     pidDiscoveryDone = false;
+    latestRpm = -1;
+    latestVoltageMv = -1;
+    lastUpdateMs = 0;
     state = State::Backoff;
     nextActionMs = millis() + kReconnectBackoffMs;
+}
+
+void ObdiiTelemetryModule::requestRescan()
+{
+    rescanRequested = true;
+}
+
+const char *ObdiiTelemetryModule::getStateLabel() const
+{
+    switch (state) {
+    case State::Idle:
+        return "idle";
+    case State::Scanning:
+        return "scanning";
+    case State::Connecting:
+        return "connecting";
+    case State::Discovering:
+        return "discovering";
+    case State::InitAdapter:
+        return "init";
+    case State::DiscoverPids:
+        return "pids";
+    case State::Polling:
+        return "polling";
+    case State::Backoff:
+        return "backoff";
+    default:
+        return "unknown";
+    }
 }
 
 bool ObdiiTelemetryModule::scanForAdapter()
@@ -410,6 +443,17 @@ bool ObdiiTelemetryModule::parsePidResponse(uint8_t pid, const std::string &resp
             hasValue = true;
             break;
         }
+        case 0x42: { // Control module voltage
+            uint16_t mv = ((uint16_t)A * 256 + B);
+            name = "voltage_v";
+            unit = "v";
+            float volts = (float)mv / 1000.0f;
+            snprintf(valueBuf, sizeof(valueBuf), "%.2f", volts);
+            hasValue = true;
+            latestVoltageMv = mv;
+            lastUpdateMs = millis();
+            break;
+        }
         case 0x04: { // Calculated engine load
             name = "load_pct";
             unit = "pct";
@@ -421,6 +465,10 @@ bool ObdiiTelemetryModule::parsePidResponse(uint8_t pid, const std::string &resp
         default:
             break;
         }
+    }
+    if (pid == 0x0C && hasValue) {
+        latestRpm = atoi(valueBuf);
+        lastUpdateMs = millis();
     }
 
     std::string raw;
@@ -467,12 +515,19 @@ void ObdiiTelemetryModule::sendJsonToMesh(const std::string &json)
 
 int32_t ObdiiTelemetryModule::runOnce()
 {
+    if (rescanRequested) {
+        rescanRequested = false;
+        resetConnectionState();
+        state = State::Idle;
+        nextActionMs = 0;
+    }
     if (!config.bluetooth.enabled) {
         return 2000;
     }
 
     switch (state) {
     case State::Idle: {
+        state = State::Scanning;
         if (scanForAdapter()) {
             state = State::Discovering;
         } else {
@@ -536,11 +591,14 @@ int32_t ObdiiTelemetryModule::runOnce()
             nextActionMs = millis() + kDiscoverIntervalMs;
             if (baseIdx >= (sizeof(bases) / sizeof(bases[0]))) {
                 pidDiscoveryDone = true;
-                if (supportedPids.empty()) {
+                if (std::find(supportedPids.begin(), supportedPids.end(), 0x0C) == supportedPids.end())
+                    supportedPids.push_back(0x0C);
+                if (std::find(supportedPids.begin(), supportedPids.end(), 0x42) == supportedPids.end())
+                    supportedPids.push_back(0x42);
+                if (supportedPids.empty())
                     LOG_WARN("OBDII: no supported PIDs found");
-                } else {
+                else
                     LOG_INFO("OBDII: discovered %u supported PIDs", (unsigned)supportedPids.size());
-                }
                 state = State::Polling;
             }
         }

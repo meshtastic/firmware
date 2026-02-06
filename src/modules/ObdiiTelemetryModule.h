@@ -17,6 +17,11 @@ class ObdiiTelemetryModule : public SinglePortModule, private concurrency::OSThr
   public:
     ObdiiTelemetryModule();
     int32_t runOnce() override;
+    void requestRescan();
+    int getLatestRpm() const { return latestRpm; }
+    int getLatestVoltageMv() const { return latestVoltageMv; }
+    uint32_t getLastUpdateMs() const { return lastUpdateMs; }
+    const char *getStateLabel() const;
 
   private:
     enum class State {
@@ -49,6 +54,11 @@ class ObdiiTelemetryModule : public SinglePortModule, private concurrency::OSThr
     bool responseReady = false;
     bool inited = false;
     bool pidDiscoveryDone = false;
+    bool rescanRequested = false;
+
+    int latestRpm = -1;
+    int latestVoltageMv = -1;
+    uint32_t lastUpdateMs = 0;
 
     static void notifyCallback(NimBLERemoteCharacteristic *pRemoteCharacteristic, uint8_t *pData, size_t length,
                                bool isNotify);

@@ -103,6 +103,7 @@ enum MenuAction {
     // Bluetooth
     TOGGLE_BLUETOOTH,
     TOGGLE_BLUETOOTH_PAIR_MODE,
+    OBD_RESCAN,
     // Channel
     TOGGLE_CHANNEL_UPLINK,
     TOGGLE_CHANNEL_DOWNLINK,

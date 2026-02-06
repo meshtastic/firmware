@@ -15,6 +15,7 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Obd/ObdApplet.h"
 
 // Shared NicheGraphics components
 // --------------------------------
@@ -69,6 +70,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
+    inkhud->addApplet("OBD", new InkHUD::ObdApplet, true, false);                // Activated, dedicated applet
 
     // Start running InkHUD
     inkhud->begin();
