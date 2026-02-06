@@ -3,21 +3,20 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "Default.h"
 #include "AirQualityTelemetry.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
 #include "UnitConversions.h"
+#include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
-#include "graphics/ScreenFonts.h"
 #include "main.h"
 #include "sleep.h"
 #include <Throttle.h>
-
 
 // Sensors
 #include "Sensor/AddI2CSensorTemplate.h"
@@ -65,7 +64,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
     uint32_t result = UINT32_MAX;
 
-    if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.air_quality_screen_enabled ||
+    if (!(moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
@@ -99,9 +98,12 @@ int32_t AirQualityTelemetryModule::runOnce()
             if (!sensor->canSleep()) {
                 LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
             } else if (((lastSentToMesh == 0) ||
-                    !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->wakeUpTimeMs(), Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                    airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) && airTime->isTxAllowedAirUtil()) {
+                        !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->wakeUpTimeMs(),
+                                                      Default::getConfiguredOrDefaultMsScaled(
+                                                          moduleConfig.telemetry.air_quality_interval,
+                                                          default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                       airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                       airTime->isTxAllowedAirUtil()) {
                 if (!sensor->isActive()) {
                     LOG_DEBUG("Waking up: %s", sensor->sensorName);
                     return sensor->wakeUp();
@@ -116,15 +118,15 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         if (((lastSentToMesh == 0) ||
-            !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                            moduleConfig.telemetry.air_quality_interval,
-                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.air_quality_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = millis();
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
-                (service->isToPhoneQueueEmpty())) {
+                   (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
@@ -135,11 +137,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         LOG_DEBUG("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
             if (sensor->isActive() && sensor->canSleep()) {
-                if (sensor->wakeUpTimeMs() < Default::getConfiguredOrDefaultMsScaled(
-                    moduleConfig.telemetry.air_quality_interval,
-                    default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
-                        LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
-                        sensor->sleep();
+                if (sensor->wakeUpTimeMs() < Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
+                                                                                     default_telemetry_broadcast_interval_secs,
+                                                                                     numOnlineNodes)) {
+                    LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
+                    sensor->sleep();
                 } else {
                     LOG_DEBUG("Sensor stays enabled due to warm up period");
                 }
@@ -411,8 +413,8 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 }
 
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
-                                                                                 meshtastic_AdminMessage *request,
-                                                                                 meshtastic_AdminMessage *response)
+                                                                                meshtastic_AdminMessage *request,
+                                                                                meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
 
