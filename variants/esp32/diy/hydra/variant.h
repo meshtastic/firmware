@@ -15,7 +15,7 @@
 #define ADC_MULTIPLIER 1.85 // (R1 = 470k, R2 = 680k)
 #define EXT_PWR_DETECT 4    // Pin to detect connected external power source for LILYGO® TTGO T-Energy T18 and other DIY boards
 #define EXT_NOTIFY_OUT 12   // Overridden default pin to use for Ext Notify Module (#975).
-#define LED_PIN 2           // add status LED (compatible with core-pcb and DIY targets)
+#define LED_POWER 2         // add status LED (compatible with core-pcb and DIY targets)
 
 // Radio
 #define USE_SX1262 // E22-900M30S uses SX1262

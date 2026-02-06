@@ -1,5 +1,5 @@
 // Status
-#define LED_PIN 1
+#define LED_POWER 1
 
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
