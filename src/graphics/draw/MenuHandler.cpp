@@ -2422,6 +2422,7 @@ void menuHandler::batteryCalibrationMenu()
         } else if (selected == Reset) {
             if (batteryCalibrationSampler) {
                 batteryCalibrationSampler->resetSamples();
+                batteryCalibrationModule->stopCalibration();
             }
             config.power.ocv_count = 0;
             for (size_t i = 0; i < NUM_OCV_POINTS; ++i) {
@@ -2470,6 +2471,7 @@ void menuHandler::batteryCalibrationConfirmMenu()
             if (batteryCalibrationModule) {
                 batteryCalibrationModule->startCalibration();
                 IF_SCREEN(screen->showSimpleBanner(
+             
                     "Calibration started.\nUse device as normal.\nDo not charge until battery dies.", 5000));
             } else if (batteryCalibrationSampler) {
                 batteryCalibrationSampler->resetSamples();
