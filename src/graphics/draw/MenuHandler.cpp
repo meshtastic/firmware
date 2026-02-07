@@ -2619,12 +2619,10 @@ void menuHandler::messageBubblesMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == ShowBubbles) {
             config.display.enable_message_bubbles = true;
-            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
             LOG_INFO("Message bubbles enabled");
         } else if (selected == HideBubbles) {
             config.display.enable_message_bubbles = false;
-            saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
             LOG_INFO("Message bubbles disabled");
         } else {

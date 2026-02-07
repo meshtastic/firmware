@@ -529,7 +529,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Check if bubbles are enabled
     const bool showBubbles = config.display.enable_message_bubbles;
-    const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : 0;
+    const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
 
     // Derived widths
     const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
@@ -861,7 +861,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     maxLineW = w;
             }
 
-            int bubbleW = std::max(BUBBLE_MIN_W, maxLineW + (BUBBLE_PAD_X * 2));
+            int bubbleW = std::max(BUBBLE_MIN_W, maxLineW + (textIndent * 2));
             int bubbleH = (bottomY - topY) + 1;
             int bubbleX = 0;
             if (b.mine) {
@@ -874,39 +874,28 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (bubbleX + bubbleW > rightEdge)
                 bubbleW = std::max(1, rightEdge - bubbleX);
 
-            if (bubbleW > 1 && bubbleH > 1) {
-                int x1 = bubbleX + bubbleW - 1;
-                int y1 = topY + bubbleH - 1;
+            // Draw rounded rectangle bubble
+            if (bubbleW > BUBBLE_RADIUS * 2 && bubbleH > BUBBLE_RADIUS * 2) {
+                const int r = BUBBLE_RADIUS;
+                const int bx = bubbleX;
+                const int by = topY;
+                const int bw = bubbleW;
+                const int bh = bubbleH;
 
-                if (b.mine) {
-                    // Send Message (Right side)
-                    display->drawRect(x1 + 2 - bubbleW, y1 - bubbleH, bubbleW, bubbleH);
-                    // Top Right Corner
-                    display->drawRect(x1, topY, 2, 1);
-                    display->drawRect(x1, topY, 1, 2);
-                    // Bottom Right Corner
-                    display->drawRect(x1 - 1, bottomY - 2, 2, 1);
-                    display->drawRect(x1, bottomY - 3, 1, 2);
-                    // Knock the corners off to make a bubble
-                    display->setColor(BLACK);
-                    display->drawRect(x1 - bubbleW, topY - 1, 1, 1);
-                    display->drawRect(x1 - bubbleW, bottomY - 1, 1, 1);
-                    display->setColor(WHITE);
-                } else {
-                    // Received Message (Left Side)
-                    display->drawRect(bubbleX, topY, bubbleW + 1, bubbleH);
-                    // Top Left Corner
-                    display->drawRect(bubbleX + 1, topY + 1, 2, 1);
-                    display->drawRect(bubbleX + 1, topY + 1, 1, 2);
-                    // Bottom Left Corner
-                    display->drawRect(bubbleX + 1, bottomY - 1, 2, 1);
-                    display->drawRect(bubbleX + 1, bottomY - 2, 1, 2);
-                    // Knock the corners off to make a bubble
-                    display->setColor(BLACK);
-                    display->drawRect(bubbleX + bubbleW, topY, 1, 1);
-                    display->drawRect(bubbleX + bubbleW, bottomY, 1, 1);
-                    display->setColor(WHITE);
-                }
+                // Draw the 4 corner arcs using drawCircleQuads
+                display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
+                display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
+                display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
+                display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
+
+                // Draw the 4 edges between corners
+                display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
+                display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
+                display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
+                display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+            } else if (bubbleW > 1 && bubbleH > 1) {
+                // Fallback to simple rectangle for very small bubbles
+                display->drawRect(bubbleX, topY, bubbleW, bubbleH);
             }
         }
     } // end if (showBubbles)
@@ -922,7 +911,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
-                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - (showBubbles ? BUBBLE_TEXT_INDENT : 0);
+                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - (showBubbles ? textIndent : 0);
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
@@ -966,8 +955,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
                     int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
-                    int rightX =
-                        (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - (showBubbles ? BUBBLE_TEXT_INDENT : 0);
+                    int rightX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - (showBubbles ? textIndent : 0);
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
 
