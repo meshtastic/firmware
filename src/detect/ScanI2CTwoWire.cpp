@@ -541,7 +541,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(BHI260AP_ADDR, BHI260AP, "BHI260AP", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(SCD4X_ADDR, SCD4X, "SCD4X", (uint8_t)addr.address);
+            case SCD4X_ADDR: {
+                delay(10);
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x8), 1);
+                if (registerValue == 0x18) {
+                    logFoundDevice("CW2015", (uint8_t)addr.address);
+                    type = CW2015;
+                } else {
+                    logFoundDevice("SCD4X", (uint8_t)addr.address);
+                    type = SCD4X;
+                }
+                break;
+            }
                 SCAN_SIMPLE_CASE(BMM150_ADDR, BMM150, "BMM150", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
