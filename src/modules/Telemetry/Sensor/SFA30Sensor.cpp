@@ -2,26 +2,22 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cSfa3x.h>)
 
+#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SFA30Sensor.h"
-#include "../detect/reClockI2C.h"
 
-SFA30Sensor::SFA30Sensor()
-    : TelemetrySensor(meshtastic_TelemetrySensorType_SFA30, "SFA30")
-{
-};
+SFA30Sensor::SFA30Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SFA30, "SFA30"){};
 
 bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
 
+    _bus = bus;
+    _address = dev->address.address;
+
 #ifdef SFA30_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
     uint32_t currentClock = reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, false);
-    if (currentClock != SFA30_I2C_CLOCK_SPEED){
-        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
-        return false;
-    }
 #elif !HAS_SCREEN
     reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, true);
 #else
@@ -30,14 +26,23 @@ bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
-    _bus = bus;
-    _address = dev->address.address;
-
     sfa30.begin(*_bus, _address);
+    delay(20);
 
-    if (isError(sfa30.deviceReset())) return false;
+    if (this->isError(sfa30.deviceReset())) {
+#if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
+        return false;
+    }
+
     state = State::IDLE;
-    if (isError(sfa30.startContinuousMeasurement())) return false;
+    if (this->isError(sfa30.startContinuousMeasurement())) {
+#if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
+        return false;
+    }
 
     LOG_INFO("%s starting measurement", sensorName);
 
@@ -56,27 +61,66 @@ bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool SFA30Sensor::isError(uint16_t response)
 {
-    if (response == SFA30_NO_ERROR) return false;
+    if (response == SFA30_NO_ERROR)
+        return false;
 
     // TODO - Check error to char conversion
     LOG_ERROR("%s: %s", sensorName, response);
     return true;
 }
 
-void SFA30Sensor::sleep() {
+void SFA30Sensor::sleep()
+{
+#ifdef SFA30_I2C_CLOCK_SPEED
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, false);
+#elif !HAS_SCREEN
+    reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SFA30_I2C_CLOCK_SPEED */
+
     // Note - not recommended for this sensor on a periodic basis
-    if (isError(sfa30.stopMeasurement())) {
+    if (this->isError(sfa30.stopMeasurement())) {
         LOG_ERROR("%s: can't stop measurement");
     };
+
+#if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
+#endif
 
     LOG_INFO("%s: stop measurement");
     state = State::IDLE;
     measureStarted = 0;
 }
 
-uint32_t SFA30Sensor::wakeUp() {
+uint32_t SFA30Sensor::wakeUp()
+{
+#ifdef SFA30_I2C_CLOCK_SPEED
+#ifdef CAN_RECLOCK_I2C
+    uint32_t currentClock = reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, false);
+#elif !HAS_SCREEN
+    reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, true);
+#else
+    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
+    return false;
+#endif /* CAN_RECLOCK_I2C */
+#endif /* SFA30_I2C_CLOCK_SPEED */
+
     LOG_INFO("Waking up %s", sensorName);
-    if (isError(sfa30.startContinuousMeasurement())) return 0;
+    if (this->isError(sfa30.startContinuousMeasurement())) {
+#if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
+        return 0;
+    }
+
+#if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+    reClockI2C(currentClock, _bus, false);
+#endif
+
     state = State::ACTIVE;
     measureStarted = getTime();
     return SFA30_WARMUP_MS;
@@ -87,9 +131,10 @@ int32_t SFA30Sensor::wakeUpTimeMs()
     return SFA30_WARMUP_MS;
 }
 
-bool SFA30Sensor::canSleep() {
-  // Sleep is disabled in this sensor because readings are not tested with periodic sleep
-  // with such low power consumption, prefered to keep it active
+bool SFA30Sensor::canSleep()
+{
+    // Sleep is disabled in this sensor because readings are not tested with periodic sleep
+    // with such low power consumption, prefered to keep it active
     return false;
 }
 
@@ -102,7 +147,7 @@ int32_t SFA30Sensor::pendingForReadyMs()
 {
     uint32_t now;
     now = getTime();
-    uint32_t sinceHchoMeasureStarted = (now - measureStarted)*1000;
+    uint32_t sinceHchoMeasureStarted = (now - measureStarted) * 1000;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sinceHchoMeasureStarted);
 
     if (sinceHchoMeasureStarted < SFA30_WARMUP_MS) {
@@ -112,7 +157,8 @@ int32_t SFA30Sensor::pendingForReadyMs()
     return 0;
 }
 
-bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement) {
+bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
+{
     LOG_DEBUG("SFA30 getMetrics");
     float hcho = 0.0;
     float humidity = 0.0;
@@ -121,10 +167,6 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement) {
 #ifdef SFA30_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
     uint32_t currentClock = reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, false);
-    if (currentClock != SFA30_I2C_CLOCK_SPEED){
-        LOG_WARN("%s can't be used at this clock speed (%u)", sensorName, currentClock);
-        return false;
-    }
 #elif !HAS_SCREEN
     reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, true);
 #else
@@ -133,7 +175,7 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement) {
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
-    if (isError(sfa30.readMeasuredValues(hcho, humidity, temperature))) {
+    if (this->isError(sfa30.readMeasuredValues(hcho, humidity, temperature))) {
         LOG_WARN("%s: No values", sensorName);
         return false;
     }
