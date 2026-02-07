@@ -1526,8 +1526,9 @@ void InkHUD::MenuApplet::onButtonShortPress()
                 cursorShown = true;
                 // Select the first item that isn't a header
                 cursor = 0;
-                while (cursor < items.size() && items.at(cursor).isHeader)
+                while (cursor < items.size() && items.at(cursor).isHeader) {
                     cursor++;
+                }
                 if (cursor >= items.size()) {
                     cursorShown = false;
                     cursor = 0;
@@ -1614,8 +1615,9 @@ void InkHUD::MenuApplet::onNavDown()
             cursorShown = true;
             // Select the first item that isn't a header
             cursor = 0;
-            while (cursor < items.size() && items.at(cursor).isHeader)
+            while (cursor < items.size() && items.at(cursor).isHeader) {
                 cursor++;
+            }
             if (cursor >= items.size()) {
                 cursorShown = false;
                 cursor = 0;
