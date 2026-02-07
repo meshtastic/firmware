@@ -46,6 +46,9 @@
 #include "modules/WaypointModule.h"
 #endif
 #if ARCH_PORTDUINO
+#include "input/LinuxInputImpl.h"
+#include "input/SeesawRotary.h"
+#include "modules/Native/StoreForwardPlusPlus.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
@@ -180,6 +183,11 @@ void setupModules()
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
+#if SFPP_ENABLED
+    if (portduino_config.sfpp_enabled) {
+        storeForwardPlusPlusModule = new StoreForwardPlusPlusModule();
+    }
+#endif
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();
