@@ -29,6 +29,7 @@ class WindowManager
 
     void nextTile();
     void prevTile();
+    Applet *getActiveApplet();
     void openMenu();
     void openAlignStick();
     void openKeyboard();
