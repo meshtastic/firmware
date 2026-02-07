@@ -665,16 +665,16 @@ bool SEN5XSensor::readValues()
     sen5xmeasurement.vocIndex = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
     sen5xmeasurement.noxIndex = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
 
-    LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
-              sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
+    LOG_DEBUG("Got %s readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
+              sen5xmeasurement.pM2p5, sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
     if (model != SEN50) {
-        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sen5xmeasurement.humidity, sen5xmeasurement.temperature,
-                  sen5xmeasurement.vocIndex);
+        LOG_DEBUG("Got %s readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, sen5xmeasurement.humidity,
+                  sen5xmeasurement.temperature, sen5xmeasurement.vocIndex);
     }
 
     if (model == SEN55) {
-        LOG_DEBUG("Got: noxIndex=%.2f", sen5xmeasurement.noxIndex);
+        LOG_DEBUG("Got %s readings: noxIndex=%.2f", sensorName, sen5xmeasurement.noxIndex);
     }
 
     return true;

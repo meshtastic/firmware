@@ -159,7 +159,6 @@ int32_t SFA30Sensor::pendingForReadyMs()
 
 bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("SFA30 getMetrics");
     float hcho = 0.0;
     float humidity = 0.0;
     float temperature = 0.0;
@@ -191,6 +190,8 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.form_temperature = temperature;
     measurement->variant.air_quality_metrics.form_humidity = humidity;
     measurement->variant.air_quality_metrics.form_formaldehyde = hcho;
+
+    LOG_DEBUG("Got %s readings: HCHO=%.2f, HCHO_T=%.2f, HCHO_H=%.2f", sensorName, hcho, temperature, humidity);
 
     return true;
 }
