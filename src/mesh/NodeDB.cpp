@@ -19,9 +19,6 @@
 #include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
-#if HAS_SCREEN
-#include "graphics/SharedUIDisplay.h"
-#endif
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -577,12 +574,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
 #endif
 
-#if HAS_SCREEN
-    if (graphics::currentResolution == graphics::ScreenResolution::High) {
-        config.display.enable_message_bubbles = true;
-    } else {
-        config.display.enable_message_bubbles = false;
-    }
+#if defined(TFT_WIDTH) && defined(TFT_HEIGHT) && (TFT_WIDTH >= 200 || TFT_HEIGHT >= 200)
+    config.display.enable_message_bubbles = true;
 #endif
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
