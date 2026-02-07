@@ -77,13 +77,13 @@ int32_t AirQualityTelemetryModule::runOnce()
         return disable();
     }
 
-  if (firstTime) {
-    // This is the first time the OSThread library has called this function, so
-    // do some setup
-    firstTime = false;
+    if (firstTime) {
+        // This is the first time the OSThread library has called this function, so
+        // do some setup
+        firstTime = false;
 
-    if (moduleConfig.telemetry.air_quality_enabled) {
-      LOG_INFO("Air quality Telemetry: init");
+        if (moduleConfig.telemetry.air_quality_enabled) {
+            LOG_INFO("Air quality Telemetry: init");
 
             // check if we have at least one sensor
             if (!sensors.empty()) {
@@ -229,6 +229,8 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
         entries.push_back("PM10: " + String(m.pm100_standard) + "ug/m3");
     if (m.has_co2)
         entries.push_back("CO2: " + String(m.co2) + "ppm");
+    if (m.has_form_formaldehyde)
+        entries.push_back("HCHO: " + String(m.form_formaldehyde) + "ppb");
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
@@ -264,28 +266,28 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
-    LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, "
-             "pm100_standard=%i",
-             sender, t->variant.air_quality_metrics.pm10_standard,
-             t->variant.air_quality_metrics.pm25_standard,
-             t->variant.air_quality_metrics.pm100_standard);
+        if (t->variant.air_quality_metrics.has_pm10_standard)
+            LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, "
+                     "pm100_standard=%i",
+                     sender, t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
+                     t->variant.air_quality_metrics.pm100_standard);
 
-        // TODO - Decide what to do with these
-        // LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
-        //          t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
-        //          t->variant.air_quality_metrics.pm100_environmental);
+        if (t->variant.air_quality_metrics.has_co2)
+            LOG_INFO("CO2=%i, CO2_T=%.2f, CO2_H=%.2f", t->variant.air_quality_metrics.co2,
+                     t->variant.air_quality_metrics.co2_temperature, t->variant.air_quality_metrics.co2_humidity);
 
-        LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f", t->variant.air_quality_metrics.co2,
-                 t->variant.air_quality_metrics.co2_temperature, t->variant.air_quality_metrics.co2_humidity);
+        if (t->variant.air_quality_metrics.has_form_formaldehyde)
+            LOG_INFO("HCHO=%.2f, HCHO_T=%.2f, HCHO_H=%.2f", t->variant.air_quality_metrics.form_formaldehyde,
+                     t->variant.air_quality_metrics.form_temperature, t->variant.air_quality_metrics.form_humidity);
 #endif
-    // release previous packet before occupying a new spot
-    if (lastMeasurementPacket != nullptr)
-      packetPool.release(lastMeasurementPacket);
+        // release previous packet before occupying a new spot
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
 
-    lastMeasurementPacket = packetPool.allocCopy(mp);
-  }
+        lastMeasurementPacket = packetPool.allocCopy(mp);
+    }
 
-  return false; // Let others look at this message also if they want
+    return false; // Let others look at this message also if they want
 }
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
@@ -310,33 +312,32 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
     return valid && hasSensor;
 }
 
-meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply() {
-  if (currentRequest) {
-    auto req = *currentRequest;
-    const auto &p = req.decoded;
-    meshtastic_Telemetry scratch;
-    meshtastic_Telemetry *decoded = NULL;
-    memset(&scratch, 0, sizeof(scratch));
-    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size,
-                             &meshtastic_Telemetry_msg, &scratch)) {
-      decoded = &scratch;
-    } else {
-      LOG_ERROR("Error decoding AirQualityTelemetry module!");
-      return NULL;
+meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
+{
+    if (currentRequest) {
+        auto req = *currentRequest;
+        const auto &p = req.decoded;
+        meshtastic_Telemetry scratch;
+        meshtastic_Telemetry *decoded = NULL;
+        memset(&scratch, 0, sizeof(scratch));
+        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
+            decoded = &scratch;
+        } else {
+            LOG_ERROR("Error decoding AirQualityTelemetry module!");
+            return NULL;
+        }
+        // Check for a request for air quality metrics
+        if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
+            meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+            if (getAirQualityTelemetry(&m)) {
+                LOG_INFO("Air quality telemetry reply to request");
+                return allocDataProtobuf(m);
+            } else {
+                return NULL;
+            }
+        }
     }
-    // Check for a request for air quality metrics
-    if (decoded->which_variant ==
-        meshtastic_Telemetry_air_quality_metrics_tag) {
-      meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
-      if (getAirQualityTelemetry(&m)) {
-        LOG_INFO("Air quality telemetry reply to request");
-        return allocDataProtobuf(m);
-      } else {
-        return NULL;
-      }
-    }
-  }
-  return NULL;
+    return NULL;
 }
 
 bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
@@ -365,8 +366,16 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                          m.variant.air_quality_metrics.has_co2_humidity;
 
         if (hasAnyCO2) {
-            LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f", m.variant.air_quality_metrics.co2,
+            LOG_INFO("Send: co2=%i, co2_t=%.2f, co2_rh=%.2f", m.variant.air_quality_metrics.co2,
                      m.variant.air_quality_metrics.co2_temperature, m.variant.air_quality_metrics.co2_humidity);
+        }
+
+        bool hasAnyHCHO = m.variant.air_quality_metrics.has_form_formaldehyde ||
+                          m.variant.air_quality_metrics.has_form_temperature || m.variant.air_quality_metrics.has_form_humidity;
+
+        if (hasAnyHCHO) {
+            LOG_INFO("Send: hcho=%.2f, hcho_t=%.2f, hcho_rh=%.2f", m.variant.air_quality_metrics.form_formaldehyde,
+                     m.variant.air_quality_metrics.form_temperature, m.variant.air_quality_metrics.form_humidity);
         }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
@@ -377,9 +386,9 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    // release previous packet before occupying a new spot
-    if (lastMeasurementPacket != nullptr)
-      packetPool.release(lastMeasurementPacket);
+        // release previous packet before occupying a new spot
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
