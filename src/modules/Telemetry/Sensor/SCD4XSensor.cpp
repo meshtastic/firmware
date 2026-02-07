@@ -125,7 +125,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    LOG_DEBUG("Got %s readings: %u ppm, %.2f degC, %.2f %rh", sensorName, co2, temperature, humidity);
+    LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum%.2f", sensorName, co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
         LOG_DEBUG("%s: Error while getting measurements: %u", sensorName, error);
         if (co2 == 0) {

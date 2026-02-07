@@ -727,9 +727,9 @@ bool SEN5XSensor::readPNValues(bool cumulative)
         sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
     }
 
-    LOG_DEBUG("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sen5xmeasurement.pN0p5,
-              sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0, sen5xmeasurement.pN10p0,
-              sen5xmeasurement.tSize);
+    LOG_DEBUG("Got %s readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
+              sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
+              sen5xmeasurement.pN10p0, sen5xmeasurement.tSize);
 
     return true;
 }
