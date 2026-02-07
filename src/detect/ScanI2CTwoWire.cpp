@@ -121,16 +121,19 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
 // Note, this code needs to be called before setting the I2C bus speed
 // for the screen at high speed. The speed needs to be at 100kHz, otherwise
 // detection will not work
-String readSEN5xProductName(TwoWire* i2cBus, uint8_t address) {
-    uint8_t cmd[] = { 0xD0, 0x14 };
+String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
+{
+    uint8_t cmd[] = {0xD0, 0x14};
     uint8_t response[48] = {0};
 
     i2cBus->beginTransmission(address);
     i2cBus->write(cmd, 2);
-    if (i2cBus->endTransmission() != 0) return "";
+    if (i2cBus->endTransmission() != 0)
+        return "";
 
     delay(20);
-    if (i2cBus->requestFrom(address, (uint8_t)48) != 48) return "";
+    if (i2cBus->requestFrom(address, (uint8_t)48) != 48)
+        return "";
 
     for (int i = 0; i < 48 && i2cBus->available(); ++i) {
         response[i] = i2cBus->read();

@@ -155,6 +155,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // Default system gain to 0 if not defined
+#ifndef NUM_PA_POINTS
+#define NUM_PA_POINTS 1
+#endif
+
 #ifndef TX_GAIN_LORA
 #define TX_GAIN_LORA 0
 #endif
@@ -388,9 +392,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_RADIO
 #define HAS_RADIO 0
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 0
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 0
 #endif
@@ -426,11 +427,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_RGB_LED
 #endif
 
-#ifndef LED_STATE_OFF
-#define LED_STATE_OFF 0
-#endif
 #ifndef LED_STATE_ON
 #define LED_STATE_ON 1
+#endif
+#ifndef LED_STATE_OFF
+#define LED_STATE_OFF (LED_STATE_ON ^ 1)
+#endif
+
+#ifndef ledOff
+#define ledOff(pin) pinMode(pin, INPUT)
 #endif
 
 // default mapping of pins

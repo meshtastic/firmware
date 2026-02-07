@@ -435,6 +435,25 @@ typedef struct _meshtastic_Nau7802Config {
     float calibrationFactor;
 } meshtastic_Nau7802Config;
 
+/* SEN5X State, for saving to flash */
+typedef struct _meshtastic_SEN5XState {
+    /* Last cleaning time for SEN5X */
+    uint32_t last_cleaning_time;
+    /* Last cleaning time for SEN5X - valid flag */
+    bool last_cleaning_valid;
+    /* Config flag for one-shot mode (see admin.proto) */
+    bool one_shot_mode;
+    /* Last VOC state time for SEN55 */
+    bool has_voc_state_time;
+    uint32_t voc_state_time;
+    /* Last VOC state validity flag for SEN55 */
+    bool has_voc_state_valid;
+    bool voc_state_valid;
+    /* VOC state array (8x uint8t) for SEN55 */
+    bool has_voc_state_array;
+    uint64_t voc_state_array;
+} meshtastic_SEN5XState;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -444,6 +463,7 @@ extern "C" {
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
 #define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_BH1750
 #define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_BH1750+1))
+
 
 
 
@@ -465,6 +485,7 @@ extern "C" {
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
+#define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
@@ -474,6 +495,7 @@ extern "C" {
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
+#define meshtastic_SEN5XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceMetrics_battery_level_tag 1
@@ -581,6 +603,12 @@ extern "C" {
 #define meshtastic_Telemetry_host_metrics_tag    8
 #define meshtastic_Nau7802Config_zeroOffset_tag  1
 #define meshtastic_Nau7802Config_calibrationFactor_tag 2
+#define meshtastic_SEN5XState_last_cleaning_time_tag 1
+#define meshtastic_SEN5XState_last_cleaning_valid_tag 2
+#define meshtastic_SEN5XState_one_shot_mode_tag  3
+#define meshtastic_SEN5XState_voc_state_time_tag 4
+#define meshtastic_SEN5XState_voc_state_valid_tag 5
+#define meshtastic_SEN5XState_voc_state_array_tag 6
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
@@ -731,6 +759,16 @@ X(a, STATIC,   SINGULAR, FLOAT,    calibrationFactor,   2)
 #define meshtastic_Nau7802Config_CALLBACK NULL
 #define meshtastic_Nau7802Config_DEFAULT NULL
 
+#define meshtastic_SEN5XState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   last_cleaning_time,   1) \
+X(a, STATIC,   SINGULAR, BOOL,     last_cleaning_valid,   2) \
+X(a, STATIC,   SINGULAR, BOOL,     one_shot_mode,     3) \
+X(a, STATIC,   OPTIONAL, UINT32,   voc_state_time,    4) \
+X(a, STATIC,   OPTIONAL, BOOL,     voc_state_valid,   5) \
+X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
+#define meshtastic_SEN5XState_CALLBACK NULL
+#define meshtastic_SEN5XState_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
@@ -740,6 +778,7 @@ extern const pb_msgdesc_t meshtastic_HealthMetrics_msg;
 extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
+extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
@@ -751,6 +790,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_HostMetrics_fields &meshtastic_HostMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
+#define meshtastic_SEN5XState_fields &meshtastic_SEN5XState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
@@ -762,6 +802,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_LocalStats_size               87
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             81
+#define meshtastic_SEN5XState_size               27
 #define meshtastic_Telemetry_size                272
 
 #ifdef __cplusplus
