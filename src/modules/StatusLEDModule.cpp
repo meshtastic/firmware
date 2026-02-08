@@ -93,19 +93,17 @@ int32_t StatusLEDModule::runOnce()
             my_interval = 250;
             if (POWER_LED_starttime + 2000 < millis()) {
                 doing_fast_blink = false;
+                CHARGE_LED_state = LED_STATE_OFF;
             }
-        } else {
-            CHARGE_LED_state = LED_STATE_OFF;
         }
+    }
 
-    } else {
-        if (doing_fast_blink) {
+    if (power_state != charging && power_state != charged && !doing_fast_blink) {
+        if (CHARGE_LED_state == LED_STATE_ON) {
             CHARGE_LED_state = LED_STATE_OFF;
-            doing_fast_blink = false;
             my_interval = 999;
         } else {
             CHARGE_LED_state = LED_STATE_ON;
-            doing_fast_blink = true;
             my_interval = 1;
         }
     }
