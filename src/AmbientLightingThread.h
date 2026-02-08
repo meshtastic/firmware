@@ -8,17 +8,14 @@
 
 #ifdef HAS_NCP5623
 #include <NCP5623.h>
-static NCP5623 rgb;
 #endif
 
 #ifdef HAS_LP5562
 #include <graphics/NomadStarLED.h>
-static LP5562 rgbw;
 #endif
 
 #ifdef HAS_NEOPIXEL
 #include <Adafruit_NeoPixel.h>
-static Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_DATA, NEOPIXEL_TYPE);
 #endif
 
 #ifdef UNPHONE
@@ -30,6 +27,20 @@ class AmbientLightingThread : public concurrency::OSThread
 {
     friend class StatusLEDModule; // Let the LEDStatusModule trigger the ambient lighting for notifications and battery status.
     friend class ExternalNotificationModule; // Let the ExternalNotificationModule trigger the ambient lighting for notifications.
+
+  private:
+#ifdef HAS_NCP5623
+    NCP5623 rgb;
+#endif
+
+#ifdef HAS_LP5562
+    LP5562 rgbw;
+#endif
+
+#ifdef HAS_NEOPIXEL
+    Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NEOPIXEL_COUNT, NEOPIXEL_DATA, NEOPIXEL_TYPE);
+#endif
+
   public:
     explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLighting")
     {
