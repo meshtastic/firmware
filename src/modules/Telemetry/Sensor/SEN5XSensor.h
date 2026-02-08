@@ -16,6 +16,10 @@
 #define SEN5X_WARMUP_MS_2 30000
 #endif
 
+#ifndef SEN5X_POLL_INTERVAL
+#define SEN5X_POLL_INTERVAL 1000
+#endif
+
 #ifndef SEN5X_I2C_CLOCK_SPEED
 #define SEN5X_I2C_CLOCK_SPEED 100000
 #endif
@@ -119,6 +123,7 @@ See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
 
     uint32_t pmMeasureStarted = 0;
     uint32_t rhtGasMeasureStarted = 0;
+    uint32_t lastDataPoll = 0;
     _SEN5XMeasurements sen5xmeasurement{};
 
     bool idle(bool checkState = true);
