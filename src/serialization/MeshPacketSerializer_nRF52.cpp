@@ -120,15 +120,15 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.air_quality_metrics.has_pm100_standard) {
                         jsonObj["payload"]["pm100"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_standard;
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
-                        jsonObj["payload"]["pm10_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm10_environmental;
-                    }
-                    if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
-                        jsonObj["payload"]["pm25_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm25_environmental;
-                    }
-                    if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
-                        jsonObj["payload"]["pm100_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_environmental;
-                    }
+                    // if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
+                    //     jsonObj["payload"]["pm10_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm10_environmental;
+                    // }
+                    // if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
+                    //     jsonObj["payload"]["pm25_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm25_environmental;
+                    // }
+                    // if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
+                    //     jsonObj["payload"]["pm100_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_environmental;
+                    // }
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     if (decoded->variant.power_metrics.has_ch1_voltage) {
                         jsonObj["payload"]["voltage_ch1"] = decoded->variant.power_metrics.ch1_voltage;
