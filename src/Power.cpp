@@ -1398,7 +1398,7 @@ bool Power::max17048Init()
 
 #if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
 
-class cw2015BatteryLevel : public AnalogBatteryLevel
+class CW2015BatteryLevel : public AnalogBatteryLevel
 {
   public:
     /**
@@ -1406,7 +1406,7 @@ class cw2015BatteryLevel : public AnalogBatteryLevel
      */
     virtual int getBatteryPercent() override
     {
-        int data = 0;
+        int data = -1;
         Wire.beginTransmission(CW2015_ADDR);
         Wire.write(0x04);
         if (Wire.endTransmission() == 0) {
@@ -1430,6 +1430,7 @@ class cw2015BatteryLevel : public AnalogBatteryLevel
                 mv = Wire.read();
                 mv <<= 8;
                 mv |= Wire.read();
+                // Voltage is read in  305uV units, convert to mV
                 mv = mv * 305 / 1000;
             }
         }
@@ -1437,10 +1438,10 @@ class cw2015BatteryLevel : public AnalogBatteryLevel
     }
 };
 
-cw2015BatteryLevel cw2015Level;
+CW2015BatteryLevel cw2015Level;
 
 /**
- * Init the Lipo battery level sensor
+ * Init the CW2015 battery level sensor
  */
 bool Power::cw2015Init()
 {
@@ -1468,7 +1469,7 @@ bool Power::cw2015Init()
 
 #else
 /**
- * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ * The CW2015 battery level sensor is unavailable - default to AnalogBatteryLevel
  */
 bool Power::cw2015Init()
 {
