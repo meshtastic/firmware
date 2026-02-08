@@ -69,6 +69,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/SHT31Sensor.h"
 #endif
 
+#if HAS_SHT21
+#include "Sensor/SHT21Sensor.h"
+#endif
+
 #if __has_include(<Adafruit_LPS2X.h>)
 #include "Sensor/LPS22HBSensor.h"
 #endif
@@ -201,6 +205,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<Adafruit_SHT31.h>)
     addSensor<SHT31Sensor>(i2cScanner, ScanI2C::DeviceType::SHT31);
+#endif
+#if HAS_SHT21
+    addSensor<SHT21Sensor>(i2cScanner, ScanI2C::DeviceType::SHT21);
 #endif
 #if __has_include(<Adafruit_LPS2X.h>)
     addSensor<LPS22HBSensor>(i2cScanner, ScanI2C::DeviceType::LPS22HB);

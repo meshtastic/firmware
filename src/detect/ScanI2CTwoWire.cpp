@@ -308,7 +308,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
+#if !HAS_SHT21
             case INA_ADDR:
+#endif
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
@@ -400,6 +402,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
 
                 break;
+
+#if HAS_SHT21
+            case SHT21_ADDR:
+                // SHT21 / HTU21D family commonly at 0x40
+                logFoundDevice("SHT21/HTU21D", (uint8_t)addr.address);
+                type = SHT21;
+                break;
+#endif
 
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3", (uint8_t)addr.address)
             case RCWL9620_ADDR:
