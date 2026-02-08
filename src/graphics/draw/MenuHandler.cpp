@@ -1498,6 +1498,7 @@ void menuHandler::nodeNameLengthMenu()
 
                                                        config.display.use_long_node_name = option.value;
                                                        saveUIConfig();
+                                                       service->reloadConfig(SEGMENT_CONFIG);
                                                        LOG_INFO("Setting names to %s", option.value ? "long" : "short");
                                                    });
 

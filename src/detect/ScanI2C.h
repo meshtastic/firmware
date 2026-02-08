@@ -89,6 +89,8 @@ class ScanI2C
         DA217,
         CHSC6X,
         CST226SE,
+        SEN5X,
+        SFA30,
         CW2015
     } DeviceType;
 

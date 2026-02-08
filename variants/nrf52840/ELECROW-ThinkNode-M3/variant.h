@@ -115,7 +115,6 @@ extern "C" {
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 #ifdef __cplusplus
 }
