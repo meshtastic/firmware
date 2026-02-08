@@ -1524,7 +1524,15 @@ void InkHUD::MenuApplet::onButtonShortPress()
         if (!settings->joystick.enabled) {
             if (!cursorShown) {
                 cursorShown = true;
+                // Select the first item that isn't a header
                 cursor = 0;
+                while (cursor < items.size() && items.at(cursor).isHeader) {
+                    cursor++;
+                }
+                if (cursor >= items.size()) {
+                    cursorShown = false;
+                    cursor = 0;
+                }
             } else {
                 do {
                     cursor = (cursor + 1) % items.size();
@@ -1576,7 +1584,15 @@ void InkHUD::MenuApplet::onNavUp()
 
         if (!cursorShown) {
             cursorShown = true;
-            cursor = 0;
+            // Select the last item that isn't a header
+            cursor = items.size() - 1;
+            while (items.at(cursor).isHeader) {
+                if (cursor == 0) {
+                    cursorShown = false;
+                    break;
+                }
+                cursor--;
+            }
         } else {
             do {
                 if (cursor == 0)
@@ -1597,7 +1613,15 @@ void InkHUD::MenuApplet::onNavDown()
 
         if (!cursorShown) {
             cursorShown = true;
+            // Select the first item that isn't a header
             cursor = 0;
+            while (cursor < items.size() && items.at(cursor).isHeader) {
+                cursor++;
+            }
+            if (cursor >= items.size()) {
+                cursorShown = false;
+                cursor = 0;
+            }
         } else {
             do {
                 cursor = (cursor + 1) % items.size();
