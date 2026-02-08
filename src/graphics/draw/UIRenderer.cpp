@@ -582,6 +582,43 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         display->drawString(x, getTextPositions(display)[line++], distStr);
     }
 
+    // === 6.Battery after Distance line, otherwise next available line ===
+    char batLine[32] = "";
+    bool haveBatLine = false;
+
+    if (node->has_device_metrics) {
+        // Battery percent
+        if (node->device_metrics.has_battery_level) {
+            int pct = (int)node->device_metrics.battery_level;
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            snprintf(batLine, sizeof(batLine), " Bat:%d%%", pct);
+            haveBatLine = true;
+        }
+
+        // Voltage
+        if (node->device_metrics.has_voltage) {
+            float v = node->device_metrics.voltage;
+            int vi = (int)v;
+            int vd = (int)(v * 100.0f + 0.5f) % 100;
+
+            if (haveBatLine) {
+                size_t len = strlen(batLine);
+                snprintf(batLine + len, sizeof(batLine) - len, " %d.%02dV", vi, vd);
+            } else {
+                snprintf(batLine, sizeof(batLine), " Bat:%d.%02dV", vi, vd);
+                haveBatLine = true;
+            }
+        }
+    }
+
+    const int maxTextLines = (currentResolution == ScreenResolution::High) ? 6 : 5;
+
+    // Only draw battery if it fits within the allowed lines
+    if (haveBatLine && line <= maxTextLines) {
+        display->drawString(x, getTextPositions(display)[line++], batLine);
+    }
+
     // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
     if (SCREEN_WIDTH > SCREEN_HEIGHT) {
         bool showCompass = false;
