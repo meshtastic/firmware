@@ -175,14 +175,14 @@ class AmbientLightingThread : public concurrency::OSThread
             rgb.setRed(red);
             rgb.setGreen(green);
             rgb.setBlue(blue);
-            LOG_DEBUG("Init NCP5623 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", current, red, green, blue);
+            LOG_DEBUG("Init NCP5623 Ambient light w/ current=%f, red=%d, green=%d, blue=%d", current, red, green, blue);
 #endif
 #ifdef HAS_LP5562
             rgbw.setCurrent(current);
             rgbw.setRed(red);
             rgbw.setGreen(green);
             rgbw.setBlue(blue);
-            LOG_DEBUG("Init LP5562 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", current, red, green, blue);
+            LOG_DEBUG("Init LP5562 Ambient light w/ current=%f, red=%d, green=%d, blue=%d", current, red, green, blue);
 #endif
 #ifdef HAS_NEOPIXEL
             pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
@@ -196,7 +196,7 @@ class AmbientLightingThread : public concurrency::OSThread
             pixels.fill(BUTTON2_COLOR, BUTTON2_COLOR_INDEX, 1);
 #endif
             pixels.show();
-            // LOG_DEBUG("Init NeoPixel Ambient light w/ brightness(current)=%d, red=%d, green=%d, blue=%d",
+            // LOG_DEBUG("Init NeoPixel Ambient light w/ brightness(current)=%f, red=%d, green=%d, blue=%d",
             //        current, red, green, blue);
 #endif
 #ifdef RGBLED_CA
