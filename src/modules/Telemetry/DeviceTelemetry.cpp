@@ -18,6 +18,7 @@
 
 int32_t DeviceTelemetryModule::runOnce()
 {
+
     refreshUptime();
     bool isImpoliteRole =
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_ROUTER);
@@ -118,6 +119,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (RadioLibInterface::instance) {
+        telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
@@ -141,10 +143,11 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_tx_relay_canceled = router->txRelayCanceled;
     }
 
-    LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i",
+    LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i, "
+             "noise_floor=%f",
              telemetry.variant.local_stats.uptime_seconds, telemetry.variant.local_stats.channel_utilization,
              telemetry.variant.local_stats.air_util_tx, telemetry.variant.local_stats.num_online_nodes,
-             telemetry.variant.local_stats.num_total_nodes);
+             telemetry.variant.local_stats.num_total_nodes, telemetry.variant.local_stats.noise_floor);
 
     LOG_INFO("num_packets_tx=%i, num_packets_rx=%i, num_packets_rx_bad=%i", telemetry.variant.local_stats.num_packets_tx,
              telemetry.variant.local_stats.num_packets_rx, telemetry.variant.local_stats.num_packets_rx_bad);

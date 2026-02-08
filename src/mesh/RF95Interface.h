@@ -37,6 +37,8 @@ class RF95Interface : public RadioLibInterface
      */
     virtual void disableInterrupt() override;
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Enable a particular ISR callback glue function
      */
