@@ -16,6 +16,11 @@ parser.add_argument(
   default=[],
   help="Board level to build for (omit for full release boards)",
 )
+parser.add_argument(
+  "--meshcn",
+  action="store_true",
+  help="Include only boards with board_meshcn=true",
+)
 args = parser.parse_args()
 
 outlist = []
@@ -44,6 +49,7 @@ for pio_env in pio_envs:
     "ci": {"board": pio_env, "platform": env_platform},
     "board_level": cfg.get(f"env:{pio_env}", "board_level", default=None),
     "board_check": bool(cfg.get(f"env:{pio_env}", "board_check", default=False)),
+    "board_meshcn": bool(cfg.get(f"env:{pio_env}", "board_meshcn", default=False)),
   }
   all_envs.append(env)
 
@@ -59,17 +65,23 @@ if "check" in args.platform:
         outlist.append(env["ci"])
 # Filter (non-check) builds by platform
 else:
-  for env in all_envs:
-    if args.platform == env["ci"]["platform"] or args.platform == "all":
-      # Always include board_level = 'pr'
-      if env["board_level"] == "pr":
+  # If --meshcn flag is set, only include boards with board_meshcn=true
+  if args.meshcn:
+    for env in all_envs:
+      if env["board_meshcn"]:
         outlist.append(env["ci"])
-      # Include board_level = 'extra' when requested
-      elif "extra" in args.level and env["board_level"] == "extra":
-        outlist.append(env["ci"])
-      # If no board level is specified, include in release builds (not PR)
-      elif "pr" not in args.level and not env["board_level"]:
-        outlist.append(env["ci"])
+  else:
+    for env in all_envs:
+      if args.platform == env["ci"]["platform"] or args.platform == "all":
+        # Always include board_level = 'pr'
+        if env["board_level"] == "pr":
+          outlist.append(env["ci"])
+        # Include board_level = 'extra' when requested
+        elif "extra" in args.level and env["board_level"] == "extra":
+          outlist.append(env["ci"])
+        # If no board level is specified, include in release builds (not PR)
+        elif "pr" not in args.level and not env["board_level"]:
+          outlist.append(env["ci"])
 
 # Return as a JSON list
 print(json.dumps(outlist))

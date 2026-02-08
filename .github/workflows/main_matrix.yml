@@ -53,12 +53,15 @@ jobs:
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr)
           fi
+          MESHCN_TARGETS=$(./bin/generate_ci_matrix.py all --meshcn)
+          echo "meshcn=$MESHCN_TARGETS" >> $GITHUB_OUTPUT
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
       check: ${{ steps.jsonStep.outputs.check }}
+      meshcn: ${{ steps.jsonStep.outputs.meshcn }}
 
   version:
     runs-on: ubuntu-latest
@@ -102,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: ${{ fromJson(needs.setup.outputs.all) }}
+        build: ${{ fromJson(needs.setup.outputs.meshcn) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
       version: ${{ needs.version.outputs.long }}
