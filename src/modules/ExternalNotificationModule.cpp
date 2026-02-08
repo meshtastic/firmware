@@ -213,7 +213,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         blue = 0;
         white = 0;
     }
-    ambientLightingThread.setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
+    ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
 #endif
 
 #ifdef HAS_DRV2605

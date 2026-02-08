@@ -7,7 +7,7 @@
 
 #ifdef HAS_RGB_LED
 #include "AmbientLightingThread.h"
-extern AmbientLightingThread ambientLightingThread;
+extern AmbientLightingThread *ambientLightingThread;
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)

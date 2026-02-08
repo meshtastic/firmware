@@ -246,7 +246,7 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-static OSThread *ambientLightingThread;
+OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
 #ifdef ARCH_PORTDUINO

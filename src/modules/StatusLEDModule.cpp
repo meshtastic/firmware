@@ -169,9 +169,9 @@ int32_t StatusLEDModule::runOnce()
 #ifdef RGB_LED_POWER
     if (!config.device.led_heartbeat_disabled) {
         if (CHARGE_LED_state == LED_STATE_ON) {
-            ambientLightingThread.setLighting(10, 255, 0, 0);
+            ambientLightingThread->setLighting(10, 255, 0, 0);
         } else {
-            ambientLightingThread.setLighting(0, 0, 0, 0);
+            ambientLightingThread->setLighting(0, 0, 0, 0);
         }
     }
 #endif

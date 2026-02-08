@@ -61,5 +61,5 @@ class StatusLEDModule : private concurrency::OSThread
 extern StatusLEDModule *statusLEDModule;
 #ifdef RGB_LED_POWER
 #include "AmbientLightingThread.h"
-extern AmbientLightingThread ambientLightingThread;
+extern AmbientLightingThread *ambientLightingThread;
 #endif
