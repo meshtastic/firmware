@@ -157,6 +157,7 @@ fi
 %license LICENSE
 %doc README.md
 %{_bindir}/meshtasticd
+%{_bindir}/meshtasticd-start.sh
 %dir %{_localstatedir}/lib/meshtasticd
 %{_udevrulesdir}/99-meshtasticd-udev.rules
 %dir %{_sysconfdir}/meshtasticd
