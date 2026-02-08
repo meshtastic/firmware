@@ -10,12 +10,21 @@ struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
-    float dutyCycle;
-    float spacing;
+    float dutyCycle;    // modified by getEffectiveDutyCycle
+    float spacing;      // gaps between radio channels
+    float padding;      // padding at each side of the "operating channel"
     uint8_t powerLimit; // Or zero for not set
     bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
+    bool licensedOnly;        // Only allow in HAM mode
+    int8_t textThrottle;      // text broadcast throttle - signed to allow future changes
+    int8_t positionThrottle;  // position broadcast throttle - signed to allow future changes
+    int8_t telemetryThrottle; // telemetry broadcast throttle - signed to allow future changes
+    uint8_t overrideSlot;     // default frequency slot if not using channel hashing
+    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
+    // static list of available presets
+    const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
     const char *name; // EU433 etc
 };
 
@@ -23,6 +32,20 @@ extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
+
+/**
+ * Get the effective duty cycle for the current region based on device role.
+ * For EU_866, returns 10% for fixed devices (ROUTER, ROUTER_LATE) and 2.5% for mobile devices.
+ * For other regions, returns the standard duty cycle.
+ */
+extern float getEffectiveDutyCycle();
+
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[];
+// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];
 
 static inline float bwCodeToKHz(uint16_t bwCode)
 {
@@ -101,6 +124,26 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
         bwKHz = wideLora ? 406.25f : 125.0f;
         cr = 8;
         sf = 12;
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST:
+        bwKHz = 125;
+        cr = 5;
+        sf = 9;
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW:
+        bwKHz = 125;
+        cr = 5;
+        sf = 10;
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST:
+        bwKHz = 62.5f;
+        cr = 6;
+        sf = 7;
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
+        bwKHz = 62.5f;
+        cr = 6;
+        sf = 8;
         break;
     default: // LONG_FAST (or illegal)
         bwKHz = wideLora ? 812.5f : 250.0f;
