@@ -6,17 +6,10 @@
  * Nanopb stores strings as fixed-size char arrays that may contain embedded nulls.
  * strlen() would stop at the first null, but we need to find the last non-null character.
  * This is critical for Android UIDs that can contain 0x00 bytes (e.g., ANDROID-e7e455b40002429d).
+ *
+ * Use the firmware implementation declared elsewhere so tests exercise the same logic.
  */
-static size_t pb_string_length(const char *str, size_t max_len)
-{
-    size_t len = 0;
-    for (size_t i = 0; i < max_len; i++) {
-        if (str[i] != '\0') {
-            len = i + 1;
-        }
-    }
-    return len;
-}
+extern size_t pb_string_length(const char *str, size_t max_len);
 
 void setUp(void)
 {
