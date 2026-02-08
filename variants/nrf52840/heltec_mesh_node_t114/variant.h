@@ -74,7 +74,6 @@ extern "C" {
 #define PIN_LED1 (32 + 3) // green (confirmed on 1.0 board)
 #define LED_BLUE PIN_LED1 // fake for bluefruit library
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
@@ -151,6 +150,14 @@ No longer populated on PCB
 #define PIN_SPI1_SCK ST7789_SCK
 
 /*
+ * Bluetooth
+ */
+
+// The bluetooth transmit power on the nRF52840 is adjustable from -20dB to +8dB in steps of 4dB
+// so NRF52_BLE_TX_POWER can be set to -20, -16, -12, -8, -4, 0 (default), 4, and 8.
+// #define NRF52_BLE_TX_POWER 8
+
+/*
  * GPS pins
  */
 
@@ -167,16 +174,13 @@ No longer populated on PCB
 #define PIN_GPS_PPS (32 + 4)
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 5) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 7) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (32 + 7) // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 5) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
-
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
 /*
  * SPI Interfaces
@@ -187,8 +191,6 @@ No longer populated on PCB
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
-
-// #define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
@@ -211,7 +213,8 @@ No longer populated on PCB
 #define ADC_MULTIPLIER (4.916F)
 
 // rf52840 AIN2 = Pin 4
-#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_2
+// commented out due to power leakage of 2.9mA in shutdown state see reported issue #8801
+// #define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_2 //UNSAFE
 
 // We have AIN2 with a VBAT divider so AIN2 = VBAT * (100/490)
 // We have the device going deep sleep under 3.1V, which is AIN2 = 0.63V
@@ -220,7 +223,6 @@ No longer populated on PCB
 // VBAT=4.04V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_2_8
 
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif

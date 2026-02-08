@@ -168,7 +168,7 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
-#ifdef T_WATCH_S3
+#ifdef HAS_DRV2605
             drv.go();
 #endif
         }
@@ -283,7 +283,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #ifdef UNPHONE
     unphone.rgb(red, green, blue);
 #endif
-#ifdef T_WATCH_S3
+#ifdef HAS_DRV2605
     if (on) {
         drv.go();
     } else {
@@ -310,18 +310,16 @@ void ExternalNotificationModule::stopNow()
     rtttl::stop();
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
-    if (audioThread->isPlaying())
-        audioThread->stop();
+    audioThread->stop();
 #endif
     // Turn off all outputs
-    LOG_INFO("Turning off setExternalStates: ");
+    LOG_INFO("Turning off setExternalStates");
     for (int i = 0; i < 3; i++) {
         setExternalState(i, false);
         externalTurnedOn[i] = 0;
-        LOG_INFO("%d ", i);
     }
     setIntervalFromNow(0);
-#ifdef T_WATCH_S3
+#ifdef HAS_DRV2605
     drv.stop();
 #endif
 
@@ -444,6 +442,7 @@ ExternalNotificationModule::ExternalNotificationModule()
 
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // Trigger external notification if enabled and not muted; isSilenced is from temporary mute toggles
     if (moduleConfig.external_notification.enabled && !isSilenced) {
 #ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
@@ -458,43 +457,67 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             for (size_t i = 0; i < p.payload.size; i++) {
                 if (p.payload.bytes[i] == ASCII_BELL) {
                     containsBell = true;
+                    break;
                 }
             }
 
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
-            if (moduleConfig.external_notification.alert_bell) {
-                if (containsBell) {
-                    LOG_INFO("externalNotificationModule - Notification Bell");
+
+            // If we receive a broadcast message, apply channel mute setting
+            // If we receive a direct message and the receipent is us, apply DM mute setting
+            // Else we just handle it as not muted.
+            const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
+            bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
+                                     : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
+
+            const bool buzzerModeIsDirectOnly =
+                (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
+
+            if (containsBell || !is_muted) {
+                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message ||
+                    moduleConfig.external_notification.alert_bell_vibra ||
+                    moduleConfig.external_notification.alert_message_vibra ||
+                    ((moduleConfig.external_notification.alert_bell_buzzer ||
+                      moduleConfig.external_notification.alert_message_buzzer) &&
+                     canBuzz())) {
+                    nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
+                                                     ? (moduleConfig.external_notification.nag_timeout * 1000)
+                                                     : moduleConfig.external_notification.output_ms);
+                    LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
                     isNagging = true;
+                }
+
+                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message) {
+                    LOG_INFO("externalNotificationModule - Notification Module or Bell");
                     setExternalState(0, true);
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    }
                 }
-            }
 
-            if (moduleConfig.external_notification.alert_bell_vibra) {
-                if (containsBell) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (Vibra)");
-                    isNagging = true;
+                if (moduleConfig.external_notification.alert_bell_vibra ||
+                    moduleConfig.external_notification.alert_message_vibra) {
+                    LOG_INFO("externalNotificationModule - Notification Module or Bell (Vibra)");
                     setExternalState(1, true);
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    }
                 }
-            }
 
-            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
-                if (containsBell) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
-                    isNagging = true;
-                    if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
-                        setExternalState(2, true);
+                if ((moduleConfig.external_notification.alert_bell_buzzer ||
+                     moduleConfig.external_notification.alert_message_buzzer) &&
+                    canBuzz()) {
+                    LOG_INFO("externalNotificationModule - Notification Module or Bell (Buzzer)");
+                    if (buzzerModeIsDirectOnly && !isDmToUs && !containsBell) {
+                        LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                     } else {
+                        // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
+#ifdef T_LORA_PAGER
+                        drv.setWaveform(0, 16); // Long buzzer 100%
+                        drv.setWaveform(1, 0);  // Pause
+                        drv.setWaveform(2, 16);
+                        drv.setWaveform(3, 0);
+                        drv.setWaveform(4, 16);
+                        drv.setWaveform(5, 0);
+                        drv.setWaveform(6, 16);
+                        drv.setWaveform(7, 0);
+                        drv.go();
+#endif
 #ifdef HAS_I2S
                         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
                             audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
@@ -502,69 +525,13 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 #endif
                             if (moduleConfig.external_notification.use_pwm) {
                             rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                        } else {
+                            setExternalState(2, true);
                         }
                     }
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    }
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message &&
-                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
-                LOG_INFO("externalNotificationModule - Notification Module");
-                isNagging = true;
-                setExternalState(0, true);
-                if (moduleConfig.external_notification.nag_timeout) {
-                    nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                } else {
-                    nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                }
-            }
-
-            if (moduleConfig.external_notification.alert_message_vibra &&
-                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
-                LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
-                isNagging = true;
-                setExternalState(1, true);
-                if (moduleConfig.external_notification.nag_timeout) {
-                    nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                } else {
-                    nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                }
-            }
-
-            if (moduleConfig.external_notification.alert_message_buzzer &&
-                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
-                LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
-                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-                    (!isBroadcast(mp.to) && isToUs(&mp))) {
-                    // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-                    isNagging = true;
-                    if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
-                        setExternalState(2, true);
-                    } else {
-#ifdef HAS_I2S
-                        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-                            audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-                        } else
-#endif
-                            if (moduleConfig.external_notification.use_pwm) {
-                            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-                        }
-                    }
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    }
-                } else {
-                    // Don't beep if buzzer mode is "direct messages only" and it is no direct message
-                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
-                }
-            }
             setIntervalFromNow(0); // run once so we know if we should do something
         }
     } else {

@@ -26,8 +26,6 @@ extern "C" {
 #define LED_RED PIN_LED1
 #define LED_BLUE PIN_LED1
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN LED_BLUE
 #define LED_STATE_ON 0 // State when LED is lit
 
 /*
@@ -100,8 +98,6 @@ No longer populated on PCB
 #define PIN_SPI_MOSI (0 + 5)
 #define PIN_SPI_SCK (0 + 4)
 
-// #define PIN_PWR_EN (0 + 6)
-
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
 
@@ -122,9 +118,14 @@ No longer populated on PCB
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.6425F)
 
+#if defined(HELTEC_MESH_POCKET_BATTERY_5000)
+#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
+#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
+#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
+#endif
+
 #undef HAS_GPS
 #define HAS_GPS 0
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif

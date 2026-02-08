@@ -12,6 +12,10 @@
 #endif
 #endif
 
+#ifndef TB_THRESHOLD
+#define TB_THRESHOLD 0
+#endif
+
 class TrackballInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
@@ -25,8 +29,6 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     void intUpHandler();
     void intLeftHandler();
     void intRightHandler();
-    uint32_t lastTime = 0;
-
     virtual int32_t runOnce() override;
 
   protected:
@@ -49,10 +51,14 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
 
     // Long press detection for press button
     uint32_t pressStartTime = 0;
+    uint32_t directionStartTime = 0;
+    uint8_t directionInterval = 0;
     bool pressDetected = false;
+    bool directionDetected = false;
     uint32_t lastLongPressEventTime = 0;
+    uint32_t lastDirectionPressEventTime = 0;
     static const uint32_t LONG_PRESS_DURATION = 500;        // ms
-    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = 500; // ms - interval between repeated long press events
+    static const uint32_t LONG_PRESS_REPEAT_INTERVAL = 300; // ms - interval between repeated long press events
 
   private:
     input_broker_event _eventDown = INPUT_BROKER_NONE;
@@ -63,4 +69,12 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     input_broker_event _eventPressedLong = INPUT_BROKER_NONE;
     const char *_originName;
     TrackballInterruptBaseActionType lastEvent = TB_ACTION_NONE;
+    volatile uint32_t lastInterruptTime = 0;
+
+#if TB_THRESHOLD
+    volatile uint8_t left_counter = 0;
+    volatile uint8_t right_counter = 0;
+    volatile uint8_t up_counter = 0;
+    volatile uint8_t down_counter = 0;
+#endif
 };

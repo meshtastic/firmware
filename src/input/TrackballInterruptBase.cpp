@@ -1,5 +1,7 @@
 #include "TrackballInterruptBase.h"
+#include "Throttle.h"
 #include "configuration.h"
+
 extern bool osk_found;
 
 TrackballInterruptBase::TrackballInterruptBase(const char *name) : concurrency::OSThread(name), _originName(name) {}
@@ -45,7 +47,9 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
 
     LOG_DEBUG("Trackball GPIO initialized - UP:%d DOWN:%d LEFT:%d RIGHT:%d PRESS:%d", this->_pinUp, this->_pinDown,
               this->_pinLeft, this->_pinRight, pinPress);
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
+#endif
     this->setInterval(100);
 }
 
@@ -53,17 +57,27 @@ int32_t TrackballInterruptBase::runOnce()
 {
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
+#if TB_THRESHOLD
+    if (lastInterruptTime && !Throttle::isWithinTimespanMs(lastInterruptTime, 1000)) {
+        left_counter = 0;
+        right_counter = 0;
+        up_counter = 0;
+        down_counter = 0;
+        lastInterruptTime = 0;
+    }
+#ifdef INPUT_DEBUG
+    if (left_counter > 0 || right_counter > 0 || up_counter > 0 || down_counter > 0) {
+        LOG_DEBUG("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
+    }
+#endif
+#endif
 
     // Handle long press detection for press button
     if (pressDetected && pressStartTime > 0) {
         uint32_t pressDuration = millis() - pressStartTime;
         bool buttonStillPressed = false;
 
-#if defined(T_DECK)
-        buttonStillPressed = (this->action == TB_ACTION_PRESSED);
-#else
         buttonStillPressed = !digitalRead(_pinPress);
-#endif
 
         if (!buttonStillPressed) {
             // Button released
@@ -88,23 +102,75 @@ int32_t TrackballInterruptBase::runOnce()
         }
     }
 
-#if defined(T_DECK) // T-deck gets a super-simple debounce on trackball
-    if (this->action == TB_ACTION_PRESSED && !pressDetected) {
+    if (directionDetected && directionStartTime > 0) {
+        uint32_t directionDuration = millis() - directionStartTime;
+        uint8_t directionPressedNow = 0;
+        directionInterval++;
+
+        if (!digitalRead(_pinUp)) {
+            directionPressedNow = TB_ACTION_UP;
+        } else if (!digitalRead(_pinDown)) {
+            directionPressedNow = TB_ACTION_DOWN;
+        } else if (!digitalRead(_pinLeft)) {
+            directionPressedNow = TB_ACTION_LEFT;
+        } else if (!digitalRead(_pinRight)) {
+            directionPressedNow = TB_ACTION_RIGHT;
+        }
+
+        const uint8_t DIRECTION_REPEAT_THRESHOLD = 3;
+
+        if (directionPressedNow == TB_ACTION_NONE) {
+            // Reset state
+            directionDetected = false;
+            directionStartTime = 0;
+            directionInterval = 0;
+            this->action = TB_ACTION_NONE;
+        } else if (directionDuration >= LONG_PRESS_DURATION && directionInterval >= DIRECTION_REPEAT_THRESHOLD) {
+            // repeat event when long press these direction.
+            switch (directionPressedNow) {
+            case TB_ACTION_UP:
+                e.inputEvent = this->_eventUp;
+                break;
+            case TB_ACTION_DOWN:
+                e.inputEvent = this->_eventDown;
+                break;
+            case TB_ACTION_LEFT:
+                e.inputEvent = this->_eventLeft;
+                break;
+            case TB_ACTION_RIGHT:
+                e.inputEvent = this->_eventRight;
+                break;
+            }
+
+            directionInterval = 0;
+        }
+    }
+
+#if TB_THRESHOLD
+    if (this->action == TB_ACTION_PRESSED && (!pressDetected || pressStartTime == 0)) {
         // Start long press detection
         pressDetected = true;
         pressStartTime = millis();
         // Don't send event yet, wait to see if it's a long press
-    } else if (this->action == TB_ACTION_UP && lastEvent == TB_ACTION_UP) {
-        // LOG_DEBUG("Trackball event UP");
+    } else if (up_counter >= TB_THRESHOLD) {
+#ifdef INPUT_DEBUG
+        LOG_DEBUG("Trackball event UP %u", millis());
+#endif
         e.inputEvent = this->_eventUp;
-    } else if (this->action == TB_ACTION_DOWN && lastEvent == TB_ACTION_DOWN) {
-        // LOG_DEBUG("Trackball event DOWN");
+    } else if (down_counter >= TB_THRESHOLD) {
+#ifdef INPUT_DEBUG
+        LOG_DEBUG("Trackball event DOWN %u", millis());
+#endif
         e.inputEvent = this->_eventDown;
-    } else if (this->action == TB_ACTION_LEFT && lastEvent == TB_ACTION_LEFT) {
-        // LOG_DEBUG("Trackball event LEFT");
+    } else if (left_counter >= TB_THRESHOLD) {
+#ifdef INPUT_DEBUG
+        LOG_DEBUG("Trackball event LEFT %u", millis());
+#endif
         e.inputEvent = this->_eventLeft;
-    } else if (this->action == TB_ACTION_RIGHT && lastEvent == TB_ACTION_RIGHT) {
-        // LOG_DEBUG("Trackball event RIGHT");
+    } else if (right_counter >= TB_THRESHOLD) {
+#ifdef INPUT_DEBUG
+        LOG_DEBUG("Trackball event RIGHT %u", millis());
+#endif
         e.inputEvent = this->_eventRight;
     }
 #else
@@ -113,17 +179,22 @@ int32_t TrackballInterruptBase::runOnce()
         pressDetected = true;
         pressStartTime = millis();
         // Don't send event yet, wait to see if it's a long press
-    } else if (this->action == TB_ACTION_UP && !digitalRead(_pinUp)) {
-        // LOG_DEBUG("Trackball event UP");
+    } else if (this->action == TB_ACTION_UP && !digitalRead(_pinUp) && !directionDetected) {
+        directionDetected = true;
+        directionStartTime = millis();
         e.inputEvent = this->_eventUp;
-    } else if (this->action == TB_ACTION_DOWN && !digitalRead(_pinDown)) {
-        // LOG_DEBUG("Trackball event DOWN");
+        // send event first,will automatically trigger every 50ms * 3 after 500ms
+    } else if (this->action == TB_ACTION_DOWN && !digitalRead(_pinDown) && !directionDetected) {
+        directionDetected = true;
+        directionStartTime = millis();
         e.inputEvent = this->_eventDown;
-    } else if (this->action == TB_ACTION_LEFT && !digitalRead(_pinLeft)) {
-        // LOG_DEBUG("Trackball event LEFT");
+    } else if (this->action == TB_ACTION_LEFT && !digitalRead(_pinLeft) && !directionDetected) {
+        directionDetected = true;
+        directionStartTime = millis();
         e.inputEvent = this->_eventLeft;
-    } else if (this->action == TB_ACTION_RIGHT && !digitalRead(_pinRight)) {
-        // LOG_DEBUG("Trackball event RIGHT");
+    } else if (this->action == TB_ACTION_RIGHT && !digitalRead(_pinRight) && !directionDetected) {
+        directionDetected = true;
+        directionStartTime = millis();
         e.inputEvent = this->_eventRight;
     }
 #endif
@@ -132,6 +203,12 @@ int32_t TrackballInterruptBase::runOnce()
         e.source = this->_originName;
         e.kbchar = 0x00;
         this->notifyObservers(&e);
+#if TB_THRESHOLD
+        left_counter = 0;
+        right_counter = 0;
+        up_counter = 0;
+        down_counter = 0;
+#endif
     }
 
     // Only update lastEvent for non-press actions or completed press actions
@@ -147,25 +224,49 @@ int32_t TrackballInterruptBase::runOnce()
 
 void TrackballInterruptBase::intPressHandler()
 {
-    this->action = TB_ACTION_PRESSED;
+    if (!Throttle::isWithinTimespanMs(lastInterruptTime, 10))
+        this->action = TB_ACTION_PRESSED;
+    lastInterruptTime = millis();
 }
 
 void TrackballInterruptBase::intDownHandler()
 {
-    this->action = TB_ACTION_DOWN;
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
+        this->action = TB_ACTION_DOWN;
+    lastInterruptTime = millis();
+
+#if TB_THRESHOLD
+    down_counter++;
+#endif
 }
 
 void TrackballInterruptBase::intUpHandler()
 {
-    this->action = TB_ACTION_UP;
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
+        this->action = TB_ACTION_UP;
+    lastInterruptTime = millis();
+
+#if TB_THRESHOLD
+    up_counter++;
+#endif
 }
 
 void TrackballInterruptBase::intLeftHandler()
 {
-    this->action = TB_ACTION_LEFT;
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
+        this->action = TB_ACTION_LEFT;
+    lastInterruptTime = millis();
+#if TB_THRESHOLD
+    left_counter++;
+#endif
 }
 
 void TrackballInterruptBase::intRightHandler()
 {
-    this->action = TB_ACTION_RIGHT;
+    if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
+        this->action = TB_ACTION_RIGHT;
+    lastInterruptTime = millis();
+#if TB_THRESHOLD
+    right_counter++;
+#endif
 }

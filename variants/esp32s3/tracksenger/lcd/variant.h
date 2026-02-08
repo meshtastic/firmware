@@ -1,4 +1,4 @@
-#define LED_PIN 18
+#define LED_POWER 18
 
 #define HELTEC_TRACKER_V1_X
 
@@ -16,6 +16,7 @@
 #define ST7789_CS 38
 #define ST7789_RS 40
 #define ST7789_BL 21
+#define USE_TFTDISPLAY 1
 // P#define TFT_BL 21 /* V1.1 PCB marking */
 
 #define ST7789_RESET -1
@@ -101,7 +102,6 @@
 // keyboard changes
 
 #define PIN_BUZZER 43
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 
