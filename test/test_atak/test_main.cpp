@@ -1,6 +1,8 @@
 #include <string.h>
 #include <unity.h>
 
+#include "TestUtil.h"
+
 /**
  * Get actual string length for nanopb char array fields.
  * Nanopb stores strings as fixed-size char arrays that may contain embedded nulls.
@@ -202,8 +204,8 @@ void setup()
 {
     // NOTE!!! Wait for >2 secs
     // if board doesn't support software reset via Serial.DTR/RTS
-    delay(10);
-    delay(2000);
+    testDelay(10);
+    testDelay(2000);
 
     UNITY_BEGIN();
     RUN_TEST(test_normal_string);
