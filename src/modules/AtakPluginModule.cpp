@@ -6,26 +6,10 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/compression/unishox2.h"
+#include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
 
 AtakPluginModule *atakPluginModule;
-
-/**
- * Get actual string length for nanopb char array fields.
- * Nanopb stores strings as fixed-size char arrays that may contain embedded nulls.
- * strlen() would stop at the first null, but we need to find the last non-null character.
- * This is critical for Android UIDs that can contain 0x00 bytes (e.g., ANDROID-e7e455b40002429d).
- */
-static size_t pb_string_length(const char *str, size_t max_len)
-{
-    size_t len = 0;
-    for (size_t i = 0; i < max_len; i++) {
-        if (str[i] != '\0') {
-            len = i + 1;
-        }
-    }
-    return len;
-}
 
 AtakPluginModule::AtakPluginModule()
     : ProtobufModule("atak", meshtastic_PortNum_ATAK_PLUGIN, &meshtastic_TAKPacket_msg), concurrency::OSThread("AtakPlugin")
