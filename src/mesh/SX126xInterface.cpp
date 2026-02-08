@@ -6,6 +6,9 @@
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
+#if defined(USE_GC1109_PA) && defined(ARCH_ESP32)
+#include "esp_sleep.h"
+#endif
 
 #include "Throttle.h"
 
@@ -59,6 +62,14 @@ template <typename T> bool SX126xInterface<T>::init()
     // VFEM_Ctrl (LORA_PA_POWER): Power enable for GC1109 LDO (always on)
     pinMode(LORA_PA_POWER, OUTPUT);
     digitalWrite(LORA_PA_POWER, HIGH);
+
+    // TLV75733P LDO has ~550us startup time (datasheet tSTR). On cold boot, wait
+    // for VBAT to stabilise before driving CSD/CPS, per GC1109 requirement:
+    // "VBAT must be prior to CSD/CPS/CTX for the power on sequence"
+    // On deep sleep wake the LDO was held on via RTC latch, so no delay needed.
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        delayMicroseconds(1000);
+    }
 
     // CSD (LORA_PA_EN): Chip enable - must be HIGH to enable GC1109 for both RX and TX
     pinMode(LORA_PA_EN, OUTPUT);
