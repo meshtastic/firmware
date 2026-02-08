@@ -824,16 +824,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312) || defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3) ||          \
-    defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M6)
-    // Default to PIN_LED2 for external notification output (LED color depends on device variant)
+#if defined(LED_NOTIFICATION)
     moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.output = PIN_LED2;
-#if defined(MUZI_BASE) || defined(ELECROW_ThinkNode_M3)
-    moduleConfig.external_notification.active = false;
-#else
-    moduleConfig.external_notification.active = true;
-#endif
+    moduleConfig.external_notification.output = LED_NOTIFICATION;
+    moduleConfig.external_notification.active = LED_STATE_ON;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
@@ -856,15 +850,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
-#endif
-#ifdef ELECROW_ThinkNode_M1
-    // Default to Elecrow USER_LED (blue)
-    moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.output = USER_LED;
-    moduleConfig.external_notification.active = true;
-    moduleConfig.external_notification.alert_message = true;
-    moduleConfig.external_notification.output_ms = 1000;
-    moduleConfig.external_notification.nag_timeout = 60;
 #endif
 #ifdef T_LORA_PAGER
     moduleConfig.canned_message.updown1_enabled = true;
@@ -1419,6 +1404,15 @@ void NodeDB::loadFromDisk()
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
     }
+    if (portduino_config.has_statusMessage) {
+        moduleConfig.has_statusmessage = true;
+        strncpy(moduleConfig.statusmessage.node_status, portduino_config.statusMessage.c_str(),
+                sizeof(moduleConfig.statusmessage.node_status));
+        moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
+    }
+    if (portduino_config.enable_UDP) {
+        config.network.enabled_protocols = true;
+    }
 
 #endif
 }
@@ -1559,6 +1553,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
+        moduleConfig.has_statusmessage = true;
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
@@ -2228,8 +2223,8 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
     } else if (location == meshtastic_AdminMessage_BackupLocation_SD) {
         // TODO: After more mainline SD card support
     }
-    return success;
 #endif
+    return success;
 }
 
 /// Record an error that should be reported via analytics

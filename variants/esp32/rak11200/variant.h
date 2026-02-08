@@ -6,8 +6,6 @@
 #define LED_GREEN 12
 #define LED_BLUE 2
 
-#define LED_BUILTIN LED_GREEN
-
 static const uint8_t TX = 1;
 static const uint8_t RX = 3;
 
@@ -45,7 +43,7 @@ static const uint8_t SCK = 33;
 #undef GPS_TX_PIN
 #define GPS_TX_PIN (TX1)
 
-#define LED_PIN LED_BLUE
+#define LED_POWER LED_BLUE
 
 #define PIN_VBAT WB_A0
 #define BATTERY_PIN PIN_VBAT
