@@ -590,8 +590,10 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         // Battery percent
         if (node->device_metrics.has_battery_level) {
             int pct = (int)node->device_metrics.battery_level;
-            if (pct < 0) pct = 0;
-            if (pct > 100) pct = 100;
+            if (pct < 0)
+                pct = 0;
+            if (pct > 100)
+                pct = 100;
             snprintf(batLine, sizeof(batLine), " Bat:%d%%", pct);
             haveBatLine = true;
         }
