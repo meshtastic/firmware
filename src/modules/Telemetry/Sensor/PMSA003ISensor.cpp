@@ -90,43 +90,44 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    measurement->variant.air_quality_metrics.has_pm10_standard = true;
-    measurement->variant.air_quality_metrics.pm10_standard = read16(buffer, 4);
+    measurement->variant.air_quality_metrics.has_pmsa003idata = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.has_pm10_standard = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.pm10_standard = read16(buffer, 4);
 
-    measurement->variant.air_quality_metrics.has_pm25_standard = true;
-    measurement->variant.air_quality_metrics.pm25_standard = read16(buffer, 6);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_pm25_standard = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.pm25_standard = read16(buffer, 6);
 
-    measurement->variant.air_quality_metrics.has_pm100_standard = true;
-    measurement->variant.air_quality_metrics.pm100_standard = read16(buffer, 8);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_pm100_standard = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.pm100_standard = read16(buffer, 8);
 
     // TODO - Add admin command to remove environmental metrics to save protobuf space
-    measurement->variant.air_quality_metrics.has_pm10_environmental = true;
-    measurement->variant.air_quality_metrics.pm10_environmental = read16(buffer, 10);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_pm10_environmental = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.pm10_environmental = read16(buffer, 10);
 
-    measurement->variant.air_quality_metrics.has_pm25_environmental = true;
-    measurement->variant.air_quality_metrics.pm25_environmental = read16(buffer, 12);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_pm25_environmental = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.pm25_environmental = read16(buffer, 12);
 
-    measurement->variant.air_quality_metrics.has_pm100_environmental = true;
-    measurement->variant.air_quality_metrics.pm100_environmental = read16(buffer, 14);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_pm100_environmental = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.pm100_environmental = read16(buffer, 14);
 
     // TODO - Add admin command to remove PN to save protobuf space
-    measurement->variant.air_quality_metrics.has_particles_03um = true;
-    measurement->variant.air_quality_metrics.particles_03um = read16(buffer, 16);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_particles_03um = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.particles_03um = read16(buffer, 16);
 
-    measurement->variant.air_quality_metrics.has_particles_05um = true;
-    measurement->variant.air_quality_metrics.particles_05um = read16(buffer, 18);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_particles_05um = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.particles_05um = read16(buffer, 18);
 
-    measurement->variant.air_quality_metrics.has_particles_10um = true;
-    measurement->variant.air_quality_metrics.particles_10um = read16(buffer, 20);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_particles_10um = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.particles_10um = read16(buffer, 20);
 
-    measurement->variant.air_quality_metrics.has_particles_25um = true;
-    measurement->variant.air_quality_metrics.particles_25um = read16(buffer, 22);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_particles_25um = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.particles_25um = read16(buffer, 22);
 
-    measurement->variant.air_quality_metrics.has_particles_50um = true;
-    measurement->variant.air_quality_metrics.particles_50um = read16(buffer, 24);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_particles_50um = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.particles_50um = read16(buffer, 24);
 
-    measurement->variant.air_quality_metrics.has_particles_100um = true;
-    measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
+    measurement->variant.air_quality_metrics.pmsa003idata.has_particles_100um = true;
+    measurement->variant.air_quality_metrics.pmsa003idata.particles_100um = read16(buffer, 26);
 
     return true;
 }
