@@ -1277,17 +1277,18 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.ethernet.has_status = true;
     bool isConnected = false;
     uint32_t ipAddr = 0;
-#if defined(ESP32) && defined(ETH_PHY_TYPE)
-    isConnected = ETH.linkUp();
-    if (isConnected) {
-        ipAddr = (uint32_t)ETH.localIP();
-    }
-#else
-    isConnected = (Ethernet.linkStatus() == LinkON);
-    if (isConnected) {
-        ipAddr = (uint32_t)Ethernet.localIP();
-    }
-#endif
+
+    #if defined(ESP32) && defined(ETH_PHY_TYPE)
+        isConnected = ETH.linkUp();
+        if (isConnected) ipAddr = (uint32_t)ETH.localIP();
+    #elif defined(USE_WS5500)
+        isConnected = (ETH.linkStatus() == LinkON); 
+        if (isConnected) ipAddr = (uint32_t)ETH.localIP();
+    #elif defined(ARCH_NRF52) || defined(ARCH_RP2040) || !defined(ESP32)
+        isConnected = (Ethernet.linkStatus() == LinkON);
+        if (isConnected) ipAddr = (uint32_t)Ethernet.localIP();
+    #endif
+
     if (isConnected) {
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = ipAddr;

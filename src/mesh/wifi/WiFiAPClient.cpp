@@ -495,11 +495,14 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-        LOG_INFO("Ethernet Obtained IP address: %s", ETH.localIP().toString().c_str());
-        #if defined(USE_WS5500)
-            LOG_INFO("Speed: %u Mbps, %s", ETH.linkSpeed(), ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
+        #if defined(ETH_PHY_TYPE)
+            LOG_INFO("Ethernet Obtained IP address: %s", ETH.localIP().toString().c_str());
+            onNetworkConnected();
+        #elif defined(USE_WS5500)
+            LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
+                ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
+            onNetworkConnected();
         #endif
-        onNetworkConnected();
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
 #ifdef USE_WS5500
