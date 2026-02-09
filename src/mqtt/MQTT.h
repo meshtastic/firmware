@@ -9,14 +9,16 @@
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
 #endif
-#if HAS_WIFI
-#include <WiFiClient.h>
-#if __has_include(<WiFiClientSecure.h>)
-#include <WiFiClientSecure.h>
+
+#if HAS_WIFI || (defined(ESP32) && defined(ETH_PHY_TYPE))
+    #include <WiFiClient.h>
+    #if __has_include(<WiFiClientSecure.h>)
+        #include <WiFiClientSecure.h>
+    #endif
 #endif
-#endif
-#if HAS_ETHERNET && !defined(USE_WS5500)
-#include <EthernetClient.h>
+
+#if HAS_ETHERNET && !defined(ETH_PHY_TYPE) && !defined(USE_WS5500)
+    #include <EthernetClient.h>
 #endif
 
 #if HAS_NETWORKING
@@ -80,12 +82,13 @@ class MQTT : private concurrency::OSThread
 #ifndef PIO_UNIT_TESTING
   private:
 #endif
-#if HAS_WIFI
+
+#if HAS_WIFI || (defined(ESP32) && defined(ETH_PHY_TYPE))
     using MQTTClient = WiFiClient;
-#if __has_include(<WiFiClientSecure.h>)
-    using MQTTClientTLS = WiFiClientSecure;
-#define MQTT_SUPPORTS_TLS 1
-#endif
+    #if __has_include(<WiFiClientSecure.h>)
+        using MQTTClientTLS = WiFiClientSecure;
+        #define MQTT_SUPPORTS_TLS 1
+    #endif
 #elif HAS_ETHERNET
     using MQTTClient = EthernetClient;
 #else
