@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
 #include "UIRenderer.h"
@@ -389,10 +390,14 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         bars = 1;
     }
 
+    // Add extra spacing on the left if we have an API connection to account for the common footer icons
+    const char *leftSideSpacing =
+        graphics::isAPIConnected(service->api_state) ? (currentResolution == ScreenResolution::High ? "     " : "   ") : " ";
+
     // --- Build the Signal/Hops line ---
     // Only show signal if we have valid SNR
     if (snr > -100 && snr != 0) {
-        snprintf(signalHopsStr, sizeof(signalHopsStr), " Sig:%s", qualityLabel);
+        snprintf(signalHopsStr, sizeof(signalHopsStr), "%sSig:%s", leftSideSpacing, qualityLabel);
         haveSignal = true;
     }
 
@@ -502,7 +507,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     if (seconds != 0 && seconds != UINT32_MAX) {
         uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
         // Format as "Heard:Xm ago", "Heard:Xh ago", or "Heard:Xd ago"
-        snprintf(seenStr, sizeof(seenStr), (days > 365 ? " Heard:?" : " Heard:%d%c ago"),
+        snprintf(seenStr, sizeof(seenStr), (days > 365 ? " Heard:?" : "%sHeard:%d%c ago"), leftSideSpacing,
                  (days    ? days
                   : hours ? hours
                           : minutes),
@@ -517,7 +522,9 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
-        getUptimeStr(node->device_metrics.uptime_seconds * 1000, " Up:", uptimeStr, sizeof(uptimeStr));
+        char upPrefix[12]; // enough for leftSideSpacing + "Up:"
+        snprintf(upPrefix, sizeof(upPrefix), "%sUp:", leftSideSpacing);
+        getUptimeStr(node->device_metrics.uptime_seconds * 1000, upPrefix, uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0]) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
@@ -546,16 +553,16 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             if (miles < 0.1) {
                 int feet = (int)(miles * 5280);
                 if (feet > 0 && feet < 1000) {
-                    snprintf(distStr, sizeof(distStr), " Distance:%dft", feet);
+                    snprintf(distStr, sizeof(distStr), "%sDistance:%dft", leftSideSpacing, feet);
                     haveDistance = true;
                 } else if (feet >= 1000) {
-                    snprintf(distStr, sizeof(distStr), " Distance:¼mi");
+                    snprintf(distStr, sizeof(distStr), "%sDistance:¼mi", leftSideSpacing);
                     haveDistance = true;
                 }
             } else {
                 int roundedMiles = (int)(miles + 0.5);
                 if (roundedMiles > 0 && roundedMiles < 1000) {
-                    snprintf(distStr, sizeof(distStr), " Distance:%dmi", roundedMiles);
+                    snprintf(distStr, sizeof(distStr), "%sDistance:%dmi", leftSideSpacing, roundedMiles);
                     haveDistance = true;
                 }
             }
@@ -563,16 +570,16 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             if (distanceKm < 1.0) {
                 int meters = (int)(distanceKm * 1000);
                 if (meters > 0 && meters < 1000) {
-                    snprintf(distStr, sizeof(distStr), " Distance:%dm", meters);
+                    snprintf(distStr, sizeof(distStr), "%sDistance:%dm", leftSideSpacing, meters);
                     haveDistance = true;
                 } else if (meters >= 1000) {
-                    snprintf(distStr, sizeof(distStr), " Distance:1km");
+                    snprintf(distStr, sizeof(distStr), "%sDistance:1km", leftSideSpacing);
                     haveDistance = true;
                 }
             } else {
                 int km = (int)(distanceKm + 0.5);
                 if (km > 0 && km < 1000) {
-                    snprintf(distStr, sizeof(distStr), " Distance:%dkm", km);
+                    snprintf(distStr, sizeof(distStr), "%sDistance:%dkm", leftSideSpacing, km);
                     haveDistance = true;
                 }
             }
@@ -604,22 +611,22 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         if (hasPct && pct > 0 && pct <= 100) {
             // Normal battery percentage
             if (hasVolt) {
-                snprintf(batLine, sizeof(batLine), " Bat:%d%% (%.2fV)", pct, volt);
+                snprintf(batLine, sizeof(batLine), "%sBat:%d%% (%.2fV)", leftSideSpacing, pct, volt);
             } else {
-                snprintf(batLine, sizeof(batLine), " Bat:%d%%", pct);
+                snprintf(batLine, sizeof(batLine), "%sBat:%d%%", leftSideSpacing, pct);
             }
             haveBatLine = true;
         } else if (hasPct && pct > 100) {
             // Plugged in
             if (hasVolt) {
-                snprintf(batLine, sizeof(batLine), " Plugged In (%.2fV)", volt);
+                snprintf(batLine, sizeof(batLine), "%sPlugged In (%.2fV)", leftSideSpacing, volt);
             } else {
-                snprintf(batLine, sizeof(batLine), " Plugged In");
+                snprintf(batLine, sizeof(batLine), "%sPlugged In", leftSideSpacing);
             }
             haveBatLine = true;
         } else if (!hasPct && hasVolt) {
             // Voltage only
-            snprintf(batLine, sizeof(batLine), " Bat:%.2fV", volt);
+            snprintf(batLine, sizeof(batLine), "%sBat:%.2fV", leftSideSpacing, volt);
             haveBatLine = true;
         }
     }

@@ -422,20 +422,6 @@ const int *getTextPositions(OLEDDisplay *display)
     return textPositions;
 }
 
-static inline bool isAPIConnected(uint8_t state)
-{
-    static constexpr bool connectedStates[] = {
-        /* STATE_NONE    */ false,
-        /* STATE_BLE     */ true,
-        /* STATE_WIFI    */ true,
-        /* STATE_SERIAL  */ true,
-        /* STATE_PACKET  */ true,
-        /* STATE_HTTP    */ true,
-        /* STATE_ETH     */ true,
-    };
-    return state < sizeof(connectedStates) ? connectedStates[state] : false;
-}
-
 // *************************
 // * Common Footer Drawing *
 // *************************
