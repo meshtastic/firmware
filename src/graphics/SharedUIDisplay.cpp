@@ -422,44 +422,52 @@ const int *getTextPositions(OLEDDisplay *display)
     return textPositions;
 }
 
+static inline bool isAPIConnected(uint8_t state)
+{
+    static constexpr bool connectedStates[] = {
+        /* STATE_NONE    */ false,
+        /* STATE_BLE     */ true,
+        /* STATE_WIFI    */ true,
+        /* STATE_SERIAL  */ true,
+        /* STATE_PACKET  */ true,
+        /* STATE_HTTP    */ true,
+        /* STATE_ETH     */ true,
+    };
+    return state < sizeof(connectedStates) ? connectedStates[state] : false;
+}
+
 // *************************
 // * Common Footer Drawing *
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    bool drawConnectionState = false;
-    if (service->api_state == service->STATE_BLE || service->api_state == service->STATE_WIFI ||
-        service->api_state == service->STATE_SERIAL || service->api_state == service->STATE_PACKET ||
-        service->api_state == service->STATE_HTTP || service->api_state == service->STATE_ETH) {
-        drawConnectionState = true;
-    }
+    if (!isAPIConnected(service->api_state))
+        return;
 
-    if (drawConnectionState) {
-        const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
-        display->setColor(BLACK);
-        display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
-                          (connection_icon_height * scale) + (2 * scale));
-        display->setColor(WHITE);
-        if (currentResolution == ScreenResolution::High) {
-            const int bytesPerRow = (connection_icon_width + 7) / 8;
-            int iconX = 0;
-            int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
+    const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
+    display->setColor(BLACK);
+    display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
+                      (connection_icon_height * scale) + (2 * scale));
+    display->setColor(WHITE);
+    if (currentResolution == ScreenResolution::High) {
+        const int bytesPerRow = (connection_icon_width + 7) / 8;
+        int iconX = 0;
+        int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
 
-            for (int yy = 0; yy < connection_icon_height; ++yy) {
-                const uint8_t *rowPtr = connection_icon + yy * bytesPerRow;
-                for (int xx = 0; xx < connection_icon_width; ++xx) {
-                    const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
-                    const uint8_t bitMask = 1U << (xx & 7); // XBM is LSB-first
-                    if (byteVal & bitMask) {
-                        display->fillRect(iconX + xx * scale, iconY + yy * scale, scale, scale);
-                    }
+        for (int yy = 0; yy < connection_icon_height; ++yy) {
+            const uint8_t *rowPtr = connection_icon + yy * bytesPerRow;
+            for (int xx = 0; xx < connection_icon_width; ++xx) {
+                const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
+                const uint8_t bitMask = 1U << (xx & 7); // XBM is LSB-first
+                if (byteVal & bitMask) {
+                    display->fillRect(iconX + xx * scale, iconY + yy * scale, scale, scale);
                 }
             }
-
-        } else {
-            display->drawXbm(0, SCREEN_HEIGHT - connection_icon_height, connection_icon_width, connection_icon_height,
-                             connection_icon);
         }
+
+    } else {
+        display->drawXbm(0, SCREEN_HEIGHT - connection_icon_height, connection_icon_width, connection_icon_height,
+                         connection_icon);
     }
 }
 
