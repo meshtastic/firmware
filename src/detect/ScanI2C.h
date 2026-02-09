@@ -32,6 +32,7 @@ class ScanI2C
         MAX17048,
         MCP9808,
         SHT31,
+        SHT21,
         SHT4X,
         SHTC3,
         LPS22HB,
