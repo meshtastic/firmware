@@ -9,6 +9,9 @@
 #endif
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
+#include "Database/AirQualityDatabase.h"
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include "detect/ScanI2CConsumer.h"
@@ -60,12 +63,35 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
                                                                  meshtastic_AdminMessage *response) override;
     void i2cScanFinished(ScanI2C *i2cScanner);
 
+#if  !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
+    /**
+     * Database query helper methods (can be called from admin commands or WebUI)
+     */
+    void getDatabaseStatsString(char *buffer, size_t bufferSize);
+    float getDatabaseMeanPM25();
+    uint32_t getDatabaseMaxPM25();
+    uint32_t getDatabaseMinPM25();
+    AirQualityDatabase &getDatabase() { return telemetryDatabase; }
+
+    /**
+     * Recover records not yet sent via MQTT
+     * Called when MQTT connection is established
+     * Sends all pending records and marks them as delivered_to_mqtt
+     * @return Number of records recovered/sent
+     */
+    uint32_t recoverMQTTRecords();
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
+
   private:
     bool firstTime = true;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
+#if  !MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
+    bool mqttRecoveryAttempted = false; // Flag to track if MQTT recovery has been attempted
+    AirQualityDatabase telemetryDatabase; // Historical data storage
+#endif //!MESHTASTIC_EXCLUDE_AIR_QUALITY_DB
 };
 
 #endif
