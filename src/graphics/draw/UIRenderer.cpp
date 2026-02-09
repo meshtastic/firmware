@@ -582,35 +582,45 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         display->drawString(x, getTextPositions(display)[line++], distStr);
     }
 
-    // === 6.Battery after Distance line, otherwise next available line ===
+    // === 6. Battery after Distance line, otherwise next available line ===
     char batLine[32] = "";
     bool haveBatLine = false;
 
     if (node->has_device_metrics) {
-        // Battery percent
-        if (node->device_metrics.has_battery_level) {
-            int pct = (int)node->device_metrics.battery_level;
-            if (pct < 0)
-                pct = 0;
-            if (pct > 100)
-                pct = 100;
-            snprintf(batLine, sizeof(batLine), " Bat:%d%%", pct);
-            haveBatLine = true;
+        bool hasPct = node->device_metrics.has_battery_level;
+        bool hasVolt = node->device_metrics.has_voltage && node->device_metrics.voltage > 0.001f;
+
+        int pct = 0;
+        float volt = 0.0f;
+
+        if (hasPct) {
+            pct = (int)node->device_metrics.battery_level;
         }
 
-        // Voltage
-        if (node->device_metrics.has_voltage) {
-            float v = node->device_metrics.voltage;
-            int vi = (int)v;
-            int vd = (int)(v * 100.0f + 0.5f) % 100;
+        if (hasVolt) {
+            volt = node->device_metrics.voltage;
+        }
 
-            if (haveBatLine) {
-                size_t len = strlen(batLine);
-                snprintf(batLine + len, sizeof(batLine) - len, " %d.%02dV", vi, vd);
+        if (hasPct && pct > 0 && pct <= 100) {
+            // Normal battery percentage
+            if (hasVolt) {
+                snprintf(batLine, sizeof(batLine), " Bat:%d%% (%.2fV)", pct, volt);
             } else {
-                snprintf(batLine, sizeof(batLine), " Bat:%d.%02dV", vi, vd);
-                haveBatLine = true;
+                snprintf(batLine, sizeof(batLine), " Bat:%d%%", pct);
             }
+            haveBatLine = true;
+        } else if (hasPct && pct > 100) {
+            // Plugged in
+            if (hasVolt) {
+                snprintf(batLine, sizeof(batLine), " Plugged In (%.2fV)", volt);
+            } else {
+                snprintf(batLine, sizeof(batLine), " Plugged In");
+            }
+            haveBatLine = true;
+        } else if (!hasPct && hasVolt) {
+            // Voltage only
+            snprintf(batLine, sizeof(batLine), " Bat:%.2fV", volt);
+            haveBatLine = true;
         }
     }
 
