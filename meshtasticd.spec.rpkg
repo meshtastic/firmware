@@ -59,8 +59,14 @@ BuildRequires: pkgconfig(libbsd-overlay)
 
 Requires:      systemd-udev
 
+# Declare that this package provides the user/group it creates in %pre
+# Required for Fedora 43+ which tracks users/groups as RPM dependencies
+Provides:      user(%{meshtasticd_user})
+Provides:      group(%{meshtasticd_user})
+Provides:      group(spi)
+
 %description
-Meshtastic daemon for controlling Meshtastic devices. Meshtastic is an off-grid
+Meshtastic daemon. Meshtastic is an off-grid
 text communication platform that uses inexpensive LoRa radios.
 
 %prep
@@ -151,6 +157,7 @@ fi
 %license LICENSE
 %doc README.md
 %{_bindir}/meshtasticd
+%{_bindir}/meshtasticd-start.sh
 %dir %{_localstatedir}/lib/meshtasticd
 %{_udevrulesdir}/99-meshtasticd-udev.rules
 %dir %{_sysconfdir}/meshtasticd
