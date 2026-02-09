@@ -93,8 +93,9 @@ class Power : private concurrency::OSThread
     void readPowerStatus();
     virtual bool setup();
     virtual int32_t runOnce() override;
+    bool reloadOcvFromConfig();
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
-    const uint16_t OCV[11] = {OCV_ARRAY};
+    const uint16_t *getOcvArray() const { return OCV; }
 
   protected:
     meshtastic::PowerStatus *statusHandler;
@@ -115,9 +116,11 @@ class Power : private concurrency::OSThread
     bool serialBatteryInit();
 
   private:
+    void loadOcvFromConfig();
     void shutdown();
     void reboot();
     // open circuit voltage lookup table
+    uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
     uint8_t low_voltage_counter;
     uint32_t lastLogTime = 0;
 #ifdef DEBUG_HEAP

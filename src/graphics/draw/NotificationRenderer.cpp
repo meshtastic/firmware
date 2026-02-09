@@ -47,6 +47,7 @@ uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelct
 const char **NotificationRenderer::optionsArrayPtr = nullptr;
 const int *NotificationRenderer::optionsEnumPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
+uint32_t NotificationRenderer::bannerGeneration = 0;
 bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
@@ -204,8 +205,13 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         return;
     }
     if (curSelected == static_cast<int8_t>(numDigits)) {
+        uint32_t generation = bannerGeneration;
         alertBannerCallback(currentNumber);
-        resetBanner();
+        if (bannerGeneration == generation) {
+            resetBanner();
+        } else {
+            inEvent.inputEvent = INPUT_BROKER_NONE;
+        }
         return;
     }
 
@@ -270,8 +276,13 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
                inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
+        uint32_t generation = bannerGeneration;
         alertBannerCallback(selectedNodenum);
-        resetBanner();
+        if (bannerGeneration == generation) {
+            resetBanner();
+        } else {
+            inEvent.inputEvent = INPUT_BROKER_NONE;
+        }
         return;
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
@@ -387,13 +398,18 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                    inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
             curSelected++;
         } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
+            uint32_t generation = bannerGeneration;
             if (optionsEnumPtr != nullptr) {
                 alertBannerCallback(optionsEnumPtr[curSelected]);
                 optionsEnumPtr = nullptr;
             } else {
                 alertBannerCallback(curSelected);
             }
-            resetBanner();
+            if (bannerGeneration == generation) {
+                resetBanner();
+            } else {
+                inEvent.inputEvent = INPUT_BROKER_NONE;
+            }
             return;
         } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                    alertBannerUntil != 0) {
