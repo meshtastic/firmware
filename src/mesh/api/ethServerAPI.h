@@ -11,7 +11,7 @@
         typedef WiFiClient MeshEthernetClient;
         typedef WiFiServer MeshEthernetServer;
     #else
-        #include <Ethernet.h>
+        #include <RAK13800_W5100S.h>
         typedef EthernetClient MeshEthernetClient;
         typedef EthernetServer MeshEthernetServer;
     #endif
