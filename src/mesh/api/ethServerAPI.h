@@ -2,16 +2,16 @@
 #include "ServerAPI.h"
 
 #if HAS_ETHERNET
-    #if defined(ESP32) && defined(ETH_PHY_TYPE)
-        #include <ETH.h>
+    #if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
+        #if defined(ETH_PHY_TYPE)
+            #include <ETH.h>
+        #else
+            #include <ETHClass2.h>
+        #endif
         typedef WiFiClient MeshEthernetClient;
         typedef WiFiServer MeshEthernetServer;
-    #elif defined(USE_WS5500)
-        #include <ETHClass2.h>
-        typedef EthernetClient MeshEthernetClient;
-        typedef EthernetServer MeshEthernetServer;
     #else
-        #include <RAK13800_W5100S.h>
+        #include <Ethernet.h>
         typedef EthernetClient MeshEthernetClient;
         typedef EthernetServer MeshEthernetServer;
     #endif

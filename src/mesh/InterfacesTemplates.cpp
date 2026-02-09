@@ -27,10 +27,10 @@ template class SX126xInterface<STM32WLx>;
 
 #if HAS_ETHERNET
     #include "api/ethServerAPI.h"
-    #if !(defined(ESP32) && defined(ETH_PHY_TYPE) && HAS_WIFI)
+    #if !(defined(ESP32) && HAS_WIFI)
         template class ServerAPI<MeshEthernetClient>;
-        template class APIServerPort<ethServerAPI, MeshEthernetServer>;
     #endif
+    template class APIServerPort<ethServerAPI, MeshEthernetServer>;
 #endif
 
 #if HAS_WIFI

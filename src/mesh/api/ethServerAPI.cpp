@@ -3,9 +3,9 @@
 #include "ethServerAPI.h"
 
 #if HAS_ETHERNET
-    static ethServerPort *apiPort;
-
     #if !HAS_WIFI
+        static ethServerPort *apiPort;
+
         void initApiServer(int port)
         {
             if (!apiPort) {

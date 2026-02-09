@@ -1278,13 +1278,10 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     bool isConnected = false;
     uint32_t ipAddr = 0;
 
-    #if defined(ESP32) && defined(ETH_PHY_TYPE)
+    #if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
         isConnected = ETH.linkUp();
         if (isConnected) ipAddr = (uint32_t)ETH.localIP();
-    #elif defined(USE_WS5500)
-        isConnected = (ETH.linkStatus() == LinkON); 
-        if (isConnected) ipAddr = (uint32_t)ETH.localIP();
-    #elif defined(ARCH_NRF52) || defined(ARCH_RP2040) || !defined(ESP32)
+    #else
         isConnected = (Ethernet.linkStatus() == LinkON);
         if (isConnected) ipAddr = (uint32_t)Ethernet.localIP();
     #endif
