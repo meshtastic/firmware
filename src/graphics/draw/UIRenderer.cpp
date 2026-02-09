@@ -765,7 +765,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {
-        getUptimeStr(millis(), "Up:", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
     }
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
@@ -1200,10 +1200,10 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             char uptimeStr[32];
 #if defined(USE_EINK)
             // E-Ink: skip seconds, show only days/hours/mins
-            getUptimeStr(delta, "Last:", uptimeStr, sizeof(uptimeStr), false);
+            getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), false);
 #else
             // Non E-Ink: include seconds where useful
-            getUptimeStr(delta, "Last", uptimeStr, sizeof(uptimeStr), true);
+            getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), true);
 #endif
 
             display->drawString(0, getTextPositions(display)[line++], uptimeStr);
