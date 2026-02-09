@@ -318,9 +318,9 @@ template <typename T> bool LR11x0Interface<T>::sleep()
     return true;
 }
 
+// LR11x0 chips do not support getRSSI(bool) for instantaneous RSSI - noise floor measurement is disabled for these chips
 template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
 {
-    float rssi = lora.getRSSI(false);
-    return (int16_t)round(rssi);
+    return 1;
 }
 #endif
