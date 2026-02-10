@@ -8,11 +8,11 @@ static size_t encode_telemetry_device_metrics(uint8_t *buffer, size_t buffer_siz
     telemetry.which_variant = meshtastic_Telemetry_device_metrics_tag;
     telemetry.variant.device_metrics.battery_level = 85;
     telemetry.variant.device_metrics.has_battery_level = true;
-    telemetry.variant.device_metrics.voltage = 3.72f;
+    telemetry.variant.device_metrics.voltage = 3.72654f;
     telemetry.variant.device_metrics.has_voltage = true;
-    telemetry.variant.device_metrics.channel_utilization = 15.56f;
+    telemetry.variant.device_metrics.channel_utilization = 15.56789f;
     telemetry.variant.device_metrics.has_channel_utilization = true;
-    telemetry.variant.device_metrics.air_util_tx = 8.23f;
+    telemetry.variant.device_metrics.air_util_tx = 8.23456f;
     telemetry.variant.device_metrics.has_air_util_tx = true;
     telemetry.variant.device_metrics.uptime_seconds = 12345;
     telemetry.variant.device_metrics.has_uptime_seconds = true;
@@ -46,9 +46,9 @@ static size_t encode_telemetry_environment_metrics_all_fields(uint8_t *buffer, s
     telemetry.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
     // Basic environment metrics
-    telemetry.variant.environment_metrics.temperature = 23.56f;
+    telemetry.variant.environment_metrics.temperature = 23.5678f;
     telemetry.variant.environment_metrics.has_temperature = true;
-    telemetry.variant.environment_metrics.relative_humidity = 65.43f;
+    telemetry.variant.environment_metrics.relative_humidity = 65.4367f;
     telemetry.variant.environment_metrics.has_relative_humidity = true;
     telemetry.variant.environment_metrics.barometric_pressure = 1013.27f;
     telemetry.variant.environment_metrics.has_barometric_pressure = true;
@@ -125,9 +125,9 @@ static size_t encode_telemetry_environment_metrics(uint8_t *buffer, size_t buffe
     telemetry.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
     // Basic environment metrics
-    telemetry.variant.environment_metrics.temperature = 23.56f;
+    telemetry.variant.environment_metrics.temperature = 23.5678f;
     telemetry.variant.environment_metrics.has_temperature = true;
-    telemetry.variant.environment_metrics.relative_humidity = 65.43f;
+    telemetry.variant.environment_metrics.relative_humidity = 65.4367f;
     telemetry.variant.environment_metrics.has_relative_humidity = true;
     telemetry.variant.environment_metrics.barometric_pressure = 1013.27f;
     telemetry.variant.environment_metrics.has_barometric_pressure = true;
@@ -225,10 +225,13 @@ void test_telemetry_device_metrics_serialization()
     TEST_ASSERT_EQUAL(85, (int)payload["battery_level"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("voltage") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.72f, payload["voltage"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.727f, payload["voltage"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("channel_utilization") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.56f, payload["channel_utilization"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.57f, payload["channel_utilization"]->AsNumber());
+
+    TEST_ASSERT_TRUE(payload.find("air_util_tx") != payload.end());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 8.23f, payload["air_util_tx"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("uptime_seconds") != payload.end());
     TEST_ASSERT_EQUAL(12345, (int)payload["uptime_seconds"]->AsNumber());
@@ -264,10 +267,10 @@ void test_telemetry_environment_metrics_serialization()
 
     // Test key fields that should be present in the serializer
     TEST_ASSERT_TRUE(payload.find("temperature") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.56f, payload["temperature"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.57f, payload["temperature"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("relative_humidity") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.43f, payload["relative_humidity"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.44f, payload["relative_humidity"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("distance") != payload.end());
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.29f, payload["distance"]->AsNumber());
@@ -403,11 +406,11 @@ void test_telemetry_environment_metrics_complete_coverage()
 
     // Basic environment (3 fields)
     TEST_ASSERT_TRUE(payload.find("temperature") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.56f, payload["temperature"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.57f, payload["temperature"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("relative_humidity") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.43f, payload["relative_humidity"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.44f, payload["relative_humidity"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("barometric_pressure") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1013.27f, payload["barometric_pressure"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1013.3f, payload["barometric_pressure"]->AsNumber());
 
     // Gas and air quality (2 fields)
     TEST_ASSERT_TRUE(payload.find("gas_resistance") != payload.end());

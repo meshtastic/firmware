@@ -10,6 +10,7 @@
 #include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TelemetryPrecision.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include "power.h"
@@ -210,6 +211,10 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     if (max17048Sensor.hasSensor())
         valid = max17048Sensor.getMetrics(m);
 #endif
+
+    if (valid) {
+        TelemetryPrecision::applyPowerMetrics(m->variant.power_metrics);
+    }
 
     return valid;
 }

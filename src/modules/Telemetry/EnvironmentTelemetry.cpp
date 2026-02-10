@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TelemetryPrecision.h"
 #include "UnitConversions.h"
 #include "buzz.h"
 #include "graphics/SharedUIDisplay.h"
@@ -571,6 +572,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid || get_metrics;
     hasSensor = true;
 #endif
+    if (valid) {
+        TelemetryPrecision::applyEnvironmentMetrics(m->variant.environment_metrics);
+    }
+
     return valid && hasSensor;
 }
 

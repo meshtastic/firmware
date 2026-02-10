@@ -5,6 +5,7 @@
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "modules/RoutingModule.h"
+#include "modules/Telemetry/TelemetryPrecision.h"
 #include <DebugConfiguration.h>
 #include <mesh-pb-constants.h>
 #if defined(ARCH_ESP32)
@@ -60,6 +61,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
                 decoded = &scratch;
+                TelemetryPrecision::applyTelemetry(*decoded);
                 if (decoded->which_variant == meshtastic_Telemetry_device_metrics_tag) {
                     // If battery is present, encode the battery level value
                     // TODO - Add a condition to send a code for a non-present value

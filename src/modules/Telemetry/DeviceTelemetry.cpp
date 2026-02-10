@@ -6,6 +6,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "RadioLibInterface.h"
+#include "TelemetryPrecision.h"
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
@@ -103,6 +104,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
 
+    TelemetryPrecision::applyDeviceMetrics(t.variant.device_metrics);
+
     return t;
 }
 
@@ -140,6 +143,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_rx_dupe = router->rxDupe;
         telemetry.variant.local_stats.num_tx_relay_canceled = router->txRelayCanceled;
     }
+
+    TelemetryPrecision::applyLocalStats(telemetry.variant.local_stats);
 
     LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i",
              telemetry.variant.local_stats.uptime_seconds, telemetry.variant.local_stats.channel_utilization,

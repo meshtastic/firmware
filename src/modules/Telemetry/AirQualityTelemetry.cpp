@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TelemetryPrecision.h"
 #include "UnitConversions.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -295,6 +296,10 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
         sensor_get = sensor->getMetrics(m);
         valid = valid || sensor_get;
         hasSensor = true;
+    }
+
+    if (valid) {
+        TelemetryPrecision::applyAirQualityMetrics(m->variant.air_quality_metrics);
     }
 
     return valid && hasSensor;
