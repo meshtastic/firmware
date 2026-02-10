@@ -78,7 +78,7 @@ void SFA30Sensor::sleep()
     reClockI2C(SFA30_I2C_CLOCK_SPEED, _bus, true);
 #else
     LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
+    return;
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
