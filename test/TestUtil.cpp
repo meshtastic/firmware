@@ -4,6 +4,13 @@
 
 #include "TestUtil.h"
 
+#if defined(ARDUINO)
+#include <Arduino.h>
+#else
+#include <chrono>
+#include <thread>
+#endif
+
 void initializeTestEnvironment()
 {
     concurrency::hasBeenSetup = true;
@@ -15,4 +22,13 @@ void initializeTestEnvironment()
     perhapsSetRTC(RTCQualityNTP, &tv);
 #endif
     concurrency::OSThread::setup();
+}
+
+void testDelay(unsigned long ms)
+{
+#if defined(ARDUINO)
+    ::delay(ms);
+#else
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+#endif
 }
