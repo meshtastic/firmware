@@ -103,7 +103,13 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* TSL2561 light sensor */
     meshtastic_TelemetrySensorType_TSL2561 = 44,
     /* BH1750 light sensor */
-    meshtastic_TelemetrySensorType_BH1750 = 45
+    meshtastic_TelemetrySensorType_BH1750 = 45,
+    /* HDC1080 Temperature and Humidity Sensor */
+    meshtastic_TelemetrySensorType_HDC1080 = 46,
+    /* STH21 Temperature and R. Humidity sensor */
+    meshtastic_TelemetrySensorType_SHT21 = 47,
+    /* Sensirion STC31 CO2 sensor */
+    meshtastic_TelemetrySensorType_STC31 = 48
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -461,8 +467,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_BH1750
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_BH1750+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_STC31
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_STC31+1))
 
 
 

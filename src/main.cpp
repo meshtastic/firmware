@@ -14,7 +14,6 @@
 #include "power/PowerHAL.h"
 
 #include "FSCommon.h"
-#include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -245,26 +244,8 @@ const char *getDeviceName()
     return name;
 }
 
-// TODO remove from main.cpp
-static int32_t ledBlinker()
-{
-    // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
-    // config.device.led_heartbeat_disabled is changed
-    if (config.device.led_heartbeat_disabled)
-        return 1000;
-
-    static bool ledOn;
-    ledOn ^= 1;
-
-    ledBlink.set(ledOn);
-
-    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
-}
-
 uint32_t timeLastPowered = 0;
 
-static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
 
@@ -302,21 +283,16 @@ void earlyInitVariant() {}
 // blink user led in 3 flashes sequence to indicate what is happening
 void waitUntilPowerLevelSafe()
 {
-
-#ifdef LED_PIN
-    pinMode(LED_PIN, OUTPUT);
-#endif
-
     while (powerHAL_isPowerLevelSafe() == false) {
 
-#ifdef LED_PIN
+#ifdef LED_POWER
 
         // 3x: blink for 300 ms, pause for 300 ms
 
         for (int i = 0; i < 3; i++) {
-            digitalWrite(LED_PIN, LED_STATE_ON);
+            digitalWrite(LED_POWER, LED_STATE_ON);
             delay(300);
-            digitalWrite(LED_PIN, LED_STATE_OFF);
+            digitalWrite(LED_POWER, LED_STATE_OFF);
             delay(300);
         }
 #endif
@@ -340,6 +316,11 @@ void setup()
     // initialize power HAL layer as early as possible
     powerHAL_init();
 
+#ifdef LED_POWER
+    pinMode(LED_POWER, OUTPUT);
+    digitalWrite(LED_POWER, LED_STATE_ON);
+#endif
+
     // prevent booting if device is in power failure mode
     // boot sequence will follow when battery level raises to safe mode
     waitUntilPowerLevelSafe();
@@ -350,11 +331,6 @@ void setup()
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-#endif
-
-#ifdef LED_POWER
-    pinMode(LED_POWER, OUTPUT);
-    digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
 #ifdef LED_NOTIFICATION
@@ -486,16 +462,6 @@ void setup()
     initSPI();
 
     OSThread::setup();
-
-    // TODO make this ifdef based on defined pins and move from main.cpp
-#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-    // The ThinkNodes have their own blink logic
-    // ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
-#else
-
-    ledPeriodic = new Periodic("Blink", ledBlinker);
-
-#endif
 
     fsInit();
 
@@ -714,18 +680,10 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
-
 #endif
 
 #ifdef HAS_SDCARD
     setupSDCard();
-#endif
-
-    // LED init
-
-#ifdef LED_PIN
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LED_STATE_ON); // turn on for now
 #endif
 
     // Hello
@@ -930,6 +888,13 @@ void setup()
     service = new MeshService();
     service->init();
 
+    // Set osk_found for trackball/encoder devices BEFORE setupModules so CannedMessageModule can detect it
+#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+#ifndef HAS_PHYSICAL_KEYBOARD
+    osk_found = true;
+#endif
+#endif
+
     // Now that the mesh service is created, create any modules
     setupModules();
 
@@ -959,12 +924,6 @@ void setup()
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
     // After modules are setup, so we can observe modules
     setupNicheGraphics();
-#endif
-
-#ifdef LED_PIN
-    // Turn LED off after boot, if heartbeat by config
-    if (config.device.led_heartbeat_disabled)
-        digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
 #endif
 
 // Do this after service.init (because that clears error_code)
@@ -1017,12 +976,6 @@ void setup()
 #if HAS_ETHERNET
     // Initialize Ethernet
     initEthernet();
-#endif
-#endif
-
-#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
-#ifndef HAS_PHYSICAL_KEYBOARD
-    osk_found = true;
 #endif
 #endif
 

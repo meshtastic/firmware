@@ -90,9 +90,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
 
     // Check for hop_limit upgrade scenario
-    if (seenRecently && wasUpgraded && found->hop_limit < p->hop_limit) {
-        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id, found->hop_limit,
-                  p->hop_limit);
+    if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id,
+                  getHighestHopLimit(*found), p->hop_limit);
         *wasUpgraded = true;
     } else if (wasUpgraded) {
         *wasUpgraded = false; // Initialize to false if not an upgrade
