@@ -65,10 +65,10 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
 #if HAS_ETHERNET
-    #include "mesh/api/ethServerAPI.h"
-    #if !defined(USE_WS5500) && !defined(ETH_PHY_TYPE)
-        #include "mesh/eth/ethClient.h"
-    #endif
+#include "mesh/api/ethServerAPI.h"
+#if !defined(USE_WS5500) && !defined(ETH_PHY_TYPE)
+#include "mesh/eth/ethClient.h"
+#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT

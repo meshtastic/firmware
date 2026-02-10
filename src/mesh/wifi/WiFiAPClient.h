@@ -10,12 +10,12 @@
 #endif
 
 #if HAS_ETHERNET
-    #if defined(ESP32) && defined(ETH_PHY_TYPE)
-        #include <ETH.h>
-    #elif defined(USE_WS5500)
-        #include <ETHClass2.h>
-        #define ETH ETH2
-    #endif
+#if defined(ESP32) && defined(ETH_PHY_TYPE)
+#include <ETH.h>
+#elif defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif
 #endif
 
 extern bool needReconnect;
