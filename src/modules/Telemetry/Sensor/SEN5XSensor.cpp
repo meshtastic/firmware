@@ -736,6 +736,9 @@ bool SEN5XSensor::readPNValues(bool cumulative)
 
 uint8_t SEN5XSensor::getMeasurements()
 {
+    uint32_t now;
+    now = getTime();
+
     // Try to get new data
     if (!sendCommand(SEN5X_READ_DATA_READY)) {
         LOG_ERROR("SEN5X: Error sending command data ready flag");
@@ -750,9 +753,10 @@ uint8_t SEN5XSensor::getMeasurements()
         return 2;
     }
 
-    bool data_ready = dataReadyBuffer[1];
-
-    if (!data_ready) {
+    bool dataReady = dataReadyBuffer[1];
+    uint32_t sinceLastDataPollMs = (now - lastDataPoll) * 1000;
+    // Check if data is ready, and if since last time we requested is less than SEN5X_POLL_INTERVAL
+    if (!dataReady && (sinceLastDataPollMs > SEN5X_POLL_INTERVAL)) {
         LOG_INFO("SEN5X: Data is not ready");
         return 1;
     }
@@ -766,6 +770,8 @@ uint8_t SEN5XSensor::getMeasurements()
         LOG_ERROR("SEN5X: Error getting PN readings");
         return 2;
     }
+
+    lastDataPoll = now;
 
     return 0;
 }
@@ -796,6 +802,7 @@ int32_t SEN5XSensor::pendingForReadyMs()
 
         // Get PN values to check if we are above or below threshold
         readPNValues(true);
+        lastDataPoll = now;
 
         // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
         if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
