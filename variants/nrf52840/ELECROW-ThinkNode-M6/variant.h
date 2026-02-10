@@ -41,7 +41,7 @@ extern "C" {
 
 // LEDs
 #define LED_BLUE -1
-#define LED_CHARGE (12)
+#define LED_POWER (12)
 #define LED_PAIRING (7)
 #define LED_NOTIFICATION LED_PAIRING
 
@@ -121,7 +121,6 @@ static const uint8_t A0 = PIN_A0;
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
