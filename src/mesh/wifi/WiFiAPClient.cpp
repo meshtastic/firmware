@@ -67,16 +67,15 @@ Periodic *wifiReconnect;
 bool initEthernet()
 {
     bool ok = false;
-    #if defined(ESP32) && defined(ETH_PHY_TYPE)
-        // Native ESP32 Ethernet (LAN8720, etc.)
-        LOG_INFO("Starting Native Ethernet...");
-        ok = ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
-    #elif defined(USE_WS5500)
-        // SPI Ethernet (W5500)
-        LOG_INFO("Starting W5500 Ethernet...");
-        ok = ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
-                       ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
-    #endif
+#if defined(ESP32) && defined(ETH_PHY_TYPE)
+    // Native ESP32 Ethernet (LAN8720, etc.)
+    LOG_INFO("Starting Native Ethernet...");
+    ok = ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
+#elif defined(USE_WS5500)
+    // SPI Ethernet (W5500)
+    LOG_INFO("Starting W5500 Ethernet...");
+    ok = ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
+#endif
 
     if (ok) {
         WiFi.onEvent(WiFiEvent);
@@ -505,14 +504,14 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-        #if defined(ETH_PHY_TYPE)
-            LOG_INFO("Ethernet Obtained IP address: %s", ETH.localIP().toString().c_str());
-            onNetworkConnected();
-        #elif defined(USE_WS5500)
-            LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
-                ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
-            onNetworkConnected();
-        #endif
+#if defined(ETH_PHY_TYPE)
+        LOG_INFO("Ethernet Obtained IP address: %s", ETH.localIP().toString().c_str());
+        onNetworkConnected();
+#elif defined(USE_WS5500)
+        LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
+                 ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
+        onNetworkConnected();
+#endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
 #ifdef USE_WS5500
