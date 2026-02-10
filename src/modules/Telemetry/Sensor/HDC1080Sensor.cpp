@@ -8,7 +8,7 @@
 #include "TelemetrySensor.h"
 #include <ClosedCube_HDC1080.h>
 
-HDC1080Sensor::HDC1080Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "HDC1080") {}
+HDC1080Sensor::HDC1080Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_HDC1080, "HDC1080") {}
 
 bool HDC1080Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
