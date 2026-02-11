@@ -447,20 +447,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
-#if HAS_TRAFFIC_MANAGEMENT
         case meshtastic_ModuleConfig_traffic_management_tag:
             LOG_DEBUG("Send module config: traffic management");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
-#endif
         default:
             LOG_ERROR("Unknown module config type %d", config_state);
         }
 
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
-        if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
+        if (config_state > meshtastic_ModuleConfig_traffic_management_tag) {
             // Handle special nonce behaviors:
             // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
             // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
