@@ -65,7 +65,7 @@ static int32_t reconnectETH()
 
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
             if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-                initApiServer();
+                initApiServer(SERVER_API_DEFAULT_PORT);
             }
 #endif
 #if HAS_UDP_MULTICAST
