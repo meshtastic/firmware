@@ -89,6 +89,9 @@ class CryptoEngine
     uint8_t xeddsa_public_key[32] = {0};
     uint8_t xeddsa_private_key[32] = {0};
     void curve_to_ed_pub(uint8_t *curve_pubkey, uint8_t *ed_pubkey);
+    // Single-entry cache for curve_to_ed_pub conversion (avoids expensive field inversion per packet)
+    uint8_t cached_curve_pubkey[32] = {0};
+    uint8_t cached_ed_pubkey[32] = {0};
 #endif
     /**
      * Init our 128 bit nonce for a new packet

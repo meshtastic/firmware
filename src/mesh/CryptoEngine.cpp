@@ -103,13 +103,16 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
 bool CryptoEngine::xeddsa_verify(uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
                                  size_t payloadLen, uint8_t *signature)
 {
-    uint8_t publicKey[32] = {0};
-    curve_to_ed_pub(pubKey, publicKey);
+    // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
+    if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
+        curve_to_ed_pub(pubKey, cached_ed_pubkey);
+        memcpy(cached_curve_pubkey, pubKey, 32);
+    }
     uint8_t sigBuf[MAX_BLOCKSIZE];
     size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
     if (sigLen == 0)
         return false;
-    return XEdDSA::verify(signature, publicKey, sigBuf, sigLen);
+    return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
 }
 
 void CryptoEngine::curve_to_ed_pub(uint8_t *curve_pubkey, uint8_t *ed_pubkey)
