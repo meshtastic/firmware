@@ -797,7 +797,7 @@ bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket
                               meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
 
     uint32_t roleLimit = isRouter ? kRouterDefaultMaxHops : kClientDefaultMaxHops;
-    uint32_t configValue = moduleConfig.traffic_management.nodeinfo_direct_response_min_hops;
+    uint32_t configValue = moduleConfig.traffic_management.nodeinfo_direct_response_max_hops;
 
     // Use config value if set, otherwise use role default, but always clamp to role limit
     uint32_t maxHops = (configValue > 0) ? configValue : roleLimit;
