@@ -471,16 +471,26 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             if (channels.decryptForHash(chIndex, p->channel)) {
                 // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
                 // fresh copy for each decrypt attempt.
-                memcpy(bytes, p->encrypted.bytes, rawSize);
-                // Try to decrypt the packet if we can
-                crypto->decrypt(p->from, p->id, rawSize, bytes);
+                size_t decryptedSize = rawSize;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+                if (channels.isAeadEnabled(chIndex)) {
+                    // AEAD channel: decrypt with authentication, no fallback
+                    decryptedSize = crypto->decryptPacketAead(p->from, p->id, rawSize, p->encrypted.bytes, bytes);
+                    if (decryptedSize == 0)
+                        continue; // Tag mismatch — try next channel
+                } else
+#endif
+                {
+                    memcpy(bytes, p->encrypted.bytes, rawSize);
+                    crypto->decrypt(p->from, p->id, rawSize, bytes);
+                }
 
                 // printBytes("plaintext", bytes, p->encrypted.size);
 
                 // Take those raw bytes and convert them back into a well structured protobuf we can understand
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
-                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
+                if (!pb_decode_from_bytes(bytes, decryptedSize, &meshtastic_Data_msg, &decodedtmp)) {
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!");
@@ -597,12 +607,17 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             }
         } */
 
-        if (numbytes + MESHTASTIC_HEADER_LENGTH > MAX_LORA_PAYLOAD_LEN)
-            return meshtastic_Routing_Error_TOO_LARGE;
-
         // printBytes("plaintext", bytes, numbytes);
 
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+        size_t channelAeadOverhead = channels.isAeadEnabled(chIndex) ? MESHTASTIC_CHANNEL_AEAD_OVERHEAD : 0;
+#else
+        size_t channelAeadOverhead = 0;
+#endif
+        if (numbytes + MESHTASTIC_HEADER_LENGTH + channelAeadOverhead > MAX_LORA_PAYLOAD_LEN)
+            return meshtastic_Routing_Error_TOO_LARGE;
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
@@ -656,8 +671,13 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 // No suitable channel could be found for
                 return meshtastic_Routing_Error_NO_CHANNEL;
             }
-            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-            memcpy(p->encrypted.bytes, bytes, numbytes);
+            if (channelAeadOverhead > 0) {
+                crypto->encryptPacketAead(getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes);
+                numbytes += MESHTASTIC_CHANNEL_AEAD_OVERHEAD;
+            } else {
+                crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+                memcpy(p->encrypted.bytes, bytes, numbytes);
+            }
         }
 #else
         if (p->pki_encrypted == true) {

@@ -460,3 +460,14 @@ int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {
     return setCrypto(channelIndex);
 }
+
+bool Channels::isAeadEnabled(ChannelIndex chIndex)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    meshtastic_Channel &ch = getByIndex(chIndex);
+    return ch.has_settings && ch.settings.aead_enabled;
+#else
+    (void)chIndex;
+    return false;
+#endif
+}

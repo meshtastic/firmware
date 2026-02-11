@@ -178,6 +178,43 @@ void test_AES_CTR(void)
     TEST_ASSERT_EQUAL_MEMORY(expected, plain, 16);
 }
 
+void test_channel_AEAD(void)
+{
+    // Set a channel key (AES-256)
+    CryptoKey k;
+    k.length = 32;
+    HexToBytes(k.bytes, "603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
+    crypto->setKey(k);
+
+    uint32_t fromNode = 0x1234;
+    uint64_t packetId = 0xDEADBEEF;
+    const char *plaintext = "Hello mesh!";
+    size_t plainLen = strlen(plaintext);
+
+    uint8_t encrypted[128] __attribute__((__aligned__));
+    uint8_t decrypted[128] __attribute__((__aligned__));
+
+    // Encrypt
+    TEST_ASSERT(crypto->encryptPacketAead(fromNode, packetId, plainLen, (const uint8_t *)plaintext, encrypted));
+    size_t cipherLen = plainLen + MESHTASTIC_CHANNEL_AEAD_OVERHEAD;
+
+    // Decrypt round-trip
+    size_t result = crypto->decryptPacketAead(fromNode, packetId, cipherLen, encrypted, decrypted);
+    TEST_ASSERT_EQUAL(plainLen, result);
+    TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, plainLen);
+
+    // Tamper with ciphertext — should fail authentication
+    encrypted[0] ^= 0xFF;
+    result = crypto->decryptPacketAead(fromNode, packetId, cipherLen, encrypted, decrypted);
+    TEST_ASSERT_EQUAL(0, result);
+    encrypted[0] ^= 0xFF; // restore
+
+    // Tamper with auth tag — should fail authentication
+    encrypted[plainLen] ^= 0xFF;
+    result = crypto->decryptPacketAead(fromNode, packetId, cipherLen, encrypted, decrypted);
+    TEST_ASSERT_EQUAL(0, result);
+}
+
 void setup()
 {
     // NOTE!!! Wait for >2 secs
@@ -192,6 +229,7 @@ void setup()
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_PKC);
+    RUN_TEST(test_channel_AEAD);
     exit(UNITY_END()); // stop unit testing
 }
 

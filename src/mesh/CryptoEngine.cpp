@@ -196,6 +196,32 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     return true;
 }
 
+bool CryptoEngine::encryptPacketAead(uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *bytesIn,
+                                     uint8_t *bytesOut)
+{
+    if (key.length <= 0)
+        return false;
+    initNonce(fromNode, packetId);
+    aes_ccm_ae(key.bytes, key.length, nonce, MESHTASTIC_CHANNEL_AEAD_OVERHEAD, bytesIn, numBytes, nullptr, 0, bytesOut,
+               bytesOut + numBytes);
+    return true;
+}
+
+size_t CryptoEngine::decryptPacketAead(uint32_t fromNode, uint64_t packetId, size_t rawSize, const uint8_t *bytesIn,
+                                       uint8_t *bytesOut)
+{
+    if (key.length <= 0 || rawSize <= MESHTASTIC_CHANNEL_AEAD_OVERHEAD)
+        return 0;
+    size_t cryptLen = rawSize - MESHTASTIC_CHANNEL_AEAD_OVERHEAD;
+    const uint8_t *auth = bytesIn + cryptLen;
+    initNonce(fromNode, packetId);
+    if (!aes_ccm_ad(key.bytes, key.length, nonce, MESHTASTIC_CHANNEL_AEAD_OVERHEAD, bytesIn, cryptLen, nullptr, 0, auth,
+                    bytesOut)) {
+        return 0;
+    }
+    return cryptLen;
+}
+
 #endif
 concurrency::Lock *cryptLock;
 

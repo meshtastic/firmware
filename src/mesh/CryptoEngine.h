@@ -71,6 +71,26 @@ class CryptoEngine
     virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    /** Bytes appended by AES-CCM authenticated encryption on channel packets (8-byte tag). */
+#define MESHTASTIC_CHANNEL_AEAD_OVERHEAD 8
+
+    /**
+     * Encrypt a channel packet with AES-CCM (authenticated encryption).
+     * Writes ciphertext to bytesOut and appends an 8-byte auth tag.
+     * @return true on success.
+     */
+    bool encryptPacketAead(uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *bytesIn, uint8_t *bytesOut);
+
+    /**
+     * Decrypt a channel packet with AES-CCM (authenticated decryption).
+     * Reads ciphertext+tag from bytesIn, writes plaintext to bytesOut.
+     * @return plaintext size on success, 0 on authentication failure.
+     */
+    size_t decryptPacketAead(uint32_t fromNode, uint64_t packetId, size_t rawSize, const uint8_t *bytesIn, uint8_t *bytesOut);
+#endif
+
 #ifndef PIO_UNIT_TESTING
   protected:
 #endif

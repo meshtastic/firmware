@@ -98,6 +98,10 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
+    /** Returns true if the specified channel has AEAD (AES-CCM) encryption enabled.
+     * Always returns false when PKI is excluded from the build. */
+    bool isAeadEnabled(ChannelIndex chIndex);
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
