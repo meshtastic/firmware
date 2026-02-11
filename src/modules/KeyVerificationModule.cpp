@@ -4,7 +4,7 @@
 #include "RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
-#include "meshUtils.h"
+#include "meshUtils.h" // for constant_time_compare
 #include "modules/AdminModule.h"
 #include <SHA256.h>
 
@@ -81,7 +81,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         return true;
 
     } else if (currentState == KEY_VERIFICATION_RECEIVER_AWAITING_HASH1 && r->hash1.size == 32 && r->nonce == currentNonce) {
-        if (memcmp(hash1, r->hash1.bytes, 32) == 0) {
+        if (constant_time_compare(hash1, r->hash1.bytes, 32) == 0) {
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
@@ -240,7 +240,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     hash.update(hash1, 32);
     hash.finalize(scratch_hash, 32);
 
-    if (memcmp(scratch_hash, hash2, 32) != 0) {
+    if (constant_time_compare(scratch_hash, hash2, 32) != 0) {
         LOG_WARN("Hash2 did not match");
         return; // should probably throw an error of some sort
     }
