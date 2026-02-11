@@ -1,4 +1,11 @@
 #pragma once
+
+// Uncomment to enable authenticated channel encryption (AES-CTR + CBC-MAC).
+// When enabled, a 4-byte MAC is appended to channel-encrypted packets.
+// Receive path is backward-compatible: falls back to legacy decryption if no valid MAC.
+// WARNING: Send path is NOT backward-compatible with firmware that lacks this feature.
+// #define MESHTASTIC_CHANNEL_HMAC
+
 #include "AES.h"
 #include "CTR.h"
 #include "concurrency/LockGuard.h"
@@ -71,6 +78,23 @@ class CryptoEngine
     virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
+
+#ifdef MESHTASTIC_CHANNEL_HMAC
+#define CHANNEL_HMAC_SIZE 4
+    /**
+     * Encrypt a packet and append a 4-byte AES-CBC-MAC for integrity.
+     * Returns the total output size (numBytes + CHANNEL_HMAC_SIZE).
+     */
+    size_t encryptPacketWithMAC(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+
+    /**
+     * Verify MAC and decrypt. If MAC is valid, decrypts (numBytes - HMAC_SIZE) bytes.
+     * If MAC is missing/invalid, falls back to legacy full-buffer decryption.
+     * Returns the decrypted payload size.
+     */
+    size_t decryptWithMAC(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+#endif
+
 #ifndef PIO_UNIT_TESTING
   protected:
 #endif

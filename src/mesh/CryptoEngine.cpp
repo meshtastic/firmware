@@ -1,6 +1,9 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
 #include "architecture.h"
+#ifdef MESHTASTIC_CHANNEL_HMAC
+#include "meshUtils.h"
+#endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "NodeDB.h"
@@ -261,6 +264,87 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
     if (extraNonce)
         memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
 }
+
+#ifdef MESHTASTIC_CHANNEL_HMAC
+#include "meshUtils.h" // for constant_time_compare
+
+/**
+ * Compute a 4-byte AES-CBC-MAC over (nonce || ciphertext) using the channel key.
+ * This provides integrity/authenticity for channel-encrypted packets.
+ */
+static void computeCBCMAC(const CryptoKey &macKey, const uint8_t *macNonce, const uint8_t *data, size_t dataLen, uint8_t *mac)
+{
+    uint8_t tag[16], tmp[16];
+
+    // Start with nonce as IV
+    memcpy(tag, macNonce, 16);
+
+    // Use AES256 for MAC regardless of key length (zero-pad short keys)
+    AESSmall256 macCipher;
+    uint8_t paddedKey[32] = {0};
+    memcpy(paddedKey, macKey.bytes, macKey.length);
+    macCipher.setKey(paddedKey, 32);
+
+    // Encrypt the nonce-IV as first CBC-MAC block
+    macCipher.encryptBlock(tmp, tag);
+    memcpy(tag, tmp, 16);
+
+    // Process ciphertext in 16-byte blocks
+    for (size_t i = 0; i < dataLen; i += 16) {
+        size_t blockLen = (dataLen - i < 16) ? dataLen - i : 16;
+        for (size_t j = 0; j < blockLen; j++)
+            tag[j] ^= data[i + j];
+        macCipher.encryptBlock(tmp, tag);
+        memcpy(tag, tmp, 16);
+    }
+
+    memcpy(mac, tag, CHANNEL_HMAC_SIZE);
+}
+
+size_t CryptoEngine::encryptPacketWithMAC(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+{
+    if (key.length > 0 && numBytes + CHANNEL_HMAC_SIZE <= MAX_BLOCKSIZE) {
+        initNonce(fromNode, packetId);
+        encryptAESCtr(key, nonce, numBytes, bytes);
+
+        // Compute MAC over the ciphertext and append it
+        uint8_t mac[CHANNEL_HMAC_SIZE];
+        computeCBCMAC(key, nonce, bytes, numBytes, mac);
+        memcpy(bytes + numBytes, mac, CHANNEL_HMAC_SIZE);
+        return numBytes + CHANNEL_HMAC_SIZE;
+    }
+
+    // Fallback: packet too large for MAC, encrypt without
+    encryptPacket(fromNode, packetId, numBytes, bytes);
+    return numBytes;
+}
+
+size_t CryptoEngine::decryptWithMAC(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+{
+    if (key.length > 0 && numBytes > CHANNEL_HMAC_SIZE) {
+        initNonce(fromNode, packetId);
+
+        // Try verifying MAC on last CHANNEL_HMAC_SIZE bytes
+        size_t cipherLen = numBytes - CHANNEL_HMAC_SIZE;
+        uint8_t computedMAC[CHANNEL_HMAC_SIZE];
+        computeCBCMAC(key, nonce, bytes, cipherLen, computedMAC);
+
+        if (constant_time_compare(computedMAC, bytes + cipherLen, CHANNEL_HMAC_SIZE) == 0) {
+            // MAC valid: decrypt only the ciphertext portion
+            encryptAESCtr(key, nonce, cipherLen, bytes);
+            return cipherLen;
+        }
+
+        // MAC invalid: legacy packet without MAC, decrypt all bytes
+        encryptAESCtr(key, nonce, numBytes, bytes);
+        return numBytes;
+    }
+
+    decrypt(fromNode, packetId, numBytes, bytes);
+    return numBytes;
+}
+#endif
+
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
 #endif

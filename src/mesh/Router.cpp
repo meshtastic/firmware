@@ -473,14 +473,20 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 // fresh copy for each decrypt attempt.
                 memcpy(bytes, p->encrypted.bytes, rawSize);
                 // Try to decrypt the packet if we can
+#ifdef MESHTASTIC_CHANNEL_HMAC
+                // Verify MAC if present, then decrypt. Falls back to legacy if no valid MAC.
+                size_t decryptedSize = crypto->decryptWithMAC(p->from, p->id, rawSize, bytes);
+#else
+                size_t decryptedSize = rawSize;
                 crypto->decrypt(p->from, p->id, rawSize, bytes);
+#endif
 
                 // printBytes("plaintext", bytes, p->encrypted.size);
 
                 // Take those raw bytes and convert them back into a well structured protobuf we can understand
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
-                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
+                if (!pb_decode_from_bytes(bytes, decryptedSize, &meshtastic_Data_msg, &decodedtmp)) {
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!");
@@ -597,7 +603,11 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             }
         } */
 
-        if (numbytes + MESHTASTIC_HEADER_LENGTH > MAX_LORA_PAYLOAD_LEN)
+        size_t channelOverhead = 0;
+#ifdef MESHTASTIC_CHANNEL_HMAC
+        channelOverhead = CHANNEL_HMAC_SIZE;
+#endif
+        if (numbytes + MESHTASTIC_HEADER_LENGTH + channelOverhead > MAX_LORA_PAYLOAD_LEN)
             return meshtastic_Routing_Error_TOO_LARGE;
 
         // printBytes("plaintext", bytes, numbytes);
@@ -656,7 +666,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 // No suitable channel could be found for
                 return meshtastic_Routing_Error_NO_CHANNEL;
             }
+
+#ifdef MESHTASTIC_CHANNEL_HMAC
+            numbytes = crypto->encryptPacketWithMAC(getFrom(p), p->id, numbytes, bytes);
+#else
             crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+#endif
             memcpy(p->encrypted.bytes, bytes, numbytes);
         }
 #else
@@ -672,7 +687,11 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // No suitable channel could be found for
             return meshtastic_Routing_Error_NO_CHANNEL;
         }
+#ifdef MESHTASTIC_CHANNEL_HMAC
+        numbytes = crypto->encryptPacketWithMAC(getFrom(p), p->id, numbytes, bytes);
+#else
         crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+#endif
         memcpy(p->encrypted.bytes, bytes, numbytes);
 #endif
 
