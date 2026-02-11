@@ -501,22 +501,28 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
         if (p->decoded.has_xeddsa_signature) {
-            LOG_WARN("packet shows XEdDSA");
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
             if (node && node->user.public_key.size == 32) {
-                LOG_WARN("attempting to verify");
                 p->xeddsa_signed = crypto->xeddsa_verify(node->user.public_key.bytes, p->decoded.payload.bytes,
                                                          p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                if (p->xeddsa_signed) {
+                    // Mark this node as a signer so future unsigned packets from it are rejected
+                    node->bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+                    LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
+                } else {
+                    LOG_WARN("XEdDSA signature verification failed from 0x%08x, dropping", p->from);
+                    return DecodeState::DECODE_FAILURE;
+                }
             } else {
-                LOG_WARN("Don't have key to verify");
+                LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
             }
-        }
-        if (p->xeddsa_signed) {
-            LOG_WARN("Received XEdDSA Signed Packet!");
-        } else if (p->decoded.has_xeddsa_signature) {
-            LOG_ERROR("Node sent signed packet, but cannot verify!");
         } else {
-            LOG_WARN("Received Unsigned Packet!");
+            // Unsigned packet — reject if this node previously sent signed packets
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+            if (node && (node->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK)) {
+                LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
+                return DecodeState::DECODE_FAILURE;
+            }
         }
 
         /* Not actually ever used.
