@@ -48,88 +48,49 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
   private:
     // =========================================================================
-    // Unified Cache Entry - Platform-Specific Variants
+    // Unified Cache Entry (10 bytes) - Same for ALL platforms
     // =========================================================================
     //
-    // Two structure variants optimize for different memory constraints:
+    // A single compact structure used across ESP32, NRF52, and all other platforms.
+    // Memory: 10 bytes × 2048 entries = 20KB
     //
-    // FULL STRUCTURE (20 bytes) - Used on ESP32 with PSRAM, Native/Portduino:
-    //   Stores complete truncated lat/lon coordinates for precise deduplication.
-    //   These platforms have ample memory, so we prioritize accuracy.
+    // Position Fingerprinting:
+    //   Instead of storing full coordinates (8 bytes) or a computed hash,
+    //   we store an 8-bit fingerprint derived deterministically from the
+    //   truncated lat/lon. This extracts the lower 4 significant bits from
+    //   each coordinate: fingerprint = (lat_low4 << 4) | lon_low4
     //
-    // COMPACT STRUCTURE (12 bytes) - Used on NRF52, ESP32 without PSRAM:
-    //   Uses an 8-bit hash of position instead of storing coordinates.
-    //   This provides 40% memory reduction (20KB -> 12KB for 1024 entries).
-    //   Hash collisions (~0.4% probability) may occasionally drop a valid
-    //   position update, but this is acceptable for traffic management.
-    //   Uses minute-granularity timestamps (4h15m max range vs 18h).
+    //   Benefits over hash:
+    //   - Adjacent grid cells have sequential fingerprints (no collision)
+    //   - Two positions only collide if 16+ grid cells apart in BOTH dimensions
+    //   - Deterministic: same input always produces same output
     //
-    // Memory comparison at 1024 cache entries:
-    //   - Full (PSRAM):    1024 × 20 = 20,480 bytes (in PSRAM)
-    //   - Compact:         1024 × 12 = 12,288 bytes (in heap)
-    //
-
-#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-    // -------------------------------------------------------------------------
-    // Full Structure - ESP32 with PSRAM, Native/Portduino (20 bytes)
-    // -------------------------------------------------------------------------
-    // Layout:
-    //   [0-3]   node             - NodeNum (4 bytes)
-    //   [4-7]   lat_truncated    - Truncated latitude (4 bytes)
-    //   [8-11]  lon_truncated    - Truncated longitude (4 bytes)
-    //   [12-13] pos_time_secs    - Position timestamp offset (2 bytes)
-    //   [14]    rate_count       - Packets in current window (1 byte)
-    //   [15]    unknown_count    - Unknown packets count (1 byte)
-    //   [16-17] rate_window_secs - Rate limit window start offset (2 bytes)
-    //   [18-19] unknown_secs     - Unknown tracking window start offset (2 bytes)
-    //
-    struct UnifiedCacheEntry {
-        NodeNum node;              // 4 bytes - Node identifier (0 = empty slot)
-        int32_t lat_truncated;     // 4 bytes - Precision-truncated latitude
-        int32_t lon_truncated;     // 4 bytes - Precision-truncated longitude
-        uint16_t pos_time_secs;    // 2 bytes - Seconds since epoch for position
-        uint8_t rate_count;        // 1 byte  - Packet count (saturates at 255)
-        uint8_t unknown_count;     // 1 byte  - Unknown packet count (saturates at 255)
-        uint16_t rate_window_secs; // 2 bytes - Window start for rate limiting
-        uint16_t unknown_secs;     // 2 bytes - Window start for unknown tracking
-    };
-    static_assert(sizeof(UnifiedCacheEntry) == 20, "UnifiedCacheEntry should be 20 bytes");
-
-    // Full structure uses 16-bit second offsets (~18 hour range)
-    static constexpr bool useCompactTimestamps = false;
-
-#else
-    // -------------------------------------------------------------------------
-    // Compact Structure - NRF52, ESP32 without PSRAM (12 bytes)
-    // -------------------------------------------------------------------------
-    // Uses 8-bit position hash instead of full coordinates to save 8 bytes.
-    // Hash collision probability is ~0.4% (1/256), which is acceptable since
-    // a collision only causes an occasional valid position to be dropped.
+    // Adaptive Timestamp Resolution:
+    //   All timestamps use 8-bit values with adaptive resolution calculated
+    //   from config at startup. Resolution = max(60, min(339, interval/2)).
+    //   - Min 60 seconds ensures reasonable precision
+    //   - Max 339 seconds allows ~24 hour range (255 * 339 = 86445 sec)
+    //   - interval/2 ensures at least 2 ticks per configured interval
     //
     // Layout:
-    //   [0-3]   node             - NodeNum (4 bytes)
-    //   [4]     pos_hash         - 8-bit hash of truncated position (1 byte)
-    //   [5]     rate_count       - Packets in current window (1 byte)
-    //   [6]     unknown_count    - Unknown packets count (1 byte)
-    //   [7]     pos_time_mins    - Position timestamp in minutes (1 byte, ~4h max)
-    //   [8-9]   rate_window_secs - Rate limit window start offset (2 bytes)
-    //   [10-11] unknown_secs     - Unknown tracking window start offset (2 bytes)
+    //   [0-3]   node            - NodeNum (4 bytes)
+    //   [4]     pos_fingerprint - 4 bits lat + 4 bits lon (1 byte)
+    //   [5]     rate_count      - Packets in current window (1 byte)
+    //   [6]     unknown_count   - Unknown packets count (1 byte)
+    //   [7]     pos_time        - Position timestamp (1 byte, adaptive resolution)
+    //   [8]     rate_time       - Rate window start (1 byte, adaptive resolution)
+    //   [9]     unknown_time    - Unknown tracking start (1 byte, adaptive resolution)
     //
-    struct UnifiedCacheEntry {
-        NodeNum node;              // 4 bytes - Node identifier (0 = empty slot)
-        uint8_t pos_hash;          // 1 byte  - 8-bit hash of truncated lat/lon
-        uint8_t rate_count;        // 1 byte  - Packet count (saturates at 255)
-        uint8_t unknown_count;     // 1 byte  - Unknown packet count (saturates at 255)
-        uint8_t pos_time_mins;     // 1 byte  - Minutes since epoch (4h15m max range)
-        uint16_t rate_window_secs; // 2 bytes - Window start for rate limiting
-        uint16_t unknown_secs;     // 2 bytes - Window start for unknown tracking
+    struct __attribute__((packed)) UnifiedCacheEntry {
+        NodeNum node;            // 4 bytes - Node identifier (0 = empty slot)
+        uint8_t pos_fingerprint; // 1 byte  - Lower 4 bits of lat + lon
+        uint8_t rate_count;      // 1 byte  - Packet count (saturates at 255)
+        uint8_t unknown_count;   // 1 byte  - Unknown packet count (saturates at 255)
+        uint8_t pos_time;        // 1 byte  - Position timestamp (adaptive resolution)
+        uint8_t rate_time;       // 1 byte  - Rate window start (adaptive resolution)
+        uint8_t unknown_time;    // 1 byte  - Unknown tracking start (adaptive resolution)
     };
-    static_assert(sizeof(UnifiedCacheEntry) == 12, "Compact UnifiedCacheEntry should be 12 bytes");
-
-    // Compact structure uses 8-bit minute offsets (~4 hour range)
-    static constexpr bool useCompactTimestamps = true;
-
-#endif
+    static_assert(sizeof(UnifiedCacheEntry) == 10, "UnifiedCacheEntry should be 10 bytes");
 
     // =========================================================================
     // Cuckoo Hash Table Implementation
@@ -144,92 +105,99 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // - O(1) insertion (amortized) with simple eviction on cycles
     // - ~95% load factor achievable
     //
-    // The cache size should be power-of-2 for fast modulo via bitmask.
-    // TRAFFIC_MANAGEMENT_CACHE_SIZE rounds up to next power-of-2 internally
-    // (e.g., 1000 → 1024, 2000 → 2048). Override per-variant in variant.h.
+    // Cache size rounds to power-of-2 for fast modulo via bitmask.
+    // TRAFFIC_MANAGEMENT_CACHE_SIZE=2000 → cacheSize()=2048
     //
     static constexpr uint16_t cacheSize();
     static constexpr uint16_t cacheMask();
 
     // Hash functions for cuckoo hashing
-    // h1: Simple modulo - good distribution for sequential NodeNums
-    // h2: Multiplicative hash - decorrelated from h1 for cuckoo property
     inline uint16_t cuckooHash1(NodeNum node) const { return node & cacheMask(); }
-    inline uint16_t cuckooHash2(NodeNum node) const
-    {
-        // Golden ratio hash: multiply by 2654435769 (closest prime to 2^32/phi)
-        // Then shift to get cacheMask() bits
-        return ((node * 2654435769u) >> (32 - cuckooHashBits())) & cacheMask();
-    }
+    inline uint16_t cuckooHash2(NodeNum node) const { return ((node * 2654435769u) >> (32 - cuckooHashBits())) & cacheMask(); }
     static constexpr uint8_t cuckooHashBits();
 
     // =========================================================================
-    // Relative Timestamp Management
+    // Adaptive Timestamp Resolution
     // =========================================================================
     //
-    // Timestamps are stored as relative offsets from a rolling epoch to save
-    // memory. Two modes are supported based on platform:
+    // All timestamps use 8-bit values with adaptive resolution calculated from
+    // config at startup. This allows ~24 hour range while maintaining precision.
     //
-    // FULL (PSRAM): 16-bit second offsets (~18 hour range)
-    //   - Used for all timestamp fields
-    //   - Epoch resets when approaching overflow (~17 hours)
+    // Resolution formula: max(60, min(339, interval/2))
+    //   - 60 sec minimum ensures reasonable precision
+    //   - 339 sec maximum allows 24 hour range (255 * 339 ≈ 86400 sec)
+    //   - interval/2 ensures at least 2 ticks per configured interval
     //
-    // COMPACT (non-PSRAM): Mixed granularity
-    //   - Position: 8-bit minute offsets (~4 hour range, sufficient for dedup)
-    //   - Rate/Unknown: 16-bit second offsets (same as full)
-    //   - Epoch resets when position minutes would overflow (~4 hours)
+    // Since config changes require reboot, resolution is calculated once.
     //
-    uint32_t cacheEpochMs = 0; // Rolling epoch base for relative timestamps
+    uint32_t cacheEpochMs = 0;
+    uint16_t posTimeResolution = 60;     // Seconds per tick for position
+    uint16_t rateTimeResolution = 60;    // Seconds per tick for rate limiting
+    uint16_t unknownTimeResolution = 60; // Seconds per tick for unknown tracking
 
-    // --- 16-bit second offset helpers (used by both modes for rate/unknown) ---
-
-    uint16_t toRelativeSecs(uint32_t nowMs) const
+    // Calculate resolution from configured interval (called once at startup)
+    static uint16_t calcTimeResolution(uint32_t intervalSecs)
     {
-        uint32_t offsetMs = nowMs - cacheEpochMs;
-        uint32_t secs = offsetMs / 1000;
-        return (secs > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(secs);
+        // Resolution = interval/2 to ensure at least 2 ticks per interval
+        // Clamped to [60, 339] for min precision and max 24h range
+        uint32_t res = (intervalSecs > 0) ? (intervalSecs / 2) : 60;
+        if (res < 60)
+            res = 60;
+        if (res > 339)
+            res = 339;
+        return static_cast<uint16_t>(res);
     }
 
-    uint32_t fromRelativeSecs(uint16_t secs) const { return cacheEpochMs + (static_cast<uint32_t>(secs) * 1000); }
-
-    // --- 8-bit minute offset helpers (compact mode position timestamps) ---
-
-    uint8_t toRelativeMins(uint32_t nowMs) const
+    // Convert to/from 8-bit relative timestamps with given resolution
+    uint8_t toRelativeTime(uint32_t nowMs, uint16_t resolutionSecs) const
     {
-        uint32_t offsetMs = nowMs - cacheEpochMs;
-        uint32_t mins = offsetMs / 60000; // ms to minutes
-        return (mins > UINT8_MAX) ? UINT8_MAX : static_cast<uint8_t>(mins);
+        uint32_t ticks = (nowMs - cacheEpochMs) / (resolutionSecs * 1000UL);
+        return (ticks > UINT8_MAX) ? UINT8_MAX : static_cast<uint8_t>(ticks);
+    }
+    uint32_t fromRelativeTime(uint8_t ticks, uint16_t resolutionSecs) const
+    {
+        return cacheEpochMs + (static_cast<uint32_t>(ticks) * resolutionSecs * 1000UL);
     }
 
-    uint32_t fromRelativeMins(uint8_t mins) const { return cacheEpochMs + (static_cast<uint32_t>(mins) * 60000); }
+    // Convenience wrappers for each timestamp type
+    uint8_t toRelativePosTime(uint32_t nowMs) const { return toRelativeTime(nowMs, posTimeResolution); }
+    uint32_t fromRelativePosTime(uint8_t t) const { return fromRelativeTime(t, posTimeResolution); }
 
-    // --- Epoch reset detection ---
+    uint8_t toRelativeRateTime(uint32_t nowMs) const { return toRelativeTime(nowMs, rateTimeResolution); }
+    uint32_t fromRelativeRateTime(uint8_t t) const { return fromRelativeTime(t, rateTimeResolution); }
 
+    uint8_t toRelativeUnknownTime(uint32_t nowMs) const { return toRelativeTime(nowMs, unknownTimeResolution); }
+    uint32_t fromRelativeUnknownTime(uint8_t t) const { return fromRelativeTime(t, unknownTimeResolution); }
+
+    // Epoch reset when any timestamp approaches overflow
+    // With max resolution of 339 sec, 200 ticks = ~19 hours (safe margin for 24h max)
     bool needsEpochReset(uint32_t nowMs) const
     {
-        if (useCompactTimestamps) {
-            // Compact mode: reset when approaching 8-bit minute overflow (~4 hours)
-            // Reset at ~3.5 hours (210 minutes) to provide margin
-            return (nowMs - cacheEpochMs) > (210UL * 60 * 1000);
-        } else {
-            // Full mode: reset when approaching 16-bit second overflow (~17 hours)
-            return (nowMs - cacheEpochMs) > (UINT16_MAX - 3600) * 1000UL;
-        }
+        uint16_t maxRes = posTimeResolution;
+        if (rateTimeResolution > maxRes)
+            maxRes = rateTimeResolution;
+        if (unknownTimeResolution > maxRes)
+            maxRes = unknownTimeResolution;
+        return (nowMs - cacheEpochMs) > (200UL * maxRes * 1000UL);
     }
-
     void resetEpoch(uint32_t nowMs);
 
     // =========================================================================
-    // Position Hash (Compact Mode Only)
+    // Position Fingerprint
     // =========================================================================
     //
-    // Computes an 8-bit hash from truncated lat/lon coordinates.
-    // Used instead of storing full coordinates to save 7 bytes per entry.
+    // Computes 8-bit fingerprint from truncated lat/lon coordinates.
+    // Extracts lower 4 significant bits from each coordinate.
     //
-    // Hash collision probability: ~0.4% (1/256)
-    // Impact of collision: may drop a valid position update (acceptable)
+    // fingerprint = (lat_low4 << 4) | lon_low4
     //
-    static uint8_t computePositionHash(int32_t lat_truncated, int32_t lon_truncated);
+    // Unlike a hash, adjacent grid cells have sequential fingerprints,
+    // so nearby positions never collide. Collisions only occur for
+    // positions 16+ grid cells apart in both dimensions.
+    //
+    // Guards: If precision < 4 bits, uses min(precision, 4) bits.
+    //
+    static uint8_t computePositionFingerprint(int32_t lat_truncated, int32_t lon_truncated, uint8_t precision);
 
     // =========================================================================
     // Cache Storage
