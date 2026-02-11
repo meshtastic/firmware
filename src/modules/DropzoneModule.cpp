@@ -32,13 +32,13 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     auto &p = mp.decoded;
     char matchCompare[54];
     auto incomingMessage = reinterpret_cast<const char *>(p.payload.bytes);
-    sprintf(matchCompare, "%s conditions", owner.short_name);
+    snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.short_name);
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
     }
 
-    sprintf(matchCompare, "%s conditions", owner.long_name);
+    snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.long_name);
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
@@ -77,11 +77,11 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         auto windDirection = telemetry.variant.environment_metrics.wind_direction;
         auto temp = telemetry.variant.environment_metrics.temperature;
         auto baro = UnitConversions::HectoPascalToInchesOfMercury(telemetry.variant.environment_metrics.barometric_pressure);
-        sprintf(replyStr, "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
-                windSpeed, windDirection, baro, temp);
+        snprintf(replyStr, sizeof(replyStr), "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus,
+                 hour, min, sec, windSpeed, windDirection, baro, temp);
     } else {
         LOG_ERROR("No sensor found");
-        sprintf(replyStr, "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
+        snprintf(replyStr, sizeof(replyStr), "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
     }
     LOG_DEBUG("Conditions reply: %s", replyStr);
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
