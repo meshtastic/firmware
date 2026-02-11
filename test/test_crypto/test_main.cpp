@@ -164,17 +164,35 @@ void test_XEdDSA(void)
     uint8_t message[] = "This is a test!";
     uint8_t message2[] = "This is a test.";
     uint8_t signature[64];
+    uint32_t fromNode = 0x1234;
+    uint32_t packetId = 0xDEADBEEF;
+    uint32_t portnum = 1;
     for (int times = 0; times < 10; times++) {
         printf("Start of time %u\n", times);
         crypto->generateKeyPair(x_public_key, private_key);
-        // crypto->setDHPrivateKey(private_key);
         XEdDSA::priv_curve_to_ed_keys(private_key, ed_private_key, ed_public_key);
         crypto->curve_to_ed_pub(x_public_key, ed_public_key2);
         TEST_ASSERT_EQUAL_MEMORY(ed_public_key, ed_public_key2, 32);
 
-        crypto->xeddsa_sign(message, sizeof(message), signature);
-        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, message, sizeof(message), signature));
-        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, message2, sizeof(message), signature));
+        // Sign and verify with metadata
+        TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), signature));
+        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, message, sizeof(message), signature));
+
+        // Different payload fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, message2, sizeof(message2), signature));
+
+        // Different fromNode fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode + 1, packetId, portnum, message, sizeof(message), signature));
+
+        // Different packetId fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode, packetId + 1, portnum, message, sizeof(message), signature));
+
+        // Different portnum fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum + 1, message, sizeof(message), signature));
     }
 }
 

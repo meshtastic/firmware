@@ -501,22 +501,29 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
         if (p->decoded.has_xeddsa_signature) {
-            LOG_WARN("packet shows XEdDSA");
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
             if (node && node->user.public_key.size == 32) {
-                LOG_WARN("attempting to verify");
-                p->xeddsa_signed = crypto->xeddsa_verify(node->user.public_key.bytes, p->decoded.payload.bytes,
-                                                         p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                p->xeddsa_signed =
+                    crypto->xeddsa_verify(node->user.public_key.bytes, p->from, p->id, p->decoded.portnum,
+                                          p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                if (p->xeddsa_signed) {
+                    // Mark this node as a signer so future unsigned packets from it are rejected
+                    node->bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+                    LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
+                } else {
+                    LOG_WARN("XEdDSA signature verification failed from 0x%08x, dropping", p->from);
+                    return DecodeState::DECODE_FAILURE;
+                }
             } else {
-                LOG_WARN("Don't have key to verify");
+                LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
             }
-        }
-        if (p->xeddsa_signed) {
-            LOG_WARN("Received XEdDSA Signed Packet!");
-        } else if (p->decoded.has_xeddsa_signature) {
-            LOG_ERROR("Node sent signed packet, but cannot verify!");
         } else {
-            LOG_WARN("Received Unsigned Packet!");
+            // Unsigned packet — reject if this node previously sent signed packets
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+            if (node && (node->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK)) {
+                LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
+                return DecodeState::DECODE_FAILURE;
+            }
         }
 
         /* Not actually ever used.
@@ -568,11 +575,16 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
-            if (p->pki_encrypted == false && isBroadcast(p->to) && p->decoded.payload.size < 120) {
-                crypto->xeddsa_sign(p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
-                p->decoded.xeddsa_signature.size = 64;
-                p->decoded.has_xeddsa_signature = true;
-                LOG_WARN("XEDDSA Signed!");
+            // Sign broadcast packets if payload + signature fits within the max Data payload.
+            // The actual encoded size is checked after pb_encode (TOO_LARGE).
+            if (!p->pki_encrypted && isBroadcast(p->to) &&
+                p->decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+                if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
+                                        p->decoded.xeddsa_signature.bytes)) {
+                    p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+                    p->decoded.has_xeddsa_signature = true;
+                    LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
+                }
             }
         }
 
