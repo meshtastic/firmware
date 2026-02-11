@@ -99,12 +99,12 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     }
 
 #if HAS_TRAFFIC_MANAGEMENT
-    // When router_preserve_hops is enabled, preserve hops for decoded packets that are not
-    // position or telemetry (those have their own exhaust_hop controls).
+    // When router_preserve_hops is enabled, unconditionally preserve hops for router devices.
+    // This is "best effort" - we don't attempt to identify the previous relay since relay_node
+    // is only 1 byte (collision-prone). Simply preserving when local is a router extends range.
     if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
-        moduleConfig.traffic_management.router_preserve_hops && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum != meshtastic_PortNum_POSITION_APP && p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP) {
-        LOG_DEBUG("Router hop preserved: port=%d from=0x%08x (traffic_management)", p->decoded.portnum, getFrom(p));
+        moduleConfig.traffic_management.router_preserve_hops) {
+        LOG_DEBUG("Router hop preserved: local is router role (traffic_management)");
         if (trafficManagementModule) {
             trafficManagementModule->recordRouterHopPreserved();
         }
