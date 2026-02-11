@@ -13,7 +13,6 @@
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
-#include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -258,7 +257,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
-    statusLEDModule->setPowerLED(false);
+
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
 #endif
@@ -397,6 +396,10 @@ void doLightSleep(uint32_t sleepMsec)
 
     res = esp_sleep_enable_uart_wakeup(UART_NUM_0);
     assert(res == ESP_OK);
+
+#if defined(LED_POWER)
+    gpio_hold_en((gpio_num_t)LED_POWER);
+#endif
 
 #if defined(VEXT_ENABLE)
     gpio_hold_en((gpio_num_t)VEXT_ENABLE);

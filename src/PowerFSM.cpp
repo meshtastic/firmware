@@ -80,7 +80,6 @@ static void lsEnter()
     LOG_POWERFSM("State: lsEnter");
     if (screen)
         screen->setOn(false);
-    ledBlink.set(false);
 
     sleepStart = -1;
     sleepTime = 0;
@@ -93,6 +92,8 @@ static void lsEnter()
     }
 
     sleepStart = millis();
+
+    statusLEDModule->setPowerLED(false);
     doLightSleep(LIGHT_SLEEP_DYNAMIC);
 #endif
 
@@ -120,7 +121,9 @@ static void lsIdle()
 
 #ifdef ARCH_ESP32
 #if !HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+    statusLEDModule->setPowerLED(false);
     doLightSleep(sleepLeft);
+    statusLEDModule->setPowerLED(true);
 #endif
 
     esp_sleep_source_t cause = esp_sleep_get_wakeup_cause();
@@ -160,6 +163,8 @@ static void lsExit()
 {
 #if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     doLightSleep(LIGHT_SLEEP_ABORT);
+#else
+    statusLEDModule->setPowerLED(false);
 #endif
 
     if (sleepStart != -1) {
