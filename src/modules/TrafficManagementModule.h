@@ -213,22 +213,10 @@ constexpr uint16_t nextPow2(uint16_t n)
     return n == 0 ? 0 : (((n - 1) | ((n - 1) >> 1) | ((n - 1) >> 2) | ((n - 1) >> 4) | ((n - 1) >> 8)) + 1);
 }
 
-// Helper: count trailing zeros (log2 for power of 2)
+// Helper: floor(log2(n)) for n >= 0, C++11-compatible constexpr.
 constexpr uint8_t log2Floor(uint16_t n)
 {
-    return n <= 1      ? 0
-           : n <= 2    ? 1
-           : n <= 4    ? 2
-           : n <= 8    ? 3
-           : n <= 16   ? 4
-           : n <= 32   ? 5
-           : n <= 64   ? 6
-           : n <= 128  ? 7
-           : n <= 256  ? 8
-           : n <= 512  ? 9
-           : n <= 1024 ? 10
-           : n <= 2048 ? 11
-                       : 12;
+    return n <= 1 ? 0 : static_cast<uint8_t>(1 + log2Floor(static_cast<uint16_t>(n >> 1)));
 }
 } // namespace detail
 
