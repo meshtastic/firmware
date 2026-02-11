@@ -136,9 +136,11 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
         } else {
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
+            strncpy(fileInfo.file_name, file.path(), sizeof(fileInfo.file_name) - 1);
+            fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
 #else
-            strcpy(fileInfo.file_name, file.name());
+            strncpy(fileInfo.file_name, file.name(), sizeof(fileInfo.file_name) - 1);
+            fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
 #endif
             if (!String(fileInfo.file_name).endsWith(".")) {
                 filenames.push_back(fileInfo);
