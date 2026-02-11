@@ -817,6 +817,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
             nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
         }
+        // User provided both keys — load them into the crypto engine
+        else {
+            owner.public_key.size = config.security.public_key.size;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+            crypto->setDHPrivateKey(config.security.private_key.bytes);
+        }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {
