@@ -48,24 +48,38 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
   private:
     // =========================================================================
-    // Unified Cache Entry
+    // Unified Cache Entry - Platform-Specific Variants
     // =========================================================================
     //
-    // Combines position dedup, rate limiting, and unknown packet tracking into
-    // a single 20-byte structure. This reduces memory from 36 bytes (16+10+10)
-    // per node to 20 bytes - a 44% reduction.
+    // Two structure variants optimize for different memory constraints:
     //
-    // Timestamps use 16-bit relative offsets from `cacheEpochMs`, providing
-    // ~65535 second (~18 hour) range which exceeds typical TTL requirements.
-    // The epoch advances when offsets would overflow.
+    // FULL STRUCTURE (20 bytes) - Used on ESP32 with PSRAM, Native/Portduino:
+    //   Stores complete truncated lat/lon coordinates for precise deduplication.
+    //   These platforms have ample memory, so we prioritize accuracy.
     //
-    // Layout (20 bytes):
+    // COMPACT STRUCTURE (12 bytes) - Used on NRF52, ESP32 without PSRAM:
+    //   Uses an 8-bit hash of position instead of storing coordinates.
+    //   This provides 40% memory reduction (20KB -> 12KB for 1024 entries).
+    //   Hash collisions (~0.4% probability) may occasionally drop a valid
+    //   position update, but this is acceptable for traffic management.
+    //   Uses minute-granularity timestamps (4h15m max range vs 18h).
+    //
+    // Memory comparison at 1024 cache entries:
+    //   - Full (PSRAM):    1024 × 20 = 20,480 bytes (in PSRAM)
+    //   - Compact:         1024 × 12 = 12,288 bytes (in heap)
+    //
+
+#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+    // -------------------------------------------------------------------------
+    // Full Structure - ESP32 with PSRAM, Native/Portduino (20 bytes)
+    // -------------------------------------------------------------------------
+    // Layout:
     //   [0-3]   node             - NodeNum (4 bytes)
     //   [4-7]   lat_truncated    - Truncated latitude (4 bytes)
     //   [8-11]  lon_truncated    - Truncated longitude (4 bytes)
     //   [12-13] pos_time_secs    - Position timestamp offset (2 bytes)
-    //   [14]    rate_count       - Packets in current window (1 byte, saturates at 255)
-    //   [15]    unknown_count    - Unknown packets count (1 byte, saturates at 255)
+    //   [14]    rate_count       - Packets in current window (1 byte)
+    //   [15]    unknown_count    - Unknown packets count (1 byte)
     //   [16-17] rate_window_secs - Rate limit window start offset (2 bytes)
     //   [18-19] unknown_secs     - Unknown tracking window start offset (2 bytes)
     //
@@ -81,19 +95,40 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     };
     static_assert(sizeof(UnifiedCacheEntry) == 20, "UnifiedCacheEntry should be 20 bytes");
 
-    // =========================================================================
-    // Hash-based Position Dedup (NRF52 only)
-    // =========================================================================
+    // Full structure uses 16-bit second offsets (~18 hour range)
+    static constexpr bool useCompactTimestamps = false;
+
+#else
+    // -------------------------------------------------------------------------
+    // Compact Structure - NRF52, ESP32 without PSRAM (12 bytes)
+    // -------------------------------------------------------------------------
+    // Uses 8-bit position hash instead of full coordinates to save 8 bytes.
+    // Hash collision probability is ~0.4% (1/256), which is acceptable since
+    // a collision only causes an occasional valid position to be dropped.
     //
-    // On memory-constrained NRF52 devices, position deduplication uses a hash
-    // of the packet content instead of storing per-node lat/lon coordinates.
-    // This trades some accuracy for significant memory savings.
+    // Layout:
+    //   [0-3]   node             - NodeNum (4 bytes)
+    //   [4]     pos_hash         - 8-bit hash of truncated position (1 byte)
+    //   [5]     rate_count       - Packets in current window (1 byte)
+    //   [6]     unknown_count    - Unknown packets count (1 byte)
+    //   [7]     pos_time_mins    - Position timestamp in minutes (1 byte, ~4h max)
+    //   [8-9]   rate_window_secs - Rate limit window start offset (2 bytes)
+    //   [10-11] unknown_secs     - Unknown tracking window start offset (2 bytes)
     //
-#if defined(ARCH_NRF52)
-    struct HashDedupEntry {
-        uint32_t hash;         // 4 bytes - Hash of (node + truncated position)
-        uint32_t last_seen_ms; // 4 bytes - Absolute timestamp (not relative)
+    struct UnifiedCacheEntry {
+        NodeNum node;              // 4 bytes - Node identifier (0 = empty slot)
+        uint8_t pos_hash;          // 1 byte  - 8-bit hash of truncated lat/lon
+        uint8_t rate_count;        // 1 byte  - Packet count (saturates at 255)
+        uint8_t unknown_count;     // 1 byte  - Unknown packet count (saturates at 255)
+        uint8_t pos_time_mins;     // 1 byte  - Minutes since epoch (4h15m max range)
+        uint16_t rate_window_secs; // 2 bytes - Window start for rate limiting
+        uint16_t unknown_secs;     // 2 bytes - Window start for unknown tracking
     };
+    static_assert(sizeof(UnifiedCacheEntry) == 12, "Compact UnifiedCacheEntry should be 12 bytes");
+
+    // Compact structure uses 8-bit minute offsets (~4 hour range)
+    static constexpr bool useCompactTimestamps = true;
+
 #endif
 
     // =========================================================================
@@ -110,7 +145,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // - ~95% load factor achievable
     //
     // The cache size should be power-of-2 for fast modulo via bitmask.
-    // Default TRAFFIC_MANAGEMENT_CACHE_SIZE=1000 rounds up to 1024 internally.
+    // TRAFFIC_MANAGEMENT_CACHE_SIZE rounds up to next power-of-2 internally
+    // (e.g., 1000 → 1024, 2000 → 2048). Override per-variant in variant.h.
     //
     static constexpr uint16_t cacheSize();
     static constexpr uint16_t cacheMask();
@@ -131,13 +167,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // Relative Timestamp Management
     // =========================================================================
     //
-    // To save memory, timestamps are stored as 16-bit second offsets from a
-    // rolling epoch. This provides ~18 hour range which exceeds our longest TTL.
+    // Timestamps are stored as relative offsets from a rolling epoch to save
+    // memory. Two modes are supported based on platform:
     //
-    // When an offset would exceed UINT16_MAX, the epoch advances and all
-    // entries are invalidated (handled during periodic maintenance).
+    // FULL (PSRAM): 16-bit second offsets (~18 hour range)
+    //   - Used for all timestamp fields
+    //   - Epoch resets when approaching overflow (~17 hours)
+    //
+    // COMPACT (non-PSRAM): Mixed granularity
+    //   - Position: 8-bit minute offsets (~4 hour range, sufficient for dedup)
+    //   - Rate/Unknown: 16-bit second offsets (same as full)
+    //   - Epoch resets when position minutes would overflow (~4 hours)
     //
     uint32_t cacheEpochMs = 0; // Rolling epoch base for relative timestamps
+
+    // --- 16-bit second offset helpers (used by both modes for rate/unknown) ---
 
     uint16_t toRelativeSecs(uint32_t nowMs) const
     {
@@ -148,23 +192,51 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     uint32_t fromRelativeSecs(uint16_t secs) const { return cacheEpochMs + (static_cast<uint32_t>(secs) * 1000); }
 
+    // --- 8-bit minute offset helpers (compact mode position timestamps) ---
+
+    uint8_t toRelativeMins(uint32_t nowMs) const
+    {
+        uint32_t offsetMs = nowMs - cacheEpochMs;
+        uint32_t mins = offsetMs / 60000; // ms to minutes
+        return (mins > UINT8_MAX) ? UINT8_MAX : static_cast<uint8_t>(mins);
+    }
+
+    uint32_t fromRelativeMins(uint8_t mins) const { return cacheEpochMs + (static_cast<uint32_t>(mins) * 60000); }
+
+    // --- Epoch reset detection ---
+
     bool needsEpochReset(uint32_t nowMs) const
     {
-        // Reset when we're within 1 hour of overflow (~17 hours elapsed)
-        return (nowMs - cacheEpochMs) > (UINT16_MAX - 3600) * 1000UL;
+        if (useCompactTimestamps) {
+            // Compact mode: reset when approaching 8-bit minute overflow (~4 hours)
+            // Reset at ~3.5 hours (210 minutes) to provide margin
+            return (nowMs - cacheEpochMs) > (210UL * 60 * 1000);
+        } else {
+            // Full mode: reset when approaching 16-bit second overflow (~17 hours)
+            return (nowMs - cacheEpochMs) > (UINT16_MAX - 3600) * 1000UL;
+        }
     }
 
     void resetEpoch(uint32_t nowMs);
+
+    // =========================================================================
+    // Position Hash (Compact Mode Only)
+    // =========================================================================
+    //
+    // Computes an 8-bit hash from truncated lat/lon coordinates.
+    // Used instead of storing full coordinates to save 7 bytes per entry.
+    //
+    // Hash collision probability: ~0.4% (1/256)
+    // Impact of collision: may drop a valid position update (acceptable)
+    //
+    static uint8_t computePositionHash(int32_t lat_truncated, int32_t lon_truncated);
 
     // =========================================================================
     // Cache Storage
     // =========================================================================
 
     mutable concurrency::Lock cacheLock; // Protects all cache access
-    UnifiedCacheEntry *cache = nullptr;  // Cuckoo hash table
-#if defined(ARCH_NRF52)
-    HashDedupEntry *hashCache = nullptr; // Separate hash cache for NRF52 position dedup
-#endif
+    UnifiedCacheEntry *cache = nullptr;  // Cuckoo hash table (unified for all platforms)
 
     meshtastic_TrafficManagementStats stats;
 
@@ -184,10 +256,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // Find existing entry (no creation)
     UnifiedCacheEntry *findEntry(NodeNum node);
 
-#if defined(ARCH_NRF52)
-    HashDedupEntry *findHashEntry(uint32_t hash, bool *isNew);
-#endif
-
     // =========================================================================
     // Traffic Management Logic
     // =========================================================================
@@ -198,10 +266,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool isRateLimited(NodeNum from, uint32_t nowMs);
     bool shouldDropUnknown(const meshtastic_MeshPacket *p, uint32_t nowMs);
     void exhaustHops(meshtastic_MeshPacket *p);
-
-#if defined(ARCH_NRF52)
-    uint32_t computePacketHash(const meshtastic_MeshPacket *p, uint8_t precision) const;
-#endif
 
     void logAction(const char *action, const meshtastic_MeshPacket *p, const char *reason) const;
     void incrementStat(uint32_t *field);
