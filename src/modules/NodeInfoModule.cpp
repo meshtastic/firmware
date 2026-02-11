@@ -156,7 +156,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         // u.id[0] = '\0';
 
         // Ensure our user.id is derived correctly
-        strcpy(u.id, nodeDB->getNodeId().c_str());
+        strncpy(u.id, nodeDB->getNodeId().c_str(), sizeof(u.id) - 1);
+        u.id[sizeof(u.id) - 1] = '\0';
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();
