@@ -137,9 +137,9 @@ int32_t AirQualityTelemetryModule::runOnce()
         LOG_DEBUG("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
             if (sensor->isActive() && sensor->canSleep()) {
-                if (sensor->wakeUpTimeMs() < Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                                                     default_telemetry_broadcast_interval_secs,
-                                                                                     numOnlineNodes)) {
+                if (sensor->wakeUpTimeMs() <
+                    (int32_t)Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
+                                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
                     LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
                     sensor->sleep();
                 } else {
