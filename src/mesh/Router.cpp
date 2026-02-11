@@ -11,6 +11,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -93,6 +96,31 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     if (!localIsRouter) {
         return true;
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
+        moduleConfig.traffic_management.router_preserve_hops) {
+        // Preserve hop_limit when relayed by known routers to keep router-to-router traffic alive.
+        for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+            if (!node || !node->has_user)
+                continue;
+
+            if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                           meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+                continue;
+            }
+
+            if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
+                LOG_DEBUG("Router hop preserved: relay 0x%x is router (traffic_management)", node->num);
+                if (trafficManagementModule) {
+                    trafficManagementModule->recordRouterHopPreserved();
+                }
+                return false;
+            }
+        }
+    }
+#endif
 
     // For subsequent hops, check if previous relay is a favorite router
     // Optimized search for favorite routers with matching last byte
