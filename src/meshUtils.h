@@ -28,6 +28,10 @@ char *strnstr(const char *s, const char *find, size_t slen);
 
 void printBytes(const char *label, const uint8_t *p, size_t numbytes);
 
+/// Constant-time comparison of two byte arrays. Returns 0 if equal, -1 if different.
+/// Must be used for all security-sensitive comparisons (keys, MACs, hashes, tokens).
+int constant_time_compare(const void *a, const void *b, size_t len);
+
 // is the memory region filled with a single character?
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
 
