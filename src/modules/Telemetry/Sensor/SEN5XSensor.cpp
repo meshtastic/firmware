@@ -919,6 +919,11 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 void SEN5XSensor::setMode(bool setOneShot)
 {
     oneShotMode = setOneShot;
+    if (oneShotMode) {
+        LOG_INFO("%s setting mode to one shot mode", sensorName);
+    } else {
+        LOG_INFO("%s setting mode to continuous mode", sensorName);
+    }
 }
 
 AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
@@ -934,16 +939,22 @@ AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPa
             break;
         }
 
-        // TODO - Add admin command to set temperature offset
+        // Check for one-shot/continuous mode request
+        if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
+            this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
+        }
+
+        // TODO - Add admin command to set temperature offset?
         // Check for temperature offset
         // if (request->sensor_config.sen5x_config.has_set_temperature) {
         //     this->setTemperature(request->sensor_config.sen5x_config.set_temperature);
         // }
 
+        // TODO - Add admin command to trigger fan cleaning?
         // Check for one-shot/continuous mode request
-        if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
-            this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
-        }
+        // if (request->sensor_config.sen5x_config.has_fan_cleaning && request->sensor_config.sen5x_config.fan_cleaning) {
+        //     this->startCleaning();
+        // }
 
         result = AdminMessageHandleResult::HANDLED;
         break;
