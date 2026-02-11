@@ -7,4 +7,9 @@
 #include "TelemetrySensor.h"
 #include "main.h"
 
+// Shared humidity value for cross-sensor compensation
+// Default to 50% if no humidity sensor is available
+float lastEnvironmentHumidity = 50.0f;
+bool hasValidHumidity = false;
+
 #endif

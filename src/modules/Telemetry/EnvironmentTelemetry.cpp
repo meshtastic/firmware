@@ -26,6 +26,7 @@
 // Sensors
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
+#include "Sensor/TelemetrySensor.h"
 #include "Sensor/nullSensor.h"
 
 namespace graphics
@@ -571,6 +572,13 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid || get_metrics;
     hasSensor = true;
 #endif
+
+    // Update shared humidity for cross-sensor compensation (e.g., STC31 CO2 sensor)
+    if (m->variant.environment_metrics.has_relative_humidity) {
+        lastEnvironmentHumidity = m->variant.environment_metrics.relative_humidity;
+        hasValidHumidity = true;
+    }
+
     return valid && hasSensor;
 }
 

@@ -25,9 +25,14 @@
 #if __has_include(<SensirionI2cScd4x.h>)
 #include "Sensor/SCD4XSensor.h"
 #endif
+#if __has_include(<SensirionI2cStc3x.h>)
+#include "Sensor/STC31Sensor.h"
+#endif
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
+    LOG_DEBUG("AirQualityTelemetryModule::i2cScanFinished called, air_quality_enabled=%d",
+              moduleConfig.telemetry.air_quality_enabled);
     if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
         return;
     }
@@ -49,6 +54,9 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
 #if __has_include(<SensirionI2cScd4x.h>)
     addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
+#endif
+#if __has_include(<SensirionI2cStc3x.h>)
+    addSensor<STC31Sensor>(i2cScanner, ScanI2C::DeviceType::STC31);
 #endif
 }
 
@@ -92,6 +100,10 @@ int32_t AirQualityTelemetryModule::runOnce()
             return disable();
         }
 
+        bool isSensorRole = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
+        // SENSOR role bypasses airtime restrictions - telemetry is its primary purpose
+        bool airTimeAllows = isSensorRole || (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil());
+
         // Wake up the sensors that need it
         LOG_INFO("Waking up sensors...");
         for (TelemetrySensor *sensor : sensors) {
@@ -102,8 +114,7 @@ int32_t AirQualityTelemetryModule::runOnce()
                                                       Default::getConfiguredOrDefaultMsScaled(
                                                           moduleConfig.telemetry.air_quality_interval,
                                                           default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                       airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-                       airTime->isTxAllowedAirUtil()) {
+                       airTimeAllows) {
                 if (!sensor->isActive()) {
                     LOG_DEBUG("Waking up: %s", sensor->sensorName);
                     return sensor->wakeUp();
@@ -117,18 +128,19 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
         }
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.air_quality_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
+        bool timeToSend = (lastSentToMesh == 0) ||
+                          !Throttle::isWithinTimespanMs(
+                              lastSentToMesh,
+                              Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
+                                                                      default_telemetry_broadcast_interval_secs, numOnlineNodes));
+
+        if (timeToSend && airTimeAllows) {
             sendTelemetry();
             lastSentToMesh = millis();
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
-                   (service->isToPhoneQueueEmpty())) {
+                   (isSensorRole || service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
-            // Only send while queue is empty (phone assumed connected)
+            // SENSOR role always sends; others only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }

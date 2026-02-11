@@ -234,6 +234,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MAX30102_ADDR 0x57
 #define SCD4X_ADDR 0x62
 #define CW2015_ADDR 0x62
+#define STC31_ADDR 0x2c // RAK12008 uses 0x2C address
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53

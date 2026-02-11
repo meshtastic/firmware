@@ -154,6 +154,42 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
     return String(productName);
 }
 
+/// for STC31 detection - probe by reading product identifier
+/// Uses two-step sequence: prepareProductIdentifier (0x367c) then readProductIdentifier (0xe102)
+bool probeSTC31(TwoWire *i2cBus, uint8_t address)
+{
+    // Step 1: Send prepare product identifier command (0x367c)
+    uint8_t prepCmd[] = {0x36, 0x7c};
+    i2cBus->beginTransmission(address);
+    i2cBus->write(prepCmd, 2);
+    if (i2cBus->endTransmission() != 0)
+        return false;
+    delay(1);
+
+    // Step 2: Send read product identifier command (0xe102)
+    uint8_t readCmd[] = {0xe1, 0x02};
+    i2cBus->beginTransmission(address);
+    i2cBus->write(readCmd, 2);
+    if (i2cBus->endTransmission() != 0)
+        return false;
+    delay(10);
+
+    // Read 6 bytes: product number (4 bytes with CRC) + more data
+    // Product number is 32-bit: STC31 = 0x08010301
+    if (i2cBus->requestFrom(address, (uint8_t)6) != 6)
+        return false;
+
+    uint8_t response[6] = {0};
+    for (int i = 0; i < 6 && i2cBus->available(); ++i) {
+        response[i] = i2cBus->read();
+    }
+
+    uint32_t productId =
+        ((uint32_t)response[0] << 24) | ((uint32_t)response[1] << 16) | ((uint32_t)response[3] << 8) | response[4];
+
+    return productId == 0x08010301;
+}
+
 #define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
     case ADDR:                                                                                                                   \
         logFoundDevice(__VA_ARGS__);                                                                                             \
@@ -532,13 +568,23 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case TSL25911_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xA0 | 0x12), 1);
-                if (registerValue == 0x50) {
-                    type = TSL2591;
-                    logFoundDevice("TSL25911", (uint8_t)addr.address);
+                // TSL25911_ADDR (0x29) is shared by TSL2591, TSL2561, and STC31
+                // Probe for STC31 first (Sensirion CO2 sensor)
+                LOG_DEBUG("Probing address 0x29 for STC31...");
+                if (probeSTC31(i2cBus, addr.address)) {
+                    type = STC31;
+                    LOG_DEBUG("STC31 probe successful!");
+                    logFoundDevice("STC31", (uint8_t)addr.address);
                 } else {
-                    type = TSL2561;
-                    logFoundDevice("TSL2561", (uint8_t)addr.address);
+                    LOG_DEBUG("STC31 probe failed, checking for TSL sensors...");
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xA0 | 0x12), 1);
+                    if (registerValue == 0x50) {
+                        type = TSL2591;
+                        logFoundDevice("TSL25911", (uint8_t)addr.address);
+                    } else {
+                        type = TSL2561;
+                        logFoundDevice("TSL2561", (uint8_t)addr.address);
+                    }
                 }
                 break;
 
@@ -548,6 +594,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
+            case STC31_ADDR:
+                // RAK12008 uses address 0x2C for STC31
+                LOG_DEBUG("Probing address 0x2c for STC31...");
+                if (probeSTC31(i2cBus, addr.address)) {
+                    type = STC31;
+                    LOG_DEBUG("STC31 probe successful at 0x2c!");
+                    logFoundDevice("STC31", (uint8_t)addr.address);
+                } else {
+                    LOG_DEBUG("STC31 probe failed at 0x2c");
+                    LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
+                }
+                break;
             case CST328_ADDR:
                 // Do we have the CST328 or the CST226SE
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
