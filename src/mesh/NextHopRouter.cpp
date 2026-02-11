@@ -4,6 +4,9 @@
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #include "NodeDB.h"
 
 NextHopRouter::NextHopRouter() {}
@@ -126,15 +129,28 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 /* Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
-    if (!isToUs(p) && !isFromUs(p) && p->hop_limit > 0) {
+    // Check if traffic management wants to exhaust this packet's hops
+    bool exhaustHops = false;
+#if HAS_TRAFFIC_MANAGEMENT
+    if (trafficManagementModule && trafficManagementModule->shouldExhaustHops()) {
+        exhaustHops = true;
+    }
+#endif
+
+    // Allow rebroadcast if hop_limit > 0 OR if we're exhausting hops (which sets hop_limit = 0 but still needs one relay)
+    if (!isToUs(p) && !isFromUs(p) && (p->hop_limit > 0 || exhaustHops)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                     LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
 
-                    // Use shared logic to determine if hop_limit should be decremented
-                    if (shouldDecrementHopLimit(p)) {
+                    // If exhausting hops, force hop_limit = 0 regardless of other logic
+                    if (exhaustHops) {
+                        tosend->hop_limit = 0;
+                        LOG_INFO("Traffic management: exhausting hops, setting hop_limit=0");
+                    } else if (shouldDecrementHopLimit(p)) {
+                        // Use shared logic to determine if hop_limit should be decremented
                         tosend->hop_limit--; // bump down the hop count
                     } else {
                         LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
