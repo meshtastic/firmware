@@ -76,6 +76,8 @@
 #define BATTERY_SENSE_SAMPLES 30
 #define ADC_MULTIPLIER 2.9333
 
+#define OCV_ARRAY 7950, 7850, 7750, 7580, 7440, 7310, 7150, 7005, 6860, 6685, 6000
+
 // NTC temperature sensor
 #define NTC_PIN 14
 
