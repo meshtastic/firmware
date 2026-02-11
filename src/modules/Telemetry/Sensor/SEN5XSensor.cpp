@@ -230,20 +230,21 @@ bool SEN5XSensor::idle(bool checkState)
                 // Check if we have time, and store it
                 uint32_t now; // If time is RTCQualityNone, it will return zero
                 now = getValidTime(RTCQuality::RTCQualityDevice);
+                // Check if state is valid (non-zero)
                 if (now) {
-                    // Check if state is valid (non-zero)
                     vocTime = now;
                 }
             }
 
-            if (vocStateStable() && vocValid) {
-                saveState();
-            } else {
+            if (!(vocStateStable() && vocValid)) {
                 LOG_INFO("SEN5X: Not stopping measurement, vocState is not stable yet!");
                 return true;
             }
         }
     }
+
+    // Save state
+    saveState();
 
     if (!oneShotMode) {
         LOG_INFO("SEN5X: Not stopping measurement, continuous mode!");

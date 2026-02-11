@@ -217,7 +217,7 @@ bool SCD4XSensor::startMeasurement()
         state = SCD4X_MEASUREMENT;
         return true;
     } else {
-        LOG_ERROR("%s: Couldn't start measurement mode", sensorName);
+        LOG_ERROR("%s: Unable to start measurement mode", sensorName);
         return false;
     }
 }
@@ -232,7 +232,7 @@ bool SCD4XSensor::stopMeasurement()
 
     error = scd4x.stopPeriodicMeasurement();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to set idle mode on SCD4X.", sensorName);
+        LOG_ERROR("%s: Unable to stop measurement.", sensorName);
         return false;
     }
 
