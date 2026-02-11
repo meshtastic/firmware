@@ -1757,7 +1757,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     // saved public key.
     if ((info->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && !contact.manually_verified) {
         if (contact.user.public_key.size != info->user.public_key.size ||
-            memcmp(contact.user.public_key.bytes, info->user.public_key.bytes, info->user.public_key.size) != 0) {
+            constant_time_compare(contact.user.public_key.bytes, info->user.public_key.bytes, info->user.public_key.size) != 0) {
             return;
         }
     }
@@ -1820,7 +1820,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
-        if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
+        if (owner.public_key.size == 32 && constant_time_compare(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
             if (!duplicateWarned) {
                 duplicateWarned = true;
                 char warning[] =
@@ -1838,7 +1838,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
     if (info->user.public_key.size == 32) { // if we have a key for this user already, don't overwrite with a new one
         // if the key doesn't match, don't update nodeDB at all.
-        if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, info->user.public_key.bytes, 32) != 0)) {
+        if (p.public_key.size != 32 || (constant_time_compare(p.public_key.bytes, info->user.public_key.bytes, 32) != 0)) {
             LOG_WARN("Public Key mismatch, dropping NodeInfo");
             return false;
         }
