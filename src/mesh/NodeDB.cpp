@@ -1830,7 +1830,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 cn->level = meshtastic_LogRecord_Level_WARNING;
                 cn->time = getValidTime(RTCQualityFromNet);
-                sprintf(cn->message, warning, p.long_name);
+                snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
                 service->sendClientNotification(cn);
             }
             return false;

@@ -69,7 +69,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
-        sprintf(cn->message, "Enter Security Number for Key Verification");
+        snprintf(cn->message, sizeof(cn->message), "Enter Security Number for Key Verification");
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
         strncpy(cn->payload_variant.key_verification_number_request.remote_longname, // should really check for nulls, etc
@@ -83,7 +83,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
     } else if (currentState == KEY_VERIFICATION_RECEIVER_AWAITING_HASH1 && r->hash1.size == 32 && r->nonce == currentNonce) {
         if (memcmp(hash1, r->hash1.bytes, 32) == 0) {
             memset(message, 0, sizeof(message));
-            sprintf(message, "Verification: \n");
+            snprintf(message, sizeof(message), "Verification: \n");
             generateVerificationCode(message + 15);
             LOG_INFO("Hash1 matches!");
             static const char *optionsArray[] = {"Reject", "Accept"};
@@ -101,7 +101,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                       screen->showOverlayBanner(options);)
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
-            sprintf(cn->message, "Final confirmation for incoming manual key verification %s", message);
+            snprintf(cn->message, sizeof(cn->message), "Final confirmation for incoming manual key verification %s", message);
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
             cn->payload_variant.key_verification_final.nonce = currentNonce;
             strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
@@ -198,8 +198,8 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
               screen->showSimpleBanner(message, 30000); LOG_WARN("%s", message);)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
-    sprintf(cn->message, "Incoming Key Verification.\nSecurity Number\n%03u %03u", currentSecurityNumber / 1000,
-            currentSecurityNumber % 1000);
+    snprintf(cn->message, sizeof(cn->message), "Incoming Key Verification.\nSecurity Number\n%03u %03u",
+             currentSecurityNumber / 1000, currentSecurityNumber % 1000);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
     cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
     strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, // should really check for nulls, etc
@@ -262,7 +262,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     IF_SCREEN(screen->requestMenu(graphics::menuHandler::KeyVerificationFinalPrompt);)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
-    sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
+    snprintf(cn->message, sizeof(cn->message), "Final confirmation for outgoing manual key verification %s", message);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
     cn->payload_variant.key_verification_final.nonce = currentNonce;
     strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
