@@ -1015,6 +1015,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
 #endif
         break;
+#endif
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
@@ -1207,6 +1208,7 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
 #endif
             break;
+#endif
         }
 
         // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
