@@ -2,6 +2,7 @@
 
 #if HAS_TRAFFIC_MANAGEMENT
 
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
@@ -116,25 +117,31 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     // Initialize rolling epoch for relative timestamps
     cacheEpochMs = millis();
 
-// Allocate unified cache using cuckoo hash table sizing
+    // Calculate adaptive time resolutions from config (config changes require reboot)
+    // Resolution = max(60, min(339, interval/2)) for ~24 hour range with good precision
+    posTimeResolution = calcTimeResolution(Default::getConfiguredOrDefault(
+        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
+    rateTimeResolution = calcTimeResolution(moduleConfig.traffic_management.rate_limit_window_secs);
+    unknownTimeResolution = calcTimeResolution(kUnknownResetMs / 1000); // ~5 min default
+
+    TM_LOG_DEBUG("Time resolutions: pos=%us, rate=%us, unknown=%us", posTimeResolution, rateTimeResolution,
+                 unknownTimeResolution);
+
+// Allocate unified cache (10 bytes/entry for all platforms)
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     const uint16_t allocSize = cacheSize();
-    TM_LOG_INFO("Allocating unified cache: %u entries (%u bytes, %s mode)", allocSize, allocSize * sizeof(UnifiedCacheEntry),
-                useCompactTimestamps ? "compact" : "full");
+    TM_LOG_INFO("Allocating unified cache: %u entries (%u bytes)", allocSize,
+                static_cast<unsigned>(allocSize * sizeof(UnifiedCacheEntry)));
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    // ESP32 with PSRAM: prefer PSRAM for large allocations (20 bytes/entry)
+    // ESP32 with PSRAM: prefer PSRAM for large allocations
     cache = static_cast<UnifiedCacheEntry *>(ps_calloc(allocSize, sizeof(UnifiedCacheEntry)));
     if (!cache) {
         TM_LOG_WARN("PSRAM allocation failed, falling back to heap");
         cache = new UnifiedCacheEntry[allocSize]();
     }
-#elif defined(ARCH_PORTDUINO)
-    // Native/Portduino: heap allocation with full 20-byte structure (abundant memory)
-    cache = new UnifiedCacheEntry[allocSize]();
 #else
-    // Memory-constrained boards (NRF52, non-PSRAM ESP32): compact 12-byte entries
-    // Memory savings: 40% reduction vs full structure (12KB vs 20KB at 1024 entries)
+    // All other platforms: heap allocation
     cache = new UnifiedCacheEntry[allocSize]();
 #endif
 
@@ -304,24 +311,30 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
     // Fall back to evicting oldest entry globally
     TM_LOG_DEBUG("Cuckoo cycle detected, evicting oldest entry");
 
+    // Find slot where new node was placed (h1 has been modified during kicks)
+    uint16_t newNodeSlot = cuckooHash1(node);
+
     uint16_t oldestIdx = 0;
     uint16_t oldestTime = UINT16_MAX;
 
     for (uint16_t i = 0; i < cacheSize(); i++) {
+        // Skip the slot where we placed the new node - don't evict it!
+        if (i == newNodeSlot)
+            continue;
+
         // Use max of all timestamp fields as "last activity"
-        // For eviction, we need to compare across all time fields
-#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-        // Full mode: pos_time_secs is 16-bit seconds
-        uint16_t entryTime = cache[i].pos_time_secs;
-#else
-        // Compact mode: pos_time_mins is 8-bit minutes, scale to ~seconds for comparison
-        // Multiply by 60 to get rough second equivalent (won't overflow uint16_t)
-        uint16_t entryTime = static_cast<uint16_t>(cache[i].pos_time_mins) * 60;
-#endif
-        if (cache[i].rate_window_secs > entryTime)
-            entryTime = cache[i].rate_window_secs;
-        if (cache[i].unknown_secs > entryTime)
-            entryTime = cache[i].unknown_secs;
+        // Scale each to common unit (seconds) using its resolution
+        uint32_t posTimeSecs = static_cast<uint32_t>(cache[i].pos_time) * posTimeResolution;
+        uint32_t rateTimeSecs = static_cast<uint32_t>(cache[i].rate_time) * rateTimeResolution;
+        uint32_t unknownTimeSecs = static_cast<uint32_t>(cache[i].unknown_time) * unknownTimeResolution;
+
+        uint32_t entryTimeSecs = posTimeSecs;
+        if (rateTimeSecs > entryTimeSecs)
+            entryTimeSecs = rateTimeSecs;
+        if (unknownTimeSecs > entryTimeSecs)
+            entryTimeSecs = unknownTimeSecs;
+
+        uint16_t entryTime = (entryTimeSecs > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(entryTimeSecs);
 
         if (entryTime < oldestTime) {
             oldestTime = entryTime;
@@ -329,12 +342,12 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
         }
     }
 
-    // Place displaced entry in oldest slot
+    // Place displaced entry in oldest slot (guaranteed != newNodeSlot)
     cache[oldestIdx] = displaced;
 
     if (isNew)
         *isNew = true;
-    return &cache[cuckooHash1(node)]; // Return slot for original node
+    return &cache[newNodeSlot]; // Return slot for new node
 #endif
 }
 
@@ -345,28 +358,20 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 /**
  * Reset the timestamp epoch when relative offsets approach overflow.
  *
- * This invalidates all cached timestamps, effectively clearing time-based
- * state while preserving node associations. Called during periodic maintenance:
- * - Full mode (PSRAM): when epoch age exceeds ~17 hours (16-bit seconds)
- * - Compact mode: when epoch age exceeds ~3.5 hours (8-bit minutes for position)
+ * Called when epoch age exceeds ~3.5 hours (approaching 8-bit minute overflow).
+ * Invalidates all cached timestamps while preserving node associations.
  */
 void TrafficManagementModule::resetEpoch(uint32_t nowMs)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    TM_LOG_DEBUG("Resetting cache epoch (%s mode)", useCompactTimestamps ? "compact" : "full");
+    TM_LOG_DEBUG("Resetting cache epoch");
     cacheEpochMs = nowMs;
 
     // Invalidate all relative timestamps
     for (uint16_t i = 0; i < cacheSize(); i++) {
-#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-        // Full mode: clear 16-bit second timestamps
-        cache[i].pos_time_secs = 0;
-#else
-        // Compact mode: clear 8-bit minute timestamp
-        cache[i].pos_time_mins = 0;
-#endif
-        cache[i].rate_window_secs = 0;
-        cache[i].unknown_secs = 0;
+        cache[i].pos_time = 0;
+        cache[i].rate_time = 0;
+        cache[i].unknown_time = 0;
         cache[i].rate_count = 0;
         cache[i].unknown_count = 0;
     }
@@ -380,35 +385,44 @@ void TrafficManagementModule::resetEpoch(uint32_t nowMs)
 // =============================================================================
 
 /**
- * Compute an 8-bit hash from truncated lat/lon coordinates.
+ * Compute 8-bit position fingerprint from truncated lat/lon coordinates.
  *
- * This hash is used on memory-constrained platforms (NRF52, non-PSRAM ESP32)
- * instead of storing full 32-bit coordinates. The hash saves 7 bytes per cache
- * entry (8 bytes for two int32_t vs 1 byte for hash).
+ * Unlike a hash, this is deterministic: adjacent grid cells have sequential
+ * fingerprints, so nearby positions never collide. The fingerprint extracts
+ * the lower 4 significant bits from each truncated coordinate.
  *
- * Hash quality considerations:
- * - Uses golden ratio multiplication (2654435761) for good bit mixing
- * - XOR combines lat/lon to spread coordinate changes across all bits
- * - Final fold ensures all 32 bits contribute to the 8-bit result
+ * Example with precision=16:
+ *   lat_truncated = 0x12340000 (top 16 bits significant)
+ *   Significant portion = 0x1234, lower 4 bits = 0x4
  *
- * Collision probability: ~0.4% (1/256) for random positions
- * Impact of collision: May drop a valid position update (acceptable trade-off)
+ * fingerprint = (lat_low4 << 4) | lon_low4 = 8 bits total
+ *
+ * Collision: Two positions collide only if they differ by a multiple of 16
+ * grid cells in BOTH lat and lon dimensions simultaneously - very unlikely
+ * for typical position update patterns.
  *
  * @param lat_truncated  Precision-truncated latitude
  * @param lon_truncated  Precision-truncated longitude
- * @return               8-bit hash suitable for deduplication
+ * @param precision      Number of significant bits (1-32)
+ * @return               8-bit fingerprint (4 bits lat + 4 bits lon)
  */
-uint8_t TrafficManagementModule::computePositionHash(int32_t lat_truncated, int32_t lon_truncated)
+uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncated, int32_t lon_truncated, uint8_t precision)
 {
-    // Combine coordinates using golden ratio hash for good distribution
-    // 2654435761 is the closest prime to 2^32 / golden_ratio
-    uint32_t h = static_cast<uint32_t>(lat_truncated) ^ (static_cast<uint32_t>(lon_truncated) * 2654435761u);
+    // Guard: no truncation means no fingerprint
+    if (precision == 0 || precision >= 32)
+        return 0;
 
-    // Fold 32 bits down to 8 bits, ensuring all bits contribute
-    h ^= (h >> 16);
-    h ^= (h >> 8);
+    // Guard: if precision < 4, we have fewer bits to work with
+    // Take min(precision, 4) bits from each coordinate
+    uint8_t bitsToTake = (precision < 4) ? precision : 4;
 
-    return static_cast<uint8_t>(h);
+    // Shift to move significant bits to bottom, then mask lower bits
+    // For precision=16: shift by 16 to get the 16 significant bits at bottom
+    uint8_t shift = 32 - precision;
+    uint8_t latBits = (static_cast<uint32_t>(lat_truncated) >> shift) & ((1u << bitsToTake) - 1);
+    uint8_t lonBits = (static_cast<uint32_t>(lon_truncated) >> shift) & ((1u << bitsToTake) - 1);
+
+    return static_cast<uint8_t>((latBits << 4) | lonBits);
 }
 
 // =============================================================================
@@ -557,9 +571,7 @@ int32_t TrafficManagementModule::runOnce()
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     const uint32_t nowMs = millis();
 
-    // Check if epoch reset needed
-    // - Full mode (PSRAM): ~17 hours (approaching 16-bit second overflow)
-    // - Compact mode: ~3.5 hours (approaching 8-bit minute overflow for position)
+    // Check if epoch reset needed (~3.5 hours approaching 8-bit minute overflow)
     if (needsEpochReset(nowMs)) {
         concurrency::LockGuard guard(&cacheLock);
         resetEpoch(nowMs);
@@ -567,18 +579,13 @@ int32_t TrafficManagementModule::runOnce()
     }
 
     // Calculate TTLs for cache expiration
-    // Position TTL: 4x the configured interval, or default (~10 min)
-    const uint32_t positionIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
-    const uint64_t positionTtlCalc =
-        (positionIntervalMs > 0) ? static_cast<uint64_t>(positionIntervalMs) * 4ULL : kDefaultCacheTtlMs;
-    const uint32_t positionTtlMs = positionTtlCalc > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(positionTtlCalc);
+    const uint32_t positionIntervalMs = secsToMs(Default::getConfiguredOrDefault(
+        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
+    const uint32_t positionTtlMs = positionIntervalMs * 4;
 
-    // Rate limit TTL: 2x the window, or default
     const uint32_t rateIntervalMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
-    const uint64_t rateTtlCalc = (rateIntervalMs > 0) ? static_cast<uint64_t>(rateIntervalMs) * 2ULL : kDefaultCacheTtlMs;
-    const uint32_t rateTtlMs = rateTtlCalc > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(rateTtlCalc);
+    const uint32_t rateTtlMs = (rateIntervalMs > 0) ? rateIntervalMs * 2 : static_cast<uint32_t>(kDefaultCacheTtlMs);
 
-    // Unknown packet TTL: 5x the reset window
     const uint32_t unknownTtlMs = kUnknownResetMs * 5;
 
     // Sweep cache and clear expired entries
@@ -589,55 +596,34 @@ int32_t TrafficManagementModule::runOnce()
 
         bool anyValid = false;
 
-        // ---------------------------------------------------------------------
         // Check and clear expired position data
-        // ---------------------------------------------------------------------
-#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-        // Full mode: 16-bit second timestamps, stores actual coordinates
-        if (cache[i].pos_time_secs != 0) {
-            uint32_t posTimeMs = fromRelativeSecs(cache[i].pos_time_secs);
+        if (cache[i].pos_time != 0) {
+            uint32_t posTimeMs = fromRelativePosTime(cache[i].pos_time);
             if (!isWithinWindow(nowMs, posTimeMs, positionTtlMs)) {
-                cache[i].lat_truncated = 0;
-                cache[i].lon_truncated = 0;
-                cache[i].pos_time_secs = 0;
+                cache[i].pos_fingerprint = 0;
+                cache[i].pos_time = 0;
             } else {
                 anyValid = true;
             }
         }
-#else
-        // Compact mode: 8-bit minute timestamps, stores position hash
-        if (cache[i].pos_time_mins != 0) {
-            uint32_t posTimeMs = fromRelativeMins(cache[i].pos_time_mins);
-            if (!isWithinWindow(nowMs, posTimeMs, positionTtlMs)) {
-                cache[i].pos_hash = 0;
-                cache[i].pos_time_mins = 0;
-            } else {
-                anyValid = true;
-            }
-        }
-#endif
 
-        // ---------------------------------------------------------------------
-        // Check and clear expired rate limit data (same for both modes)
-        // ---------------------------------------------------------------------
-        if (cache[i].rate_window_secs != 0) {
-            uint32_t rateTimeMs = fromRelativeSecs(cache[i].rate_window_secs);
+        // Check and clear expired rate limit data
+        if (cache[i].rate_time != 0) {
+            uint32_t rateTimeMs = fromRelativeRateTime(cache[i].rate_time);
             if (!isWithinWindow(nowMs, rateTimeMs, rateTtlMs)) {
                 cache[i].rate_count = 0;
-                cache[i].rate_window_secs = 0;
+                cache[i].rate_time = 0;
             } else {
                 anyValid = true;
             }
         }
 
-        // ---------------------------------------------------------------------
-        // Check and clear expired unknown tracking data (same for both modes)
-        // ---------------------------------------------------------------------
-        if (cache[i].unknown_secs != 0) {
-            uint32_t unknownTimeMs = fromRelativeSecs(cache[i].unknown_secs);
+        // Check and clear expired unknown tracking data
+        if (cache[i].unknown_time != 0) {
+            uint32_t unknownTimeMs = fromRelativeUnknownTime(cache[i].unknown_time);
             if (!isWithinWindow(nowMs, unknownTimeMs, unknownTtlMs)) {
                 cache[i].unknown_count = 0;
-                cache[i].unknown_secs = 0;
+                cache[i].unknown_time = 0;
             } else {
                 anyValid = true;
             }
@@ -669,13 +655,16 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     if (!pos->has_latitude_i || !pos->has_longitude_i)
         return false;
 
-    uint8_t precision = moduleConfig.traffic_management.position_precision_bits;
+    uint8_t precision = Default::getConfiguredOrDefault(moduleConfig.traffic_management.position_precision_bits,
+                                                        default_traffic_mgmt_position_precision_bits);
     if (precision > 32)
         precision = 32;
 
     const int32_t lat_truncated = truncateLatLon(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateLatLon(pos->longitude_i, precision);
-    const uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
+    const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
+    const uint32_t minIntervalMs = secsToMs(Default::getConfiguredOrDefault(
+        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
@@ -683,38 +672,18 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     if (!entry)
         return false;
 
-#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-    // -------------------------------------------------------------------------
-    // Full mode (PSRAM): Compare actual truncated coordinates
-    // -------------------------------------------------------------------------
-    // Stores complete lat/lon for precise duplicate detection.
-    // Uses 16-bit second timestamps (~18 hour range).
-    //
-    const bool same = !isNew && entry->lat_truncated == lat_truncated && entry->lon_truncated == lon_truncated;
-    const bool within =
-        (minIntervalMs == 0) ? true : isWithinWindow(nowMs, fromRelativeSecs(entry->pos_time_secs), minIntervalMs);
+    // Compare fingerprint and check time window
+    // When minIntervalMs == 0, deduplication is disabled (withinInterval = false means never drop)
+    const bool samePosition = !isNew && entry->pos_fingerprint == fingerprint;
+    const bool withinInterval =
+        (minIntervalMs == 0) ? false : isWithinWindow(nowMs, fromRelativePosTime(entry->pos_time), minIntervalMs);
 
-    entry->lat_truncated = lat_truncated;
-    entry->lon_truncated = lon_truncated;
-    entry->pos_time_secs = toRelativeSecs(nowMs);
-#else
-    // -------------------------------------------------------------------------
-    // Compact mode (NRF52, non-PSRAM ESP32): Compare 8-bit position hash
-    // -------------------------------------------------------------------------
-    // Saves 7 bytes per entry by hashing coordinates instead of storing them.
-    // Hash collision (~0.4%) may occasionally drop a valid position - acceptable.
-    // Uses 8-bit minute timestamps (~4 hour range, default for position dedup).
-    //
-    const uint8_t posHash = computePositionHash(lat_truncated, lon_truncated);
-    const bool same = !isNew && entry->pos_hash == posHash;
-    const bool within =
-        (minIntervalMs == 0) ? true : isWithinWindow(nowMs, fromRelativeMins(entry->pos_time_mins), minIntervalMs);
+    // Update cache entry
+    entry->pos_fingerprint = fingerprint;
+    entry->pos_time = toRelativePosTime(nowMs);
 
-    entry->pos_hash = posHash;
-    entry->pos_time_mins = toRelativeMins(nowMs);
-#endif
-
-    return same && within;
+    // Drop only if same position AND within the minimum interval
+    return samePosition && withinInterval;
 #endif
 }
 
@@ -802,8 +771,8 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
         return false;
 
     // Check if window has expired
-    if (isNew || !isWithinWindow(nowMs, fromRelativeSecs(entry->rate_window_secs), windowMs)) {
-        entry->rate_window_secs = toRelativeSecs(nowMs);
+    if (isNew || !isWithinWindow(nowMs, fromRelativeRateTime(entry->rate_time), windowMs)) {
+        entry->rate_time = toRelativeRateTime(nowMs);
         entry->rate_count = 1;
         return false;
     }
@@ -841,8 +810,8 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
         return false;
 
     // Check if window has expired
-    if (isNew || !isWithinWindow(nowMs, fromRelativeSecs(entry->unknown_secs), windowMs)) {
-        entry->unknown_secs = toRelativeSecs(nowMs);
+    if (isNew || !isWithinWindow(nowMs, fromRelativeUnknownTime(entry->unknown_time), windowMs)) {
+        entry->unknown_time = toRelativeUnknownTime(nowMs);
         entry->unknown_count = 0;
     }
 
