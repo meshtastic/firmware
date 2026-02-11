@@ -575,10 +575,13 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
-            if (p->pki_encrypted == false && isBroadcast(p->to) && p->decoded.payload.size < 120) {
+            // Sign broadcast packets if payload + signature fits within the max Data payload.
+            // The actual encoded size is checked after pb_encode (TOO_LARGE).
+            if (!p->pki_encrypted && isBroadcast(p->to) &&
+                p->decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
-                    p->decoded.xeddsa_signature.size = 64;
+                    p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
                     p->decoded.has_xeddsa_signature = true;
                     LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
                 }

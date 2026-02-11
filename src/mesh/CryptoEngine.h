@@ -22,6 +22,7 @@ struct CryptoKey {
 
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+#define XEDDSA_SIGNATURE_SIZE 64
 
 class CryptoEngine
 {
