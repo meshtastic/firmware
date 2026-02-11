@@ -736,6 +736,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.payload.size =
         pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &user);
     reply->decoded.want_response = false;
+    reply->from = p->to; // Spoof sender as the target node we're responding on behalf of
     reply->to = getFrom(p);
     reply->channel = p->channel;
     reply->decoded.request_id = p->id;
