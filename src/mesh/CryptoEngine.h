@@ -35,8 +35,10 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
-    bool xeddsa_sign(uint8_t *message, size_t len, uint8_t *signature);
-    bool xeddsa_verify(uint8_t *pubKey, uint8_t *message, size_t len, uint8_t *signature);
+    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+                     uint8_t *signature);
+    bool xeddsa_verify(uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
+                       size_t payloadLen, uint8_t *signature);
 
 #endif
     void clearKeys();

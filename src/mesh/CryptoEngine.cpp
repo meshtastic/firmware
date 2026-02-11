@@ -68,18 +68,48 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     return true;
 }
 
-bool CryptoEngine::xeddsa_sign(uint8_t *message, size_t len, uint8_t *signature)
+/**
+ * Build a signing buffer that covers packet metadata and payload:
+ *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]
+ * This prevents replay, reattribution, and portnum redirection attacks.
+ */
+static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
+                                 const uint8_t *payload, size_t payloadLen)
 {
-    XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, message,
-                 len); // sign will need modified to use the raw secret scalar, and not hash it first.
+    const size_t headerLen = sizeof(uint32_t) * 3;
+    size_t totalLen = headerLen + payloadLen;
+    if (totalLen > bufSize)
+        return 0;
+    memcpy(buf, &fromNode, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
+    memcpy(buf + headerLen, payload, payloadLen);
+    return totalLen;
+}
+
+bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+                               uint8_t *signature)
+{
+    if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
+        return false;
+    uint8_t sigBuf[MAX_BLOCKSIZE];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    if (sigLen == 0)
+        return false;
+    XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen);
     return true;
 }
-bool CryptoEngine::xeddsa_verify(uint8_t *pubKey, uint8_t *message, size_t len, uint8_t *signature)
+
+bool CryptoEngine::xeddsa_verify(uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
+                                 size_t payloadLen, uint8_t *signature)
 {
     uint8_t publicKey[32] = {0};
     curve_to_ed_pub(pubKey, publicKey);
-
-    return XEdDSA::verify(signature, publicKey, message, len);
+    uint8_t sigBuf[MAX_BLOCKSIZE];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    if (sigLen == 0)
+        return false;
+    return XEdDSA::verify(signature, publicKey, sigBuf, sigLen);
 }
 
 void CryptoEngine::curve_to_ed_pub(uint8_t *curve_pubkey, uint8_t *ed_pubkey)

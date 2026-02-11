@@ -503,8 +503,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (p->decoded.has_xeddsa_signature) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
             if (node && node->user.public_key.size == 32) {
-                p->xeddsa_signed = crypto->xeddsa_verify(node->user.public_key.bytes, p->decoded.payload.bytes,
-                                                         p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                p->xeddsa_signed =
+                    crypto->xeddsa_verify(node->user.public_key.bytes, p->from, p->id, p->decoded.portnum,
+                                          p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
                 if (p->xeddsa_signed) {
                     // Mark this node as a signer so future unsigned packets from it are rejected
                     node->bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
@@ -575,10 +576,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
             if (p->pki_encrypted == false && isBroadcast(p->to) && p->decoded.payload.size < 120) {
-                crypto->xeddsa_sign(p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
-                p->decoded.xeddsa_signature.size = 64;
-                p->decoded.has_xeddsa_signature = true;
-                LOG_WARN("XEDDSA Signed!");
+                if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
+                                        p->decoded.xeddsa_signature.bytes)) {
+                    p->decoded.xeddsa_signature.size = 64;
+                    p->decoded.has_xeddsa_signature = true;
+                    LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
+                }
             }
         }
 
