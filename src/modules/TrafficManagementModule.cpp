@@ -9,6 +9,7 @@
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include <Arduino.h>
 #include <cstring>
 
@@ -27,6 +28,13 @@ constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL;  // Cache cleanup inter
 constexpr uint32_t kUnknownResetMs = 60 * 1000UL;         // Unknown packet window
 constexpr uint32_t kDefaultCacheTtlMs = 10 * 60 * 1000UL; // Default TTL for cache entries
 constexpr uint8_t kMaxCuckooKicks = 16;                   // Max displacement chain length
+
+// NodeInfo direct response: enforced maximum hops by device role
+// Both use maxHops logic (respond when hopsAway <= threshold)
+// Config value is clamped to these role-based limits
+// Note: nodeinfo_direct_response must also be enabled for this to take effect
+constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
+constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
 
 /**
  * Convert seconds to milliseconds with overflow protection.
@@ -783,13 +791,20 @@ bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket
     if (hopsAway < 0)
         return false;
 
-    uint32_t minHops = moduleConfig.traffic_management.nodeinfo_direct_response_min_hops;
-    if (minHops == 0)
-        minHops = 2;
-    if (minHops > 7)
-        minHops = 7;
+    // Both routers and clients use maxHops logic (respond when hopsAway <= threshold)
+    // Role determines the maximum allowed value (enforced limit, not just default)
+    bool isRouter = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                              meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
 
-    return static_cast<uint32_t>(hopsAway) >= minHops;
+    uint32_t roleLimit = isRouter ? kRouterDefaultMaxHops : kClientDefaultMaxHops;
+    uint32_t configValue = moduleConfig.traffic_management.nodeinfo_direct_response_min_hops;
+
+    // Use config value if set, otherwise use role default, but always clamp to role limit
+    uint32_t maxHops = (configValue > 0) ? configValue : roleLimit;
+    if (maxHops > roleLimit)
+        maxHops = roleLimit;
+
+    return static_cast<uint32_t>(hopsAway) <= maxHops;
 }
 
 bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
