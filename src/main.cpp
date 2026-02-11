@@ -349,9 +349,10 @@ void setup()
 #endif
 
     concurrency::hasBeenSetup = true;
-
+#if HAS_SCREEN
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
+#endif
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 #ifdef USE_SEGGER
@@ -568,6 +569,7 @@ void setup()
     }
 #endif
 
+#if HAS_SCREEN
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
@@ -585,6 +587,7 @@ void setup()
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
+#endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 #if defined(USE_VIRTUAL_KEYBOARD)
@@ -722,6 +725,7 @@ void setup()
     else
         playStartMelody();
 
+#if HAS_SCREEN
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
@@ -733,6 +737,7 @@ void setup()
 
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C

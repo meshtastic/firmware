@@ -572,7 +572,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     // Check if it is time to do a cleaning
     uint32_t now;
-    int32_t passed;
+    int32_t passed = 0;
     now = getValidTime(RTCQuality::RTCQualityDevice);
 
     // If time is not RTCQualityNone, it will return non-zero
