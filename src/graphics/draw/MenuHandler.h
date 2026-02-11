@@ -8,53 +8,54 @@ class menuHandler
 {
   public:
     enum screenMenus {
-        menu_none,
-        lora_Menu,
-        lora_picker,
-        device_role_picker,
-        radio_preset_picker,
-        frequency_slot,
-        no_timeout_lora_picker,
-        TZ_picker,
-        twelve_hour_picker,
-        clock_face_picker,
-        clock_menu,
-        position_base_menu,
-        node_base_menu,
-        gps_toggle_menu,
-        gps_format_menu,
-        gps_smart_position_menu,
-        gps_update_interval_menu,
-        gps_position_broadcast_menu,
-        compass_point_north_menu,
-        reset_node_db_menu,
-        buzzermodemenupicker,
-        mui_picker,
-        tftcolormenupicker,
-        brightness_picker,
-        reboot_menu,
-        shutdown_menu,
-        NodePicker_menu,
-        Manage_Node_menu,
-        remove_favorite,
-        test_menu,
-        number_test,
-        wifi_toggle_menu,
-        bluetooth_toggle_menu,
-        screen_options_menu,
-        power_menu,
-        system_base_menu,
-        key_verification_init,
-        key_verification_final_prompt,
-        trace_route_menu,
-        throttle_message,
-        message_response_menu,
-        message_viewmode_menu,
-        reply_menu,
-        delete_messages_menu,
-        node_name_length_menu,
+        MenuNone,
+        LoraMenu,
+        LoraPicker,
+        DeviceRolePicker,
+        RadioPresetPicker,
+        FrequencySlot,
+        NoTimeoutLoraPicker,
+        TzPicker,
+        TwelveHourPicker,
+        ClockFacePicker,
+        ClockMenu,
+        PositionBaseMenu,
+        NodeBaseMenu,
+        GpsToggleMenu,
+        GpsFormatMenu,
+        GpsSmartPositionMenu,
+        GpsUpdateIntervalMenu,
+        GpsPositionBroadcastMenu,
+        CompassPointNorthMenu,
+        ResetNodeDbMenu,
+        BuzzerModeMenuPicker,
+        MuiPicker,
+        TftColorMenuPicker,
+        BrightnessPicker,
+        RebootMenu,
+        ShutdownMenu,
+        NodePickerMenu,
+        ManageNodeMenu,
+        RemoveFavorite,
+        TestMenu,
+        NumberTest,
+        WifiToggleMenu,
+        BluetoothToggleMenu,
+        ScreenOptionsMenu,
+        PowerMenu,
+        SystemBaseMenu,
+        KeyVerificationInit,
+        KeyVerificationFinalPrompt,
+        TraceRouteMenu,
+        ThrottleMessage,
+        MessageResponseMenu,
+        MessageViewModeMenu,
+        ReplyMenu,
+        DeleteMessagesMenu,
+        NodeNameLengthMenu,
         FrameToggles,
-        DisplayUnits
+        DisplayUnits,
+        MessageBubblesMenu
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
@@ -62,15 +63,15 @@ class menuHandler
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
-    static void DeviceRolePicker();
-    static void RadioPresetPicker();
+    static void deviceRolePicker();
+    static void radioPresetPicker();
     static void FrequencySlotPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
     static void TZPicker();
-    static void TwelveHourPicker();
-    static void ClockFacePicker();
+    static void twelveHourPicker();
+    static void clockFacePicker();
     static void messageResponseMenu();
     static void messageViewModeMenu();
     static void replyMenu();
@@ -95,7 +96,7 @@ class menuHandler
     static void rebootMenu();
     static void shutdownMenu();
     static void NodePicker();
-    static void ManageNodeMenu();
+    static void manageNodeMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void traceRouteMenu();
@@ -106,15 +107,16 @@ class menuHandler
     static void screenOptionsMenu();
     static void powerMenu();
     static void nodeNameLengthMenu();
-    static void FrameToggles_menu();
-    static void DisplayUnits_menu();
+    static void frameTogglesMenu();
+    static void displayUnitsMenu();
+    static void messageBubblesMenu();
     static void textMessageMenu();
 
   private:
     static void saveUIConfig();
     static void keyVerificationInitMenu();
     static void keyVerificationFinalPrompt();
-    static void BluetoothToggleMenu();
+    static void bluetoothToggleMenu();
 };
 
 /* Generic Menu Options designations  */
@@ -140,7 +142,7 @@ struct ScreenColor {
     uint8_t b;
     bool useVariant;
 
-    ScreenColor(uint8_t rIn = 0, uint8_t gIn = 0, uint8_t bIn = 0, bool variantIn = false)
+    explicit ScreenColor(uint8_t rIn = 0, uint8_t gIn = 0, uint8_t bIn = 0, bool variantIn = false)
         : r(rIn), g(gIn), b(bIn), useVariant(variantIn)
     {
     }
