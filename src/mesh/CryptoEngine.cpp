@@ -100,8 +100,8 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
     return true;
 }
 
-bool CryptoEngine::xeddsa_verify(uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
-                                 size_t payloadLen, uint8_t *signature)
+bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
+                                 const uint8_t *payload, size_t payloadLen, const uint8_t *signature)
 {
     // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
     if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
@@ -115,7 +115,7 @@ bool CryptoEngine::xeddsa_verify(uint8_t *pubKey, uint32_t fromNode, uint32_t pa
     return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
 }
 
-void CryptoEngine::curve_to_ed_pub(uint8_t *curve_pubkey, uint8_t *ed_pubkey)
+void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey)
 {
 
     // Apply the birational map defined in RFC 7748, section 4.1 "Curve25519" to calculate an Ed25519 public
