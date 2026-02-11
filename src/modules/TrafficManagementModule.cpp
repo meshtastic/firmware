@@ -414,6 +414,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         return ProcessMessage::CONTINUE;
 
     ignoreRequest = false;
+    exhaustRequested = false; // Reset exhaust flag for this packet
     incrementStat(&stats.packets_inspected);
 
     const auto &cfg = moduleConfig.traffic_management;
@@ -555,6 +556,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
         const char *reason = isTelemetry ? "zero-hop-telemetry" : "exhaust-hop-position";
         logAction("exhaust", &mp, reason);
         exhaustHops(&mp);
+        exhaustRequested = true; // Signal to perhapsRebroadcast() to force hop_limit = 0
         incrementStat(&stats.hop_exhausted_packets);
     }
 }
@@ -848,9 +850,10 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
 
 void TrafficManagementModule::exhaustHops(meshtastic_MeshPacket *p)
 {
-    // Set to 1 so packet still gets relayed once, but after normal hop decrement
-    // the outgoing packet has hop_limit=0 and won't propagate further
-    p->hop_limit = 1;
+    // Set to 0 to ensure the packet won't propagate further after this node relays it.
+    // The exhaustRequested flag signals perhapsRebroadcast() to preserve hop_limit=0
+    // even if router_preserve_hops or favorite node logic would normally prevent decrement.
+    p->hop_limit = 0;
 }
 
 #if defined(ARCH_NRF52)
