@@ -55,10 +55,15 @@ void InkHUD::Events::onButtonShort()
     }
 
     // If no system applet is handling input, default behavior instead is to cycle applets
-    if (consumer)
+    // or open menu if joystick is enabled
+    if (consumer) {
         consumer->onButtonShortPress();
-    else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
-        inkhud->nextApplet();
+    } else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
+        if (!settings->joystick.enabled)
+            inkhud->nextApplet();
+        else
+            inkhud->openMenu();
+    }
 }
 
 void InkHUD::Events::onButtonLong()
@@ -81,6 +86,189 @@ void InkHUD::Events::onButtonLong()
         consumer->onButtonLongPress();
     else
         inkhud->openMenu();
+}
+
+void InkHUD::Events::onExitShort()
+{
+    if (settings->joystick.enabled) {
+        // Audio feedback (via buzzer)
+        // Short tone
+        playChirp();
+        // Cancel any beeping, buzzing, blinking
+        // Some button handling suppressed if we are dismissing an external notification (see below)
+        bool dismissedExt = dismissExternalNotification();
+
+        // Check which system applet wants to handle the button press (if any)
+        SystemApplet *consumer = nullptr;
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleInput) {
+                consumer = sa;
+                break;
+            }
+        }
+
+        // If no system applet is handling input, default behavior instead is change tiles
+        if (consumer)
+            consumer->onExitShort();
+        else if (!dismissedExt) // Don't change tile if this button press silenced the external notification module
+            inkhud->nextTile();
+    }
+}
+
+void InkHUD::Events::onExitLong()
+{
+    if (settings->joystick.enabled) {
+        // Audio feedback (via buzzer)
+        // Slightly longer than playChirp
+        playBoop();
+
+        // Check which system applet wants to handle the button press (if any)
+        SystemApplet *consumer = nullptr;
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleInput) {
+                consumer = sa;
+                break;
+            }
+        }
+
+        if (consumer)
+            consumer->onExitLong();
+    }
+}
+
+void InkHUD::Events::onNavUp()
+{
+    if (settings->joystick.enabled) {
+        // Audio feedback (via buzzer)
+        // Short tone
+        playChirp();
+        // Cancel any beeping, buzzing, blinking
+        // Some button handling suppressed if we are dismissing an external notification (see below)
+        bool dismissedExt = dismissExternalNotification();
+
+        // Check which system applet wants to handle the button press (if any)
+        SystemApplet *consumer = nullptr;
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleInput) {
+                consumer = sa;
+                break;
+            }
+        }
+
+        if (consumer)
+            consumer->onNavUp();
+    }
+}
+
+void InkHUD::Events::onNavDown()
+{
+    if (settings->joystick.enabled) {
+        // Audio feedback (via buzzer)
+        // Short tone
+        playChirp();
+        // Cancel any beeping, buzzing, blinking
+        // Some button handling suppressed if we are dismissing an external notification (see below)
+        bool dismissedExt = dismissExternalNotification();
+
+        // Check which system applet wants to handle the button press (if any)
+        SystemApplet *consumer = nullptr;
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleInput) {
+                consumer = sa;
+                break;
+            }
+        }
+
+        if (consumer)
+            consumer->onNavDown();
+    }
+}
+
+void InkHUD::Events::onNavLeft()
+{
+    if (settings->joystick.enabled) {
+        // Audio feedback (via buzzer)
+        // Short tone
+        playChirp();
+        // Cancel any beeping, buzzing, blinking
+        // Some button handling suppressed if we are dismissing an external notification (see below)
+        bool dismissedExt = dismissExternalNotification();
+
+        // Check which system applet wants to handle the button press (if any)
+        SystemApplet *consumer = nullptr;
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleInput) {
+                consumer = sa;
+                break;
+            }
+        }
+
+        // If no system applet is handling input, default behavior instead is to cycle applets
+        if (consumer)
+            consumer->onNavLeft();
+        else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
+            inkhud->prevApplet();
+    }
+}
+
+void InkHUD::Events::onNavRight()
+{
+    if (settings->joystick.enabled) {
+        // Audio feedback (via buzzer)
+        // Short tone
+        playChirp();
+        // Cancel any beeping, buzzing, blinking
+        // Some button handling suppressed if we are dismissing an external notification (see below)
+        bool dismissedExt = dismissExternalNotification();
+
+        // Check which system applet wants to handle the button press (if any)
+        SystemApplet *consumer = nullptr;
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleInput) {
+                consumer = sa;
+                break;
+            }
+        }
+
+        // If no system applet is handling input, default behavior instead is to cycle applets
+        if (consumer)
+            consumer->onNavRight();
+        else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
+            inkhud->nextApplet();
+    }
+}
+
+void InkHUD::Events::onFreeText(char c)
+{
+    // Trigger the first system applet that wants to handle the new character
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeText(c);
+            break;
+        }
+    }
+}
+
+void InkHUD::Events::onFreeTextDone()
+{
+    // Trigger the first system applet that wants to handle it
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeTextDone();
+            break;
+        }
+    }
+}
+
+void InkHUD::Events::onFreeTextCancel()
+{
+    // Trigger the first system applet that wants to handle it
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeTextCancel();
+            break;
+        }
+    }
 }
 
 // Callback for deepSleepObserver
@@ -111,7 +299,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     // then prepared a final powered-off screen for us, which shows device shortname.
     // We're updating to show that one now.
 
-    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
     delay(1000); // Cooldown, before potentially yanking display power
 
     // InkHUD shutdown complete
@@ -119,6 +307,15 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     playShutdownMelody();
 
     return 0; // We agree: deep sleep now
+}
+
+// Display an intermediate screen while configuration changes are applied
+void InkHUD::Events::applyingChanges()
+{
+    // Bring the logo applet forward with a temporary message
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        sa->onApplyingChanges();
+    }
 }
 
 // Callback for rebootObserver

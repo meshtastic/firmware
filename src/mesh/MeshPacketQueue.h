@@ -19,8 +19,10 @@ class MeshPacketQueue
   public:
     explicit MeshPacketQueue(size_t _maxLen);
 
-    /** enqueue a packet, return false if full */
-    bool enqueue(meshtastic_MeshPacket *p);
+    /** enqueue a packet, return false if full
+     * @param dropped Optional pointer to a bool that will be set to true if a packet was dropped
+     */
+    bool enqueue(meshtastic_MeshPacket *p, bool *dropped = nullptr);
 
     /** return true if the queue is empty */
     bool empty();

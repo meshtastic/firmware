@@ -82,7 +82,13 @@ class ICM20948Sensor : public MotionSensor
   private:
     ICM20948Singleton *sensor = nullptr;
     bool showingScreen = false;
+    bool isAsleep = false;
+#ifdef MUZI_BASE
+    float highestX = 449.000000, lowestX = -140.000000, highestY = 422.000000, lowestY = -232.000000, highestZ = 749.000000,
+          lowestZ = 98.000000;
+#else
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+#endif
 
   public:
     explicit ICM20948Sensor(ScanI2C::FoundDevice foundDevice);

@@ -38,18 +38,10 @@ int8_t ntc_temp2[136] = {
 
 T1000xSensor::T1000xSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "T1000x") {}
 
-int32_t T1000xSensor::runOnce()
+bool T1000xSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-}
-
-void T1000xSensor::setup()
-{
-    // Set up oversampling and filter initialization
+    return true;
 }
 
 float T1000xSensor::getLux()

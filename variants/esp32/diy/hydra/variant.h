@@ -6,7 +6,6 @@
 #define GPS_TX_PIN 15
 #define GPS_RX_PIN 12
 #define PIN_GPS_EN 4
-#define GPS_POWER_TOGGLE // Moved definition from platformio.ini to here
 
 #define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
 // Note: On the ESP32 base version, gpio34-39 are input-only, and do not have internal pull-ups.

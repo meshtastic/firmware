@@ -15,18 +15,26 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
 {
     // Only provide feedback if buzzer is enabled for notifications
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY) {
+        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY ||
+        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY) {
         return 0; // Let other handlers process the event
     }
 
     // Handle different input events with appropriate buzzer feedback
     switch (event->inputEvent) {
+#ifdef INPUTDRIVER_ENCODER_TYPE
+    case INPUT_BROKER_SELECT:
+    case INPUT_BROKER_SELECT_LONG:
+        playClick();
+        break;
+#else
     case INPUT_BROKER_USER_PRESS:
     case INPUT_BROKER_ALT_PRESS:
     case INPUT_BROKER_SELECT:
     case INPUT_BROKER_SELECT_LONG:
-        playBeep(); // Confirmation feedback
+        playBeep();
         break;
+#endif
 
     case INPUT_BROKER_UP:
     case INPUT_BROKER_UP_LONG:

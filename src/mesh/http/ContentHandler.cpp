@@ -148,6 +148,8 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
+    if (webServerThread)
+        webServerThread->markActivity();
 
     LOG_DEBUG("webAPI handleAPIv1FromRadio");
 
@@ -171,7 +173,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        // res->print(""); @todo remove
+        res->print("");
         return;
     }
 
@@ -221,7 +223,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        // res->print(""); @todo remove
+        res->print("");
         return;
     }
 
@@ -391,6 +393,9 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 
 void handleStatic(HTTPRequest *req, HTTPResponse *res)
 {
+    if (webServerThread)
+        webServerThread->markActivity();
+
     // Get access to the parameters
     ResourceParameters *params = req->getParams();
 

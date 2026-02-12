@@ -8,18 +8,14 @@
 
 RCWL9620Sensor::RCWL9620Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_RCWL9620, "RCWL9620") {}
 
-int32_t RCWL9620Sensor::runOnce()
+bool RCWL9620Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
     status = 1;
-    begin(nodeTelemetrySensorsMap[sensorType].second, nodeTelemetrySensorsMap[sensorType].first);
-    return initI2CSensor();
+    begin(bus, dev->address.address);
+    initI2CSensor();
+    return status;
 }
-
-void RCWL9620Sensor::setup() {}
 
 bool RCWL9620Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {

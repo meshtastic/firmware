@@ -9,11 +9,8 @@
 #include "meshUtils.h"
 #include <FSCommon.h>
 #include <ctype.h> // for better whitespace handling
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "BleOta.h"
-#endif
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
-#include "WiFiOTA.h"
+#include "MeshtasticOTA.h"
 #endif
 #include "Router.h"
 #include "configuration.h"
@@ -104,9 +101,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             (config.security.admin_key[2].size == 32 &&
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
+
+            // Automatically favorite the node that is using the admin key
             auto remoteNode = nodeDB->getMeshNode(mp.from);
             if (remoteNode && !remoteNode->is_favorite) {
-                remoteNode->is_favorite = true;
+                if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+                    // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
+                    // without the user doing so deliberately.
+                    LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
+                } else {
+                    LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
+                    remoteNode->is_favorite = true;
+                }
             }
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
@@ -227,26 +233,51 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         reboot(r->reboot_seconds);
         break;
     }
-    case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
-        int32_t s = r->reboot_ota_seconds;
+    case meshtastic_AdminMessage_ota_request_tag: {
 #if defined(ARCH_ESP32)
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
-        if (!BleOta::getOtaAppVersion().isEmpty()) {
+        LOG_INFO("OTA Requested");
+
+        if (r->ota_request.ota_hash.size != 32) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("Cannot start OTA: Invalid `ota_hash` provided.");
+            break;
+        }
+
+        meshtastic_OTAMode mode = r->ota_request.reboot_ota_mode;
+        const char *mode_name = (mode == METHOD_OTA_BLE ? "BLE" : "WiFi");
+
+        // Check that we have an OTA partition
+        const esp_partition_t *part = MeshtasticOTA::getAppPartition();
+        if (part == NULL) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("Cannot start OTA: Cannot find OTA Loader partition.");
+            break;
+        }
+
+        static esp_app_desc_t app_desc;
+        if (!MeshtasticOTA::getAppDesc(part, &app_desc)) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("Cannot start OTA: Device does have a valid OTA Loader.");
+            break;
+        }
+
+        if (!MeshtasticOTA::checkOTACapability(&app_desc, mode)) {
+            suppressRebootBanner = true;
+            sendWarningAndLog("OTA Loader does not support %s", mode_name);
+            break;
+        }
+
+        if (MeshtasticOTA::trySwitchToOTA()) {
+            suppressRebootBanner = true;
             if (screen)
                 screen->startFirmwareUpdateScreen();
-            BleOta::switchToOtaApp();
-            LOG_INFO("Rebooting to BLE OTA");
+            MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
+            sendWarningAndLog("Rebooting to %s OTA", mode_name);
+        } else {
+            sendWarningAndLog("Unable to switch to the OTA partition.");
         }
 #endif
-#if !MESHTASTIC_EXCLUDE_WIFI
-        if (WiFiOTA::trySwitchToOTA()) {
-            if (screen)
-                screen->startFirmwareUpdateScreen();
-            WiFiOTA::saveConfig(&config.network);
-            LOG_INFO("Rebooting to WiFi OTA");
-        }
-#endif
-#endif
+        int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -280,7 +311,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_nodedb_reset_tag: {
         disableBluetooth();
         LOG_INFO("Initiate node-db reset");
-        nodeDB->resetNodes();
+        //  CLIENT_BASE, ROUTER and ROUTER_LATE are able to preserve the remaining hop count when relaying a packet via a
+        //  favorited node, so ensure that their favorites are kept on reset
+        bool rolePreference =
+            isOneOf(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
+                    meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
+        nodeDB->resetNodes(rolePreference ? rolePreference : r->nodedb_reset);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -369,6 +405,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_toggle_muted_node_tag: {
+        LOG_INFO("Client received toggle_muted_node command");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
+        if (node != NULL) {
+            node->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
+            saveChanges(SEGMENT_NODEDATABASE, false);
+        }
+        break;
+    }
+
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -403,6 +449,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
         LOG_INFO("Client requesting to enter DFU mode");
+#if HAS_SCREEN
+        IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
+#endif
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
@@ -554,10 +603,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         changed |= strcmp(owner.short_name, o.short_name);
         strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
     }
-    if (*o.id) {
-        changed |= strcmp(owner.id, o.id);
-        strncpy(owner.id, o.id, sizeof(owner.id));
-    }
+    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
+
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
         owner.is_licensed = o.is_licensed;
@@ -761,6 +808,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = validatedLora;
         // If we're setting region for the first time, init the region and regenerate the keys
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
             if (!owner.is_licensed) {
                 bool keygenSuccess = false;
                 if (config.security.private_key.size == 32) {
@@ -779,15 +827,29 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                     memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
                 }
             }
+#endif
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
+            //  Compare the entire string, we are sure of the length as a topic has never been set
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
+        }
+        if (config.lora.region != myRegion->code) {
+            //  Region has changed so check whether there is a regulatory one we should be using instead.
+            //  Additionally as a side-effect, assume a new value under myRegion
+            initRegion();
+
+            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+                //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+            }
+
+            changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
         }
         break;
     }
@@ -1434,13 +1496,41 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 #endif
 }
 
-void AdminModule::sendWarning(const char *message)
+void AdminModule::sendWarning(const char *format, ...)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+
     cn->level = meshtastic_LogRecord_Level_WARNING;
     cn->time = getValidTime(RTCQualityFromNet);
-    strncpy(cn->message, message, sizeof(cn->message));
+
+    va_list args;
+    va_start(args, format);
+    // Format the arguments directly into the notification object
+    vsnprintf(cn->message, sizeof(cn->message), format, args);
+    va_end(args);
+
     service->sendClientNotification(cn);
+}
+
+void AdminModule::sendWarningAndLog(const char *format, ...)
+{
+    // We need a temporary buffer to hold the formatted text so we can log it
+    // Using 250 bytes as a safe upper limit for typical text notifications
+    char buf[250];
+
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+
+    LOG_WARN(buf);
+    // 2. Call sendWarning
+    // SECURITY NOTE: We pass "%s", buf instead of just 'buf'.
+    // If 'buf' contained a % symbol (e.g. "Battery 50%"), passing it directly
+    // would crash sendWarning. "%s" treats it purely as text.
+    sendWarning("%s", buf);
 }
 
 void disableBluetooth()

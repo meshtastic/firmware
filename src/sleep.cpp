@@ -241,7 +241,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
-    // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
+#endif
+
+#ifdef RAK_WISMESH_TAP_V2
+    digitalWrite(SDCARD_CS, LOW);
 #endif
 
 #ifdef TRACKER_T1000_E
@@ -553,7 +556,7 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#ifdef HELTEC_V4
+#if defined(USE_GC1109_PA)
     gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
     gpio_pullup_en((gpio_num_t)LORA_PA_EN);
     gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
