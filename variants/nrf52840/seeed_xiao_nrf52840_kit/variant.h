@@ -23,7 +23,7 @@ Xiao pin assignments
 | Pin   | Default  | I2C  | BTB  | BLE-L |     | Pin   | Default | I2C  | BTB  | BLE-L |
 | ----- | -------- | ---- | ---- | ----- | --- | ----- | ------- | ---- | ---- | ----- |
 |       |          |      |      |       |     |       |         |      |      |       |
-| D0    |          | UBTN | DIO1 | CS    |     | 5v    |         |      |      |       |
+| D0    | G_STBY   | UBTN | DIO1 | CS    |     | 5v    |         |      |      |       |
 | D1    | DIO1     | DIO1 | Busy | DIO1  |     | GND   |         |      |      |       |
 | D2    | NRST     | NRST | NRST | Busy  |     | 3v3   |         |      |      |       |
 | D3    | Busy     | Busy | CS   | NRST  |     | D10   | MOSI    | MOSI | MOSI | MOSI  |
