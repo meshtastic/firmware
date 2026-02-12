@@ -393,7 +393,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // Add extra spacing on the left if we have an API connection to account for the common footer icons
     const char *leftSideSpacing =
-        graphics::isAPIConnected(service->api_state) ? (currentResolution == ScreenResolution::High ? "     " : "   ") : " ";
+        graphics::isAnyAPIConnected(service->api_state_mask) ? (currentResolution == ScreenResolution::High ? "     " : "   ")
+                                                              : " ";
 
     // --- Build the Signal/Hops line ---
     // Only show signal if we have valid SNR

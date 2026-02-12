@@ -12,6 +12,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "TypeConversions.h"
+#include "concurrency/LockGuard.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -66,12 +67,572 @@ Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 #include "Router.h"
 
 MeshService::MeshService()
-#ifdef ARCH_PORTDUINO
-    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_QUEUESTATUS_TOPHONE),
-      toPhoneMqttProxyQueue(MAX_RX_MQTTPROXY_TOPHONE), toPhoneClientNotificationQueue(MAX_RX_NOTIFICATION_TOPHONE)
-#endif
 {
     lastQueueStatus = {0, 0, 16, 0};
+}
+
+int MeshService::findClientSlotByPtrLocked(const PhoneAPI *client) const
+{
+    if (!client)
+        return -1;
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        if (phoneClients[i].client == client) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+int MeshService::findClientSlotByPtrLocked(const PhoneAPI *client)
+{
+    return static_cast<const MeshService *>(this)->findClientSlotByPtrLocked(client);
+}
+
+int MeshService::findFreeClientSlotLocked() const
+{
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        if (phoneClients[i].client == nullptr && !phoneClients[i].active) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+void MeshService::releasePacketFanoutEntryLocked(PacketFanoutEntry *entry)
+{
+    if (!entry)
+        return;
+
+    if (entry->refcount > 0)
+        entry->refcount--;
+
+    if (entry->refcount == 0) {
+        if (entry->payload)
+            releaseToPool(entry->payload);
+
+        entry->payload = nullptr;
+        packetFanoutPool.release(entry);
+    }
+}
+
+void MeshService::releaseQueueStatusFanoutEntryLocked(QueueStatusFanoutEntry *entry)
+{
+    if (!entry)
+        return;
+
+    if (entry->refcount > 0)
+        entry->refcount--;
+
+    if (entry->refcount == 0) {
+        if (entry->payload)
+            releaseQueueStatusToPool(entry->payload);
+
+        entry->payload = nullptr;
+        queueStatusFanoutPool.release(entry);
+    }
+}
+
+void MeshService::releaseMqttProxyFanoutEntryLocked(MqttProxyFanoutEntry *entry)
+{
+    if (!entry)
+        return;
+
+    if (entry->refcount > 0)
+        entry->refcount--;
+
+    if (entry->refcount == 0) {
+        if (entry->payload)
+            releaseMqttClientProxyMessageToPool(entry->payload);
+
+        entry->payload = nullptr;
+        mqttProxyFanoutPool.release(entry);
+    }
+}
+
+void MeshService::releaseClientNotificationFanoutEntryLocked(ClientNotificationFanoutEntry *entry)
+{
+    if (!entry)
+        return;
+
+    if (entry->refcount > 0)
+        entry->refcount--;
+
+    if (entry->refcount == 0) {
+        if (entry->payload)
+            releaseClientNotificationToPool(entry->payload);
+
+        entry->payload = nullptr;
+        clientNotificationFanoutPool.release(entry);
+    }
+}
+
+void MeshService::clearClientSlotLocked(PhoneClientSlot &slot)
+{
+    while (auto entry = slot.packetQueue.dequeuePtr(0)) {
+        releasePacketFanoutEntryLocked(entry);
+    }
+
+    while (auto entry = slot.queueStatusQueue.dequeuePtr(0)) {
+        releaseQueueStatusFanoutEntryLocked(entry);
+    }
+
+    while (auto entry = slot.mqttProxyQueue.dequeuePtr(0)) {
+        releaseMqttProxyFanoutEntryLocked(entry);
+    }
+
+    while (auto entry = slot.clientNotificationQueue.dequeuePtr(0)) {
+        releaseClientNotificationFanoutEntryLocked(entry);
+    }
+
+    if (slot.packetInflight) {
+        releasePacketFanoutEntryLocked(slot.packetInflight);
+        slot.packetInflight = nullptr;
+    }
+
+    if (slot.queueStatusInflight) {
+        releaseQueueStatusFanoutEntryLocked(slot.queueStatusInflight);
+        slot.queueStatusInflight = nullptr;
+    }
+
+    if (slot.mqttProxyInflight) {
+        releaseMqttProxyFanoutEntryLocked(slot.mqttProxyInflight);
+        slot.mqttProxyInflight = nullptr;
+    }
+
+    if (slot.clientNotificationInflight) {
+        releaseClientNotificationFanoutEntryLocked(slot.clientNotificationInflight);
+        slot.clientNotificationInflight = nullptr;
+    }
+
+    slot.active = false;
+    slot.state = STATE_DISCONNECTED;
+    slot.client = nullptr;
+}
+
+void MeshService::updateApiStateLocked(APIState preferred)
+{
+    api_state_mask = 0;
+    for (int state = STATE_BLE; state <= STATE_ETH; state++) {
+        if (apiStateCounts[state] > 0) {
+            api_state_mask |= apiStateBit(static_cast<APIState>(state));
+        }
+    }
+
+    if (preferred != STATE_DISCONNECTED && apiStateCounts[preferred] > 0) {
+        api_state = preferred;
+        return;
+    }
+
+    if (api_state != STATE_DISCONNECTED && apiStateCounts[api_state] > 0) {
+        return;
+    }
+
+    for (int state = STATE_BLE; state <= STATE_ETH; state++) {
+        if (apiStateCounts[state] > 0) {
+            api_state = static_cast<APIState>(state);
+            return;
+        }
+    }
+
+    api_state = STATE_DISCONNECTED;
+}
+
+bool MeshService::enqueuePacketFanoutLocked(meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return false;
+
+    auto entry = packetFanoutPool.allocZeroed();
+    if (!entry) {
+        LOG_WARN("Failed to allocate packet fanout entry");
+        releaseToPool(p);
+        return false;
+    }
+
+    entry->payload = p;
+
+    bool delivered = false;
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        auto &slot = phoneClients[i];
+        if (!slot.active)
+            continue;
+
+        if (slot.packetQueue.numFree() == 0) {
+            LOG_WARN("Packet fanout queue full for client slot %d, drop oldest", i);
+            if (auto oldEntry = slot.packetQueue.dequeuePtr(0)) {
+                releasePacketFanoutEntryLocked(oldEntry);
+            }
+        }
+
+        if (slot.packetQueue.enqueue(entry, 0)) {
+            entry->refcount++;
+            delivered = true;
+        } else {
+            LOG_WARN("Failed to enqueue packet fanout for client slot %d", i);
+        }
+    }
+
+    if (!delivered) {
+        releaseToPool(p);
+        entry->payload = nullptr;
+        packetFanoutPool.release(entry);
+        return false;
+    }
+
+    return true;
+}
+
+bool MeshService::enqueueQueueStatusFanoutLocked(meshtastic_QueueStatus *qs)
+{
+    if (!qs)
+        return false;
+
+    auto entry = queueStatusFanoutPool.allocZeroed();
+    if (!entry) {
+        LOG_WARN("Failed to allocate queue status fanout entry");
+        releaseQueueStatusToPool(qs);
+        return false;
+    }
+
+    entry->payload = qs;
+
+    bool delivered = false;
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        auto &slot = phoneClients[i];
+        if (!slot.active)
+            continue;
+
+        if (slot.queueStatusQueue.numFree() == 0) {
+            LOG_INFO("QueueStatus fanout queue full for client slot %d, discard oldest", i);
+            if (auto oldEntry = slot.queueStatusQueue.dequeuePtr(0)) {
+                releaseQueueStatusFanoutEntryLocked(oldEntry);
+            }
+        }
+
+        if (slot.queueStatusQueue.enqueue(entry, 0)) {
+            entry->refcount++;
+            delivered = true;
+        } else {
+            LOG_WARN("Failed to enqueue QueueStatus fanout for client slot %d", i);
+        }
+    }
+
+    if (!delivered) {
+        releaseQueueStatusToPool(qs);
+        entry->payload = nullptr;
+        queueStatusFanoutPool.release(entry);
+        return false;
+    }
+
+    return true;
+}
+
+bool MeshService::enqueueMqttProxyFanoutLocked(meshtastic_MqttClientProxyMessage *m)
+{
+    if (!m)
+        return false;
+
+    auto entry = mqttProxyFanoutPool.allocZeroed();
+    if (!entry) {
+        LOG_WARN("Failed to allocate MQTT proxy fanout entry");
+        releaseMqttClientProxyMessageToPool(m);
+        return false;
+    }
+
+    entry->payload = m;
+
+    bool delivered = false;
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        auto &slot = phoneClients[i];
+        if (!slot.active)
+            continue;
+
+        if (slot.mqttProxyQueue.numFree() == 0) {
+            LOG_WARN("MqttClientProxy fanout queue full for client slot %d, discard oldest", i);
+            if (auto oldEntry = slot.mqttProxyQueue.dequeuePtr(0)) {
+                releaseMqttProxyFanoutEntryLocked(oldEntry);
+            }
+        }
+
+        if (slot.mqttProxyQueue.enqueue(entry, 0)) {
+            entry->refcount++;
+            delivered = true;
+        } else {
+            LOG_WARN("Failed to enqueue MqttClientProxy fanout for client slot %d", i);
+        }
+    }
+
+    if (!delivered) {
+        releaseMqttClientProxyMessageToPool(m);
+        entry->payload = nullptr;
+        mqttProxyFanoutPool.release(entry);
+        return false;
+    }
+
+    return true;
+}
+
+bool MeshService::enqueueClientNotificationFanoutLocked(meshtastic_ClientNotification *cn)
+{
+    if (!cn)
+        return false;
+
+    auto entry = clientNotificationFanoutPool.allocZeroed();
+    if (!entry) {
+        LOG_WARN("Failed to allocate ClientNotification fanout entry");
+        releaseClientNotificationToPool(cn);
+        return false;
+    }
+
+    entry->payload = cn;
+
+    bool delivered = false;
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        auto &slot = phoneClients[i];
+        if (!slot.active)
+            continue;
+
+        if (slot.clientNotificationQueue.numFree() == 0) {
+            LOG_WARN("ClientNotification fanout queue full for client slot %d, discard oldest", i);
+            if (auto oldEntry = slot.clientNotificationQueue.dequeuePtr(0)) {
+                releaseClientNotificationFanoutEntryLocked(oldEntry);
+            }
+        }
+
+        if (slot.clientNotificationQueue.enqueue(entry, 0)) {
+            entry->refcount++;
+            delivered = true;
+        } else {
+            LOG_WARN("Failed to enqueue ClientNotification fanout for client slot %d", i);
+        }
+    }
+
+    if (!delivered) {
+        releaseClientNotificationToPool(cn);
+        entry->payload = nullptr;
+        clientNotificationFanoutPool.release(entry);
+        return false;
+    }
+
+    return true;
+}
+
+bool MeshService::registerPhoneClient(PhoneAPI *client, APIState state)
+{
+    if (!client || state == STATE_DISCONNECTED)
+        return false;
+
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex < 0) {
+        slotIndex = findFreeClientSlotLocked();
+        if (slotIndex < 0) {
+            LOG_ERROR("No free phone client slots available (max=%d)", MAX_PHONE_API_CLIENTS);
+            return false;
+        }
+    }
+
+    auto &slot = phoneClients[slotIndex];
+
+    if (slot.active) {
+        if (slot.state != STATE_DISCONNECTED && apiStateCounts[slot.state] > 0)
+            apiStateCounts[slot.state]--;
+    }
+    clearClientSlotLocked(slot);
+
+    slot.client = client;
+    slot.state = state;
+    slot.active = true;
+
+    apiStateCounts[state]++;
+    updateApiStateLocked(state);
+
+    return true;
+}
+
+void MeshService::unregisterPhoneClient(PhoneAPI *client)
+{
+    if (!client)
+        return;
+
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex < 0)
+        return;
+
+    auto &slot = phoneClients[slotIndex];
+
+    if (slot.active && slot.state != STATE_DISCONNECTED && apiStateCounts[slot.state] > 0) {
+        apiStateCounts[slot.state]--;
+    }
+
+    clearClientSlotLocked(slot);
+    updateApiStateLocked();
+}
+
+meshtastic_MeshPacket *MeshService::getForPhone(PhoneAPI *client)
+{
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex < 0)
+        return nullptr;
+
+    auto &slot = phoneClients[slotIndex];
+    if (!slot.active)
+        return nullptr;
+
+    if (!slot.packetInflight)
+        slot.packetInflight = slot.packetQueue.dequeuePtr(0);
+
+    return slot.packetInflight ? slot.packetInflight->payload : nullptr;
+}
+
+meshtastic_QueueStatus *MeshService::getQueueStatusForPhone(PhoneAPI *client)
+{
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex < 0)
+        return nullptr;
+
+    auto &slot = phoneClients[slotIndex];
+    if (!slot.active)
+        return nullptr;
+
+    if (!slot.queueStatusInflight)
+        slot.queueStatusInflight = slot.queueStatusQueue.dequeuePtr(0);
+
+    return slot.queueStatusInflight ? slot.queueStatusInflight->payload : nullptr;
+}
+
+meshtastic_MqttClientProxyMessage *MeshService::getMqttClientProxyMessageForPhone(PhoneAPI *client)
+{
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex < 0)
+        return nullptr;
+
+    auto &slot = phoneClients[slotIndex];
+    if (!slot.active)
+        return nullptr;
+
+    if (!slot.mqttProxyInflight)
+        slot.mqttProxyInflight = slot.mqttProxyQueue.dequeuePtr(0);
+
+    return slot.mqttProxyInflight ? slot.mqttProxyInflight->payload : nullptr;
+}
+
+meshtastic_ClientNotification *MeshService::getClientNotificationForPhone(PhoneAPI *client)
+{
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex < 0)
+        return nullptr;
+
+    auto &slot = phoneClients[slotIndex];
+    if (!slot.active)
+        return nullptr;
+
+    if (!slot.clientNotificationInflight)
+        slot.clientNotificationInflight = slot.clientNotificationQueue.dequeuePtr(0);
+
+    return slot.clientNotificationInflight ? slot.clientNotificationInflight->payload : nullptr;
+}
+
+void MeshService::releaseToPoolForPhone(PhoneAPI *client, meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return;
+
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex >= 0) {
+        auto &slot = phoneClients[slotIndex];
+        if (slot.packetInflight && slot.packetInflight->payload == p) {
+            auto *entry = slot.packetInflight;
+            slot.packetInflight = nullptr;
+            releasePacketFanoutEntryLocked(entry);
+            return;
+        }
+    }
+
+    LOG_WARN("Packet release mismatch in fanout, releasing directly");
+    releaseToPool(p);
+}
+
+void MeshService::releaseQueueStatusToPoolForPhone(PhoneAPI *client, meshtastic_QueueStatus *p)
+{
+    if (!p)
+        return;
+
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex >= 0) {
+        auto &slot = phoneClients[slotIndex];
+        if (slot.queueStatusInflight && slot.queueStatusInflight->payload == p) {
+            auto *entry = slot.queueStatusInflight;
+            slot.queueStatusInflight = nullptr;
+            releaseQueueStatusFanoutEntryLocked(entry);
+            return;
+        }
+    }
+
+    LOG_WARN("QueueStatus release mismatch in fanout, releasing directly");
+    releaseQueueStatusToPool(p);
+}
+
+void MeshService::releaseMqttClientProxyMessageToPoolForPhone(PhoneAPI *client, meshtastic_MqttClientProxyMessage *p)
+{
+    if (!p)
+        return;
+
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex >= 0) {
+        auto &slot = phoneClients[slotIndex];
+        if (slot.mqttProxyInflight && slot.mqttProxyInflight->payload == p) {
+            auto *entry = slot.mqttProxyInflight;
+            slot.mqttProxyInflight = nullptr;
+            releaseMqttProxyFanoutEntryLocked(entry);
+            return;
+        }
+    }
+
+    LOG_WARN("MqttClientProxy release mismatch in fanout, releasing directly");
+    releaseMqttClientProxyMessageToPool(p);
+}
+
+void MeshService::releaseClientNotificationToPoolForPhone(PhoneAPI *client, meshtastic_ClientNotification *p)
+{
+    if (!p)
+        return;
+
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    int slotIndex = findClientSlotByPtrLocked(client);
+    if (slotIndex >= 0) {
+        auto &slot = phoneClients[slotIndex];
+        if (slot.clientNotificationInflight && slot.clientNotificationInflight->payload == p) {
+            auto *entry = slot.clientNotificationInflight;
+            slot.clientNotificationInflight = nullptr;
+            releaseClientNotificationFanoutEntryLocked(entry);
+            return;
+        }
+    }
+
+    LOG_WARN("ClientNotification release mismatch in fanout, releasing directly");
+    releaseClientNotificationToPool(p);
 }
 
 void MeshService::init()
@@ -156,17 +717,38 @@ void MeshService::reloadOwner(bool shouldSave)
 // search the queue for a request id and return the matching nodenum
 NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
 {
-    NodeNum nodenum = 0;
-    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
-        meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
-        if (p->id == request_id) {
-            nodenum = p->to;
-            // make sure to continue this to make one full loop
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        auto &slot = phoneClients[i];
+        if (!slot.active)
+            continue;
+
+        if (slot.packetInflight && slot.packetInflight->payload && slot.packetInflight->payload->id == request_id) {
+            return slot.packetInflight->payload->to;
         }
-        // put it right back on the queue
-        toPhoneQueue.enqueue(p, 0);
+
+        int used = slot.packetQueue.numUsed();
+        for (int q = 0; q < used; q++) {
+            auto *entry = slot.packetQueue.dequeuePtr(0);
+            if (!entry)
+                break;
+
+            NodeNum nodenum = 0;
+            if (entry->payload && entry->payload->id == request_id) {
+                nodenum = entry->payload->to;
+            }
+
+            // put it right back on the queue
+            slot.packetQueue.enqueue(entry, 0);
+
+            if (nodenum != 0) {
+                return nodenum;
+            }
+        }
     }
-    return nodenum;
+
+    return 0;
 }
 
 /**
@@ -223,23 +805,26 @@ bool MeshService::cancelSending(PacketId id)
 ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
 {
     meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
+    if (!copied)
+        return ERRNO_UNKNOWN;
 
     copied->res = res;
     copied->mesh_packet_id = mesh_packet_id;
 
-    if (toPhoneQueueStatusQueue.numFree() == 0) {
-        LOG_INFO("tophone queue status queue is full, discard oldest");
-        meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
-        if (d)
-            releaseQueueStatusToPool(d);
-    }
-
     lastQueueStatus = *copied;
 
-    res = toPhoneQueueStatusQueue.enqueue(copied, 0);
-    fromNum++;
+    bool delivered = false;
+    {
+        concurrency::LockGuard guard(&phoneClientsLock);
+        delivered = enqueueQueueStatusFanoutLocked(copied);
+    }
 
-    return res ? ERRNO_OK : ERRNO_UNKNOWN;
+    if (delivered) {
+        fromNum++;
+        return ERRNO_OK;
+    }
+
+    return ERRNO_UNKNOWN;
 }
 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
@@ -308,49 +893,37 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() &&
         p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
         releaseToPool(p); // Copy is already stored in StoreForward history
-        fromNum++;        // Notify observers for packet from radio
+        if (api_state_mask != 0)
+            fromNum++; // Notify observers for packet from radio when there are active API clients
         return;
     }
 #endif
 #endif
 
-    if (toPhoneQueue.numFree() == 0) {
-        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-            LOG_WARN("ToPhone queue is full, discard oldest");
-            meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-            if (d)
-                releaseToPool(d);
-        } else {
-            LOG_WARN("ToPhone queue is full, drop packet");
-            releaseToPool(p);
-            fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
-            return;
-        }
+    bool delivered = false;
+    {
+        concurrency::LockGuard guard(&phoneClientsLock);
+        delivered = enqueuePacketFanoutLocked(p);
     }
 
-    if (toPhoneQueue.enqueue(p, 0) == false) {
-        LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
-        abort();
+    if (delivered) {
+        fromNum++;
     }
-    fromNum++;
 }
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
     LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
-    if (toPhoneMqttProxyQueue.numFree() == 0) {
-        LOG_WARN("MqttClientProxyMessagePool queue is full, discard oldest");
-        meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
-        if (d)
-            releaseMqttClientProxyMessageToPool(d);
+
+    bool delivered = false;
+    {
+        concurrency::LockGuard guard(&phoneClientsLock);
+        delivered = enqueueMqttProxyFanoutLocked(m);
     }
 
-    if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
-        LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
-        abort();
+    if (delivered) {
+        fromNum++;
     }
-    fromNum++;
 }
 
 void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp)
@@ -371,18 +944,16 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
 void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
     LOG_DEBUG("Send client notification to phone");
-    if (toPhoneClientNotificationQueue.numFree() == 0) {
-        LOG_WARN("ClientNotification queue is full, discard oldest");
-        meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
-        if (d)
-            releaseClientNotificationToPool(d);
+
+    bool delivered = false;
+    {
+        concurrency::LockGuard guard(&phoneClientsLock);
+        delivered = enqueueClientNotificationFanoutLocked(n);
     }
 
-    if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
-        LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
-        abort();
+    if (delivered) {
+        fromNum++;
     }
-    fromNum++;
 }
 
 meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
@@ -448,7 +1019,19 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 #endif
 bool MeshService::isToPhoneQueueEmpty()
 {
-    return toPhoneQueue.isEmpty();
+    concurrency::LockGuard guard(&phoneClientsLock);
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        auto &slot = phoneClients[i];
+        if (!slot.active)
+            continue;
+
+        if (slot.packetInflight || !slot.packetQueue.isEmpty()) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
