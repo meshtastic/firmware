@@ -187,6 +187,8 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     setIntervalFromNow(kMaintenanceIntervalMs);
 }
 
+// Cache may have been allocated via ps_calloc (PSRAM, C allocator) or new[] (heap).
+// Must use the matching deallocator: free() for ps_calloc, delete[] for new[].
 TrafficManagementModule::~TrafficManagementModule()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -194,7 +196,7 @@ TrafficManagementModule::~TrafficManagementModule()
         // Cache may be from ps_calloc (PSRAM, C allocator) or new[] (heap).
         // Use the matching deallocator for the allocation source.
         if (cacheFromPsram)
-            free(cache); // ps_calloc uses C allocator
+            free(cache);
         else
             delete[] cache;
         cache = nullptr;
