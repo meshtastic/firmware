@@ -189,9 +189,8 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
 
     int scrollbarHeight = display->getHeight() - scrollStartY - 10;
     int thumbHeight = max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
-    int thumbY =
-        scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) /
-                            max(1, max(0, (totalEntries - 1) / (visibleNodeRows * columns)));
+    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) /
+                                    max(1, max(0, (totalEntries - 1) / (visibleNodeRows * columns)));
 
     int scrollbarX = display->getWidth() - 2;
     for (int i = 0; i < thumbHeight; i++) {
