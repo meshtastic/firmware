@@ -156,14 +156,12 @@ extern "C" {
 
 // Enable Traffic Management Module for testing on T1000-E
 // NRF52840 has 256KB RAM - 2048 entries uses ~40KB
-#ifdef HAS_TRAFFIC_MANAGEMENT
-#undef HAS_TRAFFIC_MANAGEMENT
-#endif
+#ifndef HAS_TRAFFIC_MANAGEMENT
 #define HAS_TRAFFIC_MANAGEMENT 1
-#ifdef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#undef TRAFFIC_MANAGEMENT_CACHE_SIZE
 #endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 1024
+#endif
 
 #ifdef __cplusplus
 }

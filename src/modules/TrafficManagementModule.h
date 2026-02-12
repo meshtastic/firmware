@@ -233,7 +233,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const;
     bool isRateLimited(NodeNum from, uint32_t nowMs);
     bool shouldDropUnknown(const meshtastic_MeshPacket *p, uint32_t nowMs);
-    void exhaustHops(meshtastic_MeshPacket *p);
 
     void logAction(const char *action, const meshtastic_MeshPacket *p, const char *reason) const;
     void incrementStat(uint32_t *field);
