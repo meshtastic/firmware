@@ -89,3 +89,15 @@ uint32_t MemGet::getPsramSize()
     return 0;
 #endif
 }
+
+void displayPercentHeapFree()
+{
+    uint32_t freeHeap = memGet.getFreeHeap();
+    uint32_t totalHeap = memGet.getHeapSize();
+    if (totalHeap == 0 || totalHeap == UINT32_MAX) {
+        LOG_INFO("Heap size unavailable");
+        return;
+    }
+    int percent = (int)((freeHeap * 100) / totalHeap);
+    LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
+}

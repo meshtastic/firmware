@@ -85,11 +85,8 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     return r;
 }
 
-void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const char *specificModule)
+void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 {
-    if (specificModule) {
-        LOG_DEBUG("Calling specific module: %s", specificModule);
-    }
     // LOG_DEBUG("In call modules");
     bool moduleFound = false;
 
@@ -106,11 +103,6 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const char
 
     for (auto i = modules->begin(); i != modules->end(); ++i) {
         auto &pi = **i;
-
-        // If specificModule is provided, only call that specific module
-        if (specificModule && (!pi.name || strcmp(pi.name, specificModule) != 0)) {
-            continue;
-        }
 
         pi.currentRequest = &mp;
 
@@ -203,7 +195,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const char
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
             routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
-                                      routingModule->getHopLimitForResponse(mp.hop_start, mp.hop_limit));
+                                      routingModule->getHopLimitForResponse(mp));
         }
     }
 
@@ -243,7 +235,7 @@ void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to)
     assert(p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
-    p->hop_limit = routingModule->getHopLimitForResponse(to.hop_start, to.hop_limit);
+    p->hop_limit = routingModule->getHopLimitForResponse(to);
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)
     p->want_ack = (to.from != 0) ? to.want_ack : false;

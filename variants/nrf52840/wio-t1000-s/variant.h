@@ -48,7 +48,6 @@ extern "C" {
 
 #define PIN_LED1 (0 + 24) // P0.24
 #define LED_PIN PIN_LED1
-#define LED_BUILTIN -1
 #define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 
@@ -123,7 +122,6 @@ extern "C" {
 #define GPS_RESETB_OUT (32 + 14) // P1.14, awlays input pull_up
 
 // #define GPS_THREAD_INTERVAL 50
-#define GPS_FIX_HOLD_TIME 15000 // ms
 
 #define BATTERY_PIN 2
 // #define ADC_CHANNEL ADC1_GPIO2_CHANNEL

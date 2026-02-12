@@ -43,7 +43,6 @@
 
 // TCA8418 keyboard
 #define KB_BL_PIN 42
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 // microphone PCM5102A
 #define PCM5102A_SCK 47
@@ -92,3 +91,13 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 2.4
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
+
+#define MODEM_POWER_EN 41
+#define MODEM_PWRKEY 40
+#define MODEM_RST 9
+#define MODEM_RI 7
+#define MODEM_DTR 8
+#define MODEM_RX 10
+#define MODEM_TX 11
+
+#define HAS_PHYSICAL_KEYBOARD 1

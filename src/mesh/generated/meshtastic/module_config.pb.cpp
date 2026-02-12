@@ -30,6 +30,9 @@ PB_BIND(meshtastic_ModuleConfig_AudioConfig, meshtastic_ModuleConfig_AudioConfig
 PB_BIND(meshtastic_ModuleConfig_PaxcounterConfig, meshtastic_ModuleConfig_PaxcounterConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_TrafficManagementConfig, meshtastic_ModuleConfig_TrafficManagementConfig, AUTO)
+
+
 PB_BIND(meshtastic_ModuleConfig_SerialConfig, meshtastic_ModuleConfig_SerialConfig, AUTO)
 
 
@@ -49,6 +52,9 @@ PB_BIND(meshtastic_ModuleConfig_CannedMessageConfig, meshtastic_ModuleConfig_Can
 
 
 PB_BIND(meshtastic_ModuleConfig_AmbientLightingConfig, meshtastic_ModuleConfig_AmbientLightingConfig, AUTO)
+
+
+PB_BIND(meshtastic_ModuleConfig_StatusMessageConfig, meshtastic_ModuleConfig_StatusMessageConfig, AUTO)
 
 
 PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)

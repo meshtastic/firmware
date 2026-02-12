@@ -16,14 +16,13 @@ class RCWL9620Sensor : public TelemetrySensor
     uint32_t _speed = 200000UL;
 
   protected:
-    virtual void setup() override;
     void begin(TwoWire *wire = &Wire, uint8_t addr = 0x57, uint8_t sda = -1, uint8_t scl = -1, uint32_t speed = 200000UL);
     float getDistance();
 
   public:
     RCWL9620Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

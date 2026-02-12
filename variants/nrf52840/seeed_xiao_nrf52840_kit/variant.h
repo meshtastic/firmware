@@ -69,11 +69,6 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_LED2 LED_BLUE
 #define PIN_LED3 LED_RED
 
-#define LED_BUILTIN LED_RED // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
-
-#define LED_PWR LED_RED
-#define USER_LED LED_BLUE
-
 /*
  * Buttons
  */
@@ -147,12 +142,12 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 // GPS L76K
 #ifdef GPS_L76K
-#define PIN_GPS_RX D6
-#define PIN_GPS_TX D7
+#define GPS_TX_PIN D6 // This is data from the MCU
+#define GPS_RX_PIN D7 // This is data from the GNSS module
 #define HAS_GPS 1
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_GPS_STANDBY D0
 #else
 #define PIN_SERIAL1_RX (-1)

@@ -5,11 +5,10 @@
 #include "main.h"
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "BleOta.h"
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#include <WiFiOTA.h>
+#include <MeshtasticOTA.h>
 
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -24,6 +23,11 @@
 #include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+
+// Weak empty variant shutdown prep function.
+// May be redefined by variant files.
+void variant_shutdown() __attribute__((weak));
+void variant_shutdown() {}
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
@@ -64,7 +68,7 @@ void getMacAddr(uint8_t *dmac)
 #endif
 }
 
-#ifdef HAS_32768HZ
+#if HAS_32768HZ
 #define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
 
 static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
@@ -86,17 +90,17 @@ void enableSlowCLK()
     uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
 
     if (cal_32k == 0) {
-        LOG_DEBUG("32K XTAL OSC has not started up");
+        LOG_DEBUG("32k XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
+        LOG_DEBUG("Switch RTC Source to 32.768kHz succeeded, using 32k XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! ");
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768kHz !!! ");
         return;
     }
 }
@@ -144,22 +148,14 @@ void esp32Setup()
         preferences.putUInt("hwVendor", HW_VENDOR);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d", rebootCounter);
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
-    String BLEOTA = BleOta::getOtaAppVersion();
-    if (BLEOTA.isEmpty()) {
-        LOG_INFO("No BLE OTA firmware available");
-    } else {
-        LOG_INFO("BLE OTA firmware version %s", BLEOTA.c_str());
-    }
-#endif
 #if !MESHTASTIC_EXCLUDE_WIFI
-    String version = WiFiOTA::getVersion();
+    String version = MeshtasticOTA::getVersion();
     if (version.isEmpty()) {
-        LOG_INFO("No WiFi OTA firmware available");
+        LOG_INFO("MeshtasticOTA firmware not available");
     } else {
-        LOG_INFO("WiFi OTA firmware version %s", version.c_str());
+        LOG_INFO("MeshtasticOTA firmware version %s", version.c_str());
     }
-    WiFiOTA::initialize();
+    MeshtasticOTA::initialize();
 #endif
 
     // enableModemSleep();
@@ -182,7 +178,7 @@ void esp32Setup()
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
 
-#ifdef HAS_32768HZ
+#if HAS_32768HZ
     enableSlowCLK();
 #endif
 }
@@ -258,6 +254,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 #endif // #end ESP32S3_WAKE_TYPE
 #endif
+    variant_shutdown();
 
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);

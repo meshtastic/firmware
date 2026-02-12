@@ -11,13 +11,10 @@ class MCP9808Sensor : public TelemetrySensor
   private:
     Adafruit_MCP9808 mcp9808;
 
-  protected:
-    virtual void setup() override;
-
   public:
     MCP9808Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif
