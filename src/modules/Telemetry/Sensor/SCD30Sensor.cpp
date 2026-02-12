@@ -113,6 +113,11 @@ bool SCD30Sensor::setMeasurementInterval(uint16_t measInterval)
         return false;
     }
 
+    // Restart measuring so we don't need to wait the current interval to finish
+    // (useful when you come from very long intervals)
+    scd30.stopPeriodicMeasurement();
+    scd30.startPeriodicMeasurement(0);
+
     getMeasurementInterval(measurementInterval);
     return true;
 }
