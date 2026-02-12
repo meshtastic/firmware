@@ -725,7 +725,7 @@ void setup()
         playStartMelody();
 
 #if HAS_SCREEN
-    // fixed screen override?
+        // fixed screen override?
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     screen_geometry = GEOMETRY_128_128;
