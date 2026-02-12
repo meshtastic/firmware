@@ -569,7 +569,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
         return;
 
     if (mp.hop_limit > 0) {
-        const char *reason = isTelemetry ? "zero-hop-telemetry" : "exhaust-hop-position";
+        const char *reason = isTelemetry ? "exhaust-hop-telemetry" : "exhaust-hop-position";
         logAction("exhaust", &mp, reason);
         // Adjust hop_start so downstream nodes compute correct hopsAway (hop_start - hop_limit).
         // Without this, hop_limit=0 with original hop_start would show inflated hopsAway.
