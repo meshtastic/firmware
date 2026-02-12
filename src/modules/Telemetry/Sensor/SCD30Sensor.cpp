@@ -74,6 +74,9 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     if (scd30.readMeasurementData(co2, temperature, humidity) != SCD30_NO_ERROR) {
         LOG_ERROR("SCD30: Failed to read measurement data.");
+#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
 
@@ -122,11 +125,11 @@ bool SCD30Sensor::getMeasurementInterval(uint16_t &measInterval)
     error = scd30.getMeasurementInterval(measInterval);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to set measurement interval. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Unable to get measurement interval. Error code: %u", sensorName, error);
         return false;
     }
 
-    LOG_INFO("%s: getting measurement interval is %us", sensorName, measurementInterval);
+    LOG_INFO("%s: measurement interval is %us", sensorName, measInterval);
 
     return true;
 }
@@ -189,7 +192,7 @@ bool SCD30Sensor::performFRC(uint16_t targetCO2)
         return false;
     }
 
-    LOG_INFO("%s: FRC Correction successful. Correction output: %u", sensorName);
+    LOG_INFO("%s: FRC Correction successful.", sensorName);
 
     return true;
 }
@@ -281,7 +284,6 @@ bool SCD30Sensor::setTemperature(float tempReference)
 
         tempOffset *= 100;
         _tempOffset = static_cast<uint16_t>(tempOffset);
-        // _tempOffset *= 100; // Avoid numeric issues with float - uint convertions
     }
 
     LOG_INFO("%s: Setting temperature offset: %u (*100)", sensorName, _tempOffset);
