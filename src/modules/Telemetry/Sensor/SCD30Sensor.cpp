@@ -93,7 +93,7 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.co2_temperature = temperature;
     measurement->variant.air_quality_metrics.co2_humidity = humidity;
 
-    LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum%.2f", sensorName, (uint32_t)co2, temperature, humidity);
+    LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum=%.2f", sensorName, (uint32_t)co2, temperature, humidity);
 
     return true;
 }
