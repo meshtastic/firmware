@@ -257,24 +257,32 @@ bool SCD30Sensor::setTemperature(float tempReference)
     float temperature;
     float humidity;
 
-    LOG_INFO("%s: Setting reference temperature at: %.2f", sensorName, tempReference);
+    if (tempReference == 100) {
+        // Requesting the value of 100 will restore the temperature offset
+        LOG_INFO("%s: Setting reference temperature at 0degC", sensorName);
+        _tempOffset = 0;
+    } else {
 
-    error = scd30.readMeasurementData(co2, temperature, humidity);
-    if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to read current temperature. Error code: %u", sensorName, error);
-        return false;
+        LOG_INFO("%s: Setting reference temperature at: %.2f", sensorName, tempReference);
+
+        error = scd30.readMeasurementData(co2, temperature, humidity);
+        if (error != SCD30_NO_ERROR) {
+            LOG_ERROR("%s: Unable to read current temperature. Error code: %u", sensorName, error);
+            return false;
+        }
+
+        LOG_INFO("%s: Current sensor temperature: %.2f", sensorName, temperature);
+
+        tempOffset = (temperature - tempReference);
+        if (tempOffset < 0) {
+            LOG_ERROR("%s temperature offset is only positive", sensorName);
+            return false;
+        }
+
+        tempOffset *= 100;
+        _tempOffset = static_cast<uint16_t>(tempOffset);
+        // _tempOffset *= 100; // Avoid numeric issues with float - uint convertions
     }
-
-    LOG_INFO("%s: Current sensor temperature: %.2f", sensorName, temperature);
-
-    tempOffset = (temperature - tempReference);
-    if (tempOffset < 0) {
-        LOG_ERROR("%s temperature offset is only positive", sensorName);
-        return false;
-    }
-
-    _tempOffset = tempOffset;
-    _tempOffset *= 100; // Avoid numeric issues with float - uint convertions
 
     LOG_INFO("%s: Setting temperature offset: %u (*100)", sensorName, _tempOffset);
 
