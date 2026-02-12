@@ -30,15 +30,16 @@ bool SCD30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     scd30.begin(*_bus, _address);
 
-    if (scd30.startPeriodicMeasurement(0) != SCD30_NO_ERROR) {
+    if (!startMeasurement()) {
         LOG_ERROR("%s: Failed to start periodic measurement", sensorName);
+#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
         return false;
     }
 
     if (!getASC(ascActive)) {
         LOG_WARN("%s: Could not determine ASC state", sensorName);
-    } else {
-        LOG_INFO("SCD30: ASC is %s", ascActive ? "enabled" : "disabled");
     }
 
 #if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
@@ -110,7 +111,6 @@ bool SCD30Sensor::setMeasurementInterval(uint16_t measInterval)
     }
 
     getMeasurementInterval(measurementInterval);
-
     return true;
 }
 
@@ -198,11 +198,7 @@ bool SCD30Sensor::setASC(bool ascEnabled)
 {
     uint16_t error;
 
-    if (ascEnabled) {
-        LOG_INFO("%s: Enabling ASC", sensorName);
-    } else {
-        LOG_INFO("%s: Disabling ASC", sensorName);
-    }
+    LOG_INFO("%s: %s ASC", sensorName, ascEnabled ? "Enabling" : "Disabling");
 
     error = scd30.activateAutoCalibration((uint16_t)ascEnabled);
 
@@ -216,19 +212,13 @@ bool SCD30Sensor::setASC(bool ascEnabled)
         return false;
     }
 
-    if (ascActive) {
-        LOG_INFO("%s: ASC is enabled", sensorName);
-    } else {
-        LOG_INFO("%s: ASC is disabled", sensorName);
-    }
-
     return true;
 }
 
 bool SCD30Sensor::getASC(uint16_t &_ascActive)
 {
     uint16_t error;
-    LOG_INFO("%s: Getting ASC", sensorName);
+    // LOG_INFO("%s: Getting ASC", sensorName);
 
     error = scd30.getAutoCalibrationStatus(_ascActive);
 
@@ -237,17 +227,13 @@ bool SCD30Sensor::getASC(uint16_t &_ascActive)
         return false;
     }
 
-    if (_ascActive) {
-        LOG_INFO("%s: ASC is enabled", sensorName);
-    } else {
-        LOG_INFO("%s: FRC is enabled", sensorName);
-    }
+    LOG_INFO("%s: ASC is %s", sensorName, _ascActive ? "enabled" : "disabled");
 
     return true;
 }
 
 /**
- * @brief Set the temperature refrence. Unit ℃.
+ * @brief Set the temperature reference. Unit ℃.
  *
  * The on-board RH/T sensor is influenced by thermal self-heating of SCD30
  * and other electrical components. Design-in alters the thermal properties
@@ -259,13 +245,14 @@ bool SCD30Sensor::getASC(uint16_t &_ascActive)
  * for temperature offset compensation after repowering.
  *
  * @param[in] tempReference
+ * @note this function is certainly confusing and it's not recommended
  */
-bool SCD30Sensor::setTemperature(uint16_t tempReference)
+bool SCD30Sensor::setTemperature(float tempReference)
 {
     uint16_t error;
-    uint16_t prevTempOffset;
     uint16_t updatedTempOffset;
     float tempOffset;
+    uint16_t _tempOffset;
     float co2;
     float temperature;
     float humidity;
@@ -280,26 +267,25 @@ bool SCD30Sensor::setTemperature(uint16_t tempReference)
 
     LOG_INFO("%s: Current sensor temperature: %.2f", sensorName, temperature);
 
-    error = scd30.getTemperatureOffset(prevTempOffset);
-
-    if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to get temperature offset. Error code: %u", sensorName, error);
+    tempOffset = (temperature - tempReference);
+    if (tempOffset < 0) {
+        LOG_ERROR("%s temperature offset is only positive", sensorName);
         return false;
     }
-    LOG_INFO("%s: Current sensor temperature offset: %.2f", sensorName, prevTempOffset / 100);
 
-    tempOffset = temperature - tempReference + prevTempOffset / 100;
-    tempOffset *= 100;
+    _tempOffset = tempOffset;
+    _tempOffset *= 100; // Avoid numeric issues with float - uint convertions
 
-    LOG_INFO("%s: Setting temperature offset: %u", sensorName, (uint16_t)tempOffset);
-    error = scd30.setTemperatureOffset((uint16_t)tempOffset);
+    LOG_INFO("%s: Setting temperature offset: %u (*100)", sensorName, _tempOffset);
+
+    error = scd30.setTemperatureOffset(_tempOffset);
     if (error != SCD30_NO_ERROR) {
         LOG_ERROR("%s: Unable to set temperature offset. Error code: %u", sensorName, error);
         return false;
     }
 
     scd30.getTemperatureOffset(updatedTempOffset);
-    LOG_INFO("%s: Updated sensor temperature offset: %0.2f", sensorName, (float)updatedTempOffset);
+    LOG_INFO("%s: Updated sensor temperature offset: %u (*100)", sensorName, updatedTempOffset);
 
     return true;
 }
@@ -316,7 +302,9 @@ bool SCD30Sensor::setAltitude(uint16_t altitude)
         LOG_ERROR("%s: Unable to set altitude. Error code: %u", sensorName, error);
         return false;
     }
-    LOG_INFO("%s: altitude set", sensorName);
+
+    uint16_t newAltitude;
+    getAltitude(newAltitude);
 
     return true;
 }
@@ -324,7 +312,7 @@ bool SCD30Sensor::setAltitude(uint16_t altitude)
 bool SCD30Sensor::getAltitude(uint16_t &altitude)
 {
     uint16_t error;
-    LOG_INFO("%s: Getting altitude", sensorName);
+    // LOG_INFO("%s: Getting altitude", sensorName);
 
     error = scd30.getAltitudeCompensation(altitude);
 
@@ -341,16 +329,16 @@ bool SCD30Sensor::softReset()
 {
     uint16_t error;
 
-    LOG_INFO("%s: Requesting factory reset", sensorName);
+    LOG_INFO("%s: Requesting soft reset", sensorName);
 
     error = scd30.softReset();
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to do factory reset. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Unable to do soft reset. Error code: %u", sensorName, error);
         return false;
     }
 
-    LOG_INFO("%s: Factory reset successful", sensorName);
+    LOG_INFO("%s: soft reset successful", sensorName);
 
     return true;
 }
@@ -445,7 +433,6 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
 #endif /* CAN_RECLOCK_I2C */
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
-    // TODO: potentially add selftest command?
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_sensor_config_tag:
         // Check for ASC-FRC request first

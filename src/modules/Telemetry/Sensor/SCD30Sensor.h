@@ -18,7 +18,7 @@ class SCD30Sensor : public TelemetrySensor
     bool performFRC(uint16_t targetCO2);
     bool setASC(bool ascEnabled);
     bool getASC(uint16_t &ascEnabled);
-    bool setTemperature(uint16_t tempReference);
+    bool setTemperature(float tempReference);
     bool getAltitude(uint16_t &altitude);
     bool setAltitude(uint16_t altitude);
     bool softReset(); //
