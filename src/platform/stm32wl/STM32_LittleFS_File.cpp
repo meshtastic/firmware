@@ -24,6 +24,7 @@
 
 #include "STM32_LittleFS.h"
 #include <Arduino.h>
+#include <string>
 
 #define rtos_malloc malloc
 #define rtos_free free
@@ -102,6 +103,13 @@ bool File::_open_dir(char const *filepath)
     _is_dir = true;
 
     _dir_path = (char *)rtos_malloc(strlen(filepath) + 1);
+    if (!_dir_path) {
+        lfs_dir_close(_fs->_getFS(), _dir);
+        rtos_free(_dir);
+        _dir = NULL;
+        _is_dir = false;
+        return false;
+    }
     strcpy(_dir_path, filepath);
 
     return true;
@@ -367,14 +375,12 @@ File File::openNextFile(uint8_t mode)
         } while (rc == 1 && (!strcmp(".", info.name) || !strcmp("..", info.name)));
 
         if (rc == 1) {
-            // string cat name with current folder
-            char filepath[strlen(_dir_path) + 1 + strlen(info.name) + 1]; // potential for significant stack usage
-            strcpy(filepath, _dir_path);
-            if (!(_dir_path[0] == '/' && _dir_path[1] == 0))
-                strcat(filepath, "/"); // only add '/' if cwd is not root
-            strcat(filepath, info.name);
-
-            (void)ret._open(filepath, mode); // return value is ignored ... caller is expected to check isOpened()
+            std::string filepath = _dir_path;
+            if (!(_dir_path[0] == '/' && _dir_path[1] == 0)) {
+                filepath += "/";
+            }
+            filepath += info.name;
+            (void)ret._open(filepath.c_str(), mode); // return value is ignored ... caller is expected to check isOpened()
         } else if (rc < 0) {
             PRINT_LFS_ERR(rc);
         }

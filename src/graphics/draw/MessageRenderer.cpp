@@ -679,7 +679,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // If this is *our own* message, override senderBuf to who the recipient was
         bool mine = (m.sender == nodeDB->getNodeNum());
         if (mine && node_recipient && node_recipient->has_user) {
-            strcpy(senderBuf, node_recipient->user.long_name);
+            snprintf(senderBuf, sizeof(senderBuf), "%s", node_recipient->user.long_name);
         }
 
         // Shrink Sender name if needed
@@ -695,7 +695,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // If we actually truncated, append "..."
         if (strlen(senderBuf) < origLen) {
-            strcat(senderBuf, "...");
+            size_t len = strlen(senderBuf);
+            if (len > sizeof(senderBuf) - 4) {
+                len = sizeof(senderBuf) - 4;
+                senderBuf[len] = '\0';
+            }
+            strncat(senderBuf, "...", sizeof(senderBuf) - strlen(senderBuf) - 1);
         }
 
         // Final header line
@@ -1126,7 +1131,12 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             longName[strlen(longName) - 1] = '\0';
         }
         if (strlen(longName) < origLen) {
-            strcat(longName, "...");
+            size_t len = strlen(longName);
+            if (len > sizeof(longName) - 4) {
+                len = sizeof(longName) - 4;
+                longName[len] = '\0';
+            }
+            strncat(longName, "...", sizeof(longName) - strlen(longName) - 1);
         }
         const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
 

@@ -241,9 +241,9 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            strcpy(logRecord.message, message);
+            snprintf(logRecord.message, sizeof(logRecord.message), "%s", message);
             if (thread)
-                strcpy(logRecord.source, thread->ThreadName.c_str());
+                snprintf(logRecord.source, sizeof(logRecord.source), "%s", thread->ThreadName.c_str());
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
             uint8_t *buffer = new uint8_t[meshtastic_LogRecord_size];

@@ -1704,7 +1704,12 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     entryText[strlen(entryText) - 1] = '\0';
                 }
                 if (strlen(entryText) < origLen) {
-                    strcat(entryText, "...");
+                    size_t len = strlen(entryText);
+                    if (len > sizeof(entryText) - 4) {
+                        len = sizeof(entryText) - 4;
+                        entryText[len] = '\0';
+                    }
+                    strncat(entryText, "...", sizeof(entryText) - strlen(entryText) - 1);
                 }
 
                 // Prepend "* " if this is a favorite
@@ -2316,7 +2321,12 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                     nodeName[strlen(nodeName) - 1] = '\0';
                 }
                 if (strlen(nodeName) < origLen) {
-                    strcat(nodeName, "...");
+                    size_t len = strlen(nodeName);
+                    if (len > sizeof(nodeName) - 4) {
+                        len = sizeof(nodeName) - 4;
+                        nodeName[len] = '\0';
+                    }
+                    strncat(nodeName, "...", sizeof(nodeName) - strlen(nodeName) - 1);
                 }
 
                 // Calculate signal quality and bars based on preset, SNR, and RSSI

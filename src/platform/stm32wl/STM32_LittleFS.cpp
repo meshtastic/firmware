@@ -24,6 +24,7 @@
 
 #include "STM32_LittleFS.h"
 #include <Arduino.h>
+#include <string>
 #include <string.h>
 
 #define memclr(buffer, size) memset(buffer, 0, size)
@@ -162,10 +163,8 @@ bool STM32_LittleFS::mkdir(char const *filepath)
 
     // make intermediate parent directory(ies)
     while (NULL != (slash = strchr(slash, '/'))) {
-        char parent[slash - filepath + 1] = {0};
-        memcpy(parent, filepath, slash - filepath);
-
-        int rc = lfs_mkdir(&_lfs, parent);
+        std::string parent(filepath, slash - filepath);
+        int rc = lfs_mkdir(&_lfs, parent.c_str());
         if (rc != LFS_ERR_OK && rc != LFS_ERR_EXIST) {
             PRINT_LFS_ERR(rc);
             ret = false;

@@ -32,8 +32,10 @@ static int constant_time_compare(const void *a_, const void *b_, size_t len)
     for (i = 0U; i < len; i++) {
         d |= (a[i] ^ b[i]);
     }
-    /* Constant time bit arithmetic to convert d > 0 to -1 and d = 0 to 0. */
-    return (1 & ((d - 1) >> 8)) - 1;
+    /* Constant-time mapping: non-zero -> -1, zero -> 0. */
+    const uint32_t diff = d;
+    const uint32_t nonzero = (diff | (0U - diff)) >> 31;
+    return -(int)nonzero;
 }
 
 static void WPA_PUT_BE16(uint8_t *a, uint16_t val)

@@ -241,7 +241,21 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->binary_body_length;
 
-    memcpy(buffer, req->binary_body, MAX_TO_FROM_RADIO_SIZE);
+    if (s > MAX_TO_FROM_RADIO_SIZE) {
+        LOG_WARN("Reject PUT body too large: %u bytes (max %u)", static_cast<unsigned>(s), MAX_TO_FROM_RADIO_SIZE);
+        ulfius_set_response_properties(res, U_OPT_STATUS, 413);
+        return U_CALLBACK_COMPLETE;
+    }
+
+    if (s > 0 && req->binary_body == nullptr) {
+        LOG_WARN("Reject PUT body: missing payload pointer");
+        ulfius_set_response_properties(res, U_OPT_STATUS, 400);
+        return U_CALLBACK_COMPLETE;
+    }
+
+    if (s > 0) {
+        memcpy(buffer, req->binary_body, s);
+    }
 
     // FIXME* Problem with portdunio loosing mountpoint maybe because of running in a real sep. thread
 

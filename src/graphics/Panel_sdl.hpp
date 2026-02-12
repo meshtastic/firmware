@@ -137,10 +137,10 @@ struct Panel_sdl : public Panel_FrameBufferBase {
     monitor_t monitor;
 
     rgb888_t *_texturebuf = nullptr;
-    uint_fast16_t _modified_counter;
-    uint_fast16_t _texupdate_counter;
-    uint_fast16_t _display_counter;
-    bool _invalidated;
+    uint_fast16_t _modified_counter = 0;
+    uint_fast16_t _texupdate_counter = 0;
+    uint_fast16_t _display_counter = 0;
+    bool _invalidated = true;
 
     static void _event_proc(void);
     static void _update_proc(void);

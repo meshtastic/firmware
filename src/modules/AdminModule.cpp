@@ -829,7 +829,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             }
             //  Compare the entire string, we are sure of the length as a topic has never been set
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
         }
@@ -840,7 +840,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
             if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
                 //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
             }
 
             changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;

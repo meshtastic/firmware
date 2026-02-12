@@ -30,6 +30,7 @@
 #endif
 #include <Throttle.h>
 #include <assert.h>
+#include <memory>
 #include <utility>
 
 #include <IPAddress.h>
@@ -118,7 +119,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->via_mqtt = true; // Mark that the packet was received via MQTT
     p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     p->which_payload_variant = e.packet->which_payload_variant;
-    memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        memcpy(&p->decoded, &e.packet->decoded, sizeof(p->decoded));
+    } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+        memcpy(&p->encrypted, &e.packet->encrypted, sizeof(p->encrypted));
+    }
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
@@ -162,10 +167,10 @@ inline bool isValidJsonEnvelope(JSONObject &json)
 
 inline void onReceiveJson(byte *payload, size_t length)
 {
-    char payloadStr[length + 1];
-    memcpy(payloadStr, payload, length);
+    std::unique_ptr<char[]> payloadStr(new char[length + 1]);
+    memcpy(payloadStr.get(), payload, length);
     payloadStr[length] = 0; // null terminated string
-    std::unique_ptr<JSONValue> json_value(JSON::Parse(payloadStr));
+    std::unique_ptr<JSONValue> json_value(JSON::Parse(payloadStr.get()));
     if (json_value == nullptr) {
         LOG_ERROR("JSON received payload on MQTT but not a valid JSON");
         return;

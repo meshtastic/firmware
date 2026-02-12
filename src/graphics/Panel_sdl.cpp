@@ -534,7 +534,9 @@ void Panel_sdl::sdl_create(monitor_t *m)
             SDL_FreeSurface(sf);
         }
     }
-    SDL_SetTextureBlendMode(m->texture_frameimage, SDL_BLENDMODE_BLEND);
+    if (m->texture_frameimage) {
+        SDL_SetTextureBlendMode(m->texture_frameimage, SDL_BLENDMODE_BLEND);
+    }
     _update_scaling(m, scaling_x, scaling_y);
 }
 
@@ -609,7 +611,9 @@ void Panel_sdl::sdl_update(void)
             SDL_GetRendererOutputSize(monitor.renderer, &mw, &mh);
         }
         render_texture(monitor.texture, monitor.frame_inner_x, monitor.frame_inner_y, _cfg.panel_width, _cfg.panel_height, angle);
-        render_texture(monitor.texture_frameimage, 0, 0, monitor.frame_width, monitor.frame_height, angle);
+        if (monitor.texture_frameimage) {
+            render_texture(monitor.texture_frameimage, 0, 0, monitor.frame_width, monitor.frame_height, angle);
+        }
         SDL_RenderPresent(monitor.renderer);
         _display_counter = _texupdate_counter;
         if (_invalidated) {
@@ -618,7 +622,9 @@ void Panel_sdl::sdl_update(void)
             SDL_RenderClear(monitor.renderer);
             render_texture(monitor.texture, monitor.frame_inner_x, monitor.frame_inner_y, _cfg.panel_width, _cfg.panel_height,
                            angle);
-            render_texture(monitor.texture_frameimage, 0, 0, monitor.frame_width, monitor.frame_height, angle);
+            if (monitor.texture_frameimage) {
+                render_texture(monitor.texture_frameimage, 0, 0, monitor.frame_width, monitor.frame_height, angle);
+            }
             SDL_RenderPresent(monitor.renderer);
         }
     }
@@ -626,6 +632,9 @@ void Panel_sdl::sdl_update(void)
 
 void Panel_sdl::render_texture(SDL_Texture *texture, int tx, int ty, int tw, int th, float angle)
 {
+    if (!texture) {
+        return;
+    }
     SDL_Point pivot;
     pivot.x = (monitor.frame_width / 2.0f - tx) * (float)monitor.scaling_x;
     pivot.y = (monitor.frame_height / 2.0f - ty) * (float)monitor.scaling_y;
