@@ -205,7 +205,6 @@ uint8_t SEN5XSensor::sen5xCRC(uint8_t *buffer)
 
 void SEN5XSensor::sleep()
 {
-    // TODO Check this works
     idle(true);
 }
 

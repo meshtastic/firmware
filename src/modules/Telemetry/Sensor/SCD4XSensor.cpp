@@ -283,11 +283,7 @@ bool SCD4XSensor::getASC(uint16_t &_ascActive)
         return false;
     }
 
-    if (_ascActive) {
-        LOG_INFO("%s: ASC is enabled", sensorName);
-    } else {
-        LOG_INFO("%s: FRC is enabled", sensorName);
-    }
+    LOG_INFO("%s ASC is %s", sensorName, _ascActive ? "enabled" : "disabled");
 
     return true;
 }
@@ -305,11 +301,7 @@ bool SCD4XSensor::setASC(bool ascEnabled)
 {
     uint16_t error;
 
-    if (ascEnabled) {
-        LOG_INFO("%s: Enabling ASC", sensorName);
-    } else {
-        LOG_INFO("%s: Disabling ASC", sensorName);
-    }
+    LOG_INFO("%s %s ASC", sensorName, ascEnabled ? "Enabling" : "Disabling");
 
     if (!stopMeasurement()) {
         return false;
@@ -351,7 +343,6 @@ bool SCD4XSensor::setASC(bool ascEnabled)
  */
 bool SCD4XSensor::setASCBaseline(uint32_t targetCO2)
 {
-    // TODO - Remove?
     // Available in library, but not described in datasheet.
     uint16_t error;
     LOG_INFO("%s: Setting ASC baseline to: %u", sensorName, targetCO2);
