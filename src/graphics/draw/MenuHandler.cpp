@@ -539,7 +539,7 @@ void menuHandler::messageResponseMenu()
     // If viewing ALL chats, hide “Mute Chat”
     if (mode != graphics::MessageRenderer::ThreadMode::ALL && mode != graphics::MessageRenderer::ThreadMode::DIRECT) {
         const uint8_t chIndex = (threadChannel != 0) ? (uint8_t)threadChannel : channels.getPrimaryIndex();
-        auto &chan = channels.getByIndex(chIndex);
+        const auto &chan = channels.getByIndex(chIndex);
 
         optionsArray[options] = chan.settings.module_settings.is_muted ? "Unmute Channel" : "Mute Channel";
         optionsEnumArray[options++] = MuteChannel;
@@ -831,7 +831,7 @@ void menuHandler::messageViewModeMenu()
     // Gather unique peers
     auto dms = messageStore.getDirectMessages();
     std::vector<uint32_t> uniquePeers;
-    for (auto &m : dms) {
+    for (const auto &m : dms) {
         uint32_t peer = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
         if (peer != nodeDB->getNodeNum() && std::find(uniquePeers.begin(), uniquePeers.end(), peer) == uniquePeers.end())
             uniquePeers.push_back(peer);
@@ -1397,7 +1397,7 @@ void menuHandler::manageNodeMenu()
         }
 
         if (selected == Favorite) {
-            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            const auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
             if (!n) {
                 return;
             }
@@ -2444,7 +2444,7 @@ void menuHandler::frameTogglesMenu()
         nodelist_hopsignal,
         nodelist_distance,
         nodelist_bearings,
-        gps,
+        gps_position,
         lora,
         clock,
         show_favorites,
@@ -2482,7 +2482,7 @@ void menuHandler::frameTogglesMenu()
 #endif
 
     optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
-    optionsEnumArray[options++] = gps;
+    optionsEnumArray[options++] = gps_position;
 #endif
 
     optionsArray[options] = screen->isFrameHidden("lora") ? "Show LoRa" : "Hide LoRa";
@@ -2545,7 +2545,7 @@ void menuHandler::frameTogglesMenu()
             screen->toggleFrameVisibility("nodelist_bearings");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
-        } else if (selected == gps) {
+        } else if (selected == gps_position) {
             screen->toggleFrameVisibility("gps");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();

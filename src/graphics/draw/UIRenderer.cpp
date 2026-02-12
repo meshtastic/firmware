@@ -1388,7 +1388,7 @@ static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
 constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 
-void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
+void UIRenderer::drawNavigationBar(OLEDDisplay *display, const OLEDDisplayUiState *state)
 {
     int currentFrame = state->currentFrame;
 
