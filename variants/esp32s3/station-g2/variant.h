@@ -41,14 +41,12 @@ Board Information: https://wiki.uniteng.com/en/meshtastic/station-g2
 #endif
 
 // Enable Traffic Management Module for Station G2
-#ifdef HAS_TRAFFIC_MANAGEMENT
-#undef HAS_TRAFFIC_MANAGEMENT
-#endif
+#ifndef HAS_TRAFFIC_MANAGEMENT
 #define HAS_TRAFFIC_MANAGEMENT 1
-#ifdef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#undef TRAFFIC_MANAGEMENT_CACHE_SIZE
 #endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
+#endif
 
 /*
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage

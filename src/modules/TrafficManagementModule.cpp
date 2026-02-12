@@ -25,10 +25,9 @@
 namespace
 {
 
-constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL;  // Cache cleanup interval
-constexpr uint32_t kUnknownResetMs = 60 * 1000UL;         // Unknown packet window
-constexpr uint32_t kDefaultCacheTtlMs = 10 * 60 * 1000UL; // Default TTL for cache entries
-constexpr uint8_t kMaxCuckooKicks = 16;                   // Max displacement chain length
+constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interval
+constexpr uint32_t kUnknownResetMs = 60 * 1000UL;        // Unknown packet window
+constexpr uint8_t kMaxCuckooKicks = 16;                  // Max displacement chain length
 
 // NodeInfo direct response: enforced maximum hops by device role
 // Both use maxHops logic (respond when hopsAway <= threshold)
@@ -94,6 +93,38 @@ inline void saturatingIncrement(uint8_t &counter)
         counter++;
 }
 
+/**
+ * Return a short human-readable name for common port numbers.
+ * Falls back to "port:<N>" for unknown ports.
+ */
+const char *portName(int portnum)
+{
+    switch (portnum) {
+    case meshtastic_PortNum_TEXT_MESSAGE_APP:
+        return "text";
+    case meshtastic_PortNum_POSITION_APP:
+        return "position";
+    case meshtastic_PortNum_NODEINFO_APP:
+        return "nodeinfo";
+    case meshtastic_PortNum_ROUTING_APP:
+        return "routing";
+    case meshtastic_PortNum_ADMIN_APP:
+        return "admin";
+    case meshtastic_PortNum_TELEMETRY_APP:
+        return "telemetry";
+    case meshtastic_PortNum_TRACEROUTE_APP:
+        return "traceroute";
+    case meshtastic_PortNum_NEIGHBORINFO_APP:
+        return "neighborinfo";
+    case meshtastic_PortNum_STORE_FORWARD_APP:
+        return "store-forward";
+    case meshtastic_PortNum_WAYPOINT_APP:
+        return "waypoint";
+    default:
+        return nullptr;
+    }
+}
+
 } // namespace
 
 // =============================================================================
@@ -111,7 +142,6 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     // Module configuration
     isPromiscuous = true; // See all packets, not just those addressed to us
     encryptedOk = true;   // Can process encrypted packets
-    loopbackOk = true;    // Process our own outgoing packets (for hop exhaustion)
     stats = meshtastic_TrafficManagementStats_init_zero;
 
     // Initialize rolling epoch for relative timestamps
@@ -124,6 +154,11 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     rateTimeResolution = calcTimeResolution(moduleConfig.traffic_management.rate_limit_window_secs);
     unknownTimeResolution = calcTimeResolution(kUnknownResetMs / 1000); // ~5 min default
 
+    const auto &cfg = moduleConfig.traffic_management;
+    TM_LOG_INFO("Enabled: pos_dedup=%d nodeinfo_resp=%d rate_limit=%d drop_unknown=%d exhaust_telem=%d exhaust_pos=%d "
+                "preserve_hops=%d",
+                cfg.position_dedup_enabled, cfg.nodeinfo_direct_response, cfg.rate_limit_enabled, cfg.drop_unknown_enabled,
+                cfg.exhaust_hop_telemetry, cfg.exhaust_hop_position, cfg.router_preserve_hops);
     TM_LOG_DEBUG("Time resolutions: pos=%us, rate=%us, unknown=%us", posTimeResolution, rateTimeResolution,
                  unknownTimeResolution);
 
@@ -307,47 +342,14 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
         h1 = altSlot;
     }
 
-    // Cuckoo cycle detected or max kicks exceeded
-    // Fall back to evicting oldest entry globally
-    TM_LOG_DEBUG("Cuckoo cycle detected, evicting oldest entry");
-
-    // Find slot where new node was placed (h1 has been modified during kicks)
-    uint16_t newNodeSlot = cuckooHash1(node);
-
-    uint16_t oldestIdx = 0;
-    uint16_t oldestTime = UINT16_MAX;
-
-    for (uint16_t i = 0; i < cacheSize(); i++) {
-        // Skip the slot where we placed the new node - don't evict it!
-        if (i == newNodeSlot)
-            continue;
-
-        // Use max of all timestamp fields as "last activity"
-        // Scale each to common unit (seconds) using its resolution
-        uint32_t posTimeSecs = static_cast<uint32_t>(cache[i].pos_time) * posTimeResolution;
-        uint32_t rateTimeSecs = static_cast<uint32_t>(cache[i].rate_time) * rateTimeResolution;
-        uint32_t unknownTimeSecs = static_cast<uint32_t>(cache[i].unknown_time) * unknownTimeResolution;
-
-        uint32_t entryTimeSecs = posTimeSecs;
-        if (rateTimeSecs > entryTimeSecs)
-            entryTimeSecs = rateTimeSecs;
-        if (unknownTimeSecs > entryTimeSecs)
-            entryTimeSecs = unknownTimeSecs;
-
-        uint16_t entryTime = (entryTimeSecs > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(entryTimeSecs);
-
-        if (entryTime < oldestTime) {
-            oldestTime = entryTime;
-            oldestIdx = i;
-        }
-    }
-
-    // Place displaced entry in oldest slot (guaranteed != newNodeSlot)
-    cache[oldestIdx] = displaced;
+    // Cuckoo cycle detected or max kicks exceeded.
+    // The displaced entry has no valid cuckoo slot — drop it to preserve cache integrity.
+    // Placing it at an arbitrary slot would make it unreachable by findEntry().
+    TM_LOG_DEBUG("Cuckoo cycle, evicting node 0x%08x", displaced.node);
 
     if (isNew)
         *isNew = true;
-    return &cache[newNodeSlot]; // Return slot for new node
+    return &cache[cuckooHash1(node)];
 #endif
 }
 
@@ -525,7 +527,6 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag)
         return;
 
-    // Skip our own packets - only zero-hop relayed packets from other nodes
     if (isFromUs(&mp))
         return;
 
@@ -534,18 +535,11 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     // -------------------------------------------------------------------------
     // For relayed telemetry or position broadcasts from other nodes, optionally
     // set hop_limit=0 so they don't propagate further through the mesh.
-    // Our own packets are unaffected and will use normal hop_limit.
 
     const auto &cfg = moduleConfig.traffic_management;
     const bool isTelemetry = mp.decoded.portnum == meshtastic_PortNum_TELEMETRY_APP;
     const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
     const bool shouldExhaust = (isTelemetry && cfg.exhaust_hop_telemetry) || (isPosition && cfg.exhaust_hop_position);
-
-    TM_LOG_DEBUG(
-        "alterReceived: from=0x%08x port=%d isTelemetry=%d isPosition=%d zeroHopTelem=%d exhaustHopPos=%d shouldExhaust=%d "
-        "isBroadcast=%d hop_limit=%d",
-        getFrom(&mp), mp.decoded.portnum, isTelemetry, isPosition, cfg.exhaust_hop_telemetry, cfg.exhaust_hop_position,
-        shouldExhaust, isBroadcast(mp.to), mp.hop_limit);
 
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;
@@ -553,8 +547,10 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     if (mp.hop_limit > 0) {
         const char *reason = isTelemetry ? "zero-hop-telemetry" : "exhaust-hop-position";
         logAction("exhaust", &mp, reason);
-        exhaustHops(&mp);
-        exhaustRequested = true; // Signal to perhapsRebroadcast() to force hop_limit = 0
+        // Preserve correct hopsAway for the one remaining relay hop
+        mp.hop_start = mp.hop_start - mp.hop_limit + 1;
+        mp.hop_limit = 0;
+        exhaustRequested = true;
         incrementStat(&stats.hop_exhausted_packets);
     }
 }
@@ -584,11 +580,14 @@ int32_t TrafficManagementModule::runOnce()
     const uint32_t positionTtlMs = positionIntervalMs * 4;
 
     const uint32_t rateIntervalMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
-    const uint32_t rateTtlMs = (rateIntervalMs > 0) ? rateIntervalMs * 2 : static_cast<uint32_t>(kDefaultCacheTtlMs);
+    const uint32_t rateTtlMs = (rateIntervalMs > 0) ? rateIntervalMs * 2 : (10 * 60 * 1000UL);
 
     const uint32_t unknownTtlMs = kUnknownResetMs * 5;
 
     // Sweep cache and clear expired entries
+    uint16_t activeEntries = 0;
+    uint16_t expiredEntries = 0;
+
     concurrency::LockGuard guard(&cacheLock);
     for (uint16_t i = 0; i < cacheSize(); i++) {
         if (cache[i].node == 0)
@@ -632,8 +631,14 @@ int32_t TrafficManagementModule::runOnce()
         // If all data expired, free the slot entirely
         if (!anyValid) {
             memset(&cache[i], 0, sizeof(UnifiedCacheEntry));
+            expiredEntries++;
+        } else {
+            activeEntries++;
         }
     }
+
+    TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots used", activeEntries, expiredEntries,
+                 static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()));
 
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
@@ -678,6 +683,9 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const bool withinInterval =
         (minIntervalMs == 0) ? false : isWithinWindow(nowMs, fromRelativePosTime(entry->pos_time), minIntervalMs);
 
+    TM_LOG_DEBUG("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
+                 entry->pos_fingerprint, samePosition, withinInterval, isNew);
+
     // Update cache entry
     entry->pos_fingerprint = fingerprint;
     entry->pos_time = toRelativePosTime(nowMs);
@@ -689,14 +697,8 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
 
 bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse)
 {
-    if (!moduleConfig.traffic_management.nodeinfo_direct_response)
-        return false;
-
-    if (isBroadcast(p->to) || isToUs(p) || isFromUs(p))
-        return false;
-
-    if (!p->decoded.want_response)
-        return false;
+    // Caller already verified: nodeinfo_direct_response, portnum, want_response,
+    // !isBroadcast, !isToUs, !isFromUs
 
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
     if (!node || !node->has_user)
@@ -719,11 +721,12 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.payload.size =
         pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &user);
     reply->decoded.want_response = false;
-    reply->from = p->to; // Spoof sender as the target node we're responding on behalf of
+    reply->from = p->to; // Respond on behalf of the target node
     reply->to = getFrom(p);
     reply->channel = p->channel;
     reply->decoded.request_id = p->id;
     reply->hop_limit = 0;
+    reply->hop_start = 0; // Not from us, so Router::send() won't set this — be explicit
     reply->next_hop = nodeDB->getLastByteOfNodeNum(getFrom(p));
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
@@ -750,7 +753,10 @@ bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket
     if (maxHops > roleLimit)
         maxHops = roleLimit;
 
-    return static_cast<uint32_t>(hopsAway) <= maxHops;
+    bool result = static_cast<uint32_t>(hopsAway) <= maxHops;
+    TM_LOG_DEBUG("NodeInfo hops check: hopsAway=%d maxHops=%u roleLimit=%u isRouter=%d -> %s", hopsAway, maxHops, roleLimit,
+                 isRouter, result ? "respond" : "skip");
+    return result;
 }
 
 bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
@@ -785,7 +791,12 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
     if (threshold > 255)
         threshold = 255;
 
-    return entry->rate_count > threshold;
+    bool limited = entry->rate_count > threshold;
+    if (limited || entry->rate_count == threshold) {
+        TM_LOG_DEBUG("Rate limit 0x%08x: count=%u threshold=%u -> %s", from, entry->rate_count, threshold,
+                     limited ? "DROP" : "at-limit");
+    }
+    return limited;
 #endif
 }
 
@@ -823,25 +834,30 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     if (threshold > 255)
         threshold = 255;
 
-    return entry->unknown_count > threshold;
+    bool drop = entry->unknown_count > threshold;
+    if (drop || entry->unknown_count == threshold) {
+        TM_LOG_DEBUG("Unknown packets 0x%08x: count=%u threshold=%u -> %s", p->from, entry->unknown_count, threshold,
+                     drop ? "DROP" : "at-limit");
+    }
+    return drop;
 #endif
-}
-
-void TrafficManagementModule::exhaustHops(meshtastic_MeshPacket *p)
-{
-    // Set to 0 to ensure the packet won't propagate further after this node relays it.
-    // The exhaustRequested flag signals perhapsRebroadcast() to preserve hop_limit=0
-    // even if router_preserve_hops or favorite node logic would normally prevent decrement.
-    p->hop_limit = 0;
 }
 
 void TrafficManagementModule::logAction(const char *action, const meshtastic_MeshPacket *p, const char *reason) const
 {
-    int portnum = -1;
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        portnum = p->decoded.portnum;
+        const char *name = portName(p->decoded.portnum);
+        if (name) {
+            TM_LOG_INFO("%s %s from=0x%08x to=0x%08x hop=%d/%d reason=%s", action, name, getFrom(p), p->to, p->hop_limit,
+                        p->hop_start, reason);
+        } else {
+            TM_LOG_INFO("%s port=%d from=0x%08x to=0x%08x hop=%d/%d reason=%s", action, p->decoded.portnum, getFrom(p), p->to,
+                        p->hop_limit, p->hop_start, reason);
+        }
+    } else {
+        TM_LOG_INFO("%s encrypted from=0x%08x to=0x%08x hop=%d/%d reason=%s", action, getFrom(p), p->to, p->hop_limit,
+                    p->hop_start, reason);
     }
-    TM_LOG_INFO("%s from=0x%08x to=0x%08x port=%d reason=%s", action, getFrom(p), p->to, portnum, reason);
 }
 
 #endif

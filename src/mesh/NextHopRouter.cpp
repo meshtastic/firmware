@@ -148,7 +148,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
                     if (exhaustHops) {
                         tosend->hop_limit = 0;
-                        LOG_INFO("Traffic management: exhausting hops, setting hop_limit=0");
+                        LOG_INFO("Traffic management: exhausting hops for 0x%08x, setting hop_limit=0", getFrom(p));
                     } else if (shouldDecrementHopLimit(p)) {
                         // Use shared logic to determine if hop_limit should be decremented
                         tosend->hop_limit--; // bump down the hop count

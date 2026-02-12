@@ -458,7 +458,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
-        if (config_state > meshtastic_ModuleConfig_traffic_management_tag) {
+        if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
             // Handle special nonce behaviors:
             // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
             // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
