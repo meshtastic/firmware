@@ -180,7 +180,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define GPS_L76K
 #define GPS_TX_PIN D6 // This is data from the MCU
 #define GPS_RX_PIN D7 // This is data from the GNSS module
-#define PIN_GPS_STANDBY D0
+#if defined(SEEED_XIAO_NRF_KIT_DEFAULT)
+#define PIN_GPS_STANDBY D0 // this is where the conflicting pinouts come from
+#endif
 // I2C and BLE-Legacy put them on the NFC pins
 #else
 #define GPS_TX_PIN (30)
