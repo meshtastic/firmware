@@ -47,9 +47,9 @@ class UIRenderer
     static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
 
     // Navigation bar overlay
-    static void drawNavigationBar(OLEDDisplay *display, const OLEDDisplayUiState *state);
+    static void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
 
-    static void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
