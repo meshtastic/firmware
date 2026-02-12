@@ -572,7 +572,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     // Check if it is time to do a cleaning
     uint32_t now;
-    int32_t passed;
+    int32_t passed = 0;
     now = getValidTime(RTCQuality::RTCQualityDevice);
 
     // If time is not RTCQualityNone, it will return non-zero
@@ -665,16 +665,16 @@ bool SEN5XSensor::readValues()
     sen5xmeasurement.vocIndex = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
     sen5xmeasurement.noxIndex = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
 
-    LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
-              sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
+    LOG_DEBUG("Got %s readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
+              sen5xmeasurement.pM2p5, sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
     if (model != SEN50) {
-        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sen5xmeasurement.humidity, sen5xmeasurement.temperature,
-                  sen5xmeasurement.vocIndex);
+        LOG_DEBUG("Got %s readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, sen5xmeasurement.humidity,
+                  sen5xmeasurement.temperature, sen5xmeasurement.vocIndex);
     }
 
     if (model == SEN55) {
-        LOG_DEBUG("Got: noxIndex=%.2f", sen5xmeasurement.noxIndex);
+        LOG_DEBUG("Got %s readings: noxIndex=%.2f", sensorName, sen5xmeasurement.noxIndex);
     }
 
     return true;
@@ -727,9 +727,9 @@ bool SEN5XSensor::readPNValues(bool cumulative)
         sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
     }
 
-    LOG_DEBUG("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sen5xmeasurement.pN0p5,
-              sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0, sen5xmeasurement.pN10p0,
-              sen5xmeasurement.tSize);
+    LOG_DEBUG("Got %s readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
+              sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
+              sen5xmeasurement.pN10p0, sen5xmeasurement.tSize);
 
     return true;
 }
@@ -919,6 +919,11 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 void SEN5XSensor::setMode(bool setOneShot)
 {
     oneShotMode = setOneShot;
+    if (oneShotMode) {
+        LOG_INFO("%s setting mode to one shot mode", sensorName);
+    } else {
+        LOG_INFO("%s setting mode to continuous mode", sensorName);
+    }
 }
 
 AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
@@ -934,16 +939,22 @@ AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPa
             break;
         }
 
-        // TODO - Add admin command to set temperature offset
+        // Check for one-shot/continuous mode request
+        if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
+            this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
+        }
+
+        // TODO - Add admin command to set temperature offset?
         // Check for temperature offset
         // if (request->sensor_config.sen5x_config.has_set_temperature) {
         //     this->setTemperature(request->sensor_config.sen5x_config.set_temperature);
         // }
 
+        // TODO - Add admin command to trigger fan cleaning?
         // Check for one-shot/continuous mode request
-        if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
-            this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
-        }
+        // if (request->sensor_config.sen5x_config.has_fan_cleaning && request->sensor_config.sen5x_config.fan_cleaning) {
+        //     this->startCleaning();
+        // }
 
         result = AdminMessageHandleResult::HANDLED;
         break;

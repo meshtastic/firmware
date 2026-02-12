@@ -29,7 +29,6 @@
 #include <Wire.h>
 #endif
 #include "detect/einkScan.h"
-#include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -247,7 +246,7 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-static OSThread *ambientLightingThread;
+OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
 #ifdef ARCH_PORTDUINO
@@ -349,9 +348,10 @@ void setup()
 #endif
 
     concurrency::hasBeenSetup = true;
-
+#if HAS_SCREEN
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
+#endif
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 #ifdef USE_SEGGER
@@ -568,6 +568,7 @@ void setup()
     }
 #endif
 
+#if HAS_SCREEN
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
@@ -585,6 +586,7 @@ void setup()
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
+#endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 #if defined(USE_VIRTUAL_KEYBOARD)
@@ -679,7 +681,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
 #endif
 
 #ifdef HAS_SDCARD
@@ -723,6 +724,7 @@ void setup()
     else
         playStartMelody();
 
+#if HAS_SCREEN
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
@@ -734,6 +736,7 @@ void setup()
 
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
