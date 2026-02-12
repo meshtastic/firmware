@@ -705,9 +705,9 @@ bool Power::setup()
     } else if (analogInit()) {
         found = true;
     }
-
 #ifdef NRF_APM
-    found = true;
+    if (!found)
+        found = true;
 #endif
 #ifdef EXT_PWR_DETECT
     attachInterrupt(
@@ -846,8 +846,10 @@ void Power::readPowerStatus()
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
+#ifndef NRF_APM
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
+#endif
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it

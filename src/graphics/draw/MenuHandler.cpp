@@ -1397,7 +1397,7 @@ void menuHandler::manageNodeMenu()
         }
 
         if (selected == Favorite) {
-            const auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
+            const auto *n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
             if (!n) {
                 return;
             }
