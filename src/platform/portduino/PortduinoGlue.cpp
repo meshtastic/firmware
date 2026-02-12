@@ -496,7 +496,7 @@ void portduinoSetup()
     randomSeed(time(NULL));
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
-    for (const auto i : portduino_config.all_pins) {
+    for (const auto *i : portduino_config.all_pins) {
         if (i->enabled && i->pin > max_GPIO)
             max_GPIO = i->pin;
     }
@@ -510,7 +510,7 @@ void portduinoSetup()
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    for (const auto i : portduino_config.all_pins) {
+    for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
         if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {

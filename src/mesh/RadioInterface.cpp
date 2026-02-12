@@ -300,15 +300,16 @@ bool initLoRa()
     }
 
 #elif defined(HW_SPI1_DEVICE)
-    RadioLibHAL = new LockingArduinoHal(SPI1, loraSpiSettings);
+    LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
 #else // HW_SPI1_DEVICE
-    RadioLibHAL = new LockingArduinoHal(SPI, loraSpiSettings);
+    LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
 #endif
+    RadioLibHAL = loraHal;
 
 // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 #if defined(USE_STM32WLx)
     if (!rIf) {
-        rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new STM32WLE5JCInterface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("No STM32WL radio");
             delete rIf;
@@ -322,7 +323,7 @@ bool initLoRa()
 
 #if defined(RF95_IRQ) && RADIOLIB_EXCLUDE_SX127X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
+        rIf = new RF95Interface(loraHal, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("No RF95 radio");
             delete rIf;
@@ -336,7 +337,7 @@ bool initLoRa()
 
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL) && RADIOLIB_EXCLUDE_SX126X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        auto *sxIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        auto *sxIf = new SX1262Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
 #ifdef SX126X_DIO3_TCXO_VOLTAGE
         sxIf->setTCXOVoltage(SX126X_DIO3_TCXO_VOLTAGE);
 #endif
@@ -355,7 +356,7 @@ bool initLoRa()
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && defined(TCXO_OPTIONAL)
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // try using the specified TCXO voltage
-        auto *sxIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        auto *sxIf = new SX1262Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         sxIf->setTCXOVoltage(SX126X_DIO3_TCXO_VOLTAGE);
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
@@ -370,7 +371,7 @@ bool initLoRa()
 
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // If specified TCXO voltage fails, attempt to use DIO3 as a reference instead
-        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new SX1262Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("No SX1262 radio with XTAL, Vref 0.0V");
             delete rIf;
@@ -386,7 +387,7 @@ bool initLoRa()
 #if defined(SX126X_DIO3_TCXO_VOLTAGE) && defined(TCXO_OPTIONAL)
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // try using the specified TCXO voltage
-        auto *sxIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        auto *sxIf = new SX1268Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         sxIf->setTCXOVoltage(SX126X_DIO3_TCXO_VOLTAGE);
         if (!sxIf->init()) {
             LOG_WARN("No SX1268 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
@@ -400,7 +401,7 @@ bool initLoRa()
     }
 #endif
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new SX1268Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("No SX1268 radio");
             delete rIf;
@@ -414,7 +415,7 @@ bool initLoRa()
 
 #if defined(USE_LLCC68)
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new LLCC68Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("No LLCC68 radio");
             delete rIf;
@@ -428,7 +429,7 @@ bool initLoRa()
 
 #if defined(USE_LR1110) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
+        rIf = new LR1110Interface(loraHal, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("No LR1110 radio");
             delete rIf;
@@ -442,7 +443,7 @@ bool initLoRa()
 
 #if defined(USE_LR1120) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
+        rIf = new LR1120Interface(loraHal, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("No LR1120 radio");
             delete rIf;
@@ -456,7 +457,7 @@ bool initLoRa()
 
 #if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
+        rIf = new LR1121Interface(loraHal, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("No LR1121 radio");
             delete rIf;
@@ -470,7 +471,7 @@ bool initLoRa()
 
 #if defined(USE_SX1280) && RADIOLIB_EXCLUDE_SX128X != 1
     if (!rIf) {
-        rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
+        rIf = new SX1280Interface(loraHal, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("No SX1280 radio");
             delete rIf;

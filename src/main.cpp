@@ -726,16 +726,14 @@ void setup()
 
 #if HAS_SCREEN
     // fixed screen override?
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
-        screen_model = config.display.oled;
-
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     screen_geometry = GEOMETRY_128_128;
-#endif
-
-#if defined(USE_SH1107_128_64)
+#elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#else
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+        screen_model = config.display.oled;
 #endif
 #endif
 

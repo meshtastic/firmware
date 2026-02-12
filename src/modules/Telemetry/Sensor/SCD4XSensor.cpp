@@ -111,7 +111,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 
     bool dataReady;
     error = scd4x.getDataReadyStatus(dataReady);
-    if (!dataReady) {
+    if (error != SCD4X_NO_ERROR || !dataReady) {
 #if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
         reClockI2C(currentClock, _bus, false);
 #endif
@@ -419,7 +419,7 @@ bool SCD4XSensor::setTemperature(float tempReference)
     LOG_INFO("%s: Setting reference temperature at: %.2f", sensorName, tempReference);
 
     error = scd4x.getDataReadyStatus(dataReady);
-    if (!dataReady) {
+    if (error != SCD4X_NO_ERROR || !dataReady) {
         LOG_ERROR("%s: Data is not ready", sensorName);
         return false;
     }
