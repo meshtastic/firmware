@@ -248,7 +248,7 @@ bool SEN5XSensor::idle(bool checkState)
         LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
         return true;
     } else {
-        LOG_INFO("%s: One shot mode enabled", sensorName)
+        LOG_INFO("%s: One shot mode enabled", sensorName);
     }
 
     // Switch to low-power based on the model
