@@ -236,35 +236,36 @@ bool SEN5XSensor::idle(bool checkState)
             }
 
             if (!(vocStateStable() && vocValid)) {
-                LOG_INFO("SEN5X: Not stopping measurement, vocState is not stable yet!");
+                LOG_INFO("%s: Not stopping measurement, vocState is not stable yet!", sensorName);
                 return true;
             }
         }
+        // Save state and prefs (on all models)
+        saveState();
     }
 
-    // Save state
-    saveState();
-
     if (!oneShotMode) {
-        LOG_INFO("SEN5X: Not stopping measurement, continuous mode!");
+        LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
         return true;
+    } else {
+        LOG_INFO("%s: One shot mode enabled", sensorName)
     }
 
     // Switch to low-power based on the model
     if (model == SEN50) {
         if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
-            LOG_ERROR("SEN5X: Error stopping measurement");
+            LOG_ERROR("%s: Error stopping measurement", sensorName);
             return false;
         }
         state = SEN5X_IDLE;
-        LOG_INFO("SEN5X: Stop measurement mode");
+        LOG_INFO("%s: Stop measurement mode", sensorName);
     } else {
         if (!sendCommand(SEN5X_START_MEASUREMENT_RHT_GAS)) {
-            LOG_ERROR("SEN5X: Error switching to RHT/Gas measurement");
+            LOG_ERROR("%s: Error switching to RHT/Gas measurement", sensorName);
             return false;
         }
         state = SEN5X_RHTGAS_ONLY;
-        LOG_INFO("SEN5X: Switch to RHT/Gas only measurement mode");
+        LOG_INFO("%s: Switch to RHT/Gas only measurement mode", sensorName);
     }
 
     delay(200); // From Sensirion Datasheet
@@ -289,10 +290,10 @@ bool SEN5XSensor::vocStateValid()
 {
     if (!vocState[0] && !vocState[1] && !vocState[2] && !vocState[3] && !vocState[4] && !vocState[5] && !vocState[6] &&
         !vocState[7]) {
-        LOG_DEBUG("SEN5X: VOC state is all 0, invalid");
+        LOG_DEBUG("%s: VOC state is all 0, invalid", sensorName);
         return false;
     } else {
-        LOG_DEBUG("SEN5X: VOC state is valid");
+        LOG_DEBUG("%s: VOC state is valid", sensorName);
         return true;
     }
 }
@@ -618,7 +619,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         }
     } else {
         // TODO - Should this actually ignore? We could end up never cleaning...
-        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved state. Trying again later");
+        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved cleaning and VOC state");
     }
 
     idle(false);
