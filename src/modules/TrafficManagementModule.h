@@ -28,6 +28,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 {
   public:
     TrafficManagementModule();
+    ~TrafficManagementModule();
+
+    // Singleton — no copying or moving
+    TrafficManagementModule(const TrafficManagementModule &) = delete;
+    TrafficManagementModule &operator=(const TrafficManagementModule &) = delete;
 
     meshtastic_TrafficManagementStats getStats() const;
     void resetStats();
@@ -205,6 +210,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     mutable concurrency::Lock cacheLock; // Protects all cache access
     UnifiedCacheEntry *cache = nullptr;  // Cuckoo hash table (unified for all platforms)
+    bool cacheFromPsram = false;         // Tracks allocator for correct deallocation
 
     meshtastic_TrafficManagementStats stats;
 
