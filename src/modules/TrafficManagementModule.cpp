@@ -187,12 +187,14 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     setIntervalFromNow(kMaintenanceIntervalMs);
 }
 
+// Cache may have been allocated via ps_calloc (PSRAM, C allocator) or new[] (heap).
+// Must use the matching deallocator: free() for ps_calloc, delete[] for new[].
 TrafficManagementModule::~TrafficManagementModule()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     if (cache) {
         if (cacheFromPsram)
-            free(cache); // ps_calloc uses C allocator
+            free(cache);
         else
             delete[] cache;
         cache = nullptr;
@@ -446,13 +448,19 @@ uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncate
 // Packet Handling
 // =============================================================================
 
+// Processing order matters: this module runs BEFORE RoutingModule in the callModules() loop.
+// - STOP prevents RoutingModule from calling sniffReceived() → perhapsRebroadcast(),
+//   so the packet is fully consumed (not forwarded).
+// - ignoreRequest suppresses the default "no one responded" NAK for want_response packets.
+// - exhaustRequested is set by alterReceived() and checked by perhapsRebroadcast() to
+//   force hop_limit=0 on the rebroadcast copy, allowing one final relay hop.
 ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
         return ProcessMessage::CONTINUE;
 
     ignoreRequest = false;
-    exhaustRequested = false; // Reset exhaust flag for this packet
+    exhaustRequested = false; // Reset per-packet; may be set by alterReceived() below
     incrementStat(&stats.packets_inspected);
 
     const auto &cfg = moduleConfig.traffic_management;
@@ -469,8 +477,8 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             if (shouldDropUnknown(&mp, nowMs)) {
                 logAction("drop", &mp, "unknown");
                 incrementStat(&stats.unknown_packet_drops);
-                ignoreRequest = true;
-                return ProcessMessage::STOP;
+                ignoreRequest = true;        // Suppress NAK for want_response packets
+                return ProcessMessage::STOP; // Consumed — will not be rebroadcast
             }
         }
         return ProcessMessage::CONTINUE;
@@ -481,15 +489,16 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // -------------------------------------------------------------------------
     // When we see a unicast NodeInfo request for a node we know about,
     // respond directly from cache instead of forwarding the request.
-    // This reduces mesh traffic for common "who is node X?" queries.
+    // STOP prevents the request from being rebroadcast toward the target node,
+    // and our cached response is sent back to the requestor with hop_limit=0.
 
     if (cfg.nodeinfo_direct_response && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && mp.decoded.want_response &&
         !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
         if (shouldRespondToNodeInfo(&mp, true)) {
             logAction("respond", &mp, "nodeinfo-cache");
             incrementStat(&stats.nodeinfo_cache_hits);
-            ignoreRequest = true;
-            return ProcessMessage::STOP;
+            ignoreRequest = true;        // We responded; suppress default NAK
+            return ProcessMessage::STOP; // Consumed — request will not be forwarded
         }
     }
 
@@ -507,8 +516,8 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
                 if (shouldDropPosition(&mp, &pos, nowMs)) {
                     logAction("drop", &mp, "position-dedup");
                     incrementStat(&stats.position_dedup_drops);
-                    ignoreRequest = true;
-                    return ProcessMessage::STOP;
+                    ignoreRequest = true;        // Suppress NAK
+                    return ProcessMessage::STOP; // Consumed — duplicate will not be rebroadcast
                 }
             }
         }
@@ -524,8 +533,8 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
                 if (isRateLimited(mp.from, nowMs)) {
                     logAction("drop", &mp, "rate-limit");
                     incrementStat(&stats.rate_limit_drops);
-                    ignoreRequest = true;
-                    return ProcessMessage::STOP;
+                    ignoreRequest = true;        // Suppress NAK
+                    return ProcessMessage::STOP; // Consumed — throttled packet will not be rebroadcast
                 }
             }
         }
@@ -562,9 +571,14 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     if (mp.hop_limit > 0) {
         const char *reason = isTelemetry ? "zero-hop-telemetry" : "exhaust-hop-position";
         logAction("exhaust", &mp, reason);
-        // Preserve correct hopsAway for the one remaining relay hop
+        // Adjust hop_start so downstream nodes compute correct hopsAway (hop_start - hop_limit).
+        // Without this, hop_limit=0 with original hop_start would show inflated hopsAway.
         mp.hop_start = mp.hop_start - mp.hop_limit + 1;
         mp.hop_limit = 0;
+        // Signal perhapsRebroadcast() to allow one final relay with hop_limit=0.
+        // Without this flag, perhapsRebroadcast() would skip the packet since hop_limit==0.
+        // The flag is checked in NextHopRouter::perhapsRebroadcast() which forces
+        // tosend->hop_limit=0, ensuring no further propagation beyond the next node.
         exhaustRequested = true;
         incrementStat(&stats.hop_exhausted_packets);
     }
@@ -602,6 +616,7 @@ int32_t TrafficManagementModule::runOnce()
     // Sweep cache and clear expired entries
     uint16_t activeEntries = 0;
     uint16_t expiredEntries = 0;
+    const uint32_t sweepStartMs = millis();
 
     concurrency::LockGuard guard(&cacheLock);
     for (uint16_t i = 0; i < cacheSize(); i++) {
@@ -652,8 +667,9 @@ int32_t TrafficManagementModule::runOnce()
         }
     }
 
-    TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots used", activeEntries, expiredEntries,
-                 static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()));
+    TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
+                 static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
+                 static_cast<unsigned long>(millis() - sweepStartMs));
 
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
@@ -736,12 +752,16 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.payload.size =
         pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &user);
     reply->decoded.want_response = false;
-    reply->from = p->to; // Respond on behalf of the target node
+    // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
+    // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
+    // hop_start=0 is set explicitly because Router::send() only sets it for isFromUs(),
+    // and our spoofed from means isFromUs() is false.
+    reply->from = p->to;
     reply->to = getFrom(p);
     reply->channel = p->channel;
     reply->decoded.request_id = p->id;
     reply->hop_limit = 0;
-    reply->hop_start = 0; // Not from us, so Router::send() won't set this — be explicit
+    reply->hop_start = 0;
     reply->next_hop = nodeDB->getLastByteOfNodeNum(getFrom(p));
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
