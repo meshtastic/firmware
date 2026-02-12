@@ -249,9 +249,7 @@ static OSThread *powerFSMthread;
 OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
-#ifdef ARCH_PORTDUINO
 RadioLibHal *RadioLibHAL = NULL;
-#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
