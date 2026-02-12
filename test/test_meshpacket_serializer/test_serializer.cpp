@@ -11,6 +11,7 @@ void test_text_message_serialization_invalid_utf8();
 void test_position_serialization();
 void test_nodeinfo_serialization();
 void test_waypoint_serialization();
+void test_traceroute_request_serialization();
 void test_telemetry_device_metrics_serialization();
 void test_telemetry_environment_metrics_serialization();
 void test_telemetry_environment_metrics_comprehensive();
@@ -39,6 +40,8 @@ void setup()
 
     // Waypoint tests
     RUN_TEST(test_waypoint_serialization);
+    // Traceroute tests
+    RUN_TEST(test_traceroute_request_serialization);
 
     // Telemetry tests
     RUN_TEST(test_telemetry_device_metrics_serialization);

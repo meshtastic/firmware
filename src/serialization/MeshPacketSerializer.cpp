@@ -296,8 +296,9 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             break;
         }
         case meshtastic_PortNum_TRACEROUTE_APP: {
-            if (mp->decoded.request_id) { // Only report the traceroute response
-                msgType = "traceroute";
+            // Always set type so traceroute requests do not emit an empty "type" field.
+            msgType = "traceroute";
+            if (mp->decoded.request_id) { // Only include traceroute payload for responses
                 meshtastic_RouteDiscovery scratch;
                 meshtastic_RouteDiscovery *decoded = NULL;
                 memset(&scratch, 0, sizeof(scratch));
