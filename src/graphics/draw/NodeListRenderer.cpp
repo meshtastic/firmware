@@ -613,8 +613,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     if (millis() - popupTime < POPUP_DURATION_MS) {
         popupTotal = totalEntries;
 
-        int perPage = visibleNodeRows * totalColumns;
-
         popupStart = startIndex + 1;
         popupEnd = std::min(startIndex + perPage, totalEntries);
 

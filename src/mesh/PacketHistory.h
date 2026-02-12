@@ -43,9 +43,9 @@ class PacketHistory
      * @return true if node was indeed a relayer, false if not */
     bool wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole = nullptr);
 
-    uint8_t getHighestHopLimit(PacketRecord &r);
+    uint8_t getHighestHopLimit(const PacketRecord &r);
     void setHighestHopLimit(PacketRecord &r, uint8_t hopLimit);
-    uint8_t getOurTxHopLimit(PacketRecord &r);
+    uint8_t getOurTxHopLimit(const PacketRecord &r);
     void setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit);
 
     PacketHistory(const PacketHistory &);            // non construction-copyable

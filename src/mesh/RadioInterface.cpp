@@ -241,9 +241,9 @@ bool initLoRa()
     }
 
 #if ARCH_PORTDUINO
-    SPISettings spiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
+    SPISettings loraSpiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
 #else
-    SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
+    SPISettings loraSpiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -284,7 +284,7 @@ bool initLoRa()
             delete RadioLibHAL;
             RadioLibHAL = nullptr;
         }
-        RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+        RadioLibHAL = new LockingArduinoHal(SPI, loraSpiSettings);
     }
     rIf =
         loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,
@@ -300,9 +300,9 @@ bool initLoRa()
     }
 
 #elif defined(HW_SPI1_DEVICE)
-    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
+    RadioLibHAL = new LockingArduinoHal(SPI1, loraSpiSettings);
 #else // HW_SPI1_DEVICE
-    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+    RadioLibHAL = new LockingArduinoHal(SPI, loraSpiSettings);
 #endif
 
 // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)

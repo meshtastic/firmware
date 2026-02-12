@@ -23,14 +23,14 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 {
     switch (arg->getStatusType()) {
     case STATUS_TYPE_POWER: {
-        meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)arg;
-        if (powerStatus->getHasUSB() || powerStatus->getIsCharging()) {
+        const meshtastic::PowerStatus *pwrStatus = (const meshtastic::PowerStatus *)arg;
+        if (pwrStatus->getHasUSB() || pwrStatus->getIsCharging()) {
             power_state = charging;
-            if (powerStatus->getBatteryChargePercent() >= 100) {
+            if (pwrStatus->getBatteryChargePercent() >= 100) {
                 power_state = charged;
             }
         } else {
-            if (powerStatus->getBatteryChargePercent() > 5) {
+            if (pwrStatus->getBatteryChargePercent() > 5) {
                 power_state = discharging;
             } else {
                 power_state = critical;
@@ -39,8 +39,8 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
         break;
     }
     case STATUS_TYPE_BLUETOOTH: {
-        meshtastic::BluetoothStatus *bluetoothStatus = (meshtastic::BluetoothStatus *)arg;
-        switch (bluetoothStatus->getConnectionState()) {
+        const meshtastic::BluetoothStatus *btStatus = (const meshtastic::BluetoothStatus *)arg;
+        switch (btStatus->getConnectionState()) {
         case meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED: {
             ble_state = unpaired;
             PAIRING_LED_starttime = millis();

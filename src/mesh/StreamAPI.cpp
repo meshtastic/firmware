@@ -56,7 +56,7 @@ void StreamAPI::writeStream()
     }
 }
 
-int32_t StreamAPI::handleRecStream(char *buf, uint16_t bufLen)
+int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
     while (bufLen > index) { // Currently we never want to block
