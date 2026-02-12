@@ -171,7 +171,9 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     // ESP32 with PSRAM: prefer PSRAM for large allocations
     cache = static_cast<UnifiedCacheEntry *>(ps_calloc(allocSize, sizeof(UnifiedCacheEntry)));
-    if (!cache) {
+    if (cache) {
+        cacheFromPsram = true;
+    } else {
         TM_LOG_WARN("PSRAM allocation failed, falling back to heap");
         cache = new UnifiedCacheEntry[allocSize]();
     }
@@ -183,6 +185,19 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
     setIntervalFromNow(kMaintenanceIntervalMs);
+}
+
+TrafficManagementModule::~TrafficManagementModule()
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    if (cache) {
+        if (cacheFromPsram)
+            free(cache); // ps_calloc uses C allocator
+        else
+            delete[] cache;
+        cache = nullptr;
+    }
+#endif
 }
 
 // =============================================================================
@@ -700,7 +715,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Caller already verified: nodeinfo_direct_response, portnum, want_response,
     // !isBroadcast, !isToUs, !isFromUs
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
     if (!node || !node->has_user)
         return false;
 
