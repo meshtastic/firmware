@@ -232,6 +232,7 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             logRecord.level = getLogLevel(logLevel);
             vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);
             if (thread) {
+                assert(strlen(thread->ThreadName.c_str()) < sizeof(logRecord.source));
                 strncpy(logRecord.source, thread->ThreadName.c_str(), sizeof(logRecord.source) - 1);
                 logRecord.source[sizeof(logRecord.source) - 1] = '\0';
             }

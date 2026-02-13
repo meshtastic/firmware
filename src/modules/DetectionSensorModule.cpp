@@ -6,6 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
+#include <assert.h>
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
@@ -119,41 +120,52 @@ int32_t DetectionSensorModule::runOnce()
 void DetectionSensorModule::sendDetectionMessage()
 {
     LOG_DEBUG("Detected event observed. Send message");
-    char *message = new char[40];
-    snprintf(message, 40, "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
-        p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
+    int written = snprintf(reinterpret_cast<char *>(p->decoded.payload.bytes), sizeof(p->decoded.payload.bytes), "%s detected",
+                           moduleConfig.detection_sensor.name);
+    if (written < 0 || (size_t)written >= sizeof(p->decoded.payload.bytes)) {
+        LOG_ERROR("Detection message truncated (wrote %d, buf %u)", written, sizeof(p->decoded.payload.bytes));
+        assert(false);
+        packetPool.release(p);
+        return;
+    }
+    p->decoded.payload.size = written;
+    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size + 1 <= sizeof(p->decoded.payload.bytes)) {
+        p->decoded.payload.bytes[p->decoded.payload.size] = 7; // Bell character
         p->decoded.payload.size++;
     }
     lastSentToMesh = millis();
     if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    } else
+    } else {
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+        packetPool.release(p);
+    }
 }
 
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
-    char *message = new char[40];
-    snprintf(message, 40, "%s state: %i", moduleConfig.detection_sensor.name, state);
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    int written = snprintf(reinterpret_cast<char *>(p->decoded.payload.bytes), sizeof(p->decoded.payload.bytes), "%s state: %i",
+                           moduleConfig.detection_sensor.name, state);
+    if (written < 0 || (size_t)written >= sizeof(p->decoded.payload.bytes)) {
+        LOG_ERROR("State message truncated (wrote %d, buf %u)", written, sizeof(p->decoded.payload.bytes));
+        assert(false);
+        packetPool.release(p);
+        return;
+    }
+    p->decoded.payload.size = written;
     lastSentToMesh = millis();
     if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    } else
+    } else {
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+        packetPool.release(p);
+    }
 }
 
 bool DetectionSensorModule::hasDetectionEvent()
