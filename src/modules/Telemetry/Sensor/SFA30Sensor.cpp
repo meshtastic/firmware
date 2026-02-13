@@ -91,7 +91,7 @@ void SFA30Sensor::sleep()
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    LOG_INFO("%s: stop measurement");
+    LOG_INFO("%s: stop measurement", sensorName);
     state = State::IDLE;
     measureStarted = 0;
 }
