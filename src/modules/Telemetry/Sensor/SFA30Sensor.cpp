@@ -65,7 +65,7 @@ bool SFA30Sensor::isError(uint16_t response)
         return false;
 
     // TODO - Check error to char conversion
-    LOG_ERROR("%s: %s", sensorName, response);
+    LOG_ERROR("%s: %u", sensorName, response);
     return true;
 }
 
