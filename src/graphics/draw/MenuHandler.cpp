@@ -2292,14 +2292,13 @@ void menuHandler::wifiToggleMenu()
 void menuHandler::screenOptionsMenu()
 {
     // Check if brightness is supported
-    bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
-    hasSupportBrightness = true;
-#endif
-
 #if defined(T_DECK)
     // TDeck Doesn't seem to support brightness at all, at least not reliably
-    hasSupportBrightness = false;
+    bool hasSupportBrightness = false;
+#elif defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+    bool hasSupportBrightness = true;
+#else
+    bool hasSupportBrightness = false;
 #endif
 
     enum optionsNumbers { Back, Brightness, ScreenColor, FrameToggles, DisplayUnits, MessageBubbles };

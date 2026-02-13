@@ -704,11 +704,11 @@ bool Power::setup()
         found = true;
     } else if (analogInit()) {
         found = true;
-    }
+    } else {
 #ifdef NRF_APM
-    if (!found)
         found = true;
 #endif
+    }
 #ifdef EXT_PWR_DETECT
     attachInterrupt(
         EXT_PWR_DETECT,
