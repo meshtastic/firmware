@@ -40,7 +40,7 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
             if (remoteNodePtr) {
                 remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
             } else {
-                LOG_WARN("Key verification: remote node 0x%x not found", currentRemoteNode);
+                LOG_WARN("Key verification: node 0x%x missing or has no user", currentRemoteNode);
             }
             resetToIdle();
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
@@ -77,11 +77,11 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
         auto *remoteNode = nodeDB->getMeshNode(currentRemoteNode);
-        if (remoteNode) {
+        if (remoteNode && remoteNode->has_user) {
             strncpy(cn->payload_variant.key_verification_number_request.remote_longname, remoteNode->user.long_name,
                     sizeof(cn->payload_variant.key_verification_number_request.remote_longname));
         } else {
-            LOG_WARN("Key verification: remote node 0x%x removed during verification", currentRemoteNode);
+            LOG_WARN("Key verification: node 0x%x missing or has no user", currentRemoteNode);
         }
         service->sendClientNotification(cn);
         LOG_INFO("Received hash2");
@@ -103,8 +103,11 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                           [=](int selected) {
                               if (selected == 1) {
                                   auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-                                  if (remoteNodePtr)
+                                  if (remoteNodePtr) {
                                       remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                                  } else {
+                                      LOG_WARN("Key verification: node 0x%x missing or has no user", currentRemoteNode);
+                                  }
                               }
                           };
                       screen->showOverlayBanner(options);)
@@ -114,11 +117,11 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
             cn->payload_variant.key_verification_final.nonce = currentNonce;
             auto *remoteNode = nodeDB->getMeshNode(currentRemoteNode);
-            if (remoteNode) {
+            if (remoteNode && remoteNode->has_user) {
                 strncpy(cn->payload_variant.key_verification_final.remote_longname, remoteNode->user.long_name,
                         sizeof(cn->payload_variant.key_verification_final.remote_longname));
             } else {
-                LOG_WARN("Key verification: remote node 0x%x removed during verification", currentRemoteNode);
+                LOG_WARN("Key verification: node 0x%x missing or has no user", currentRemoteNode);
             }
             cn->payload_variant.key_verification_final.isSender = false;
             service->sendClientNotification(cn);
@@ -216,11 +219,11 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
     cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
     auto *remoteNode = nodeDB->getMeshNode(currentRemoteNode);
-    if (remoteNode) {
+    if (remoteNode && remoteNode->has_user) {
         strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, remoteNode->user.long_name,
                 sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
     } else {
-        LOG_WARN("Key verification: remote node 0x%x removed during verification", currentRemoteNode);
+        LOG_WARN("Key verification: node 0x%x missing or has no user", currentRemoteNode);
     }
     cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
     service->sendClientNotification(cn);
@@ -282,8 +285,12 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
     cn->payload_variant.key_verification_final.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_final.remote_longname, remoteNodePtr->user.long_name,
-            sizeof(cn->payload_variant.key_verification_final.remote_longname));
+    if (remoteNodePtr && remoteNodePtr->has_user) {
+        strncpy(cn->payload_variant.key_verification_final.remote_longname, remoteNodePtr->user.long_name,
+                sizeof(cn->payload_variant.key_verification_final.remote_longname));
+    } else {
+        LOG_WARN("Key verification: node 0x%x missing or has no user", currentRemoteNode);
+    }
     cn->payload_variant.key_verification_final.isSender = true;
     service->sendClientNotification(cn);
     LOG_INFO(message);
