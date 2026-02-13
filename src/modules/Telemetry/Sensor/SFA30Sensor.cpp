@@ -84,7 +84,7 @@ void SFA30Sensor::sleep()
 
     // Note - not recommended for this sensor on a periodic basis
     if (this->isError(sfa30.stopMeasurement())) {
-        LOG_ERROR("%s: can't stop measurement");
+        LOG_ERROR("%s: can't stop measurement", sensorName);
     };
 
 #if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
