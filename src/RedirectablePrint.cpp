@@ -241,9 +241,12 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
+            if (strlen(message) >= sizeof(logRecord.message))
+                LOG_WARN("BLE log message truncated");
             strncpy(logRecord.message, message, sizeof(logRecord.message) - 1);
             logRecord.message[sizeof(logRecord.message) - 1] = '\0';
             if (thread) {
+                assert(strlen(thread->ThreadName.c_str()) < sizeof(logRecord.source));
                 strncpy(logRecord.source, thread->ThreadName.c_str(), sizeof(logRecord.source) - 1);
                 logRecord.source[sizeof(logRecord.source) - 1] = '\0';
             }

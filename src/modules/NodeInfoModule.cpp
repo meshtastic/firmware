@@ -9,6 +9,7 @@
 #include "main.h"
 #include <Throttle.h>
 #include <algorithm>
+#include <assert.h>
 
 #ifndef USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS
 #define USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS (12 * 60 * 60)
@@ -155,7 +156,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         // FIXME: Clear the user.id field since it should be derived from node number on the receiving end
         // u.id[0] = '\0';
 
-        // Ensure our user.id is derived correctly
+        // Ensure our user.id is derived correctly — "!%08x" = 10 chars into id[16]
+        assert(nodeDB->getNodeId().length() < sizeof(u.id));
         strncpy(u.id, nodeDB->getNodeId().c_str(), sizeof(u.id) - 1);
         u.id[sizeof(u.id) - 1] = '\0';
 

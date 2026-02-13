@@ -25,6 +25,7 @@
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <power/PowerHAL.h>
@@ -1830,7 +1831,13 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 cn->level = meshtastic_LogRecord_Level_WARNING;
                 cn->time = getValidTime(RTCQualityFromNet);
-                snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
+                int written = snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
+                if (written < 0 || (size_t)written >= sizeof(cn->message)) {
+                    LOG_ERROR("Duplicate key warning truncated (wrote %d, buf %u)", written, sizeof(cn->message));
+                    assert(false);
+                    snprintf(cn->message, sizeof(cn->message),
+                             "Remote device is advertising your public key. Possible key compromise.");
+                }
                 service->sendClientNotification(cn);
             }
             return false;
