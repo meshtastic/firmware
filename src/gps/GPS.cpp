@@ -127,7 +127,7 @@ static int32_t gpsSwitch()
     return 1000;
 }
 
-static str::unique_ptr<concurrency::Periodic> gpsPeriodic;
+static std::unique_ptr<concurrency::Periodic> gpsPeriodic;
 #endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
