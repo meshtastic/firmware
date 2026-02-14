@@ -7,6 +7,8 @@
 #include "sleep.h"
 
 #ifdef HAS_NCP5623
+#include <Wire.h>
+
 #include <NCP5623.h>
 #endif
 
