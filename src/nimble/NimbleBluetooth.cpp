@@ -588,31 +588,41 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (screen) {
-            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                char btPIN[16] = "888888";
-                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
-                int x_offset = display->width() / 2;
-                int y_offset = display->height() <= 80 ? 0 : 12;
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->setFont(FONT_MEDIUM);
-                display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(M5STACK_UNITC6L)
-                display->setFont(FONT_SMALL);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-                display->drawString(x_offset + x, y_offset + y, "Enter this code");
-#endif
-                display->setFont(FONT_LARGE);
-                char pin[8];
-                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-                display->drawString(x_offset + x, y_offset + y, pin);
+    screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        int x_offset = display->width() / 2;
+        int y_offset = display->height() <= 80 ? 0 : 12;
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
-                display->setFont(FONT_SMALL);
-                char deviceName[64];
-                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-                display->drawString(x_offset + x, y_offset + y, deviceName);
-            });
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+            // Predefined PIN: don't reveal the code on screen
+            display->setFont(FONT_SMALL);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+            display->drawString(x_offset + x, y_offset + y, "Pairing with");
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+            display->drawString(x_offset + x, y_offset + y, "predefined PIN");
+        } else {
+            char btPIN[16] = "888888";
+            snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
+#if !defined(M5STACK_UNITC6L)
+            display->setFont(FONT_SMALL);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+            display->drawString(x_offset + x, y_offset + y, "Enter this code");
+#endif
+            display->setFont(FONT_LARGE);
+            char pin[8];
+            snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+            display->drawString(x_offset + x, y_offset + y, pin);
+        }
+
+        display->setFont(FONT_SMALL);
+        char deviceName[64];
+        snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
+        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+        display->drawString(x_offset + x, y_offset + y, deviceName);
+    });
         }
 #endif
         passkeyShowing = true;
