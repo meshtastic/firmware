@@ -14,12 +14,20 @@ void InkHUD::PairingApplet::onRender(bool full)
     // Header
     setFont(fontMedium);
     printAt(X(0.5), Y(0.25), "Bluetooth", CENTER, BOTTOM);
-    setFont(fontSmall);
-    printAt(X(0.5), Y(0.25), "Enter this code", CENTER, TOP);
 
-    // Passkey
-    setFont(fontMedium);
-    printThick(X(0.5), Y(0.5), passkey.substr(0, 3) + " " + passkey.substr(3), 3, 2);
+    if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+        // Predefined PIN: don't reveal the code on screen
+        setFont(fontSmall);
+        printAt(X(0.5), Y(0.45), "Pairing with", CENTER, BOTTOM);
+        printAt(X(0.5), Y(0.55), "predefined PIN", CENTER, TOP);
+    } else {
+        setFont(fontSmall);
+        printAt(X(0.5), Y(0.25), "Enter this code", CENTER, TOP);
+
+        // Passkey
+        setFont(fontMedium);
+        printThick(X(0.5), Y(0.5), passkey.substr(0, 3) + " " + passkey.substr(3), 3, 2);
+    }
 
     // Device's bluetooth name, if it will fit
     setFont(fontSmall);
