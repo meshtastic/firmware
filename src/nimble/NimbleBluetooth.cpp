@@ -800,6 +800,14 @@ void NimbleBluetooth::setup()
     // Set the security callbacks
     BLEDevice::setSecurityCallbacks(new NimbleBluetoothSecurityCallback());
     bleServer = BLEDevice::createServer();
+
+    // BLEDevice::createServer calls ble_svc_gap_init, which resets the device
+    // name to default, so set it again.
+    int nameRc = ble_svc_gap_device_name_set(BLEDevice::getDeviceName().c_str());
+    if (nameRc != 0) {
+      LOG_ERROR("ble_svc_gap_device_name_set: rc=%d %s", nameRc, BLEUtils::returnCodeToString(nameRc));
+    }
+
     bleServer->setCallbacks(new NimbleBluetoothServerCallback(this));
     setupService();
     startAdvertising();
