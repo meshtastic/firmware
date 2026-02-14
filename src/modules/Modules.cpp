@@ -1,8 +1,11 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
-#include "modules/StatusLEDModule.h"
 #include "modules/SystemCommandsModule.h"
+#endif
+#include "modules/StatusLEDModule.h"
+#if !MESHTASTIC_EXCLUDE_REPLYBOT
+#include "ReplyBotModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
@@ -109,10 +112,10 @@ void setupModules()
         buzzerFeedbackThread = new BuzzerFeedbackThread();
     }
 #endif
-#if defined(LED_CHARGE) || defined(LED_PAIRING)
     statusLEDModule = new StatusLEDModule();
+#if !MESHTASTIC_EXCLUDE_REPLYBOT
+    new ReplyBotModule();
 #endif
-
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif

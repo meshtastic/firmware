@@ -574,6 +574,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
 #endif
 
+#if defined(TFT_WIDTH) && defined(TFT_HEIGHT) && (TFT_WIDTH >= 200 || TFT_HEIGHT >= 200)
+    config.display.enable_message_bubbles = true;
+#endif
+
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Restrict ROUTER*, LOST AND FOUND roles for security reasons
     if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
@@ -1768,7 +1772,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
-        info->user.public_key.bytes[0] = 0;
+        memset(info->user.public_key.bytes, 0, sizeof(info->user.public_key.bytes));
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
