@@ -89,8 +89,9 @@ class ScanI2C
         DA217,
         CHSC6X,
         CST226SE,
-        CW2015,
-        SEN5X
+        SEN5X,
+        SFA30,
+        CW2015
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
