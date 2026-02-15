@@ -13,6 +13,13 @@ bool InkHUD::FavoritesMapApplet::shouldDrawNode(meshtastic_NodeInfoLite *node)
 
 void InkHUD::FavoritesMapApplet::onRender(bool full)
 {
+    // Custom empty state text for favorites-only map.
+    if (!enoughMarkers()) {
+        printAt(X(0.5), Y(0.5) - (getFont().lineHeight() / 2), "Favorite node position", CENTER, MIDDLE);
+        printAt(X(0.5), Y(0.5) + (getFont().lineHeight() / 2), "will appear here", CENTER, MIDDLE);
+        return;
+    }
+
     // Draw the usual map applet first.
     MapApplet::onRender(full);
 
