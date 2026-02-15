@@ -1415,7 +1415,7 @@ void NodeDB::loadFromDisk()
         moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
     }
     if (portduino_config.enable_UDP) {
-        config.network.enabled_protocols = true;
+        config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
     }
 
 #endif
