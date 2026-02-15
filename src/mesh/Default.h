@@ -63,20 +63,11 @@ class Default
         if (numOnlineNodes <= 40) {
             return 1.0;
         } else {
-            float throttlingFactor = 0.075;
-            if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
-                throttlingFactor = 0.04;
-            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
-                throttlingFactor = 0.02;
-            else if (config.lora.use_preset &&
-                     IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
-                throttlingFactor = 0.01;
+            float throttlingFactor = pow(2, config.lora.spread_factor) / (config.lora.bandwidth * 100);
 
 #if USERPREFS_EVENT_MODE
-            // If we are in event mode, scale down the throttling factor
-            throttlingFactor = 0.04;
+            // If we are in event mode, scale down the throttling factor by 4
+            throttlingFactor = pow(2, config.lora.spread_factor) / (config.lora.bandwidth * 25);
 #endif
 
             // Scaling up traffic based on number of nodes over 40
