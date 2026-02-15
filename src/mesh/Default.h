@@ -65,7 +65,7 @@ class Default
         } else {
             float throttlingFactor = pow(2, config.lora.spread_factor) / (config.lora.bandwidth * 100000);
 
-            // In SF11 and BW=250khz (longfast), this gives 0.0812 rather than the original 0.075
+            // In SF11 and BW=250khz (longfast), this gives 0.08192 rather than the original 0.075
             // In SF10 and BW=250khz (mediumslow), this gives 0.0496 rather than the original 0.04
             // In SF9 and BW=250khz (mediumfast), this gives 0.02048 rather than the original 0.02
             // In SF7 and BW=250khz (shortfast), this gives 0.00512 rather than the original 0.01
