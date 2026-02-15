@@ -429,6 +429,10 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
             c = c - 'a' + 'A';
         }
         keyText = (key.character == ' ' || key.character == '_') ? "_" : std::string(1, c);
+        // Show the common "/" pairing next to "?" like on a real keyboard
+        if (key.type == VK_CHAR && key.character == '?') {
+            keyText = "?/";
+        }
     }
 
     int textWidth = display->getStringWidth(keyText.c_str());
@@ -518,9 +522,13 @@ char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
 
     char c = key.character;
 
-    // Long-press: only keep letter lowercase->uppercase conversion; remove other symbol mappings
-    if (isLongPress && c >= 'a' && c <= 'z') {
-        c = (char)(c - 'a' + 'A');
+    // Long-press: letters become uppercase; for "?" provide "/" like a typical keyboard
+    if (isLongPress) {
+        if (c >= 'a' && c <= 'z') {
+            c = (char)(c - 'a' + 'A');
+        } else if (c == '?') {
+            c = '/';
+        }
     }
 
     return c;

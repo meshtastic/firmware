@@ -6,6 +6,7 @@
 #include "PointerQueue.h"
 #include "airtime.h"
 #include "error.h"
+#include <memory>
 
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
@@ -279,7 +280,7 @@ class RadioInterface
     }
 };
 
-bool initLoRa();
+std::unique_ptr<RadioInterface> initLoRa();
 
 /// Debug printing for packets
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p);

@@ -46,7 +46,7 @@
 
 uint16_t getVDDVoltage();
 
-// Weak empty variant initialization function.
+// Weak empty variant shutdown prep function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
 void variant_shutdown() {}
