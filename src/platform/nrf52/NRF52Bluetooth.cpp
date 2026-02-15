@@ -265,7 +265,13 @@ void NRF52Bluetooth::setup()
                                 ? config.bluetooth.fixed_pin
                                 : random(100000, 999999);
         auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
+        // Only log PIN if it's random or user explicitly allows showing fixed PIN
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN ||
+            config.bluetooth.device_show_fixed_pin) {
+            LOG_INFO("Bluetooth PIN set to '%i'", configuredPasskey);
+        } else {
+            LOG_INFO("Bluetooth PIN configured (hidden)");
+        }
         Bluefruit.Security.setPIN(pinString.c_str());
         Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
@@ -355,9 +361,16 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
-    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
-    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
+    // Only log PIN if it's random or user explicitly allows showing fixed PIN
+    bool hidePin = (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) &&
+                   !config.bluetooth.device_show_fixed_pin;
+    if (hidePin) {
+        LOG_INFO("BLE pair process started (PIN hidden)");
+    } else {
+        char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
+        char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
+        LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
+    }
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string
@@ -374,23 +387,37 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
     if (screen) {
         screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-            char btPIN[16] = "888888";
-            snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
             int x_offset = display->width() / 2;
             int y_offset = display->height() <= 80 ? 0 : 12;
             display->setTextAlignment(TEXT_ALIGN_CENTER);
             display->setFont(FONT_MEDIUM);
             display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
-            display->setFont(FONT_SMALL);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-            display->drawString(x_offset + x, y_offset + y, "Enter this code");
+            // Hide PIN for FIXED_PIN mode unless user explicitly enabled "Show PIN"
+            bool hidePin = (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) &&
+                           !config.bluetooth.device_show_fixed_pin;
 
-            display->setFont(FONT_LARGE);
-            String displayPin(btPIN);
-            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-            display->drawString(x_offset + x, y_offset + y, pin);
+            if (hidePin) {
+                // Predefined PIN: don't reveal the code on screen
+                display->setFont(FONT_SMALL);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+                display->drawString(x_offset + x, y_offset + y, "Pairing with");
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+                display->drawString(x_offset + x, y_offset + y, "predefined PIN");
+            } else {
+                char btPIN[16] = "888888";
+                snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
+
+                display->setFont(FONT_SMALL);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+                display->drawString(x_offset + x, y_offset + y, "Enter this code");
+
+                display->setFont(FONT_LARGE);
+                String displayPin(btPIN);
+                String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+                display->drawString(x_offset + x, y_offset + y, pin);
+            }
 
             display->setFont(FONT_SMALL);
             String deviceName = "Name: ";
