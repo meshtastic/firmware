@@ -575,12 +575,21 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
+        // Only log PIN if it's random or user explicitly allows showing fixed PIN
+        bool hidePin = (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) &&
+                       !config.bluetooth.device_show_fixed_pin;
+
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999);
         }
-        LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
+
+        if (hidePin) {
+            LOG_INFO("*** Enter predefined passkey on the peer side (hidden from logs) ***");
+        } else {
+            LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
+        }
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
         meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
@@ -589,23 +598,37 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (screen) {
             screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                char btPIN[16] = "888888";
-                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
                 int x_offset = display->width() / 2;
                 int y_offset = display->height() <= 80 ? 0 : 12;
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->setFont(FONT_MEDIUM);
                 display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+
+                // Hide PIN for FIXED_PIN mode unless user explicitly enabled "Show PIN"
+                bool hidePin = (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) &&
+                               !config.bluetooth.device_show_fixed_pin;
+
+                if (hidePin) {
+                    // Predefined PIN: don't reveal the code on screen
+                    display->setFont(FONT_SMALL);
+                    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+                    display->drawString(x_offset + x, y_offset + y, "Pairing with");
+                    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+                    display->drawString(x_offset + x, y_offset + y, "predefined PIN");
+                } else {
+                    char btPIN[16] = "888888";
+                    snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
 #if !defined(M5STACK_UNITC6L)
-                display->setFont(FONT_SMALL);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-                display->drawString(x_offset + x, y_offset + y, "Enter this code");
+                    display->setFont(FONT_SMALL);
+                    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+                    display->drawString(x_offset + x, y_offset + y, "Enter this code");
 #endif
-                display->setFont(FONT_LARGE);
-                char pin[8];
-                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-                display->drawString(x_offset + x, y_offset + y, pin);
+                    display->setFont(FONT_LARGE);
+                    char pin[8];
+                    snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
+                    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+                    display->drawString(x_offset + x, y_offset + y, pin);
+                }
 
                 display->setFont(FONT_SMALL);
                 char deviceName[64];
