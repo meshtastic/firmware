@@ -52,7 +52,7 @@ SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
 HardwareSerial *GPS::_serial_gps = nullptr;
 #endif
 
-GPS *gps = nullptr;
+std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
 
@@ -127,7 +127,7 @@ static int32_t gpsSwitch()
     return 1000;
 }
 
-static concurrency::Periodic *gpsPeriodic;
+static std::unique_ptr<concurrency::Periodic> gpsPeriodic;
 #endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
@@ -896,18 +896,21 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-
-// Determine the new value for the pin
-// Normally: active HIGH for awake
-#ifdef PIN_GPS_STANDBY_INVERTED
-    bool val = standby;
-#else
-    bool val = !standby;
-#endif
+    bool val;
+    if (standby)
+        val = GPS_STANDBY_ACTIVE;
+    else
+        val = !GPS_STANDBY_ACTIVE;
 
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, val);
+
+    // Enter backup mode on PA1010D; TODO: may be applicable to other MTK GPS too
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_MTK_PA1010D)) {
+        _serial_gps->write("$PMTK225,4*2F\r\n");
+    }
+
 #ifdef GPS_DEBUG
     LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
@@ -934,8 +937,11 @@ void GPS::setPowerPMU(bool on)
             // t-beam v1.2 GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
-            // t-beam-s3-core GNSS  power channel
+            // t-beam-s3-core GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+            // t-watch-s3-plus GNSS power channel
+            on ? PMU->enablePowerOutput(XPOWERS_BLDO1) : PMU->disablePowerOutput(XPOWERS_BLDO1);
         }
     } else if (model == XPOWERS_AXP192) {
         // t-beam v1.1 GNSS  power channel
@@ -1479,7 +1485,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
     if (bufferSize > 2048)
         bufferSize = 2048;
 
-    char *response = new char[bufferSize](); // Dynamically allocate based on baud rate
+    auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
@@ -1495,19 +1501,18 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
-                    if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
+                    if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
 #ifdef GPS_DEBUG
-                        LOG_DEBUG(response);
+                        LOG_DEBUG(response.get());
 #endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
-                        delete[] response; // Cleanup before return
                         return chipInfo.driver;
                     }
                 }
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
 #ifdef GPS_DEBUG
-                LOG_DEBUG(response);
+                LOG_DEBUG(response.get());
 #endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
@@ -1516,13 +1521,12 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(response);
+    LOG_DEBUG(response.get());
 #endif
-    delete[] response;         // Cleanup before return
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 
-GPS *GPS::createGps()
+std::unique_ptr<GPS> GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
@@ -1547,7 +1551,7 @@ GPS *GPS::createGps()
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
-    GPS *new_gps = new GPS;
+    auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
 
@@ -1575,7 +1579,7 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_SWITCH
     // toggle GPS via external GPIO switch
     pinMode(PIN_GPS_SWITCH, INPUT);
-    gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
+    gpsPeriodic = std::unique_ptr<concurrency::Periodic>(new concurrency::Periodic("GPSSwitch", gpsSwitch));
 #endif
 
 // Currently disabled per issue #525 (TinyGPS++ crash bug)

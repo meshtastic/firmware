@@ -11,7 +11,7 @@ RUN apk --no-cache add \
         bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
         libgpiod-dev yaml-cpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
-        libx11-dev libinput-dev libxkbcommon-dev \
+        libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev \
     && rm -rf /var/cache/apk/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
@@ -28,7 +28,7 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 
 # ##### PRODUCTION BUILD #############
 
-FROM alpine:3.22
+FROM alpine:3.23
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Alpine Meshtastic daemon" \
       org.opencontainers.image.url="https://meshtastic.org" \
@@ -42,7 +42,7 @@ USER root
 
 RUN apk --no-cache add \
         shadow libstdc++ libbsd libgpiod yaml-cpp libusb \
-        i2c-tools libuv libx11 libinput libxkbcommon \
+        i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

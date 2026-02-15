@@ -41,9 +41,11 @@ namespace graphics
 
 // Shared state (declare inside namespace)
 extern bool hasUnreadMessage;
-extern bool isMuted;
-extern bool isHighResolution;
-void determineResolution(int16_t screenheight, int16_t screenwidth);
+enum class ScreenResolution : uint8_t { UltraLow = 0, Low = 1, High = 2 };
+extern ScreenResolution currentResolution;
+ScreenResolution determineScreenResolution(int16_t screenheight, int16_t screenwidth);
+
+void decomposeTime(uint32_t rtc_sec, int &hour, int &minute, int &second);
 
 // Rounded highlight (used for inverted headers)
 void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r);
@@ -60,5 +62,19 @@ const int *getTextPositions(OLEDDisplay *display);
 bool isAllowedPunctuation(char c);
 
 std::string sanitizeString(const std::string &input);
+
+static inline bool isAPIConnected(uint8_t state)
+{
+    static constexpr bool connectedStates[] = {
+        /* STATE_NONE    */ false,
+        /* STATE_BLE     */ true,
+        /* STATE_WIFI    */ true,
+        /* STATE_SERIAL  */ true,
+        /* STATE_PACKET  */ true,
+        /* STATE_HTTP    */ true,
+        /* STATE_ETH     */ true,
+    };
+    return state < sizeof(connectedStates) ? connectedStates[state] : false;
+}
 
 } // namespace graphics

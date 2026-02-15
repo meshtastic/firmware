@@ -81,7 +81,6 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
-#define LED_BUILTIN PIN_LED1
 // Actually red
 #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit
@@ -90,16 +89,16 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define BUTTON_PIN (32 + 0) // P1.00
 
 // GPS
-#define PIN_GPS_TX (0 + 20) // P0.20 - This is data from the MCU
-#define PIN_GPS_RX (0 + 22) // P0.22 - This is data from the GNSS
+#define GPS_TX_PIN (0 + 20) // P0.20 - This is data from the MCU
+#define GPS_RX_PIN (0 + 22) // P0.22 - This is data from the GNSS
 
 #define PIN_GPS_EN (0 + 24) // P0.24
 #define GPS_UBLOX
 // define GPS_DEBUG
 
 // UART interfaces
-#define PIN_SERIAL1_TX PIN_GPS_TX
-#define PIN_SERIAL1_RX PIN_GPS_RX
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
 #define PIN_SERIAL2_RX (0 + 6) // P0.06
 #define PIN_SERIAL2_TX (0 + 8) // P0.08

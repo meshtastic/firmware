@@ -64,16 +64,6 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
-    // negotiate connections params as soon as possible
-
-    ble_gap_conn_params_t newParams;
-    newParams.min_conn_interval = 24;
-    newParams.max_conn_interval = 40;
-    newParams.slave_latency = 5;
-    newParams.conn_sup_timeout = 400;
-
-    sd_ble_gap_conn_param_update(conn_handle, &newParams);
-
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
@@ -250,6 +240,12 @@ int NRF52Bluetooth::getRssi()
 {
     return 0; // FIXME figure out where to source this
 }
+
+// Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".
+// See https://docs.nordicsemi.com/bundle/ps_nrf52840/page/keyfeatures_html5.html
+#define VALID_BLE_TX_POWER(x)                                                                                                    \
+    ((x) == -20 || (x) == -16 || (x) == -12 || (x) == -8 || (x) == -4 || (x) == 0 || (x) == 4 || (x) == 8)
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -261,6 +257,9 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
+#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
+    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
+#endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
                                 ? config.bluetooth.fixed_pin
@@ -283,22 +282,27 @@ void NRF52Bluetooth::setup()
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
-    // Set slave latency to 5 to conserve power
-    // Despite name this does not impact data transfer
-    // https://docs.silabs.com/bluetooth/2.13/bluetooth-general-system-and-performance/optimizing-current-consumption-in-bluetooth-low-energy-devices
-    
-    Bluefruit.Periph.setConnSlaveLatency(5);
+    // Do not change Slave Latency to value other than 0 !!!
+    // There is probably a bug in SoftDevice + certain Apple iOS versions being
+    // brain damaged causing connectivity problems.
 
-    // TODO: Adafruit defaul min, max interval seems to be (20,30) [in 1.25 ms units] -> (25.00, 31.25) milliseconds
-    // so using formula Interval Max * (Slave Latency + 1) ≤ 2 seconds
-    // max slave latency we can use is 30 (max available in BLE)
-    // and even double max inteval (see apple doc linked above for formulas)
-    // See Periph.SetConnInterval method
+    // On one side it seems SoftDevice is using SlaveLatency value even
+    // if connection parameter negotation failed and phone sees it as connectivity errors.
 
-    // Tweak this later for even more power savings once those changes are confirmed to work well.
-    // Changing min, max interval may slow BLE transfer a bit - bumping slave latency will most likely not.
+    // On the other hand Apple can randomly refuse any parameter negotiation and shutdown connection
+    // even if you meet Apple Developer Guidelines for BLE devices. Because f* you, that's why.
 
+    // While this API call sets preferred connection parameters (PPCP) - many phones ignore it (yeah) and it seems SoftDevice
+    // will try to renegotiate connection parameters based on those values after phone connection.
+    // So those are relatively safe values so Apple braindead firmware won't get angry and at least we may try
+    // to negotiate some longer connection interval to save battery.
 
+    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not
+    // worth dying on a hill here.
+
+    Bluefruit.Periph.setConnSlaveLatency(0);
+    // 1.25 ms units - so min, max is 15, 100 ms range.
+    Bluefruit.Periph.setConnInterval(12, 80);
 
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);

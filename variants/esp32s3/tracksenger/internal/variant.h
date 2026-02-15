@@ -1,4 +1,4 @@
-#define LED_PIN 18
+#define LED_POWER 18
 
 #define HELTEC_TRACKER_V1_X
 
@@ -78,7 +78,6 @@
 // keyboard changes
 
 #define PIN_BUZZER 43
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 

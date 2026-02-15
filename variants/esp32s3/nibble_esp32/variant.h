@@ -1,7 +1,7 @@
 #define I2C_SDA 11 // I2C pins for this board
 #define I2C_SCL 10
 
-#define LED_PIN 1 // If defined we will blink this LED
+#define LED_POWER 1 // If defined we will blink this LED
 
 #define BUTTON_PIN 0 // If defined, this will be used for user button presses
 #define BUTTON_NEED_PULLUP

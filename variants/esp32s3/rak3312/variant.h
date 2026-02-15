@@ -18,27 +18,41 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
+#define LED_GREEN 46
+#define LED_BLUE 45
+
+#define PIN_LED1 LED_GREEN
+#define LED_NOTIFICATION LED_BLUE
+
+#define LED_POWER LED_GREEN
+#define ledOff(pin) pinMode(pin, INPUT)
+
+#define LED_STATE_ON 1 // State when LED is litted
+
+#define BATTERY_PIN 1
+#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+
+#ifdef _VARIANT_RAK3112_ //  Modular variant (stamp)
+#define ADC_MULTIPLIER 2.11
+
+#define BUTTON_NEED_PULLUP
+
+#define HAS_SDCARD
+#define SDCARD_USE_SPI1
+#define SDCARD_CS SPI_CS
+
+#define I2C_SDA1 PIN_WIRE1_SDA
+#define I2C_SCL1 PIN_WIRE1_SCL
+#else // Generic 3312 variant (40-pin standard connector)
+#define ADC_MULTIPLIER 1.667
+
 #define SX126X_POWER_EN (4)
 
 #define PIN_POWER_EN PIN_3V3_EN
 #define PIN_3V3_EN (14)
 
-#define LED_GREEN 46
-#define LED_BLUE 45
-
-#define PIN_LED1 LED_GREEN
-#define PIN_LED2 LED_BLUE
-
-#define LED_CONN LED_BLUE
-#define LED_PIN LED_GREEN
-#define ledOff(pin) pinMode(pin, INPUT)
-
-#define LED_STATE_ON 1 // State when LED is litted
-
 #define HAS_GPS 1
 #define GPS_TX_PIN 43
 #define GPS_RX_PIN 44
 
-#define BATTERY_PIN 1
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
-#define ADC_MULTIPLIER 1.667
+#endif
