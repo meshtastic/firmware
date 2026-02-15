@@ -88,7 +88,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // -
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // -
 
     // Start running InkHUD
     inkhud->begin();

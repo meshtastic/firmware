@@ -72,14 +72,14 @@ void setupNicheGraphics()
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // -
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // -
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true);      // Activated, autoshown
+    inkhud->addApplet("DMs", new InkHUD::DMApplet);                                   // -
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));             // -
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));             // -
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);                // Activated
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);                 // -
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);              // Activated, no autoshow, default on tile 0
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // -
 
     // Start running InkHUD
     inkhud->begin();
