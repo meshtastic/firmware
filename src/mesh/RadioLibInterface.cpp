@@ -523,6 +523,20 @@ void RadioLibInterface::startReceive()
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
+void RadioLibInterface::checkIrqFlagsAfterStartReceive()
+{
+    // RadioLib::startReceive configures the radio chip to set the digital line when there's an interrupt.
+    // RadioLibInterface::enableInterrupt sets our CPU to use *EDGE-TRIGGERED* interrupts on that line.
+    // If the line is already high when enableInterrupt is called (for example, PREAMBLE_DETECTED immediately), we'll miss that
+    // interrupt and be out of sync until we reset the radio state! To fix this missed edge, check the radio's IRQ flags
+    // immediately after enableInterrupts:
+    if (isIRQPending()) {
+        // Route through the same deferred handler path the ISR uses.
+        LOG_DEBUG("checkIrqFlagsAfterStartReceive: caught an interrupt");
+        notify(ISR_RX, true);
+    }
+}
+
 void RadioLibInterface::configHardwareForSend()
 {
     powerMon->setState(meshtastic_PowerMon_State_Lora_TXOn);
