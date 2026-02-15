@@ -263,7 +263,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
-    checkIrqFlagsAfterStartReceive();
+    checkRxDoneIrqFlag();
 #endif
 }
 

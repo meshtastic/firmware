@@ -1124,6 +1124,14 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
+    if (RadioLibInterface::instance != nullptr) {
+        static uint32_t lastRadioMissedIrqPoll;
+        if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
+            lastRadioMissedIrqPoll = millis();
+            RadioLibInterface::instance->pollMissedIrqs();
+        }
+    }
+
     if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
         !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
         RadioLibInterface::instance->startReceive();
