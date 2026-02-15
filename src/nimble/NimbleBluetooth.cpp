@@ -590,7 +590,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (screen) {
 
-            std::string ble_message = "Bluetooth\nPIN\n" + passkey.substr(0, 3) + " " + passkey.substr(3, 6);
+            std::string ble_message = "Bluetooth\nPIN\n[M]" + passkey.substr(0, 3) + " " + passkey.substr(3, 6);
             screen->showSimpleBanner(ble_message.c_str(), 30000);
         }
 #endif

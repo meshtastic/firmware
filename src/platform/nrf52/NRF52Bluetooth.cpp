@@ -373,7 +373,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 #if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN)
     if (screen) {
         std::string passkey = std::to_string(configuredPasskey);
-        std::string ble_message = "Bluetooth\nPIN\n" + passkey.substr(0, 3) + " " + passkey.substr(3, 6);
+        std::string ble_message = "Bluetooth\nPIN\n[M]" + passkey.substr(0, 3) + " " + passkey.substr(3, 6);
         screen->showSimpleBanner(ble_message.c_str(), 30000);
     }
 #endif
