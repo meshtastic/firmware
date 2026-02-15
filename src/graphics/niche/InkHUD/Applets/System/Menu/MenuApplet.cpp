@@ -567,7 +567,19 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_BLUETOOTH_PAIR_MODE:
-        config.bluetooth.fixed_pin = !config.bluetooth.fixed_pin;
+        // Toggle between RANDOM_PIN and FIXED_PIN modes
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
+            config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+        } else {
+            config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN;
+        }
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case TOGGLE_SHOW_FIXED_PIN:
+        // Toggle whether to show fixed PIN on pairing screen
+        // Only relevant when FIXED_PIN mode is active
+        config.bluetooth.device_show_fixed_pin = !config.bluetooth.device_show_fixed_pin;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         break;
 
@@ -1141,8 +1153,16 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         const char *btLabel = config.bluetooth.enabled ? "Bluetooth: On" : "Bluetooth: Off";
         items.push_back(MenuItem(btLabel, MenuAction::TOGGLE_BLUETOOTH, MenuPage::EXIT));
 
-        const char *pairLabel = config.bluetooth.fixed_pin ? "Pair Mode: Fixed" : "Pair Mode: Random";
+        const char *pairLabel = (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN)
+                                    ? "Pair Mode: Fixed"
+                                    : "Pair Mode: Random";
         items.push_back(MenuItem(pairLabel, MenuAction::TOGGLE_BLUETOOTH_PAIR_MODE, MenuPage::NODE_CONFIG_BLUETOOTH));
+
+        // Show PIN toggle - only visible when FIXED_PIN mode is active
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+            const char *showPinLabel = config.bluetooth.device_show_fixed_pin ? "Show PIN: Yes" : "Show PIN: No";
+            items.push_back(MenuItem(showPinLabel, MenuAction::TOGGLE_SHOW_FIXED_PIN, MenuPage::NODE_CONFIG_BLUETOOTH));
+        }
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
