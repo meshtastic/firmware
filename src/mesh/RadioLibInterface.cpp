@@ -527,17 +527,12 @@ void RadioLibInterface::pollMissedIrqs()
 {
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
     if (isReceiving) {
-        return checkRxDoneIrqFlag();
+        checkRxDoneIrqFlag();
     }
 }
 
 void RadioLibInterface::checkRxDoneIrqFlag()
 {
-    // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
-    if (!isReceiving) {
-        return;
-    }
-
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
