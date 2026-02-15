@@ -1,5 +1,8 @@
 #pragma once
+#include <MeshRadio.h>
 #include <NodeDB.h>
+#include <RadioInterface.h>
+#include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
 #define ONE_DAY 24 * 60 * 60
@@ -63,21 +66,26 @@ class Default
         if (numOnlineNodes <= 40) {
             return 1.0;
         } else {
-            float throttlingFactor = pow(2, config.lora.spread_factor) / (config.lora.bandwidth * 100000);
+            // Get bandwidth in kHz - convert from code if not using preset
+            float bwKHz =
+                config.lora.use_preset ? modemPresetToBwKHz(config.lora.modem_preset, false) : bwCodeToKHz(config.lora.bandwidth);
 
+            // throttlingFactor = 2^SF / (BW_in_kHz * scaling_divisor)
+            // With scaling_divisor=100:
             // In SF11 and BW=250khz (longfast), this gives 0.08192 rather than the original 0.075
             // In SF10 and BW=250khz (mediumslow), this gives 0.04096 rather than the original 0.04
             // In SF9 and BW=250khz (mediumfast), this gives 0.02048 rather than the original 0.02
             // In SF7 and BW=250khz (shortfast), this gives 0.00512 rather than the original 0.01
+            float throttlingFactor = static_cast<float>(pow_of_2(config.lora.spread_factor)) / (bwKHz * 100.0f);
 
 #if USERPREFS_EVENT_MODE
             // If we are in event mode, scale down the throttling factor by 4
-            throttlingFactor = pow(2, config.lora.spread_factor) / (config.lora.bandwidth * 25000);
+            throttlingFactor = static_cast<float>(pow_of_2(config.lora.spread_factor)) / (bwKHz * 25.0f);
 #endif
 
             // Scaling up traffic based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
-            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
+            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by throttle factor
         }
     }
 };

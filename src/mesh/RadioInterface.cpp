@@ -16,6 +16,7 @@
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
+#include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
@@ -30,12 +31,6 @@
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
-
-// Calculate 2^n without calling pow()
-uint32_t pow_of_2(uint32_t n)
-{
-    return 1 << n;
-}
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
