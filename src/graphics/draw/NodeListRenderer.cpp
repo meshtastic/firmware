@@ -207,7 +207,7 @@ unsigned long getModeCycleIntervalMs()
 
 int calculateMaxScroll(int totalEntries, int visibleRows)
 {
-    return std::max(0, (totalEntries - 1) / (visibleRows * 2));
+    return max(0, (totalEntries - 1) / (visibleRows * 2));
 }
 
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
@@ -223,13 +223,12 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     if (totalEntries <= visibleNodeRows * columns)
         return;
 
-    int scrollbarX = display->getWidth() - 2;
     int scrollbarHeight = display->getHeight() - scrollStartY - 10;
-    int thumbHeight = std::max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
-    int perPage = visibleNodeRows * columns;
-    int maxScroll = std::max(0, (totalEntries - 1) / perPage);
-    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) / std::max(1, maxScroll);
+    int thumbHeight = max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
+    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) /
+                                    max(1, max(0, (totalEntries - 1) / (visibleNodeRows * columns)));
 
+    int scrollbarX = display->getWidth() - 2;
     for (int i = 0; i < thumbHeight; i++) {
         display->setPixel(scrollbarX, thumbY + i);
     }
@@ -592,13 +591,13 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int maxScroll = 0;
     if (perPage > 0) {
-        maxScroll = std::max(0, (totalEntries - 1) / perPage);
+        maxScroll = max(0, (totalEntries - 1) / perPage);
     }
 
     if (scrollIndex > maxScroll)
         scrollIndex = maxScroll;
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
+    int endIndex = min(startIndex + visibleNodeRows * totalColumns, totalEntries);
     int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
@@ -616,7 +615,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         if (extras)
             extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
 
-        lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
+        lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
         shownCount++;
         rowCount++;
@@ -649,13 +648,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     if (millis() - popupTime < POPUP_DURATION_MS) {
         popupTotal = totalEntries;
 
-        int perPage = visibleNodeRows * totalColumns;
-
         popupStart = startIndex + 1;
-        popupEnd = std::min(startIndex + perPage, totalEntries);
+        popupEnd = min(startIndex + perPage, totalEntries);
 
         popupPage = (scrollIndex + 1);
-        popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
+        popupMaxPage = max(1, (totalEntries + perPage - 1) / perPage);
 
         char buf[32];
         snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);

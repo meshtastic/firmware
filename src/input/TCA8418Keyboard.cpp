@@ -63,7 +63,6 @@ void TCA8418Keyboard::pressed(uint8_t key)
     if (state == Init || state == Busy) {
         return;
     }
-    uint8_t next_key = 0;
     int row = (key - 1) / 10;
     int col = (key - 1) % 10;
 
@@ -72,7 +71,7 @@ void TCA8418Keyboard::pressed(uint8_t key)
     }
 
     // Compute key index based on dynamic row/column
-    next_key = row * _TCA8418_COLS + col;
+    next_key = (int8_t)(row * _TCA8418_COLS + col);
 
     // LOG_DEBUG("TCA8418: Key %u -> Next Key %u", key, next_key);
 

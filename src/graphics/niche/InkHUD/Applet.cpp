@@ -34,7 +34,7 @@ void InkHUD::Applet::drawPixel(int16_t x, int16_t y, uint16_t color)
 {
     // Only render pixels if they fall within user's cropped region
     if (x >= cropLeft && x < (cropLeft + cropWidth) && y >= cropTop && y < (cropTop + cropHeight))
-        assignedTile->handleAppletPixel(x, y, (Color)color);
+        assignedTile->handleAppletPixel(x, y, static_cast<Color>(color));
 }
 
 // Link our applet to a tile
@@ -312,7 +312,7 @@ void InkHUD::Applet::printAt(int16_t x, int16_t y, const char *text, HorizontalA
 }
 
 // Print text, specifying the position of any edge / corner of the textbox
-void InkHUD::Applet::printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha, VerticalAlignment va)
+void InkHUD::Applet::printAt(int16_t x, int16_t y, const std::string &text, HorizontalAlignment ha, VerticalAlignment va)
 {
     printAt(x, y, text.c_str(), ha, va);
 }
@@ -334,7 +334,7 @@ InkHUD::AppletFont InkHUD::Applet::getFont()
 
 // Parse any text which might have "special characters"
 // Re-encodes UTF-8 characters to match our 8-bit encoded fonts
-std::string InkHUD::Applet::parse(std::string text)
+std::string InkHUD::Applet::parse(const std::string &text)
 {
     return getFont().decodeUTF8(text);
 }
@@ -361,10 +361,10 @@ std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
 }
 
 // Determine if all characters of a string are printable using the current font
-bool InkHUD::Applet::isPrintable(std::string text)
+bool InkHUD::Applet::isPrintable(const std::string &text)
 {
     // Scan for SUB (0x1A), which is the value assigned by AppletFont::applyEncoding if a unicode character is not handled
-    for (char &c : text) {
+    for (const char &c : text) {
         if (c == '\x1A')
             return false;
     }
@@ -387,7 +387,7 @@ uint16_t InkHUD::Applet::getTextWidth(const char *text)
 
 // Gets rendered width of a string
 // Wrapper for getTextBounds
-uint16_t InkHUD::Applet::getTextWidth(std::string text)
+uint16_t InkHUD::Applet::getTextWidth(const std::string &text)
 {
     return getTextWidth(text.c_str());
 }
@@ -435,7 +435,7 @@ std::string InkHUD::Applet::hexifyNodeNum(NodeNum num)
 
 // Print text, with word wrapping
 // Avoids splitting words in half, instead moving the entire word to a new line wherever possible
-void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std::string text)
+void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, const std::string &text)
 {
     // Place the AdafruitGFX cursor to suit our "top" coord
     setCursor(left, top + getFont().heightAboveCursor());
@@ -492,15 +492,15 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
 
                 // Todo: rewrite making use of AdafruitGFX native text wrapping
                 char cstr[] = {0, 0};
-                int16_t l, t;
-                uint16_t w, h;
+                int16_t bx, by;
+                uint16_t bw, bh;
                 for (uint16_t c = 0; c < word.length(); c++) {
                     // Shove next char into a c string
                     cstr[0] = word[c];
-                    getTextBounds(cstr, getCursorX(), getCursorY(), &l, &t, &w, &h);
+                    getTextBounds(cstr, getCursorX(), getCursorY(), &bx, &by, &bw, &bh);
 
                     // Manual newline, if next character will spill beyond screen edge
-                    if ((l + w) > left + width)
+                    if ((bx + bw) > left + width)
                         setCursor(left, getCursorY() + getFont().lineHeight());
 
                     // Print next character
@@ -519,7 +519,7 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
 
 // Simulate running printWrapped, to determine how tall the block of text will be.
 // This is a wasteful way of handling things. Maybe some way to optimize in future?
-uint32_t InkHUD::Applet::getWrappedTextHeight(int16_t left, uint16_t width, std::string text)
+uint32_t InkHUD::Applet::getWrappedTextHeight(int16_t left, uint16_t width, const std::string &text)
 {
     // Cache the current crop region
     int16_t cL = cropLeft;
@@ -649,7 +649,7 @@ uint16_t InkHUD::Applet::getActiveNodeCount()
 
     // For each node in db
     for (uint16_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
         // Check if heard recently, and not our own node
         if (sinceLastSeen(node) < settings->recentlyActiveSeconds && node->num != nodeDB->getNodeNum())
@@ -702,7 +702,7 @@ std::string InkHUD::Applet::localizeDistance(uint32_t meters)
 }
 
 // Print text with a "faux bold" effect, by drawing it multiple times, offsetting slightly
-void InkHUD::Applet::printThick(int16_t xCenter, int16_t yCenter, std::string text, uint8_t thicknessX, uint8_t thicknessY)
+void InkHUD::Applet::printThick(int16_t xCenter, int16_t yCenter, const std::string &text, uint8_t thicknessX, uint8_t thicknessY)
 {
     // How many times to draw along x axis
     int16_t xStart;
@@ -770,7 +770,7 @@ bool InkHUD::Applet::approveNotification(NicheGraphics::InkHUD::Notification &n)
 │                               │
 └───────────────────────────────┘
 */
-void InkHUD::Applet::drawHeader(std::string text)
+void InkHUD::Applet::drawHeader(const std::string &text)
 {
     // Y position for divider
     // - between header text and messages

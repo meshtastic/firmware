@@ -30,20 +30,21 @@ class AppletFont
     };
 
     AppletFont();
-    AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding = ASCII, int8_t paddingTop = 0, int8_t paddingBottom = 0);
+    explicit AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding = ASCII, int8_t paddingTop = 0,
+                        int8_t paddingBottom = 0);
 
     uint8_t lineHeight();
     uint8_t heightAboveCursor();
     uint8_t heightBelowCursor();
     uint8_t widthBetweenWords(); // Width of the space character
 
-    std::string decodeUTF8(std::string encoded);
+    std::string decodeUTF8(const std::string &encoded);
 
-    const GFXfont *gfxFont = NULL; // Default value: in-built AdafruitGFX font
+    const GFXfont *gfxFont = nullptr; // Default value: in-built AdafruitGFX font
 
   private:
-    uint32_t toUtf32(std::string utf8);
-    char applyEncoding(std::string utf8);
+    uint32_t toUtf32(const std::string &utf8);
+    char applyEncoding(const std::string &utf8);
 
     uint8_t height = 8;          // Default value: in-built AdafruitGFX font
     uint8_t ascenderHeight = 0;  // Default value: in-built AdafruitGFX font

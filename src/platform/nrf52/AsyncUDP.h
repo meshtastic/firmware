@@ -38,7 +38,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
 class AsyncUDPPacket
 {
   public:
-    AsyncUDPPacket(EthernetUDP &source);
+    explicit AsyncUDPPacket(EthernetUDP &source);
 
     IPAddress remoteIP();
     uint16_t length();
