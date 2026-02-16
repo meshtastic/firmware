@@ -943,9 +943,9 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         }
     } else if (!devicestate.owner.is_licensed) {
         // we have an array of PA gain values.  Find the highest power setting that works.
-        for (int radio_dbm = 0; radio_dbm < num_pa_points; radio_dbm++) {
+        for (int radio_dbm = 0; radio_dbm < (int)num_pa_points; radio_dbm++) {
             if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
-                ((radio_dbm == (num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
+                ((radio_dbm == (int)(num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
                 // we've exceeded the power limit, or hit the max we can do
                 LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
                 power -= tx_gain[radio_dbm];

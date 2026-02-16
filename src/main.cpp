@@ -436,9 +436,10 @@ void setup()
 #endif
 
     concurrency::hasBeenSetup = true;
-
+#if HAS_SCREEN
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
+#endif
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 #ifdef USE_SEGGER
@@ -663,6 +664,7 @@ void setup()
     }
 #endif
 
+#if HAS_SCREEN
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
@@ -680,6 +682,7 @@ void setup()
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
+#endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 #if defined(USE_VIRTUAL_KEYBOARD)
@@ -775,7 +778,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
-
 #endif
 
 #ifdef HAS_SDCARD
@@ -826,6 +828,7 @@ void setup()
     else
         playStartMelody();
 
+#if HAS_SCREEN
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
@@ -837,6 +840,7 @@ void setup()
 
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -991,6 +995,13 @@ void setup()
     service = new MeshService();
     service->init();
 
+    // Set osk_found for trackball/encoder devices BEFORE setupModules so CannedMessageModule can detect it
+#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+#ifndef HAS_PHYSICAL_KEYBOARD
+    osk_found = true;
+#endif
+#endif
+
     // Now that the mesh service is created, create any modules
     setupModules();
 
@@ -1078,12 +1089,6 @@ void setup()
 #if HAS_ETHERNET
     // Initialize Ethernet
     initEthernet();
-#endif
-#endif
-
-#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
-#ifndef HAS_PHYSICAL_KEYBOARD
-    osk_found = true;
 #endif
 #endif
 

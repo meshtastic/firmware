@@ -527,8 +527,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     constexpr int BUBBLE_MIN_W = 24;
     constexpr int BUBBLE_TEXT_INDENT = 2;
 
+    // Check if bubbles are enabled
+    const bool showBubbles = config.display.enable_message_bubbles;
+    const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
+
     // Derived widths
-    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (BUBBLE_PAD_X * 2);
+    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
     const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
 
     // Title string depending on mode
@@ -796,114 +800,105 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 
-    // Draw bubbles
-    for (size_t bi = 0; bi < blocks.size(); ++bi) {
-        const auto &b = blocks[bi];
-        if (b.start >= cachedLines.size() || b.end >= cachedLines.size() || b.start > b.end)
-            continue;
+    // Draw bubbles (only if enabled)
+    if (showBubbles) {
+        for (size_t bi = 0; bi < blocks.size(); ++bi) {
+            const auto &b = blocks[bi];
+            if (b.start >= cachedLines.size() || b.end >= cachedLines.size() || b.start > b.end)
+                continue;
 
-        int visualTop = lineTop[b.start];
+            int visualTop = lineTop[b.start];
 
-        int topY;
-        if (isHeader[b.start]) {
-            // Header start
-            constexpr int BUBBLE_PAD_TOP_HEADER = 1; // try 1 or 2
-            topY = visualTop - BUBBLE_PAD_TOP_HEADER;
-        } else {
-            // Body start
-            bool thisLineHasEmote = false;
-            for (int e = 0; e < numEmotes; ++e) {
-                if (cachedLines[b.start].find(emotes[e].label) != std::string::npos) {
-                    thisLineHasEmote = true;
-                    break;
+            int topY;
+            if (isHeader[b.start]) {
+                // Header start
+                constexpr int BUBBLE_PAD_TOP_HEADER = 1; // try 1 or 2
+                topY = visualTop - BUBBLE_PAD_TOP_HEADER;
+            } else {
+                // Body start
+                bool thisLineHasEmote = false;
+                for (int e = 0; e < numEmotes; ++e) {
+                    if (cachedLines[b.start].find(emotes[e].label) != std::string::npos) {
+                        thisLineHasEmote = true;
+                        break;
+                    }
                 }
+                if (thisLineHasEmote) {
+                    constexpr int EMOTE_PADDING_ABOVE = 4;
+                    visualTop -= EMOTE_PADDING_ABOVE;
+                }
+                topY = visualTop - BUBBLE_PAD_Y;
             }
-            if (thisLineHasEmote) {
-                constexpr int EMOTE_PADDING_ABOVE = 4;
-                visualTop -= EMOTE_PADDING_ABOVE;
+            int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
+            int bottomY = visualBottom + BUBBLE_PAD_Y;
+
+            if (bi + 1 < blocks.size()) {
+                int nextHeaderIndex = (int)blocks[bi + 1].start;
+                int nextTop = lineTop[nextHeaderIndex];
+                int maxBottom = nextTop - 1 - bubbleGapY;
+                if (bottomY > maxBottom)
+                    bottomY = maxBottom;
             }
-            topY = visualTop - BUBBLE_PAD_Y;
-        }
-        int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
-        int bottomY = visualBottom + BUBBLE_PAD_Y;
 
-        if (bi + 1 < blocks.size()) {
-            int nextHeaderIndex = (int)blocks[bi + 1].start;
-            int nextTop = lineTop[nextHeaderIndex];
-            int maxBottom = nextTop - 1 - bubbleGapY;
-            if (bottomY > maxBottom)
-                bottomY = maxBottom;
-        }
+            if (bottomY <= topY + 2)
+                continue;
 
-        if (bottomY <= topY + 2)
-            continue;
+            if (bottomY < contentTop || topY > contentBottom - 1)
+                continue;
 
-        if (bottomY < contentTop || topY > contentBottom - 1)
-            continue;
+            int maxLineW = 0;
 
-        int maxLineW = 0;
-
-        for (size_t i = b.start; i <= b.end; ++i) {
-            int w = 0;
-            if (isHeader[i]) {
-                w = display->getStringWidth(cachedLines[i].c_str());
-                if (b.mine)
-                    w += 12; // room for ACK/NACK/relay mark
-            } else {
-                w = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
+            for (size_t i = b.start; i <= b.end; ++i) {
+                int w = 0;
+                if (isHeader[i]) {
+                    w = display->getStringWidth(cachedLines[i].c_str());
+                    if (b.mine)
+                        w += 12; // room for ACK/NACK/relay mark
+                } else {
+                    w = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
+                }
+                if (w > maxLineW)
+                    maxLineW = w;
             }
-            if (w > maxLineW)
-                maxLineW = w;
-        }
 
-        int bubbleW = std::max(BUBBLE_MIN_W, maxLineW + (BUBBLE_PAD_X * 2));
-        int bubbleH = (bottomY - topY) + 1;
-        int bubbleX = 0;
-        if (b.mine) {
-            bubbleX = rightEdge - bubbleW;
-        } else {
-            bubbleX = x;
-        }
-        if (bubbleX < x)
-            bubbleX = x;
-        if (bubbleX + bubbleW > rightEdge)
-            bubbleW = std::max(1, rightEdge - bubbleX);
-
-        if (bubbleW > 1 && bubbleH > 1) {
-            int x1 = bubbleX + bubbleW - 1;
-            int y1 = topY + bubbleH - 1;
-
+            int bubbleW = std::max(BUBBLE_MIN_W, maxLineW + (textIndent * 2));
+            int bubbleH = (bottomY - topY) + 1;
+            int bubbleX = 0;
             if (b.mine) {
-                // Send Message (Right side)
-                display->drawRect(x1 + 2 - bubbleW, y1 - bubbleH, bubbleW, bubbleH);
-                // Top Right Corner
-                display->drawRect(x1, topY, 2, 1);
-                display->drawRect(x1, topY, 1, 2);
-                // Bottom Right Corner
-                display->drawRect(x1 - 1, bottomY - 2, 2, 1);
-                display->drawRect(x1, bottomY - 3, 1, 2);
-                // Knock the corners off to make a bubble
-                display->setColor(BLACK);
-                display->drawRect(x1 - bubbleW, topY - 1, 1, 1);
-                display->drawRect(x1 - bubbleW, bottomY - 1, 1, 1);
-                display->setColor(WHITE);
+                bubbleX = rightEdge - bubbleW;
             } else {
-                // Received Message (Left Side)
-                display->drawRect(bubbleX, topY, bubbleW + 1, bubbleH);
-                // Top Left Corner
-                display->drawRect(bubbleX + 1, topY + 1, 2, 1);
-                display->drawRect(bubbleX + 1, topY + 1, 1, 2);
-                // Bottom Left Corner
-                display->drawRect(bubbleX + 1, bottomY - 1, 2, 1);
-                display->drawRect(bubbleX + 1, bottomY - 2, 1, 2);
-                // Knock the corners off to make a bubble
-                display->setColor(BLACK);
-                display->drawRect(bubbleX + bubbleW, topY, 1, 1);
-                display->drawRect(bubbleX + bubbleW, bottomY, 1, 1);
-                display->setColor(WHITE);
+                bubbleX = x;
+            }
+            if (bubbleX < x)
+                bubbleX = x;
+            if (bubbleX + bubbleW > rightEdge)
+                bubbleW = std::max(1, rightEdge - bubbleX);
+
+            // Draw rounded rectangle bubble
+            if (bubbleW > BUBBLE_RADIUS * 2 && bubbleH > BUBBLE_RADIUS * 2) {
+                const int r = BUBBLE_RADIUS;
+                const int bx = bubbleX;
+                const int by = topY;
+                const int bw = bubbleW;
+                const int bh = bubbleH;
+
+                // Draw the 4 corner arcs using drawCircleQuads
+                display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
+                display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
+                display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
+                display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
+
+                // Draw the 4 edges between corners
+                display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
+                display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
+                display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
+                display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+            } else if (bubbleW > 1 && bubbleH > 1) {
+                // Fallback to simple rectangle for very small bubbles
+                display->drawRect(bubbleX, topY, bubbleW, bubbleH);
             }
         }
-    }
+    } // end if (showBubbles)
 
     // Render visible lines
     int lineY = yOffset;
@@ -916,11 +911,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
-                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - BUBBLE_TEXT_INDENT;
+                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - (showBubbles ? textIndent : 0);
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
-                    headerX = x + BUBBLE_PAD_X + BUBBLE_TEXT_INDENT;
+                    headerX = x + textIndent;
                 }
                 display->drawString(headerX, lineY, cachedLines[i].c_str());
 
@@ -960,14 +955,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
                     int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
-                    int rightX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - BUBBLE_TEXT_INDENT;
+                    int rightX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - (showBubbles ? textIndent : 0);
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
 
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
-                    drawStringWithEmotes(display, x + BUBBLE_PAD_X + BUBBLE_TEXT_INDENT, lineY, cachedLines[i], emotes,
-                                         numEmotes);
+                    drawStringWithEmotes(display, x + textIndent, lineY, cachedLines[i], emotes, numEmotes);
                 }
             }
         }
