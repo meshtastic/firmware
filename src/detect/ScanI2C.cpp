@@ -44,7 +44,7 @@ ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 ScanI2C::FoundDevice ScanI2C::firstAQI() const
 {
     ScanI2C::DeviceType types[] = {PMSA003I, SEN5X, SCD4X, SFA30};
-    return firstOfOrNONE(2, types);
+    return firstOfOrNONE(4, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstRGBLED() const

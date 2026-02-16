@@ -65,7 +65,7 @@ bool SFA30Sensor::isError(uint16_t response)
         return false;
 
     // TODO - Check error to char conversion
-    LOG_ERROR("%s: %s", sensorName, response);
+    LOG_ERROR("%s: %u", sensorName, response);
     return true;
 }
 
@@ -84,14 +84,14 @@ void SFA30Sensor::sleep()
 
     // Note - not recommended for this sensor on a periodic basis
     if (this->isError(sfa30.stopMeasurement())) {
-        LOG_ERROR("%s: can't stop measurement");
+        LOG_ERROR("%s: can't stop measurement", sensorName);
     };
 
 #if defined(SFA30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    LOG_INFO("%s: stop measurement");
+    LOG_INFO("%s: stop measurement", sensorName);
     state = State::IDLE;
     measureStarted = 0;
 }
