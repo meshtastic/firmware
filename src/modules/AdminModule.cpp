@@ -391,7 +391,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             node->has_device_metrics = false;
             node->has_position = false;
             node->user.public_key.size = 0;
-            node->user.public_key.bytes[0] = 0;
+            memset(node->user.public_key.bytes, 0, sizeof(node->user.public_key.bytes));
             saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
@@ -642,12 +642,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
             accelerometerThread->enabled = true;
             accelerometerThread->start();
-        }
-#endif
-#ifdef LED_PIN
-        // Turn LED off if heartbeat by config
-        if (c.payload_variant.device.led_heartbeat_disabled) {
-            digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
         }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&

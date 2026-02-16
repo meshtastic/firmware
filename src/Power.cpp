@@ -692,7 +692,9 @@ bool Power::setup()
     bool found = false;
     if (axpChipInit()) {
         found = true;
-    } else if (lipoInit()) {
+    } else if (cw2015Init()) {
+        found = true;
+    } else if (max17048Init()) {
         found = true;
     } else if (lipoChargerInit()) {
         found = true;
@@ -702,11 +704,11 @@ bool Power::setup()
         found = true;
     } else if (analogInit()) {
         found = true;
-    }
-
+    } else {
 #ifdef NRF_APM
-    found = true;
+        found = true;
 #endif
+    }
 #ifdef EXT_PWR_DETECT
     attachInterrupt(
         EXT_PWR_DETECT,
@@ -844,8 +846,10 @@ void Power::readPowerStatus()
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
+#ifndef NRF_APM
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
+#endif
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -1321,7 +1325,7 @@ bool Power::axpChipInit()
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor.
  */
-class LipoBatteryLevel : public HasBatteryLevel
+class MAX17048BatteryLevel : public HasBatteryLevel
 {
   private:
     MAX17048Singleton *max17048 = nullptr;
@@ -1369,18 +1373,18 @@ class LipoBatteryLevel : public HasBatteryLevel
     virtual bool isCharging() override { return max17048->isBatteryCharging(); }
 };
 
-LipoBatteryLevel lipoLevel;
+MAX17048BatteryLevel max17048Level;
 
 /**
  * Init the Lipo battery level sensor
  */
-bool Power::lipoInit()
+bool Power::max17048Init()
 {
-    bool result = lipoLevel.runOnce();
-    LOG_DEBUG("Power::lipoInit lipo sensor is %s", result ? "ready" : "not ready yet");
+    bool result = max17048Level.runOnce();
+    LOG_DEBUG("Power::max17048Init lipo sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
-    batteryLevel = &lipoLevel;
+    batteryLevel = &max17048Level;
     return true;
 }
 
@@ -1388,7 +1392,88 @@ bool Power::lipoInit()
 /**
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
-bool Power::lipoInit()
+bool Power::max17048Init()
+{
+    return false;
+}
+#endif
+
+#if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
+
+class CW2015BatteryLevel : public AnalogBatteryLevel
+{
+  public:
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override
+    {
+        int data = -1;
+        Wire.beginTransmission(CW2015_ADDR);
+        Wire.write(0x04);
+        if (Wire.endTransmission() == 0) {
+            if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
+                data = Wire.read();
+            }
+        }
+        return data;
+    }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override
+    {
+        uint16_t mv = 0;
+        Wire.beginTransmission(CW2015_ADDR);
+        Wire.write(0x02);
+        if (Wire.endTransmission() == 0) {
+            if (Wire.requestFrom(CW2015_ADDR, (uint8_t)2)) {
+                mv = Wire.read();
+                mv <<= 8;
+                mv |= Wire.read();
+                // Voltage is read in  305uV units, convert to mV
+                mv = mv * 305 / 1000;
+            }
+        }
+        return mv;
+    }
+};
+
+CW2015BatteryLevel cw2015Level;
+
+/**
+ * Init the CW2015 battery level sensor
+ */
+bool Power::cw2015Init()
+{
+
+    Wire.beginTransmission(CW2015_ADDR);
+    uint8_t getInfo[] = {0x0a, 0x00};
+    Wire.write(getInfo, 2);
+    Wire.endTransmission();
+    delay(10);
+    Wire.beginTransmission(CW2015_ADDR);
+    Wire.write(0x00);
+    bool result = false;
+    if (Wire.endTransmission() == 0) {
+        if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
+            uint8_t data = Wire.read();
+            LOG_DEBUG("CW2015 init read data: 0x%x", data);
+            if (data == 0x73) {
+                result = true;
+                batteryLevel = &cw2015Level;
+            }
+        }
+    }
+    return result;
+}
+
+#else
+/**
+ * The CW2015 battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::cw2015Init()
 {
     return false;
 }

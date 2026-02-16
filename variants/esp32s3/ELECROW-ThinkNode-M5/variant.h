@@ -8,8 +8,10 @@
 
 // LED
 // Both of these are on the GPIO expander
-#define PCA_LED_USER 1  // the Blue LED
-#define PCA_LED_POWER 3 // the Red LED? Seems to have hardware logic to blink when USB is plugged in.
+#define PCA_LED_USER 1   // the Blue LED
+#define PCA_LED_ENABLE 2 // the power supply to the LEDs, in an OR arrangement with VBUS power
+#define PCA_LED_POWER 3  // the Red LED? Seems to have hardware logic to blink when USB is plugged in.
+#define POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
 
 // USB_CHECK
 #define EXT_PWR_DETECT 12
@@ -29,6 +31,9 @@
 
 #define I2C_SCL 1
 #define I2C_SDA 2
+
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
 
 // GPS pins
 #define GPS_SWITH 10

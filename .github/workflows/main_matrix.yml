@@ -95,7 +95,7 @@ jobs:
         with:
           pio_platform: ${{ matrix.check.platform }}
           pio_env: ${{ matrix.check.board }}
-          pio_target: check
+          pio_target: check --fail-on-defect=low
 
   build:
     needs: [setup, version]
