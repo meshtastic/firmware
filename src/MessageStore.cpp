@@ -319,9 +319,9 @@ void MessageStore::saveToFlash()
 {
 #ifdef USE_EXTERNAL_FLASH
     spiLock->lock();
-    if (!fatfs.exists("/prefs")) {
+    if (!externalFS.exists("/prefs")) {
         LOG_WARN("Creating missing /prefs directory in external flash");
-        fatfs.mkdir("/prefs");
+        externalFS.mkdir("/prefs");
     }
     spiLock->unlock();
 #elif defined(FSCom)
@@ -355,19 +355,19 @@ void MessageStore::saveToFlash()
 void MessageStore::loadFromFlash()
 {
     // In MessageStore::loadFromFlash we already stream sequentially from flash
-    // —fatfs.open(...) + f.read(...) per record—without staging the file in RAM,
+    // —externalFS.open(...) + f.read(...) per record—without staging the file in RAM,
     // so no pb_istream_t is needed.
     std::deque<StoredMessage>().swap(liveMessages);
     resetMessagePool(); // reset pool when loading
 
 #if defined(USE_EXTERNAL_FLASH)
     concurrency::LockGuard guard(spiLock);
-    if (!fatfs.exists(filename.c_str())) {
+    if (!externalFS.exists(filename.c_str())) {
         LOG_WARN("MessageStore: file %s does not exist in external flash", filename.c_str());
         return;
     }
 
-    File32 f = fatfs.open(filename.c_str(), FILE_READ);
+    ExternalFSFile f = externalFS.open(filename.c_str(), FILE_O_READ);
     if (!f) {
         LOG_WARN("MessageStore: Failed to open file %s from external flash", filename.c_str());
         return;

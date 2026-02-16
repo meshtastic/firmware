@@ -42,11 +42,8 @@ using namespace STM32_LittleFS_Namespace;
 
 #if defined(ARCH_NRF52)
 #if defined(USE_EXTERNAL_FLASH)
-// nRF52 version with external flash
-#include "SdFat_Adafruit_Fork.h"
-#include "Filesystem/fatfs_ff.h"
-
-#include "diskio.h"
+// nRF52 version with external flash (LittleFS backend)
+#include "Filesystem/ExternalLittleFS.h"
 #include <Adafruit_SPIFlash.h>
 #include <SPI.h>
 #define DISK_LABEL "EXT FLASH"
@@ -54,9 +51,26 @@ using namespace STM32_LittleFS_Namespace;
 extern Adafruit_FlashTransport_QSPI flashTransport;
 #endif
 extern Adafruit_SPIFlash flash;
-extern FatVolume fatfs;
+extern ExternalLittleFS externalFS;
+#define FSCom externalFS
+#define FSBegin() FSCom.begin(&flash)
+using ExternalFSFile = Adafruit_LittleFS_Namespace::File;
+
+#ifndef FILE_O_WRITE
+#define FILE_O_WRITE Adafruit_LittleFS_Namespace::FILE_O_WRITE
+#endif
+#ifndef FILE_O_READ
+#define FILE_O_READ Adafruit_LittleFS_Namespace::FILE_O_READ
+#endif
+#ifndef FILE_WRITE
+#define FILE_WRITE FILE_O_WRITE
+#endif
+#ifndef FILE_READ
+#define FILE_READ FILE_O_READ
+#endif
+
 extern bool flashInitialized;
-extern bool fatfsMounted;
+extern bool externalFSMounted;
 #else
 // nRF52 version without external flash
 #include "InternalFileSystem.h"
@@ -75,6 +89,6 @@ void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
 #ifdef USE_EXTERNAL_FLASH
-bool check_fat12();
-bool format_fat12();
+bool checkExternalFS();
+bool formatExternalFS();
 #endif

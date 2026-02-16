@@ -2,25 +2,26 @@
 
 #ifdef USE_EXTERNAL_FLASH
 // Only way to work on both esp32 and nrf52
-static File openFile(const char *filename, bool fullAtomic)
+static bool openFile(const char *filename, bool fullAtomic, ExternalFSFile &file)
 {
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
-    if (!flashInitialized || !fatfsMounted) {
+    if (!flashInitialized || !externalFSMounted) {
         LOG_ERROR("External flash not ready, cannot open %s", filename);
-        return File();
+        return false;
     }
-//FatFS actually supports file renaming, so we can use the correct safefile logic here.
-/*#ifdef ARCH_NRF52
-    fatfs.remove(filename);
-    return fatfs.open(filename, FILE_WRITE);
-#endif
-*/
+    // External filesystem supports file renaming, so we can use the correct safefile logic here.
+    /*#ifdef ARCH_NRF52
+        externalFS.remove(filename);
+        file = externalFS.open(filename, FILE_O_WRITE);
+        return static_cast<bool>(file);
+    #endif
+    */
     if (!fullAtomic) {
         LOG_INFO("Removing old file %s, not fullAtomic", filename);
-        if(!fatfs.exists(filename)) {
+        if (!externalFS.exists(filename)) {
             LOG_DEBUG("File %s does not exist, no need to remove", filename);
-        } else if(!fatfs.remove(filename)) { // Nuke the old file to make space
+        } else if (!externalFS.remove(filename)) { // Nuke the old file to make space
             LOG_ERROR("Can't remove old file %s", filename);
         }
     }
@@ -34,12 +35,13 @@ static File openFile(const char *filename, bool fullAtomic)
     // }
 
     // clear any previous LFS errors
-    return fatfs.open(filenameTmp.c_str(), FILE_WRITE);
+    file = externalFS.open(filenameTmp.c_str(), FILE_O_WRITE);
+    return static_cast<bool>(file);
 }
 
-SafeFile::SafeFile(const char *_filename, bool fullAtomic)
-    : filename(_filename), f(openFile(_filename, fullAtomic)), fullAtomic(fullAtomic)
+SafeFile::SafeFile(const char *_filename, bool fullAtomic) : filename(_filename), f(externalFS), fullAtomic(fullAtomic)
 {
+    openFile(_filename, fullAtomic, f);
 }
 
 size_t SafeFile::write(uint8_t ch)
@@ -78,17 +80,17 @@ bool SafeFile::close()
     f.close();
     spiLock->unlock();
 
-//FatFS actually supports file renaming, so don't return true here but do the correct safefile logic.
-/*#ifdef ARCH_NRF52
-    return true;
-#endif*/
+    // External filesystem supports file renaming, so don't return true here but do the correct safefile logic.
+    /*#ifdef ARCH_NRF52
+        return true;
+    #endif*/
     if (!testReadback())
         return false;
 
     { // Scope for lock
         concurrency::LockGuard g(spiLock);
         // brief window of risk here ;-)
-        if (fullAtomic && fatfs.exists(filename.c_str()) && !fatfs.remove(filename.c_str())) {
+        if (fullAtomic && externalFS.exists(filename.c_str()) && !externalFS.remove(filename.c_str())) {
             LOG_ERROR("Can't remove old pref file");
             return false;
         }
@@ -111,7 +113,7 @@ bool SafeFile::testReadback()
 
     String filenameTmp = filename;
     filenameTmp += ".tmp";
-    auto f2 = fatfs.open(filenameTmp.c_str(), FILE_READ);
+    auto f2 = externalFS.open(filenameTmp.c_str(), FILE_O_READ);
     if (!f2) {
         LOG_ERROR("Can't open tmp file for readback");
         return false;

@@ -6,9 +6,9 @@
 #include "CannedMessageModule.h"
 #include "Channels.h"
 #include "Filesystem/FSCommon.h"
+#include "Filesystem/NodeDB.h"
 #include "MeshService.h"
 #include "MessageStore.h"
-#include "Filesystem/NodeDB.h"
 #include "SPILock.h"
 #include "buzz.h"
 #include "detect/ScanI2C.h"
@@ -2376,9 +2376,9 @@ bool CannedMessageModule::saveProtoForModule()
 
 #ifdef USE_EXTERNAL_FLASH
     spiLock->lock();
-    if (!fatfs.exists("/prefs")) {
+    if (!externalFS.exists("/prefs")) {
         LOG_WARN("Creating missing /prefs directory in external flash");
-        fatfs.mkdir("/prefs");
+        externalFS.mkdir("/prefs");
     }
     spiLock->unlock();
 #elif defined(FSCom)

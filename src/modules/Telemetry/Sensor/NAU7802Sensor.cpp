@@ -4,9 +4,9 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Filesystem/FSCommon.h"
+#include "Filesystem/SafeFile.h"
 #include "NAU7802Sensor.h"
 #include "SPILock.h"
-#include "Filesystem/SafeFile.h"
 #include "TelemetrySensor.h"
 #include <Throttle.h>
 #include <pb_decode.h>
@@ -121,7 +121,7 @@ bool NAU7802Sensor::loadCalibrationData()
 {
     spiLock->lock();
 #ifdef USE_EXTERNAL_FLASH
-    auto file = fatfs.open(nau7802ConfigFileName, FILE_READ);
+    auto file = externalFS.open(nau7802ConfigFileName, FILE_O_READ);
 #else
     auto file = FSCom.open(nau7802ConfigFileName, FILE_O_READ);
 #endif

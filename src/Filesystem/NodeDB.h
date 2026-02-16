@@ -147,6 +147,16 @@ class NodeDB
 
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
+    bool externalFlashLoadFailed = false;
+    bool externalFlashLoadWarned = false;
+    enum ExternalLoadSegmentMask : uint8_t {
+        ExternalLoadSegment_DeviceState = 1 << 0,
+        ExternalLoadSegment_Config = 1 << 1,
+        ExternalLoadSegment_ModuleConfig = 1 << 2,
+        ExternalLoadSegment_Channels = 1 << 3,
+    };
+    uint8_t externalFlashRecoveredFromInternalMask = 0;
+    uint8_t externalFlashDefaultedMask = 0;
 
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack

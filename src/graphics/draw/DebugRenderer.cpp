@@ -3,8 +3,8 @@
 #include "../Screen.h"
 #include "DebugRenderer.h"
 #include "Filesystem/FSCommon.h"
-#include "MeshService.h"
 #include "Filesystem/NodeDB.h"
+#include "MeshService.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
@@ -686,9 +686,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     uint32_t flashUsed = 0, flashTotal = 0;
 #ifdef USE_EXTERNAL_FLASH // compute external flash usage
-    uint32_t bytesPerCluster = fatfs.bytesPerCluster();
-    uint32_t totalCapacity = fatfs.clusterCount() * bytesPerCluster;
-    uint32_t freeSpace = fatfs.freeClusterCount() * bytesPerCluster;
+    uint32_t bytesPerCluster = externalFS.bytesPerCluster();
+    uint32_t totalCapacity = externalFS.clusterCount() * bytesPerCluster;
+    uint32_t freeSpace = externalFS.freeClusterCount() * bytesPerCluster;
     flashUsed = (totalCapacity - freeSpace);
     flashTotal = totalCapacity;
 

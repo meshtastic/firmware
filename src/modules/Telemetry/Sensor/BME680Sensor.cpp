@@ -108,7 +108,7 @@ void BME680Sensor::loadState()
 #ifdef USE_EXTERNAL_FLASH
     // Load BSEC state from external flash
     spiLock->lock();
-    auto file = fatfs.open(bsecConfigFileName, FILE_READ);
+    auto file = externalFS.open(bsecConfigFileName, FILE_O_READ);
 #elif defined(FSCom)
     spiLock->lock();
     auto file = FSCom.open(bsecConfigFileName, FILE_O_READ);
@@ -157,15 +157,15 @@ void BME680Sensor::updateState()
 #endif
 #ifdef USE_EXTERNAL_FLASH
         // Save BSEC state to external flash
-        if (fatfs.exists(bsecConfigFileName) && !fatfs.remove(bsecConfigFileName)) {
+        if (externalFS.exists(bsecConfigFileName) && !externalFS.remove(bsecConfigFileName)) {
             LOG_WARN("Can't remove old state file");
         }
-        auto file = fatfs.open(bsecConfigFileName, FILE_WRITE);
+        auto file = externalFS.open(bsecConfigFileName, FILE_O_WRITE);
 #elif defined(FSCom)
-        if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
-            LOG_WARN("Can't remove old state file");
-        }
-        auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
+    if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
+        LOG_WARN("Can't remove old state file");
+    }
+    auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
 #endif
 #if defined(USE_EXTERNAL_FLASH) || defined(FSCom)
         if (file) {

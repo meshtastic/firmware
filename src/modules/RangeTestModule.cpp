@@ -10,8 +10,8 @@
  */
 #include "RangeTestModule.h"
 #include "Filesystem/FSCommon.h"
-#include "MeshService.h"
 #include "Filesystem/NodeDB.h"
+#include "MeshService.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
@@ -227,7 +227,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     // If the file doesn't exist, write the header.
     if (!FSCom.exists("/static/rangetest.csv")) {
         //--------- Write to file
-        File fileToWrite = FSCom.open("/static/rangetest.csv", FILE_WRITE);
+        File fileToWrite = FSCom.open("/static/rangetest.csv", FILE_O_WRITE);
 
         if (!fileToWrite) {
             LOG_ERROR("There was an error opening the file for writing");

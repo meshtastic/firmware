@@ -42,7 +42,11 @@ class SafeFile : public Print
     bool testReadback();
 
     String filename;
+#ifdef USE_EXTERNAL_FLASH
+    ExternalFSFile f;
+#else
     File f;
+#endif
     bool fullAtomic;
     uint8_t hash = 0;
 };

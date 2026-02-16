@@ -124,9 +124,9 @@ void CannedMessageStore::handleSet(const meshtastic_AdminMessage *request)
     // Ensure the directory exists
 #ifdef USE_EXTERNAL_FLASH
     spiLock->lock();
-    if (!fatfs.exists("/prefs")) {
+    if (!externalFS.exists("/prefs")) {
         LOG_WARN("Creating missing /prefs directory in external flash");
-        fatfs.mkdir("/prefs");
+        externalFS.mkdir("/prefs");
     }
     spiLock->unlock();
 #elif defined(FSCom)

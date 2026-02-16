@@ -2,9 +2,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#include "Filesystem/NodeDB.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "Filesystem/NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
 #include "RadioLibInterface.h"
@@ -13,12 +13,7 @@
 #include "buzz.h"
 #include "power/PowerHAL.h"
 
-<<<<<<< HEAD
 #include "Filesystem/FSCommon.h"
-#include "Led.h"
-=======
-#include "FSCommon.h"
->>>>>>> origin/develop
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -923,6 +918,60 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
+
+    if (nodeDB->externalFlashLoadFailed && !nodeDB->externalFlashLoadWarned) {
+        LOG_WARN("Failed to load one or more preference files from external flash; using recovered settings");
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            auto appendSegmentNames = [](char *dest, size_t destLen, uint8_t mask) {
+                size_t used = 0;
+                bool first = true;
+                auto appendOne = [&](const char *name) {
+                    if (used >= destLen) {
+                        return;
+                    }
+                    int written = snprintf(dest + used, destLen - used, "%s%s", first ? "" : ",", name);
+                    if (written > 0) {
+                        size_t added = static_cast<size_t>(written);
+                        if (added > (destLen - used - 1)) {
+                            used = destLen - 1;
+                        } else {
+                            used += added;
+                        }
+                    }
+                    first = false;
+                };
+
+                dest[0] = '\0';
+                if (mask & NodeDB::ExternalLoadSegment_DeviceState)
+                    appendOne("device");
+                if (mask & NodeDB::ExternalLoadSegment_Config)
+                    appendOne("config");
+                if (mask & NodeDB::ExternalLoadSegment_ModuleConfig)
+                    appendOne("module");
+                if (mask & NodeDB::ExternalLoadSegment_Channels)
+                    appendOne("channels");
+
+                if (first) {
+                    snprintf(dest, destLen, "none");
+                }
+            };
+
+            char recoveredSegments[80];
+            char defaultedSegments[80];
+            appendSegmentNames(recoveredSegments, sizeof(recoveredSegments), nodeDB->externalFlashRecoveredFromInternalMask);
+            appendSegmentNames(defaultedSegments, sizeof(defaultedSegments), nodeDB->externalFlashDefaultedMask);
+
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message),
+                     "External flash load failed. Configs restored from internal:%s Configs reset to default:%s",
+                     recoveredSegments, defaultedSegments);
+            service->sendClientNotification(cn);
+            nodeDB->externalFlashLoadWarned = true;
+        }
+    }
+
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputBroker->Init();

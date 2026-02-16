@@ -29,9 +29,9 @@ void InkHUD::MessageStore::saveToFlash()
     assert(!filename.empty());
 #ifdef USE_EXTERNAL_FLASH
     spiLock->lock();
-    if (!fatfs.exists("/NicheGraphics")){
+    if (!externalFS.exists("/NicheGraphics")) {
         LOG_WARN("Creating missing /NicheGraphics directory in external flash");
-        fatfs.mkdir("/NicheGraphics");
+        externalFS.mkdir("/NicheGraphics");
     }
     spiLock->unlock();
 #elif defined(FSCom)
@@ -89,12 +89,12 @@ void InkHUD::MessageStore::loadFromFlash()
     // Take the firmware's SPI Lock
     concurrency::LockGuard guard(spiLock);
     // Check that the file *does* actually exist
-    if (!fatfs.exists(filename.c_str())) {
+    if (!externalFS.exists(filename.c_str())) {
         LOG_WARN("MessageStore: file %s does not exist in external flash, Using default values", filename.c_str());
         return;
     }
     // Open the file
-    File32 f = fatfs.open(filename.c_str(), FILE_READ);
+    ExternalFSFile f = externalFS.open(filename.c_str(), FILE_O_READ);
     if (!f) {
         LOG_WARN("MessageStore: Failed to open file %s from external flash", filename.c_str());
         return;
@@ -130,7 +130,6 @@ void InkHUD::MessageStore::loadFromFlash()
         LOG_DEBUG("#%u, timestamp=%u, sender(num)=%u, text=\"%s\"", (uint32_t)i, m.timestamp, m.sender, m.text.c_str());
     }
     f.close();
-
 
 #elif defined(FSCom)
 

@@ -17,13 +17,11 @@
 Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
 #endif
 Adafruit_SPIFlash flash(&flashTransport);
-
-FatVolume fatfs;
 bool flashInitialized = false;
-bool fatfsMounted = false;
+bool externalFSMounted = false;
 #endif
 // External flash is only present on a subset of nRF52 boards, but when enabled we share
-// this single FatFs instance across the entire firmware so every helper touches the same
+// this single external filesystem instance across the entire firmware so every helper touches the same
 // QSPI-backed block device via the Adafruit SPIFlash shim above.
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
@@ -51,85 +49,40 @@ SPIClass SPI_HSPI(HSPI);
  * @return true if the file was successfully copied, false otherwise.
  */
 #ifdef USE_EXTERNAL_FLASH
-bool format_fat12(void)
+bool formatExternalFS(void)
 {
-    spiLock->lock();
-    // This is an emergency formatter that rewrites the external flash with a clean FAT12
-    // volume so the higher level preference code can start dropping files immediately
-
-    // Allocate formatting buffer on the heap so it isn't permanently pinned in RAM.
-    // Use a smaller buffer (512 bytes) on AVR platforms due to limited RAM constraints,
-    // and a larger buffer (4096 bytes) on other platforms for faster formatting performance.
-    // The unique_ptr with nothrow ensures automatic cleanup and safe error handling if
-    // memory allocation fails.
-#ifdef __AVR__
-    std::unique_ptr<uint8_t[]> workbuf(new (std::nothrow) uint8_t[512]);
-#else
-    std::unique_ptr<uint8_t[]> workbuf(new (std::nothrow) uint8_t[4096]);
-#endif
-    if (!workbuf) {
-        LOG_ERROR("Error, failed to allocate format buffer");
-        spiLock->unlock();
+    concurrency::LockGuard g(spiLock);
+    if (!externalFS.prepare(&flash)) {
+        LOG_ERROR("Error, external LittleFS prepare failed");
         return false;
     }
 
-    // Elm Cham's fatfs objects
-    FATFS elmchamFatfs;
+    if (!externalFS.format()) {
+        LOG_ERROR("Error, external LittleFS format failed, trying full chip erase");
 
-    // Make filesystem.
-    FRESULT r = f_mkfs("", FM_FAT, 0, workbuf.get(),
-#ifdef __AVR__
-                       512
-#else
-                       4096
-#endif
-    );
-    if (r != FR_OK) {
-        LOG_ERROR("Error, f_mkfs failed");
-        spiLock->unlock();
-        return false;
+        if (!flash.eraseChip()) {
+            LOG_ERROR("Error, external flash chip erase failed");
+            return false;
+        }
+
+        if (!externalFS.format()) {
+            LOG_ERROR("Error, external LittleFS format failed after chip erase");
+            return false;
+        }
     }
-
-    // mount to set disk label
-    r = f_mount(&elmchamFatfs, "0:", 1);
-    if (r != FR_OK) {
-        LOG_ERROR("Error, f_mount failed");
-        spiLock->unlock();
-        return false;
-    }
-
-    // Setting label
-    LOG_INFO("Setting disk label to: " DISK_LABEL);
-    r = f_setlabel(DISK_LABEL);
-    if (r != FR_OK) {
-        LOG_ERROR("Error, f_setlabel failed");
-        spiLock->unlock();
-        return false;
-    }
-
-    // unmount
-    f_unmount("0:");
-
-    // sync to make sure all data is written to flash
-    flash.syncBlocks();
-
+    externalFSMounted = false;
     LOG_INFO("Formatted external flash!");
-    spiLock->unlock();
     return true;
 }
 
-bool check_fat12(void)
+bool checkExternalFS(void)
 {
-    spiLock->lock();
-    // After formatting (or on first boot) make sure the freshly created filesystem actually
-    // mounts against the shared FatVolume instance before the rest of the stack uses it.
-    // Check new filesystem
-    if (!fatfs.begin(&flash)) {
+    if (!externalFS.begin(&flash)) {
         LOG_ERROR("Error, failed to mount newly formatted filesystem!");
-        spiLock->unlock();
+        externalFSMounted = false;
         return false;
     }
-    spiLock->unlock();
+    externalFSMounted = true;
     return true;
 }
 #endif
@@ -139,18 +92,16 @@ bool copyFile(const char *from, const char *to)
 #ifdef USE_EXTERNAL_FLASH
     // take SPI Lock
     concurrency::LockGuard g(spiLock);
-    // External flash path uses the lightweight FatFile API because SdFat works directly
-    // on the FatVolume we own above; this avoids instantiating the Arduino FS shim here.
     unsigned char cbuffer[16];
 
-    FatFile f1;
-    if (!f1.open(from, O_READ)) { // Open from root
+    auto f1 = externalFS.open(from, FILE_O_READ);
+    if (!f1) {
         LOG_ERROR("Failed to open source file %s", from);
         return false;
     }
 
-    FatFile f2;
-    if (!f2.open(to, O_WRITE | O_CREAT | O_TRUNC)) { // Open from root
+    auto f2 = externalFS.open(to, FILE_O_WRITE);
+    if (!f2) {
         LOG_ERROR("Failed to open destination file %s", to);
         return false;
     }
@@ -206,9 +157,9 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #ifdef USE_EXTERNAL_FLASH
     // take SPI Lock
     spiLock->lock();
-    // FatVolume::rename manipulates directory entries in place which is much faster than
-    // copy/remove when the QSPI flash already exposes FAT semantics.
-    bool result = fatfs.rename(pathFrom, pathTo);
+    // Backend rename manipulates directory entries in place which is much faster than
+    // copy/remove on the QSPI-backed external filesystem.
+    bool result = externalFS.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
 
@@ -257,7 +208,7 @@ static bool buildPath(char *dest, size_t destLen, const char *parent, const char
  * @brief Recursively retrieves information about all files in a directory and its subdirectories.
  *
  * This function traverses a directory structure and collects metadata about all files found,
- * including their full paths and sizes. It supports both external flash storage (via FatFile)
+ * including their full paths and sizes. It supports both external flash storage (via ExternalFSFile)
  * and standard filesystem implementations (FSCom).
  *
  * @param dirname The path to the directory to scan. Must be a valid directory path.
@@ -281,47 +232,49 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
 #ifdef USE_EXTERNAL_FLASH
-    FatFile root;
-    if (!root.open(dirname, O_READ)) { // Failed to open directory
-        return filenames;              // Return empty list
-    }
-    if (!root.isDir()) {  // Not a directory
+    auto root = externalFS.open(dirname, FILE_O_READ);
+    if (!root) {          // Failed to open directory
         return filenames; // Return empty list
     }
+    if (!root.isDirectory()) { // Not a directory
+        return filenames;      // Return empty list
+    }
 
-    FatFile file;
+    auto file = root.openNextFile();
     // Keep local buffers aligned with the on-wire field width to avoid mismatched truncation handling.
     constexpr size_t FileNameFieldLen = sizeof(((meshtastic_FileInfo *)nullptr)->file_name);
     constexpr size_t NameBufLen = FileNameFieldLen;
     constexpr size_t PathBufLen = FileNameFieldLen;
-    char name[NameBufLen] = {0};                                                 // Buffer for file name
-    char path[PathBufLen] = {0};                                                 // Buffer for full path
-    while (file.openNext(&root, O_READ)) {                                       // Iterate through directory entries
+    char name[NameBufLen] = {0}; // Buffer for file name
+    char path[PathBufLen] = {0}; // Buffer for full path
+    while (file) {               // Iterate through directory entries
         memset(name, 0, sizeof(name));
-        file.getName(name, sizeof(name));                                        // Get file name
-        if (strnlen(name, sizeof(name)) >= sizeof(name) - 1) {                   // Detect truncation
+        strncpy(name, file.name(), sizeof(name) - 1);          // Get file name
+        if (strnlen(name, sizeof(name)) >= sizeof(name) - 1) { // Detect truncation
             LOG_ERROR("Name truncated in getFiles: %s", name);
             file.close();
-            return filenames;                                                    // Abort traversal on truncation
+            return filenames; // Abort traversal on truncation
         }
-        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) { // if it's a directory and name is not . or ..
-            if (levels) {                                                        // Recurse into subdirectory
-                if (!buildPath(path, sizeof(path), dirname, name)) {             // Build full path
+        if (file.isDirectory() && strcmp(name, ".") != 0 &&
+            strcmp(name, "..") != 0) {                               // if it's a directory and name is not . or ..
+            if (levels) {                                            // Recurse into subdirectory
+                if (!buildPath(path, sizeof(path), dirname, name)) { // Build full path
                     file.close();
-                    return filenames;                                            // Abort traversal on truncation
+                    return filenames; // Abort traversal on truncation
                 }
                 std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(path, levels - 1);     // Recurse
                 filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end()); // Append results
             }
-        } else if (!file.isDir()) {                                                      // if it's a file
-            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.fileSize())}; // Create file info struct
+        } else if (!file.isDirectory()) {                                            // if it's a file
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())}; // Create file info struct
             if (!buildPath(fileInfo.file_name, sizeof(fileInfo.file_name), dirname, name)) {
                 file.close();
-                return filenames;                                                // Abort traversal on truncation
+                return filenames; // Abort traversal on truncation
             }
-            filenames.push_back(fileInfo);                                               // Add to list
+            filenames.push_back(fileInfo); // Add to list
         }
         file.close();
+        file = root.openNextFile();
     }
     root.close();
 #elif FSCom
@@ -381,62 +334,64 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 void listDir(const char *dirname, uint8_t levels, bool del)
 {
 #ifdef USE_EXTERNAL_FLASH
-    FatFile root;
-    if (!root.open(dirname, O_READ)) { // Failed to open directory
+    auto root = externalFS.open(dirname, FILE_O_READ);
+    if (!root) { // Failed to open directory
         return;
     }
-    if (!root.isDir()) { // Not a directory
+    if (!root.isDirectory()) { // Not a directory
         return;
     }
 
-    FatFile file;
+    auto file = root.openNextFile();
     // Keep local buffers aligned with the on-wire field width to avoid mismatched truncation handling.
     constexpr size_t FileNameFieldLen = sizeof(((meshtastic_FileInfo *)nullptr)->file_name);
     constexpr size_t NameBufLen = FileNameFieldLen;
     constexpr size_t PathBufLen = FileNameFieldLen;
     char name[NameBufLen] = {0};
     char path[PathBufLen] = {0};
-    while (file.openNext(&root, O_READ)) {                                       // Iterate through directory entries
+    while (file) { // Iterate through directory entries
         memset(name, 0, sizeof(name));
-        file.getName(name, sizeof(name));                                        // Get file name
+        strncpy(name, file.name(), sizeof(name) - 1); // Get file name
         if (strnlen(name, sizeof(name)) >= sizeof(name) - 1) {
             LOG_ERROR("Name truncated in listDir: %s", name);
             file.close();
-            return;                                                                // Abort traversal on truncation
+            return; // Abort traversal on truncation
         }
-        if (file.isDir() && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) { // if it's a directory and name is not . or ..
-            if (levels) {                                                        // Recurse into subdirectory
-                if (!buildPath(path, sizeof(path), dirname, name)) {             // Build full path
+        if (file.isDirectory() && strcmp(name, ".") != 0 &&
+            strcmp(name, "..") != 0) {                               // if it's a directory and name is not . or ..
+            if (levels) {                                            // Recurse into subdirectory
+                if (!buildPath(path, sizeof(path), dirname, name)) { // Build full path
                     file.close();
-                    return;                                                      // Abort traversal on truncation
+                    return; // Abort traversal on truncation
                 }
-                listDir(path, levels - 1, del);                                  // Recurse
-                if (del) {                                                       // After recursion, delete directory if requested
+                listDir(path, levels - 1, del); // Recurse
+                if (del) {                      // After recursion, delete directory if requested
                     LOG_DEBUG("Remove %s", path);
                     file.close();
-                    // FatVolume::rmdir is the only recursive delete we have, so walk depth
+                    // externalFS::rmdir is the only recursive delete we have, so walk depth
                     // first and remove directories once their contents have been handled.
-                    fatfs.rmdir(path); // Remove directory
+                    externalFS.rmdir(path); // Remove directory
                     continue;
                 }
             }
-        } else if (!file.isDir()) {                       // if it's a file
+        } else if (!file.isDirectory()) {                        // if it's a file
             if (!buildPath(path, sizeof(path), dirname, name)) { // Build full path
                 file.close();
-                return;                                                          // Abort traversal on truncation
+                return; // Abort traversal on truncation
             }
-            if (del) {                                    // Delete file
+            if (del) { // Delete file
                 LOG_DEBUG("Delete %s", path);
                 file.close();
-                // FatVolume::remove issues the low level FAT delete, ensuring we do not
+                // externalFS::remove issues the backend delete, ensuring we do not
                 // leave orphaned clusters on the external flash.
-                fatfs.remove(path);
+                externalFS.remove(path);
                 continue;
             } else {
-                LOG_DEBUG("   %s (%lu Bytes)", path, file.fileSize());
+                LOG_DEBUG("   %s (%lu Bytes)", path, file.size());
             }
         }
         file.close();
+        file = root.openNextFile();
     }
     root.close();
 #else
@@ -545,15 +500,15 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef USE_EXTERNAL_FLASH
-    // Adafruit SPI Flash FatFs implementation does not support recursive delete, so we do it manually here
+    // The external filesystem implementation does not support recursive delete, so we do it manually here
     std::vector<meshtastic_FileInfo> files = getFiles(dirname, 10); // Get all files in directory and subdirectories
     for (auto const &fileInfo : files) {                            // Iterate through files and delete them
         LOG_DEBUG("Delete %s", fileInfo.file_name);
-        fatfs.remove(fileInfo.file_name); // Delete file
+        externalFS.remove(fileInfo.file_name); // Delete file
     }
     // Finally remove the (now empty) directory itself
     LOG_DEBUG("Remove directory %s", dirname);
-    fatfs.rmdir(dirname);
+    externalFS.rmdir(dirname);
 #elif defined(FSCom)
 
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
@@ -575,32 +530,50 @@ void fsInit()
 {
 #ifdef USE_EXTERNAL_FLASH
     if (!flashInitialized) {
-        LOG_INFO("Adafruit SPI Flash FatFs initialization!");
-        flashInitialized = true;
+        LOG_INFO("Adafruit SPI Flash external FS initialization!");
         if (!flash.begin()) {
             LOG_ERROR("Error, failed to initialize flash chip!");
             flashInitialized = false;
+            return;
+        }
+        flashInitialized = true;
+    }
+
+    if (!flashInitialized) {
+        LOG_ERROR("External flash is not initialized, skipping external FS init");
+        return;
+    }
+
+    LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
+    /*
+     * Testing helper: force format on every boot to validate recovery from internal flash mirror.
+     * Enable with build flag: -DMESHTASTIC_TEST_FORMAT_EXTERNAL_FS_ON_BOOT
+     */
+#if defined(MESHTASTIC_TEST_FORMAT_EXTERNAL_FS_ON_BOOT)
+    LOG_WARN("MESHTASTIC_TEST_FORMAT_EXTERNAL_FS_ON_BOOT enabled: formatting external flash on boot");
+    if (!formatExternalFS()) {
+        LOG_ERROR("formatExternalFS failed during fsInit test mode");
+        return;
+    }
+#endif
+
+    if (!checkExternalFS()) {
+        LOG_WARN("checkExternalFS failed during fsInit, attempting recovery format");
+        if (!formatExternalFS()) {
+            LOG_ERROR("formatExternalFS failed during fsInit recovery");
+            return;
+        }
+        if (!checkExternalFS()) {
+            LOG_ERROR("checkExternalFS failed during fsInit recovery");
+            return;
         }
     }
-    LOG_INFO("Flash chip JEDEC ID: 0x%X", flash.getJEDECID());
-    /*   Uncomment to auto-format on init the external flash to test backup restoring functionality from internal flash.
-         If it works correctly, the board should boot normally after this, loosing only the node db but restoring
-         all configuration and preferences from internal flash mirror.
-    if (!format_fat12()) {
-        LOG_ERROR("format_fat12 failed during fsInit");
-        return;
-    }
-    */
-    if (!check_fat12()) {
-        LOG_ERROR("check_fat12 failed during fsInit");
-        return;
-    }
-    if (!fatfsMounted) {
-        if (!fatfs.begin(&flash)) {
+    if (!externalFSMounted) {
+        if (!externalFS.begin(&flash)) {
             LOG_ERROR("Error, failed to mount filesystem!");
             return;
         }
-        fatfsMounted = true;
+        externalFSMounted = true;
         LOG_INFO("Filesystem mounted!");
     }
 #elif defined(FSCom)

@@ -13,8 +13,8 @@ Avoid bloating everyone's protobuf code for our one-off UI implementations
 
 #include "configuration.h"
 
-#include "SPILock.h"
 #include "Filesystem/SafeFile.h"
+#include "SPILock.h"
 
 namespace NicheGraphics
 {
@@ -58,14 +58,14 @@ template <typename T> class FlashData
 
 #ifdef USE_EXTERNAL_FLASH
         // Check that the file *does* actually exist
-        if (!fatfs.exists(filename.c_str())) {
+        if (!externalFS.exists(filename.c_str())) {
             LOG_WARN("'%s' not found in external flash. Using default values", filename.c_str());
             okay = false;
             return okay;
         }
 
         // Open the file
-        auto f = fatfs.open(filename.c_str(), FILE_O_READ);
+        auto f = externalFS.open(filename.c_str(), FILE_O_READ);
 
         // If opened, start reading
         if (f) {
@@ -161,9 +161,9 @@ template <typename T> class FlashData
         std::string filename = getFilename(label);
 #ifdef USE_EXTERNAL_FLASH
         spiLock->lock();
-        if (!fatfs.exists("/NicheGraphics")){
+        if (!externalFS.exists("/NicheGraphics")) {
             LOG_WARN("Creating missing /NicheGraphics directory in external flash");
-            fatfs.mkdir("/NicheGraphics");
+            externalFS.mkdir("/NicheGraphics");
         }
         spiLock->unlock();
 
@@ -203,8 +203,8 @@ inline void clearFlashData()
     // Take firmware's SPI lock, in case the files are stored on SD card
     concurrency::LockGuard guard(spiLock);
 #ifdef USE_EXTERNAL_FLASH
-    File32 dir = fatfs.open("/NicheGraphics"); // Open the directory
-    File32 file = dir.openNextFile();          // Attempt to open the first file in the directory
+    ExternalFSFile dir = externalFS.open("/NicheGraphics"); // Open the directory
+    ExternalFSFile file = dir.openNextFile();               // Attempt to open the first file in the directory
 
     // While the directory still contains files
     while (file) {
@@ -212,7 +212,7 @@ inline void clearFlashData()
         path += file.name();
         LOG_DEBUG("Erasing %s", path.c_str());
         file.close();
-        fatfs.remove(path.c_str());
+        externalFS.remove(path.c_str());
 
         file = dir.openNextFile();
     }
