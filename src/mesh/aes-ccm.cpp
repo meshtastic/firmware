@@ -8,33 +8,8 @@
  */
 #define AES_BLOCK_SIZE 16
 #include "aes-ccm.h"
+#include "meshUtils.h"
 #if !MESHTASTIC_EXCLUDE_PKI
-
-/**
- * Constant-time comparison of two byte arrays
- *
- * @param a First byte array to compare
- * @param b Second byte array to compare
- * @param len Number of bytes to compare
- * @return 0 if arrays are equal, -1 if different or if inputs are invalid
- */
-static int constant_time_compare(const void *a_, const void *b_, size_t len)
-{
-    /* Cast to volatile to prevent the compiler from optimizing out their comparison. */
-    const volatile uint8_t *volatile a = (const volatile uint8_t *volatile)a_;
-    const volatile uint8_t *volatile b = (const volatile uint8_t *volatile)b_;
-    if (len == 0)
-        return 0;
-    if (a == NULL || b == NULL)
-        return -1;
-    size_t i;
-    volatile uint8_t d = 0U;
-    for (i = 0U; i < len; i++) {
-        d |= (a[i] ^ b[i]);
-    }
-    /* Constant time bit arithmetic to convert d > 0 to -1 and d = 0 to 0. */
-    return (1 & ((d - 1) >> 8)) - 1;
-}
 
 static void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 {

@@ -95,11 +95,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
     } else if (mp.pki_encrypted) {
         if ((config.security.admin_key[0].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0) ||
+             constant_time_compare(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0) ||
             (config.security.admin_key[1].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
+             constant_time_compare(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
             (config.security.admin_key[2].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
+             constant_time_compare(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
 
             // Automatically favorite the node that is using the admin key
@@ -1438,7 +1438,7 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
     printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
     printBytes("Expected session key: ", session_passkey, 8);
     return (session_time + 300 > millis() / 1000 && res->session_passkey.size == 8 &&
-            memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
+            constant_time_compare(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
 
 bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)

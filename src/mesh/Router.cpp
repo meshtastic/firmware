@@ -634,7 +634,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                constant_time_compare(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
