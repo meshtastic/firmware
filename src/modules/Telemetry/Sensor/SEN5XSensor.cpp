@@ -182,7 +182,7 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
     return receivedBytes;
 }
 
-uint8_t SEN5XSensor::sen5xCRC(uint8_t *buffer)
+uint8_t SEN5XSensor::sen5xCRC(const uint8_t *buffer)
 {
     // This code is based on Sensirion's own implementation
     // https://github.com/Sensirion/arduino-core/blob/41fd02cacf307ec4945955c58ae495e56809b96c/src/SensirionCrc.cpp
