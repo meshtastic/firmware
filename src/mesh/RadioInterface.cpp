@@ -366,8 +366,7 @@ std::unique_ptr<RadioInterface> initLoRa()
 
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // If specified TCXO voltage fails, attempt to use DIO3 as a reference instead
-        rIf =
-            std::unique_ptr<SX1262Interface>(new SX1262Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY));
+        rIf = std::unique_ptr<SX1262Interface>(new SX1262Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY));
         if (!rIf->init()) {
             LOG_WARN("No SX1262 radio with XTAL, Vref 0.0V");
             rIf = nullptr;
@@ -396,8 +395,7 @@ std::unique_ptr<RadioInterface> initLoRa()
     }
 #endif
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        rIf =
-            std::unique_ptr<SX1268Interface>(new SX1268Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY));
+        rIf = std::unique_ptr<SX1268Interface>(new SX1268Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY));
         if (!rIf->init()) {
             LOG_WARN("No SX1268 radio");
             rIf = nullptr;
@@ -410,8 +408,7 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #if defined(USE_LLCC68)
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
-        rIf =
-            std::unique_ptr<LLCC68Interface>(new LLCC68Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY));
+        rIf = std::unique_ptr<LLCC68Interface>(new LLCC68Interface(loraHal, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY));
         if (!rIf->init()) {
             LOG_WARN("No LLCC68 radio");
             rIf = nullptr;
@@ -466,8 +463,7 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #if defined(USE_SX1280) && RADIOLIB_EXCLUDE_SX128X != 1
     if (!rIf) {
-        rIf =
-            std::unique_ptr<SX1280Interface>(new SX1280Interface(loraHal, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY));
+        rIf = std::unique_ptr<SX1280Interface>(new SX1280Interface(loraHal, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY));
         if (!rIf->init()) {
             LOG_WARN("No SX1280 radio");
             rIf = nullptr;
