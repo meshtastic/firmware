@@ -950,7 +950,7 @@ void setup()
 #endif
 #endif
 
-    initLoRa();
+    auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
@@ -999,12 +999,12 @@ void setup()
     if (!rIf)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else {
-        router->addInterface(rIf);
-
         // Log bit rate to debug output
         LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
                                                     (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
                                                        1000);
+
+        router->addInterface(std::move(rIf));
     }
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
@@ -1146,10 +1146,7 @@ void loop()
     }
     if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
         LOG_ERROR("LoRa in error detected, attempting to recover");
-        if (rIf != nullptr) {
-            delete rIf;
-            rIf = nullptr;
-        }
+        router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
             if (ch341Hal != nullptr) {
                 delete ch341Hal;
@@ -1165,8 +1162,9 @@ void loop()
                 exit(EXIT_FAILURE);
             }
         }
-        if (initLoRa()) {
-            router->addInterface(rIf);
+        auto rIf = initLoRa();
+        if (rIf) {
+            router->addInterface(std::move(rIf));
             portduino_status.LoRa_in_error = false;
         } else {
             LOG_WARN("Reconfigure failed, rebooting");
