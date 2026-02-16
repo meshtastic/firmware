@@ -21,7 +21,7 @@
  *
  * Memory Optimization:
  * Uses a unified cache with cuckoo hashing for O(1) lookups and 56% memory reduction
- * compared to separate per-feature caches. Timestamps are stored as 16-bit relative
+ * compared to separate per-feature caches. Timestamps are stored as 8-bit relative
  * offsets from a rolling epoch to further reduce memory footprint.
  */
 class TrafficManagementModule : public MeshModule, private concurrency::OSThread

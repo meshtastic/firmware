@@ -377,7 +377,7 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 /**
  * Reset the timestamp epoch when relative offsets approach overflow.
  *
- * Called when epoch age exceeds ~3.5 hours (approaching 8-bit minute overflow).
+ * Called when epoch age exceeds ~19 hours (approaching 8-bit minute overflow).
  * Invalidates all cached timestamps while preserving node associations.
  */
 void TrafficManagementModule::resetEpoch(uint32_t nowMs)
