@@ -248,9 +248,8 @@ uint32_t timeLastPowered = 0;
 static OSThread *powerFSMthread;
 OSThread *ambientLightingThread;
 
-#ifdef ARCH_PORTDUINO
+RadioInterface *rIf = NULL;
 RadioLibHal *RadioLibHAL = NULL;
-#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
@@ -724,17 +723,15 @@ void setup()
         playStartMelody();
 
 #if HAS_SCREEN
-    // fixed screen override?
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
-        screen_model = config.display.oled;
-
+        // fixed screen override?
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     screen_geometry = GEOMETRY_128_128;
-#endif
-
-#if defined(USE_SH1107_128_64)
+#elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#else
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+        screen_model = config.display.oled;
 #endif
 #endif
 

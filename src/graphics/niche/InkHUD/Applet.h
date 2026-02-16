@@ -125,16 +125,17 @@ class Applet : public GFX
 
     void setFont(AppletFont f);
     AppletFont getFont();
-    uint16_t getTextWidth(std::string text);
+    uint16_t getTextWidth(const std::string &text);
     uint16_t getTextWidth(const char *text);
-    uint32_t getWrappedTextHeight(int16_t left, uint16_t width, std::string text); // Result of printWrapped
+    uint32_t getWrappedTextHeight(int16_t left, uint16_t width, const std::string &text); // Result of printWrapped
     void printAt(int16_t x, int16_t y, const char *text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
-    void printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
-    void printThick(int16_t xCenter, int16_t yCenter, std::string text, uint8_t thicknessX, uint8_t thicknessY); // Faux bold
-    void printWrapped(int16_t left, int16_t top, uint16_t width, std::string text); // Per-word line wrapping
+    void printAt(int16_t x, int16_t y, const std::string &text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
+    void printThick(int16_t xCenter, int16_t yCenter, const std::string &text, uint8_t thicknessX,
+                    uint8_t thicknessY);                                                   // Faux bold
+    void printWrapped(int16_t left, int16_t top, uint16_t width, const std::string &text); // Per-word line wrapping
 
     void hatchRegion(int16_t x, int16_t y, uint16_t w, uint16_t h, uint8_t spacing, Color color); // Fill with sparse lines
-    void drawHeader(std::string text); // Draw the standard applet header
+    void drawHeader(const std::string &text); // Draw the standard applet header
 
     // Meshtastic Logo
 
@@ -150,9 +151,9 @@ class Applet : public GFX
     std::string getTimeString();                               // Current time, human readable
     uint16_t getActiveNodeCount();                             // Duration determined by user, in onscreen menu
     std::string localizeDistance(uint32_t meters);             // Human readable distance, imperial or metric
-    std::string parse(std::string text);                       // Handle text which might contain special chars
+    std::string parse(const std::string &text);                // Handle text which might contain special chars
     std::string parseShortName(meshtastic_NodeInfoLite *node); // Get the shortname, or a substitute if has unprintable chars
-    bool isPrintable(std::string);                             // Check for characters which the font can't print
+    bool isPrintable(const std::string &text);                 // Check for characters which the font can't print
 
     // Convenient references
 

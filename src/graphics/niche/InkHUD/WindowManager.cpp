@@ -396,7 +396,7 @@ void InkHUD::WindowManager::autoshow()
 {
     // Don't perform autoshow if a system applet has exclusive use of the display right now
     // Note: lockRequests prevents autoshow attempting to hide menuApplet
-    for (SystemApplet *sa : inkhud->systemApplets) {
+    for (const SystemApplet *sa : inkhud->systemApplets) {
         if (sa->lockRendering || sa->lockRequests)
             return;
     }
