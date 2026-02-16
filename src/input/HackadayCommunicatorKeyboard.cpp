@@ -106,8 +106,8 @@ static unsigned char HackadayCommunicatorTapMap[_TCA8418_NUM_KEYS][2] = {{},
                                                                          {}};
 
 HackadayCommunicatorKeyboard::HackadayCommunicatorKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(UINT8_MAX), next_key(UINT8_MAX),
-      last_tap(0L), char_idx(0), tap_interval(0)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(UINT8_MAX),
+      next_key(UINT8_MAX), last_tap(0L), char_idx(0), tap_interval(0)
 {
     reset();
 }

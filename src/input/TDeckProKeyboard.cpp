@@ -62,8 +62,8 @@ static unsigned char TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
 };
 
 TDeckProKeyboard::TDeckProKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(UINT8_MAX), next_key(UINT8_MAX),
-      last_tap(0L), char_idx(0), tap_interval(0)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(UINT8_MAX),
+      next_key(UINT8_MAX), last_tap(0L), char_idx(0), tap_interval(0)
 {
 }
 

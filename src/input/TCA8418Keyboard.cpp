@@ -44,8 +44,7 @@ static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 
 TCA8418Keyboard::TCA8418Keyboard()
     : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), last_key(UINT8_MAX), next_key(UINT8_MAX), last_tap(0L), char_idx(0),
-      tap_interval(0),
-      should_backspace(false)
+      tap_interval(0), should_backspace(false)
 {
 }
 
