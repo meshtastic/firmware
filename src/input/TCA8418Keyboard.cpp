@@ -43,8 +43,8 @@ static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 };
 
 TCA8418Keyboard::TCA8418Keyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), last_key(-1), next_key(-1), last_tap(0L), char_idx(0), tap_interval(0),
-      should_backspace(false)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), last_key(UINT8_MAX), next_key(UINT8_MAX), last_tap(0L), char_idx(0),
+      tap_interval(0), should_backspace(false)
 {
 }
 
@@ -71,7 +71,7 @@ void TCA8418Keyboard::pressed(uint8_t key)
     }
 
     // Compute key index based on dynamic row/column
-    next_key = (int8_t)(row * _TCA8418_COLS + col);
+    next_key = (uint8_t)(row * _TCA8418_COLS + col);
 
     // LOG_DEBUG("TCA8418: Key %u -> Next Key %u", key, next_key);
 
@@ -105,8 +105,8 @@ void TCA8418Keyboard::released()
         return;
     }
 
-    if (last_key < 0 || last_key > _TCA8418_NUM_KEYS) { // reset to idle if last_key out of bounds
-        last_key = -1;
+    if (last_key >= _TCA8418_NUM_KEYS) { // reset to idle if last_key out of bounds
+        last_key = UINT8_MAX;
         state = Idle;
         return;
     }
