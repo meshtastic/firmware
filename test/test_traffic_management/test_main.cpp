@@ -745,7 +745,7 @@ void setUp(void)
 }
 void tearDown(void) {}
 
-void setup()
+extern "C" void setup()
 {
     delay(10);
     delay(2000);
@@ -782,18 +782,20 @@ void setup()
     exit(UNITY_END());
 }
 
+extern "C" void loop() {}
+
 #else
 
 void setUp(void) {}
 void tearDown(void) {}
 
-void setup()
+extern "C" void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
     exit(UNITY_END());
 }
 
-#endif
+extern "C" void loop() {}
 
-void loop() {}
+#endif
