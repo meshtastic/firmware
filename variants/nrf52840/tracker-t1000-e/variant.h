@@ -155,7 +155,7 @@ extern "C" {
 #define HAS_SCREEN 0
 
 // Enable Traffic Management Module for testing on T1000-E
-// NRF52840 has 256KB RAM - 2048 entries uses ~40KB
+// NRF52840 has 256KB RAM - 1024 entries uses ~10KB
 #ifndef HAS_TRAFFIC_MANAGEMENT
 #define HAS_TRAFFIC_MANAGEMENT 1
 #endif
