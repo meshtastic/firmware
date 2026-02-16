@@ -125,10 +125,12 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
         i2cBus->write((uint8_t)(command >> 8));
     }
     i2cBus->write((uint8_t)(command & 0xFF));
-    i2cBus->endTransmission();
+    if (i2cBus->endTransmission() != 0) {
+        return false;
+    }
     delay(20);
-    i2cBus->requestFrom(addr.address, expectedLength);
-    bool match = (i2cBus->available() == expectedLength);
+    uint8_t received = i2cBus->requestFrom(addr.address, expectedLength);
+    bool match = (received == expectedLength);
     while (i2cBus->available())
         i2cBus->read();
     return match;
