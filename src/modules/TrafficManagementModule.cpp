@@ -754,13 +754,13 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.want_response = false;
     // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
     // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
-    // hop_start=0 is set explicitly because Router::send() only sets it for isFromUs(),
-    // and our spoofed from means isFromUs() is false.
     reply->from = p->to;
     reply->to = getFrom(p);
     reply->channel = p->channel;
     reply->decoded.request_id = p->id;
     reply->hop_limit = 0;
+    // hop_start=0 is set explicitly because Router::send() only sets it for isFromUs(),
+    // and our spoofed from means isFromUs() is false.
     reply->hop_start = 0;
     reply->next_hop = nodeDB->getLastByteOfNodeNum(getFrom(p));
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
